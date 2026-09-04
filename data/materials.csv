@@ -1,0 +1,32 @@
+nome,categoria,Sut_MPa,Sy_MPa,observacao
+AISI 1018 estirado a frio,aco,440,370,valores típicos de referência; dependem do diâmetro e do fornecedor
+AISI 1020 laminado a quente,aco,380,210,valores típicos de referência; validar com norma ou certificado
+AISI 1020 estirado a frio,aco,470,390,valores típicos de referência; validar com norma ou certificado
+AISI 1045 laminado a quente,aco,565,310,valores típicos de referência; validar com norma ou certificado
+AISI 1045 temperado e revenido,aco,700,600,condição genérica; propriedades variam com o tratamento e a seção
+AISI 4140 normalizado,aco,655,415,valores típicos de referência; dependem da seção
+AISI 4140 temperado e revenido,aco,950,760,condição genérica; confirmar dureza e tratamento
+AISI 4340 temperado e revenido,aco,1280,1170,condição genérica; confirmar dureza e tratamento
+ASTM A36 aço estrutural,aco,400,250,valores mínimos usuais; verificar espessura e edição da norma
+ASTM A572 grau 50,aco,450,345,valores mínimos usuais; verificar espessura e edição da norma
+ASTM A992 aço estrutural,aco,450,345,valores mínimos usuais; verificar edição da norma
+ASTM A516 grau 70,aco,485,260,valores mínimos usuais para chapas; dependem da espessura
+AISI 304 recozido,aco,517,207,valores mínimos de referência para produto recozido
+AISI 304L recozido,aco,483,172,valores mínimos de referência para produto recozido
+AISI 316 recozido,aco,517,207,valores mínimos de referência para produto recozido
+AISI 316L recozido,aco,483,172,valores mínimos de referência para produto recozido
+Aço inoxidável duplex 2205 solubilizado,aco,620,450,valores mínimos típicos; confirmar forma do produto
+Aço inoxidável 17-4 PH H900,aco,1310,1170,condição H900; confirmar forma e especificação do produto
+Ferro fundido cinzento classe 20,ferro_fundido,152,0,material frágil; não possui escoamento definido
+Ferro fundido cinzento classe 30,ferro_fundido,214,0,material frágil; não possui escoamento definido
+Ferro fundido cinzento classe 40,ferro_fundido,293,0,material frágil; não possui escoamento definido
+Ferro fundido nodular ASTM A536 65-45-12,ferro_fundido,448,310,valores mínimos nominais da classe; validar certificado
+Alumínio 2024-T3 chapa,aluminio,483,345,valores típicos; dependem da espessura e forma do produto
+Alumínio 5052-H32 chapa,aluminio,228,193,valores típicos; dependem da espessura
+Alumínio 6061-T6,aluminio,310,276,valores típicos; dependem da forma e espessura do produto
+Alumínio 6063-T6 extrudado,aluminio,241,214,valores típicos; dependem da espessura da parede
+Alumínio 7075-T6 chapa,aluminio,572,503,valores típicos; dependem da espessura e forma do produto
+Cobre C110 recozido,cobre,220,69,valores típicos; variam com o grau de encruamento
+Latão C260 meio duro,cobre,365,125,valores típicos; confirmar têmpera e espessura
+Latão C360 meio duro,cobre,338,124,valores típicos; confirmar têmpera e diâmetro
+Bronze SAE 660 C93200 fundido,cobre,240,125,valores típicos; confirmar processo e fornecedor
