@@ -442,9 +442,17 @@ cabecalho_pagina(
     acoes=(("app_pages/assistente_cargas.py", "Calcular pelas cargas", ":material/manufacturing:"),),
 )
 st.info(
+    "**Para que serve:** em um mesmo ponto do material, a tensão medida muda "
+    "conforme o ângulo do corte que você observa. O Círculo de Mohr encontra, "
+    "para qualquer ponto, a direção onde o material está sendo mais esticado "
+    "(**tensões principais**, σ1/σ2) e a direção onde está sendo mais torcido "
+    "(**cisalhamento máximo**) — informações essenciais para saber se algo vai "
+    "romper ou escoar.",
+    icon=":material/lightbulb:",
+)
+st.caption(
     "Convenção: tração positiva; θ físico é anti-horário de x para x'. "
-    "No círculo, a mesma transformação percorre −2θ.",
-    icon=":material/rotate_left:",
+    "No círculo, a mesma transformação percorre −2θ."
 )
 
 modo = st.segmented_control(
@@ -506,6 +514,13 @@ if modo == "Estado plano (2D)":
     transformada = resultado_2d.transformacao
 
     st.subheader("Resultados principais")
+    st.caption(
+        "**σ1/σ2** são os maiores valores de tração/compressão que existem "
+        "nesse ponto, em alguma direção. **τmáx** é o maior cisalhamento "
+        "(torção local) possível. **von Mises** combina tudo em um único "
+        "número para comparar diretamente com o limite de escoamento do "
+        "material."
+    )
     with st.container(horizontal=True):
         st.metric("σ1 no plano", formatar_tensao(resultado_2d.sigma_1_plana), border=True)
         st.metric("σ2 no plano", formatar_tensao(resultado_2d.sigma_2_plana), border=True)
@@ -758,6 +773,12 @@ else:
         )
 
     st.subheader("Resultados principais")
+    st.caption(
+        "**σ1, σ2, σ3** são as três tensões principais do ponto (as maiores "
+        "trações/compressões em qualquer direção). **von Mises** e **Tresca** "
+        "são formas de resumir tudo em um único número comparável ao limite "
+        "de escoamento do material."
+    )
     sigma_1, sigma_2, sigma_3 = resultado_3d.tensoes_principais
     with st.container(horizontal=True):
         st.metric("σ1", formatar_tensao(sigma_1), border=True)
@@ -822,63 +843,74 @@ else:
                 rf"{tracao.normal_unitaria[2]:.4f})"
             )
 
-    detalhes = st.columns(2)
-    with detalhes[0]:
-        with st.container(border=True):
-            st.subheader("Direções principais")
-            direcoes = resultado_3d.direcoes_principais
-            tabela_direcoes = pd.DataFrame(
-                {
-                    "Direção": ["σ1", "σ2", "σ3"],
-                    "Tensão (MPa)": resultado_3d.tensoes_principais,
-                    "nx": direcoes[0, :],
-                    "ny": direcoes[1, :],
-                    "nz": direcoes[2, :],
-                }
-            )
-            st.dataframe(
-                tabela_direcoes,
-                hide_index=True,
-                column_config={
-                    "Tensão (MPa)": st.column_config.NumberColumn(format="%.3f"),
-                    "nx": st.column_config.NumberColumn(format="%.5f"),
-                    "ny": st.column_config.NumberColumn(format="%.5f"),
-                    "nz": st.column_config.NumberColumn(format="%.5f"),
-                },
-            )
-            st.caption(
-                "Cada linha fornece o vetor unitário normal ao plano principal correspondente."
-            )
-    with detalhes[1]:
-        with st.container(border=True):
-            st.subheader("Invariantes do tensor")
-            tabela_invariantes = pd.DataFrame(
-                {
-                    "Invariante": ["I1", "I2", "I3", "J2", "J3"],
-                    "Valor": [
-                        resultado_3d.I1,
-                        resultado_3d.I2,
-                        resultado_3d.I3,
-                        resultado_3d.J2,
-                        resultado_3d.J3,
-                    ],
-                    "Unidade": ["MPa", "MPa²", "MPa³", "MPa²", "MPa³"],
-                    "Leitura": [
-                        "Traço do tensor",
-                        "Segundo invariante",
-                        "Determinante",
-                        "Energia distorcional",
-                        "Terceiro invariante desviador",
-                    ],
-                }
-            )
-            st.dataframe(
-                tabela_invariantes,
-                hide_index=True,
-                column_config={
-                    "Valor": st.column_config.NumberColumn(format="%.5g"),
-                },
-            )
+    with st.container(border=True):
+        st.subheader("Direções principais")
+        st.caption(
+            "Mostra para onde apontam as direções de σ1, σ2 e σ3 no espaço "
+            "— útil para saber em que orientação a peça está sendo mais "
+            "solicitada."
+        )
+        direcoes = resultado_3d.direcoes_principais
+        tabela_direcoes = pd.DataFrame(
+            {
+                "Direção": ["σ1", "σ2", "σ3"],
+                "Tensão (MPa)": resultado_3d.tensoes_principais,
+                "nx": direcoes[0, :],
+                "ny": direcoes[1, :],
+                "nz": direcoes[2, :],
+            }
+        )
+        st.dataframe(
+            tabela_direcoes,
+            hide_index=True,
+            column_config={
+                "Tensão (MPa)": st.column_config.NumberColumn(format="%.3f"),
+                "nx": st.column_config.NumberColumn(format="%.5f"),
+                "ny": st.column_config.NumberColumn(format="%.5f"),
+                "nz": st.column_config.NumberColumn(format="%.5f"),
+            },
+        )
+        st.caption(
+            "Cada linha fornece o vetor unitário normal ao plano principal correspondente."
+        )
+
+    with st.expander(
+        "Avançado — invariantes do tensor (I1, I2, I3, J2, J3)",
+        icon=":material/functions:",
+    ):
+        st.caption(
+            "Grandezas matemáticas que não mudam com a orientação dos eixos. "
+            "Só são necessárias para verificações mais avançadas ou "
+            "conferência com outro software — a maioria dos usuários pode "
+            "ignorar esta tabela."
+        )
+        tabela_invariantes = pd.DataFrame(
+            {
+                "Invariante": ["I1", "I2", "I3", "J2", "J3"],
+                "Valor": [
+                    resultado_3d.I1,
+                    resultado_3d.I2,
+                    resultado_3d.I3,
+                    resultado_3d.J2,
+                    resultado_3d.J3,
+                ],
+                "Unidade": ["MPa", "MPa²", "MPa³", "MPa²", "MPa³"],
+                "Leitura": [
+                    "Traço do tensor",
+                    "Segundo invariante",
+                    "Determinante",
+                    "Energia distorcional",
+                    "Terceiro invariante desviador",
+                ],
+            }
+        )
+        st.dataframe(
+            tabela_invariantes,
+            hide_index=True,
+            column_config={
+                "Valor": st.column_config.NumberColumn(format="%.5g"),
+            },
+        )
 
     with st.expander(
         "Equações usadas no estado tridimensional",

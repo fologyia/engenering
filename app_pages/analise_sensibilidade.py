@@ -33,6 +33,15 @@ cabecalho_pagina(
     acoes=(("app_pages/central_relatorios.py", "Memorial", ":material/description:"),),
 )
 
+st.info(
+    "**Para que serve:** você raramente conhece uma medida com precisão "
+    "absoluta — uma dimensão, uma carga, uma propriedade de material sempre "
+    "tem uma margem de incerteza. Este módulo testa o que acontece com o "
+    "resultado se essas entradas variarem dentro da margem que você informar, "
+    "e aponta qual delas mais pesa na decisão final.",
+    icon=":material/lightbulb:",
+)
+
 sincronizar_projeto_ativo()
 projeto = obter_projeto_ativo()
 modelos = listar_modelos()
@@ -195,8 +204,11 @@ if resultado and resultado.get("modelo_id") == modelo_id:
     )
     st.altair_chart(grafico_ranking, width="stretch")
     st.caption(
-        "A barra mede o efeito de variar uma entrada por vez. Elasticidade próxima de 4, por exemplo, indica que "
-        "1% na entrada produz aproximadamente 4% na saída ao redor do ponto nominal."
+        "**OAT (\"uma variável por vez\")**: varia uma entrada de cada vez, mantendo as demais "
+        "fixas, e mede o efeito isolado no resultado. A barra mede esse efeito. Elasticidade "
+        "próxima de 4, por exemplo, indica que 1% na entrada produz aproximadamente 4% na "
+        "saída ao redor do ponto nominal — quanto maior a barra, mais essa entrada merece ser "
+        "medida com cuidado."
     )
 
     st.subheader("Curva de resposta")
@@ -216,6 +228,12 @@ if resultado and resultado.get("modelo_id") == modelo_id:
     st.altair_chart(grafico_curva, width="stretch")
 
     st.subheader("Propagação de incertezas")
+    st.caption(
+        "**Simulação de Monte Carlo**: sorteia milhares de combinações aleatórias de entradas, "
+        "respeitando a incerteza e a distribuição de cada uma, e recalcula o resultado em cada "
+        "sorteio. O histograma abaixo mostra a faixa provável de resultados, não só o valor "
+        "nominal único."
+    )
     h1, h2 = st.columns([3, 2])
     amostra_df = pd.DataFrame({"Resultado": mc["amostra_saida"]})
     histograma = (
@@ -236,7 +254,10 @@ if resultado and resultado.get("modelo_id") == modelo_id:
         width="stretch",
         column_config={"Correlação": st.column_config.NumberColumn(format="%.3f")},
     )
-    h2.caption("Spearman mostra associação monotônica; não prova causalidade isoladamente.")
+    h2.caption(
+        "**Correlação de Spearman**: de -1 a 1, mostra o quanto o resultado tende a subir ou "
+        "descer junto com cada entrada nas simulações. Não prova causa e efeito isoladamente."
+    )
 
     with st.expander("Tabela completa e premissas do resultado"):
         st.dataframe(

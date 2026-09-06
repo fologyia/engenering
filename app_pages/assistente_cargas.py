@@ -77,9 +77,15 @@ cabecalho_pagina(
     acoes=(("app_pages/circulo_mohr.py", "Círculo de Mohr", ":material/donut_large:"),),
 )
 st.info(
+    "**Para que serve:** você tem forças, momentos, torques ou pressão medidos "
+    "ou definidos em projeto, mas precisa saber o quanto o material está sendo "
+    "esticado, comprimido ou torcido em um ponto específico. Este assistente faz "
+    "essa conversão para você, sem precisar montar as fórmulas manualmente.",
+    icon=":material/lightbulb:",
+)
+st.caption(
     "Use forças em kN, momentos e torques em N·m e dimensões em mm. "
-    "A saída é calculada em MPa.",
-    icon=":material/straighten:",
+    "A saída é calculada em MPa (megapascal)."
 )
 
 opcoes_modelo = [
@@ -93,12 +99,56 @@ opcoes_modelo = [
     "Vaso cilíndrico de parede fina",
     "Vaso esférico de parede fina",
 ]
+descricoes_simples = {
+    "Barra sob carga axial": (
+        "Uma peça reta sendo puxada (tração) ou empurrada (compressão) "
+        "no sentido do seu comprimento — como um tirante ou uma coluna."
+    ),
+    "Eixo circular maciço": (
+        "Um eixo redondo e cheio (sem furo no meio) que pode estar sendo "
+        "puxado/empurrado, dobrado e torcido ao mesmo tempo."
+    ),
+    "Eixo circular vazado": (
+        "Um tubo — eixo redondo oco — sob os mesmos tipos de esforço do "
+        "eixo maciço."
+    ),
+    "Viga de seção retangular": (
+        "Uma viga retangular (como uma régua de canto) que dobra e também "
+        "sofre corte transversal."
+    ),
+    "Seção retangular com flexão biaxial": (
+        "Uma barra retangular que dobra em duas direções ao mesmo tempo, "
+        "não só em uma."
+    ),
+    "Seção I sob força axial e flexão": (
+        "Uma viga com seção em forma de 'I', muito comum em estruturas "
+        "metálicas."
+    ),
+    "Pinos ou parafusos sob cisalhamento": (
+        "Um pino ou parafuso sendo cortado transversalmente pela força, "
+        "como uma tesoura corta um papel."
+    ),
+    "Vaso cilíndrico de parede fina": (
+        "Um tubo ou vaso de pressão com parede fina, como um cilindro de "
+        "gás ou uma tubulação pressurizada."
+    ),
+    "Vaso esférico de parede fina": (
+        "Um vaso esférico de parede fina, como um tanque redondo "
+        "pressurizado."
+    ),
+}
+
+st.markdown("##### Passo 1 · Escolha a peça e o tipo de carregamento")
 geometria = st.selectbox(
     "Selecione o modelo",
     opcoes_modelo,
     help="Escolha o modelo que melhor representa a seção no ponto analisado.",
     key="assistente_geometria",
+    label_visibility="collapsed",
 )
+st.caption(f":material/info: {descricoes_simples[geometria]}")
+
+st.markdown("##### Passo 2 · Informe os valores")
 
 estado = None
 
@@ -532,7 +582,13 @@ else:
         mostrar_validacao_parede_fina(diametro, espessura)
 
 if estado is not None:
+    st.markdown("##### Passo 3 · Resultado")
     st.subheader("Estado de tensão calculado")
+    st.caption(
+        "**σx** e **σy** indicam o quanto o material está sendo esticado "
+        "(valor positivo) ou comprimido (valor negativo) em cada direção. "
+        "**τxy** indica o quanto está sendo torcido/cisalhado nesse ponto."
+    )
     with st.container(horizontal=True):
         st.metric("σx", f"{estado.sigma_x:.3f} MPa", border=True)
         st.metric("σy", f"{estado.sigma_y:.3f} MPa", border=True)
