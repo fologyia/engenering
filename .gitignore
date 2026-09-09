@@ -1,0 +1,21 @@
+# Bytecode e caches do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Caches de ferramentas
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Arquivos temporarios de execucao e de teste
+tmp/
+
+# Sistema operacional
+Thumbs.db
+desktop.ini
+.DS_Store
