@@ -26,7 +26,6 @@ class ModuloTecnico:
     aliases: tuple[str, ...] = ()
     schema_registro: str = "mecanica-toolkit/registro-tecnico/v2"
     provedor_relatorio: str = "registros"
-    regras_validacao: tuple[str, ...] = ("contrato-registro",)
 
 
 _MODULOS: dict[str, ModuloTecnico] = {}
@@ -88,7 +87,6 @@ def _registrar_padrao() -> None:
             descricao="Cenários operacionais, combinações vetoriais e envelopes rastreáveis.",
             aliases=("Casos de carga", "Combinações de carga"),
             provedor_relatorio="carregamentos",
-            regras_validacao=("contrato-registro", "casos-carga"),
         ),
         ModuloTecnico(
             id="analise_estatica",
@@ -99,6 +97,17 @@ def _registrar_padrao() -> None:
             ordem=10,
             icone=":material/analytics:",
             descricao="Estado plano de tensões, equivalentes e margens estáticas.",
+        ),
+        ModuloTecnico(
+            id="flambagem_colunas",
+            titulo="Flambagem de colunas",
+            versao="1.0",
+            pagina="app_pages/flambagem_colunas.py",
+            grupo_navegacao="Análises técnicas",
+            ordem=15,
+            icone=":material/architecture:",
+            descricao="Esbeltez, carga crítica de Euler e transição de Johnson para peças comprimidas.",
+            aliases=("Flambagem", "Euler", "Índice de esbeltez"),
         ),
         ModuloTecnico(
             id="analise_fadiga",

@@ -27,6 +27,11 @@ from core.load_cases import (
 )
 from core.project_store import obter_projeto_ativo, salvar_projeto
 
+st.set_page_config(
+    page_title="Casos e combinações de carga",
+    page_icon=":material/layers:",
+    layout="wide",
+)
 
 cabecalho_pagina(
     "Casos e combinações de carga",
@@ -39,6 +44,7 @@ cabecalho_pagina(
         ("app_pages/central_validacao.py", "Validação", ":material/fact_check:"),
         ("app_pages/central_relatorios.py", "Relatórios", ":material/description:"),
     ),
+    modulo_id="casos_carga",
 )
 
 
@@ -207,14 +213,24 @@ with aba_combinacoes:
             ["Nova combinação", "Editar combinação"],
             default="Nova combinação",
             selection_mode="single",
+            key="casos_carga_modo_combinacao",
+            persist_state="session",
         ) or "Nova combinação"
         selecionada_id = None
         selecionada: Mapping[str, Any] = {}
         if modo == "Editar combinação" and opcoes:
+            if st.session_state.get("casos_carga_combinacao_selecionada") not in opcoes:
+                # A seleção persistida (session) pode apontar para uma
+                # combinação já excluída; sem isto, o selectbox devolveria
+                # um id que não existe mais e o next() abaixo quebraria com
+                # StopIteration.
+                st.session_state.pop("casos_carga_combinacao_selecionada", None)
             selecionada_id = st.selectbox(
                 "Combinação existente",
                 list(opcoes),
                 format_func=lambda valor: opcoes[valor],
+                key="casos_carga_combinacao_selecionada",
+                persist_state="session",
             )
             selecionada = next(item for item in combinacoes if str(item.get("id")) == selecionada_id)
         elif modo == "Editar combinação":
@@ -312,6 +328,8 @@ with aba_envelope:
         "Incluir também os casos isolados",
         value=not bool(combinacoes),
         help="Útil para conferir cada cenário. As combinações continuam sendo avaliadas separadamente.",
+        key="casos_carga_incluir_isolados",
+        persist_state="session",
     )
     try:
         envelope = calcular_envelope(
@@ -341,6 +359,19 @@ with aba_envelope:
             for item in COMPONENTES_CARGA
         ]
         st.dataframe(pd.DataFrame(linhas_envelope), hide_index=True, width="stretch")
+        st.session_state["cargas_envelope_projeto"] = {
+            "projeto_id": projeto.get("id"),
+            "projeto_nome": projeto.get("nome"),
+            "componentes": {
+                item.chave: {
+                    "rotulo": item.rotulo,
+                    "unidade": item.unidade,
+                    "valor_governante": envelope["componentes"][item.chave]["valor_governante"],
+                    "cenario_governante": envelope["componentes"][item.chave]["cenario_governante"],
+                }
+                for item in COMPONENTES_CARGA
+            },
+        }
         grafico = pd.DataFrame(
             {
                 "Componente": [item.rotulo for item in COMPONENTES_CARGA],

@@ -53,7 +53,7 @@ class ProjectAssistantTests(unittest.TestCase):
             projetos.sequencia_recomendada(
                 projetos.OBJETIVOS[1], projetos.DADOS_DISPONIVEIS[0]
             ),
-            ["cargas", "estatica"],
+            ["casos_carga", "cargas", "estatica", "analise_sensibilidade"],
         )
 
     def test_known_cycle_routes_to_fatigue(self):
@@ -76,6 +76,28 @@ class ProjectAssistantTests(unittest.TestCase):
         self.assertEqual(alternada, 60)
         with self.assertRaises(ValueError):
             projetos.calcular_tensoes_ciclo(100, -20)
+
+    def test_rotas_include_casos_carga_and_sensibilidade(self):
+        self.assertIn("casos_carga", projetos.ROTAS)
+        self.assertIn("analise_sensibilidade", projetos.ROTAS)
+        self.assertEqual(
+            projetos.ROTAS["casos_carga"].pagina, "app_pages/casos_carga.py"
+        )
+        self.assertEqual(
+            projetos.ROTAS["analise_sensibilidade"].pagina,
+            "app_pages/analise_sensibilidade.py",
+        )
+
+    def test_sequencia_recomendada_sempre_comeca_e_termina_no_mesmo_par(self):
+        for objetivo in projetos.OBJETIVOS[:6]:
+            for dados in projetos.DADOS_DISPONIVEIS:
+                try:
+                    sequencia = projetos.sequencia_recomendada(objetivo, dados)
+                except ValueError:
+                    continue
+                self.assertEqual(sequencia[0], "casos_carga")
+                self.assertEqual(sequencia[-1], "analise_sensibilidade")
+                self.assertEqual(len(sequencia), len(set(sequencia)))
 
 
 if __name__ == "__main__":

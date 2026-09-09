@@ -30,6 +30,89 @@ class SteelSectionsTests(unittest.TestCase):
         self.assertGreaterEqual(len(tabela), 30)
         self.assertGreaterEqual(tabela["familia"].nunique(), 4)
 
+    def test_w_profile_reuses_i_beam_equations(self):
+        w = secoes.perfil_w_mesa_larga("W", 300, 300, 10, 15)
+        i_equivalente = secoes.perfil_i_simetrico("I equiv", 300, 300, 10, 15)
+        self.assertEqual(w.familia, "W (mesa larga)")
+        self.assertAlmostEqual(w.area_mm2, i_equivalente.area_mm2)
+        self.assertAlmostEqual(w.ix_mm4, i_equivalente.ix_mm4)
+        self.assertAlmostEqual(w.zx_mm3, i_equivalente.zx_mm3)
+
+    def test_generic_composite_helpers_match_closed_form_i_beam(self):
+        # O helper genérico de composição/módulo plástico usado nos perfis
+        # monossimétricos (U, C, T) precisa reproduzir exatamente as fórmulas
+        # fechadas já validadas do perfil I — senão os novos perfis herdam
+        # um bug silencioso no cálculo de Ix/Iy/Zx/Zy.
+        h, b, tw, tf = 300, 150, 6.5, 10.0
+        referencia = secoes.perfil_i_simetrico("ref", h, b, tw, tf)
+        hw = h - 2 * tf
+        pecas = [
+            secoes._retangulo(b / 2, tf / 2, b, tf),
+            secoes._retangulo(b / 2, h - tf / 2, b, tf),
+            secoes._retangulo(b / 2, h / 2, tw, hw),
+        ]
+        area, _xbar, ybar, ix, iy = secoes._combinar(pecas)
+        retangulos = [
+            (0, b, 0, tf),
+            (0, b, h - tf, h),
+            (b / 2 - tw / 2, b / 2 + tw / 2, tf, h - tf),
+        ]
+        zx = secoes._modulo_plastico(retangulos, "x")
+        zy = secoes._modulo_plastico(retangulos, "y")
+        self.assertAlmostEqual(area, referencia.area_mm2)
+        self.assertAlmostEqual(ix, referencia.ix_mm4)
+        self.assertAlmostEqual(iy, referencia.iy_mm4)
+        self.assertAlmostEqual(zx, referencia.zx_mm3)
+        self.assertAlmostEqual(zy, referencia.zy_mm3)
+        self.assertAlmostEqual(ybar, h / 2.0)
+
+    def test_u_channel_is_symmetric_only_about_x(self):
+        canal = secoes.perfil_u("U", 150, 75, 6.5, 9.5)
+        self.assertGreater(canal.area_mm2, 0)
+        self.assertGreater(canal.ix_mm4, 0)
+        self.assertGreater(canal.iy_mm4, 0)
+        # Seção aberta: Iy (fraco, com centroide deslocado) bem menor que Ix.
+        self.assertLess(canal.iy_mm4, canal.ix_mm4)
+        self.assertGreater(canal.zy_mm3, 0)
+
+    def test_u_channel_rejects_web_wider_than_flange(self):
+        with self.assertRaises(ValueError):
+            secoes.perfil_u("U inválido", 150, 5, 6.5, 9.5)
+
+    def test_c_enrijecido_rejects_lip_too_long_for_height(self):
+        with self.assertRaises(ValueError):
+            secoes.perfil_c_enrijecido("C inválido", 100, 50, 60.0, 3.0)
+
+    def test_c_enrijecido_has_positive_properties(self):
+        perfil = secoes.perfil_c_enrijecido("C", 150, 50, 17, 3.0)
+        self.assertGreater(perfil.area_mm2, 0)
+        self.assertGreater(perfil.ix_mm4, 0)
+        self.assertGreater(perfil.iy_mm4, 0)
+        self.assertGreater(perfil.zx_mm3, 0)
+        self.assertGreater(perfil.zy_mm3, 0)
+
+    def test_t_profile_is_symmetric_about_y_only(self):
+        perfil = secoes.perfil_t("T", 150, 150, 7.5, 10.5)
+        hw = 150 - 10.5
+        iy_esperado = hw * 7.5**3 / 12.0 + 10.5 * 150**3 / 12.0
+        self.assertAlmostEqual(perfil.iy_mm4, iy_esperado)
+        # Monossimétrico em x: Ix não tem fórmula fechada trivial, mas deve
+        # ser positivo e bem menor que o de um I duplamente simétrico do
+        # mesmo porte (metade da alma, sem mesa inferior).
+        self.assertGreater(perfil.ix_mm4, 0)
+
+    def test_t_profile_rejects_flange_taller_than_section(self):
+        with self.assertRaises(ValueError):
+            secoes.perfil_t("T inválido", 50, 150, 7.5, 60.0)
+
+    def test_barra_circular_matches_closed_form(self):
+        perfil = secoes.barra_circular("Barra", 25.0)
+        self.assertAlmostEqual(perfil.area_mm2, math.pi * 25.0**2 / 4.0)
+        self.assertAlmostEqual(perfil.ix_mm4, math.pi * 25.0**4 / 64.0)
+        self.assertAlmostEqual(perfil.zx_mm3, 25.0**3 / 6.0)
+        self.assertAlmostEqual(perfil.ix_mm4, perfil.iy_mm4)
+        self.assertAlmostEqual(perfil.j_mm4, 2.0 * perfil.ix_mm4)
+
 
 class SteelMemberTests(unittest.TestCase):
     def setUp(self):

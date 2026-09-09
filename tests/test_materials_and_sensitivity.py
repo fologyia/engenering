@@ -100,3 +100,45 @@ def test_importacao_de_registro_estatico_preserva_entradas():
     )
     assert sugestao["modelo_id"] == "seguranca_vm"
     assert sugestao["entradas"]["Sy_MPa"] == 250
+
+
+def test_sugestao_prefere_modulo_id_ao_texto_do_titulo():
+    sugestao = sugerir_de_registro(
+        {
+            "modulo": "Nome alterado depois da versão 1",
+            "modulo_id": "analise_estatica",
+            "entradas": {"sigma_x_MPa": 50, "sigma_y_MPa": 0, "tau_xy_MPa": 0, "Sy_MPa": 200},
+        }
+    )
+    assert sugestao["modelo_id"] == "seguranca_vm"
+
+
+def test_mohr_2d_sugere_modelo_de_seguranca_sem_sy():
+    sugestao = sugerir_de_registro(
+        {
+            "modulo": "Círculo de Mohr",
+            "modulo_id": "circulo_mohr",
+            "entradas": {"sigma_x_MPa": 80, "sigma_y_MPa": -20, "tau_xy_MPa": 35, "theta_graus": 10},
+        }
+    )
+    assert sugestao is not None
+    assert sugestao["modelo_id"] == "seguranca_vm"
+    assert "Sy_MPa" not in sugestao["entradas"]
+
+
+def test_mohr_3d_nao_sugere_modelo_plano():
+    sugestao = sugerir_de_registro(
+        {
+            "modulo": "Círculo de Mohr",
+            "modulo_id": "circulo_mohr",
+            "entradas": {
+                "sigma_x_MPa": 80,
+                "sigma_y_MPa": -20,
+                "sigma_z_MPa": 10,
+                "tau_xy_MPa": 35,
+                "tau_xz_MPa": 0,
+                "tau_yz_MPa": 0,
+            },
+        }
+    )
+    assert sugestao is None

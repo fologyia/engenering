@@ -62,6 +62,22 @@ ROTAS: dict[str, RotaProjeto] = {
         "geometria, apoios, ações, combinações e material",
         "esforços, deslocamentos, utilização de barras e ligações",
     ),
+    "casos_carga": RotaProjeto(
+        "casos_carga",
+        "Casos e combinações de carga",
+        "app_pages/casos_carga.py",
+        ":material/layers:",
+        "cenários operacionais e fatores de cada caso",
+        "vetor de esforços governante por componente",
+    ),
+    "analise_sensibilidade": RotaProjeto(
+        "analise_sensibilidade",
+        "Análise de sensibilidade",
+        "app_pages/analise_sensibilidade.py",
+        ":material/tune:",
+        "um cálculo já registrado no projeto e a incerteza de cada entrada",
+        "ranking de influência e risco de não atendimento",
+    ),
 }
 
 
@@ -156,12 +172,22 @@ def sequencia_recomendada(
     dados_disponiveis: str,
     componente: str | None = None,
 ) -> list[str]:
-    """Lista os módulos do fluxo, começando pela preparação necessária."""
+    """Lista o fluxo completo sugerido, do primeiro passo ao acompanhamento.
+
+    O roteiro sempre começa por "Casos e combinações de carga" (quando o
+    primeiro passo calculado não é ele mesmo) e termina por "Análise de
+    sensibilidade" (quando o último não é ela mesma). Essas duas pontas são
+    sugestões de trabalho, não módulos que o assistente pré-preenche.
+    """
     primeira = recomendar_rota(objetivo, dados_disponiveis, componente).chave
     destino = _ROTA_POR_OBJETIVO.get(objetivo, primeira)
-    if primeira == destino:
-        return [primeira]
-    return [primeira, destino]
+    nucleo = [primeira] if primeira == destino else [primeira, destino]
+    sequencia = list(nucleo)
+    if sequencia[0] != "casos_carga":
+        sequencia.insert(0, "casos_carga")
+    if sequencia[-1] != "analise_sensibilidade":
+        sequencia.append("analise_sensibilidade")
+    return sequencia
 
 
 def calcular_tensoes_ciclo(

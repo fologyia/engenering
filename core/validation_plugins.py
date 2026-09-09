@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from core.load_cases import CHAVES_CARGA, calcular_envelope
+from core.project_dependencies import (
+    STATUS_ATUAL,
+    STATUS_AUSENTE,
+    STATUS_CICLO,
+    STATUS_DESATUALIZADO,
+    STATUS_SEM_DEPENDENCIAS,
+    sincronizar_estados_dependencias,
+)
 from core.technical_records import avaliar_contrato_registro
 
 
@@ -213,5 +221,66 @@ def _regra_casos_carga(projeto: Mapping[str, Any]) -> ResultadoRegra:
     return ResultadoRegra(tuple(achados), preenchidos, total)
 
 
+_SEVERIDADE_POR_STATUS = {
+    STATUS_DESATUALIZADO: "Atenção",
+    STATUS_AUSENTE: "Bloqueio",
+    STATUS_CICLO: "Bloqueio",
+}
+
+
+def _regra_dependencias(projeto: Mapping[str, Any]) -> ResultadoRegra:
+    """Sinaliza cálculos cujas fontes (material, caso de carga, critério ou
+    outro registro) mudaram desde que o resultado foi salvo.
+
+    A reavaliação é sempre feita sobre o projeto atual, nunca sobre um
+    instantâneo persistido — por isso o achado desaparece assim que o
+    cálculo apontado é refeito, sem exigir uma sincronização manual.
+    """
+    achados: list[AchadoRegra] = []
+    sincronizado = sincronizar_estados_dependencias(projeto)
+    registros = [
+        item
+        for item in sincronizado.get("registros_tecnicos", [])
+        if isinstance(item, Mapping)
+    ]
+    preenchidos = 0
+    total = 0
+    for indice, registro in enumerate(registros, start=1):
+        estado = (
+            registro.get("estado_dependencias", {})
+            if isinstance(registro.get("estado_dependencias"), Mapping)
+            else {}
+        )
+        status = _texto(estado.get("status")) or STATUS_SEM_DEPENDENCIAS
+        if status == STATUS_SEM_DEPENDENCIAS:
+            continue
+        total += 1
+        if status == STATUS_ATUAL:
+            preenchidos += 1
+            continue
+        titulo = _texto(registro.get("titulo")) or f"Registro {indice}"
+        modulo = _texto(registro.get("modulo")) or "Registro técnico"
+        motivos_brutos = estado.get("motivos", [])
+        motivos = (
+            [str(motivo) for motivo in motivos_brutos]
+            if isinstance(motivos_brutos, Sequence) and not isinstance(motivos_brutos, (str, bytes))
+            else []
+        )
+        detalhe = " ".join(motivos) or f"Estado das dependências: {status}."
+        achados.append(
+            AchadoRegra(
+                _SEVERIDADE_POR_STATUS.get(status, "Atenção"),
+                "Rastreabilidade de cálculo",
+                f"{titulo}: {status.lower()}",
+                detalhe,
+                f"Reabra o módulo {modulo} e refaça este cálculo com os dados atuais do projeto.",
+                modulo=modulo,
+                evidencia="; ".join(motivos[:3]),
+            )
+        )
+    return ResultadoRegra(tuple(achados), preenchidos, total)
+
+
 registrar_regra(RegraValidacao("contrato-registro", "Contrato dos registros técnicos", "1.0", _regra_contratos))
 registrar_regra(RegraValidacao("casos-carga", "Casos e combinações de carga", "1.0", _regra_casos_carga))
+registrar_regra(RegraValidacao("dependencias-calculo", "Atualidade dos cálculos dependentes", "1.0", _regra_dependencias))

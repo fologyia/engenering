@@ -14,6 +14,10 @@ import sqlite3
 from typing import Any, Mapping, Sequence
 from uuid import uuid4
 
+from core.project_dependencies import (
+    preparar_registro_dependencias,
+    sincronizar_estados_dependencias,
+)
 from core.technical_records import normalizar_registro_tecnico
 
 
@@ -566,6 +570,34 @@ def adicionar_registro_tecnico(
         raise ProjetoPersistenciaErro("Projeto nao encontrado.")
     item = _json_seguro(normalizar_registro_tecnico(registro))
     projeto["registros_tecnicos"].append(item)
+    return salvar_projeto(projeto, caminho_banco=caminho_banco)
+
+
+def registrar_calculo_tecnico(
+    projeto_id: str,
+    registro: Mapping[str, Any],
+    *,
+    dependencias_chaves: Sequence[str] = (),
+    caminho_banco: str | Path = BANCO_PADRAO,
+) -> dict[str, Any]:
+    """Anexa um registro técnico fotografando as fontes que ele consumiu.
+
+    Diferente de :func:`adicionar_registro_tecnico`, esta função também
+    reavalia a atualidade de *todos* os cálculos do projeto após a inclusão,
+    para que um material, caso de carga ou registro de origem alterado
+    apareça como desatualizado assim que outro cálculo for salvo.
+    """
+    projeto = obter_projeto(projeto_id, caminho_banco=caminho_banco)
+    if projeto is None:
+        raise ProjetoPersistenciaErro("Projeto nao encontrado.")
+    item = preparar_registro_dependencias(
+        projeto, registro, dependencias_chaves=dependencias_chaves
+    )
+    projeto["registros_tecnicos"] = [
+        *projeto["registros_tecnicos"],
+        _json_seguro(item),
+    ]
+    projeto = sincronizar_estados_dependencias(projeto)
     return salvar_projeto(projeto, caminho_banco=caminho_banco)
 
 

@@ -81,6 +81,11 @@ def _utilizacao(x: Mapping[str, float]) -> float:
     return x["demanda"] / x["capacidade"]
 
 
+def _carga_critica_euler(x: Mapping[str, float]) -> float:
+    comprimento_efetivo_mm = x["K"] * x["L_mm"]
+    return math.pi**2 * x["E_GPa"] * 1_000.0 * x["I_mm4"] / comprimento_efetivo_mm**2
+
+
 MODELOS: dict[str, ModeloSensibilidade] = {
     "tensao_axial": ModeloSensibilidade(
         "tensao_axial", "Tensão axial média", "Barra, tirante ou área resistente sob força normal.",
@@ -153,6 +158,16 @@ MODELOS: dict[str, ModeloSensibilidade] = {
         "utilizacao", "Índice demanda/capacidade", "Modelo universal para ações, resistência, vazão, potência ou outro par compatível.",
         "U = demanda / capacidade", "Índice de utilização", "-", "menor",
         (EntradaModelo("demanda", "Demanda", "unidade consistente", 80.0), EntradaModelo("capacidade", "Capacidade", "mesma unidade", 100.0, 1e-9)), _utilizacao,
+    ),
+    "carga_critica_euler": ModeloSensibilidade(
+        "carga_critica_euler", "Carga crítica de flambagem (Euler)", "Coluna esbelta sob compressão centrada; sensibilidade do comprimento destravado e da rigidez.",
+        "Pcr = π²EI / (KL)²", "Carga crítica", "N", "maior",
+        (
+            EntradaModelo("E_GPa", "Módulo de elasticidade", "GPa", 200.0, 1e-9),
+            EntradaModelo("I_mm4", "Momento de inércia", "mm⁴", 500_000.0, 1e-9),
+            EntradaModelo("K", "Fator de comprimento efetivo", "-", 1.0, 1e-9),
+            EntradaModelo("L_mm", "Comprimento real", "mm", 2_000.0, 1e-9),
+        ), _carga_critica_euler,
     ),
 }
 
@@ -383,11 +398,17 @@ def analisar_monte_carlo(
 
 
 def sugerir_de_registro(registro: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Mapeia registros conhecidos sem ocultar campos faltantes."""
+    """Mapeia registros conhecidos sem ocultar campos faltantes.
+
+    Prefere o ``modulo_id`` estável do contrato técnico; o texto do título
+    continua servindo de fallback para registros antigos que não tinham
+    esse campo.
+    """
+    modulo_id = str(registro.get("modulo_id", "")).strip().casefold()
     modulo = str(registro.get("modulo", "")).casefold()
     entradas = registro.get("entradas", {}) if isinstance(registro.get("entradas"), Mapping) else {}
     resultados = registro.get("resultados", {}) if isinstance(registro.get("resultados"), Mapping) else {}
-    if "estática" in modulo or "estatica" in modulo:
+    if modulo_id == "analise_estatica" or (not modulo_id and ("estática" in modulo or "estatica" in modulo)):
         return {
             "modelo_id": "seguranca_vm",
             "entradas": {
@@ -397,7 +418,16 @@ def sugerir_de_registro(registro: Mapping[str, Any]) -> dict[str, Any] | None:
                 "Sy_MPa": entradas.get("Sy_MPa"),
             },
         }
-    if "fadiga" in modulo:
+    if modulo_id == "circulo_mohr" and "sigma_x_MPa" in entradas and "sigma_z_MPa" not in entradas:
+        return {
+            "modelo_id": "seguranca_vm",
+            "entradas": {
+                "sigma_x_MPa": entradas.get("sigma_x_MPa"),
+                "sigma_y_MPa": entradas.get("sigma_y_MPa"),
+                "tau_xy_MPa": entradas.get("tau_xy_MPa"),
+            },
+        }
+    if modulo_id == "analise_fadiga" or (not modulo_id and "fadiga" in modulo):
         return {
             "modelo_id": "goodman",
             "entradas": {
@@ -405,6 +435,26 @@ def sugerir_de_registro(registro: Mapping[str, Any]) -> dict[str, Any] | None:
                 "sigma_m_MPa": entradas.get("sigma_m_MPa"),
                 "Se_MPa": resultados.get("Se_corrigido_MPa"),
                 "Sut_MPa": entradas.get("Sut_MPa"),
+            },
+        }
+    if modulo_id == "flambagem_colunas":
+        eixo = str(resultados.get("eixo_governante") or "x")
+        raio = entradas.get(f"raio_giracao_{eixo}_mm")
+        area = entradas.get("area_mm2")
+        inercia = None
+        if raio is not None and area is not None:
+            try:
+                inercia = float(area) * float(raio) ** 2
+            except (TypeError, ValueError):
+                inercia = None
+        modulo_elasticidade = entradas.get("modulo_elasticidade_MPa")
+        return {
+            "modelo_id": "carga_critica_euler",
+            "entradas": {
+                "E_GPa": modulo_elasticidade / 1_000.0 if modulo_elasticidade else None,
+                "I_mm4": inercia,
+                "K": entradas.get("kx" if eixo == "x" else "ky"),
+                "L_mm": entradas.get("comprimento_mm"),
             },
         }
     return None

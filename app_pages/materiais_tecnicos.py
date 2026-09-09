@@ -53,6 +53,11 @@ def _linha_material(material: dict) -> dict:
         "Rastreabilidade (%)": avaliacao["indice_rastreabilidade"],
     }
 
+st.set_page_config(
+    page_title="Materiais técnicos",
+    page_icon=":material/science:",
+    layout="wide",
+)
 
 cabecalho_pagina(
     "Materiais técnicos",

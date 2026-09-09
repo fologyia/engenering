@@ -6,6 +6,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+from components import load_models as catalogo
 from components.project_tools import contexto_sessao_projeto
 from components.ui import cabecalho_pagina
 from core import project_assistant as projetos
@@ -201,8 +202,8 @@ def coletar_entradas(
         }
         return valores, resumo
 
-    modelo = st.session_state.get(
-        "projeto_modelo_carga", "Barra sob carga axial"
+    modelo = catalogo.resolver_chave(
+        st.session_state.get("projeto_modelo_carga")
     )
     return {"modelo": modelo}, {"Modelo inicial": modelo}
 
@@ -627,17 +628,10 @@ elif etapa == 3:
         else:
             st.selectbox(
                 "Modelo que mais se aproxima do componente",
-                [
-                    "Barra sob carga axial",
-                    "Eixo circular maciço",
-                    "Eixo circular vazado",
-                    "Viga de seção retangular",
-                    "Seção retangular com flexão biaxial",
-                    "Seção I sob força axial e flexão",
-                    "Pinos ou parafusos sob cisalhamento",
-                    "Vaso cilíndrico de parede fina",
-                    "Vaso esférico de parede fina",
-                ],
+                list(catalogo.CATALOGO),
+                format_func=lambda chave: (
+                    f"{catalogo.CATALOGO[chave].grupo} · {chave}"
+                ),
                 key="projeto_modelo_carga",
                 persist_state="session",
             )

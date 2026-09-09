@@ -66,6 +66,7 @@ opcoes = [
     "Assistente de projeto",
     "Conversor de unidades",
     "Análise estática",
+    "Flambagem de colunas",
     "Análise de fadiga",
     "Assistente de cargas",
     "Círculo de Mohr",
@@ -135,6 +136,11 @@ if modulo == "Comece aqui":
                 "Tensor 2D/3D de uma simulação",
                 "Círculo de Mohr",
                 "Transformar o plano e achar tensões principais",
+            ],
+            [
+                "Peça esbelta sob compressão (coluna, escora, tirante invertido)",
+                "Flambagem de colunas",
+                "Obter esbeltez e a carga crítica de Euler/Johnson",
             ],
             [
                 "Carga ou tensão máxima e mínima de um ciclo",
@@ -644,6 +650,73 @@ elif modulo == "Análise estática":
         icon=":material/warning:",
     )
     link_modulo("app_pages/analise_estatica.py", "Abrir a análise estática")
+
+
+elif modulo == "Flambagem de colunas":
+    st.header("Flambagem de colunas")
+    st.markdown(
+        "Use para uma **peça esbelta sob compressão** (coluna, escora, haste "
+        "de cilindro, montante comprimido) — a tensão σ = F/A sozinha não "
+        "avisa quando a peça vai flambar antes de escoar."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Seção", "Geometria da peça (retangular, circular, tubo, perfil ou A/r direto)", "Desenho ou catálogo do perfil"],
+            ["L", "Comprimento real da coluna, em mm", "Desenho ou montagem"],
+            ["Condição de apoio", "K teórico do caso mais próximo do apoio real", "Croqui de fixação nas extremidades"],
+            ["E", "Módulo de elasticidade do material, em MPa", "Certificado ou catálogo"],
+            ["Sy", "Limite de escoamento, em MPa", "Certificado ou base do material"],
+            ["P", "Força de compressão atuante, em kN (só magnitude)", "Assistente de cargas ou análise do equipamento"],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Escolha o tipo de seção e informe suas dimensões (ou perfil de catálogo).
+        2. Informe o comprimento real e a condição de apoio mais próxima da real.
+        3. Informe E, Sy e a força de compressão atuante.
+        4. Compare a esbeltez governante com a esbeltez de transição.
+        5. Leia o regime (Euler ou Johnson) e a carga admissível.
+        """
+    )
+    mostrar_exemplo(
+        [
+            ["Seção", "Circular maciça, d = 50 mm"],
+            ["L", "2000 mm"],
+            ["Condição de apoio", "Biapoiada (pino-pino), K = 1,0"],
+            ["E", "200000 MPa"],
+            ["Sy", "250 MPa"],
+            ["P", "50 kN"],
+        ],
+        "Resultado esperado: λ ≈ 160 (maior que λ de transição ≈ 125,7, "
+        "portanto regime de Euler); Pcr ≈ 151,4 kN; com fator de segurança "
+        "2,0 a carga admissível é ≈ 75,7 kN — utilização de 66% para os 50 kN "
+        "aplicados.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **λ ≥ λ de transição:** regime de **Euler** — coluna longa,
+              carga crítica cai com o quadrado do comprimento destravado.
+            - **λ < λ de transição:** regime de **Johnson** — coluna curta ou
+              intermediária, Euler sozinho superestimaria a resistência.
+            - **Eixo governante:** o de maior esbeltez — geralmente o eixo
+              mais "fraco" (menor raio de giração) ou com maior K·L.
+            - **Utilização > 100%:** a carga admissível (crítica ÷ fator de
+              segurança escolhido) foi excedida.
+            - Dobrar o comprimento destravado L divide a carga crítica de
+              Euler por 4 — é a variável mais sensível deste cálculo.
+            """
+        )
+    st.warning(
+        "Este é o modelo elementar de Euler/Johnson: compressão centrada, "
+        "coluna prismática, sem imperfeições, excentricidade, flambagem "
+        "local/torcional ou efeitos de 2ª ordem. Para perfis de aço conforme "
+        "norma (NBR 8800/AISC), use Estruturas de aço.",
+        icon=":material/warning:",
+    )
+    link_modulo("app_pages/flambagem_colunas.py", "Abrir Flambagem de colunas")
 
 
 elif modulo == "Análise de fadiga":

@@ -27,6 +27,11 @@ PERFIS = {
     "Memorial de cálculos": ["escopo", "base", "carregamentos", "materiais", "normas", "plano_calculo", "registros", "sensibilidade", "conclusao"],
 }
 
+st.set_page_config(
+    page_title="Central de relatórios",
+    page_icon=":material/description:",
+    layout="wide",
+)
 
 cabecalho_pagina(
     "Central de relatórios",

@@ -22,6 +22,11 @@ from core.sensitivity import (
     sugerir_de_registro,
 )
 
+st.set_page_config(
+    page_title="Análise de sensibilidade",
+    page_icon=":material/tune:",
+    layout="wide",
+)
 
 cabecalho_pagina(
     "Análise de sensibilidade",
@@ -31,6 +36,7 @@ cabecalho_pagina(
     cor="violet",
     ajuda_modulo="Análise de sensibilidade",
     acoes=(("app_pages/central_relatorios.py", "Memorial", ":material/description:"),),
+    modulo_id="analise_sensibilidade",
 )
 
 st.info(
@@ -289,6 +295,7 @@ if resultado and resultado.get("modelo_id") == modelo_id:
     )
     registro = construir_registro_tecnico(
         modulo="Análise de sensibilidade",
+        modulo_id="analise_sensibilidade",
         titulo=f"Sensibilidade — {modelo.titulo}",
         status=status,
         resumo=f"OAT e Monte Carlo aplicados ao modelo: {modelo.descricao}",

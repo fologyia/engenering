@@ -10,6 +10,11 @@ from components.ui import cabecalho_pagina
 from core.project_store import criar_item, obter_projeto_ativo, salvar_projeto
 from core.project_validation import SEVERIDADES, validar_projeto
 
+st.set_page_config(
+    page_title="Central de validação",
+    page_icon=":material/fact_check:",
+    layout="wide",
+)
 
 cabecalho_pagina(
     "Central de validação",

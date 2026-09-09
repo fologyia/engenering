@@ -12,7 +12,7 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.ui import cabecalho_pagina
+from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
 from core import fatigue as fat
 from core import fatigue_report
 from core import memorial_word
@@ -32,6 +32,7 @@ cabecalho_pagina(
     icone=":material/cycle:",
     cor="green",
     ajuda_modulo="Análise de fadiga",
+    modulo_id="analise_fadiga",
 )
 
 ROTULOS_MATERIAL = {
@@ -79,6 +80,8 @@ modelo = st.segmented_control(
     default="norton",
     required=True,
     width="stretch",
+    key="fadiga_modelo_marin",
+    persist_state="session",
 )
 st.caption(f"Fonte ativa: {fat.FONTES_MARIN[modelo]}.")
 
@@ -95,6 +98,8 @@ with st.container(border=True):
         escolha = st.selectbox(
             "Material da base (opcional)",
             ["— entrada manual —"] + nomes,
+            key="fadiga_material_escolha",
+            persist_state="session",
         )
         dados = None if escolha == "— entrada manual —" else mat.obter_material(escolha)
         classe_base = MAPA_CATEGORIA.get(dados["categoria"]) if dados else None
@@ -103,6 +108,8 @@ with st.container(border=True):
             "Usar classe, Sut e Sy do material selecionado",
             value=base_valida,
             disabled=not base_valida,
+            key=f"fadiga_usar_base_{escolha}",
+            persist_state="session",
         )
         usar_base = bool(base_valida and usar_base_widget)
         if dados:
@@ -123,6 +130,7 @@ with st.container(border=True):
             format_func=ROTULOS_MATERIAL.get,
             disabled=usar_base,
             key=f"classe_{escolha}",
+            persist_state="session",
         )
         Sut_padrao = float(dados["Sut_MPa"]) if base_valida else 600.0
         Sut_manual = st.number_input(
@@ -132,6 +140,7 @@ with st.container(border=True):
             step=10.0,
             disabled=usar_base,
             key=f"sut_fadiga_{escolha}",
+            persist_state="session",
         )
         Sy_padrao = float(dados["Sy_MPa"]) if base_valida else 400.0
         Sy_manual = st.number_input(
@@ -142,6 +151,7 @@ with st.container(border=True):
             disabled=usar_base,
             key=f"sy_fadiga_{escolha}",
             help="Necessário para Soderberg e para a verificação de escoamento.",
+            persist_state="session",
         )
 
 material = classe_base if usar_base else material_manual
@@ -163,6 +173,8 @@ with st.container(border=True):
             "Tipo de carregamento",
             list(ROTULOS_CARGA),
             format_func=ROTULOS_CARGA.get,
+            key="fadiga_tipo_carregamento",
+            persist_state="session",
         )
         Ccarreg = fat.fator_carregamento(tipo_carga, modelo)
         st.metric("Ccarreg", f"{Ccarreg:.3f}", border=True)
@@ -213,6 +225,7 @@ with st.container(border=True):
             ["Informar d equivalente", "Calcular pela geometria"],
             default="Informar d equivalente", required=True, width="stretch",
             key=f"modo_diametro_{modelo}_{tipo_carga}",
+            persist_state="session",
         )
         if modo_diametro == "Informar d equivalente":
             diametro_mm = st.number_input(
@@ -220,46 +233,47 @@ with st.container(border=True):
                 max_value=diametro_maximo, value=max(diametro_minimo, 20.0), step=1.0,
                 key=f"diametro_{modelo}_{tipo_carga}",
                 help="Para secoes nao circulares, informe o diametro equivalente obtido pela area submetida a pelo menos 95% da tensao maxima.",
+                persist_state="session",
             )
             st.caption("Use esta opcao quando A0,95sigma ja tiver sido determinada por outro metodo.")
         else:
             st.markdown("**Calculadora de diametro equivalente (A0,95sigma)**")
-            geometria = st.selectbox("Geometria e condicao de flexao", ["Cilindro macico rotativo", "Circulo nao rotativo", "Retangulo", "Perfil I", "Perfil canal", "Area A0,95sigma manual"], key="geometria_diametro_equivalente")
+            geometria = st.selectbox("Geometria e condicao de flexao", ["Cilindro macico rotativo", "Circulo nao rotativo", "Retangulo", "Perfil I", "Perfil canal", "Area A0,95sigma manual"], key="geometria_diametro_equivalente", persist_state="session")
             rotulo_svg = {"Cilindro macico rotativo": "Circulo rotativo", "Circulo nao rotativo": "Circulo nao rotativo", "Retangulo": "Retangulo", "Perfil I": "Perfil I", "Perfil canal": "Perfil canal", "Area A0,95sigma manual": "Area manual"}[geometria]
             entrada_geometria, desenho_geometria = st.columns(2)
             with entrada_geometria:
                 try:
                     if geometria == "Cilindro macico rotativo":
-                        d_fisico = st.number_input("d (mm)", min_value=0.1, value=20.0, step=1.0, key="de_circulo_rotativo")
+                        d_fisico = st.number_input("d (mm)", min_value=0.1, value=20.0, step=1.0, key="de_circulo_rotativo", persist_state="session")
                         area_95 = size.area_95_circulo_rotativo(d_fisico)
                         st.latex(r"A_{0,95\sigma}=0,0766d^2 \quad\Rightarrow\quad d_e=d")
                     elif geometria == "Circulo nao rotativo":
-                        d_fisico = st.number_input("d (mm)", min_value=0.1, value=60.0, step=1.0, key="de_circulo_nao_rotativo")
+                        d_fisico = st.number_input("d (mm)", min_value=0.1, value=60.0, step=1.0, key="de_circulo_nao_rotativo", persist_state="session")
                         area_95 = size.area_95_circulo_nao_rotativo(d_fisico)
                         st.latex(r"A_{0,95\sigma}=0,01046d^2 \quad\Rightarrow\quad d_e=0,370d")
                     elif geometria == "Retangulo":
-                        h_mm = st.number_input("h (mm)", min_value=0.1, value=60.0, step=1.0, key="de_retangulo_h")
-                        b_mm = st.number_input("b (mm)", min_value=0.1, value=40.0, step=1.0, key="de_retangulo_b")
+                        h_mm = st.number_input("h (mm)", min_value=0.1, value=60.0, step=1.0, key="de_retangulo_h", persist_state="session")
+                        b_mm = st.number_input("b (mm)", min_value=0.1, value=40.0, step=1.0, key="de_retangulo_b", persist_state="session")
                         area_95 = size.area_95_retangulo(h_mm, b_mm)
                         st.latex(r"A_{0,95\sigma}=0,05hb \quad\Rightarrow\quad d_e=0,808\sqrt{hb}")
                     elif geometria == "Perfil I":
-                        a_mm = st.number_input("a (mm)", min_value=0.1, value=100.0, step=1.0, key="de_i_a")
-                        b_mm = st.number_input("b (mm)", min_value=0.1, value=200.0, step=1.0, key="de_i_b")
-                        tf_mm = st.number_input("tf (mm)", min_value=0.1, value=10.0, step=0.5, key="de_i_tf")
-                        eixo = st.segmented_control("Eixo de flexao", ["eixo 1-1", "eixo 2-2"], default="eixo 1-1", required=True, width="stretch", key="de_i_eixo")
+                        a_mm = st.number_input("a (mm)", min_value=0.1, value=100.0, step=1.0, key="de_i_a", persist_state="session")
+                        b_mm = st.number_input("b (mm)", min_value=0.1, value=200.0, step=1.0, key="de_i_b", persist_state="session")
+                        tf_mm = st.number_input("tf (mm)", min_value=0.1, value=10.0, step=0.5, key="de_i_tf", persist_state="session")
+                        eixo = st.segmented_control("Eixo de flexao", ["eixo 1-1", "eixo 2-2"], default="eixo 1-1", required=True, width="stretch", key="de_i_eixo", persist_state="session")
                         area_95 = size.area_95_perfil_i(a_mm, b_mm, tf_mm, eixo)
                         st.latex(r"A_{0,95\sigma}=0,10at_f\ (eixo\ 1\text{-}1)\quad;\quad A_{0,95\sigma}=0,05ba\ (eixo\ 2\text{-}2)")
                         st.caption("Validade desta aproximacao: tf > 0,025a.")
                     elif geometria == "Perfil canal":
-                        a_mm = st.number_input("a (mm)", min_value=0.1, value=100.0, step=1.0, key="de_canal_a")
-                        b_mm = st.number_input("b (mm)", min_value=0.1, value=200.0, step=1.0, key="de_canal_b")
-                        tf_mm = st.number_input("tf (mm)", min_value=0.1, value=10.0, step=0.5, key="de_canal_tf")
-                        x_mm = st.number_input("x (mm)", min_value=0.0, max_value=b_mm, value=min(70.0, b_mm), step=1.0, key="de_canal_x")
-                        eixo = st.segmented_control("Eixo de flexao", ["eixo 1-1", "eixo 2-2"], default="eixo 1-1", required=True, width="stretch", key="de_canal_eixo")
+                        a_mm = st.number_input("a (mm)", min_value=0.1, value=100.0, step=1.0, key="de_canal_a", persist_state="session")
+                        b_mm = st.number_input("b (mm)", min_value=0.1, value=200.0, step=1.0, key="de_canal_b", persist_state="session")
+                        tf_mm = st.number_input("tf (mm)", min_value=0.1, value=10.0, step=0.5, key="de_canal_tf", persist_state="session")
+                        x_mm = st.number_input("x (mm)", min_value=0.0, max_value=b_mm, value=min(70.0, b_mm), step=1.0, key="de_canal_x", persist_state="session")
+                        eixo = st.segmented_control("Eixo de flexao", ["eixo 1-1", "eixo 2-2"], default="eixo 1-1", required=True, width="stretch", key="de_canal_eixo", persist_state="session")
                         area_95 = size.area_95_perfil_canal(a_mm, b_mm, tf_mm, x_mm, eixo)
                         st.latex(r"A_{0,95\sigma}=0,05ab\ (eixo\ 1\text{-}1)\quad;\quad A_{0,95\sigma}=0,052xa+0,10t_f(b-x)\ (eixo\ 2\text{-}2)")
                     else:
-                        area_95 = st.number_input("A0,95sigma (mm2)", min_value=0.001, value=100.0, step=1.0, key="de_area_manual")
+                        area_95 = st.number_input("A0,95sigma (mm2)", min_value=0.001, value=100.0, step=1.0, key="de_area_manual", persist_state="session")
                         st.latex(r"d_e=\sqrt{\frac{A_{0,95\sigma}}{0,0766}}")
                     diametro_mm = size.diametro_equivalente_por_area_95(area_95)
                 except ValueError as erro:
@@ -315,6 +329,8 @@ with st.container(border=True):
             "Acabamento superficial de referência",
             list(ROTULOS_ACABAMENTO),
             format_func=ROTULOS_ACABAMENTO.get,
+            key="fadiga_acabamento",
+            persist_state="session",
         )
         modo_superficie = st.segmented_control(
             "Como definir Csuperf?",
@@ -322,6 +338,8 @@ with st.container(border=True):
             default="Calculado pela curva",
             required=True,
             width="stretch",
+            key="fadiga_modo_superficie",
+            persist_state="session",
         )
         Csuperf_calculado = fat.fator_superficie(
             Sut, acabamento, material=material
@@ -348,6 +366,8 @@ with st.container(border=True):
                     "O valor manual substitui a correlação. Use-o quando houver "
                     "um gráfico, ensaio ou norma diferente da base implementada."
                 ),
+                key="fadiga_csuperf_manual",
+                persist_state="session",
             )
             st.warning(
                 "Modo manual ativo: o valor informado será usado no produto de Marin."
@@ -475,6 +495,7 @@ with st.container(border=True):
                 "Norton publica a Equação 6.7f em °F; Shigley usa °C. "
                 "O programa converte a entrada antes do cálculo."
             ),
+            persist_state="session",
         )
         temp_min, temp_max = fat.limites_temperatura_entrada(
             modelo, unidade_temperatura
@@ -491,6 +512,7 @@ with st.container(border=True):
                 "Informe a temperatura da peça na região crítica. Não use "
                 "automaticamente a temperatura dos gases, do fluido ou do ambiente."
             ),
+            persist_state="session",
         )
         temperatura = fat.temperatura_para_celsius(
             temperatura_entrada, unidade_temperatura
@@ -669,6 +691,8 @@ with st.container(border=True):
             "Confiabilidade desejada (%)",
             list(fat.FATORES_CONFIABILIDADE),
             index=2,
+            key="fadiga_confiabilidade",
+            persist_state="session",
         )
         Cconf = fat.fator_confiabilidade(confiabilidade)
         st.metric("Cconf", f"{Cconf:.3f}", border=True)
@@ -778,6 +802,7 @@ with st.container(border=True):
             "Kt considera a concentração elástica teórica. Kf reduz esse "
             "efeito conforme a sensibilidade do material ao entalhe."
         ),
+        persist_state="session",
     )
 
     entrada_entalhe, explicacao_entalhe = st.columns([0.85, 1.15])
@@ -788,6 +813,7 @@ with st.container(border=True):
             step=10.0,
             key="fadiga_sigma_alternada_nominal",
             help="Amplitude calculada na seção nominal da peça, antes do entalhe.",
+            persist_state="session",
         )
         Kt = st.number_input(
             "Fator teórico de concentração, Kt",
@@ -796,6 +822,8 @@ with st.container(border=True):
             step=0.05,
             disabled=modo_entalhe == "Sem entalhe",
             help="Obtido da geometria do entalhe e do tipo de carregamento.",
+            key="fadiga_kt",
+            persist_state="session",
         )
         q = st.slider(
             "Índice de sensibilidade ao entalhe, q",
@@ -805,6 +833,8 @@ with st.container(border=True):
             step=0.01,
             disabled=modo_entalhe != "Usar Kf com q",
             help="q = 0: material insensível; q = 1: totalmente sensível.",
+            key="fadiga_q",
+            persist_state="session",
         )
 
         if modo_entalhe == "Sem entalhe":
@@ -945,6 +975,7 @@ with st.container(border=True):
                 "é multiplicada automaticamente por Kf porque o tratamento "
                 "depende do escoamento local e da ductilidade."
             ),
+            persist_state="session",
         )
         st.latex(
             r"\frac{1}{n_G}=\frac{\sigma_a}{S_e}+\frac{\sigma_m}{S_{ut}}"
@@ -1590,12 +1621,14 @@ with st.container(border=True):
                 "Identificação do projeto",
                 value="Análise de fadiga",
                 key="fadiga_nome_projeto_pdf",
+                persist_state="session",
             )
         with cliente_col:
             cliente_projeto = st.text_input(
                 "Cliente, empresa ou setor",
                 key="fadiga_cliente_memorial",
                 placeholder="Organização responsável pelo equipamento",
+                persist_state="session",
             )
 
         codigo_col, revisao_col, emissao_col = st.columns([1.4, 0.7, 1.0])
@@ -1604,12 +1637,14 @@ with st.container(border=True):
                 "Código do documento",
                 value="MC-FAD-001",
                 key="fadiga_codigo_memorial",
+                persist_state="session",
             )
         with revisao_col:
             revisao_documento = st.text_input(
                 "Revisão",
                 value="00",
                 key="fadiga_revisao_memorial",
+                persist_state="session",
             )
         with emissao_col:
             data_emissao = st.date_input(
@@ -1624,12 +1659,14 @@ with st.container(border=True):
                 "Elaborado por",
                 key="fadiga_responsavel_pdf",
                 placeholder="Nome do projetista ou da equipe",
+                persist_state="session",
             )
         with verificador_col:
             verificador_projeto = st.text_input(
                 "Verificado por",
                 key="fadiga_verificador_memorial",
                 placeholder="Responsável pela verificação independente",
+                persist_state="session",
             )
 
         aprovador_col, situacao_col = st.columns(2)
@@ -1638,12 +1675,14 @@ with st.container(border=True):
                 "Aprovado por",
                 key="fadiga_aprovador_memorial",
                 placeholder="Responsável pela aprovação final",
+                persist_state="session",
             )
         with situacao_col:
             situacao_documento = st.selectbox(
                 "Situação do documento",
                 ["Preliminar", "Para verificação", "Para aprovação", "Final"],
                 key="fadiga_situacao_memorial",
+                persist_state="session",
             )
 
         with st.container(border=True):
@@ -1658,12 +1697,14 @@ with st.container(border=True):
                     "Componente ou ponto crítico",
                     key="fadiga_componente_memorial",
                     placeholder="Ex.: eixo, seção junto ao ombro, desenho 123 - posição A",
+                    persist_state="session",
                 )
             with referencia_col:
                 referencia_projeto = st.text_input(
                     "Norma, especificação ou desenho de referência",
                     key="fadiga_referencia_projeto_memorial",
                     placeholder="Ex.: especificação interna, desenho, norma ou requisito do cliente",
+                    persist_state="session",
                 )
 
             fator_col, vida_col = st.columns(2)
@@ -1677,6 +1718,7 @@ with st.container(border=True):
                     format="%.2f",
                     key="fadiga_meta_seguranca_memorial",
                     help="Meta usada para interpretar Goodman, Soderberg e escoamento.",
+                    persist_state="session",
                 )
             with vida_col:
                 vida_requerida_ciclos = st.number_input(
@@ -1687,6 +1729,7 @@ with st.container(border=True):
                     format="%.0f",
                     key="fadiga_vida_requerida_memorial",
                     help="Use 0 quando o requisito ainda não estiver definido; o relatório marcará a pendência.",
+                    persist_state="session",
                 )
         observacoes_memorial = st.text_area(
             "Observações para o memorial (opcional)",
@@ -1820,8 +1863,38 @@ with st.container(border=True):
         if menor_fator_registro is not None
         else "Não há fatores de segurança válidos suficientes para concluir."
     )
+
+    fronteira_modelo(
+        [
+            "Fadiga multiaxial não proporcional (tensões fora de fase entre si).",
+            "Propagação de trinca — este é um modelo de iniciação (tensão-vida), não de mecânica da fratura.",
+            "Acúmulo de dano por blocos de carga com amplitudes diferentes (regra de Miner não aplicada aqui).",
+            "Corrosão-fadiga e fadiga térmica.",
+        ]
+    )
+
+    with st.container(border=True):
+        st.subheader("Comparar cenários")
+        comparador_cenarios(
+            escopo="analise_fadiga",
+            resumo_entradas={
+                "σa (MPa)": round(tensao_alternada, 1),
+                "σm (MPa)": round(tensao_media, 1),
+                "Se (MPa)": round(Se, 1),
+            },
+            metricas={
+                "n Goodman": "∞" if math.isinf(n_goodman) else round(n_goodman, 2),
+                "n Soderberg": (
+                    "—" if n_soderberg is None
+                    else ("∞" if math.isinf(n_soderberg) else round(n_soderberg, 2))
+                ),
+                "Vida": resultado_vida,
+            },
+        )
+
     registro_fadiga = construir_registro_tecnico(
         modulo="Análise de fadiga",
+        modulo_id="analise_fadiga",
         titulo=f"Avaliação de fadiga — {componente_analisado or 'ponto crítico'}",
         status=status_registro,
         resumo="Fatores de Marin, concentração de tensões, Goodman, Soderberg, escoamento no primeiro ciclo e vida S-N.",

@@ -100,6 +100,7 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
     analises = listar_modulos(grupo="Análises técnicas")
     assert [item.id for item in analises] == [
         "analise_estatica",
+        "flambagem_colunas",
         "analise_fadiga",
         "assistente_cargas",
         "circulo_mohr",

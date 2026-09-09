@@ -28,6 +28,11 @@ from core.project_store import (
 )
 from core.project_validation import validar_projeto
 
+st.set_page_config(
+    page_title="Projetos permanentes",
+    page_icon=":material/folder_managed:",
+    layout="wide",
+)
 
 cabecalho_pagina(
     "Gestão de projetos industriais",

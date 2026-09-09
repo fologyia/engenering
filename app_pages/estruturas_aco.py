@@ -10,7 +10,7 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.ui import cabecalho_pagina
+from components.ui import cabecalho_pagina, fronteira_modelo
 from core import bolt_design as parafusos
 from core import load_combinations as combinacoes
 from core import steel_connections as ligacoes
@@ -51,6 +51,7 @@ cabecalho_pagina(
     cor="violet",
     ajuda_modulo="Estruturas de aço",
     acoes=(("app_pages/projeto_parafusos.py", "Projeto de parafusos", ":material/build:"),),
+    modulo_id="estruturas_aco",
 )
 st.session_state.setdefault("estrutura_aco_modulo", "1. Perfis")
 st.session_state.setdefault("estrutura_nd_kN", 100.0)
@@ -72,6 +73,7 @@ modulo = st.segmented_control(
     required=True,
     width="stretch",
     key="estrutura_aco_modulo",
+    persist_state="session",
 )
 
 
@@ -84,7 +86,10 @@ if modulo == "1. Perfis":
     )
     catalogo = secoes.catalogo_dataframe()
     familias = sorted(catalogo["familia"].unique())
-    familia = st.selectbox("Família", ["Todas"] + familias)
+    familia = st.selectbox(
+        "Família", ["Todas"] + familias, key="estrutura_perfil_familia_filtro",
+        persist_state="session",
+    )
     filtrado = (
         catalogo
         if familia == "Todas"
@@ -118,6 +123,7 @@ if modulo == "1. Perfis":
         "Inspecionar perfil",
         list(secoes.CATALOGO_PERFIS),
         key="estrutura_perfil_selecionado",
+        persist_state="session",
     )
     perfil = secoes.obter_perfil(nome_perfil)
     with st.container(border=True):
@@ -164,34 +170,133 @@ if modulo == "1. Perfis":
     ):
         familia_custom = st.segmented_control(
             "Geometria",
-            ["I simétrico", "Tubo retangular", "Tubo circular", "Barra retangular"],
+            [
+                "I simétrico",
+                "W mesa larga",
+                "U (canal)",
+                "C enrijecido",
+                "T (tê)",
+                "Tubo retangular",
+                "Tubo circular",
+                "Barra retangular",
+                "Barra circular",
+            ],
             default="I simétrico",
             required=True,
             width="stretch",
+            key="estrutura_perfil_custom_familia",
+            persist_state="session",
         )
         try:
             if familia_custom == "I simétrico":
                 dimensoes = st.columns(4)
-                h = dimensoes[0].number_input("h (mm)", 1.0, value=300.0)
-                b = dimensoes[1].number_input("bf (mm)", 1.0, value=150.0)
-                tw = dimensoes[2].number_input("tw (mm)", 0.1, value=6.5)
-                tf = dimensoes[3].number_input("tf (mm)", 0.1, value=10.0)
+                h = dimensoes[0].number_input(
+                    "h (mm)", 1.0, value=300.0, key="estrutura_custom_i_h"
+                )
+                b = dimensoes[1].number_input(
+                    "bf (mm)", 1.0, value=150.0, key="estrutura_custom_i_b"
+                )
+                tw = dimensoes[2].number_input(
+                    "tw (mm)", 0.1, value=6.5, key="estrutura_custom_i_tw"
+                )
+                tf = dimensoes[3].number_input(
+                    "tf (mm)", 0.1, value=10.0, key="estrutura_custom_i_tf"
+                )
                 custom = secoes.perfil_i_simetrico("Personalizado", h, b, tw, tf)
+            elif familia_custom == "W mesa larga":
+                dimensoes = st.columns(4)
+                h = dimensoes[0].number_input(
+                    "h (mm)", 1.0, value=300.0, key="estrutura_custom_w_h"
+                )
+                b = dimensoes[1].number_input(
+                    "bf (mm)", 1.0, value=300.0, key="estrutura_custom_w_b"
+                )
+                tw = dimensoes[2].number_input(
+                    "tw (mm)", 0.1, value=10.0, key="estrutura_custom_w_tw"
+                )
+                tf = dimensoes[3].number_input(
+                    "tf (mm)", 0.1, value=15.0, key="estrutura_custom_w_tf"
+                )
+                custom = secoes.perfil_w_mesa_larga("Personalizado", h, b, tw, tf)
+            elif familia_custom == "U (canal)":
+                dimensoes = st.columns(4)
+                h = dimensoes[0].number_input(
+                    "h (mm)", 1.0, value=150.0, key="estrutura_custom_u_h"
+                )
+                b = dimensoes[1].number_input(
+                    "b (mm)", 1.0, value=75.0, key="estrutura_custom_u_b"
+                )
+                tw = dimensoes[2].number_input(
+                    "tw (mm)", 0.1, value=6.5, key="estrutura_custom_u_tw"
+                )
+                tf = dimensoes[3].number_input(
+                    "tf (mm)", 0.1, value=9.5, key="estrutura_custom_u_tf"
+                )
+                custom = secoes.perfil_u("Personalizado", h, b, tw, tf)
+            elif familia_custom == "C enrijecido":
+                dimensoes = st.columns(4)
+                h = dimensoes[0].number_input(
+                    "h (mm)", 1.0, value=150.0, key="estrutura_custom_c_h"
+                )
+                b = dimensoes[1].number_input(
+                    "b (mm)", 1.0, value=50.0, key="estrutura_custom_c_b"
+                )
+                d = dimensoes[2].number_input(
+                    "aba enrijecedora (mm)", 0.1, value=17.0, key="estrutura_custom_c_d"
+                )
+                t = dimensoes[3].number_input(
+                    "t (mm)", 0.1, value=3.0, key="estrutura_custom_c_t"
+                )
+                custom = secoes.perfil_c_enrijecido("Personalizado", h, b, d, t)
+            elif familia_custom == "T (tê)":
+                dimensoes = st.columns(4)
+                d = dimensoes[0].number_input(
+                    "altura total (mm)", 1.0, value=150.0, key="estrutura_custom_t_d"
+                )
+                b = dimensoes[1].number_input(
+                    "bf (mm)", 1.0, value=150.0, key="estrutura_custom_t_b"
+                )
+                tw = dimensoes[2].number_input(
+                    "tw (mm)", 0.1, value=7.5, key="estrutura_custom_t_tw"
+                )
+                tf = dimensoes[3].number_input(
+                    "tf (mm)", 0.1, value=10.5, key="estrutura_custom_t_tf"
+                )
+                custom = secoes.perfil_t("Personalizado", d, b, tw, tf)
+            elif familia_custom == "Barra circular":
+                d = st.number_input(
+                    "Diâmetro (mm)", 1.0, value=25.0, key="estrutura_custom_barra_circular_d"
+                )
+                custom = secoes.barra_circular("Personalizado", d)
             elif familia_custom == "Tubo retangular":
                 dimensoes = st.columns(3)
-                h = dimensoes[0].number_input("h (mm)", 1.0, value=100.0)
-                b = dimensoes[1].number_input("b (mm)", 1.0, value=50.0)
-                t = dimensoes[2].number_input("t (mm)", 0.1, value=3.0)
+                h = dimensoes[0].number_input(
+                    "h (mm)", 1.0, value=100.0, key="estrutura_custom_tubo_ret_h"
+                )
+                b = dimensoes[1].number_input(
+                    "b (mm)", 1.0, value=50.0, key="estrutura_custom_tubo_ret_b"
+                )
+                t = dimensoes[2].number_input(
+                    "t (mm)", 0.1, value=3.0, key="estrutura_custom_tubo_ret_t"
+                )
                 custom = secoes.tubo_retangular("Personalizado", h, b, t)
             elif familia_custom == "Tubo circular":
                 dimensoes = st.columns(2)
-                d = dimensoes[0].number_input("D (mm)", 1.0, value=114.3)
-                t = dimensoes[1].number_input("t (mm)", 0.1, value=4.5)
+                d = dimensoes[0].number_input(
+                    "D (mm)", 1.0, value=114.3, key="estrutura_custom_tubo_circ_d"
+                )
+                t = dimensoes[1].number_input(
+                    "t (mm)", 0.1, value=4.5, key="estrutura_custom_tubo_circ_t"
+                )
                 custom = secoes.tubo_circular("Personalizado", d, t)
             else:
                 dimensoes = st.columns(2)
-                h = dimensoes[0].number_input("h (mm)", 1.0, value=100.0)
-                b = dimensoes[1].number_input("b (mm)", 1.0, value=20.0)
+                h = dimensoes[0].number_input(
+                    "h (mm)", 1.0, value=100.0, key="estrutura_custom_barra_h"
+                )
+                b = dimensoes[1].number_input(
+                    "b (mm)", 1.0, value=20.0, key="estrutura_custom_barra_b"
+                )
                 custom = secoes.barra_retangular("Personalizado", h, b)
         except ValueError as erro:
             st.error(str(erro))
@@ -209,16 +314,25 @@ elif modulo == "2. Barras":
         "Perfil",
         list(secoes.CATALOGO_PERFIS),
         key="estrutura_barra_perfil",
+        persist_state="session",
     )
     perfil = secoes.obter_perfil(nome_perfil)
 
     with st.container(border=True):
         st.subheader("Material e esforços de cálculo")
         material = st.columns(4)
-        fy = material[0].number_input("Fy (MPa)", 1.0, value=250.0, step=10.0)
-        fu = material[1].number_input("Fu (MPa)", 1.0, value=400.0, step=10.0)
-        e = material[2].number_input("E (GPa)", 1.0, value=200.0, step=5.0)
-        g = material[3].number_input("G (GPa)", 1.0, value=77.0, step=1.0)
+        fy = material[0].number_input(
+            "Fy (MPa)", 1.0, value=250.0, step=10.0, key="estrutura_barra_fy"
+        )
+        fu = material[1].number_input(
+            "Fu (MPa)", 1.0, value=400.0, step=10.0, key="estrutura_barra_fu"
+        )
+        e = material[2].number_input(
+            "E (GPa)", 1.0, value=200.0, step=5.0, key="estrutura_barra_e"
+        )
+        g = material[3].number_input(
+            "G (GPa)", 1.0, value=77.0, step=1.0, key="estrutura_barra_g"
+        )
         if fu < fy:
             st.error("Fu deve ser maior ou igual a Fy.")
             st.stop()
@@ -228,6 +342,8 @@ elif modulo == "2. Barras":
             default="Compressão",
             required=True,
             width="stretch",
+            key="estrutura_barra_tipo_axial",
+            persist_state="session",
         )
         esforcos = st.columns(4)
         nd_kN = esforcos[0].number_input(
@@ -236,7 +352,9 @@ elif modulo == "2. Barras":
         mdx_kNm = esforcos[1].number_input(
             "|Mdx| (kN·m)", 0.0, step=5.0, key="estrutura_mdx_kNm"
         )
-        mdy_kNm = esforcos[2].number_input("|Mdy| (kN·m)", 0.0, value=0.0, step=5.0)
+        mdy_kNm = esforcos[2].number_input(
+            "|Mdy| (kN·m)", 0.0, value=0.0, step=5.0, key="estrutura_mdy_kNm"
+        )
         vd_kN = esforcos[3].number_input(
             "|Vd| (kN)", 0.0, step=5.0, key="estrutura_vd_kN"
         )
@@ -250,21 +368,41 @@ elif modulo == "2. Barras":
             step=0.25,
             key="estrutura_comprimento_m",
         )
-        kx = estabilidade[1].number_input("Kx", 0.01, value=1.0, step=0.1)
-        ky = estabilidade[2].number_input("Ky", 0.01, value=1.0, step=0.1)
+        kx = estabilidade[1].number_input(
+            "Kx", 0.01, value=1.0, step=0.1, key="estrutura_kx"
+        )
+        ky = estabilidade[2].number_input(
+            "Ky", 0.01, value=1.0, step=0.1, key="estrutura_ky"
+        )
         lb_m = estabilidade[3].number_input(
-            "Comprimento destravado Lb (m)", 0.001, value=3.0, step=0.25
+            "Comprimento destravado Lb (m)",
+            0.001,
+            value=3.0,
+            step=0.25,
+            key="estrutura_lb_m",
         )
         reducoes = st.columns(4)
         q_local = reducoes[0].number_input(
-            "Redução local Q", 0.01, 1.0, value=1.0, step=0.05
+            "Redução local Q", 0.01, 1.0, value=1.0, step=0.05, key="estrutura_q_local"
         )
         cv = reducoes[1].number_input(
-            "Redução de cisalhamento Cv", 0.01, 1.0, value=1.0, step=0.05
+            "Redução de cisalhamento Cv",
+            0.01,
+            1.0,
+            value=1.0,
+            step=0.05,
+            key="estrutura_cv",
         )
-        cb = reducoes[2].number_input("Cb", 0.01, value=1.0, step=0.1)
+        cb = reducoes[2].number_input(
+            "Cb", 0.01, value=1.0, step=0.1, key="estrutura_cb"
+        )
         area_liquida_pct = reducoes[3].number_input(
-            "Área líquida / bruta (%)", 1.0, 100.0, value=90.0, step=1.0
+            "Área líquida / bruta (%)",
+            1.0,
+            100.0,
+            value=90.0,
+            step=1.0,
+            key="estrutura_area_liquida_pct",
         )
         ct = st.number_input(
             "Coeficiente de redução da área líquida Ct",
@@ -272,15 +410,27 @@ elif modulo == "2. Barras":
             1.0,
             value=1.0,
             step=0.05,
+            key="estrutura_ct",
+            persist_state="session",
         )
 
     with st.expander("Coeficientes de resistência", icon=":material/settings:"):
         coef = st.columns(5)
-        phi_y = coef[0].number_input("φ escoamento", 0.01, 1.0, value=0.90)
-        phi_u = coef[1].number_input("φ ruptura", 0.01, 1.0, value=0.75)
-        phi_c = coef[2].number_input("φ compressão", 0.01, 1.0, value=0.90)
-        phi_b = coef[3].number_input("φ flexão", 0.01, 1.0, value=0.90)
-        phi_v = coef[4].number_input("φ cisalhamento", 0.01, 1.0, value=0.90)
+        phi_y = coef[0].number_input(
+            "φ escoamento", 0.01, 1.0, value=0.90, key="estrutura_phi_y"
+        )
+        phi_u = coef[1].number_input(
+            "φ ruptura", 0.01, 1.0, value=0.75, key="estrutura_phi_u"
+        )
+        phi_c = coef[2].number_input(
+            "φ compressão", 0.01, 1.0, value=0.90, key="estrutura_phi_c"
+        )
+        phi_b = coef[3].number_input(
+            "φ flexão", 0.01, 1.0, value=0.90, key="estrutura_phi_b"
+        )
+        phi_v = coef[4].number_input(
+            "φ cisalhamento", 0.01, 1.0, value=0.90, key="estrutura_phi_v"
+        )
 
     try:
         if tipo_axial == "Tração":
@@ -436,6 +586,7 @@ elif modulo == "2. Barras":
     status_barra = "Atende" if utilizacao_governante <= 1.0 else "Não atende"
     registro_barra = construir_registro_tecnico(
         modulo="Estruturas de aço",
+        modulo_id="estruturas_aco",
         titulo=f"Verificação da barra {nome_perfil}",
         status=status_barra,
         resumo="Pré-dimensionamento de barra isolada sob esforço axial, flexão, cisalhamento, interação e flecha.",
@@ -583,6 +734,7 @@ elif modulo == "3. Combinações":
     )
     registro_combinacoes = construir_registro_tecnico(
         modulo="Estruturas de aço",
+        modulo_id="estruturas_aco",
         titulo="Combinações de ações ELU e ELS",
         status="Calculado",
         resumo="Geração de combinações editáveis e envelope de esforços para uso nas verificações estruturais.",
@@ -618,6 +770,8 @@ elif modulo == "4. Ligações":
         default="Parafusos",
         required=True,
         width="stretch",
+        key="estrutura_ligacao_tipo",
+        persist_state="session",
     )
 
     if tipo_ligacao == "Parafusos":
@@ -631,12 +785,16 @@ elif modulo == "4. Ligações":
             "Rosca",
             list(parafusos.ROSCAS_METRICAS),
             index=list(parafusos.ROSCAS_METRICAS).index("M20"),
+            key="estrutura_ligacao_rosca",
+            persist_state="session",
         )
         rosca = parafusos.obter_rosca(escolha_rosca)
         classe_nome = st.selectbox(
             "Classe",
             list(parafusos.CLASSES_PARAFUSO),
             index=list(parafusos.CLASSES_PARAFUSO).index("8.8"),
+            key="estrutura_ligacao_classe",
+            persist_state="session",
         )
         try:
             classe = parafusos.obter_classe(classe_nome, rosca.diametro_mm)
@@ -644,35 +802,67 @@ elif modulo == "4. Ligações":
             st.error(str(erro))
             st.stop()
         dados = st.columns(4)
-        n_parafusos = dados[0].number_input("Número de parafusos", 1, value=4)
-        planos = dados[1].number_input("Planos de corte", 1, value=1)
-        vd = dados[2].number_input("|Vd| (kN)", 0.0, value=100.0)
-        td = dados[3].number_input("|Td| (kN)", 0.0, value=20.0)
+        n_parafusos = dados[0].number_input(
+            "Número de parafusos", 1, value=4, key="estrutura_lig_n_parafusos"
+        )
+        planos = dados[1].number_input(
+            "Planos de corte", 1, value=1, key="estrutura_lig_planos"
+        )
+        vd = dados[2].number_input(
+            "|Vd| (kN)", 0.0, value=100.0, key="estrutura_lig_vd"
+        )
+        td = dados[3].number_input(
+            "|Td| (kN)", 0.0, value=20.0, key="estrutura_lig_td"
+        )
         chapa = st.columns(4)
-        t = chapa[0].number_input("Espessura da chapa (mm)", 0.1, value=10.0)
-        fu_chapa = chapa[1].number_input("Fu da chapa (MPa)", 1.0, value=400.0)
+        t = chapa[0].number_input(
+            "Espessura da chapa (mm)", 0.1, value=10.0, key="estrutura_lig_t"
+        )
+        fu_chapa = chapa[1].number_input(
+            "Fu da chapa (MPa)", 1.0, value=400.0, key="estrutura_lig_fu_chapa"
+        )
         lc = chapa[2].number_input(
-            "Distância livre Lc na direção da força (mm)", 0.1, value=30.0
+            "Distância livre Lc na direção da força (mm)",
+            0.1,
+            value=30.0,
+            key="estrutura_lig_lc",
         )
         pre_tensao = chapa[3].number_input(
-            "Pré-tensão por parafuso (kN)", 0.0, value=50.0
+            "Pré-tensão por parafuso (kN)",
+            0.0,
+            value=50.0,
+            key="estrutura_lig_pre_tensao",
         )
         atrito = st.columns(2)
-        mu = atrito[0].number_input("Coeficiente de atrito", 0.0, value=0.30)
-        interfaces = atrito[1].number_input("Interfaces de atrito", 1, value=1)
+        mu = atrito[0].number_input(
+            "Coeficiente de atrito", 0.0, value=0.30, key="estrutura_lig_mu"
+        )
+        interfaces = atrito[1].number_input(
+            "Interfaces de atrito", 1, value=1, key="estrutura_lig_interfaces"
+        )
         with st.expander("Coeficientes da ligação", icon=":material/settings:"):
             cs = st.columns(4)
             cnv = cs[0].number_input(
-                "Coef. cisalhamento", 0.01, value=0.48
+                "Coef. cisalhamento", 0.01, value=0.48, key="estrutura_lig_cnv"
             )
-            cnt = cs[1].number_input("Coef. tração", 0.01, value=0.75)
-            phi_b = cs[2].number_input("φ parafuso", 0.01, 1.0, value=0.75)
-            phi_c = cs[3].number_input("φ contato", 0.01, 1.0, value=0.75)
+            cnt = cs[1].number_input(
+                "Coef. tração", 0.01, value=0.75, key="estrutura_lig_cnt"
+            )
+            phi_b = cs[2].number_input(
+                "φ parafuso", 0.01, 1.0, value=0.75, key="estrutura_lig_phi_b"
+            )
+            phi_c = cs[3].number_input(
+                "φ contato", 0.01, 1.0, value=0.75, key="estrutura_lig_phi_c"
+            )
             cc = st.columns(3)
-            c_lc = cc[0].number_input("Coef. Lc", 0.01, value=1.20)
-            c_lim = cc[1].number_input("Coef. limite contato", 0.01, value=2.40)
+            c_lc = cc[0].number_input(
+                "Coef. Lc", 0.01, value=1.20, key="estrutura_lig_c_lc"
+            )
+            c_lim = cc[1].number_input(
+                "Coef. limite contato", 0.01, value=2.40, key="estrutura_lig_c_lim"
+            )
             phi_s = cc[2].number_input(
-                "φ deslizamento", 0.01, 1.0, value=1.0
+                "φ deslizamento", 0.01, 1.0, value=1.0, key="estrutura_lig_phi_s"
             )
         resultado = ligacoes.verificar_ligacao_parafusada(
             int(n_parafusos),
@@ -738,17 +928,35 @@ elif modulo == "4. Ligações":
 
     elif tipo_ligacao == "Chapa e bloco":
         material = st.columns(3)
-        fy = material[0].number_input("Fy da chapa (MPa)", 1.0, value=250.0)
-        fu = material[1].number_input("Fu da chapa (MPa)", 1.0, value=400.0)
-        sd = material[2].number_input("|Sd| (kN)", 0.0, value=100.0)
+        fy = material[0].number_input(
+            "Fy da chapa (MPa)", 1.0, value=250.0, key="estrutura_bloco_fy"
+        )
+        fu = material[1].number_input(
+            "Fu da chapa (MPa)", 1.0, value=400.0, key="estrutura_bloco_fu"
+        )
+        sd = material[2].number_input(
+            "|Sd| (kN)", 0.0, value=100.0, key="estrutura_bloco_sd"
+        )
         areas = st.columns(4)
-        ant = areas[0].number_input("An de tração (mm²)", 0.1, value=800.0)
-        agv = areas[1].number_input("Agv do bloco (mm²)", 0.1, value=1200.0)
-        anv = areas[2].number_input("Anv do bloco (mm²)", 0.1, value=900.0)
-        antb = areas[3].number_input("Ant do bloco (mm²)", 0.1, value=400.0)
+        ant = areas[0].number_input(
+            "An de tração (mm²)", 0.1, value=800.0, key="estrutura_bloco_ant"
+        )
+        agv = areas[1].number_input(
+            "Agv do bloco (mm²)", 0.1, value=1200.0, key="estrutura_bloco_agv"
+        )
+        anv = areas[2].number_input(
+            "Anv do bloco (mm²)", 0.1, value=900.0, key="estrutura_bloco_anv"
+        )
+        antb = areas[3].number_input(
+            "Ant do bloco (mm²)", 0.1, value=400.0, key="estrutura_bloco_antb"
+        )
         fatores = st.columns(2)
-        ubs = fatores[0].number_input("Ubs", 0.01, 1.0, value=1.0)
-        phi = fatores[1].number_input("φ ruptura", 0.01, 1.0, value=0.75)
+        ubs = fatores[0].number_input(
+            "Ubs", 0.01, 1.0, value=1.0, key="estrutura_bloco_ubs"
+        )
+        phi = fatores[1].number_input(
+            "φ ruptura", 0.01, 1.0, value=0.75, key="estrutura_bloco_phi"
+        )
         resultado = ligacoes.verificar_chapa_ligacao(
             fu, fy, ant, agv, anv, antb, ubs, phi, sd * 1e3
         )
@@ -778,17 +986,28 @@ elif modulo == "4. Ligações":
 
     else:
         solda = st.columns(4)
-        perna = solda[0].number_input("Perna da solda a (mm)", 0.1, value=6.0)
-        comprimento = solda[1].number_input(
-            "Comprimento total efetivo (mm)", 0.1, value=300.0
+        perna = solda[0].number_input(
+            "Perna da solda a (mm)", 0.1, value=6.0, key="estrutura_solda_perna"
         )
-        fexx = solda[2].number_input("FEXX (MPa)", 1.0, value=490.0)
-        sd = solda[3].number_input("|Sd| (kN)", 0.0, value=100.0)
+        comprimento = solda[1].number_input(
+            "Comprimento total efetivo (mm)",
+            0.1,
+            value=300.0,
+            key="estrutura_solda_comprimento",
+        )
+        fexx = solda[2].number_input(
+            "FEXX (MPa)", 1.0, value=490.0, key="estrutura_solda_fexx"
+        )
+        sd = solda[3].number_input(
+            "|Sd| (kN)", 0.0, value=100.0, key="estrutura_solda_sd"
+        )
         coef = st.columns(2)
         c_solda = coef[0].number_input(
-            "Coeficiente resistente", 0.01, value=0.60
+            "Coeficiente resistente", 0.01, value=0.60, key="estrutura_solda_c_solda"
         )
-        phi = coef[1].number_input("φ solda", 0.01, 1.0, value=0.75)
+        phi = coef[1].number_input(
+            "φ solda", 0.01, 1.0, value=0.75, key="estrutura_solda_phi"
+        )
         resultado = ligacoes.verificar_solda_filete(
             perna, comprimento, fexx, c_solda, phi, sd * 1e3
         )
@@ -839,6 +1058,8 @@ else:
         default="Treliça 2D",
         required=True,
         width="stretch",
+        key="estrutura_2d_modelo",
+        persist_state="session",
     )
     perfil_padrao = "I ideal 200×100×5.5×8"
     if modelo == "Treliça 2D":
@@ -969,119 +1190,147 @@ else:
         except (ValueError, TypeError, KeyError) as erro:
             st.error(f"Modelo inválido: {erro}", icon=":material/error:")
         else:
-            st.subheader("Resultados")
-            st.metric(
-                "Maior deslocamento translacional",
-                f"{resultado.deslocamento_maximo_mm:.3f} mm",
-                border=True,
-            )
-            deslocamentos = pd.DataFrame(resultado.deslocamentos_nodais)
-            reacoes = pd.DataFrame(resultado.reacoes_nodais)
-            esforcos = pd.DataFrame(resultado.esforcos_elementos)
-            for coluna in reacoes.columns:
-                if coluna.endswith("_N"):
-                    reacoes[coluna] = reacoes[coluna] / 1e3
-                    reacoes.rename(columns={coluna: coluna.replace("_N", "_kN")}, inplace=True)
-                elif coluna.endswith("_Nmm"):
-                    reacoes[coluna] = reacoes[coluna] / 1e6
-                    reacoes.rename(columns={coluna: coluna.replace("_Nmm", "_kNm")}, inplace=True)
-            for coluna in esforcos.columns:
-                if coluna.endswith("_N"):
-                    esforcos[coluna] = esforcos[coluna] / 1e3
-                    esforcos.rename(columns={coluna: coluna.replace("_N", "_kN")}, inplace=True)
-                elif coluna.endswith("_Nmm"):
-                    esforcos[coluna] = esforcos[coluna] / 1e6
-                    esforcos.rename(columns={coluna: coluna.replace("_Nmm", "_kNm")}, inplace=True)
-            resultados_tabs = st.tabs(["Deslocamentos", "Reações", "Esforços"])
-            with resultados_tabs[0]:
-                st.dataframe(deslocamentos, hide_index=True)
-            with resultados_tabs[1]:
-                st.dataframe(reacoes, hide_index=True)
-            with resultados_tabs[2]:
-                st.dataframe(esforcos, hide_index=True)
+            # Guardado em session_state (e não só nas variáveis locais) para
+            # que o resultado sobreviva ao clique em "Registrar análise 2D no
+            # projeto": esse clique também dispara um rerun do script, no
+            # qual "analisar" (um st.button comum) voltaria a ser False.
+            st.session_state["estrutura_2d_resultado"] = {
+                "modelo": modelo,
+                "nos": nos,
+                "elementos": elementos,
+                "resultado": resultado,
+            }
 
-            coordenadas = {
-                int(no.id): (no.x_mm / 1e3, no.y_mm / 1e3)
-                for no in nos
-            }
-            desloc_por_no = {
-                int(item["no"]): (item["ux_mm"], item["uy_mm"])
-                for item in resultado.deslocamentos_nodais
-            }
-            maior_dimensao = max(
-                max(x for x, _ in coordenadas.values()) - min(x for x, _ in coordenadas.values()),
-                max(y for _, y in coordenadas.values()) - min(y for _, y in coordenadas.values()),
-                1.0,
+    resultado_estrutura_2d = st.session_state.get("estrutura_2d_resultado")
+    if resultado_estrutura_2d and resultado_estrutura_2d["modelo"] == modelo:
+        nos = resultado_estrutura_2d["nos"]
+        elementos = resultado_estrutura_2d["elementos"]
+        resultado = resultado_estrutura_2d["resultado"]
+
+        st.subheader("Resultados")
+        st.metric(
+            "Maior deslocamento translacional",
+            f"{resultado.deslocamento_maximo_mm:.3f} mm",
+            border=True,
+        )
+        deslocamentos = pd.DataFrame(resultado.deslocamentos_nodais)
+        reacoes = pd.DataFrame(resultado.reacoes_nodais)
+        esforcos = pd.DataFrame(resultado.esforcos_elementos)
+        for coluna in reacoes.columns:
+            if coluna.endswith("_N"):
+                reacoes[coluna] = reacoes[coluna] / 1e3
+                reacoes.rename(columns={coluna: coluna.replace("_N", "_kN")}, inplace=True)
+            elif coluna.endswith("_Nmm"):
+                reacoes[coluna] = reacoes[coluna] / 1e6
+                reacoes.rename(columns={coluna: coluna.replace("_Nmm", "_kNm")}, inplace=True)
+        for coluna in esforcos.columns:
+            if coluna.endswith("_N"):
+                esforcos[coluna] = esforcos[coluna] / 1e3
+                esforcos.rename(columns={coluna: coluna.replace("_N", "_kN")}, inplace=True)
+            elif coluna.endswith("_Nmm"):
+                esforcos[coluna] = esforcos[coluna] / 1e6
+                esforcos.rename(columns={coluna: coluna.replace("_Nmm", "_kNm")}, inplace=True)
+        resultados_tabs = st.tabs(["Deslocamentos", "Reações", "Esforços"])
+        with resultados_tabs[0]:
+            st.dataframe(deslocamentos, hide_index=True)
+        with resultados_tabs[1]:
+            st.dataframe(reacoes, hide_index=True)
+        with resultados_tabs[2]:
+            st.dataframe(esforcos, hide_index=True)
+
+        coordenadas = {
+            int(no.id): (no.x_mm / 1e3, no.y_mm / 1e3)
+            for no in nos
+        }
+        desloc_por_no = {
+            int(item["no"]): (item["ux_mm"], item["uy_mm"])
+            for item in resultado.deslocamentos_nodais
+        }
+        maior_dimensao = max(
+            max(x for x, _ in coordenadas.values()) - min(x for x, _ in coordenadas.values()),
+            max(y for _, y in coordenadas.values()) - min(y for _, y in coordenadas.values()),
+            1.0,
+        )
+        escala = (
+            1.0
+            if resultado.deslocamento_maximo_mm == 0
+            else 0.15 * maior_dimensao * 1e3 / resultado.deslocamento_maximo_mm
+        )
+        linhas_grafico = []
+        for elemento in elementos:
+            for estado, fator in (("Original", 0.0), ("Deformada", escala)):
+                for ordem, no_id in enumerate((elemento.no_i, elemento.no_j)):
+                    x, y = coordenadas[no_id]
+                    ux, uy = desloc_por_no[no_id]
+                    linhas_grafico.append(
+                        {
+                            "elemento": str(elemento.id),
+                            "estado": estado,
+                            "ordem": ordem,
+                            "x (m)": x + fator * ux / 1e3,
+                            "y (m)": y + fator * uy / 1e3,
+                        }
+                    )
+        df_grafico = pd.DataFrame(linhas_grafico)
+        grafico = (
+            alt.Chart(df_grafico)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("x (m):Q", scale=alt.Scale(zero=False)),
+                y=alt.Y("y (m):Q", scale=alt.Scale(zero=False)),
+                color=alt.Color("estado:N"),
+                detail="elemento:N",
+                order="ordem:O",
+                strokeDash=alt.StrokeDash("estado:N"),
+                tooltip=["elemento", "estado", "x (m)", "y (m)"],
             )
-            escala = (
-                1.0
-                if resultado.deslocamento_maximo_mm == 0
-                else 0.15 * maior_dimensao * 1e3 / resultado.deslocamento_maximo_mm
-            )
-            linhas_grafico = []
-            for elemento in elementos:
-                for estado, fator in (("Original", 0.0), ("Deformada", escala)):
-                    for ordem, no_id in enumerate((elemento.no_i, elemento.no_j)):
-                        x, y = coordenadas[no_id]
-                        ux, uy = desloc_por_no[no_id]
-                        linhas_grafico.append(
-                            {
-                                "elemento": str(elemento.id),
-                                "estado": estado,
-                                "ordem": ordem,
-                                "x (m)": x + fator * ux / 1e3,
-                                "y (m)": y + fator * uy / 1e3,
-                            }
-                        )
-            df_grafico = pd.DataFrame(linhas_grafico)
-            grafico = (
-                alt.Chart(df_grafico)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("x (m):Q", scale=alt.Scale(zero=False)),
-                    y=alt.Y("y (m):Q", scale=alt.Scale(zero=False)),
-                    color=alt.Color("estado:N"),
-                    detail="elemento:N",
-                    order="ordem:O",
-                    strokeDash=alt.StrokeDash("estado:N"),
-                    tooltip=["elemento", "estado", "x (m)", "y (m)"],
-                )
-                .properties(height=420)
-                .interactive()
-            )
-            st.altair_chart(grafico)
-            st.caption(f"Forma deformada ampliada {escala:.1f}×.")
-            registro_modelo_2d = construir_registro_tecnico(
-                modulo="Estruturas de aço",
-                titulo=f"Análise linear — {modelo}",
-                status="Calculado",
-                resumo="Análise elástica linear de treliça ou pórtico plano com deslocamentos, reações e esforços internos.",
-                entradas={
-                    "modelo": modelo,
-                    "numero_nos": len(nos),
-                    "numero_elementos": len(elementos),
-                    "nos": [asdict(item) for item in nos],
-                    "elementos": [asdict(item) for item in elementos],
-                },
-                resultados={
-                    "deslocamento_maximo_mm": resultado.deslocamento_maximo_mm,
-                    "deslocamentos_nodais": resultado.deslocamentos_nodais,
-                    "reacoes_nodais": resultado.reacoes_nodais,
-                    "esforcos_elementos": resultado.esforcos_elementos,
-                },
-                premissas=[
-                    "Análise linear elástica, pequenas deformações e ligações idealizadas.",
-                    "Propriedades geométricas e módulos são os valores informados no modelo.",
-                ],
-                alertas=["Estabilidade, imperfeições, segunda ordem, ligações e combinações não são verificadas automaticamente por este modelo."],
-                referencias=["Vincular o modelo aos desenhos, combinações de ações e critérios de deslocamento do projeto."],
-                conclusao="Modelo resolvido sem singularidade; validar idealização, deslocamentos admissíveis e dimensionar cada elemento.",
-            )
-            botao_registrar_calculo(
-                registro_modelo_2d,
-                key="registrar_estrutura_2d",
-                rotulo="Registrar análise 2D no projeto",
-            )
+            .properties(height=420)
+            .interactive()
+        )
+        st.altair_chart(grafico)
+        st.caption(f"Forma deformada ampliada {escala:.1f}×.")
+
+        fronteira_modelo(
+            [
+                "Efeitos de segunda ordem (P–Δ, P–δ) e imperfeições geométricas iniciais.",
+                "Flambagem global ou local dos elementos.",
+                "Ligações semirrígidas — os apoios e nós são idealizados como rígidos ou rotulados.",
+                "Combinações de ações e dimensionamento de cada barra (fazer em separado).",
+            ]
+        )
+
+        registro_modelo_2d = construir_registro_tecnico(
+            modulo="Estruturas de aço",
+            modulo_id="estruturas_aco",
+            titulo=f"Análise linear — {modelo}",
+            status="Calculado",
+            resumo="Análise elástica linear de treliça ou pórtico plano com deslocamentos, reações e esforços internos.",
+            entradas={
+                "modelo": modelo,
+                "numero_nos": len(nos),
+                "numero_elementos": len(elementos),
+                "nos": [asdict(item) for item in nos],
+                "elementos": [asdict(item) for item in elementos],
+            },
+            resultados={
+                "deslocamento_maximo_mm": resultado.deslocamento_maximo_mm,
+                "deslocamentos_nodais": resultado.deslocamentos_nodais,
+                "reacoes_nodais": resultado.reacoes_nodais,
+                "esforcos_elementos": resultado.esforcos_elementos,
+            },
+            premissas=[
+                "Análise linear elástica, pequenas deformações e ligações idealizadas.",
+                "Propriedades geométricas e módulos são os valores informados no modelo.",
+            ],
+            alertas=["Estabilidade, imperfeições, segunda ordem, ligações e combinações não são verificadas automaticamente por este modelo."],
+            referencias=["Vincular o modelo aos desenhos, combinações de ações e critérios de deslocamento do projeto."],
+            conclusao="Modelo resolvido sem singularidade; validar idealização, deslocamentos admissíveis e dimensionar cada elemento.",
+        )
+        botao_registrar_calculo(
+            registro_modelo_2d,
+            key="registrar_estrutura_2d",
+            rotulo="Registrar análise 2D no projeto",
+        )
 
 st.caption(
     "Referências de escopo: ABNT NBR 8800:2024, ABNT NBR 8681:2025, "

@@ -10,8 +10,12 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from components.material_verification import mostrar_verificacao_material
-from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.ui import cabecalho_pagina
+from components.project_tools import (
+    botao_registrar_calculo,
+    construir_registro_tecnico,
+    id_registro_existente,
+)
+from components.ui import cabecalho_pagina, fronteira_modelo
 from core import mohr_analysis as mohr
 
 
@@ -440,6 +444,7 @@ cabecalho_pagina(
     cor="blue",
     ajuda_modulo="Círculo de Mohr",
     acoes=(("app_pages/assistente_cargas.py", "Calcular pelas cargas", ":material/manufacturing:"),),
+    modulo_id="circulo_mohr",
 )
 st.info(
     "**Para que serve:** em um mesmo ponto do material, a tensão medida muda "
@@ -462,6 +467,7 @@ modo = st.segmented_control(
     required=True,
     width="stretch",
     key="mohr_tipo_estado",
+    persist_state="session",
 )
 
 if modo == "Estado plano (2D)":
@@ -473,6 +479,7 @@ if modo == "Estado plano (2D)":
             format_func=lambda chave: EXEMPLOS_2D[chave][0],
             help="Escolha um caso e altere livremente as componentes.",
             key="mohr_2d_exemplo",
+            persist_state="session",
         )
         padroes = EXEMPLOS_2D[exemplo][1]
         entradas = st.columns(3)
@@ -482,6 +489,7 @@ if modo == "Estado plano (2D)":
                 value=padroes[0],
                 step=5.0,
                 key=f"mohr_2d_sigma_x_{exemplo}",
+                persist_state="session",
             )
         with entradas[1]:
             sigma_y = st.number_input(
@@ -489,6 +497,7 @@ if modo == "Estado plano (2D)":
                 value=padroes[1],
                 step=5.0,
                 key=f"mohr_2d_sigma_y_{exemplo}",
+                persist_state="session",
             )
         with entradas[2]:
             tau_xy = st.number_input(
@@ -497,6 +506,7 @@ if modo == "Estado plano (2D)":
                 step=5.0,
                 key=f"mohr_2d_tau_xy_{exemplo}",
                 help="Positiva na face +x apontando para +y.",
+                persist_state="session",
             )
         theta_graus = st.slider(
             "Rotação física do elemento, θ (graus)",
@@ -506,6 +516,7 @@ if modo == "Estado plano (2D)":
             step=0.5,
             key=f"mohr_2d_theta_{exemplo}",
             help="Ângulo anti-horário do eixo x para o eixo x'.",
+            persist_state="session",
         )
 
     resultado_2d = mohr.analisar_estado_plano(
@@ -631,8 +642,23 @@ if modo == "Estado plano (2D)":
         resultado_2d.von_mises,
         prefixo="mohr_2d",
     )
+    origem_assistente = (
+        _estado_assistente.get("origem_registro_id")
+        if (exemplo == "assistente" and _estado_assistente)
+        else None
+    )
+
+    fronteira_modelo(
+        [
+            "Estado real tridimensional — aqui σz = 0 é uma hipótese, não um dado medido.",
+            "Concentração de tensão e efeitos localizados de furos, entalhes ou soldas.",
+            "Carga variável no tempo (fadiga) — este é um estado instantâneo.",
+        ]
+    )
+
     registro_mohr_2d = construir_registro_tecnico(
         modulo="Círculo de Mohr",
+        modulo_id="circulo_mohr",
         titulo="Transformação do estado plano de tensões",
         status="Calculado",
         resumo="Tensões principais, cisalhamento máximo, von Mises e transformação no plano escolhido.",
@@ -641,6 +667,7 @@ if modo == "Estado plano (2D)":
             "sigma_y_MPa": sigma_y,
             "tau_xy_MPa": tau_xy,
             "theta_graus": theta_graus,
+            "registro_origem": origem_assistente,
         },
         resultados={
             "sigma_1_MPa": resultado_2d.sigma_1_plana,
@@ -660,12 +687,32 @@ if modo == "Estado plano (2D)":
         referencias=["Vincular o tensor ao ponto, caso de carga e revisão do modelo ou memória de origem."],
         conclusao="Estado transformado calculado; a aceitação depende do material e do critério do projeto.",
     )
+    if exemplo == "assistente" and not origem_assistente:
+        st.caption(
+            ":material/link_off: Este estado veio do Assistente de cargas, mas "
+            "ainda não foi registrado lá — a origem não será rastreada até que "
+            "seja registrado."
+        )
     botao_registrar_calculo(
         registro_mohr_2d,
         key="registrar_mohr_2d",
         rotulo="Registrar análise de Mohr no projeto",
         tipo="secondary",
     )
+    # A origem a repassar adiante é a que já vinha do Assistente de cargas
+    # (Mohr só transforma o mesmo estado, não cria um novo); na ausência
+    # dela, usa o próprio registro de Mohr, se ele já tiver sido salvo.
+    origem_para_repasse = origem_assistente or id_registro_existente(registro_mohr_2d)
+    if st.button(
+        "Enviar σx, σy, τxy para a Análise estática",
+        icon=":material/analytics:",
+        key="mohr_2d_enviar_estatica",
+    ):
+        st.session_state["estatica_sigma_x"] = sigma_x
+        st.session_state["estatica_sigma_y"] = sigma_y
+        st.session_state["estatica_tau_xy"] = tau_xy
+        st.session_state["estatica_origem_registro_id"] = origem_para_repasse
+        st.switch_page("app_pages/analise_estatica.py")
 
 else:
     with st.container(border=True):
@@ -675,20 +722,25 @@ else:
             list(EXEMPLOS_3D),
             format_func=lambda chave: EXEMPLOS_3D[chave][0],
             help="Escolha um caso e altere livremente as seis componentes.",
+            key="mohr_3d_exemplo",
+            persist_state="session",
         )
         padroes = EXEMPLOS_3D[exemplo][1]
         normais = st.columns(3)
         with normais[0]:
             sigma_x = st.number_input(
-                "σx (MPa)", value=padroes[0], step=5.0, key=f"mohr_3d_sx_{exemplo}"
+                "σx (MPa)", value=padroes[0], step=5.0, key=f"mohr_3d_sx_{exemplo}",
+                persist_state="session",
             )
         with normais[1]:
             sigma_y = st.number_input(
-                "σy (MPa)", value=padroes[1], step=5.0, key=f"mohr_3d_sy_{exemplo}"
+                "σy (MPa)", value=padroes[1], step=5.0, key=f"mohr_3d_sy_{exemplo}",
+                persist_state="session",
             )
         with normais[2]:
             sigma_z = st.number_input(
-                "σz (MPa)", value=padroes[2], step=5.0, key=f"mohr_3d_sz_{exemplo}"
+                "σz (MPa)", value=padroes[2], step=5.0, key=f"mohr_3d_sz_{exemplo}",
+                persist_state="session",
             )
         cisalhamentos = st.columns(3)
         with cisalhamentos[0]:
@@ -697,6 +749,7 @@ else:
                 value=padroes[3],
                 step=5.0,
                 key=f"mohr_3d_txy_{exemplo}",
+                persist_state="session",
             )
         with cisalhamentos[1]:
             tau_xz = st.number_input(
@@ -704,6 +757,7 @@ else:
                 value=padroes[4],
                 step=5.0,
                 key=f"mohr_3d_txz_{exemplo}",
+                persist_state="session",
             )
         with cisalhamentos[2]:
             tau_yz = st.number_input(
@@ -711,6 +765,7 @@ else:
                 value=padroes[5],
                 step=5.0,
                 key=f"mohr_3d_tyz_{exemplo}",
+                persist_state="session",
             )
 
     resultado_3d = mohr.analisar_estado_tridimensional(
@@ -725,15 +780,17 @@ else:
             default="Componentes",
             required=True,
             width="stretch",
+            key="mohr_3d_modo_normal",
+            persist_state="session",
         )
         if modo_normal == "Componentes":
             componentes = st.columns(3)
             with componentes[0]:
-                normal_x = st.number_input("nx", value=1.0, step=0.1, key="normal_x_3d")
+                normal_x = st.number_input("nx", value=1.0, step=0.1, key="normal_x_3d", persist_state="session")
             with componentes[1]:
-                normal_y = st.number_input("ny", value=1.0, step=0.1, key="normal_y_3d")
+                normal_y = st.number_input("ny", value=1.0, step=0.1, key="normal_y_3d", persist_state="session")
             with componentes[2]:
-                normal_z = st.number_input("nz", value=0.0, step=0.1, key="normal_z_3d")
+                normal_z = st.number_input("nz", value=0.0, step=0.1, key="normal_z_3d", persist_state="session")
             normal = (normal_x, normal_y, normal_z)
         else:
             angulos_normal = st.columns(2)
@@ -745,6 +802,8 @@ else:
                     45.0,
                     1.0,
                     help="Medido de +x para +y.",
+                    key="mohr_3d_azimute",
+                    persist_state="session",
                 )
             with angulos_normal[1]:
                 elevacao = st.slider(
@@ -754,6 +813,8 @@ else:
                     0.0,
                     1.0,
                     help="Positiva em direção a +z.",
+                    key="mohr_3d_elevacao",
+                    persist_state="session",
                 )
             alpha = math.radians(azimute)
             beta = math.radians(elevacao)
@@ -950,6 +1011,7 @@ else:
     )
     registro_mohr_3d = construir_registro_tecnico(
         modulo="Círculo de Mohr",
+        modulo_id="circulo_mohr",
         titulo="Análise tridimensional do tensor de tensões",
         status="Calculado",
         resumo="Tensões principais, invariantes, equivalentes e tração no plano de interesse.",
