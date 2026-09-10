@@ -767,6 +767,39 @@ elif modulo == "Vigas e eixos":
         )
 
     with st.container(border=True):
+        st.subheader("Vários cenários de carga na mesma barra")
+        st.markdown(
+            """
+            Quando a mesma viga precisa ser verificada sob combinações
+            diferentes, marque cada carga com o caso a que ela pertence e
+            declare as combinações:
+
+            ```text
+            q 0 8 12 baixo                 # sem caso=, logo Permanente
+            q 0 8 20 baixo caso=Sobrecarga
+            q 0 8 8 cima   caso=Vento
+
+            combinacao ELU_gravidade Permanente=1.4 Sobrecarga=1.5
+            combinacao ELU_vento     Permanente=1.0 Vento=1.4
+            ```
+
+            O programa resolve a barra **uma vez por combinação** e abre a aba
+            **Envoltória**, com a faixa que as cargas podem produzir em cada
+            seção e uma tabela dizendo qual combinação governa cada grandeza —
+            que quase nunca é a mesma para todas.
+
+            Dois cuidados:
+
+            - um caso que **não** aparece na combinação entra com fator zero;
+            - as demais abas continuam mostrando a barra **sem** fatores, como
+              você escreveu. Os valores de projeto são os da envoltória.
+
+            Se o projeto ativo já tem combinações cadastradas em *Casos e
+            combinações de carga*, o botão acima do editor as importa prontas.
+            """
+        )
+
+    with st.container(border=True):
         st.subheader("Levar a seção adiante")
         st.markdown(
             """

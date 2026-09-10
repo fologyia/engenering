@@ -117,6 +117,12 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - conferência automática do equilíbrio global e exportação dos diagramas em CSV;
 - repasse da seção escolhida para o Círculo de Mohr, a Análise estática e a
   Análise de fadiga, com vínculo de origem — sem redigitar tensões;
+- casos de carga nomeados e combinações: a barra é resolvida uma vez por
+  combinação e o programa desenha a envoltória de V, M e flecha, apontando
+  qual combinação governa cada grandeza;
+- importação das combinações de carga do projeto ativo;
+- material do catálogo do programa ou material qualificado do projeto, com
+  o vínculo de rastreabilidade gravado no registro;
 - meta de fator de segurança lida dos critérios do projeto ativo;
 - registro rastreável do modelo e dos resultados no projeto industrial ativo.
 
@@ -188,12 +194,32 @@ A página **Guia geral** reúne:
   leitura de cada diagrama.
 - uso completo dos projetos permanentes, da validação e dos relatórios modulares.
 
+## Qualidade
+
+- suíte de testes com pytest, conferida contra soluções fechadas clássicas
+  em vez de valores colhidos do próprio programa;
+- `ruff` no projeto inteiro e `mypy` no núcleo de cálculo, com adoção
+  gradual: só entram na verificação de tipos os módulos que já passam
+  limpos, para o resultado poder bloquear o CI e continuar significando
+  alguma coisa;
+- GitHub Actions roda lint, tipos e testes a cada push e pull request.
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+mypy
+pytest -q
+```
+
 ## Estrutura
 
 ```text
 mecanica_toolkit/
 ├── app.py
 ├── requirements.txt
+├── requirements-dev.txt
+├── pyproject.toml
+├── .github/workflows/
 ├── .streamlit/config.toml
 ├── assets/
 ├── app_pages/

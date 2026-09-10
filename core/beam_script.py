@@ -24,10 +24,11 @@ intensidade.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 import re
 import unicodedata
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 from core import beam_analysis as vb
 
@@ -71,6 +72,17 @@ _SUFIXO_SENTIDO = {
     "anti_horario": 1.0,
     "tracao": 1.0,
     "compressao": -1.0,
+}
+
+# O catálogo de materiais do programa tabela Sut e Sy, mas não E nem G.
+# Estes são os valores típicos por categoria, usados apenas para completar
+# o que o catálogo não traz — e sempre sinalizados como estimativa.
+_ELASTICIDADE_POR_CATEGORIA: dict[str, tuple[float, float, float]] = {
+    # categoria: (E em GPa, G em GPa, densidade em kg/m³)
+    "aco": (200.0, 77.0, 7_850.0),
+    "aluminio": (69.0, 26.0, 2_700.0),
+    "cobre": (117.0, 44.0, 8_960.0),
+    "ferro_fundido": (100.0, 41.0, 7_200.0),
 }
 
 _MATERIAIS_PRONTOS: dict[str, tuple[float, float, float, float]] = {
@@ -162,6 +174,14 @@ def _separar_nomeados(tokens: list[str]) -> tuple[list[str], dict[str, str]]:
     return posicionais, nomeados
 
 
+def _caso(nom: dict[str, str]) -> str:
+    """Caso de carga declarado na linha, ou o permanente por padrão."""
+    for chave in ("caso", "acao", "grupo"):
+        if chave in nom and nom[chave].strip():
+            return nom[chave].strip()
+    return vb.CASO_PADRAO
+
+
 def _sentido(tokens: list[str]) -> tuple[list[str], float]:
     """Remove um eventual sufixo de sentido e devolve o multiplicador."""
     if tokens and _chave(tokens[-1]) in _SUFIXO_SENTIDO:
@@ -187,8 +207,12 @@ class _Acumulador:
     axiais: list[vb.CargaAxial] = None  # type: ignore[assignment]
     axiais_distribuidas: list[vb.CargaAxialDistribuida] = None  # type: ignore[assignment]
     torques: list[vb.Torque] = None  # type: ignore[assignment]
+    combinacoes: list[vb.CombinacaoCarga] = None  # type: ignore[assignment]
     peso_proprio: bool = False
     nome: str = "Viga"
+    material_id: str | None = None
+    material_fonte: str = ""
+    materiais_projeto: tuple = ()
 
     def __post_init__(self) -> None:
         for campo in (
@@ -200,6 +224,7 @@ class _Acumulador:
             "axiais",
             "axiais_distribuidas",
             "torques",
+            "combinacoes",
         ):
             if getattr(self, campo) is None:
                 setattr(self, campo, [])
@@ -228,19 +253,164 @@ def _comando_nome(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int,
     acc.nome = " ".join(pos)
 
 
-def _comando_material(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
-    e_gpa = g_gpa = sy = densidade = None
-    if pos:
-        atalho = _chave(pos[0])
-        if atalho not in _MATERIAIS_PRONTOS:
-            disponiveis = ", ".join(sorted(_MATERIAIS_PRONTOS))
+def _material_do_catalogo(nome: str, n: int, texto: str) -> tuple:
+    """Resolve um material da base do programa (``data/materials.csv``)."""
+    from core import materials as base
+
+    try:
+        dados = base.obter_material(nome)
+    except (ValueError, FileNotFoundError):
+        alvo = _chave(nome)
+        try:
+            nomes = base.listar_nomes()
+        except (ValueError, FileNotFoundError) as erro:  # pragma: no cover
+            raise ErroDeScript(str(erro), linha=n, texto=texto) from None
+        parecidos = [item for item in nomes if alvo and alvo in _chave(item)]
+        if len(parecidos) == 1:
+            dados = base.obter_material(parecidos[0])
+        else:
+            sugestao = parecidos[:5] or nomes[:5]
             raise ErroDeScript(
-                f"Material {pos[0]!r} não está na lista de atalhos ({disponiveis}). "
-                "Para um material próprio use `material E=200 G=77 Sy=250`.",
+                f"Material {nome!r} não está no catálogo. "
+                + ("Você quis dizer: " if parecidos else "Alguns disponíveis: ")
+                + "; ".join(sugestao)
+                + ".",
+                linha=n,
+                texto=texto,
+            ) from None
+    categoria = _chave(str(dados.get("categoria", "")))
+    if categoria not in _ELASTICIDADE_POR_CATEGORIA:
+        raise ErroDeScript(
+            f"O catálogo não traz E e G para a categoria {categoria!r} de "
+            f"{dados['nome']!r}. Informe E= e G= na mesma linha.",
+            linha=n,
+            texto=texto,
+        )
+    e_gpa, g_gpa, densidade = _ELASTICIDADE_POR_CATEGORIA[categoria]
+    fonte = (
+        f"Catálogo orientativo do programa · {dados['nome']} · "
+        "E e G são valores típicos da categoria"
+    )
+    return str(dados["nome"]), e_gpa, g_gpa, _numero_ou_none(dados.get("Sy_MPa")), densidade, None, fonte
+
+
+def _numero_ou_none(valor) -> float | None:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) and numero > 0 else None
+
+
+def _material_do_projeto(
+    identificador: str, materiais: tuple, n: int, texto: str
+) -> tuple:
+    """Resolve um material qualificado do projeto ativo, por id ou por nome."""
+    from core.materials_registry import avaliar_material, resumir_fonte
+
+    alvo = _chave(identificador)
+    escolhido = None
+    for material in materiais:
+        if _chave(str(material.get("id", ""))) == alvo or _chave(
+            str(material.get("nome", ""))
+        ) == alvo:
+            escolhido = material
+            break
+    if escolhido is None:
+        if not materiais:
+            raise ErroDeScript(
+                "O projeto ativo não tem materiais cadastrados. Cadastre em "
+                "Materiais técnicos, ou use `material catalogo <nome>`.",
                 linha=n,
                 texto=texto,
             )
-        e_gpa, g_gpa, sy, densidade = _MATERIAIS_PRONTOS[atalho]
+        nomes = "; ".join(str(item.get("nome")) for item in materiais[:6])
+        raise ErroDeScript(
+            f"Material {identificador!r} não está no projeto ativo. "
+            f"Disponíveis: {nomes}.",
+            linha=n,
+            texto=texto,
+        )
+    props = escolhido.get("propriedades", {}) or {}
+    e_gpa = _numero_ou_none(props.get("E_GPa"))
+    if e_gpa is None:
+        raise ErroDeScript(
+            f"O material {escolhido.get('nome')!r} do projeto não tem módulo de "
+            "elasticidade cadastrado. Complete-o em Materiais técnicos ou "
+            "informe E= nesta linha.",
+            linha=n,
+            texto=texto,
+        )
+    nu = _numero_ou_none(props.get("nu"))
+    # G = E / (2(1+ν)); sem ν cadastrado usa-se o 0,3 típico de metais.
+    g_gpa = e_gpa / (2.0 * (1.0 + (nu if nu is not None else 0.3)))
+    densidade = _numero_ou_none(props.get("densidade_kg_m3")) or 7_850.0
+    avaliacao = avaliar_material(escolhido)
+    fonte = (
+        f"Material do projeto · {escolhido.get('nome')} · "
+        f"{avaliacao['nivel']} · {resumir_fonte(escolhido)}"
+    )
+    return (
+        str(escolhido.get("nome")),
+        e_gpa,
+        g_gpa,
+        _numero_ou_none(props.get("Sy_MPa")),
+        densidade,
+        str(escolhido.get("id")),
+        fonte,
+    )
+
+
+def _comando_material(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+    e_gpa = g_gpa = sy = densidade = None
+    nome_material = "personalizado"
+    material_id = nom.get("id") or nom.get("material_id")
+    fonte = ""
+
+    if pos:
+        primeiro = _chave(pos[0])
+        if primeiro == "catalogo" or primeiro == "catalogo_referencia":
+            if len(pos) < 2:
+                raise ErroDeScript(
+                    "Informe o nome do material do catálogo. Ex.: "
+                    "`material catalogo AISI 1045 temperado e revenido`.",
+                    linha=n,
+                    texto=texto,
+                )
+            nome_material, e_gpa, g_gpa, sy, densidade, _, fonte = _material_do_catalogo(
+                " ".join(pos[1:]), n, texto
+            )
+        elif primeiro == "projeto":
+            if len(pos) < 2:
+                raise ErroDeScript(
+                    "Informe o material do projeto pelo nome ou pelo id. Ex.: "
+                    "`material projeto Chapa A36 certificada`.",
+                    linha=n,
+                    texto=texto,
+                )
+            (
+                nome_material,
+                e_gpa,
+                g_gpa,
+                sy,
+                densidade,
+                material_id,
+                fonte,
+            ) = _material_do_projeto(" ".join(pos[1:]), acc.materiais_projeto, n, texto)
+        elif primeiro in _MATERIAIS_PRONTOS:
+            e_gpa, g_gpa, sy, densidade = _MATERIAIS_PRONTOS[primeiro]
+            nome_material = primeiro
+            fonte = "Atalho genérico da linguagem — valores típicos, sem rastreabilidade"
+        else:
+            disponiveis = ", ".join(sorted(_MATERIAIS_PRONTOS))
+            raise ErroDeScript(
+                f"Material {pos[0]!r} não está na lista de atalhos ({disponiveis}). "
+                "Use `material catalogo <nome>` para a base do programa, "
+                "`material projeto <nome>` para um material qualificado, ou "
+                "`material E=200 G=77 Sy=250` para valores próprios.",
+                linha=n,
+                texto=texto,
+            )
 
     for nome_campo, chaves in (
         ("e", ("e", "modulo", "young")),
@@ -273,11 +443,13 @@ def _comando_material(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: 
         g_gpa = e_gpa / 2.6
     try:
         acc.material = vb.MaterialViga(
-            nome=_chave(pos[0]) if pos else "personalizado",
+            nome=nome_material,
             modulo_elasticidade_MPa=e_gpa * 1_000.0,
             modulo_cisalhamento_MPa=g_gpa * 1_000.0,
             escoamento_MPa=sy,
             densidade_kg_m3=densidade if densidade is not None else 7_850.0,
+            material_id=material_id or None,
+            fonte=nom.get("fonte") or fonte,
         )
     except ValueError as erro:
         raise ErroDeScript(str(erro), linha=n, texto=texto) from None
@@ -402,12 +574,16 @@ def _secao_manual(nom: dict[str, str], n: int, texto: str) -> vb.SecaoViga:
 
     area = pegar(("a", "area"), "A (mm²)")
     inercia = pegar(("i", "inercia", "ix"), "I (mm⁴)")
+    # ``pegar`` só devolve None quando obrigatorio=False; estas quatro são
+    # obrigatórias, e o assert documenta isso para o verificador de tipos.
+    assert area is not None and inercia is not None
     c_sup = pegar(("c_sup", "csup"), "c superior (mm)", obrigatorio=False)
     c_inf = pegar(("c_inf", "cinf"), "c inferior (mm)", obrigatorio=False)
     # ``c`` só é exigido quando as duas distâncias específicas não vieram.
     c = pegar(("c", "c_max", "y"), "c (mm)", obrigatorio=c_sup is None or c_inf is None)
     c_sup = c_sup if c_sup is not None else c
     c_inf = c_inf if c_inf is not None else c
+    assert c_sup is not None and c_inf is not None
     q = pegar(("q", "momento_estatico"), "Q (mm³)", obrigatorio=False) or 0.0
     t = pegar(("t", "espessura", "b"), "t (mm)", obrigatorio=False) or 1.0
     j = pegar(("j", "torcao"), "J (mm⁴)", obrigatorio=False) or 0.0
@@ -484,7 +660,9 @@ def _comando_pontual(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: i
         )
     x = _numero(pos[0], campo="posição da carga", linha=n, texto=texto)
     valor = _numero(pos[1], campo="valor da carga (kN)", linha=n, texto=texto)
-    acc.pontuais.append(vb.CargaPontual(x_mm=x * 1_000.0, fy_N=sinal * valor * 1_000.0))
+    acc.pontuais.append(
+        vb.CargaPontual(x_mm=x * 1_000.0, fy_N=sinal * valor * 1_000.0, caso=_caso(nom))
+    )
 
 
 def _comando_momento(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
@@ -497,7 +675,11 @@ def _comando_momento(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: i
         )
     x = _numero(pos[0], campo="posição do momento", linha=n, texto=texto)
     valor = _numero(pos[1], campo="valor do momento (kN·m)", linha=n, texto=texto)
-    acc.momentos.append(vb.MomentoConcentrado(x_mm=x * 1_000.0, mz_Nmm=sinal * valor * 1e6))
+    acc.momentos.append(
+        vb.MomentoConcentrado(
+            x_mm=x * 1_000.0, mz_Nmm=sinal * valor * 1e6, caso=_caso(nom)
+        )
+    )
 
 
 def _comando_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
@@ -520,6 +702,7 @@ def _comando_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], 
                 x_final_mm=x2 * 1_000.0,
                 w_inicial_N_mm=sinal * w1,
                 w_final_N_mm=None if w2 is None else sinal * w2,
+                caso=_caso(nom),
             )
         )
     except ValueError as erro:
@@ -536,7 +719,9 @@ def _comando_axial(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
         )
     x = _numero(pos[0], campo="posição da carga axial", linha=n, texto=texto)
     valor = _numero(pos[1], campo="valor da carga axial (kN)", linha=n, texto=texto)
-    acc.axiais.append(vb.CargaAxial(x_mm=x * 1_000.0, fx_N=sinal * valor * 1_000.0))
+    acc.axiais.append(
+        vb.CargaAxial(x_mm=x * 1_000.0, fx_N=sinal * valor * 1_000.0, caso=_caso(nom))
+    )
 
 
 def _comando_axial_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
@@ -559,6 +744,7 @@ def _comando_axial_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, 
                 x_final_mm=x2 * 1_000.0,
                 a_inicial_N_mm=sinal * a1,
                 a_final_N_mm=None if a2 is None else sinal * a2,
+                caso=_caso(nom),
             )
         )
     except ValueError as erro:
@@ -575,7 +761,44 @@ def _comando_torque(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: in
         )
     x = _numero(pos[0], campo="posição do torque", linha=n, texto=texto)
     valor = _numero(pos[1], campo="valor do torque (kN·m)", linha=n, texto=texto)
-    acc.torques.append(vb.Torque(x_mm=x * 1_000.0, t_Nmm=sinal * valor * 1e6))
+    acc.torques.append(
+        vb.Torque(x_mm=x * 1_000.0, t_Nmm=sinal * valor * 1e6, caso=_caso(nom))
+    )
+
+
+def _comando_combinacao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+    if not pos:
+        raise ErroDeScript(
+            "Informe o nome da combinação e os fatores por caso. Ex.: "
+            "`combinacao ELU Permanente=1.4 Sobrecarga=1.5`.",
+            linha=n,
+            texto=texto,
+        )
+    nome = " ".join(pos)
+    if not nom:
+        raise ErroDeScript(
+            f"A combinação {nome!r} não tem nenhum fator. Escreva os casos que "
+            "participam dela, como `Permanente=1.4 Vento=1.4`.",
+            linha=n,
+            texto=texto,
+        )
+    # ``nom`` chega com as chaves normalizadas; aqui interessa a grafia que o
+    # usuário escreveu, porque ela precisa casar com o `caso=` das cargas e
+    # aparece como está na tabela de combinações.
+    originais = {}
+    for token in _tokenizar(texto)[1:]:
+        if "=" in token:
+            chave, _, valor = token.partition("=")
+            originais[chave.strip()] = valor
+    fatores = {
+        chave: _numero(valor, campo=f"fator de {chave}", linha=n, texto=texto)
+        for chave, valor in originais.items()
+    }
+    if any(nome == existente.nome for existente in acc.combinacoes):
+        raise ErroDeScript(
+            f"Já existe uma combinação chamada {nome!r}.", linha=n, texto=texto
+        )
+    acc.combinacoes.append(vb.CombinacaoCarga(nome=nome, fatores=fatores))
 
 
 def _comando_peso_proprio(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
@@ -617,6 +840,8 @@ _COMANDOS = {
     "t": _comando_torque,
     "torque": _comando_torque,
     "torcao": _comando_torque,
+    "combinacao": _comando_combinacao,
+    "comb": _comando_combinacao,
     "peso_proprio": _comando_peso_proprio,
     "peso": _comando_peso_proprio,
 }
@@ -627,14 +852,19 @@ _COMANDOS = {
 # ---------------------------------------------------------------------------
 
 
-def interpretar(script: str) -> vb.Viga:
-    """Converte o texto do modelo em uma :class:`core.beam_analysis.Viga`."""
+def interpretar(script: str, *, materiais_projeto: Sequence[Mapping] = ()) -> vb.Viga:
+    """Converte o texto do modelo em uma :class:`core.beam_analysis.Viga`.
+
+    ``materiais_projeto`` são os materiais qualificados do projeto ativo,
+    injetados pela página. O parser não busca o projeto sozinho de propósito:
+    assim ele continua testável sem banco e sem sessão do Streamlit.
+    """
     if not str(script or "").strip():
         raise ErroDeScript(
             "O modelo está vazio. Comece com `viga <comprimento em m>` e adicione "
             "seção, material, apoios e cargas."
         )
-    acc = _Acumulador()
+    acc = _Acumulador(materiais_projeto=tuple(materiais_projeto))
     for numero, linha_texto in enumerate(str(script).splitlines(), start=1):
         tokens = _tokenizar(linha_texto)
         if not tokens:
@@ -672,6 +902,24 @@ def _sugerir(comando: str) -> str | None:
     return candidatos[0] if candidatos else None
 
 
+def combinacoes_do_script(script: str) -> list[vb.CombinacaoCarga]:
+    """Lê apenas as combinações declaradas, sem exigir um modelo completo.
+
+    A página precisa delas antes de decidir se mostra a envoltória; separar
+    a leitura evita ter de interpretar o modelo duas vezes ou guardar estado
+    global no interpretador.
+    """
+    combinacoes: list[vb.CombinacaoCarga] = []
+    acumulador = _Acumulador(combinacoes=combinacoes)
+    for numero, linha_texto in enumerate(str(script or "").splitlines(), start=1):
+        tokens = _tokenizar(linha_texto)
+        if not tokens or _chave(tokens[0]) not in {"combinacao", "comb"}:
+            continue
+        posicionais, nomeados = _separar_nomeados(tokens[1:])
+        _comando_combinacao(acumulador, posicionais, nomeados, numero, linha_texto)
+    return combinacoes
+
+
 def _montar(acc: _Acumulador) -> vb.Viga:
     faltando = []
     if acc.comprimento_m is None:
@@ -684,6 +932,10 @@ def _montar(acc: _Acumulador) -> vb.Viga:
         faltando.append("pelo menos um apoio (`apoio 0 pino`)")
     if faltando:
         raise ErroDeScript("Falta definir " + "; ".join(faltando) + ".")
+    # A checagem acima já garante que os três existem; o assert torna isso
+    # explícito para o verificador de tipos em vez de deixá-lo adivinhar.
+    assert acc.comprimento_m is not None
+    assert acc.secao is not None and acc.material is not None
 
     try:
         return vb.Viga(
@@ -703,6 +955,43 @@ def _montar(acc: _Acumulador) -> vb.Viga:
         )
     except ValueError as erro:
         raise ErroDeScript(str(erro)) from None
+
+
+def linhas_de_combinacoes_do_projeto(
+    casos: Sequence[Mapping], combinacoes: Sequence[Mapping]
+) -> list[str]:
+    """Converte as combinações do projeto em linhas de `combinacao`.
+
+    Os fatores do projeto apontam para o **id** do caso de carga; aqui eles
+    viram o **nome**, que é o que as cargas do modelo usam em `caso=`. Se um
+    nome não bater com nenhum caso do modelo, a análise recusa a combinação
+    com a lista do que existe — melhor do que zerar a parcela em silêncio.
+    """
+    nomes_por_id = {
+        str(caso.get("id")): str(caso.get("nome") or caso.get("id"))
+        for caso in casos
+        if caso.get("id")
+    }
+    linhas: list[str] = []
+    for combinacao in combinacoes:
+        if not combinacao.get("ativo", True):
+            continue
+        fatores = combinacao.get("fatores") or {}
+        partes = []
+        for caso_id, fator in fatores.items():
+            nome = nomes_por_id.get(str(caso_id), str(caso_id))
+            # Espaço quebraria a leitura em campos; o modelo usa um token.
+            partes.append(f"{nome.replace(' ', '_')}={float(fator):g}")
+        if partes:
+            rotulo = str(combinacao.get("nome") or "Combinação").replace(" ", "_")
+            linhas.append(f"combinacao {rotulo} " + " ".join(partes))
+    return linhas
+
+
+def _sufixo_caso(carga: object) -> str:
+    """Escreve `caso=` só quando não é o permanente, para não poluir."""
+    nome = str(getattr(carga, "caso", vb.CASO_PADRAO) or vb.CASO_PADRAO)
+    return "" if nome == vb.CASO_PADRAO else f" caso={nome}"
 
 
 def gerar_script(viga: vb.Viga) -> str:
@@ -726,13 +1015,17 @@ def gerar_script(viga: vb.Viga) -> str:
     )
     material = viga.material
     partes = [
-        f"E={material.modulo_elasticidade_MPa / 1_000.0:g}",
-        f"G={material.modulo_cisalhamento_MPa / 1_000.0:g}",
+        f"E={material.modulo_elasticidade_MPa / 1_000.0:.17g}",
+        f"G={material.modulo_cisalhamento_MPa / 1_000.0:.17g}",
     ]
     if material.escoamento_MPa:
-        partes.append(f"Sy={material.escoamento_MPa:g}")
-    partes.append(f"densidade={material.densidade_kg_m3:g}")
-    linhas.append("material " + " ".join(partes))
+        partes.append(f"Sy={material.escoamento_MPa:.17g}")
+    partes.append(f"densidade={material.densidade_kg_m3:.17g}")
+    if material.material_id:
+        # Preserva o vínculo com o material do projeto sem depender de o
+        # projeto estar aberto na hora de reler o texto.
+        partes.append(f"id={material.material_id}")
+    linhas.append("material " + " ".join(partes) + f"   # {material.nome}")
 
     for apoio in viga.apoios:
         extras = ""
@@ -746,24 +1039,40 @@ def gerar_script(viga: vb.Viga) -> str:
         )
     for rotula in viga.rotulas:
         linhas.append(f"rotula {rotula.x_mm / 1_000.0:g}")
-    for carga in viga.cargas_pontuais:
-        linhas.append(f"P {carga.x_mm / 1_000.0:g} {carga.fy_N / 1_000.0:g}")
-    for momento in viga.momentos:
-        linhas.append(f"M {momento.x_mm / 1_000.0:g} {momento.mz_Nmm / 1e6:g}")
-    for carga in viga.cargas_distribuidas:
+    for pontual in viga.cargas_pontuais:
         linhas.append(
-            f"q {carga.x_inicial_mm / 1_000.0:g} {carga.x_final_mm / 1_000.0:g} "
-            f"{carga.w_inicial_N_mm:g} {carga.w_final:g}"
+            f"P {pontual.x_mm / 1_000.0:g} {pontual.fy_N / 1_000.0:g}"
+            f"{_sufixo_caso(pontual)}"
         )
-    for carga in viga.cargas_axiais:
-        linhas.append(f"N {carga.x_mm / 1_000.0:g} {carga.fx_N / 1_000.0:g}")
-    for carga in viga.cargas_axiais_distribuidas:
+    for momento in viga.momentos:
         linhas.append(
-            f"qn {carga.x_inicial_mm / 1_000.0:g} {carga.x_final_mm / 1_000.0:g} "
-            f"{carga.a_inicial_N_mm:g} {carga.a_final:g}"
+            f"M {momento.x_mm / 1_000.0:g} {momento.mz_Nmm / 1e6:g}"
+            f"{_sufixo_caso(momento)}"
+        )
+    for distribuida in viga.cargas_distribuidas:
+        linhas.append(
+            f"q {distribuida.x_inicial_mm / 1_000.0:g} "
+            f"{distribuida.x_final_mm / 1_000.0:g} "
+            f"{distribuida.w_inicial_N_mm:g} {distribuida.w_final:g}"
+            f"{_sufixo_caso(distribuida)}"
+        )
+    for axial in viga.cargas_axiais:
+        linhas.append(
+            f"N {axial.x_mm / 1_000.0:g} {axial.fx_N / 1_000.0:g}"
+            f"{_sufixo_caso(axial)}"
+        )
+    for axial_distribuida in viga.cargas_axiais_distribuidas:
+        linhas.append(
+            f"qn {axial_distribuida.x_inicial_mm / 1_000.0:g} "
+            f"{axial_distribuida.x_final_mm / 1_000.0:g} "
+            f"{axial_distribuida.a_inicial_N_mm:g} {axial_distribuida.a_final:g}"
+            f"{_sufixo_caso(axial_distribuida)}"
         )
     for torque in viga.torques:
-        linhas.append(f"T {torque.x_mm / 1_000.0:g} {torque.t_Nmm / 1e6:g}")
+        linhas.append(
+            f"T {torque.x_mm / 1_000.0:g} {torque.t_Nmm / 1e6:g}"
+            f"{_sufixo_caso(torque)}"
+        )
     if viga.considerar_peso_proprio:
         linhas.append("peso_proprio")
     return "\n".join(linhas)
@@ -832,6 +1141,23 @@ q 0 4 6 baixo
 N 4 180 compressao
 peso_proprio
 """,
+    "Envoltória de combinações (viga de piso)": """# Cada carga pertence a um caso; cada combinação pesa os casos.
+# O programa resolve a barra uma vez por combinação e envelopa o resultado.
+viga 8
+secao perfil W ideal 250x250x9x14
+material catalogo ASTM A572 grau 50
+apoio 0 pino
+apoio 8 rolete
+
+q 0 8 12 baixo                 # sem caso=, logo Permanente
+q 0 8 20 baixo caso=Sobrecarga
+q 0 8 8 cima   caso=Vento      # sucção
+peso_proprio
+
+combinacao ELU_gravidade Permanente=1.4 Sobrecarga=1.5
+combinacao ELU_vento     Permanente=1.0 Vento=1.4
+combinacao ELS_rara      Permanente=1.0 Sobrecarga=1.0
+""",
     "Carga triangular (empuxo em comporta)": """# Distribuída trapezoidal: intensidade inicial e final
 # Empuxo hidrostático cresce com a profundidade, de 0 no topo ao máximo na base
 viga 3
@@ -849,6 +1175,8 @@ AJUDA_SINTAXE = """\
 | `viga L` | Comprimento total, em metros | `viga 6` |
 | `nome ...` | Identifica o modelo | `nome Viga do mezanino` |
 | `material <atalho>` | aco, aco_inox, aluminio, ferro_fundido, cobre, titanio, madeira, concreto | `material aco` |
+| `material catalogo <nome>` | Material da base do programa (Sy do catálogo) | `material catalogo AISI 1045 temperado e revenido` |
+| `material projeto <nome>` | Material qualificado do projeto ativo, com rastreabilidade | `material projeto Chapa A36 certificada` |
 | `material E= G= Sy= densidade=` | Material próprio (E e G em GPa, Sy em MPa) | `material E=200 G=77 Sy=250` |
 | `secao retangular b h` | Retangular maciça, em mm | `secao retangular 100 200` |
 | `secao circular d` | Barra redonda, em mm | `secao circular 50` |
@@ -867,9 +1195,15 @@ AJUDA_SINTAXE = """\
 | `qn x1 x2 a1 [a2]` | Axial distribuída, em kN/m | `qn 0 6 2` |
 | `T x valor` | Torque, em kN·m | `T 0.4 1.5` |
 | `peso_proprio` | Soma o peso da própria barra | `peso_proprio` |
+| `caso=<nome>` | Marca a que ação a carga pertence (sufixo de qualquer carga) | `q 0 6 15 baixo caso=Sobrecarga` |
+| `combinacao <nome> <Caso>=<fator>` | Combinação a envelopar | `combinacao ELU Permanente=1.4 Sobrecarga=1.5` |
 
 Posições em **metros**, forças em **kN**, momentos e torques em **kN·m**,
 dimensões de seção em **mm**. Tudo depois de `#` é comentário. Valores
 positivos apontam para **cima**; escreva `baixo` (ou `compressao`) no fim da
 linha para inverter o sinal sem digitar o menos.
+
+Carga sem `caso=` é **Permanente**. Quando há pelo menos uma `combinacao`,
+o programa resolve a barra uma vez por combinação e desenha a envoltória;
+um caso que não aparece na combinação entra com fator zero.
 """

@@ -16,10 +16,11 @@ from components.project_tools import (
 from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
 from core import beam_analysis as vigas
 from core import beam_script as escrita
+from core import materials as materiais_base
 from core import steel_sections as secoes
+from core.materials_registry import avaliar_material
 from core.project_criteria import normalizar_criterios_projeto
 from core.project_store import obter_projeto_ativo
-
 
 st.set_page_config(
     page_title="Vigas e eixos",
@@ -137,6 +138,9 @@ st.caption(
 
 st.session_state.setdefault(CHAVE_SCRIPT, escrita.EXEMPLOS["Viga biapoiada com carga distribuída"])
 
+projeto_ativo = obter_projeto_ativo()
+materiais_projeto = list((projeto_ativo or {}).get("materiais_projeto", []))
+
 
 # ---------------------------------------------------------------------------
 # 1. Entrada do modelo
@@ -184,6 +188,56 @@ with st.container(border=True):
                 "Dica: `secao perfil <nome>` aceita qualquer perfil do catálogo — "
                 f"por exemplo `{list(secoes.CATALOGO_PERFIS)[10]}`."
             )
+            if materiais_projeto:
+                nomes = ", ".join(
+                    f"`{item.get('nome')}`" for item in materiais_projeto[:6]
+                )
+                st.caption(
+                    "Materiais qualificados deste projeto (use "
+                    f"`material projeto <nome>` para rastreabilidade): {nomes}."
+                )
+            else:
+                st.caption(
+                    "Este projeto ainda não tem materiais qualificados. Use "
+                    "`material catalogo <nome>` para a base do programa, ou "
+                    "cadastre em Materiais técnicos para o cálculo ficar "
+                    "vinculado ao certificado."
+                )
+        combinacoes_projeto = list((projeto_ativo or {}).get("combinacoes_carga", []))
+        casos_projeto = list((projeto_ativo or {}).get("casos_carga", []))
+        if combinacoes_projeto:
+            linhas_projeto = escrita.linhas_de_combinacoes_do_projeto(
+                casos_projeto, combinacoes_projeto
+            )
+            with st.container(border=True):
+                st.caption(
+                    f"O projeto ativo tem {len(linhas_projeto)} combinação(ões) de "
+                    "carga. Importe-as para envelopar a barra — depois marque cada "
+                    "carga com `caso=<nome do caso>` para elas terem efeito."
+                )
+                st.code("\n".join(linhas_projeto), language="text")
+                if st.button(
+                    "Acrescentar as combinações do projeto ao modelo",
+                    icon=":material/playlist_add:",
+                    width="stretch",
+                    key="vigas_importar_combinacoes",
+                ):
+                    atual = st.session_state[CHAVE_SCRIPT].rstrip()
+                    faltantes = [
+                        linha for linha in linhas_projeto if linha not in atual
+                    ]
+                    if faltantes:
+                        st.session_state[CHAVE_SCRIPT] = (
+                            atual + "\n\n" + "\n".join(faltantes) + "\n"
+                        )
+                        st.session_state.pop(CHAVE_RESULTADO, None)
+                        st.rerun()
+                    else:
+                        st.info(
+                            "As combinações do projeto já estão no modelo.",
+                            icon=":material/check:",
+                        )
+
         texto_modelo = st.session_state[CHAVE_SCRIPT]
 
     else:
@@ -312,31 +366,94 @@ with st.container(border=True):
         )
 
         st.markdown("**Material**")
-        colunas_material = st.columns(4)
-        atalho = colunas_material[0].selectbox(
-            "Material de referência",
-            list(escrita._MATERIAIS_PRONTOS),
-            key="vigas_form_material", persist_state="session",
+        # A mesma escolha das outras páginas de cálculo: material qualificado
+        # do projeto (rastreável), catálogo orientativo ou valores próprios.
+        opcoes_material = {"manual": "— valores informados manualmente —"}
+        for item in materiais_projeto:
+            opcoes_material[f"projeto::{item['nome']}"] = (
+                f"Projeto · {item.get('nome')} · {avaliar_material(item)['nivel']}"
+            )
+        try:
+            for nome_catalogo in materiais_base.listar_nomes():
+                opcoes_material[f"catalogo::{nome_catalogo}"] = (
+                    f"Catálogo orientativo · {nome_catalogo}"
+                )
+        except (FileNotFoundError, ValueError) as erro:
+            st.warning(
+                f"Base de materiais indisponível: {erro}", icon=":material/warning:"
+            )
+        if st.session_state.get("vigas_form_material") not in opcoes_material:
+            st.session_state["vigas_form_material"] = "manual"
+        escolha_material = st.selectbox(
+            "Material",
+            list(opcoes_material),
+            format_func=lambda valor: opcoes_material[valor],
+            key="vigas_form_material",
+            persist_state="session",
+            help=(
+                "Um material do projeto leva o vínculo de rastreabilidade para o "
+                "registro; o catálogo é orientativo."
+            ),
         )
-        e_padrao, g_padrao, sy_padrao, densidade_padrao = escrita._MATERIAIS_PRONTOS[atalho]
-        modulo_e = colunas_material[1].number_input(
-            "E (GPa)", min_value=0.1, value=float(e_padrao), step=5.0,
-            key=f"vigas_form_E_{atalho}", persist_state="session",
-        )
-        modulo_g = colunas_material[2].number_input(
-            "G (GPa)", min_value=0.1, value=float(g_padrao), step=1.0,
-            key=f"vigas_form_G_{atalho}", persist_state="session",
-        )
-        escoamento = colunas_material[3].number_input(
-            "Sy (MPa)", min_value=0.0, value=float(sy_padrao), step=10.0,
-            key=f"vigas_form_Sy_{atalho}", persist_state="session",
-            help="Zero deixa o fator de segurança em branco.",
-        )
+
+        linha_material = ""
+        e_padrao, g_padrao, sy_padrao, densidade_padrao = escrita._MATERIAIS_PRONTOS["aco"]
+        if escolha_material.startswith("projeto::"):
+            linha_material = f"material projeto {escolha_material.split('::', 1)[1]}"
+        elif escolha_material.startswith("catalogo::"):
+            linha_material = f"material catalogo {escolha_material.split('::', 1)[1]}"
+
+        if linha_material:
+            # Deixa o próprio interpretador resolver o material: assim o modo
+            # formulário e o modo texto não podem discordar sobre Sy.
+            try:
+                previa = escrita.interpretar(
+                    f"viga 1\nsecao circular 10\napoio 0 pino\n{linha_material}",
+                    materiais_projeto=materiais_projeto,
+                )
+            except escrita.ErroDeScript as erro:
+                st.error(str(erro), icon=":material/error:")
+                st.stop()
+            material_previa = previa.material
+            densidade_padrao = material_previa.densidade_kg_m3
+            colunas_material = st.columns(3)
+            colunas_material[0].metric(
+                "E", f"{material_previa.modulo_elasticidade_MPa / 1_000.0:.4g} GPa", border=True
+            )
+            colunas_material[1].metric(
+                "G", f"{material_previa.modulo_cisalhamento_MPa / 1_000.0:.4g} GPa", border=True
+            )
+            colunas_material[2].metric(
+                "Sy",
+                "—" if not material_previa.escoamento_MPa else f"{material_previa.escoamento_MPa:.4g} MPa",
+                border=True,
+            )
+            st.caption(f":material/verified: {material_previa.fonte}")
+        else:
+            colunas_material = st.columns(3)
+            modulo_e = colunas_material[0].number_input(
+                "E (GPa)", min_value=0.1, value=float(e_padrao), step=5.0,
+                key="vigas_form_E", persist_state="session",
+            )
+            modulo_g = colunas_material[1].number_input(
+                "G (GPa)", min_value=0.1, value=float(g_padrao), step=1.0,
+                key="vigas_form_G", persist_state="session",
+            )
+            escoamento = colunas_material[2].number_input(
+                "Sy (MPa)", min_value=0.0, value=float(sy_padrao), step=10.0,
+                key="vigas_form_Sy", persist_state="session",
+                help="Zero deixa o fator de segurança em branco.",
+            )
+            linha_material = (
+                f"material E={modulo_e:g} G={modulo_g:g} densidade={densidade_padrao:g}"
+                + (f" Sy={escoamento:g}" if escoamento > 0 else "")
+            )
+
         peso_proprio = st.checkbox(
             "Somar o peso próprio da barra",
             value=False,
             key="vigas_form_peso", persist_state="session",
-            help=f"Densidade de referência: {densidade_padrao:.0f} kg/m³.",
+            help=f"Densidade considerada: {densidade_padrao:.0f} kg/m³.",
         )
 
         st.markdown(
@@ -437,10 +554,7 @@ with st.container(border=True):
                 f"J={secao.constante_torcao_mm4:.17g} Wt={secao.modulo_torcao_mm3:.17g} "
                 f"Av={secao.area_cisalhamento_mm2:.17g}   # {secao.nome}"
             ),
-            (
-                f"material E={modulo_e:g} G={modulo_g:g} densidade={densidade_padrao:g}"
-                + (f" Sy={escoamento:g}" if escoamento > 0 else "")
-            ),
+            linha_material,
         ]
         for _, linha in apoios_editados.dropna(subset=["x (m)", "tipo"]).iterrows():
             rigidezes = ""
@@ -495,8 +609,14 @@ analisar = st.button(
 
 if analisar:
     try:
-        modelo = escrita.interpretar(texto_modelo)
+        modelo = escrita.interpretar(
+            texto_modelo, materiais_projeto=materiais_projeto
+        )
         resultado = vigas.analisar_viga(modelo)
+        combinacoes = escrita.combinacoes_do_script(texto_modelo)
+        envoltoria = (
+            vigas.analisar_envoltoria(modelo, combinacoes) if combinacoes else None
+        )
     except escrita.ErroDeScript as erro:
         st.session_state.pop(CHAVE_RESULTADO, None)
         st.error(str(erro), icon=":material/error:")
@@ -509,6 +629,7 @@ if analisar:
         st.session_state[CHAVE_RESULTADO] = {
             "script": texto_modelo,
             "resultado": resultado,
+            "envoltoria": envoltoria,
         }
 
 guardado = st.session_state.get(CHAVE_RESULTADO)
@@ -520,6 +641,7 @@ if not guardado:
     st.stop()
 
 resultado: vigas.ResultadoViga = guardado["resultado"]
+envoltoria = guardado.get("envoltoria")
 modelo: vigas.Viga = resultado.viga
 secao = modelo.secao
 material = modelo.material
@@ -663,6 +785,15 @@ with st.container(border=True):
         f"{material.modulo_elasticidade_MPa * secao.inercia_mm4:.4g} N·mm²",
         border=True,
     )
+    if material.fonte:
+        icone = ":material/verified:" if material.material_id else ":material/info:"
+        st.caption(f"{icone} Material: {material.fonte}")
+    if not material.material_id and materiais_projeto:
+        st.caption(
+            ":material/link_off: Este cálculo não está vinculado a um material "
+            "qualificado do projeto. Use `material projeto <nome>` para que o "
+            "registro aponte para o certificado."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -671,6 +802,19 @@ with st.container(border=True):
 
 extremos = resultado.extremos
 meta_fator_seguranca = fator_seguranca_minimo_do_projeto()
+
+if envoltoria is not None:
+    # Sem este aviso, é fácil registrar como verificação de projeto um fator
+    # de segurança calculado sobre as cargas sem fator de combinação.
+    nome_governante, extremo_governante = envoltoria.governante("momento")
+    st.warning(
+        "Este modelo declara combinações de carga. **As seções 3 a 6 abaixo "
+        "usam as cargas como escritas, sem fatores de combinação** — são os "
+        "valores característicos. Os valores de projeto estão na aba "
+        f"**Envoltória**: o momento governante é {extremo_governante.valor / 1e6:.2f} "
+        f"kN·m, pela combinação {nome_governante}.",
+        icon=":material/rule:",
+    )
 
 with st.container(border=True):
     st.subheader("3. Reações de apoio")
@@ -821,9 +965,92 @@ with st.container(border=True):
         ),
     )
 
-    abas = st.tabs(
-        ["Cortante e momento", "Linha elástica", "Normal e torção", "Tensões", "Tabela"]
-    )
+    nomes_abas = [
+        "Cortante e momento",
+        "Linha elástica",
+        "Normal e torção",
+        "Tensões",
+        "Tabela",
+    ]
+    if envoltoria is not None:
+        nomes_abas.insert(0, "Envoltória")
+    abas_lista = st.tabs(nomes_abas)
+    abas = abas_lista[1:] if envoltoria is not None else abas_lista
+
+    if envoltoria is not None:
+        with abas_lista[0]:
+            st.markdown(
+                "**Cada combinação foi resolvida separadamente.** A envoltória "
+                "mostra a faixa que as cargas podem produzir em cada seção; a "
+                "tabela abaixo diz qual combinação governa cada grandeza — que "
+                "raramente é a mesma para todas."
+            )
+            resumo = pd.DataFrame(vigas.resumo_governantes(envoltoria))
+            st.dataframe(
+                resumo.style.format({"Valor": "{:.3f}", "x (m)": "{:.3f}"}),
+                hide_index=True,
+                width="stretch",
+            )
+
+            fatores_linhas = []
+            for combinacao in envoltoria.combinacoes:
+                linha = {"Combinação": combinacao.nome}
+                for caso in vigas.casos_declarados(modelo):
+                    linha[caso] = combinacao.fator(caso)
+                fatores_linhas.append(linha)
+            st.caption(
+                "Fatores aplicados — um caso com fator zero não participa "
+                "daquela combinação."
+            )
+            st.dataframe(pd.DataFrame(fatores_linhas), hide_index=True, width="stretch")
+
+            tabela_env = pd.DataFrame(vigas.tabela_envoltoria(envoltoria))
+            tabela_env["ordem"] = range(len(tabela_env))
+
+            def faixa(coluna_max: str, coluna_min: str, titulo: str, cor: str):
+                base = alt.Chart(tabela_env).encode(
+                    x=alt.X("x (m):Q", title="x (m)", scale=alt.Scale(nice=False, domainMin=0)),
+                    order=alt.Order("ordem:Q"),
+                )
+                area = base.mark_area(opacity=0.25, color=cor).encode(
+                    y=alt.Y(f"{coluna_max}:Q", title=titulo),
+                    y2=alt.Y2(f"{coluna_min}:Q"),
+                )
+                linha_max = base.mark_line(color=cor, strokeWidth=2).encode(
+                    y=alt.Y(f"{coluna_max}:Q")
+                )
+                linha_min = base.mark_line(color=cor, strokeWidth=2, strokeDash=[4, 3]).encode(
+                    y=alt.Y(f"{coluna_min}:Q")
+                )
+                zero = (
+                    alt.Chart(pd.DataFrame({"zero": [0.0]}))
+                    .mark_rule(color="#94a3b8", strokeDash=[4, 4])
+                    .encode(y=alt.Y("zero:Q"))
+                )
+                return (area + linha_max + linha_min + zero).properties(height=220).interactive()
+
+            st.altair_chart(
+                faixa("V máx (kN)", "V mín (kN)", "Envoltória de cortante (kN)", CORES["cortante"])
+            )
+            st.altair_chart(
+                faixa("M máx (kN·m)", "M mín (kN·m)", "Envoltória de momento (kN·m)", CORES["momento"])
+            )
+            st.altair_chart(
+                faixa("Flecha máx (mm)", "Flecha mín (mm)", "Envoltória de flecha (mm)", CORES["flecha"])
+            )
+            st.caption(
+                "Linha cheia: máximo; tracejada: mínimo. As demais abas mostram "
+                "a barra **sem** fatores de combinação, como escrita no modelo."
+            )
+            st.download_button(
+                "Baixar envoltória em CSV",
+                data=tabela_env.drop(columns=["ordem"]).to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"envoltoria_{modelo.nome.replace(' ', '_').lower()}.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+                key="vigas_baixar_envoltoria",
+            )
 
     with abas[0]:
         st.altair_chart(diagrama("V (kN)", "Cortante V (kN)", CORES["cortante"], altura=230))
@@ -856,6 +1083,9 @@ with st.container(border=True):
             "analítica de M(x)/EI em cada trecho, com as constantes vindas dos "
             "deslocamentos nodais — não é uma interpolação do gráfico."
         )
+        # Guardado numa variável de módulo para o registro da seção 6 poder
+        # gravar o critério: sem ele, a Central de Validação não tem como
+        # verificar o estado limite de serviço desta barra.
         verificacao = vigas.verificar_flecha(
             resultado,
             limite_vao=float(
@@ -965,6 +1195,7 @@ fronteira_modelo(
         "Concentração de tensão em furos, entalhes, mudanças de seção e rasgos de chaveta.",
         "Fadiga, fluência, impacto e temperatura — use o repasse abaixo para levar a seção ao módulo próprio.",
         "Ligações e apoios reais: o modelo trata engaste, pino e rolete como ideais.",
+        "Os fatores de combinação são os que você declarar: o programa não atribui coeficiente normativo automaticamente.",
     ]
 )
 
@@ -1021,6 +1252,12 @@ with st.container(border=True):
         resumo=(
             "Análise linear de barra reta com cortante, momento fletor, linha "
             "elástica, esforço normal e torção combinados."
+            + (
+                ""
+                if envoltoria is None
+                else f" Envoltória de {len(envoltoria.combinacoes)} combinação(ões) "
+                "de carga, com a combinação governante de cada grandeza."
+            )
         ),
         entradas={
             "script_modelo": guardado["script"],
@@ -1036,10 +1273,12 @@ with st.container(border=True):
                 "modulo_torcao_mm3": secao.modulo_torcao_mm3,
             },
             "material": {
+                "nome": material.nome,
                 "modulo_elasticidade_MPa": material.modulo_elasticidade_MPa,
                 "modulo_cisalhamento_MPa": material.modulo_cisalhamento_MPa,
                 "escoamento_MPa": material.escoamento_MPa,
                 "densidade_kg_m3": material.densidade_kg_m3,
+                "fonte": material.fonte,
             },
             "apoios": [
                 {"x_mm": apoio.x_mm, "tipo": apoio.tipo} for apoio in modelo.apoios
@@ -1076,7 +1315,21 @@ with st.container(border=True):
             ),
             # O memorial usa esta meta para concluir "atende / não atende".
             "fator_seguranca_minimo": meta_fator_seguranca,
+            "flecha_admissivel_mm": verificacao["flecha_admissivel_mm"],
+            "criterio_flecha": verificacao["criterio"],
+            "utilizacao_flecha": verificacao["utilizacao"],
             "grau_hiperestaticidade": resultado.grau_hiperestaticidade,
+            **(
+                {}
+                if envoltoria is None
+                else {
+                    "envoltoria_combinacoes": [
+                        {"nome": item.nome, "fatores": item.fatores}
+                        for item in envoltoria.combinacoes
+                    ],
+                    "envoltoria_governantes": vigas.resumo_governantes(envoltoria),
+                }
+            ),
             "residuos_equilibrio": vigas.conferir_equilibrio(resultado),
         },
         metodo=(
@@ -1112,6 +1365,7 @@ with st.container(border=True):
             "Confirmar critério de flecha admissível e condições reais de apoio do projeto.",
         ],
         conclusao=conclusao,
+        materiais_ids=[material.material_id] if material.material_id else [],
     )
     botao_registrar_calculo(
         registro,

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 from core.load_cases import CHAVES_CARGA, calcular_envelope
+from core.project_criteria import normalizar_criterios_projeto
 from core.project_dependencies import (
     STATUS_ATUAL,
     STATUS_AUSENTE,
@@ -281,6 +284,196 @@ def _regra_dependencias(projeto: Mapping[str, Any]) -> ResultadoRegra:
     return ResultadoRegra(tuple(achados), preenchidos, total)
 
 
+# ---------------------------------------------------------------------------
+# Regras que olham o resultado de engenharia, não só a documentação
+# ---------------------------------------------------------------------------
+
+# Chaves de fator de segurança usadas pelos módulos. O nome varia porque cada
+# verificação tem o seu critério; o que importa é comparar com a meta.
+_CHAVES_FATOR = (
+    "fator_seguranca",
+    "fator_seguranca_escoamento",
+    "fator_seguranca_ruptura",
+    "fator_ruptura",
+    "fator_seguranca_minimo_calculado",
+    "menor_fator",
+)
+
+_STATUS_REPROVADO = {"não atende", "nao atende", "reprovado"}
+_STATUS_ATENCAO = {"atenção", "atencao"}
+
+
+def _float_ou_none(valor: Any) -> float | None:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) else None
+
+
+def _meta_do_projeto(projeto: Mapping[str, Any]) -> float:
+    criterios = normalizar_criterios_projeto(projeto.get("criterios_projeto"))
+    meta = _float_ou_none(criterios["seguranca"]["fator_seguranca_minimo"])
+    return meta if meta and meta > 0 else 1.5
+
+
+def _utilizacao_maxima(projeto: Mapping[str, Any]) -> float:
+    criterios = normalizar_criterios_projeto(projeto.get("criterios_projeto"))
+    limite = _float_ou_none(criterios["seguranca"]["utilizacao_maxima"])
+    return limite if limite and limite > 0 else 1.0
+
+
+def _regra_margens_calculadas(projeto: Mapping[str, Any]) -> ResultadoRegra:
+    """Confronta o que os módulos calcularam com a meta do próprio projeto.
+
+    As demais regras verificam se o cálculo está documentado e atualizado.
+    Esta verifica se ele **passa** — sem isso, um projeto pode chegar
+    completo, assinado e coerente à emissão carregando um fator de segurança
+    abaixo do critério que o próprio projeto declarou.
+    """
+    achados: list[AchadoRegra] = []
+    registros = [
+        item
+        for item in projeto.get("registros_tecnicos", [])
+        if isinstance(item, Mapping)
+    ]
+    meta = _meta_do_projeto(projeto)
+    limite_utilizacao = _utilizacao_maxima(projeto)
+    avaliados = 0
+    dentro_do_criterio = 0
+
+    for indice, registro in enumerate(registros, start=1):
+        titulo = _texto(registro.get("titulo")) or f"Registro {indice}"
+        modulo = _texto(registro.get("modulo")) or "Registro técnico"
+        resultados = registro.get("resultados")
+        resultados = resultados if isinstance(resultados, Mapping) else {}
+
+        # A meta gravada no próprio registro tem prioridade: é a que valia
+        # quando o cálculo foi feito, e é a que o memorial reproduz.
+        meta_registro = _float_ou_none(resultados.get("fator_seguranca_minimo")) or meta
+
+        fatores = {
+            chave: _float_ou_none(resultados.get(chave))
+            for chave in _CHAVES_FATOR
+            if _float_ou_none(resultados.get(chave)) is not None
+        }
+        if fatores:
+            avaliados += 1
+            criterio, menor = min(fatores.items(), key=lambda item: item[1])
+            if menor < 1.0:
+                achados.append(
+                    AchadoRegra(
+                        "Bloqueio",
+                        "Margem de segurança",
+                        f"{titulo}: resistência excedida",
+                        f"O menor fator calculado é {menor:.2f} ({criterio}), abaixo de 1,00.",
+                        "Revise geometria, material ou carregamento antes de emitir o memorial.",
+                        modulo=modulo,
+                        evidencia=f"{criterio} = {menor:.3f}",
+                    )
+                )
+            elif menor < meta_registro:
+                achados.append(
+                    AchadoRegra(
+                        "Atenção",
+                        "Margem de segurança",
+                        f"{titulo}: abaixo da meta do projeto",
+                        f"O menor fator calculado é {menor:.2f} ({criterio}), "
+                        f"abaixo da meta n ≥ {meta_registro:.2f} declarada nos critérios.",
+                        "Aumente a margem ou registre a justificativa técnica da exceção.",
+                        modulo=modulo,
+                        evidencia=f"{criterio} = {menor:.3f} · meta = {meta_registro:.2f}",
+                    )
+                )
+            else:
+                dentro_do_criterio += 1
+
+        utilizacao = _float_ou_none(resultados.get("utilizacao"))
+        if utilizacao is None:
+            utilizacao = _float_ou_none(resultados.get("utilizacao_maxima"))
+        if utilizacao is not None and utilizacao > limite_utilizacao:
+            achados.append(
+                AchadoRegra(
+                    "Bloqueio",
+                    "Margem de segurança",
+                    f"{titulo}: utilização acima do limite",
+                    f"Utilização de {utilizacao * 100:.0f}%, acima do limite de "
+                    f"{limite_utilizacao * 100:.0f}% dos critérios do projeto.",
+                    "Reforce o componente ou reveja o critério de utilização.",
+                    modulo=modulo,
+                    evidencia=f"utilização = {utilizacao:.3f}",
+                )
+            )
+
+        status = _texto(registro.get("status")).casefold()
+        if status in _STATUS_REPROVADO:
+            achados.append(
+                AchadoRegra(
+                    "Bloqueio",
+                    "Margem de segurança",
+                    f"{titulo}: registrado como não atendido",
+                    "O próprio módulo concluiu que a verificação não é atendida.",
+                    "Trate a não conformidade ou remova o registro superado do escopo.",
+                    modulo=modulo,
+                )
+            )
+        elif status in _STATUS_ATENCAO:
+            achados.append(
+                AchadoRegra(
+                    "Atenção",
+                    "Margem de segurança",
+                    f"{titulo}: registrado com ressalva",
+                    "O módulo concluiu a verificação com margem pequena.",
+                    "Confirme se a ressalva é aceitável para o critério de aceitação do projeto.",
+                    modulo=modulo,
+                )
+            )
+
+    return ResultadoRegra(
+        achados=tuple(achados),
+        pontos_preenchidos=dentro_do_criterio,
+        pontos_totais=avaliados,
+    )
+
+
+def _regra_deslocamentos(projeto: Mapping[str, Any]) -> ResultadoRegra:
+    """Serviço (flecha) é verificação separada da resistência.
+
+    Uma barra pode atender folgadamente à tensão e ainda assim ser inviável
+    por deslocamento. Como o critério de flecha não está nos critérios do
+    projeto, a regra só confronta o que o próprio módulo registrou.
+    """
+    achados: list[AchadoRegra] = []
+    for indice, registro in enumerate(
+        [i for i in projeto.get("registros_tecnicos", []) if isinstance(i, Mapping)],
+        start=1,
+    ):
+        resultados = registro.get("resultados")
+        resultados = resultados if isinstance(resultados, Mapping) else {}
+        flecha = _float_ou_none(resultados.get("flecha_maxima_mm"))
+        admissivel = _float_ou_none(resultados.get("flecha_admissivel_mm"))
+        if flecha is None or admissivel is None or admissivel <= 0:
+            continue
+        if abs(flecha) > admissivel:
+            titulo = _texto(registro.get("titulo")) or f"Registro {indice}"
+            achados.append(
+                AchadoRegra(
+                    "Atenção",
+                    "Estado limite de serviço",
+                    f"{titulo}: flecha acima do critério",
+                    f"Flecha máxima de {abs(flecha):.2f} mm contra "
+                    f"{admissivel:.2f} mm admissíveis "
+                    f"({_texto(resultados.get('criterio_flecha')) or 'critério informado'}).",
+                    "Aumente a inércia, reduza o vão ou registre a aceitação do deslocamento.",
+                    modulo=_texto(registro.get("modulo")) or "Registro técnico",
+                    evidencia=f"flecha = {abs(flecha):.3f} mm",
+                )
+            )
+    return ResultadoRegra(achados=tuple(achados))
+
+
 registrar_regra(RegraValidacao("contrato-registro", "Contrato dos registros técnicos", "1.0", _regra_contratos))
 registrar_regra(RegraValidacao("casos-carga", "Casos e combinações de carga", "1.0", _regra_casos_carga))
 registrar_regra(RegraValidacao("dependencias-calculo", "Atualidade dos cálculos dependentes", "1.0", _regra_dependencias))
+registrar_regra(RegraValidacao("margens-calculadas", "Margens de segurança calculadas", "1.0", _regra_margens_calculadas))
+registrar_regra(RegraValidacao("deslocamentos", "Deslocamentos em serviço", "1.0", _regra_deslocamentos))

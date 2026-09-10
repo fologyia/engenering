@@ -180,6 +180,39 @@ de `ΣFy`, `ΣFx`, `ΣM` e `ΣT`. É um controle numérico do próprio solver,
 exibido na interface: valores muito acima do zero de máquina indicam
 problema no modelo ou no condicionamento.
 
+## Casos de carga e envoltória
+
+Cada carga pertence a um **caso**, declarado com `caso=<nome>`; sem isso ela
+é `Permanente`. Uma `combinacao` atribui um fator a cada caso, e um caso
+ausente da combinação entra com fator **zero** — a combinação declara o que
+participa dela.
+
+`analisar_envoltoria` resolve a barra uma vez por combinação e monta a
+faixa envelopada. Duas decisões importam:
+
+* **A malha é a mesma em todas as combinações.** Geometria, apoios e
+  posições de carga não mudam; só as intensidades são escaladas. A
+  envoltória é montada sobre a interseção das abscissas, porque cada
+  combinação ainda acrescenta as raízes de `V(x)=0` e `θ(x)=0` da sua
+  própria solução, que naturalmente não coincidem.
+* **Os extremos governantes vêm dos resultados completos**, não da malha
+  comum: assim o pico continua exato, em vez de arredondado para a amostra
+  mais próxima. Para cada grandeza, a envoltória guarda **qual** combinação
+  governou — que raramente é a mesma para todas.
+
+Um caso citado numa combinação mas ausente do modelo é recusado com a lista
+do que existe: o efeito silencioso seria a parcela simplesmente não entrar.
+A comparação de nomes ignora maiúsculas, para uma letra trocada não zerar
+uma carga.
+
+O peso próprio é permanente. Quando a combinação aplica um fator diferente
+de 1,0 ao permanente, ele é materializado como distribuída antes de ser
+escalado, para não duplicar a fórmula do peso.
+
+`linhas_de_combinacoes_do_projeto` converte as combinações do projeto ativo
+em linhas de `combinacao`, trocando o **id** do caso pelo seu **nome** — que
+é o que as cargas do modelo usam em `caso=`.
+
 ## Repasse para os outros módulos
 
 `estado_plano_da_secao(resultado, x_mm, ponto=...)` converte qualquer seção

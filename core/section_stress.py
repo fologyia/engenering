@@ -19,8 +19,8 @@ Unidades: N, mm, MPa e N·mm.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Protocol
 
 
@@ -30,16 +30,35 @@ class SecaoTensionavel(Protocol):
     É um protocolo (e não uma classe base) de propósito: tanto a
     :class:`PropriedadesSecao` deste módulo quanto a ``SecaoViga`` da análise
     de vigas o satisfazem sem herança nem importação cruzada.
+
+    As propriedades são declaradas como somente-leitura porque as duas
+    implementações são dataclasses congeladas; exigir atributo gravável
+    excluiria justamente quem deveria satisfazer o protocolo.
     """
 
-    area_mm2: float
-    inercia_mm4: float
-    c_superior_mm: float
-    c_inferior_mm: float
-    momento_estatico_mm3: float
-    espessura_cisalhamento_mm: float
-    modulo_torcao_mm3: float
-    area_cisalhamento_mm2: float
+    @property
+    def area_mm2(self) -> float: ...
+
+    @property
+    def inercia_mm4(self) -> float: ...
+
+    @property
+    def c_superior_mm(self) -> float: ...
+
+    @property
+    def c_inferior_mm(self) -> float: ...
+
+    @property
+    def momento_estatico_mm3(self) -> float: ...
+
+    @property
+    def espessura_cisalhamento_mm(self) -> float: ...
+
+    @property
+    def modulo_torcao_mm3(self) -> float: ...
+
+    @property
+    def area_cisalhamento_mm2(self) -> float: ...
 
 
 @dataclass(frozen=True, slots=True)
