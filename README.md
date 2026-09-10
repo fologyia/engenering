@@ -184,8 +184,15 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
   as propriedades. Sy e Sut vêm da norma citada e ficam marcados como tal —
   nunca atribuídos ao critério. Valores sem mínimo normativo (SAE 1020,
   ASTM A108) são declarados como típicos;
+- propriedades mecânicas do catálogo **Gerdau**: 10 aços das duas tabelas de
+  propriedades (perfis W e HP; perfis I, U, T e cantoneiras), com alongamento
+  e equivalência NBR 7007. A diferença por forma de produto é preservada — o
+  mesmo ASTM A572 Gr. 50 vale 345 MPa em perfil W e 350 MPa (AR 350) em
+  perfil laminado, e achatar isso apagaria um dado do fabricante;
 - filtro por aplicação: responde "que aço posso usar num perfil laminado
   neste projeto" em vez de só listar aços;
+- aviso quando dois critérios definem a mesma designação, para o valor de um
+  não sobrepor o do outro em silêncio;
 - cadastro, edição, exclusão e importação em lote, com aviso de coerência
   (Sy/Sut fora da faixa, unidade em psi, propriedade sem procedência);
 - Sy igual a zero é aceito como dado físico: ferro fundido cinzento rompe sem
@@ -304,6 +311,7 @@ mecanica_toolkit/
 ├── data/
 │   ├── normas_catalogo.json
 │   ├── materiais_ref_anglo.json
+│   ├── materiais_ref_gerdau.json
 │   ├── perfis_ref_gerdau.json
 │   └── projetos_industriais.sqlite3  # criado automaticamente
 ├── docs/

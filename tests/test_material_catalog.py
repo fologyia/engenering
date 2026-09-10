@@ -277,6 +277,137 @@ class CriterioDeProjetoTests(unittest.TestCase):
                 self.assertTrue(item.origem_propriedades)
 
 
+class CatalogoGerdauTests(unittest.TestCase):
+    """Propriedades mecânicas declaradas pelo fabricante dos perfis."""
+
+    def test_catalogo_esta_distribuido(self):
+        arquivos = [c.name for c in catalogo.catalogos_de_criterio()]
+        self.assertIn("materiais_ref_gerdau.json", arquivos)
+
+    def test_valores_batem_com_a_tabela_do_fabricante(self):
+        esperado = {
+            "ASTM A572 Gr. 50 — perfis W e HP (Gerdau)": (345, 450, 18),
+            "ASTM A572 Gr. 60 — perfis W e HP (Gerdau)": (415, 520, 16),
+            "ASTM A992 — perfis W e HP (Gerdau)": (345, 450, 18),
+            "Aço COR 500 — perfis W e HP (Gerdau)": (370, 500, 18),
+            "ASTM A131 AH32 — perfis W e HP (Gerdau)": (315, 440, 19),
+            "ASTM A131 AH36 — perfis W e HP (Gerdau)": (355, 490, 19),
+        }
+        for nome, (sy, sut, along) in esperado.items():
+            with self.subTest(material=nome):
+                item = catalogo.obter(nome)
+                self.assertAlmostEqual(item.sy_MPa, sy)
+                self.assertAlmostEqual(item.sut_MPa, sut)
+                self.assertAlmostEqual(item.alongamento_pct, along)
+
+    def test_diferenca_por_forma_de_produto_e_preservada(self):
+        # O catálogo tabela o MESMO A572 Gr. 50 com 345 MPa em perfis W e HP e
+        # com 350 MPa (AR 350) em perfis I, U, T e cantoneiras. Achatar os dois
+        # num valor só apagaria uma diferença que o fabricante declara.
+        w_hp = catalogo.obter("ASTM A572 Gr. 50 — perfis W e HP (Gerdau)")
+        laminados = catalogo.obter(
+            "ASTM A572 Gr. 50 / NBR 7007 AR 350 — perfis I, U, T e cantoneiras (Gerdau)"
+        )
+        self.assertAlmostEqual(w_hp.sy_MPa, 345.0)
+        self.assertAlmostEqual(laminados.sy_MPa, 350.0)
+
+    def test_equivalencia_nbr_7007_aparece_na_designacao(self):
+        for nome, equivalencia in (
+            ("ASTM A36 / NBR 7007 MR 250 — perfis I, U, T e cantoneiras (Gerdau)", "MR 250"),
+            ("ASTM A572 Gr. 60 / NBR 7007 AR 415 — perfis I, U, T e cantoneiras (Gerdau)", "AR 415"),
+            ("ASTM A588 / NBR 7007 AR 350 COR — perfis I, U, T e cantoneiras (Gerdau)", "AR 350 COR"),
+        ):
+            with self.subTest(material=nome):
+                item = catalogo.obter(nome)
+                self.assertIn(equivalencia, item.nome)
+                self.assertIn(equivalencia, item.observacao)
+
+    def test_faixa_de_resistencia_adota_o_minimo_e_declara_a_faixa(self):
+        # Onde o catálogo dá "400 a 550 MPa", o valor de projeto é o mínimo; a
+        # faixa completa não pode se perder.
+        item = catalogo.obter(
+            "ASTM A36 / NBR 7007 MR 250 — perfis I, U, T e cantoneiras (Gerdau)"
+        )
+        self.assertAlmostEqual(item.sut_MPa, 400.0)
+        self.assertIn("400 a 550", item.observacao)
+
+    def test_escoamento_em_faixa_adota_o_minimo(self):
+        # O A992 é tabelado com escoamento de 345 a 450 MPa.
+        item = catalogo.obter("ASTM A992 — perfis W e HP (Gerdau)")
+        self.assertAlmostEqual(item.sy_MPa, 345.0)
+        self.assertIn("345 a 450", item.observacao)
+
+    def test_produzidos_sob_encomenda_sao_sinalizados(self):
+        for nome in (
+            "ASTM A572 Gr. 60 — perfis W e HP (Gerdau)",
+            "ASTM A992 — perfis W e HP (Gerdau)",
+            "Aço COR 500 — perfis W e HP (Gerdau)",
+            "ASTM A588 / NBR 7007 AR 350 COR — perfis I, U, T e cantoneiras (Gerdau)",
+        ):
+            with self.subTest(material=nome):
+                self.assertIn("encomenda", catalogo.obter(nome).observacao.lower())
+
+    def test_aplicacoes_separam_as_duas_tabelas(self):
+        w_hp = {m.nome for m in catalogo.materiais_para("Perfis W e HP")}
+        laminados = {
+            m.nome for m in catalogo.materiais_para("Perfis I, U, T e cantoneiras")
+        }
+        self.assertEqual(len(w_hp), 6)
+        self.assertEqual(len(laminados), 4)
+        self.assertEqual(w_hp & laminados, set())
+
+    def test_todos_declaram_alongamento(self):
+        for nome, item in catalogo.listar_cadastrados().items():
+            if "Gerdau" not in item.origem:
+                continue
+            with self.subTest(material=nome):
+                self.assertGreater(item.alongamento_pct, 0.0)
+
+    def test_todos_sao_coerentes(self):
+        for nome, item in catalogo.listar_cadastrados().items():
+            if "Gerdau" not in item.origem:
+                continue
+            with self.subTest(material=nome):
+                self.assertEqual(catalogo.conferir_coerencia(item), [])
+
+
+class ColisaoEntreCriteriosTests(unittest.TestCase):
+    def test_criterios_distribuidos_nao_colidem(self):
+        # Dois catálogos definindo a mesma designação fariam o último vencer em
+        # silêncio; os que vêm com o programa precisam estar livres disso.
+        self.assertEqual(catalogo.colisoes_entre_catalogos(), {})
+
+    def test_colisao_e_detectada_quando_existe(self):
+        import json as _json
+        import pathlib as _pathlib
+        import tempfile as _tempfile
+        from unittest import mock as _mock
+
+        with _tempfile.TemporaryDirectory() as pasta:
+            caminho = _pathlib.Path(pasta)
+            for indice in (1, 2):
+                (caminho / f"materiais_ref_{indice}.json").write_text(
+                    _json.dumps(
+                        {
+                            "schema": catalogo.SCHEMA,
+                            "origem": f"Critério {indice}",
+                            "materiais": [
+                                {
+                                    "nome": "ASTM A36",
+                                    "Sy_MPa": 250 + indice,
+                                    "Sut_MPa": 400,
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            with _mock.patch.object(catalogo, "PASTA_DADOS", caminho):
+                colisoes = catalogo.colisoes_entre_catalogos()
+        self.assertIn("ASTM A36", colisoes)
+        self.assertEqual(len(colisoes["ASTM A36"]), 2)
+
+
 class ArquivoCorrompidoTests(unittest.TestCase):
     def setUp(self):
         self.contexto = ArquivoIsolado()

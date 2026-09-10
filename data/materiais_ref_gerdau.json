@@ -1,0 +1,108 @@
+{
+  "schema": "mecanica-toolkit/catalogo-materiais/v1",
+  "origem": "Gerdau — Tabela de bitolas, propriedades mecânicas",
+  "criterio": "Gerdau — Perfis para construção metálica, tabela de bitolas (01/23)",
+  "observacoes": "Propriedades mecânicas declaradas pelo fabricante para os perfis que ele produz, com a equivalência da ABNT NBR 7007 onde o catálogo a indica. Os valores dependem da FORMA DO PRODUTO: o mesmo ASTM A572 Gr. 50 aparece com escoamento mínimo de 345 MPa nos perfis W e HP e de 350 MPa (AR 350) nos perfis I, U, T e cantoneiras. Por isso cada designação entra com o escopo no nome, em vez de um valor único que esconderia a diferença. Onde o catálogo dá faixa de resistência (por exemplo 400 a 550 MPa), foi adotado o mínimo, que é o valor de projeto; a faixa completa está na observação. Perfis marcados como produzidos sob encomenda podem não estar disponíveis em estoque.",
+  "materiais": [
+    {
+      "nome": "ASTM A572 Gr. 50 — perfis W e HP (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 345,
+      "Sut_MPa": 450,
+      "alongamento_pct": 18,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis W e HP",
+      "aplicacoes": ["Perfis W e HP"],
+      "observacao": "Escoamento 345 MPa mín., resistência 450 MPa mín., alongamento após ruptura 18% mín. Variação da massa linear: +3% a -2,5% para bitolas abaixo de 148 kg/m e ±2,5% para as demais."
+    },
+    {
+      "nome": "ASTM A572 Gr. 60 — perfis W e HP (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 415,
+      "Sut_MPa": 520,
+      "alongamento_pct": 16,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis W e HP",
+      "aplicacoes": ["Perfis W e HP"],
+      "observacao": "Produzido sob encomenda. Escoamento 415 MPa mín., resistência 520 MPa mín., alongamento 16% mín."
+    },
+    {
+      "nome": "ASTM A992 — perfis W e HP (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 345,
+      "Sut_MPa": 450,
+      "alongamento_pct": 18,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis W e HP",
+      "aplicacoes": ["Perfis W e HP"],
+      "observacao": "Produzido sob encomenda. O catálogo dá o escoamento como FAIXA de 345 a 450 MPa; adotado o mínimo de 345 MPa como valor de projeto. Resistência 450 MPa mín., alongamento 18% mín."
+    },
+    {
+      "nome": "Aço COR 500 — perfis W e HP (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 370,
+      "Sut_MPa": 500,
+      "alongamento_pct": 18,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis W e HP",
+      "aplicacoes": ["Perfis W e HP"],
+      "observacao": "Produzido sob encomenda. Aço patinável de resistência à corrosão atmosférica. Escoamento 370 MPa mín., resistência 500 MPa mín., alongamento 18% mín."
+    },
+    {
+      "nome": "ASTM A131 AH32 — perfis W e HP (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 315,
+      "Sut_MPa": 440,
+      "alongamento_pct": 19,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis W e HP",
+      "aplicacoes": ["Perfis W e HP"],
+      "observacao": "Produzido sob encomenda. Aço naval. Resistência dada como faixa de 440 a 590 MPa; adotado o mínimo. Alongamento 19% mín."
+    },
+    {
+      "nome": "ASTM A131 AH36 — perfis W e HP (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 355,
+      "Sut_MPa": 490,
+      "alongamento_pct": 19,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis W e HP",
+      "aplicacoes": ["Perfis W e HP"],
+      "observacao": "Produzido sob encomenda. Aço naval. Resistência dada como faixa de 490 a 620 MPa; adotado o mínimo. Alongamento 19% mín."
+    },
+    {
+      "nome": "ASTM A36 / NBR 7007 MR 250 — perfis I, U, T e cantoneiras (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 250,
+      "Sut_MPa": 400,
+      "alongamento_pct": 20,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis I, U, T e cantoneiras",
+      "aplicacoes": ["Perfis I, U, T e cantoneiras"],
+      "observacao": "Equivalência NBR 7007: MR 250. Resistência dada como faixa de 400 a 550 MPa; adotado o mínimo. Alongamento 20% mín. em 200 mm e 21% mín. em 50 mm."
+    },
+    {
+      "nome": "ASTM A572 Gr. 50 / NBR 7007 AR 350 — perfis I, U, T e cantoneiras (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 350,
+      "Sut_MPa": 450,
+      "alongamento_pct": 18,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis I, U, T e cantoneiras",
+      "aplicacoes": ["Perfis I, U, T e cantoneiras"],
+      "observacao": "Equivalência NBR 7007: AR 350. Escoamento 350 MPa mín. — cinco MPa acima do valor tabelado para o mesmo aço em perfis W e HP. Alongamento 18% mín. em 200 mm e 21% mín. em 50 mm."
+    },
+    {
+      "nome": "ASTM A572 Gr. 60 / NBR 7007 AR 415 — perfis I, U, T e cantoneiras (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 415,
+      "Sut_MPa": 520,
+      "alongamento_pct": 16,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis I, U, T e cantoneiras",
+      "aplicacoes": ["Perfis I, U, T e cantoneiras"],
+      "observacao": "Equivalência NBR 7007: AR 415. Alongamento 16% mín. em 200 mm e 18% mín. em 50 mm."
+    },
+    {
+      "nome": "ASTM A588 / NBR 7007 AR 350 COR — perfis I, U, T e cantoneiras (Gerdau)",
+      "categoria": "aco",
+      "Sy_MPa": 350,
+      "Sut_MPa": 485,
+      "alongamento_pct": 18,
+      "origem_propriedades": "Gerdau — tabela de bitolas, propriedades mecânicas de perfis I, U, T e cantoneiras",
+      "aplicacoes": ["Perfis I, U, T e cantoneiras"],
+      "observacao": "Produzido sob encomenda. Equivalência NBR 7007: AR 350 COR, aço patinável. Alongamento 18% mín. em 200 mm e 21% mín. em 50 mm."
+    }
+  ]
+}

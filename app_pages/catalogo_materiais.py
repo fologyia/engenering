@@ -52,6 +52,26 @@ with st.container(border=True):
             "Critérios de projeto carregados: " + "; ".join(criterios),
             icon=":material/gavel:",
         )
+    colisoes = catalogo.colisoes_entre_catalogos()
+    if colisoes:
+        # Dois critérios tabelando a mesma designação com valores diferentes é
+        # normal — muda com a forma do produto —, mas precisa ser visível:
+        # calado, o projetista veria um número sem saber que existe outro.
+        st.warning(
+            "Designações definidas por mais de um critério de projeto. Vale a "
+            "do último catálogo carregado; confira qual se aplica ao seu caso.",
+            icon=":material/rule:",
+        )
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {"Designação": nome, "Definida por": " e ".join(origens)}
+                    for nome, origens in colisoes.items()
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
 
     colunas_filtro = st.columns([2, 2, 2])
     categorias = sorted(completo["categoria"].unique())
@@ -141,6 +161,7 @@ with st.container(border=True):
         st.session_state["materiais_form_criterio"] = copiado.criterio
         st.session_state["materiais_form_aplicacoes"] = "; ".join(copiado.aplicacoes)
         st.session_state["materiais_form_protecao"] = copiado.protecao
+        st.session_state["materiais_form_alongamento"] = float(copiado.alongamento_pct)
         st.session_state["materiais_form_observacao"] = copiado.observacao
         st.rerun()
 
@@ -184,6 +205,18 @@ with st.container(border=True):
             key="materiais_form_sut",
         )
 
+        alongamento = st.number_input(
+            "Alongamento após ruptura (%)",
+            min_value=0.0,
+            value=float(base.alongamento_pct) if base else 0.0,
+            step=1.0,
+            key="materiais_form_alongamento",
+            help=(
+                "Critério usual de ductilidade. Zero significa não informado; "
+                "o programa não usa este valor no cálculo, ele acompanha o "
+                "material na documentação."
+            ),
+        )
         origem_propriedades = st.text_input(
             "De onde vêm estas propriedades",
             value=(base.origem_propriedades if base else ""),
@@ -233,6 +266,7 @@ with st.container(border=True):
                     "categoria": categoria,
                     "Sy_MPa": sy,
                     "Sut_MPa": sut,
+                    "alongamento_pct": alongamento,
                     "origem_propriedades": origem_propriedades,
                     "criterio": criterio,
                     "aplicacoes": aplicacoes_texto,
@@ -315,6 +349,7 @@ with st.container(border=True):
         "criterio",
         "aplicacoes",
         "protecao",
+        "alongamento_pct",
         "observacao",
     ]
     st.code("\t".join(colunas), language="text")

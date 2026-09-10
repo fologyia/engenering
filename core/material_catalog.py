@@ -80,6 +80,7 @@ class MaterialCadastrado:
     criterio: str = ""
     aplicacoes: tuple[str, ...] = ()
     protecao: str = ""
+    alongamento_pct: float = 0.0
     observacao: str = ""
     atualizado_em: str = ""
 
@@ -105,6 +106,7 @@ class MaterialCadastrado:
             "criterio": self.criterio,
             "aplicacoes": list(self.aplicacoes),
             "protecao": self.protecao,
+            "alongamento_pct": self.alongamento_pct,
             "nivel_confianca": "Referência",
             "origem_tipo": self.origem_propriedades or "Valor típico / estimativa",
             "fonte_controlada": bool(self.criterio),
@@ -180,6 +182,11 @@ def material_de_dicionario(
         criterio=str(dados.get("criterio", "")).strip(),
         aplicacoes=_lista(dados.get("aplicacoes")),
         protecao=str(dados.get("protecao", "")).strip(),
+        alongamento_pct=_numero(
+            "Alongamento após ruptura (%)",
+            dados.get("alongamento_pct", 0.0) or 0.0,
+            permite_zero=True,
+        ),
         observacao=str(dados.get("observacao", "")).strip(),
         atualizado_em=str(dados.get("atualizado_em", "")).strip(),
     )
@@ -315,6 +322,24 @@ def _carregar_base() -> dict[str, MaterialCadastrado]:
     return resultado
 
 
+def colisoes_entre_catalogos() -> dict[str, list[str]]:
+    """Designações definidas por mais de um catálogo de critério.
+
+    Dois critérios podem tabelar a mesma designação com valores diferentes —
+    é comum, porque o mesmo aço tem mínimos distintos conforme a forma do
+    produto. O último carregado venceria em silêncio, e o projetista veria um
+    número sem saber que existe outro. Isto expõe a colisão para a interface
+    poder avisar.
+    """
+    ocorrencias: dict[str, list[str]] = {}
+    for caminho in catalogos_de_criterio():
+        for nome, material in _carregar_json(caminho, editavel=False).items():
+            ocorrencias.setdefault(nome, []).append(material.origem)
+    return {
+        nome: origens for nome, origens in ocorrencias.items() if len(origens) > 1
+    }
+
+
 def listar_cadastrados() -> dict[str, MaterialCadastrado]:
     """Catálogo completo: base, critérios e materiais do usuário.
 
@@ -435,6 +460,7 @@ def salvar_material(
         "criterio": material.criterio,
         "aplicacoes": list(material.aplicacoes),
         "protecao": material.protecao,
+        "alongamento_pct": material.alongamento_pct,
         "observacao": material.observacao,
         "atualizado_em": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
@@ -510,6 +536,7 @@ def catalogo_dataframe():
             "criterio": material.criterio,
             "aplicacoes": "; ".join(material.aplicacoes),
             "protecao": material.protecao,
+            "alongamento_pct": material.alongamento_pct,
             "origem_propriedades": material.origem_propriedades,
             "observacao": material.observacao,
         }
