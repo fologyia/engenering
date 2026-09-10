@@ -173,6 +173,23 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - análise matricial linear de treliças e pórticos 2D.
 - registro das combinações, verificações de barras e análises 2D no projeto ativo.
 
+### Catálogo de perfis
+
+- catálogo geométrico embutido, catálogos de referência distribuídos com o
+  programa e perfis cadastrados pelo usuário, fundidos em uma lista só;
+- 106 perfis W e HP da tabela de bitolas Gerdau, extraídos por posição na
+  página e conferidos por coerência interna (raio de giração contra
+  `sqrt(I/A)` e módulo elástico contra `I/(d/2)`, de colunas diferentes da
+  mesma linha) — um erro de leitura vira perfil rejeitado, nunca propriedade
+  errada entrando em silêncio;
+- cadastro, edição e exclusão de perfis próprios, com aviso de coerência
+  (eixos trocados, massa incompatível com a área, Z/W fora da faixa usual);
+- importação em lote colando uma tabela do Excel ou de um CSV, aceita
+  parcialmente: uma linha malformada não derruba as outras;
+- perfis de referência e embutidos não podem ser excluídos, mas podem ser
+  sobrepostos por um perfil próprio de mesmo nome;
+- tudo fica disponível em vigas e eixos, flambagem e estruturas de aço.
+
 ### Normas técnicas
 
 - catálogo orientativo separado por segurança, estruturas, parafusos, materiais, soldagem, vasos, tolerâncias e elementos de máquinas;
@@ -240,6 +257,7 @@ mecanica_toolkit/
 │   ├── circulo_mohr.py
 │   ├── projeto_parafusos.py
 │   ├── estruturas_aco.py
+│   ├── catalogo_perfis.py
 │   ├── normas_tecnicas.py
 │   └── guia_geral.py
 ├── core/
@@ -247,6 +265,7 @@ mecanica_toolkit/
 │   ├── beam_analysis.py
 │   ├── beam_script.py
 │   ├── section_stress.py
+│   ├── section_catalog.py
 │   ├── technical_records.py
 │   ├── load_cases.py
 │   ├── report_plugins.py
@@ -261,6 +280,7 @@ mecanica_toolkit/
 ├── components/
 ├── data/
 │   ├── normas_catalogo.json
+│   ├── perfis_ref_gerdau.json
 │   └── projetos_industriais.sqlite3  # criado automaticamente
 ├── docs/
 ├── normas_pdf/

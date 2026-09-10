@@ -15,6 +15,9 @@ venv/
 # Arquivos temporarios de execucao e de teste
 tmp/
 
+# Catalogo de perfis cadastrados pelo usuario (dado local)
+data/perfis_usuario.json
+
 # Sistema operacional
 Thumbs.db
 desktop.ini

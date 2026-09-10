@@ -10,7 +10,7 @@ from components.project_tools import botao_registrar_calculo, construir_registro
 from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
 from core import column_buckling as flambagem
 from core import materials as mat
-from core import steel_sections as secoes
+from core import section_catalog as catalogo_perfis
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
 
@@ -116,11 +116,11 @@ with st.container(border=True):
     elif tipo_secao == "Perfil de aço (catálogo)":
         nome_perfil = st.selectbox(
             "Perfil",
-            list(secoes.CATALOGO_PERFIS),
+            list(catalogo_perfis.listar_perfis()),
             key="flambagem_perfil_catalogo",
             persist_state="session",
         )
-        perfil = secoes.obter_perfil(nome_perfil)
+        perfil = catalogo_perfis.obter_perfil(nome_perfil)
         geometria = flambagem.geometria_perfil_catalogo(perfil)
         with st.container(horizontal=True):
             st.metric("Área", f"{perfil.area_mm2:.0f} mm²", border=True)

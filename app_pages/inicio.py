@@ -1,7 +1,7 @@
 import streamlit as st
 
 from core import materials as mat
-from core import steel_sections as secoes
+from core import section_catalog as catalogo_perfis
 
 try:
     materiais = mat.carregar_materiais()
@@ -236,7 +236,7 @@ with st.container(horizontal=True):
     )
     st.metric(
         ":material/view_in_ar: Perfis geométricos",
-        len(secoes.CATALOGO_PERFIS),
+        len(catalogo_perfis.listar_perfis()),
         border=True,
         help="Perfis idealizados disponíveis na área de estruturas de aço.",
     )

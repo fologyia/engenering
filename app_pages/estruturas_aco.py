@@ -13,6 +13,7 @@ from components.project_tools import botao_registrar_calculo, construir_registro
 from components.ui import cabecalho_pagina, fronteira_modelo
 from core import bolt_design as parafusos
 from core import load_combinations as combinacoes
+from core import section_catalog as catalogo_perfis
 from core import steel_connections as ligacoes
 from core import steel_member_design as barras
 from core import steel_sections as secoes
@@ -83,7 +84,7 @@ if modulo == "1. Perfis":
         "Raios de concordância e tolerâncias não estão incluídos.",
         icon=":material/info:",
     )
-    catalogo = secoes.catalogo_dataframe()
+    catalogo = catalogo_perfis.catalogo_dataframe()
     familias = sorted(catalogo["familia"].unique())
     familia = st.selectbox(
         "Família", ["Todas"] + familias, key="estrutura_perfil_familia_filtro",
@@ -120,11 +121,11 @@ if modulo == "1. Perfis":
 
     nome_perfil = st.selectbox(
         "Inspecionar perfil",
-        list(secoes.CATALOGO_PERFIS),
+        list(catalogo_perfis.listar_perfis()),
         key="estrutura_perfil_selecionado",
         persist_state="session",
     )
-    perfil = secoes.obter_perfil(nome_perfil)
+    perfil = catalogo_perfis.obter_perfil(nome_perfil)
     with st.container(border=True):
         st.subheader(perfil.nome)
         with st.container(horizontal=True):
@@ -311,11 +312,11 @@ elif modulo == "2. Barras":
     st.header("Verificação de barras isoladas")
     nome_perfil = st.selectbox(
         "Perfil",
-        list(secoes.CATALOGO_PERFIS),
+        list(catalogo_perfis.listar_perfis()),
         key="estrutura_barra_perfil",
         persist_state="session",
     )
-    perfil = secoes.obter_perfil(nome_perfil)
+    perfil = catalogo_perfis.obter_perfil(nome_perfil)
 
     with st.container(border=True):
         st.subheader("Material e esforços de cálculo")
@@ -1115,7 +1116,7 @@ else:
         key=f"estrutura_elementos_{modelo}",
         column_config={
             "perfil": st.column_config.SelectboxColumn(
-                options=list(secoes.CATALOGO_PERFIS),
+                options=list(catalogo_perfis.listar_perfis()),
                 required=True,
             )
         },
@@ -1143,7 +1144,7 @@ else:
                 ]
                 elementos = []
                 for _, linha in elementos_editados.dropna().iterrows():
-                    perfil_elemento = secoes.obter_perfil(str(linha["perfil"]))
+                    perfil_elemento = catalogo_perfis.obter_perfil(str(linha["perfil"]))
                     elementos.append(
                         estrutural.ElementoTrelica(
                             id=int(linha["id"]),
@@ -1171,7 +1172,7 @@ else:
                 ]
                 elementos = []
                 for _, linha in elementos_editados.dropna().iterrows():
-                    perfil_elemento = secoes.obter_perfil(str(linha["perfil"]))
+                    perfil_elemento = catalogo_perfis.obter_perfil(str(linha["perfil"]))
                     elementos.append(
                         estrutural.ElementoPortico(
                             id=int(linha["id"]),

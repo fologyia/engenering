@@ -533,23 +533,22 @@ def _normalizar_perfil(nome: str) -> str:
 
 
 def _buscar_perfil(nome: str, n: int, texto: str):
-    from core import steel_sections as secoes
+    from core import section_catalog as catalogo
 
-    try:
-        return secoes.obter_perfil(nome)
-    except (KeyError, ValueError):
-        pass
+    disponiveis = catalogo.listar_perfis()
+    if nome in disponiveis:
+        return disponiveis[nome]
     alvo = _normalizar_perfil(nome)
-    for chave, perfil in secoes.CATALOGO_PERFIS.items():
+    for chave, perfil in disponiveis.items():
         if _normalizar_perfil(chave) == alvo:
             return perfil
     # Sem correspondência exata, sugere os que contêm o texto digitado.
     parecidos = [
-        chave for chave in secoes.CATALOGO_PERFIS if alvo and alvo in _normalizar_perfil(chave)
+        chave for chave in disponiveis if alvo and alvo in _normalizar_perfil(chave)
     ]
     if len(parecidos) == 1:
-        return secoes.CATALOGO_PERFIS[parecidos[0]]
-    sugestao = parecidos[:6] or list(secoes.CATALOGO_PERFIS)[:6]
+        return disponiveis[parecidos[0]]
+    sugestao = parecidos[:6] or list(disponiveis)[:6]
     raise ErroDeScript(
         f"Perfil {nome!r} não está no catálogo. "
         + ("Você quis dizer: " if parecidos else "Alguns disponíveis: ")

@@ -17,7 +17,7 @@ from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_model
 from core import beam_analysis as vigas
 from core import beam_script as escrita
 from core import materials as materiais_base
-from core import steel_sections as secoes
+from core import section_catalog as catalogo_perfis
 from core.materials_registry import avaliar_material
 from core.project_criteria import normalizar_criterios_projeto
 from core.project_store import obter_projeto_ativo
@@ -186,7 +186,7 @@ with st.container(border=True):
             st.markdown(escrita.AJUDA_SINTAXE)
             st.caption(
                 "Dica: `secao perfil <nome>` aceita qualquer perfil do catálogo — "
-                f"por exemplo `{list(secoes.CATALOGO_PERFIS)[10]}`."
+                f"por exemplo `{list(catalogo_perfis.listar_perfis())[10]}`."
             )
             if materiais_projeto:
                 nomes = ", ".join(
@@ -342,7 +342,7 @@ with st.container(border=True):
                 colunas = st.columns([3, 1])
                 nome_perfil = colunas[0].selectbox(
                     "Perfil do catálogo",
-                    list(secoes.CATALOGO_PERFIS),
+                    list(catalogo_perfis.listar_perfis()),
                     key="vigas_form_perfil", persist_state="session",
                 )
                 eixo = colunas[1].selectbox(
@@ -350,7 +350,7 @@ with st.container(border=True):
                     key="vigas_form_eixo", persist_state="session",
                 )
                 secao = vigas.secao_de_perfil_catalogo(
-                    secoes.obter_perfil(nome_perfil), eixo=eixo
+                    catalogo_perfis.obter_perfil(nome_perfil), eixo=eixo
                 )
         except ValueError as erro:
             erro_secao = str(erro)
