@@ -66,6 +66,7 @@ opcoes = [
     "Assistente de projeto",
     "Conversor de unidades",
     "Análise estática",
+    "Vigas e eixos",
     "Flambagem de colunas",
     "Análise de fadiga",
     "Assistente de cargas",
@@ -650,6 +651,145 @@ elif modulo == "Análise estática":
         icon=":material/warning:",
     )
     link_modulo("app_pages/analise_estatica.py", "Abrir a análise estática")
+
+
+elif modulo == "Vigas e eixos":
+    st.header("Vigas e eixos")
+    st.markdown(
+        "Use para uma **barra reta** (viga, eixo, mão-francesa, tirante fletido) "
+        "quando você quer os diagramas de **cortante V(x)**, **momento fletor "
+        "M(x)**, a **linha elástica** (flecha) e, se houver, **torção** e "
+        "**carga axial** agindo juntas — o caso de *cargas combinadas*."
+    )
+    st.info(
+        "O modelo é digitado, não desenhado: cada linha é um comando com "
+        "números. Isso torna o modelo fácil de revisar, copiar entre projetos e "
+        "colar num memorial — e o mesmo texto é gerado automaticamente quando "
+        "você prefere preencher pelo formulário.",
+        icon=":material/keyboard:",
+    )
+
+    st.subheader("Os apoios da Tabela 12.1")
+    st.dataframe(
+        pd.DataFrame(
+            [
+                ["Rolete", "rolete", "Δ = 0, M = 0", "Impede só o deslocamento vertical"],
+                ["Pino", "pino", "Δ = 0, M = 0", "Impede vertical e horizontal"],
+                ["Extremidade fixa", "engaste", "Δ = 0, θ = 0", "Impede deslocamento e rotação"],
+                ["Extremidade livre", "(não declare nada)", "V = 0, M = 0", "Ponta em balanço"],
+                ["Pino / articulação interna", "rotula", "M = 0", "Transmite V e N, libera o giro"],
+                ["Engaste deslizante", "deslizante", "θ = 0, V = 0", "Guiado: gira travado, desliza livre"],
+                ["Apoio elástico", "mola kv=… kr=…", "F = −k·Δ", "Recua sob carga, em vez de travar"],
+            ],
+            columns=["Situação", "Como escrever", "O que vale no ponto", "O que o apoio impede"],
+        ),
+        hide_index=True,
+    )
+    st.caption(
+        "A extremidade livre não precisa de comando: tudo que você não declara "
+        "como apoio já é livre."
+    )
+
+    st.subheader("Como preencher")
+    mostrar_tabela_campos(
+        [
+            ["`viga L`", "Comprimento total em metros", "Desenho ou medição"],
+            ["`secao ...`", "Geometria da seção em mm, ou um perfil do catálogo", "Desenho da peça"],
+            ["`material ...`", "Atalho (aco, aluminio…) ou E, G e Sy próprios", "Certificado do material"],
+            ["`apoio x tipo`", "Posição em metros e tipo do apoio", "Projeto / condição de montagem"],
+            ["`P x valor`", "Força concentrada em kN (negativo = para baixo)", "Casos de carga"],
+            ["`q x1 x2 w1 [w2]`", "Distribuída em kN/m; com w2 vira trapezoidal", "Peso, pressão, empuxo"],
+            ["`M x valor`", "Momento concentrado em kN·m", "Excentricidade, engaste vizinho"],
+            ["`N x valor`", "Carga axial em kN (positivo = tração)", "Tirante, coluna-viga"],
+            ["`T x valor`", "Torque em kN·m", "Engrenagem, polia, acoplamento"],
+        ]
+    )
+    st.markdown(
+        "Se preferir digitar só a intensidade, escreva o sentido no fim da "
+        "linha: `P 3 20 baixo` é o mesmo que `P 3 -20`. Vale também "
+        "`compressao` para carga axial."
+    )
+
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Escolha um exemplo pronto parecido com o seu caso — é mais rápido do
+           que começar do zero.
+        2. Ajuste o comprimento, a seção e o material.
+        3. Coloque os apoios: **duas** restrições verticais (ou um engaste)
+           deixam a viga estável. Apoios a mais tornam a viga hiperestática, e
+           o programa resolve assim mesmo.
+        4. Lance as cargas. Positivo é para cima, então cargas de gravidade são
+           negativas (ou use o sufixo `baixo`).
+        5. Clique em **Calcular diagramas** e leia as abas: cortante e momento,
+           linha elástica, normal e torção, tensões.
+        6. Confira as **reações** e o resíduo de equilíbrio (deve ser ~0).
+        """
+    )
+
+    mostrar_exemplo(
+        [
+            ["Comprimento", "6 m"],
+            ["Seção", "Perfil W ideal 200×200×8×12 do catálogo"],
+            ["Material", "aço (E = 200 GPa, Sy = 250 MPa)"],
+            ["Apoios", "pino em x = 0 e rolete em x = 6 m"],
+            ["Carga distribuída", "15 kN/m para baixo em todo o vão"],
+            ["Carga pontual", "20 kN para baixo em x = 3 m"],
+        ],
+        "Resultado esperado: reações de 55 kN em cada apoio, V máx = 55 kN nos "
+        "apoios, M máx = 97,5 kN·m no meio do vão, flecha máxima de 37,21 mm "
+        "para baixo (também no meio) e von Mises de 211,5 MPa, com fator de "
+        "segurança 1,18 contra o escoamento. A flecha não passa em L/350 "
+        "(17,14 mm admissíveis) — é um caso em que a resistência atende, mas o "
+        "deslocamento não.",
+    )
+
+    with st.container(border=True):
+        st.subheader("Como interpretar cada diagrama")
+        st.markdown(
+            """
+            - **Cortante V(x):** salta exatamente no ponto de cada carga
+              concentrada; o salto vale a própria carga. Onde `V = 0`, o momento
+              é máximo ou mínimo.
+            - **Momento M(x):** positivo comprime a fibra de cima. Num apoio de
+              extremidade sem engaste, `M = 0`; numa rótula interna, também.
+            - **Linha elástica:** é a flecha real em mm, negativa para baixo.
+              Compare com o critério `L/350` (ou o que o seu projeto exigir) —
+              resistência e deslocamento são verificações separadas.
+            - **Normal N(x):** positivo traciona. Somado à flexão, é o que
+              caracteriza a *carga combinada*.
+            - **Torque T(x) e giro φ:** constantes entre dois torques aplicados.
+            - **von Mises:** avaliado na fibra superior, na inferior e na linha
+              neutra; o gráfico mostra o pior dos três. Por isso a flexão máxima
+              e o cisalhamento máximo normalmente **não** ocorrem no mesmo
+              ponto da seção.
+            """
+        )
+
+    with st.container(border=True):
+        st.subheader("Erros comuns")
+        st.markdown(
+            """
+            - **Carga para cima sem querer:** o sinal positivo é para cima. Se a
+              flecha deu positiva, provavelmente falta o sinal ou o sufixo
+              `baixo`.
+            - **"O modelo é instável":** faltam apoios. Um rolete sozinho não
+              segura a viga; use pino + rolete, ou um engaste.
+            - **Rótula deixando um trecho solto:** cada trecho entre rótulas
+              precisa de apoio suficiente, senão vira mecanismo.
+            - **Unidade trocada:** posições em metros, seção em milímetros. Um
+              `viga 6000` cria uma viga de 6 km.
+            """
+        )
+
+    st.warning(
+        "O modelo é linear e de Euler-Bernoulli: não amplifica a flecha pela "
+        "compressão (efeito P–Δ), não verifica flambagem, não inclui deformação "
+        "por cisalhamento (relevante quando L/h < 10) nem concentração de "
+        "tensão em entalhes e rasgos de chaveta.",
+        icon=":material/warning:",
+    )
+    link_modulo("app_pages/vigas_eixos.py", "Abrir vigas e eixos")
 
 
 elif modulo == "Flambagem de colunas":

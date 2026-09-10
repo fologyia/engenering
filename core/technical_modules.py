@@ -110,6 +110,27 @@ def _registrar_padrao() -> None:
             aliases=("Flambagem", "Euler", "Índice de esbeltez"),
         ),
         ModuloTecnico(
+            id="vigas_eixos",
+            titulo="Vigas e eixos",
+            versao="1.0",
+            pagina="app_pages/vigas_eixos.py",
+            grupo_navegacao="Análises técnicas",
+            ordem=25,
+            icone=":material/linear_scale:",
+            descricao=(
+                "Diagramas de cortante e momento, linha elástica, torção e "
+                "cargas combinadas em barras retas."
+            ),
+            aliases=(
+                "Viga",
+                "Vigas",
+                "Eixos",
+                "Diagramas de esforços",
+                "Linha elástica",
+                "Cortante e momento",
+            ),
+        ),
+        ModuloTecnico(
             id="analise_fadiga",
             titulo="Análise de fadiga",
             versao="1.2",

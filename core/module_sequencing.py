@@ -32,6 +32,19 @@ FLUXOS: dict[str, tuple[str, ...]] = {
         "analise_estatica",
         "analise_sensibilidade",
     ),
+    "viga": (
+        "casos_carga",
+        "vigas_eixos",
+        "circulo_mohr",
+        "analise_estatica",
+        "analise_sensibilidade",
+    ),
+    "eixo": (
+        "casos_carga",
+        "vigas_eixos",
+        "analise_estatica",
+        "analise_fadiga",
+    ),
     "fadiga": (
         "casos_carga",
         "assistente_cargas",
@@ -46,7 +59,7 @@ FLUXOS: dict[str, tuple[str, ...]] = {
         "analise_sensibilidade",
     ),
     "parafusos": ("casos_carga", "projeto_parafusos"),
-    "aco": ("casos_carga", "estruturas_aco", "flambagem_colunas"),
+    "aco": ("casos_carga", "vigas_eixos", "estruturas_aco", "flambagem_colunas"),
 }
 
 SITUACOES = ("concluida", "atencao", "atual", "pendente")

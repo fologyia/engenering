@@ -101,6 +101,22 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - exportação complementar em PDF para impressão.
 - registro padronizado da avaliação no projeto industrial ativo.
 
+### Vigas e eixos
+
+- barra reta com apoios de rolete, pino, engaste, engaste deslizante e trava axial;
+- rótulas internas (vigas Gerber) e vãos contínuos isostáticos ou hiperestáticos;
+- cargas pontuais, distribuídas uniformes e trapezoidais, momentos concentrados,
+  carga axial, carga axial distribuída, torques e peso próprio;
+- diagramas de esforço normal, cortante, momento fletor, linha elástica (flecha),
+  rotação, torque e ângulo de torção;
+- tensões combinadas: N/A ± M·c/I, V·Q/(I·t), T/Wt, von Mises e Tresca avaliados
+  na fibra superior, na fibra inferior e na linha neutra;
+- verificação de flecha admissível por L/limite e fator de segurança ao escoamento;
+- entrada por **texto e números** (uma instrução por linha) ou por formulário —
+  os dois modos usam o mesmo interpretador;
+- conferência automática do equilíbrio global e exportação dos diagramas em CSV;
+- registro rastreável do modelo e dos resultados no projeto industrial ativo.
+
 ### Assistente de cargas e geometrias
 
 - barras, eixos maciços e vazados, vigas e seção I;
@@ -164,7 +180,9 @@ A página **Guia geral** reúne:
 - unidades, sinais e glossário;
 - passo a passo de todos os módulos e ferramentas;
 - um exemplo preenchido e interpretação para cada parte;
-- exemplos individuais dos cinco módulos de estruturas de aço.
+- exemplos individuais dos cinco módulos de estruturas de aço;
+- a tabela de comandos de vigas e eixos, com os apoios da Tabela 12.1 e a
+  leitura de cada diagrama.
 - uso completo dos projetos permanentes, da validação e dos relatórios modulares.
 
 ## Estrutura
@@ -184,6 +202,7 @@ mecanica_toolkit/
 │   ├── conversor_unidades.py
 │   ├── analise_estatica.py
 │   ├── analise_fadiga.py
+│   ├── vigas_eixos.py
 │   ├── assistente_cargas.py
 │   ├── circulo_mohr.py
 │   ├── projeto_parafusos.py
@@ -192,6 +211,8 @@ mecanica_toolkit/
 │   └── guia_geral.py
 ├── core/
 │   ├── technical_modules.py
+│   ├── beam_analysis.py
+│   ├── beam_script.py
 │   ├── technical_records.py
 │   ├── load_cases.py
 │   ├── report_plugins.py

@@ -102,11 +102,13 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "analise_estatica",
         "flambagem_colunas",
         "analise_fadiga",
+        "vigas_eixos",
         "assistente_cargas",
         "circulo_mohr",
         "analise_sensibilidade",
     ]
     assert resolver_modulo("Casos de carga").id == "casos_carga"
+    assert resolver_modulo("Linha elástica").id == "vigas_eixos"
 
 
 def test_relatorio_e_validacao_consumem_extensao_de_carregamentos():
