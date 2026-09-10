@@ -129,6 +129,7 @@ def _registrar_padrao() -> None:
                 "Linha elástica",
                 "Cortante e momento",
             ),
+            provedor_relatorio="vigas_eixos",
         ),
         ModuloTecnico(
             id="analise_fadiga",

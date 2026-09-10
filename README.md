@@ -124,6 +124,10 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - material do catálogo do programa ou material qualificado do projeto, com
   o vínculo de rastreabilidade gravado no registro;
 - meta de fator de segurança lida dos critérios do projeto ativo;
+- efeito de segunda ordem (P–Δ) opcional e fator de carga crítica elástica,
+  com aviso quando a compressão se aproxima da instabilidade;
+- capítulo próprio no memorial, com barras, esforços governantes, reações e
+  combinações;
 - registro rastreável do modelo e dos resultados no projeto industrial ativo.
 
 ### Assistente de cargas e geometrias
@@ -282,5 +286,3 @@ Os modelos possuem hipóteses e faixas de validade. Os materiais cadastrados sã
 referências típicas. Antes de usar resultados em projeto real, valide
 propriedades, carregamentos, combinações, concentrações de tensão, ambiente,
 processo de fabricação, norma aplicável e certificado do material.
-#   e n g e n e r i n g  
- 

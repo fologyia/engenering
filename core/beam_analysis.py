@@ -558,6 +558,8 @@ class Viga:
     cargas_axiais_distribuidas: tuple[CargaAxialDistribuida, ...] = ()
     torques: tuple[Torque, ...] = ()
     considerar_peso_proprio: bool = False
+    considerar_segunda_ordem: bool = False
+    divisoes_por_trecho: int = 1
     nome: str = "Viga"
 
     def __post_init__(self) -> None:
@@ -595,6 +597,8 @@ class Viga:
             cargas_axiais_distribuidas=self.cargas_axiais_distribuidas,
             torques=self.torques,
             considerar_peso_proprio=False,
+            considerar_segunda_ordem=self.considerar_segunda_ordem,
+            divisoes_por_trecho=self.divisoes_por_trecho,
             nome=self.nome,
         )
 
@@ -658,6 +662,8 @@ class ResultadoViga:
     grau_hiperestaticidade: int = 0
     fator_seguranca_escoamento: float | None = None
     verificacao_flecha: dict[str, float] | None = None
+    fator_carga_critica: float | None = None
+    segunda_ordem: bool = False
 
     # -- atalhos de leitura -------------------------------------------------
     @property
@@ -727,6 +733,24 @@ def _posicoes_nodais(viga: Viga) -> list[float]:
         _inserir(posicoes, _validar_posicao("início da carga axial distribuída", axial_distribuida.x_inicial_mm, comprimento))
         _inserir(posicoes, _validar_posicao("fim da carga axial distribuída", axial_distribuida.x_final_mm, comprimento))
     posicoes.sort()
+
+    divisoes = max(1, int(viga.divisoes_por_trecho))
+    tem_axial = bool(viga.cargas_axiais or viga.cargas_axiais_distribuidas)
+    if viga.considerar_segunda_ordem or tem_axial:
+        # A rigidez geométrica converge com o refino: com um elemento por
+        # trecho o fator de carga crítica de uma coluna biapoiada sai 21,6%
+        # alto (12EI/L² em vez de π²EI/L²) — e alto demais é justamente o
+        # lado inseguro. Refinar não altera V, M nem a flecha de primeira
+        # ordem, que são exatos em qualquer malha, então o custo é só tempo.
+        divisoes = max(divisoes, 8)
+    if divisoes > 1:
+        refinadas: list[float] = []
+        for inicio, fim in zip(posicoes, posicoes[1:], strict=False):
+            refinadas.append(inicio)
+            for indice in range(1, divisoes):
+                refinadas.append(inicio + (fim - inicio) * indice / divisoes)
+        refinadas.append(posicoes[-1])
+        posicoes = refinadas
     return posicoes
 
 
@@ -757,6 +781,26 @@ def _rigidez_flexao(ei: float, l: float) -> np.ndarray:
             [6.0 * l, 4.0 * l**2, -6.0 * l, 2.0 * l**2],
             [-12.0, -6.0 * l, 12.0, -6.0 * l],
             [6.0 * l, 2.0 * l**2, -6.0 * l, 4.0 * l**2],
+        ],
+        dtype=float,
+    )
+
+
+def _rigidez_geometrica(normal: float, l: float) -> np.ndarray:
+    """Rigidez geométrica consistente de um elemento sob esforço normal.
+
+    ``normal`` é positivo em tração: tração enrijece a barra à flexão e
+    compressão a amolece. Somada à rigidez elástica, é o que produz o efeito
+    de segunda ordem (P–Δ e P–δ) numa análise ainda linear — a flecha cresce
+    porque a compressão reduz a rigidez, não porque a geometria foi
+    atualizada.
+    """
+    return (normal / (30.0 * l)) * np.array(
+        [
+            [36.0, 3.0 * l, -36.0, 3.0 * l],
+            [3.0 * l, 4.0 * l**2, -3.0 * l, -(l**2)],
+            [-36.0, -3.0 * l, 36.0, -3.0 * l],
+            [3.0 * l, -(l**2), -3.0 * l, 4.0 * l**2],
         ],
         dtype=float,
     )
@@ -809,6 +853,47 @@ class _Elemento:
     theta_i: float = 0.0
     u_i: float = 0.0
     phi_i: float = 0.0
+
+
+def _normal_medio(elemento: _Elemento) -> float:
+    """Esforço normal médio do elemento (positivo em tração)."""
+    n_inicial = -elemento.esforco_axial_i
+    n_final = n_inicial - (
+        elemento.a_i * elemento.comprimento
+        + (elemento.a_j - elemento.a_i) * elemento.comprimento / 2.0
+    )
+    return 0.5 * (n_inicial + n_final)
+
+
+def _fator_carga_critica(
+    k_elastica: np.ndarray, k_geometrica: np.ndarray, restritos: set[int]
+) -> float | None:
+    """Multiplicador das cargas axiais que leva o modelo à flambagem.
+
+    Resolve ``K_e φ = λ (−K_g) φ`` nos graus livres. Um fator de 3,2 quer
+    dizer que as cargas **axiais** poderiam ser multiplicadas por 3,2 antes
+    da instabilidade elástica. Devolve ``None`` quando não há compressão —
+    aí não existe carga crítica a reportar.
+    """
+    if not np.any(k_geometrica):
+        return None
+    total = k_elastica.shape[0]
+    livres = [i for i in range(total) if i not in restritos]
+    if not livres:
+        return None
+    kff = k_elastica[np.ix_(livres, livres)]
+    kgff = k_geometrica[np.ix_(livres, livres)]
+    try:
+        matriz = np.linalg.solve(kff, -kgff)
+    except np.linalg.LinAlgError:  # pragma: no cover - kff já é validada antes
+        return None
+    autovalores = np.linalg.eigvals(matriz)
+    candidatos = [
+        1.0 / valor.real
+        for valor in autovalores
+        if abs(valor.imag) < 1e-9 and valor.real > 1e-12
+    ]
+    return min(candidatos) if candidatos else None
 
 
 def _resolver_sistema(
@@ -942,44 +1027,9 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
     ea = material.modulo_elasticidade_MPa * secao.area_mm2
     gj = material.modulo_cisalhamento_MPa * secao.constante_torcao_mm4
 
-    # -- sistema de flexão ---------------------------------------------------
-    k_flexao = np.zeros((n_dof_flexao, n_dof_flexao))
-    f_flexao = np.zeros(n_dof_flexao)
-    for elemento in elementos:
-        dofs = list(elemento.dofs_flexao)
-        k_flexao[np.ix_(dofs, dofs)] += _rigidez_flexao(ei, elemento.comprimento)
-        f_flexao[dofs] += _cargas_equivalentes_flexao(
-            elemento.w_i, elemento.w_j, elemento.comprimento
-        )
-    for pontual in viga.cargas_pontuais:
-        indice = no_de(_validar_posicao("posição da carga pontual", pontual.x_mm, comprimento))
-        f_flexao[dof_v[indice]] += pontual.fy_N
-    for momento in viga.momentos:
-        indice = no_de(_validar_posicao("posição do momento", momento.x_mm, comprimento))
-        # Num nó com rótula o momento aplicado não tem trecho definido para
-        # entrar; recusar é melhor do que escolher um lado silenciosamente.
-        if indice in nos_rotula:
-            raise ValueError(
-                f"Há um momento concentrado exatamente sobre a rótula em "
-                f"x = {momento.x_mm:.4g} mm. Desloque um dos dois."
-            )
-        f_flexao[dof_theta_esq[indice]] += momento.mz_Nmm
-
-    restritos_flexao: set[int] = set()
-    for indice, apoio in apoios_por_no.items():
-        if apoio.restringe_vertical:
-            restritos_flexao.add(dof_v[indice])
-        if apoio.restringe_rotacao:
-            restritos_flexao.add(dof_theta_esq[indice])
-        if apoio.rigidez_vertical_N_mm > 0:
-            k_flexao[dof_v[indice], dof_v[indice]] += apoio.rigidez_vertical_N_mm
-        if apoio.rigidez_rotacional_Nmm_rad > 0:
-            k_flexao[dof_theta_esq[indice], dof_theta_esq[indice]] += apoio.rigidez_rotacional_Nmm_rad
-
-    deslocamentos_flexao, reacoes_flexao = _resolver_sistema(
-        k_flexao, f_flexao, restritos_flexao, "flexão (translação vertical / rotação)"
-    )
-
+    # O esforço normal é resolvido primeiro porque a rigidez geométrica da
+    # flexão depende dele. Neste modelo o axial não depende da flecha, então
+    # uma única passagem basta — não há iteração a fazer.
     # -- sistema axial -------------------------------------------------------
     k_axial = np.zeros((n_nos, n_nos))
     f_axial = np.zeros(n_nos)
@@ -1014,6 +1064,76 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
 
     deslocamentos_axiais, reacoes_axiais = _resolver_sistema(
         k_axial, f_axial, restritos_axial, "esforço axial"
+    )
+
+    # O esforço normal de cada elemento sai já aqui porque a rigidez
+    # geométrica da flexão precisa dele antes da montagem.
+    for elemento in elementos:
+        dofs_axial = list(elemento.dofs_axial)
+        u_axial = deslocamentos_axiais[dofs_axial]
+        rigidez_axial = ea / elemento.comprimento
+        forcas_axiais = rigidez_axial * np.array(
+            [u_axial[0] - u_axial[1], u_axial[1] - u_axial[0]]
+        ) - _cargas_equivalentes_axial(elemento.a_i, elemento.a_j, elemento.comprimento)
+        elemento.esforco_axial_i = float(forcas_axiais[0])
+        elemento.u_i = float(u_axial[0])
+
+    # -- sistema de flexão ---------------------------------------------------
+    k_flexao = np.zeros((n_dof_flexao, n_dof_flexao))
+    k_geometrica = np.zeros((n_dof_flexao, n_dof_flexao))
+    f_flexao = np.zeros(n_dof_flexao)
+    for elemento in elementos:
+        dofs = list(elemento.dofs_flexao)
+        k_flexao[np.ix_(dofs, dofs)] += _rigidez_flexao(ei, elemento.comprimento)
+        # Esforço normal médio do elemento, já disponível da solução axial.
+        normal_medio = _normal_medio(elemento)
+        if normal_medio != 0.0:
+            k_geometrica[np.ix_(dofs, dofs)] += _rigidez_geometrica(
+                normal_medio, elemento.comprimento
+            )
+        f_flexao[dofs] += _cargas_equivalentes_flexao(
+            elemento.w_i, elemento.w_j, elemento.comprimento
+        )
+    for pontual in viga.cargas_pontuais:
+        indice = no_de(_validar_posicao("posição da carga pontual", pontual.x_mm, comprimento))
+        f_flexao[dof_v[indice]] += pontual.fy_N
+    for momento in viga.momentos:
+        indice = no_de(_validar_posicao("posição do momento", momento.x_mm, comprimento))
+        # Num nó com rótula o momento aplicado não tem trecho definido para
+        # entrar; recusar é melhor do que escolher um lado silenciosamente.
+        if indice in nos_rotula:
+            raise ValueError(
+                f"Há um momento concentrado exatamente sobre a rótula em "
+                f"x = {momento.x_mm:.4g} mm. Desloque um dos dois."
+            )
+        f_flexao[dof_theta_esq[indice]] += momento.mz_Nmm
+
+    restritos_flexao: set[int] = set()
+    for indice, apoio in apoios_por_no.items():
+        if apoio.restringe_vertical:
+            restritos_flexao.add(dof_v[indice])
+        if apoio.restringe_rotacao:
+            restritos_flexao.add(dof_theta_esq[indice])
+        if apoio.rigidez_vertical_N_mm > 0:
+            k_flexao[dof_v[indice], dof_v[indice]] += apoio.rigidez_vertical_N_mm
+        if apoio.rigidez_rotacional_Nmm_rad > 0:
+            k_flexao[dof_theta_esq[indice], dof_theta_esq[indice]] += apoio.rigidez_rotacional_Nmm_rad
+
+    fator_critico = _fator_carga_critica(k_flexao, k_geometrica, restritos_flexao)
+    if viga.considerar_segunda_ordem:
+        if fator_critico is not None and fator_critico <= 1.0:
+            raise ValueError(
+                "A compressão aplicada atinge ou ultrapassa a carga crítica de "
+                f"flambagem do modelo (fator de carga crítica = {fator_critico:.3f}). "
+                "A análise de segunda ordem não tem solução estável aqui: reduza a "
+                "compressão, aumente a inércia ou reduza o comprimento destravado."
+            )
+        k_flexao_efetiva = k_flexao + k_geometrica
+    else:
+        k_flexao_efetiva = k_flexao
+
+    deslocamentos_flexao, reacoes_flexao = _resolver_sistema(
+        k_flexao_efetiva, f_flexao, restritos_flexao, "flexão (translação vertical / rotação)"
     )
 
     # -- sistema de torção ---------------------------------------------------
@@ -1074,15 +1194,6 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
         elemento.v_i = float(u_local[0])
         elemento.theta_i = float(u_local[1])
 
-        dofs_axial = list(elemento.dofs_axial)
-        u_axial = deslocamentos_axiais[dofs_axial]
-        rigidez_axial = ea / elemento.comprimento
-        forcas_axiais = rigidez_axial * np.array(
-            [u_axial[0] - u_axial[1], u_axial[1] - u_axial[0]]
-        ) - _cargas_equivalentes_axial(elemento.a_i, elemento.a_j, elemento.comprimento)
-        elemento.esforco_axial_i = float(forcas_axiais[0])
-        elemento.u_i = float(u_axial[0])
-
         if gj > 0:
             dofs_torcao = list(elemento.dofs_torcao)
             u_torcao = deslocamentos_torcao[dofs_torcao]
@@ -1130,6 +1241,18 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
             )
         )
 
+    if (
+        fator_critico is not None
+        and not viga.considerar_segunda_ordem
+        and fator_critico < 10.0
+    ):
+        avisos.append(
+            f"A compressão atinge 1/{fator_critico:.1f} da carga crítica de "
+            "flambagem elástica deste modelo. Com essa ordem de grandeza, a "
+            "flecha real é maior que a calculada: ligue a análise de segunda "
+            "ordem para incluir o efeito P–Δ."
+        )
+
     extremos = _calcular_extremos(pontos)
     grau = _grau_hiperestaticidade(apoios_por_no.values(), len(nos_rotula))
 
@@ -1148,6 +1271,8 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
         avisos=tuple(avisos),
         grau_hiperestaticidade=grau,
         fator_seguranca_escoamento=fator_seguranca,
+        fator_carga_critica=fator_critico,
+        segunda_ordem=viga.considerar_segunda_ordem,
     )
 
 
@@ -1425,11 +1550,34 @@ _EXTREMOS = (
 )
 
 
+def _extremo_por_modulo(
+    pontos: Sequence[PontoDiagrama], atributo: str
+) -> PontoDiagrama:
+    """Ponto de maior módulo; empate fica com o de menor ``x``.
+
+    Numa viga simétrica o cortante vale +wL/2 num apoio e −wL/2 no outro:
+    o módulo empata e, sem um critério explícito, o sinal reportado passa a
+    depender de ruído de arredondamento — refinar a malha invertia o sinal.
+    A tolerância relativa absorve esse ruído e o desempate por ``x`` torna a
+    escolha reprodutível.
+
+    A folga de 1e-9 é escolhida pelo ruído do solver, que cresce com o número
+    de elementos: dois extremos de fato distintos num diagrama de viga nunca
+    diferem por menos de uma parte em 1e9.
+    """
+    maximo = max(abs(getattr(ponto, atributo)) for ponto in pontos)
+    limite = maximo * (1.0 - 1e-9)
+    empatados = [
+        ponto for ponto in pontos if abs(getattr(ponto, atributo)) >= limite
+    ]
+    return min(empatados, key=lambda ponto: ponto.x_mm)
+
+
 def _calcular_extremos(pontos: Sequence[PontoDiagrama]) -> dict[str, Extremo]:
     """Extremo = valor de maior módulo, preservando o sinal original."""
     extremos: dict[str, Extremo] = {}
     for chave, atributo, unidade in _EXTREMOS:
-        melhor = max(pontos, key=lambda ponto: abs(getattr(ponto, atributo)))
+        melhor = _extremo_por_modulo(pontos, atributo)
         extremos[chave] = Extremo(
             grandeza=chave,
             valor=float(getattr(melhor, atributo)),
@@ -1437,7 +1585,7 @@ def _calcular_extremos(pontos: Sequence[PontoDiagrama]) -> dict[str, Extremo]:
             unidade=unidade,
         )
     # A tensão normal extrema pode estar na fibra superior; refaz o confronto.
-    melhor_superior = max(pontos, key=lambda ponto: abs(ponto.tensao_normal_superior_MPa))
+    melhor_superior = _extremo_por_modulo(pontos, "tensao_normal_superior_MPa")
     if abs(melhor_superior.tensao_normal_superior_MPa) > abs(extremos["tensao_normal"].valor):
         extremos["tensao_normal"] = Extremo(
             grandeza="tensao_normal",
@@ -1606,6 +1754,8 @@ def viga_da_combinacao(viga: Viga, combinacao: CombinacaoCarga) -> Viga:
             _escalar(item, fator_de(item), ("t_Nmm",)) for item in viga.torques
         ),
         considerar_peso_proprio=peso,
+        considerar_segunda_ordem=viga.considerar_segunda_ordem,
+        divisoes_por_trecho=viga.divisoes_por_trecho,
         nome=f"{viga.nome} — {combinacao.nome}",
     )
 

@@ -180,6 +180,52 @@ de `ΣFy`, `ΣFx`, `ΣM` e `ΣT`. É um controle numérico do próprio solver,
 exibido na interface: valores muito acima do zero de máquina indicam
 problema no modelo ou no condicionamento.
 
+## Segunda ordem (P–Δ) e carga crítica
+
+Com `segunda_ordem` no modelo, a matriz de rigidez da flexão passa a ser
+`K = K_e + K_g`, onde `K_g` é a rigidez geométrica consistente do elemento
+sob esforço normal:
+
+```text
+K_g = N/(30 L) ·
+[[ 36,    3L,  -36,    3L ],
+ [ 3L,  4L²,  -3L,   -L² ],
+ [-36,   -3L,   36,   -3L ],
+ [ 3L,   -L²,  -3L,  4L² ]]
+```
+
+`N` positivo é tração: tração enrijece a barra à flexão, compressão a
+amolece. Por isso o **esforço normal é resolvido antes da flexão** — neste
+modelo o axial não depende da flecha, então uma única passagem basta e não
+há iteração a fazer.
+
+O programa também resolve `K_e φ = λ (−K_g) φ` e reporta o **fator de carga
+crítica**: o multiplicador das cargas *axiais* que levaria o modelo à
+flambagem elástica. Um fator 3,2 quer dizer que a compressão poderia
+triplicar antes da instabilidade. Quando o fator fica abaixo de 10 e a
+segunda ordem está desligada, o resultado traz um aviso; quando a carga já
+passou da crítica, a análise é recusada em vez de devolver um número sem
+significado.
+
+### Malha
+
+A rigidez geométrica converge com o refino, e a solução de primeira ordem
+**não**: os deslocamentos nodais de Euler-Bernoulli são exatos em qualquer
+malha. Por isso o refino é gratuito em precisão e só custa tempo — e é
+aplicado sempre que há carga axial, não apenas quando a segunda ordem está
+ligada. Com um elemento por trecho, a carga crítica de uma coluna biapoiada
+sai `12EI/L²` em vez de `π²EI/L²`, ou seja **21,6% alta** — e alto é
+exatamente o lado inseguro. Com oito divisões o erro cai para 0,003%.
+
+`divisoes n` refina ainda mais, quando se quer conferir a convergência.
+
+### Limites
+
+A segunda ordem aqui parte da barra perfeitamente reta: imperfeições
+geométricas iniciais e desaprumo não são considerados, e as normas costumam
+exigi-los. A flambagem lateral com torção e a flambagem local também
+continuam fora do escopo.
+
 ## Casos de carga e envoltória
 
 Cada carga pertence a um **caso**, declarado com `caso=<nome>`; sem isso ela
@@ -213,6 +259,20 @@ escalado, para não duplicar a fórmula do peso.
 em linhas de `combinacao`, trocando o **id** do caso pelo seu **nome** — que
 é o que as cargas do modelo usam em `caso=`.
 
+## Memorial
+
+`core/report_plugins.py` registra o provedor `vigas_eixos`, que entra no
+memorial depois dos registros técnicos com as barras analisadas, os esforços
+e deslocamentos governantes com a seção em que ocorrem, a verificação de
+resistência e de serviço, as reações de apoio e — quando há combinações — a
+tabela de qual delas governa cada grandeza.
+
+O gancho de extensão do memorial precisou ser corrigido para isso: as seções
+`registros` e `sensibilidade` são anexadas diretamente, sem passar por
+`adicionar`, então um provedor registrado com `apos="registros"` era
+silenciosamente descartado. Agora `anexar_extensoes` é chamada
+explicitamente ao fim dessas seções.
+
 ## Repasse para os outros módulos
 
 `estado_plano_da_secao(resultado, x_mm, ponto=...)` converte qualquer seção
@@ -239,9 +299,10 @@ zero e joga tudo na média, em vez de inventar um ciclo que não existe.
 
 ## Fora do escopo
 
-- efeitos de segunda ordem (P–Δ, P–δ): a compressão axial não amplifica a
-  flecha neste modelo linear;
-- flambagem global, local ou lateral com torção;
+- imperfeições geométricas iniciais e desaprumo — a segunda ordem, quando
+  ligada, parte da barra perfeitamente reta;
+- flambagem local ou lateral com torção (a flambagem global por flexão
+  aparece no fator de carga crítica);
 - deformação por cisalhamento (viga de Timoshenko) — em vigas curtas
   (`L/h < 10`) a flecha real é maior que a calculada aqui;
 - empenamento restringido na torção (só torção uniforme de Saint-Venant);

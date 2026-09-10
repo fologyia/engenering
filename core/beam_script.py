@@ -209,6 +209,8 @@ class _Acumulador:
     torques: list[vb.Torque] = None  # type: ignore[assignment]
     combinacoes: list[vb.CombinacaoCarga] = None  # type: ignore[assignment]
     peso_proprio: bool = False
+    segunda_ordem: bool = False
+    divisoes: int = 1
     nome: str = "Viga"
     material_id: str | None = None
     material_fonte: str = ""
@@ -766,6 +768,30 @@ def _comando_torque(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: in
     )
 
 
+def _comando_segunda_ordem(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+    ligado = True
+    if pos:
+        ligado = _chave(pos[0]) not in {"nao", "off", "0", "false", "desligado"}
+    acc.segunda_ordem = ligado
+
+
+def _comando_divisoes(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+    if not pos:
+        raise ErroDeScript(
+            "Informe em quantas partes dividir cada trecho. Ex.: `divisoes 12`.",
+            linha=n,
+            texto=texto,
+        )
+    valor = _numero(pos[0], campo="número de divisões", linha=n, texto=texto)
+    if valor < 1 or valor != int(valor):
+        raise ErroDeScript(
+            "O número de divisões deve ser um inteiro maior ou igual a 1.",
+            linha=n,
+            texto=texto,
+        )
+    acc.divisoes = int(valor)
+
+
 def _comando_combinacao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
     if not pos:
         raise ErroDeScript(
@@ -843,6 +869,9 @@ _COMANDOS = {
     "combinacao": _comando_combinacao,
     "comb": _comando_combinacao,
     "peso_proprio": _comando_peso_proprio,
+    "segunda_ordem": _comando_segunda_ordem,
+    "p_delta": _comando_segunda_ordem,
+    "divisoes": _comando_divisoes,
     "peso": _comando_peso_proprio,
 }
 
@@ -951,6 +980,8 @@ def _montar(acc: _Acumulador) -> vb.Viga:
             cargas_axiais_distribuidas=tuple(acc.axiais_distribuidas),
             torques=tuple(acc.torques),
             considerar_peso_proprio=acc.peso_proprio,
+            considerar_segunda_ordem=acc.segunda_ordem,
+            divisoes_por_trecho=acc.divisoes,
             nome=acc.nome,
         )
     except ValueError as erro:
@@ -1075,6 +1106,10 @@ def gerar_script(viga: vb.Viga) -> str:
         )
     if viga.considerar_peso_proprio:
         linhas.append("peso_proprio")
+    if viga.considerar_segunda_ordem:
+        linhas.append("segunda_ordem")
+    if viga.divisoes_por_trecho > 1:
+        linhas.append(f"divisoes {viga.divisoes_por_trecho}")
     return "\n".join(linhas)
 
 
@@ -1158,6 +1193,17 @@ combinacao ELU_gravidade Permanente=1.4 Sobrecarga=1.5
 combinacao ELU_vento     Permanente=1.0 Vento=1.4
 combinacao ELS_rara      Permanente=1.0 Sobrecarga=1.0
 """,
+    "Coluna-viga com efeito P–Δ (segunda ordem)": """# A compressão reduz a rigidez à flexão: a flecha e o momento crescem.
+# Compare ligando e desligando a linha `segunda_ordem`.
+viga 4
+secao tubo 168.3 152.3
+material catalogo ASTM A572 grau 50
+apoio 0 pino
+apoio 4 rolete
+q 0 4 3 baixo
+N 4 600 compressao
+segunda_ordem
+""",
     "Carga triangular (empuxo em comporta)": """# Distribuída trapezoidal: intensidade inicial e final
 # Empuxo hidrostático cresce com a profundidade, de 0 no topo ao máximo na base
 viga 3
@@ -1195,6 +1241,8 @@ AJUDA_SINTAXE = """\
 | `qn x1 x2 a1 [a2]` | Axial distribuída, em kN/m | `qn 0 6 2` |
 | `T x valor` | Torque, em kN·m | `T 0.4 1.5` |
 | `peso_proprio` | Soma o peso da própria barra | `peso_proprio` |
+| `segunda_ordem` | Inclui o efeito P–Δ: a compressão amplifica a flecha | `segunda_ordem` |
+| `divisoes n` | Refina a malha de cada trecho (só afeta a segunda ordem) | `divisoes 12` |
 | `caso=<nome>` | Marca a que ação a carga pertence (sufixo de qualquer carga) | `q 0 6 15 baixo caso=Sobrecarga` |
 | `combinacao <nome> <Caso>=<fator>` | Combinação a envelopar | `combinacao ELU Permanente=1.4 Sobrecarga=1.5` |
 

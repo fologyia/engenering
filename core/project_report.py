@@ -273,6 +273,24 @@ def montar_modelo_relatorio(
         "metadata": metadata,
     }
 
+    def anexar_extensoes(chave: str) -> None:
+        """Emite os provedores ancorados em ``chave``.
+
+        Nem toda seção do memorial passa por ``adicionar``: algumas montam
+        vários capítulos e são anexadas diretamente. Sem este gancho
+        explícito, um provedor registrado com ``apos="registros"`` seria
+        silenciosamente descartado — o pior tipo de falha num ponto de
+        extensão, porque nada indica que ele existe.
+        """
+        nonlocal numero
+        for provedor in listar_provedores(apos=chave):
+            if provedor.id not in ativas:
+                continue
+            conteudo = provedor.construir(projeto, contexto_extensoes)
+            conteudo["titulo"] = f"{numero}. {SECOES_RELATORIO[provedor.id]}"
+            secoes.append(conteudo)
+            numero += 1
+
     def adicionar(
         chave: str, conteudo: dict[str, Any], *, incluir_extensoes: bool = True
     ) -> None:
@@ -284,12 +302,7 @@ def montar_modelo_relatorio(
             secoes.append(conteudo)
             numero += 1
         if incluir_extensoes:
-            for provedor in listar_provedores(apos=chave):
-                adicionar(
-                    provedor.id,
-                    provedor.construir(projeto, contexto_extensoes),
-                    incluir_extensoes=False,
-                )
+            anexar_extensoes(chave)
 
     adicionar(
         "escopo",
@@ -462,6 +475,7 @@ def montar_modelo_relatorio(
         if not registros_capitulos:
             secoes[-1]["nota"] = "Nenhum registro técnico foi selecionado para esta emissão."
         numero += 1
+    anexar_extensoes("registros")
 
     if "sensibilidade" in ativas:
         titulo_secao = f"{numero}. {SECOES_RELATORIO['sensibilidade']}"

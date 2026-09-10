@@ -885,6 +885,28 @@ with st.container(border=True):
         help=f"Em x = {extremos['von_mises'].x_mm / 1_000.0:.3f} m.",
     )
 
+    if resultado.fator_carga_critica is not None:
+        colunas_estabilidade = st.columns(2)
+        colunas_estabilidade[0].metric(
+            "Fator de carga crítica",
+            f"{resultado.fator_carga_critica:.2f}",
+            border=True,
+            help=(
+                "Multiplicador das cargas **axiais** que levaria o modelo à "
+                "flambagem elástica. Um fator 3,2 significa que a compressão "
+                "poderia triplicar antes da instabilidade."
+            ),
+        )
+        colunas_estabilidade[1].metric(
+            "Efeito P–Δ",
+            "Incluído" if resultado.segunda_ordem else "Não incluído",
+            border=True,
+            help=(
+                "Escreva `segunda_ordem` no modelo para a compressão amplificar "
+                "a flecha e o momento."
+            ),
+        )
+
     terceira = st.columns(3)
     terceira[0].metric(
         "τ de cisalhamento (V)",
@@ -1188,7 +1210,8 @@ with st.container(border=True):
 
 fronteira_modelo(
     [
-        "Efeitos de segunda ordem (P–Δ, P–δ): a compressão axial não amplifica a flecha neste modelo linear.",
+        "Efeitos de segunda ordem só entram se você escrever `segunda_ordem` no modelo; sem isso a compressão não amplifica a flecha.",
+        "Imperfeições geométricas iniciais e desaprumo — a segunda ordem parte da barra perfeitamente reta.",
         "Flambagem global, local ou lateral com torção — verifique em Flambagem de colunas e Estruturas de aço.",
         "Deformação por cisalhamento (viga de Timoshenko): em vigas curtas (L/h < 10) a flecha real é maior.",
         "Empenamento restringido na torção — só a torção uniforme de Saint-Venant é considerada.",
@@ -1319,6 +1342,8 @@ with st.container(border=True):
             "criterio_flecha": verificacao["criterio"],
             "utilizacao_flecha": verificacao["utilizacao"],
             "grau_hiperestaticidade": resultado.grau_hiperestaticidade,
+            "fator_carga_critica": resultado.fator_carga_critica,
+            "segunda_ordem": resultado.segunda_ordem,
             **(
                 {}
                 if envoltoria is None
