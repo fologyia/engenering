@@ -409,8 +409,15 @@ def catalogo_dataframe():
                 "zx_mm3": perfil.zx_mm3,
                 "zy_mm3": perfil.zy_mm3,
                 "j_mm4": perfil.j_mm4,
+                "cw_mm6": perfil.cw_mm6,
+                # Colunas derivadas da versão embutida: manter o mesmo conjunto
+                # permite este catálogo substituir aquele sem que as páginas
+                # que já leem a tabela precisem ser reescritas.
+                "sx_mm3": perfil.sx_mm3,
+                "sy_mm3": perfil.sy_mm3,
                 "rx_mm": perfil.rx_mm,
                 "ry_mm": perfil.ry_mm,
+                "area_cisalhamento_mm2": perfil.area_cisalhamento_mm2,
                 "descricao": perfil.descricao,
             }
         )

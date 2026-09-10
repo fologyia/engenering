@@ -1,0 +1,202 @@
+{
+  "schema": "mecanica-toolkit/catalogo-materiais/v1",
+  "origem": "Critério de projeto Anglo American — Estruturas metálicas",
+  "criterio": "Anglo American AA-BR-DPST-DR-0001 rev. 1 (22/12/2025), item 4.5, Tabela 1",
+  "observacoes": "O critério de projeto especifica a DESIGNAÇÃO e a norma de cada material por aplicação; ele não tabela propriedades mecânicas. Os valores de Sy e Sut abaixo são os mínimos especificados pela norma citada em 'origem_propriedades' e devem ser confirmados na edição vigente da norma e no certificado do material. A utilização de materiais não previstos no critério deve ser submetida à aprovação da Anglo American (nota 5 do item 4.5).",
+  "materiais": [
+    {
+      "nome": "ASTM A36",
+      "categoria": "aco",
+      "Sy_MPa": 250,
+      "Sut_MPa": 400,
+      "origem_propriedades": "ASTM A36/A36M — mínimos especificados (Fy 36 ksi; Fu 58–80 ksi)",
+      "aplicacoes": [
+        "Perfis laminados",
+        "Chapas e perfis soldados",
+        "Perfis dobrados a frio",
+        "Tirantes",
+        "Chapa xadrez de piso e degraus",
+        "Grade de piso",
+        "Trilho de ponte rolante ate 2 t"
+      ],
+      "observacao": "Trilho para ponte rolante de capacidade menor ou igual a 2 t: barra quadrada de 1.1/2 pol. Chapas com espessura igual ou maior que 31,5 mm devem ser 100% ensaiadas por ultrassom (nota 1)."
+    },
+    {
+      "nome": "ASTM A572 Gr. 50",
+      "categoria": "aco",
+      "Sy_MPa": 345,
+      "Sut_MPa": 450,
+      "origem_propriedades": "ASTM A572/A572M Gr. 50 — mínimos especificados (Fy 50 ksi; Fu 65 ksi)",
+      "aplicacoes": [
+        "Perfis laminados",
+        "Chapas e perfis soldados"
+      ],
+      "observacao": "Chapas com espessura igual ou maior que 31,5 mm devem ser 100% ensaiadas por ultrassom (nota 1)."
+    },
+    {
+      "nome": "ASTM A588",
+      "categoria": "aco",
+      "Sy_MPa": 345,
+      "Sut_MPa": 485,
+      "origem_propriedades": "ASTM A588/A588M Gr. B — mínimos especificados (Fy 50 ksi; Fu 70 ksi)",
+      "aplicacoes": [
+        "Chapas e perfis soldados",
+        "Perfis dobrados a frio"
+      ],
+      "observacao": "Aço patinável de resistência à corrosão atmosférica; a compatibilidade com os demais materiais da ligação deve ser verificada para evitar pilha galvânica (nota 4)."
+    },
+    {
+      "nome": "ASTM A570 Gr. 36",
+      "categoria": "aco",
+      "Sy_MPa": 250,
+      "Sut_MPa": 365,
+      "origem_propriedades": "ASTM A570 Gr. 36 — mínimos especificados (Fy 36 ksi; Fu 53 ksi); norma substituída pela ASTM A1011 SS Gr. 36",
+      "aplicacoes": [
+        "Perfis dobrados a frio"
+      ],
+      "observacao": "Perfis formados a frio devem atender também à ABNT NBR 14762."
+    },
+    {
+      "nome": "SAE 1020",
+      "categoria": "aco",
+      "Sy_MPa": 210,
+      "Sut_MPa": 380,
+      "origem_propriedades": "Valor típico de literatura para laminado a quente; a norma SAE não especifica mínimo de resistência",
+      "aplicacoes": [
+        "Tirantes"
+      ],
+      "observacao": "Sem mínimo especificado em norma: confirmar em certificado do material antes de usar em elemento principal."
+    },
+    {
+      "nome": "ASTM A53 Gr. A",
+      "categoria": "aco",
+      "Sy_MPa": 205,
+      "Sut_MPa": 330,
+      "origem_propriedades": "ASTM A53/A53M Gr. A — mínimos especificados (Fy 30 ksi; Fu 48 ksi)",
+      "aplicacoes": [
+        "Tubos estruturais com ou sem costura",
+        "Perfis tubulares nao cilindricos",
+        "Guarda-corpo e postes de ancoragem de linha de vida"
+      ],
+      "observacao": "Grau A é o especificado pelo critério para guarda-corpo e postes de ancoragem das linhas de vida."
+    },
+    {
+      "nome": "ASTM A53 Gr. B",
+      "categoria": "aco",
+      "Sy_MPa": 240,
+      "Sut_MPa": 415,
+      "origem_propriedades": "ASTM A53/A53M Gr. B — mínimos especificados (Fy 35 ksi; Fu 60 ksi)",
+      "aplicacoes": [
+        "Tubos estruturais com ou sem costura",
+        "Perfis tubulares nao cilindricos"
+      ],
+      "observacao": "Grau mais resistente da mesma norma de tubo aceita pelo critério para uso estrutural."
+    },
+    {
+      "nome": "ASTM A500 Gr. B",
+      "categoria": "aco",
+      "Sy_MPa": 290,
+      "Sut_MPa": 400,
+      "origem_propriedades": "ASTM A500/A500M Gr. B, seção circular — mínimos especificados (Fy 42 ksi; Fu 58 ksi)",
+      "aplicacoes": [
+        "Tubos estruturais com ou sem costura",
+        "Perfis tubulares nao cilindricos"
+      ],
+      "observacao": "Para seções não circulares o mesmo grau especifica Fy de 315 MPa (46 ksi); ajuste o valor conforme a forma do produto."
+    },
+    {
+      "nome": "ASTM A501",
+      "categoria": "aco",
+      "Sy_MPa": 250,
+      "Sut_MPa": 400,
+      "origem_propriedades": "ASTM A501/A501M Gr. A — mínimos especificados (Fy 36 ksi; Fu 58 ksi)",
+      "aplicacoes": [
+        "Tubos estruturais com ou sem costura",
+        "Perfis tubulares nao cilindricos"
+      ],
+      "observacao": "Tubo estrutural conformado a quente."
+    },
+    {
+      "nome": "ASTM F3125 Gr. A325",
+      "categoria": "aco",
+      "Sy_MPa": 635,
+      "Sut_MPa": 825,
+      "origem_propriedades": "ASTM F3125/F3125M Gr. A325 — mínimos especificados para diâmetro ate 1 pol (Fy 92 ksi; Fu 120 ksi)",
+      "aplicacoes": [
+        "Parafusos de alta resistencia em ligacoes principais"
+      ],
+      "protecao": "Galvanização a fogo",
+      "observacao": "Ligações principais. A compatibilidade entre o material do parafuso e o da peça deve evitar pilha galvânica (nota 4)."
+    },
+    {
+      "nome": "ASTM F3125 Gr. A490",
+      "categoria": "aco",
+      "Sy_MPa": 895,
+      "Sut_MPa": 1035,
+      "origem_propriedades": "ASTM F3125/F3125M Gr. A490 — mínimos especificados (Fy 130 ksi; Fu 150 ksi)",
+      "aplicacoes": [
+        "Parafusos de alta resistencia em ligacoes principais"
+      ],
+      "protecao": "Zinc/Aluminum Coatings ASTM F1136; Dacromet ou equivalente conforme IFI-144 e RCSC-ASTM F1136",
+      "observacao": "O critério não admite galvanização a fogo para A490; a proteção especificada é revestimento de zinco/alumínio."
+    },
+    {
+      "nome": "ASTM A307 Gr. A",
+      "categoria": "aco",
+      "Sy_MPa": 250,
+      "Sut_MPa": 414,
+      "origem_propriedades": "ASTM A307 Gr. A — mínimo especificado de tração (Fu 60 ksi); a norma não especifica escoamento, adotado o valor usual de aço carbono comum",
+      "aplicacoes": [
+        "Parafusos comuns em ligacoes secundarias"
+      ],
+      "protecao": "Galvanização a fogo ASTM A153",
+      "observacao": "Somente ligações secundárias. O escoamento não é especificado pela norma: não use este valor em verificação que dependa de Sy sem confirmação."
+    },
+    {
+      "nome": "AWS E70XX",
+      "categoria": "aco",
+      "Sy_MPa": 400,
+      "Sut_MPa": 485,
+      "origem_propriedades": "AWS A5.1 / A5.5 classe E70XX — mínimos do metal depositado (Fy 58 ksi; Fu 70 ksi)",
+      "aplicacoes": [
+        "Eletrodo de solda"
+      ],
+      "observacao": "Consumível de soldagem, não elemento estrutural: as propriedades são do metal depositado."
+    },
+    {
+      "nome": "ASTM A1011 Gr. 33",
+      "categoria": "aco",
+      "Sy_MPa": 230,
+      "Sut_MPa": 310,
+      "origem_propriedades": "ASTM A1011/A1011M SS Gr. 33 — mínimos especificados (Fy 33 ksi; Fu 45 ksi)",
+      "aplicacoes": [
+        "Calhas, rufos e cumeeiras nao estruturais"
+      ],
+      "protecao": "Galvanizado a fogo",
+      "observacao": "Elemento não estrutural. Espessura de 0,8 mm para rufos e 0,95 mm para calhas, conforme o critério."
+    },
+    {
+      "nome": "ASTM A108 Gr. 1020",
+      "categoria": "aco",
+      "Sy_MPa": 350,
+      "Sut_MPa": 420,
+      "origem_propriedades": "Valor típico de literatura para barra trefilada SAE 1020; a ASTM A108 especifica a barra, não os mínimos mecânicos",
+      "aplicacoes": [
+        "Conectores tipo stud bolt"
+      ],
+      "observacao": "O critério admite os graus 1010, 1015 ou 1020. Sem mínimo especificado em norma: confirmar em certificado."
+    },
+    {
+      "nome": "Aco galvanizado Z275 para telha trapezoidal",
+      "categoria": "aco",
+      "Sy_MPa": 230,
+      "Sut_MPa": 310,
+      "origem_propriedades": "Valor típico de chapa estrutural para telha; confirmar com o fabricante da telha",
+      "aplicacoes": [
+        "Cobertura e tapamento"
+      ],
+      "protecao": "Galvanizado com revestimento Z 275 (275 g/m2)",
+      "observacao": "Telha trapezoidal H = 40 mm com espessura de 0,65 mm, conforme o critério. Elemento de vedação, não estrutural."
+    }
+  ]
+}

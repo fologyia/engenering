@@ -85,6 +85,11 @@ pagina = st.navigation(
                 icon=":material/science:",
             ),
             st.Page(
+                "app_pages/catalogo_materiais.py",
+                title="Catálogo de materiais",
+                icon=":material/science:",
+            ),
+            st.Page(
                 "app_pages/catalogo_perfis.py",
                 title="Catálogo de perfis",
                 icon=":material/view_in_ar:",

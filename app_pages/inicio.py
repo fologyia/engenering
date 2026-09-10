@@ -1,6 +1,6 @@
 import streamlit as st
 
-from core import materials as mat
+from core import material_catalog as mat
 from core import section_catalog as catalogo_perfis
 
 try:

@@ -15,7 +15,7 @@ from components.project_tools import botao_registrar_calculo, construir_registro
 from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
 from core import fatigue as fat
 from core import fatigue_report, memorial_word
-from core import materials as mat
+from core import material_catalog as mat
 from core import size_effect as size
 
 st.set_page_config(

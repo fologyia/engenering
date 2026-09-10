@@ -173,6 +173,25 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - análise matricial linear de treliças e pórticos 2D.
 - registro das combinações, verificações de barras e análises 2D no projeto ativo.
 
+### Catálogo de materiais
+
+- base orientativa do programa, catálogos de critério de projeto distribuídos
+  junto do programa e materiais cadastrados pelo usuário, fundidos numa lista só;
+- tabela de materiais do critério **Anglo American AA-BR-DPST-DR-0001**
+  (Estruturas metálicas, item 4.5): 16 designações com a aplicação que cada
+  uma é autorizada a cumprir e a proteção exigida;
+- procedência separada: o critério especifica a **designação e a norma**, não
+  as propriedades. Sy e Sut vêm da norma citada e ficam marcados como tal —
+  nunca atribuídos ao critério. Valores sem mínimo normativo (SAE 1020,
+  ASTM A108) são declarados como típicos;
+- filtro por aplicação: responde "que aço posso usar num perfil laminado
+  neste projeto" em vez de só listar aços;
+- cadastro, edição, exclusão e importação em lote, com aviso de coerência
+  (Sy/Sut fora da faixa, unidade em psi, propriedade sem procedência);
+- Sy igual a zero é aceito como dado físico: ferro fundido cinzento rompe sem
+  patamar de escoamento definido;
+- alimenta a seleção de material em análise estática, fadiga e flambagem.
+
 ### Catálogo de perfis
 
 - catálogo geométrico embutido, catálogos de referência distribuídos com o
@@ -259,6 +278,7 @@ mecanica_toolkit/
 │   ├── circulo_mohr.py
 │   ├── projeto_parafusos.py
 │   ├── estruturas_aco.py
+│   ├── catalogo_materiais.py
 │   ├── catalogo_perfis.py
 │   ├── normas_tecnicas.py
 │   └── guia_geral.py
@@ -268,6 +288,7 @@ mecanica_toolkit/
 │   ├── beam_script.py
 │   ├── section_stress.py
 │   ├── section_catalog.py
+│   ├── material_catalog.py
 │   ├── technical_records.py
 │   ├── load_cases.py
 │   ├── report_plugins.py
@@ -282,6 +303,7 @@ mecanica_toolkit/
 ├── components/
 ├── data/
 │   ├── normas_catalogo.json
+│   ├── materiais_ref_anglo.json
 │   ├── perfis_ref_gerdau.json
 │   └── projetos_industriais.sqlite3  # criado automaticamente
 ├── docs/

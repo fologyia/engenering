@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
-from core import materials as mat
+from core import material_catalog as mat
 from core import static_analysis as est
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
