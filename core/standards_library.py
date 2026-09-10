@@ -7,14 +7,13 @@ resultado para que a conferência seja feita no documento licenciado.
 
 from __future__ import annotations
 
+import json
+import re
+import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from hashlib import sha256
-import json
 from pathlib import Path
-import re
-import unicodedata
-
 
 RAIZ_PROJETO = Path(__file__).resolve().parents[1]
 PASTA_NORMAS_PADRAO = RAIZ_PROJETO / "normas_pdf"

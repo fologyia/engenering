@@ -6,16 +6,15 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+from components import load_models as catalogo
 from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
     id_registro_existente,
 )
-from components import load_models as catalogo
 from components.ui import cabecalho_pagina, fronteira_modelo
 from core import additional_load_models as modelos
 from core import load_to_stress as cargas
-
 
 st.set_page_config(
     page_title="Assistente de cargas",

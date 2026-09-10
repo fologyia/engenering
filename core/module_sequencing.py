@@ -13,12 +13,16 @@ com o mesmo status ("Desatualizado") mostrado na Central de Validação.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from core.project_dependencies import STATUS_ATUAL, STATUS_SEM_DEPENDENCIAS, sincronizar_estados_dependencias
+from core.project_dependencies import (
+    STATUS_ATUAL,
+    STATUS_SEM_DEPENDENCIAS,
+    sincronizar_estados_dependencias,
+)
 from core.technical_modules import obter_modulo
-
 
 # Cada fluxo é uma sequência típica de módulos, do primeiro ao último. Um
 # módulo pode pertencer a mais de um fluxo (ex.: Análise estática participa

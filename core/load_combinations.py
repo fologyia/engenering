@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,6 @@ def gerar_combinacoes(acoes: Iterable[AcaoEstrutural]) -> list[Combinacao]:
     o gerador aplicável às categorias específicas da norma e do projeto.
     """
     itens = _validar(acoes)
-    permanentes = [acao for acao in itens if acao.tipo == "Permanente"]
     variaveis = [acao for acao in itens if acao.tipo == "Variável"]
     combinacoes: list[Combinacao] = []
 

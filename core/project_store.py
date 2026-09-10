@@ -6,12 +6,13 @@ projeto ativo e recarrega o documento sempre que precisa mostrar ou editar.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sqlite3
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from core.project_dependencies import (
@@ -19,7 +20,6 @@ from core.project_dependencies import (
     sincronizar_estados_dependencias,
 )
 from core.technical_records import normalizar_registro_tecnico
-
 
 RAIZ_PROJETO = Path(__file__).resolve().parents[1]
 BANCO_PADRAO = RAIZ_PROJETO / "data" / "projetos_industriais.sqlite3"
@@ -32,7 +32,7 @@ class ProjetoPersistenciaErro(RuntimeError):
 
 
 def _agora() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _json_seguro(valor: Any) -> Any:

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Any, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from copy import deepcopy
+from datetime import UTC, datetime
+from typing import Any
 
 from core.project_criteria import calcular_hash_criterios
 from core.technical_records import calcular_hash_registro, normalizar_registro_tecnico
-
 
 STATUS_ATUAL = "Atual"
 STATUS_DESATUALIZADO = "Desatualizado"
@@ -20,7 +20,7 @@ STATUS_SEM_DEPENDENCIAS = "Sem dependências declaradas"
 
 
 def _agora() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _hash(valor: Any) -> str:

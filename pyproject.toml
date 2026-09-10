@@ -1,0 +1,95 @@
+[project]
+name = "mecanica-toolkit"
+version = "1.0.0"
+description = "Projetos industriais, análises técnicas e memoriais rastreáveis"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "tmp", "normas_pdf", "output"]
+
+[tool.ruff.lint]
+# Conjunto deliberadamente curto: erros reais primeiro. Regras de estilo
+# entram depois, quando o que elas apontarem for ruído e não bug — trocar
+# 33 mil linhas de uma vez esconderia as correções que importam.
+select = [
+    "E9",   # erros de sintaxe e de execução
+    "F",    # pyflakes: nome indefinido, import não usado, f-string sem campo
+    "B",    # bugbear: armadilhas reais (mutável como padrão, except amplo)
+    "UP",   # pyupgrade: sintaxe obsoleta para a versão de Python alvo
+    "I",    # ordem dos imports
+]
+ignore = [
+    "B008",  # chamada em argumento padrão: normal nas fábricas de dataclass
+    "E501",  # comprimento de linha fica com o formatador, não com o lint
+]
+
+[tool.ruff.lint.per-file-ignores]
+# As páginas Streamlit executam de cima a baixo: import no meio do arquivo,
+# depois do sys.path.append, é o padrão exigido pelo próprio framework.
+"app_pages/*.py" = ["E402"]
+# Os testes acessam helpers privados de propósito, para travar o contrato
+# interno de fórmulas que a interface não expõe.
+"tests/*.py" = ["SLF001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "components", "app_pages"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+# Adoção gradual e *exigível*: só entram aqui os módulos que já passam
+# limpos, para a verificação poder bloquear o CI e continuar significando
+# alguma coisa. Um verificador sempre vermelho é um verificador ignorado.
+# Ao anotar um módulo novo, acrescente-o a esta lista.
+files = [
+    "core/additional_load_models.py",
+    "core/beam_analysis.py",
+    "core/beam_script.py",
+    "core/bolt_design.py",
+    "core/column_buckling.py",
+    "core/fatigue_report.py",
+    "core/load_to_stress.py",
+    "core/materials.py",
+    "core/materials_registry.py",
+    "core/project_assistant.py",
+    "core/project_criteria.py",
+    "core/section_stress.py",
+    "core/size_effect.py",
+    "core/static_analysis.py",
+    "core/steel_connections.py",
+    "core/steel_member_design.py",
+    "core/steel_sections.py",
+    "core/structural_2d.py",
+    "core/technical_modules.py",
+    "core/technical_records.py",
+    "core/unit_converter.py",
+    "core/units.py",
+]
+# Fora da lista acima ainda faltam anotações; a interface (app_pages) não é
+# verificada de propósito, porque o Streamlit devolve Any em quase tudo e o
+# resultado seria ruído, não bug de engenharia.
+check_untyped_defs = false
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+# Módulos anotados de ponta a ponta: checagem estrita.
+module = [
+    "core.beam_analysis",
+    "core.section_stress",
+    "core.technical_modules",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# O diretório temporário padrão do pytest fica inacessível no Windows deste
+# projeto; manter basetemp e cache dentro do repositório evita falhas de
+# permissão no setup de todo teste que usa tmp_path.
+addopts = "--basetemp=tmp/pytest"
+cache_dir = "tmp/pytest_cache"

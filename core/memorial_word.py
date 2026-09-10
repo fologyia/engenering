@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from io import BytesIO
-import math
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
@@ -14,7 +15,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor, Twips
-
 
 CONTENT_WIDTH_DXA = 9360
 TABLE_INDENT_DXA = 120

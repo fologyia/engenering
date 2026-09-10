@@ -1,8 +1,7 @@
 """Conversor geral de unidades para entradas e resultados de engenharia."""
 
-from dataclasses import dataclass
 import math
-
+from dataclasses import dataclass
 
 MPA_PER_KSI = 6.894757293168
 MM_PER_IN = 25.4

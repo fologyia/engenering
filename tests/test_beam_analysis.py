@@ -11,7 +11,6 @@ import unittest
 from core import beam_analysis as vb
 from core import beam_script as bs
 
-
 E_MPA = 200_000.0
 G_MPA = 77_000.0
 L_MM = 6_000.0

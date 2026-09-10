@@ -14,7 +14,6 @@ from dataclasses import dataclass
 
 import streamlit as st
 
-
 # Paleta alinhada ao tema em .streamlit/config.toml.
 _CONTORNO = "#0B6E99"
 _CORPO = "#DDF2FA"

@@ -1,10 +1,7 @@
 import math
 import unittest
 
-from core import fatigue
-from core import materials
-from core import static_analysis
-from core import size_effect
+from core import fatigue, materials, size_effect, static_analysis
 
 
 class StaticAnalysisTests(unittest.TestCase):

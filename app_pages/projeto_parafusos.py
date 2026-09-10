@@ -11,7 +11,6 @@ from components.project_tools import botao_registrar_calculo, construir_registro
 from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
 from core import bolt_design as parafusos
 
-
 st.set_page_config(
     page_title="Projeto de parafusos",
     page_icon=":material/build:",
@@ -501,6 +500,7 @@ with st.container(border=True):
         zip(
             resultado.distribuicao.forcas_axiais_N,
             resultado.distribuicao.forcas_cisalhantes_N,
+            strict=True,
         )
     ):
         angulo = 2.0 * math.pi * indice / int(numero_parafusos)
@@ -633,6 +633,7 @@ with st.container(border=True):
             for minimo, maximo in zip(
                 dist_min.forcas_axiais_N,
                 dist_max.forcas_axiais_N,
+                strict=True,
             ):
                 menor, maior = sorted((minimo, maximo))
                 resultados_fadiga.append(

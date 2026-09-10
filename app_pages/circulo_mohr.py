@@ -18,7 +18,6 @@ from components.project_tools import (
 from components.ui import cabecalho_pagina, fronteira_modelo
 from core import mohr_analysis as mohr
 
-
 st.set_page_config(
     page_title="Círculo de Mohr",
     page_icon=":material/donut_large:",

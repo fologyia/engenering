@@ -5,9 +5,9 @@ Unidades internas: N, mm, MPa e N·mm.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 import numpy as np
 

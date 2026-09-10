@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 CAMINHO_CSV = Path(__file__).resolve().parent.parent / "data" / "materials.csv"
 COLUNAS_OBRIGATORIAS = {"nome", "categoria", "Sut_MPa", "Sy_MPa", "observacao"}
 

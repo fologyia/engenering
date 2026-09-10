@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
 
 from core.load_cases import (
     CHAVES_CARGA,
@@ -13,7 +14,6 @@ from core.load_cases import (
     calcular_envelope,
     fatores_legiveis,
 )
-
 
 ConstrutorSecao = Callable[[Mapping[str, Any], Mapping[str, Any]], dict[str, Any]]
 

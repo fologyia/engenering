@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.materials_registry import criar_material_projeto, resumir_fonte
 from core.load_cases import calcular_envelope, criar_caso_carga, criar_combinacao_carga
+from core.materials_registry import criar_material_projeto, resumir_fonte
 from core.project_report import gerar_relatorio_industrial_pdf, gerar_relatorio_industrial_word
 from core.project_store import criar_item, novo_projeto_documento
 from core.sensitivity import analisar_monte_carlo, analisar_oat
 from core.technical_records import criar_registro_tecnico
-
 
 RAIZ = Path(__file__).resolve().parents[1]
 

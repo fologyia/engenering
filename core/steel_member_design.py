@@ -7,8 +7,8 @@ aplicável.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 from core.steel_sections import PerfilAco
 

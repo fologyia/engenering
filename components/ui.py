@@ -6,7 +6,6 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-
 AcaoCabecalho = tuple[str, str, str]
 
 _ICONE_SITUACAO = {

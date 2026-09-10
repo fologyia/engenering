@@ -6,11 +6,10 @@ Raios de concordância e tolerâncias de fabricação são desprezados.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
+from dataclasses import asdict, dataclass
 
 import pandas as pd
-
 
 DENSIDADE_ACO_KG_M3 = 7_850.0
 
@@ -101,7 +100,8 @@ def _modulo_plastico(retangulos: list[tuple[float, float, float, float]], eixo: 
         largura_em = lambda meio: sum(r[3] - r[2] for r in retangulos if r[0] <= meio <= r[1])
 
     segmentos = []
-    for c0, c1 in zip(cortes, cortes[1:]):
+    # Pares consecutivos: a segunda lista é sempre um item menor.
+    for c0, c1 in zip(cortes, cortes[1:], strict=False):
         largura = largura_em((c0 + c1) / 2.0)
         segmentos.append((c0, c1, largura))
 

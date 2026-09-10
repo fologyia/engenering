@@ -15,7 +15,6 @@ from core import load_to_stress as cargas
 from core import section_stress as ss
 from core.sensitivity import sugerir_de_registro
 
-
 E_MPA = 200_000.0
 G_MPA = 77_000.0
 

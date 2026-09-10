@@ -2,7 +2,12 @@
 
 from core import module_sequencing as seq
 from core.materials_registry import criar_material_projeto
-from core.project_store import criar_projeto, obter_projeto, registrar_calculo_tecnico, salvar_projeto
+from core.project_store import (
+    criar_projeto,
+    obter_projeto,
+    registrar_calculo_tecnico,
+    salvar_projeto,
+)
 
 
 def _registro_estatico(*, materiais_ids=()):

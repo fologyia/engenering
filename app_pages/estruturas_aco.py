@@ -18,7 +18,6 @@ from core import steel_member_design as barras
 from core import steel_sections as secoes
 from core import structural_2d as estrutural
 
-
 st.set_page_config(
     page_title="Estruturas de aço",
     page_icon=":material/domain:",

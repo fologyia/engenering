@@ -3,7 +3,6 @@ import streamlit as st
 from core import materials as mat
 from core import steel_sections as secoes
 
-
 try:
     materiais = mat.carregar_materiais()
 except (FileNotFoundError, ValueError) as erro:
@@ -365,7 +364,10 @@ st.caption("Cada módulo mostra suas hipóteses, unidades e critérios de leitur
 
 for inicio_linha in range(0, len(modulos), 3):
     colunas = st.columns(3)
-    for coluna, dados_modulo in zip(colunas, modulos[inicio_linha : inicio_linha + 3]):
+    # A última linha da grade pode ter menos módulos do que colunas.
+    for coluna, dados_modulo in zip(
+        colunas, modulos[inicio_linha : inicio_linha + 3], strict=False
+    ):
         titulo_modulo, icone, etiqueta, descricao, pagina, cor = dados_modulo
         with coluna:
             with st.container(border=True, height=215):

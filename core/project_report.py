@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from html import escape
-from io import BytesIO
 import hashlib
 import json
 import math
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from datetime import datetime
+from html import escape
+from io import BytesIO
+from typing import Any
 
-from core.memorial_word import CAUTION, POSITIVE, RISK, gerar_memorial_word_padrao
 from core.materials_registry import avaliar_material, resumir_fonte
+from core.memorial_word import CAUTION, POSITIVE, RISK, gerar_memorial_word_padrao
 from core.project_validation import validar_projeto
 from core.report_plugins import listar_provedores, titulos_secoes_extensao
 from core.technical_records import avaliar_contrato_registro
-
 
 _SECOES_BASE = (
     ("escopo", "Objetivo e escopo"),
@@ -666,7 +666,15 @@ def gerar_relatorio_industrial_pdf(
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.platypus import (
+            LongTable,
+            PageBreak,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError as erro:
         raise RuntimeError("A exportação PDF requer reportlab.") from erro
 

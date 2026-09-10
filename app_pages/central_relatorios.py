@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
 import re
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -12,13 +12,12 @@ from components.project_tools import sincronizar_projeto_ativo
 from components.ui import cabecalho_pagina
 from core.project_report import (
     SECOES_RELATORIO,
+    avaliar_integridade_registro,
     gerar_relatorio_industrial_pdf,
     gerar_relatorio_industrial_word,
     montar_modelo_relatorio,
-    avaliar_integridade_registro,
 )
 from core.project_store import obter_projeto_ativo, salvar_projeto
-
 
 PERFIS = {
     "Memorial industrial completo": list(SECOES_RELATORIO),

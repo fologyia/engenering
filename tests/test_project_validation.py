@@ -1,7 +1,10 @@
-from core.project_dependencies import preparar_registro_dependencias, sincronizar_estados_dependencias
+from core.materials_registry import listar_catalogo_referencia
+from core.project_dependencies import (
+    preparar_registro_dependencias,
+    sincronizar_estados_dependencias,
+)
 from core.project_store import criar_item, novo_projeto_documento
 from core.project_validation import validar_projeto
-from core.materials_registry import listar_catalogo_referencia
 
 
 def _projeto_documentado():

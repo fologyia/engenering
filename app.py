@@ -3,7 +3,6 @@ import streamlit as st
 from components.project_tools import sincronizar_projeto_ativo
 from core.technical_modules import listar_modulos, obter_modulo
 
-
 st.set_page_config(
     page_title="Mecânica Toolkit",
     page_icon=":material/precision_manufacturing:",

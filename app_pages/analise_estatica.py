@@ -16,7 +16,6 @@ from core import static_analysis as est
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
 
-
 st.set_page_config(
     page_title="Análise estática",
     page_icon=":material/analytics:",

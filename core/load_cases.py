@@ -7,9 +7,10 @@ interpretados como simultâneos sem consultar a combinação governante.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 from uuid import uuid4
 
 

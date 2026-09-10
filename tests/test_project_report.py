@@ -3,13 +3,13 @@ from io import BytesIO
 from docx import Document
 from pypdf import PdfReader
 
+from core.materials_registry import criar_material_projeto
 from core.project_report import (
     avaliar_integridade_registro,
     gerar_relatorio_industrial_pdf,
     gerar_relatorio_industrial_word,
     montar_modelo_relatorio,
 )
-from core.materials_registry import criar_material_projeto
 from core.project_store import criar_item
 from tests.test_project_validation import _projeto_documentado
 

@@ -1,7 +1,6 @@
 """Cálculos de resistência à fadiga em unidades SI (MPa, mm e °C)."""
 import math
 
-
 MATERIAIS_SE_LINHA = {"aco", "ferro", "aluminio", "cobre"}
 
 COEFICIENTES_SUPERFICIE = {

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
 import os
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from components.ui import cabecalho_pagina
 from components.project_tools import contexto_sessao_projeto
+from components.ui import cabecalho_pagina
 from core.project_store import criar_item, obter_projeto_ativo, salvar_projeto
 from core.standards_library import (
     CATALOGO_PADRAO,

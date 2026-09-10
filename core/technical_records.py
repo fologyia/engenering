@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from datetime import datetime
 import hashlib
 import json
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
+from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from core.technical_modules import resolver_modulo
-
 
 SCHEMA_REGISTRO = "mecanica-toolkit/registro-tecnico/v2"
 

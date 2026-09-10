@@ -8,7 +8,6 @@ from docx import Document
 
 from core import memorial_word
 
-
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
@@ -79,7 +78,7 @@ class MemorialWordTests(unittest.TestCase):
             ("Resultados", "Vida estimada", "N", "31.875 ciclos", "-", "Modelo S-N"),
         ]
         keys = ["Grupo", "Grandeza", "Símbolo", "Valor", "Unidade", "Observação"]
-        self.linhas = [dict(zip(keys, row)) for row in rows]
+        self.linhas = [dict(zip(keys, row, strict=True)) for row in rows]
 
     def test_generates_editable_standardized_docx(self):
         content = memorial_word.gerar_memorial_fadiga_word(self.dados, self.linhas)

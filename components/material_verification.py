@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from collections.abc import Iterable
 
 import streamlit as st
 
 from core import failure_criteria as falha
 from core import materials as mat
-
 
 ROTULOS_COMPORTAMENTO = {
     "ductil": "Dúctil",

@@ -7,8 +7,8 @@ concentrações de tensão, efeitos de apoio ou distribuições tridimensionais.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 from core.section_stress import (
     NOME_INFERIOR,

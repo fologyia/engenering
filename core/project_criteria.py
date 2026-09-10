@@ -7,12 +7,12 @@ enquanto o hash técnico permite detectar quando uma análise ficou defasada.
 
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import json
 import math
-from typing import Any, Mapping
-
+from collections.abc import Mapping
+from copy import deepcopy
+from typing import Any
 
 SCHEMA_CRITERIOS = "mecanica-toolkit/criterios-projeto/v1"
 

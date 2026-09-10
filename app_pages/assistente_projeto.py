@@ -13,7 +13,6 @@ from core import project_assistant as projetos
 from core import unit_converter as unidades
 from core.project_store import criar_item, criar_projeto, salvar_projeto
 
-
 st.set_page_config(
     page_title="Assistente de projeto",
     page_icon=":material/route:",

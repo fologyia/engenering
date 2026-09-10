@@ -10,7 +10,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from components.ui import cabecalho_pagina
 from core import unit_converter as unidades
 
-
 st.set_page_config(
     page_title="Conversor de unidades",
     page_icon=":material/swap_horiz:",

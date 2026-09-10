@@ -7,13 +7,13 @@ próprio usuário, produzindo uma fila rastreável para a Central de Validação
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
+from typing import Any
 
 from core.materials_registry import avaliar_material
 from core.validation_plugins import executar_regras
-
 
 SEVERIDADES = ("Bloqueio", "Atenção", "Pendência", "Informação")
 ORDEM_SEVERIDADE = {nome: indice for indice, nome in enumerate(SEVERIDADES)}

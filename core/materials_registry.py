@@ -7,16 +7,16 @@ carregam condição de fornecimento, propriedades, origem e evidências própria
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import date
 from functools import lru_cache
-import math
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 from uuid import uuid4
 
 import pandas as pd
-
 
 CAMINHO_CATALOGO = Path(__file__).resolve().parents[1] / "data" / "materials.csv"
 

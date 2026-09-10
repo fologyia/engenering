@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from html import escape
 from io import BytesIO
-import math
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 def _texto(valor: Any) -> str:

@@ -14,7 +14,6 @@ from core import steel_sections as secoes
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
 
-
 st.set_page_config(
     page_title="Flambagem de colunas",
     page_icon=":material/architecture:",
