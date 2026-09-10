@@ -27,7 +27,11 @@ from core.project_store import (
     restaurar_revisao,
     salvar_projeto,
 )
-from core.project_validation import validar_projeto
+from core.project_validation import (
+    estado_de_preenchimento,
+    pendencias_de_preenchimento,
+    validar_projeto,
+)
 
 st.set_page_config(
     page_title="Projetos permanentes",
@@ -43,6 +47,30 @@ cabecalho_pagina(
     cor="blue",
     ajuda_modulo="Projetos permanentes",
 )
+
+
+ICONE_SEVERIDADE = {
+    "Bloqueio": ":material/block:",
+    "Pendência": ":material/pending:",
+    "Atenção": ":material/warning:",
+}
+
+
+def _marca(estado: Mapping[str, Any], campo: str) -> str:
+    """Sufixo do rótulo dizendo o que a falta daquele campo provoca.
+
+    A informação já existia na Central de Validação, mas descobrir a QUAL
+    campo um achado se referia obrigava a sair da tela e voltar caçando. Aqui
+    ela fica ao lado do campo, no momento de preencher.
+    """
+    dados = estado.get(campo)
+    if not dados or dados["preenchido"]:
+        return ""
+    return {
+        "Bloqueio": " · bloqueia a emissão",
+        "Pendência": " · pendência",
+        "Atenção": " · recomendado",
+    }.get(dados["severidade"], "")
 
 
 def _limpar(valor: Any) -> Any:
@@ -66,28 +94,50 @@ def _salvar(documento: Mapping[str, Any], motivo: str, *, revisao: bool = False)
 
 @st.dialog("Novo projeto industrial")
 def _dialogo_novo_projeto() -> None:
+    # Só os três campos que bloqueiam a emissão. A versão anterior pedia
+    # cliente, unidade, área e TAG — que são pendências — e NÃO pedia o
+    # objetivo, que é bloqueio: o projeto nascia travado e sem dizer por quê.
+    st.caption(
+        "Estes são os três **campos** que bloqueiam a emissão do memorial. "
+        "Depois de criar, ainda faltarão o escopo físico, a matriz normativa "
+        "e o primeiro cálculo registrado — o painel da aba **Dados e base** "
+        "mostra o que falta e onde resolver."
+    )
     with st.form("form_novo_projeto", border=False):
-        nome = st.text_input("Nome do projeto *", placeholder="Adequação do transportador CV-204")
-        c1, c2 = st.columns(2)
-        codigo = c1.text_input("Código", placeholder="PRJ-2026-014")
-        cliente = c2.text_input("Cliente / solicitante")
-        c3, c4, c5 = st.columns(3)
-        unidade = c3.text_input("Unidade industrial")
-        area = c4.text_input("Área / setor")
-        tag = c5.text_input("TAG principal")
-        descricao = st.text_area("Descrição inicial")
-        enviar = st.form_submit_button("Criar e abrir", type="primary", icon=":material/create_new_folder:")
+        nome = st.text_input(
+            "Nome do projeto *", placeholder="Adequação do transportador CV-204"
+        )
+        codigo = st.text_input("Código *", placeholder="PRJ-2026-014")
+        objetivo = st.text_area(
+            "Objetivo e resultado esperado *",
+            placeholder=(
+                "Verificar a estrutura de suporte para a nova carga de 12 t e "
+                "emitir memorial para aprovação."
+            ),
+            height=90,
+        )
+        enviar = st.form_submit_button(
+            "Criar e abrir", type="primary", icon=":material/create_new_folder:"
+        )
     if enviar:
-        try:
-            projeto = criar_projeto(
-                nome,
-                codigo=codigo,
-                cliente=cliente,
-                unidade_industrial=unidade,
-                area=area,
-                tag_equipamento=tag,
-                descricao=descricao,
+        faltando = [
+            rotulo
+            for rotulo, valor in (
+                ("nome", nome),
+                ("código", codigo),
+                ("objetivo", objetivo),
             )
+            if not str(valor).strip()
+        ]
+        if faltando:
+            st.error(
+                "Preencha " + ", ".join(faltando) + " para o projeto não nascer "
+                "bloqueado.",
+                icon=":material/error:",
+            )
+            return
+        try:
+            projeto = criar_projeto(nome, codigo=codigo, objetivo=objetivo)
         except ProjetoPersistenciaErro as erro:
             st.error(str(erro))
             return
@@ -197,53 +247,263 @@ with abas[0]:
     st.info(validacao["aviso"], icon=":material/info:")
 
 with abas[1]:
-    with st.form("dados_gerais_projeto"):
-        st.subheader("Identificação e responsabilidades")
-        a, b, c = st.columns(3)
-        nome = a.text_input("Nome *", value=projeto.get("nome", ""))
-        codigo = b.text_input("Código *", value=projeto.get("codigo", ""))
-        status = c.selectbox(
-            "Situação",
-            ["Em elaboração", "Em verificação", "Emitido", "Suspenso", "Arquivado"],
-            index=(["Em elaboração", "Em verificação", "Emitido", "Suspenso", "Arquivado"].index(projeto["status"]) if projeto["status"] in ["Em elaboração", "Em verificação", "Emitido", "Suspenso", "Arquivado"] else 0),
+    estado = estado_de_preenchimento(projeto)
+    faltando = pendencias_de_preenchimento(projeto)
+    bloqueios = [item for item in faltando if item["severidade"] == "Bloqueio"]
+
+    # Painel de progresso: antes só existia um "índice documental" no topo da
+    # página, sem dizer QUAL campo o derrubava. Aqui a lista é a própria
+    # ordem de trabalho.
+    with st.container(border=True):
+        preenchidos = sum(1 for dados in estado.values() if dados["preenchido"])
+        total = len(estado)
+        st.progress(
+            preenchidos / total if total else 0.0,
+            text=f"{preenchidos} de {total} campos do cadastro preenchidos",
         )
-        d, e, f = st.columns(3)
-        cliente = d.text_input("Cliente / solicitante", value=projeto.get("cliente", ""))
-        unidade = e.text_input("Unidade industrial", value=projeto.get("unidade_industrial", ""))
-        area = f.text_input("Área / setor", value=projeto.get("area", ""))
-        g, h, i = st.columns(3)
-        tag = g.text_input("TAG principal", value=projeto.get("tag_equipamento", ""))
-        processo = h.text_input("Processo / serviço", value=projeto.get("processo", ""))
-        regime = i.text_input("Regime de operação", value=projeto.get("regime_operacao", ""))
-        responsavel, verificador, aprovador = st.columns(3)
-        resp = responsavel.text_input("Responsável técnico", value=projeto.get("responsavel", ""))
-        verif = verificador.text_input("Verificador", value=projeto.get("verificador", ""))
-        aprov = aprovador.text_input("Aprovador", value=projeto.get("aprovador", ""))
-        descricao = st.text_area("Descrição", value=projeto.get("descricao", ""))
-        objetivo = st.text_area("Objetivo e resultado esperado", value=projeto.get("objetivo", ""))
-        st.subheader("Base de projeto")
-        base = projeto.get("base_projeto", {})
-        desenhos = st.text_area("Desenhos, memoriais e documentos de entrada", value=base.get("referencias_desenho", ""))
-        cargas = st.text_area("Base dos carregamentos", value=base.get("base_carregamentos", ""))
-        condicoes = st.text_area("Condições de operação e projeto", value=base.get("condicoes_operacao", ""))
-        criterio = st.text_area("Critérios de aceitação", value=base.get("criterio_aceitacao", ""))
-        vida = st.text_input("Vida requerida / horizonte de projeto", value=base.get("vida_requerida", ""))
-        limitacoes = st.text_area("Limitações, exclusões e interfaces", value=base.get("limitacoes", ""))
-        enviar = st.form_submit_button("Salvar dados e base", type="primary", icon=":material/save:")
-    if enviar:
-        projeto.update({
-            "nome": nome, "codigo": codigo, "status": status, "cliente": cliente,
-            "unidade_industrial": unidade, "area": area, "tag_equipamento": tag,
-            "processo": processo, "regime_operacao": regime, "responsavel": resp,
-            "verificador": verif, "aprovador": aprov, "descricao": descricao, "objetivo": objetivo,
-        })
-        projeto["base_projeto"] = {
-            "referencias_desenho": desenhos, "base_carregamentos": cargas,
-            "condicoes_operacao": condicoes, "criterio_aceitacao": criterio,
-            "vida_requerida": vida, "limitacoes": limitacoes,
+        # Nem todo bloqueio é campo de formulário: escopo físico, matriz
+        # normativa e primeiro cálculo também travam a emissão e se resolvem
+        # em outra aba. Mostrar só as pendências de campo faria o painel dizer
+        # "completo" com o projeto ainda bloqueado.
+        onde_resolver = {
+            "Escopo físico": ("na aba **Escopo físico**, aqui mesmo", None, ""),
+            "Normas": ("na aba **Normas**, aqui mesmo", None, ""),
+            "Cálculos": (
+                "em qualquer módulo de análise, registrando o cálculo no projeto",
+                "app_pages/vigas_eixos.py",
+                "Abrir Vigas e eixos",
+            ),
+            "Carregamentos": (
+                "na página de casos de carga",
+                "app_pages/casos_carga.py",
+                "Abrir Casos de carga",
+            ),
         }
-        _salvar(projeto, "Atualização dos dados e da base de projeto")
-        st.rerun()
+        bloqueios_validacao = [
+            achado
+            for achado in validacao["achados"]
+            if achado["severidade"] == "Bloqueio"
+        ]
+        if bloqueios_validacao:
+            st.error(
+                f"{len(bloqueios_validacao)} bloqueio(s) impedem a emissão do "
+                "memorial.",
+                icon=":material/block:",
+            )
+            for achado in bloqueios_validacao:
+                destino, pagina, rotulo_link = onde_resolver.get(
+                    achado["categoria"], ("nos campos abaixo", None, "")
+                )
+                st.markdown(f"- **{achado['titulo']}** — resolva {destino}.")
+                if pagina:
+                    st.page_link(
+                        pagina, label=rotulo_link, icon=":material/arrow_forward:"
+                    )
+        elif faltando:
+            st.warning(
+                f"Nada bloqueia a emissão. Ainda faltam {len(faltando)} "
+                "campo(s) para a documentação ficar completa: "
+                + ", ".join(item["rotulo"] for item in faltando[:4])
+                + ("…" if len(faltando) > 4 else "."),
+                icon=":material/pending:",
+            )
+        else:
+            st.success(
+                "Cadastro completo e sem bloqueios: o memorial pode ser emitido.",
+                icon=":material/check_circle:",
+            )
+            st.page_link(
+                "app_pages/central_relatorios.py",
+                label="Ir para a Central de relatórios",
+                icon=":material/description:",
+            )
+
+    st.caption(
+        "Os três blocos abaixo salvam separadamente. Comece pelo essencial — "
+        "o resto pode esperar sem travar o trabalho."
+    )
+
+    # ---------------------------------------------------------------- bloco 1
+    with st.container(border=True):
+        st.subheader("Essencial")
+        st.caption("Sem estes campos o memorial não pode ser emitido.")
+        with st.form("projeto_essencial"):
+            a, b = st.columns(2)
+            nome = a.text_input(
+                "Nome" + _marca(estado, "nome"), value=projeto.get("nome", "")
+            )
+            codigo = b.text_input(
+                "Código" + _marca(estado, "codigo"), value=projeto.get("codigo", "")
+            )
+            objetivo = st.text_area(
+                "Objetivo e resultado esperado" + _marca(estado, "objetivo"),
+                value=projeto.get("objetivo", ""),
+                height=90,
+                help=(
+                    "O que este projeto precisa concluir. É o que abre o "
+                    "memorial e o que a conclusão retoma."
+                ),
+            )
+            descricao = st.text_area(
+                "Descrição", value=projeto.get("descricao", ""), height=90
+            )
+            salvar_essencial = st.form_submit_button(
+                "Salvar essencial", type="primary", icon=":material/save:"
+            )
+        if salvar_essencial:
+            projeto.update(
+                {
+                    "nome": nome,
+                    "codigo": codigo,
+                    "objetivo": objetivo,
+                    "descricao": descricao,
+                }
+            )
+            _salvar(projeto, "Atualização dos dados essenciais")
+            st.rerun()
+
+    # ---------------------------------------------------------------- bloco 2
+    with st.container(border=True):
+        st.subheader("Identificação e responsáveis")
+        st.caption(
+            "Localiza o projeto na planta e define a cadeia de elaboração, "
+            "verificação e aprovação."
+        )
+        with st.form("projeto_identificacao"):
+            a, b, c = st.columns(3)
+            cliente = a.text_input(
+                "Cliente / solicitante" + _marca(estado, "cliente"),
+                value=projeto.get("cliente", ""),
+            )
+            unidade = b.text_input(
+                "Unidade industrial" + _marca(estado, "unidade_industrial"),
+                value=projeto.get("unidade_industrial", ""),
+            )
+            area = c.text_input(
+                "Área / setor" + _marca(estado, "area"), value=projeto.get("area", "")
+            )
+            d, e, f = st.columns(3)
+            tag = d.text_input(
+                "TAG principal" + _marca(estado, "tag_equipamento"),
+                value=projeto.get("tag_equipamento", ""),
+            )
+            processo = e.text_input(
+                "Processo / serviço", value=projeto.get("processo", "")
+            )
+            regime = f.text_input(
+                "Regime de operação", value=projeto.get("regime_operacao", "")
+            )
+            g, h, i = st.columns(3)
+            resp = g.text_input(
+                "Responsável técnico" + _marca(estado, "responsavel"),
+                value=projeto.get("responsavel", ""),
+            )
+            verif = h.text_input(
+                "Verificador" + _marca(estado, "verificador"),
+                value=projeto.get("verificador", ""),
+            )
+            aprov = i.text_input(
+                "Aprovador" + _marca(estado, "aprovador"),
+                value=projeto.get("aprovador", ""),
+            )
+            situacoes = [
+                "Em elaboração",
+                "Em verificação",
+                "Emitido",
+                "Suspenso",
+                "Arquivado",
+            ]
+            status = st.selectbox(
+                "Situação",
+                situacoes,
+                index=situacoes.index(projeto["status"])
+                if projeto["status"] in situacoes
+                else 0,
+            )
+            salvar_identificacao = st.form_submit_button(
+                "Salvar identificação", type="primary", icon=":material/save:"
+            )
+        if salvar_identificacao:
+            projeto.update(
+                {
+                    "cliente": cliente,
+                    "unidade_industrial": unidade,
+                    "area": area,
+                    "tag_equipamento": tag,
+                    "processo": processo,
+                    "regime_operacao": regime,
+                    "responsavel": resp,
+                    "verificador": verif,
+                    "aprovador": aprov,
+                    "status": status,
+                }
+            )
+            _salvar(projeto, "Atualização da identificação e das responsabilidades")
+            st.rerun()
+
+    # ---------------------------------------------------------------- bloco 3
+    base = projeto.get("base_projeto", {})
+    faltando_base = [item for item in faltando if item.get("grupo") == "base"]
+    with st.expander(
+        "Base de projeto"
+        + (f" — {len(faltando_base)} campo(s) por preencher" if faltando_base else " — completa"),
+        expanded=bool(faltando_base) and not bloqueios,
+    ):
+        st.caption(
+            "As premissas que o memorial cita e que a conclusão limita. É o "
+            "que separa um cálculo verificável de um número solto."
+        )
+        with st.form("projeto_base"):
+            desenhos = st.text_area(
+                "Desenhos, memoriais e documentos de entrada"
+                + _marca(estado, "referencias_desenho"),
+                value=base.get("referencias_desenho", ""),
+                height=80,
+                placeholder="Desenho DE-1042 rev. C; memorial MC-08 rev. 2",
+            )
+            cargas = st.text_area(
+                "Base dos carregamentos" + _marca(estado, "base_carregamentos"),
+                value=base.get("base_carregamentos", ""),
+                height=80,
+                placeholder="NBR 6120 para sobrecarga; peso do equipamento por folha de dados",
+            )
+            condicoes = st.text_area(
+                "Condições de operação e projeto" + _marca(estado, "condicoes_operacao"),
+                value=base.get("condicoes_operacao", ""),
+                height=80,
+                placeholder="Ambiente externo, temperatura de 0 a 45 °C, operação contínua",
+            )
+            criterio = st.text_area(
+                "Critérios de aceitação" + _marca(estado, "criterio_aceitacao"),
+                value=base.get("criterio_aceitacao", ""),
+                height=80,
+                placeholder="NBR 8800 para ELU e ELS; flecha limitada a L/350",
+            )
+            limitacoes = st.text_area(
+                "Limitações, exclusões e interfaces" + _marca(estado, "limitacoes"),
+                value=base.get("limitacoes", ""),
+                height=80,
+                placeholder="Fundação e ligações soldadas fora do escopo",
+            )
+            vida = st.text_input(
+                "Vida requerida / horizonte de projeto",
+                value=base.get("vida_requerida", ""),
+                placeholder="20 anos",
+            )
+            salvar_base = st.form_submit_button(
+                "Salvar base de projeto", type="primary", icon=":material/save:"
+            )
+        if salvar_base:
+            projeto["base_projeto"] = {
+                "referencias_desenho": desenhos,
+                "base_carregamentos": cargas,
+                "condicoes_operacao": condicoes,
+                "criterio_aceitacao": criterio,
+                "vida_requerida": vida,
+                "limitacoes": limitacoes,
+            }
+            _salvar(projeto, "Atualização da base de projeto")
+            st.rerun()
 
 with abas[2]:
     st.caption("Cadastre equipamentos, linhas, estruturas, suportes, pontos críticos ou sistemas — não apenas elementos de máquinas.")

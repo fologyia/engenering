@@ -18,6 +18,7 @@ from core.project_report import (
     montar_modelo_relatorio,
 )
 from core.project_store import obter_projeto_ativo, salvar_projeto
+from core.project_validation import validar_projeto
 
 PERFIS = {
     "Memorial industrial completo": list(SECOES_RELATORIO),
@@ -54,6 +55,38 @@ st.caption(
     "O Word é indicado para revisão, comentários e assinatura. O PDF preserva o layout para distribuição. "
     "Ambos são gerados a partir do mesmo conjunto de dados."
 )
+
+# Situação do projeto antes de qualquer configuração: emitir um memorial com
+# bloqueio aberto é a coisa que mais custa caro aqui, e a página só avisava
+# disso depois de rolar até a prévia.
+_validacao_projeto = validar_projeto(projeto)
+_bloqueios = [
+    achado
+    for achado in _validacao_projeto["achados"]
+    if achado["severidade"] == "Bloqueio"
+]
+with st.container(border=True):
+    _a, _b, _c = st.columns(3)
+    _a.metric("Índice documental", f"{_validacao_projeto['indice_documental']}%", border=True)
+    _b.metric("Bloqueios abertos", len(_bloqueios), border=True)
+    _c.metric("Registros no projeto", len(projeto.get("registros_tecnicos", [])), border=True)
+    if _bloqueios:
+        st.warning(
+            "O memorial pode ser emitido assim mesmo, e os bloqueios aparecem "
+            "sinalizados nele — mas convém resolvê-los antes: "
+            + "; ".join(achado["titulo"] for achado in _bloqueios[:4])
+            + ("…" if len(_bloqueios) > 4 else "."),
+            icon=":material/gavel:",
+        )
+        st.page_link(
+            "app_pages/gestao_projetos.py",
+            label="Resolver em Gestão de projetos",
+            icon=":material/arrow_forward:",
+        )
+    else:
+        st.success(
+            "Sem bloqueios abertos no projeto.", icon=":material/check_circle:"
+        )
 
 perfil_padrao = projeto.get("configuracao_relatorio", {}).get("perfil", "Memorial industrial completo")
 if perfil_padrao not in PERFIS:
@@ -124,19 +157,54 @@ else:
 if not registros:
     st.info("O projeto ainda não possui registros técnicos. O relatório pode ser emitido como base documental, com essa pendência sinalizada.")
 
+# O que foi usado na última emissão vira o padrão da próxima: redigitar
+# título, subtítulo e situação a cada emissão era trabalho repetido que o
+# projeto já tinha condições de lembrar.
+_identificacao_salva = config_salva.get("identificacao", {})
+_situacoes = ["Para revisão", "Para aprovação", "Emitido", "Preliminar"]
+_situacao_salva = _identificacao_salva.get("situacao", _situacoes[0])
+
 with st.expander("Identificação e controle do documento", expanded=True):
+    if _identificacao_salva:
+        st.caption(
+            "Campos preenchidos com o que foi usado na última emissão deste "
+            "projeto."
+        )
     c1, c2 = st.columns([2, 1])
-    titulo = c1.text_input("Título", value="Memorial técnico do projeto industrial")
-    subtitulo = c1.text_input("Subtítulo", value="Base de projeto, registros técnicos e central de validação")
-    codigo_documento = c2.text_input("Código do documento", value=projeto["codigo"])
+    titulo = c1.text_input(
+        "Título",
+        value=_identificacao_salva.get("titulo")
+        or "Memorial técnico do projeto industrial",
+    )
+    subtitulo = c1.text_input(
+        "Subtítulo",
+        value=_identificacao_salva.get("subtitulo")
+        or "Base de projeto, registros técnicos e central de validação",
+    )
+    codigo_documento = c2.text_input(
+        "Código do documento",
+        value=_identificacao_salva.get("codigo") or projeto["codigo"],
+    )
     revisao = c2.text_input("Revisão", value=f"{int(projeto.get('revisao', 0)):02d}")
     d1, d2, d3 = st.columns(3)
     responsavel = d1.text_input("Elaborado por", value=projeto.get("responsavel", ""))
     verificador = d2.text_input("Verificado por", value=projeto.get("verificador", ""))
     aprovador = d3.text_input("Aprovado por", value=projeto.get("aprovador", ""))
     e1, e2 = st.columns(2)
-    situacao = e1.selectbox("Situação do documento", ["Para revisão", "Para aprovação", "Emitido", "Preliminar"])
+    situacao = e1.selectbox(
+        "Situação do documento",
+        _situacoes,
+        index=_situacoes.index(_situacao_salva)
+        if _situacao_salva in _situacoes
+        else 0,
+    )
     emissao = e2.date_input("Data de emissão", value=date.today(), format="DD/MM/YYYY")
+
+    if not (responsavel and verificador and aprovador):
+        st.caption(
+            ":material/info: Elaborado, verificado e aprovado vêm do cadastro "
+            "do projeto. Preencher lá evita redigitar a cada emissão."
+        )
 
 metadata = {
     "titulo": titulo,
@@ -220,6 +288,12 @@ if st.button(
                     "registros_incluidos": list(ids_registros),
                     "ultimo_snapshot_hash": modelo["snapshot_hash"],
                     "ultima_emissao": metadata["emissao"],
+                    "identificacao": {
+                        "titulo": titulo,
+                        "subtitulo": subtitulo,
+                        "codigo": codigo_documento,
+                        "situacao": situacao,
+                    },
                 }
             )
             projeto["configuracao_relatorio"] = configuracao

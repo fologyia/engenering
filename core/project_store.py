@@ -100,6 +100,7 @@ def novo_projeto_documento(
     area: str = "",
     tag_equipamento: str = "",
     descricao: str = "",
+    objetivo: str = "",
 ) -> dict[str, Any]:
     nome_limpo = str(nome).strip()
     if not nome_limpo:
@@ -122,7 +123,10 @@ def novo_projeto_documento(
         "tag_equipamento": str(tag_equipamento).strip(),
         "tipo_projeto": "Projeto industrial",
         "descricao": str(descricao).strip(),
-        "objetivo": "",
+        # O objetivo bloqueia a emissão do memorial, então precisa poder ser
+        # informado já na criação — antes ele só aceitava ficar vazio, e todo
+        # projeto nascia bloqueado.
+        "objetivo": str(objetivo).strip(),
         "processo": "",
         "regime_operacao": "",
         "responsavel": "",

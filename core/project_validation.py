@@ -86,6 +86,74 @@ def _procurar_numero(dados: Mapping[str, Any], nomes: Sequence[str]) -> float | 
     return None
 
 
+# Campos que a validação cobra, com o rótulo e a severidade de cada falta.
+# Ficam no nível do módulo de propósito: a página de projetos usa a MESMA
+# lista para mostrar, ao lado de cada campo, o que a falta dele provoca.
+# Duplicar isso na interface faria as duas metades divergirem na primeira
+# vez que uma regra mudasse.
+CAMPOS_IDENTIFICACAO: tuple[tuple[str, str, str], ...] = (
+    ("nome", "nome do projeto", "Bloqueio"),
+    ("codigo", "código do projeto", "Bloqueio"),
+    ("objetivo", "objetivo do projeto", "Bloqueio"),
+    ("cliente", "cliente ou solicitante", "Pendência"),
+    ("unidade_industrial", "unidade industrial", "Pendência"),
+    ("area", "área/setor", "Pendência"),
+    ("tag_equipamento", "TAG do equipamento ou sistema", "Pendência"),
+    ("responsavel", "responsável técnico", "Pendência"),
+)
+
+CAMPOS_RESPONSABILIDADE: tuple[tuple[str, str, str], ...] = (
+    ("verificador", "verificador", "Atenção"),
+    ("aprovador", "aprovador", "Atenção"),
+)
+
+CAMPOS_BASE: tuple[tuple[str, str, str], ...] = (
+    ("referencias_desenho", "referências de desenhos e documentos", "Pendência"),
+    ("base_carregamentos", "base dos carregamentos", "Pendência"),
+    ("condicoes_operacao", "condições de operação e projeto", "Pendência"),
+    ("criterio_aceitacao", "critérios de aceitação", "Pendência"),
+    ("limitacoes", "limitações e exclusões de escopo", "Pendência"),
+)
+
+
+def estado_de_preenchimento(projeto: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Situação de cada campo cobrado, para a interface guiar o preenchimento.
+
+    A Central de Validação diz o que falta; sem isto, descobrir **onde** o
+    campo fica exigia sair da tela, ler o achado e voltar caçando. Aqui o
+    formulário recebe a mesma informação já ligada ao campo.
+    """
+    base = projeto.get("base_projeto")
+    base = base if isinstance(base, Mapping) else {}
+    estado: dict[str, dict[str, Any]] = {}
+    for campo, rotulo, severidade in (*CAMPOS_IDENTIFICACAO, *CAMPOS_RESPONSABILIDADE):
+        estado[campo] = {
+            "rotulo": rotulo,
+            "severidade": severidade,
+            "preenchido": bool(_texto(projeto.get(campo))),
+            "grupo": "identificacao",
+        }
+    for campo, rotulo, severidade in CAMPOS_BASE:
+        estado[campo] = {
+            "rotulo": rotulo,
+            "severidade": severidade,
+            "preenchido": bool(_texto(base.get(campo))),
+            "grupo": "base",
+        }
+    return estado
+
+
+def pendencias_de_preenchimento(projeto: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Campos ainda vazios, do mais grave para o menos."""
+    ordem = {"Bloqueio": 0, "Pendência": 1, "Atenção": 2}
+    faltando = [
+        {"campo": campo, **dados}
+        for campo, dados in estado_de_preenchimento(projeto).items()
+        if not dados["preenchido"]
+    ]
+    return sorted(faltando, key=lambda item: (ordem.get(item["severidade"], 3), item["rotulo"]))
+
+
 def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
     """Executa a matriz de validação e devolve achados e indicadores.
 
@@ -98,23 +166,12 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
     def adicionar(*args: Any, **kwargs: Any) -> None:
         achados.append(_achado(len(achados) + 1, *args, **kwargs))
 
-    campos_criticos = {
-        "nome": "nome do projeto",
-        "codigo": "código do projeto",
-        "cliente": "cliente ou solicitante",
-        "unidade_industrial": "unidade industrial",
-        "area": "área/setor",
-        "tag_equipamento": "TAG do equipamento ou sistema",
-        "objetivo": "objetivo do projeto",
-        "responsavel": "responsável técnico",
-    }
     preenchidos = 0
-    pontos_totais = len(campos_criticos)
-    for campo, rotulo in campos_criticos.items():
+    pontos_totais = len(CAMPOS_IDENTIFICACAO)
+    for campo, rotulo, severidade in CAMPOS_IDENTIFICACAO:
         if _texto(projeto.get(campo)):
             preenchidos += 1
         else:
-            severidade = "Bloqueio" if campo in {"nome", "codigo", "objetivo"} else "Pendência"
             adicionar(
                 severidade,
                 "Identificação",
@@ -123,13 +180,13 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 f"Preencha {rotulo} em Gestão de projetos > Dados gerais.",
             )
 
-    for campo, rotulo in (("verificador", "verificador"), ("aprovador", "aprovador")):
+    for campo, rotulo, severidade_responsabilidade in CAMPOS_RESPONSABILIDADE:
         pontos_totais += 1
         if _texto(projeto.get(campo)):
             preenchidos += 1
         else:
             adicionar(
-                "Atenção",
+                severidade_responsabilidade,
                 "Responsabilidades",
                 f"{rotulo.capitalize()} não definido",
                 "A cadeia de elaboração, verificação e aprovação está incompleta.",
@@ -137,20 +194,13 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             )
 
     base = projeto.get("base_projeto", {}) if isinstance(projeto.get("base_projeto"), Mapping) else {}
-    campos_base = {
-        "referencias_desenho": "referências de desenhos e documentos",
-        "base_carregamentos": "base dos carregamentos",
-        "condicoes_operacao": "condições de operação e projeto",
-        "criterio_aceitacao": "critérios de aceitação",
-        "limitacoes": "limitações e exclusões de escopo",
-    }
-    for campo, rotulo in campos_base.items():
+    for campo, rotulo, severidade_base in CAMPOS_BASE:
         pontos_totais += 1
         if _texto(base.get(campo)):
             preenchidos += 1
         else:
             adicionar(
-                "Pendência",
+                severidade_base,
                 "Base de projeto",
                 f"Sem {rotulo}",
                 "A premissa ainda não está documentada na base de projeto.",
