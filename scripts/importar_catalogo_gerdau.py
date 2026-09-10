@@ -150,11 +150,19 @@ def conferir(valores: dict[str, float]) -> str:
     return ""
 
 
+def altura_nominal(nome: str) -> int | None:
+    """Altura da designação: em "W 310 x 38,7" a bitola nominal é 310 mm."""
+    achado = re.search(r"\s(\d+)\s*x", nome)
+    return int(achado.group(1)) if achado else None
+
+
 def familia_de(nome: str) -> str:
     return "HP (perfil de estaca)" if nome.upper().startswith("HP") else "W (mesa larga)"
 
 
-def extrair(caminho_pdf: Path) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
+def extrair(
+    caminho_pdf: Path, *, altura_maxima_mm: int | None = None
+) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
     from pypdf import PdfReader
 
     leitor = PdfReader(str(caminho_pdf))
@@ -186,6 +194,14 @@ def extrair(caminho_pdf: Path) -> tuple[list[dict[str, Any]], list[tuple[str, st
             nome = limpar_nome(bruto["nome"])
             if not NOME_PERFIL.match(nome):
                 rejeitados.append((nome or "(sem nome)", "nome irreconhecível"))
+                continue
+
+            # Fora da faixa pedida não é rejeição: é escolha de escopo, e
+            # listá-la junto dos erros de leitura esconderia os erros reais.
+            altura = altura_nominal(nome)
+            if altura_maxima_mm is not None and (
+                altura is None or altura > altura_maxima_mm
+            ):
                 continue
 
             valores: dict[str, float] = {}
@@ -260,10 +276,22 @@ def principal() -> int:
     analisador.add_argument(
         "--origem", default="Gerdau — Tabela de bitolas (perfis W e HP)"
     )
+    analisador.add_argument(
+        "--altura-maxima",
+        type=int,
+        default=310,
+        help=(
+            "Maior bitola nominal a importar, em mm. O padrão de 310 cobre as "
+            "bitolas correntes; acima disso o catálogo cresce sem que os "
+            "perfis sejam de fato usados."
+        ),
+    )
     argumentos = analisador.parse_args()
 
-    perfis, rejeitados = extrair(argumentos.pdf)
-    print(f"Perfis aceitos: {len(perfis)}")
+    perfis, rejeitados = extrair(
+        argumentos.pdf, altura_maxima_mm=argumentos.altura_maxima
+    )
+    print(f"Perfis aceitos: {len(perfis)} (até W/HP {argumentos.altura_maxima})")
     print(f"Rejeitados: {len(rejeitados)}")
     for nome, motivo in rejeitados[:25]:
         print(f"  - {nome}: {motivo}")
@@ -279,7 +307,8 @@ def principal() -> int:
             "Extraído da tabela de bitolas do fabricante e conferido por "
             "coerência interna (raio de giração e módulo elástico contra I e "
             "A da mesma linha). Confirme a bitola no catálogo vigente antes "
-            "de usar em projeto."
+            "de usar em projeto. Bitolas maiores que a importada podem ser "
+            "acrescentadas pela página Catálogo de perfis."
         ),
         "perfis": perfis,
     }

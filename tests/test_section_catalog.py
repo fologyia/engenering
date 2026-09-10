@@ -296,7 +296,19 @@ class CatalogoDeReferenciaTests(unittest.TestCase):
         gerdau = [
             nome for nome, item in completo.items() if "Gerdau" in item.origem
         ]
-        self.assertGreater(len(gerdau), 90)
+        self.assertGreater(len(gerdau), 50)
+
+    def test_catalogo_cobre_as_bitolas_correntes_ate_310(self):
+        import re
+
+        alturas = set()
+        for nome, item in catalogo.listar_cadastrados().items():
+            if "Gerdau" not in item.origem:
+                continue
+            achado = re.search(r"\s(\d+)\s*x", nome)
+            if achado:
+                alturas.add(int(achado.group(1)))
+        self.assertEqual(sorted(alturas), [150, 200, 250, 310])
 
     def test_perfil_de_referencia_nao_e_editavel(self):
         item = catalogo.obter("W 250 x 25,3")

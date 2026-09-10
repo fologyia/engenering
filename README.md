@@ -177,11 +177,13 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 
 - catálogo geométrico embutido, catálogos de referência distribuídos com o
   programa e perfis cadastrados pelo usuário, fundidos em uma lista só;
-- 106 perfis W e HP da tabela de bitolas Gerdau, extraídos por posição na
+- 60 perfis W e HP da tabela de bitolas Gerdau — as bitolas correntes, de
+  W 150 a W 310 — extraídos por posição na
   página e conferidos por coerência interna (raio de giração contra
   `sqrt(I/A)` e módulo elástico contra `I/(d/2)`, de colunas diferentes da
   mesma linha) — um erro de leitura vira perfil rejeitado, nunca propriedade
-  errada entrando em silêncio;
+  errada entrando em silêncio. Bitolas maiores podem ser importadas pela
+  própria página, ou reimportadas com `--altura-maxima`;
 - cadastro, edição e exclusão de perfis próprios, com aviso de coerência
   (eixos trocados, massa incompatível com a área, Z/W fora da faixa usual);
 - importação em lote colando uma tabela do Excel ou de um CSV, aceita
