@@ -7,6 +7,7 @@ registrada no projeto, precisa chegar ao memorial com a seção que a governou
 e com a combinação que a produziu.
 """
 
+import io
 import unittest
 
 from core import beam_analysis as vb
@@ -72,6 +73,7 @@ def registro_de_viga(script: str, *, titulo="Viga do mezanino", com_envoltoria=F
         status="Atende",
         resumo="Análise linear de barra reta",
         entradas={
+            "script_modelo": script,
             "comprimento_mm": viga.comprimento_mm,
             "secao": {"nome": viga.secao.nome},
             "material": {"nome": viga.material.nome, "fonte": viga.material.fonte},
@@ -233,6 +235,116 @@ class SecaoDeVigasTests(unittest.TestCase):
         secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
         self.assertIn("P–Δ", secao["nota"])
         self.assertIn("flambagem", secao["nota"])
+
+
+class DiagramasNoMemorialTests(unittest.TestCase):
+    def secao(self, projeto) -> dict:
+        modelo = montar_modelo_relatorio(projeto)
+        return next(
+            s for s in modelo["secoes"] if "Vigas e eixos" in s.get("titulo", "")
+        )
+
+    def test_diagramas_entram_como_imagem(self):
+        secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
+        imagens = secao["imagens"]
+        titulos = [imagem["titulo"] for imagem in imagens]
+        self.assertIn("Esforço cortante V (kN)", titulos)
+        self.assertIn("Momento fletor M (kN·m)", titulos)
+        self.assertIn("Linha elástica — flecha (mm)", titulos)
+        for imagem in imagens:
+            with self.subTest(imagem=imagem["titulo"]):
+                # Assinatura PNG: 89 50 4E 47 0D 0A 1A 0A.
+                self.assertEqual(
+                    imagem["png"][:8],
+                    bytes((137, 80, 78, 71, 13, 10, 26, 10)),
+                )
+                self.assertGreater(len(imagem["png"]), 1_000)
+                self.assertIn("Viga do mezanino", imagem["legenda"])
+
+    def test_diagramas_sem_esforco_nao_sao_desenhados(self):
+        # Uma viga sem carga axial nem torque não deve gastar meia página com
+        # dois diagramas retos no zero.
+        titulos = [
+            imagem["titulo"]
+            for imagem in self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))["imagens"]
+        ]
+        self.assertNotIn("Torque T (kN·m)", titulos)
+        self.assertNotIn("Esforço normal N (kN)", titulos)
+
+    def test_envoltoria_acrescenta_as_faixas(self):
+        secao = self.secao(
+            projeto_minimo(registro_de_viga(SCRIPT_COMBINADO, com_envoltoria=True))
+        )
+        titulos = [imagem["titulo"] for imagem in secao["imagens"]]
+        self.assertIn("Envoltória de momento M (kN·m)", titulos)
+        self.assertIn("Envoltória de flecha (mm)", titulos)
+
+    def test_registro_sem_modelo_guardado_avisa_em_vez_de_quebrar(self):
+        antigo = criar_registro_tecnico(
+            modulo="Vigas e eixos",
+            modulo_id="vigas_eixos",
+            titulo="Registro sem modelo",
+            status="Calculado",
+            resumo="",
+            entradas={},
+            resultados={},
+        )
+        secao = self.secao(projeto_minimo(antigo))
+        self.assertEqual(secao["imagens"], [])
+        self.assertTrue(
+            any("diagramas indisponíveis" in p for p in secao["paragrafos"])
+        )
+
+    def test_modelo_invalido_nao_derruba_o_memorial(self):
+        quebrado = criar_registro_tecnico(
+            modulo="Vigas e eixos",
+            modulo_id="vigas_eixos",
+            titulo="Modelo corrompido",
+            status="Calculado",
+            resumo="",
+            entradas={"script_modelo": "viga 6\nlixo total"},
+            resultados={},
+        )
+        secao = self.secao(projeto_minimo(quebrado))
+        self.assertEqual(secao["imagens"], [])
+        self.assertTrue(
+            any("redesenhar os diagramas" in p for p in secao["paragrafos"])
+        )
+
+    def test_resultado_divergente_omite_o_grafico(self):
+        # Se o modelo guardado não reproduz mais o número registrado, o
+        # gráfico contradiria a tabela ao lado — melhor não desenhar.
+        registro = registro_de_viga(SCRIPT_SIMPLES)
+        registro["resultados"]["momento_maximo_kNm"] = 999.0
+        secao = self.secao(projeto_minimo(registro))
+        self.assertEqual(secao["imagens"], [])
+        self.assertTrue(any("omitidos" in p for p in secao["paragrafos"]))
+
+    def test_word_embute_as_imagens(self):
+        from core.project_report import gerar_relatorio_industrial_word
+
+        conteudo = gerar_relatorio_industrial_word(
+            projeto_minimo(registro_de_viga(SCRIPT_SIMPLES))
+        )
+        # As partes de mídia do .docx são um zip; contar os PNGs embutidos.
+        import zipfile
+
+        with zipfile.ZipFile(io.BytesIO(conteudo)) as arquivo:
+            midia = [
+                nome
+                for nome in arquivo.namelist()
+                if nome.startswith("word/media/") and nome.endswith(".png")
+            ]
+        self.assertGreaterEqual(len(midia), 3)
+
+    def test_pdf_embute_as_imagens(self):
+        from core.project_report import gerar_relatorio_industrial_pdf
+
+        conteudo = gerar_relatorio_industrial_pdf(
+            projeto_minimo(registro_de_viga(SCRIPT_SIMPLES))
+        )
+        self.assertTrue(conteudo.startswith(b"%PDF"))
+        self.assertIn(b"/Image", conteudo)
 
 
 class LarguraDasTabelasTests(unittest.TestCase):

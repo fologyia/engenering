@@ -681,6 +681,7 @@ def gerar_relatorio_industrial_pdf(
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
         from reportlab.platypus import (
+            Image,
             LongTable,
             PageBreak,
             Paragraph,
@@ -808,6 +809,24 @@ def gerar_relatorio_industrial_pdf(
             ]))
             historia.append(formula_box)
             historia.append(Spacer(1, 1.5 * mm))
+        for imagem in secao.get("imagens", []):
+            conteudo = imagem.get("png")
+            if not conteudo:
+                continue
+            largura_mm = float(imagem.get("largura_mm", 165.0))
+            proporcao = float(imagem.get("altura_px", 1)) / max(
+                float(imagem.get("largura_px", 1)), 1.0
+            )
+            historia.append(
+                Image(
+                    BytesIO(conteudo),
+                    width=largura_mm * mm,
+                    height=largura_mm * proporcao * mm,
+                )
+            )
+            if imagem.get("legenda"):
+                historia.append(par(imagem["legenda"], "pequeno"))
+            historia.append(Spacer(1, 2 * mm))
         for especificacao in secao.get("tabelas", []):
             if especificacao.get("legenda"):
                 historia.append(par(especificacao["legenda"], "pequeno"))

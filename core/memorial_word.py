@@ -677,6 +677,27 @@ def _add_revision_control(document: Document, metadata: Mapping[str, Any]) -> No
     )
 
 
+def _add_image(document: Document, imagem: Mapping[str, Any]) -> None:
+    """Insere um PNG já renderizado, centralizado, com a legenda embaixo.
+
+    A largura é fixada em polegadas em vez de deixar o Word escalar pelo DPI
+    da imagem: assim o gráfico ocupa a mesma faixa útil das tabelas,
+    qualquer que seja a resolução com que ele foi desenhado.
+    """
+    conteudo = imagem.get("png")
+    if not conteudo:
+        return
+    paragrafo = document.add_paragraph()
+    paragrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    paragrafo.add_run().add_picture(
+        BytesIO(conteudo), width=Inches(float(imagem.get("largura_pol", 6.3)))
+    )
+    if imagem.get("legenda"):
+        legenda = document.add_paragraph(style="Memorial Caption")
+        legenda.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        legenda.add_run(_texto(imagem["legenda"]))
+
+
 def _render_section(document: Document, section: Mapping[str, Any], bullet_id: int) -> None:
     if section.get("page_break_before"):
         document.add_page_break()
@@ -696,6 +717,8 @@ def _render_section(document: Document, section: Mapping[str, Any], bullet_id: i
             _add_list_item(document, _texto(item), number_id)
     for formula in section.get("formulas", []):
         _add_formula(document, _texto(formula))
+    for imagem in section.get("imagens", []):
+        _add_image(document, imagem)
     for table_spec in section.get("tabelas", []):
         if table_spec.get("legenda"):
             caption = document.add_paragraph(style="Memorial Caption")

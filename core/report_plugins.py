@@ -214,6 +214,75 @@ def _com_unidade(valor: Any, unidade: str, *, em: Any = None) -> str:
     return texto if posicao is None else f"{texto}\n(x = {_numero(posicao)} m)"
 
 
+def _diagramas_do_registro(
+    registro: Mapping[str, Any], projeto: Mapping[str, Any]
+) -> tuple[list[dict[str, Any]], str]:
+    """Redesenha os diagramas da barra a partir do modelo guardado.
+
+    O registro guarda o **texto** do modelo, não os milhares de pontos do
+    diagrama — armazená-los incharia o registro e o hash sem necessidade.
+    Reexecutar a análise na hora de emitir tem um efeito colateral bem-vindo:
+    se o resultado recalculado não bater com o que está registrado, algo
+    mudou desde o cálculo (um material revisado, por exemplo), e aí o gráfico
+    é omitido em vez de contradizer a tabela ao lado.
+    """
+    entradas = _entradas(registro)
+    script = _texto(entradas.get("script_modelo"), "")
+    if not script:
+        return [], "Modelo não guardado neste registro; diagramas indisponíveis."
+
+    try:
+        from core import beam_analysis as vigas
+        from core import beam_charts as desenho
+        from core import beam_script as escrita
+
+        modelo = escrita.interpretar(
+            script,
+            materiais_projeto=[
+                item
+                for item in projeto.get("materiais_projeto", [])
+                if isinstance(item, Mapping)
+            ],
+        )
+        resultado = vigas.analisar_viga(modelo)
+        combinacoes = escrita.combinacoes_do_script(script)
+        envoltoria = (
+            vigas.analisar_envoltoria(modelo, combinacoes) if combinacoes else None
+        )
+    except Exception as erro:  # noqa: BLE001 - o memorial não pode cair por isto
+        return [], f"Não foi possível redesenhar os diagramas: {erro}"
+
+    resultados = _resultados(registro)
+    conferencias = (
+        ("momento_maximo_kNm", resultado.extremos["momento"].valor / 1e6),
+        ("cortante_maximo_kN", resultado.extremos["cortante"].valor / 1_000.0),
+        ("flecha_maxima_mm", resultado.extremos["flecha"].valor),
+    )
+    for chave, recalculado in conferencias:
+        registrado = _float_seguro(resultados.get(chave))
+        if registrado is None:
+            continue
+        referencia = max(abs(registrado), 1e-9)
+        if abs(registrado - recalculado) > 1e-6 * referencia:
+            return [], (
+                "Os diagramas foram omitidos: recalcular o modelo guardado deu "
+                f"{chave} = {_numero(recalculado)} contra {_numero(registrado)} "
+                "no registro. Regere o cálculo antes de emitir."
+            )
+
+    imagens = desenho.imagens_do_resultado(resultado, envoltoria=envoltoria)
+    return [
+        {
+            "titulo": imagem.titulo,
+            "legenda": f"{_texto(registro.get('titulo'))} — {imagem.legenda}",
+            "png": imagem.png,
+            "largura_px": imagem.largura_px,
+            "altura_px": imagem.altura_px,
+        }
+        for imagem in imagens
+    ], ""
+
+
 def _secao_vigas_eixos(
     projeto: Mapping[str, Any], contexto: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -224,6 +293,9 @@ def _secao_vigas_eixos(
     número, mas não a seção que o governou nem a combinação que o produziu.
     """
     registros = _registros_do_modulo(projeto, "vigas_eixos")
+
+    imagens: list[dict[str, Any]] = []
+    avisos_diagrama: list[str] = []
 
     linhas_barras = []
     linhas_esforcos = []
@@ -323,6 +395,11 @@ def _secao_vigas_eixos(
                 ]
             )
 
+        desenhos, aviso = _diagramas_do_registro(registro, projeto)
+        imagens.extend(desenhos)
+        if aviso:
+            avisos_diagrama.append(f"{titulo}: {aviso}")
+
         governantes = resultados.get("envoltoria_governantes")
         for item in governantes if isinstance(governantes, list) else []:
             if not isinstance(item, Mapping):
@@ -351,6 +428,12 @@ def _secao_vigas_eixos(
             "combinação; a tabela de envoltória indica qual delas governa cada "
             "grandeza, que raramente é a mesma para todas."
         )
+    if imagens:
+        paragrafos.append(
+            "Os diagramas abaixo foram redesenhados a partir do modelo guardado "
+            "em cada registro e conferidos contra os valores registrados."
+        )
+    paragrafos.extend(avisos_diagrama)
 
     tabelas = [
         {
@@ -395,11 +478,13 @@ def _secao_vigas_eixos(
 
     return {
         "paragrafos": paragrafos,
+        "imagens": imagens,
         "tabelas": tabelas,
         "nota": (
-            "O modelo é linear: não amplifica a flecha pela compressão axial "
-            "(efeito P–Δ), não verifica flambagem nem inclui deformação por "
-            "cisalhamento, relevante quando L/h < 10. Os fatores de combinação "
+            "O efeito de segunda ordem (P–Δ) só entra nas barras em que ele foi "
+            "declarado; imperfeições geométricas iniciais nunca entram. O modelo "
+            "não inclui deformação por cisalhamento, relevante quando L/h < 10, "
+            "nem flambagem local ou lateral com torção. Os fatores de combinação "
             "são os declarados no modelo; o programa não atribui coeficiente "
             "normativo automaticamente."
         ),
