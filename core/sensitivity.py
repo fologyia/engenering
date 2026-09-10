@@ -437,6 +437,20 @@ def sugerir_de_registro(registro: Mapping[str, Any]) -> dict[str, Any] | None:
                 "Sut_MPa": entradas.get("Sut_MPa"),
             },
         }
+    if modulo_id == "vigas_eixos":
+        # A seção governante da barra já vem resolvida no registro; o que a
+        # sensibilidade precisa é do par (tensão equivalente, resistência).
+        return {
+            "modelo_id": "seguranca_vm",
+            "entradas": {
+                "sigma_x_MPa": resultados.get("tensao_normal_extrema_MPa"),
+                "sigma_y_MPa": 0.0,
+                "tau_xy_MPa": resultados.get("tensao_torcao_maxima_MPa"),
+                "Sy_MPa": (entradas.get("material") or {}).get("escoamento_MPa")
+                if isinstance(entradas.get("material"), Mapping)
+                else None,
+            },
+        }
     if modulo_id == "flambagem_colunas":
         eixo = str(resultados.get("eixo_governante") or "x")
         raio = entradas.get(f"raio_giracao_{eixo}_mm")

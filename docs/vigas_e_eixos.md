@@ -98,6 +98,12 @@ concentrada e de `M` sob momento aplicado.
 
 ## Tensões combinadas
 
+O cálculo das tensões em um ponto **não vive neste módulo**: está em
+`core/section_stress.py`, compartilhado com o assistente de cargas
+(`core/load_to_stress.py`). As duas páginas do programa precisam responder a
+mesma coisa para a mesma seção, e manter duas cópias da fórmula é o caminho
+mais curto para elas divergirem em silêncio quando uma for corrigida.
+
 ```text
 σ_axial = N / A
 σ_sup   = N/A − M c_sup / I
@@ -151,6 +157,10 @@ porque naquele grau o deslocamento é zero.
 O grau de hiperestaticidade é reportado como
 `incógnitas de reação − 3 − número de rótulas`.
 
+A meta de fator de segurança usada para concluir "atende / não atende" vem
+de `criterios_projeto.seguranca.fator_seguranca_minimo` do projeto ativo, e
+vai junto no registro para o memorial poder repetir a mesma conclusão.
+
 ## Diagnóstico de instabilidade
 
 Antes de resolver, o programa compara o posto da submatriz livre com sua
@@ -170,6 +180,30 @@ de `ΣFy`, `ΣFx`, `ΣM` e `ΣT`. É um controle numérico do próprio solver,
 exibido na interface: valores muito acima do zero de máquina indicam
 problema no modelo ou no condicionamento.
 
+## Repasse para os outros módulos
+
+`estado_plano_da_secao(resultado, x_mm, ponto=...)` converte qualquer seção
+da barra no mesmo `EstadoPlanoCalculado` que o assistente de cargas entrega
+ao Círculo de Mohr e à Análise estática. É o que permite levar a seção
+crítica adiante sem redigitar nada, com o vínculo de origem preservado — a
+Central de Validação passa a marcar o cálculo de destino como
+"Desatualizado" quando a viga muda.
+
+Funções de apoio:
+
+| Função | Para que serve |
+| --- | --- |
+| `ponto_em(resultado, x_mm)` | Ponto do diagrama em `x`; numa descontinuidade devolve o lado mais solicitado |
+| `secoes_notaveis(resultado)` | Abscissas de cada grandeza governante (M máx, V máx, von Mises…) |
+| `estado_plano_da_secao(...)` | Estado plano `(σx, 0, τxy)` da seção, no ponto governante ou em um nomeado |
+| `amplitudes_de_fadiga(...)` | Par `(σa, σm)` para a Análise de fadiga |
+
+Sobre a fadiga: num **eixo girante** cada fibra passa por tração e compressão
+a cada volta, então a flexão é totalmente alternada (`σa = |M| c/I`) e a
+parcela axial permanece como tensão média. Numa **viga fixa** o mesmo momento
+é estático: `amplitudes_de_fadiga(..., eixo_girante=False)` devolve amplitude
+zero e joga tudo na média, em vez de inventar um ciclo que não existe.
+
 ## Fora do escopo
 
 - efeitos de segunda ordem (P–Δ, P–δ): a compressão axial não amplifica a
@@ -182,7 +216,8 @@ problema no modelo ou no condicionamento.
 - seção variável ao longo do comprimento;
 - concentração de tensão em furos, entalhes, mudanças de seção e rasgos de
   chaveta;
-- fadiga, fluência, impacto e temperatura;
+- fadiga, fluência, impacto e temperatura — os esforços saem daqui pelo
+  repasse, mas a verificação é do módulo próprio;
 - ligações e apoios reais — engaste, pino e rolete são idealizados.
 
 Para perfis monossimétricos do catálogo (U, C, T) mantém-se `c = altura/2`,

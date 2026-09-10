@@ -10,6 +10,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
+from core.section_stress import (
+    NOME_INFERIOR,
+    NOME_SUPERIOR,
+    EsforcosSecao,
+    PropriedadesSecao,
+    tensao_normal_em,
+    tensoes_combinadas,
+)
+
 
 @dataclass(frozen=True)
 class EstadoPlanoCalculado:
@@ -68,17 +77,31 @@ def eixo_circular_macico(
     if face_flexao not in {"tracionada", "comprimida"}:
         raise ValueError("face_flexao deve ser 'tracionada' ou 'comprimida'.")
 
-    area = math.pi * diametro_mm**2 / 4.0
-    sigma_axial = forca_axial_N / area
-    sigma_flexao_modulo = 32.0 * abs(momento_fletor_Nmm) / (
-        math.pi * diametro_mm**3
+    # A superfície de um eixo é exatamente a "fibra extrema" do núcleo
+    # compartilhado: ali o cisalhamento de V é nulo e só a torção age.
+    propriedades = PropriedadesSecao(
+        area_mm2=math.pi * diametro_mm**2 / 4.0,
+        inercia_mm4=math.pi * diametro_mm**4 / 64.0,
+        c_superior_mm=diametro_mm / 2.0,
+        c_inferior_mm=diametro_mm / 2.0,
+        modulo_torcao_mm3=math.pi * diametro_mm**3 / 16.0,
     )
-    sinal_flexao = 1.0 if face_flexao == "tracionada" else -1.0
-    tau_torcao = 16.0 * torque_Nmm / (math.pi * diametro_mm**3)
+    tensoes = tensoes_combinadas(
+        EsforcosSecao(
+            normal_N=forca_axial_N,
+            momento_Nmm=abs(momento_fletor_Nmm),
+            torque_Nmm=torque_Nmm,
+        ),
+        propriedades,
+    )
+    # Momento entra em módulo: quem define o lado é ``face_flexao``.
+    ponto = tensoes.ponto(
+        NOME_INFERIOR if face_flexao == "tracionada" else NOME_SUPERIOR
+    )
     return EstadoPlanoCalculado(
-        sigma_x=sigma_axial + sinal_flexao * sigma_flexao_modulo,
+        sigma_x=ponto.sigma_MPa,
         sigma_y=0.0,
-        tau_xy=tau_torcao,
+        tau_xy=ponto.tau_MPa,
         descricao=f"Superfície {face_flexao} de eixo circular maciço",
         hipoteses=(
             "Seção circular maciça e comportamento elástico linear.",
@@ -112,11 +135,20 @@ def viga_retangular(
         raise ValueError("A coordenada y deve estar dentro da altura da seção.")
 
     area = largura_mm * altura_mm
-    inercia = largura_mm * altura_mm**3 / 12.0
-    sigma_x = (
-        forca_axial_N / area
-        - momento_fletor_Nmm * coordenada_y_mm / inercia
+    propriedades = PropriedadesSecao(
+        area_mm2=area,
+        inercia_mm4=largura_mm * altura_mm**3 / 12.0,
+        c_superior_mm=altura_mm / 2.0,
+        c_inferior_mm=altura_mm / 2.0,
     )
+    sigma_x = tensao_normal_em(
+        EsforcosSecao(normal_N=forca_axial_N, momento_Nmm=momento_fletor_Nmm),
+        propriedades,
+        coordenada_y_mm,
+    )
+    # O cisalhamento NÃO delega: o núcleo compartilhado devolve o valor na
+    # linha neutra, e aqui interessa a parábola completa ao longo de y, que
+    # é específica da seção retangular.
     fator_posicao = 1.0 - (2.0 * coordenada_y_mm / altura_mm) ** 2
     tau_xy = 1.5 * forca_cortante_N / area * max(0.0, fator_posicao)
     return EstadoPlanoCalculado(

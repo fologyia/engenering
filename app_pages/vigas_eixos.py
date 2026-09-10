@@ -8,11 +8,17 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
+from components.project_tools import (
+    botao_registrar_calculo,
+    construir_registro_tecnico,
+    id_registro_existente,
+)
 from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
 from core import beam_analysis as vigas
 from core import beam_script as escrita
 from core import steel_sections as secoes
+from core.project_criteria import normalizar_criterios_projeto
+from core.project_store import obter_projeto_ativo
 
 
 st.set_page_config(
@@ -57,6 +63,55 @@ def numero(valor: float, casas: int = 2) -> str:
     if valor is None or (isinstance(valor, float) and not math.isfinite(valor)):
         return "∞"
     return f"{valor:,.{casas}f}".replace(",", " ")
+
+
+def fator_seguranca_minimo_do_projeto() -> float:
+    """Meta de fator de segurança vinda dos critérios do projeto ativo.
+
+    Sem projeto aberto cai no mesmo 1,5 que é o padrão de
+    ``core.project_criteria`` — o número não muda, mas deixa de estar
+    chumbado em dois lugares diferentes do programa.
+    """
+    projeto = obter_projeto_ativo()
+    criterios = normalizar_criterios_projeto((projeto or {}).get("criterios_projeto"))
+    return float(criterios["seguranca"]["fator_seguranca_minimo"])
+
+
+def enviar_para_mohr(estado, *, origem_id: str | None) -> None:
+    """Mesmo contrato usado pelo assistente de cargas."""
+    st.session_state["mohr_assistente_2d"] = {
+        "sigma_x": estado.sigma_x,
+        "sigma_y": estado.sigma_y,
+        "tau_xy": estado.tau_xy,
+        "descricao": estado.descricao,
+        "origem_registro_id": origem_id,
+    }
+    st.session_state["mohr_tipo_estado"] = "Estado plano (2D)"
+    st.session_state["mohr_2d_exemplo"] = "assistente"
+    for chave in (
+        "mohr_2d_sigma_x_assistente",
+        "mohr_2d_sigma_y_assistente",
+        "mohr_2d_tau_xy_assistente",
+        "mohr_2d_theta_assistente",
+    ):
+        st.session_state.pop(chave, None)
+    st.switch_page("app_pages/circulo_mohr.py")
+
+
+def enviar_para_estatica(estado, *, origem_id: str | None) -> None:
+    st.session_state["estatica_sigma_x"] = estado.sigma_x
+    st.session_state["estatica_sigma_y"] = estado.sigma_y
+    st.session_state["estatica_tau_xy"] = estado.tau_xy
+    st.session_state["estatica_origem_registro_id"] = origem_id
+    st.switch_page("app_pages/analise_estatica.py")
+
+
+def enviar_para_fadiga(amplitudes: dict) -> None:
+    st.session_state["fadiga_sigma_alternada_nominal"] = float(
+        amplitudes["sigma_alternada_MPa"]
+    )
+    st.session_state["fadiga_sigma_media"] = float(amplitudes["sigma_media_MPa"])
+    st.switch_page("app_pages/analise_fadiga.py")
 
 
 cabecalho_pagina(
@@ -615,6 +670,7 @@ with st.container(border=True):
 # ---------------------------------------------------------------------------
 
 extremos = resultado.extremos
+meta_fator_seguranca = fator_seguranca_minimo_do_projeto()
 
 with st.container(border=True):
     st.subheader("3. Reações de apoio")
@@ -706,12 +762,16 @@ with st.container(border=True):
         fator = resultado.fator_seguranca_escoamento
         mensagem = (
             f"Fator de segurança ao escoamento (von Mises, Sy = {material.escoamento_MPa:g} MPa): "
-            f"**{'∞' if math.isinf(fator) else f'{fator:.2f}'}**."
+            f"**{'∞' if math.isinf(fator) else f'{fator:.2f}'}** "
+            f"para a meta n ≥ {meta_fator_seguranca:.2f} dos critérios do projeto."
         )
         if fator < 1.0:
             st.error(mensagem + " A tensão equivalente excede o escoamento.", icon=":material/error:")
-        elif fator < 1.5:
-            st.warning(mensagem + " Margem pequena frente às incertezas do modelo.", icon=":material/warning:")
+        elif fator < meta_fator_seguranca:
+            st.warning(
+                mensagem + " Abaixo da meta — margem pequena frente às incertezas do modelo.",
+                icon=":material/warning:",
+            )
         else:
             st.success(mensagem, icon=":material/check_circle:")
 
@@ -903,7 +963,7 @@ fronteira_modelo(
         "Deformação por cisalhamento (viga de Timoshenko): em vigas curtas (L/h < 10) a flecha real é maior.",
         "Empenamento restringido na torção — só a torção uniforme de Saint-Venant é considerada.",
         "Concentração de tensão em furos, entalhes, mudanças de seção e rasgos de chaveta.",
-        "Fadiga, fluência, impacto e temperatura — leve os esforços daqui para os módulos próprios.",
+        "Fadiga, fluência, impacto e temperatura — use o repasse abaixo para levar a seção ao módulo próprio.",
         "Ligações e apoios reais: o modelo trata engaste, pino e rolete como ideais.",
     ]
 )
@@ -918,7 +978,13 @@ with st.container(border=True):
 
     if material.escoamento_MPa and resultado.fator_seguranca_escoamento is not None:
         fator = resultado.fator_seguranca_escoamento
-        status = "Atende" if fator >= 1.5 else "Atenção" if fator >= 1.0 else "Não atende"
+        status = (
+            "Atende"
+            if fator >= meta_fator_seguranca
+            else "Atenção"
+            if fator >= 1.0
+            else "Não atende"
+        )
     else:
         status = "Calculado"
         fator = None
@@ -1008,6 +1074,8 @@ with st.container(border=True):
             "fator_seguranca_escoamento": (
                 None if fator is None or math.isinf(fator) else fator
             ),
+            # O memorial usa esta meta para concluir "atende / não atende".
+            "fator_seguranca_minimo": meta_fator_seguranca,
             "grau_hiperestaticidade": resultado.grau_hiperestaticidade,
             "residuos_equilibrio": vigas.conferir_equilibrio(resultado),
         },
@@ -1050,6 +1118,143 @@ with st.container(border=True):
         key="registrar_vigas_eixos",
         rotulo="Registrar análise da barra no projeto ativo",
     )
+
+
+# ---------------------------------------------------------------------------
+# 7. Levar a seção adiante
+# ---------------------------------------------------------------------------
+
+with st.container(border=True):
+    st.subheader("7. Levar uma seção para o próximo módulo")
+    st.caption(
+        "A barra resolvida já contém σ e τ de cada seção. Em vez de anotar e "
+        "redigitar esses números, escolha a seção e mande direto — o módulo de "
+        "destino abre com os valores preenchidos e com o vínculo de origem."
+    )
+
+    notaveis = vigas.secoes_notaveis(resultado)
+    escolha_secao = st.selectbox(
+        "Seção a levar adiante",
+        [*notaveis, "Posição escolhida"],
+        key="vigas_secao_repasse",
+        persist_state="session",
+    )
+    if escolha_secao == "Posição escolhida":
+        x_repasse_m = st.number_input(
+            "Posição x (m)",
+            min_value=0.0,
+            max_value=float(comprimento_m),
+            value=float(extremos["von_mises"].x_mm / 1_000.0),
+            step=0.05,
+            key="vigas_x_repasse",
+            persist_state="session",
+        )
+        x_repasse_mm = x_repasse_m * 1_000.0
+    else:
+        x_repasse_mm = notaveis[escolha_secao]
+        st.caption(f"Posição correspondente: x = {x_repasse_mm / 1_000.0:.3f} m.")
+
+    diagrama_secao = vigas.ponto_em(resultado, x_repasse_mm)
+    estado_secao = vigas.estado_plano_da_secao(resultado, x_repasse_mm)
+
+    esforcos_colunas = st.columns(4)
+    esforcos_colunas[0].metric(
+        "N na seção", f"{numero(diagrama_secao.normal_N / 1_000.0)} kN", border=True
+    )
+    esforcos_colunas[1].metric(
+        "V na seção", f"{numero(diagrama_secao.cortante_N / 1_000.0)} kN", border=True
+    )
+    esforcos_colunas[2].metric(
+        "M na seção", f"{numero(diagrama_secao.momento_Nmm / 1e6)} kN·m", border=True
+    )
+    esforcos_colunas[3].metric(
+        "T na seção", f"{numero(diagrama_secao.torque_Nmm / 1e6, 3)} kN·m", border=True
+    )
+
+    tensoes_colunas = st.columns(3)
+    tensoes_colunas[0].metric(
+        "σx a repassar",
+        f"{numero(estado_secao.sigma_x)} MPa",
+        border=True,
+        help=f"Ponto governante: {diagrama_secao.ponto_critico.lower()}.",
+    )
+    tensoes_colunas[1].metric(
+        "τxy a repassar", f"{numero(estado_secao.tau_xy)} MPa", border=True
+    )
+    tensoes_colunas[2].metric(
+        "von Mises na seção", f"{numero(diagrama_secao.von_mises_MPa)} MPa", border=True
+    )
+
+    origem_id = id_registro_existente(registro)
+    if origem_id is None:
+        st.caption(
+            ":material/link_off: Esta análise ainda não foi registrada no projeto — "
+            "o repasse leva os valores, mas não uma origem rastreável. Registre "
+            "acima para que o próximo módulo saiba de onde eles vieram."
+        )
+
+    destino_mohr, destino_estatica = st.columns(2)
+    with destino_mohr:
+        if st.button(
+            "Enviar para o Círculo de Mohr",
+            type="primary",
+            icon=":material/donut_large:",
+            width="stretch",
+            key="vigas_enviar_mohr",
+        ):
+            enviar_para_mohr(estado_secao, origem_id=origem_id)
+    with destino_estatica:
+        if st.button(
+            "Enviar para a Análise estática",
+            type="secondary",
+            icon=":material/analytics:",
+            width="stretch",
+            key="vigas_enviar_estatica",
+        ):
+            enviar_para_estatica(estado_secao, origem_id=origem_id)
+
+    st.divider()
+    st.markdown("**Fadiga — só faz sentido se a barra girar ou a carga variar**")
+    eixo_girante = st.checkbox(
+        "A barra gira sob este momento (eixo de transmissão)",
+        value=bool(modelo.torques),
+        key="vigas_eixo_girante",
+        persist_state="session",
+        help=(
+            "Num eixo girando, cada fibra passa por tração e compressão a cada "
+            "volta: a flexão vira tensão totalmente alternada. Numa viga fixa o "
+            "mesmo momento é estático e não gera ciclo."
+        ),
+    )
+    amplitudes = vigas.amplitudes_de_fadiga(
+        resultado, x_repasse_mm, eixo_girante=eixo_girante
+    )
+    colunas_fadiga = st.columns(3)
+    colunas_fadiga[0].metric(
+        "σa (alternada)", f"{numero(amplitudes['sigma_alternada_MPa'])} MPa", border=True
+    )
+    colunas_fadiga[1].metric(
+        "σm (média)", f"{numero(amplitudes['sigma_media_MPa'])} MPa", border=True
+    )
+    colunas_fadiga[2].metric(
+        "τ de torção", f"{numero(amplitudes['tensao_torcao_MPa'])} MPa", border=True,
+        help="A torção estática entra na fadiga como tensão média de cisalhamento; leve-a em conta no módulo de destino.",
+    )
+    if amplitudes["sigma_alternada_MPa"] <= 0:
+        st.caption(
+            ":material/info: Sem parcela alternada nesta seção — a verificação "
+            "de fadiga só faz sentido se a carga variar no tempo. Marque a opção "
+            "acima se a barra girar, ou defina o ciclo direto no módulo de fadiga."
+        )
+    if st.button(
+        "Enviar para a Análise de fadiga",
+        type="secondary",
+        icon=":material/cycle:",
+        width="stretch",
+        disabled=amplitudes["sigma_alternada_MPa"] <= 0,
+        key="vigas_enviar_fadiga",
+    ):
+        enviar_para_fadiga(amplitudes)
 
 
 with st.container(border=True):

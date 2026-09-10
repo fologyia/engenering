@@ -767,6 +767,26 @@ elif modulo == "Vigas e eixos":
         )
 
     with st.container(border=True):
+        st.subheader("Levar a seção adiante")
+        st.markdown(
+            """
+            Depois de calcular, a seção **7** manda a seção escolhida direto
+            para outro módulo, sem você anotar e redigitar número nenhum:
+
+            - **Círculo de Mohr** e **Análise estática** recebem σx e τxy da
+              seção — por padrão a mais solicitada, mas você pode escolher a de
+              momento máximo, de cortante máximo ou uma posição qualquer.
+            - **Análise de fadiga** recebe σa e σm. Marque *"a barra gira"* se
+              for eixo de transmissão: aí a flexão vira tensão totalmente
+              alternada. Numa viga fixa o momento é estático e não há ciclo —
+              o programa não inventa um.
+            - Se você já registrou a análise no projeto, o módulo de destino
+              guarda de onde os valores vieram, e a Central de Validação avisa
+              se a viga mudar depois.
+            """
+        )
+
+    with st.container(border=True):
         st.subheader("Erros comuns")
         st.markdown(
             """

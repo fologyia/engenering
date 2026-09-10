@@ -115,6 +115,9 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - entrada por **texto e números** (uma instrução por linha) ou por formulário —
   os dois modos usam o mesmo interpretador;
 - conferência automática do equilíbrio global e exportação dos diagramas em CSV;
+- repasse da seção escolhida para o Círculo de Mohr, a Análise estática e a
+  Análise de fadiga, com vínculo de origem — sem redigitar tensões;
+- meta de fator de segurança lida dos critérios do projeto ativo;
 - registro rastreável do modelo e dos resultados no projeto industrial ativo.
 
 ### Assistente de cargas e geometrias
@@ -213,6 +216,7 @@ mecanica_toolkit/
 │   ├── technical_modules.py
 │   ├── beam_analysis.py
 │   ├── beam_script.py
+│   ├── section_stress.py
 │   ├── technical_records.py
 │   ├── load_cases.py
 │   ├── report_plugins.py
@@ -235,6 +239,11 @@ mecanica_toolkit/
 
 A interface fica separada do núcleo de cálculo para permitir testes e evolução
 independente. A rastreabilidade das equações está na pasta `docs/`.
+
+Cálculos usados por mais de um módulo ficam em um único lugar: as tensões
+combinadas em um ponto de seção, por exemplo, vivem em `core/section_stress.py`
+e são consumidas tanto pelo assistente de cargas quanto pela análise de vigas —
+as duas páginas não podem divergir na mesma seção.
 
 Os módulos técnicos possuem um contrato central com identidade, versão, página,
 esquema de registro e pontos de extensão. Novos registros recebem hash SHA-256

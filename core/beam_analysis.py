@@ -31,6 +31,9 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from core.load_to_stress import EstadoPlanoCalculado
+from core.section_stress import EsforcosSecao, tensoes_combinadas
+
 
 # ---------------------------------------------------------------------------
 # Tolerâncias e constantes
@@ -1231,38 +1234,18 @@ def _montar_ponto(
     giro: float,
     secao: SecaoViga,
 ) -> PontoDiagrama:
-    tensao_axial = normal / secao.area_mm2
-    # M positivo comprime a fibra superior.
-    flexao_superior = -momento * secao.c_superior_mm / secao.inercia_mm4
-    flexao_inferior = momento * secao.c_inferior_mm / secao.inercia_mm4
-    normal_superior = tensao_axial + flexao_superior
-    normal_inferior = tensao_axial + flexao_inferior
-
-    if secao.momento_estatico_mm3 > 0 and secao.espessura_cisalhamento_mm > 0:
-        # Jourawski: exato para as seções cujo Q é conhecido.
-        cisalhamento = (
-            cortante * secao.momento_estatico_mm3
-            / (secao.inercia_mm4 * secao.espessura_cisalhamento_mm)
-        )
-    elif secao.area_cisalhamento_mm2 > 0:
-        cisalhamento = cortante / secao.area_cisalhamento_mm2
-    else:  # pragma: no cover - barrado na construção da seção
-        cisalhamento = 0.0
-    torcao = torque / secao.modulo_torcao_mm3 if secao.modulo_torcao_mm3 > 0 else 0.0
-
-    candidatos = (
-        ("Fibra superior", normal_superior, torcao),
-        ("Fibra inferior", normal_inferior, torcao),
-        ("Linha neutra", tensao_axial, cisalhamento + torcao),
+    # As tensões vêm do núcleo compartilhado com o assistente de cargas, para
+    # que as duas páginas nunca divirjam na mesma seção.
+    tensoes = tensoes_combinadas(
+        EsforcosSecao(
+            normal_N=normal,
+            momento_Nmm=momento,
+            cortante_N=cortante,
+            torque_Nmm=torque,
+        ),
+        secao,
     )
-    melhor_nome, melhor_vm, melhor_tresca = "", 0.0, 0.0
-    melhor_sigma = melhor_tau = 0.0
-    for nome, sigma, tau in candidatos:
-        vm = math.sqrt(sigma**2 + 3.0 * tau**2)
-        tresca = math.sqrt(sigma**2 + 4.0 * tau**2)
-        if vm >= melhor_vm:
-            melhor_nome, melhor_vm, melhor_tresca = nome, vm, tresca
-            melhor_sigma, melhor_tau = sigma, tau
+    critico = tensoes.critico
 
     return PontoDiagrama(
         x_mm=x_global,
@@ -1274,24 +1257,136 @@ def _montar_ponto(
         rotacao_rad=rotacao,
         deslocamento_axial_mm=deslocamento_axial,
         giro_torcao_rad=giro,
-        tensao_axial_MPa=tensao_axial,
-        tensao_flexao_superior_MPa=flexao_superior,
-        tensao_flexao_inferior_MPa=flexao_inferior,
-        tensao_normal_superior_MPa=normal_superior,
-        tensao_normal_inferior_MPa=normal_inferior,
-        tensao_cisalhamento_MPa=cisalhamento,
-        tensao_torcao_MPa=torcao,
-        von_mises_MPa=melhor_vm,
-        tresca_MPa=melhor_tresca,
-        ponto_critico=melhor_nome,
-        sigma_critico_MPa=melhor_sigma,
-        tau_critico_MPa=melhor_tau,
+        tensao_axial_MPa=tensoes.axial_MPa,
+        tensao_flexao_superior_MPa=tensoes.flexao_superior_MPa,
+        tensao_flexao_inferior_MPa=tensoes.flexao_inferior_MPa,
+        tensao_normal_superior_MPa=tensoes.normal_superior_MPa,
+        tensao_normal_inferior_MPa=tensoes.normal_inferior_MPa,
+        tensao_cisalhamento_MPa=tensoes.cisalhamento_MPa,
+        tensao_torcao_MPa=tensoes.torcao_MPa,
+        von_mises_MPa=critico.von_mises_MPa,
+        tresca_MPa=critico.tresca_MPa,
+        ponto_critico=critico.nome,
+        sigma_critico_MPa=critico.sigma_MPa,
+        tau_critico_MPa=critico.tau_MPa,
     )
 
 
 def estado_no_ponto_critico(ponto: PontoDiagrama) -> tuple[float, float]:
     """Par (σ, τ) que governou o von Mises daquela seção."""
     return ponto.sigma_critico_MPa, ponto.tau_critico_MPa
+
+
+def ponto_em(resultado: ResultadoViga, x_mm: float) -> PontoDiagrama:
+    """Ponto do diagrama em ``x_mm``, escolhendo o mais solicitado.
+
+    Numa descontinuidade (carga concentrada, apoio, momento aplicado) há dois
+    valores na mesma abscissa — um de cada lado. Devolver o de maior von
+    Mises é o que interessa para levar a seção adiante: é ele que governa a
+    verificação no módulo seguinte.
+    """
+    if not resultado.pontos:  # pragma: no cover - resultado sempre tem pontos
+        raise ValueError("O resultado não contém pontos de diagrama.")
+    alvo = _finito("x_mm", x_mm)
+    distancia_minima = min(abs(ponto.x_mm - alvo) for ponto in resultado.pontos)
+    candidatos = [
+        ponto
+        for ponto in resultado.pontos
+        if abs(abs(ponto.x_mm - alvo) - distancia_minima) <= TOLERANCIA_POSICAO_MM
+    ]
+    return max(candidatos, key=lambda ponto: ponto.von_mises_MPa)
+
+
+def secoes_notaveis(resultado: ResultadoViga) -> dict[str, float]:
+    """Abscissas que valem a pena levar adiante, por grandeza governante."""
+    extremos = resultado.extremos
+    return {
+        "Seção mais solicitada (von Mises)": extremos["von_mises"].x_mm,
+        "Momento fletor máximo": extremos["momento"].x_mm,
+        "Cortante máximo": extremos["cortante"].x_mm,
+        "Esforço normal máximo": extremos["normal"].x_mm,
+        "Torque máximo": extremos["torque"].x_mm,
+        "Flecha máxima": extremos["flecha"].x_mm,
+    }
+
+
+def estado_plano_da_secao(
+    resultado: ResultadoViga,
+    x_mm: float | None = None,
+    *,
+    ponto: str | None = None,
+) -> EstadoPlanoCalculado:
+    """Converte uma seção da barra no estado plano usado pelos outros módulos.
+
+    É o mesmo contrato que o assistente de cargas entrega ao Círculo de Mohr
+    e à Análise estática, então a seção crítica de uma viga entra nesses
+    módulos sem ninguém redigitar número nenhum.
+    """
+    if x_mm is None:
+        x_mm = resultado.extremos["von_mises"].x_mm
+    diagrama = ponto_em(resultado, x_mm)
+    tensoes = tensoes_combinadas(
+        EsforcosSecao(
+            normal_N=diagrama.normal_N,
+            momento_Nmm=diagrama.momento_Nmm,
+            cortante_N=diagrama.cortante_N,
+            torque_Nmm=diagrama.torque_Nmm,
+        ),
+        resultado.viga.secao,
+    )
+    escolhido = tensoes.critico if ponto is None else tensoes.ponto(ponto)
+    return EstadoPlanoCalculado(
+        sigma_x=escolhido.sigma_MPa,
+        sigma_y=0.0,
+        tau_xy=escolhido.tau_MPa,
+        descricao=(
+            f"{escolhido.nome} da seção em x = {diagrama.x_mm / 1_000.0:.3f} m "
+            f"de {resultado.viga.nome} ({resultado.viga.secao.nome})"
+        ),
+        hipoteses=(
+            "Estado plano na superfície da barra: a tensão transversal é nula.",
+            "Tensões de flexão, axial, cortante e torção superpostas linearmente.",
+            f"Esforços da seção: N = {diagrama.normal_N / 1_000.0:.3f} kN, "
+            f"V = {diagrama.cortante_N / 1_000.0:.3f} kN, "
+            f"M = {diagrama.momento_Nmm / 1e6:.3f} kN·m, "
+            f"T = {diagrama.torque_Nmm / 1e6:.3f} kN·m.",
+            "Concentração de tensão e efeitos locais de apoio não incluídos.",
+        ),
+    )
+
+
+def amplitudes_de_fadiga(
+    resultado: ResultadoViga, x_mm: float | None = None, *, eixo_girante: bool = True
+) -> dict[str, float]:
+    """Componentes alternada e média para levar à Análise de fadiga.
+
+    Num **eixo girante** a fibra passa alternadamente por tração e compressão
+    a cada volta: a flexão é totalmente alternada (``σa = |M| c/I``, média
+    zero) e a parcela axial permanece estática. Numa viga fixa o mesmo
+    momento é estático — por isso ``eixo_girante=False`` devolve amplitude
+    zero, em vez de fingir que há ciclo onde não há.
+    """
+    if x_mm is None:
+        x_mm = resultado.extremos["momento"].x_mm
+    diagrama = ponto_em(resultado, x_mm)
+    secao = resultado.viga.secao
+    flexao = abs(diagrama.momento_Nmm) * max(
+        secao.c_superior_mm, secao.c_inferior_mm
+    ) / secao.inercia_mm4
+    axial = diagrama.normal_N / secao.area_mm2
+    if eixo_girante:
+        return {
+            "x_mm": diagrama.x_mm,
+            "sigma_alternada_MPa": flexao,
+            "sigma_media_MPa": axial,
+            "tensao_torcao_MPa": abs(diagrama.tensao_torcao_MPa),
+        }
+    return {
+        "x_mm": diagrama.x_mm,
+        "sigma_alternada_MPa": 0.0,
+        "sigma_media_MPa": axial + flexao,
+        "tensao_torcao_MPa": abs(diagrama.tensao_torcao_MPa),
+    }
 
 
 _EXTREMOS = (
