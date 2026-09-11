@@ -88,7 +88,7 @@ def _indexar_arquivo(arquivo: ArquivoNorma, catalogo_mtime: int) -> dict:
 def _mostrar_visualizador(caminho: str, *, chave: str) -> None:
     try:
         st.pdf(caminho, height=780, key=chave)
-    except Exception as erro:
+    except Exception as erro:  # noqa: BLE001 - o visualizador não pode travar a página
         st.warning(
             "O visualizador interno não pôde ser carregado. O arquivo continua "
             f"disponível na pasta local. Detalhe: {erro}",
