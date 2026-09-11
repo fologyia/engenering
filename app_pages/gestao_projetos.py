@@ -19,6 +19,7 @@ from core.project_store import (
     criar_projeto,
     definir_projeto_ativo,
     duplicar_projeto,
+    excluir_projeto,
     exportar_projeto,
     historico_revisoes,
     importar_projeto,
@@ -808,7 +809,7 @@ with abas[6]:
             st.rerun()
 
 with abas[7]:
-    st.subheader("Duplicação e arquivamento")
+    st.subheader("Duplicação, arquivamento e exclusão")
     nome_copia = st.text_input("Nome da cópia", value=f"{projeto['nome']} - cópia")
     if st.button("Duplicar projeto", icon=":material/content_copy:"):
         duplicar_projeto(projeto["id"], novo_nome=nome_copia)
@@ -816,6 +817,30 @@ with abas[7]:
     confirmar_arquivo = st.checkbox("Confirmo que desejo arquivar este projeto.")
     if st.button("Arquivar projeto", disabled=not confirmar_arquivo, icon=":material/archive:"):
         arquivar_projeto(projeto["id"])
+        st.rerun()
+    if projeto.get("status") == "Arquivado" and st.button("Desarquivar projeto", icon=":material/unarchive:"):
+        arquivar_projeto(projeto["id"], arquivado=False)
+        st.rerun()
+
+    st.subheader("Exclusão definitiva")
+    st.warning(
+        "Excluir apaga o projeto, todos os registros técnicos e o histórico de revisões. "
+        "Não há como recuperar; se houver dúvida, arquive ou exporte o JSON antes."
+    )
+    codigo_confirmacao = st.text_input(
+        f"Digite o código {projeto['codigo']} para confirmar a exclusão",
+        key=f"confirmar_exclusao_{projeto['id']}",
+        placeholder=projeto["codigo"],
+    )
+    if st.button(
+        "Excluir projeto definitivamente",
+        type="primary",
+        disabled=codigo_confirmacao.strip() != projeto["codigo"],
+        icon=":material/delete_forever:",
+    ):
+        excluir_projeto(projeto["id"])
+        st.session_state["projeto_ativo"] = None
+        st.success(f"Projeto {projeto['codigo']} · {projeto['nome']} excluído.")
         st.rerun()
     st.subheader("Importar outro projeto")
     novo_arquivo = st.file_uploader("Arquivo JSON exportado", type=["json"], key="importar_administracao")

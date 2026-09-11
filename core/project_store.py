@@ -460,6 +460,28 @@ def arquivar_projeto(
     return salvo
 
 
+def excluir_projeto(
+    projeto_id: str,
+    *,
+    caminho_banco: str | Path | None = None,
+) -> None:
+    """Apaga o projeto e todo o seu histórico de revisões, sem volta.
+
+    Diferente de :func:`arquivar_projeto`, que só esconde o projeto da lista,
+    esta operação remove as linhas do banco. As revisões caem em cascata
+    pela chave estrangeira; o ponteiro de projeto ativo é limpo antes, para
+    que nenhuma página fique apontando para um id inexistente.
+    """
+    inicializar_banco(caminho_banco)
+    ativo = obter_projeto_ativo(caminho_banco=caminho_banco)
+    if ativo and ativo["id"] == projeto_id:
+        definir_projeto_ativo(None, caminho_banco=caminho_banco)
+    with _conectar(caminho_banco) as conexao:
+        removido = conexao.execute("DELETE FROM projects WHERE id=?", (str(projeto_id),)).rowcount
+    if not removido:
+        raise ProjetoPersistenciaErro("Projeto nao encontrado.")
+
+
 def _renumerar_itens_copia(copia: dict[str, Any]) -> dict[str, Any]:
     """Renova IDs internos e preserva vínculos ao duplicar ou importar."""
     colecoes = (

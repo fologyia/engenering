@@ -96,3 +96,22 @@ def test_banco_padrao_redirecionado_isola_de_verdade(tmp_path, monkeypatch):
 
     assert alvo.exists()
     assert [item["codigo"] for item in listar_projetos()] == ["ISO-1"]
+
+
+def test_excluir_projeto_apaga_revisoes_e_limpa_ativo(tmp_path):
+    from core.project_store import ProjetoPersistenciaErro, excluir_projeto, obter_projeto
+    import pytest
+
+    banco = tmp_path / "projetos.sqlite3"
+    projeto = criar_projeto("Para apagar", codigo="PRJ-DEL", caminho_banco=banco)
+    assert len(historico_revisoes(projeto["id"], caminho_banco=banco)) >= 1
+    assert obter_projeto_ativo(caminho_banco=banco)["id"] == projeto["id"]
+
+    excluir_projeto(projeto["id"], caminho_banco=banco)
+
+    assert obter_projeto(projeto["id"], caminho_banco=banco) is None
+    assert historico_revisoes(projeto["id"], caminho_banco=banco) == []
+    assert obter_projeto_ativo(caminho_banco=banco) is None
+    assert listar_projetos(incluir_arquivados=True, caminho_banco=banco) == []
+    with pytest.raises(ProjetoPersistenciaErro):
+        excluir_projeto(projeto["id"], caminho_banco=banco)
