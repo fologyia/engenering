@@ -51,6 +51,7 @@ files = [
     "core/beam_analysis.py",
     "core/beam_script.py",
     "core/bolt_design.py",
+    "core/checklist_templates.py",
     "core/column_buckling.py",
     "core/fatigue_report.py",
     "core/load_to_stress.py",

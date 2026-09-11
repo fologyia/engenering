@@ -1,0 +1,97 @@
+{
+  "schema": "mecanica-toolkit/modelos-checklist/v1",
+  "observacoes": "Modelos de checklist semeados ao criar um projeto, conforme o tipo escolhido. Os itens são pontos de verificação usuais de engenharia industrial; não substituem a lista exigida pelo contrato, pela norma aplicável ou pelo procedimento do cliente. Prazos não vêm no modelo: são definidos por projeto. 'papel' preenche o responsável com o nome cadastrado no projeto (responsavel, verificador ou aprovador). Um arquivo data/modelos_checklist_usuario.json com o mesmo formato acrescenta ou sobrepõe modelos.",
+  "modelos": [
+    {
+      "id": "generico",
+      "nome": "Projeto industrial (genérico)",
+      "tipo_projeto": "Projeto industrial",
+      "descricao": "Base documental mínima de qualquer verificação: entradas, critérios, normas, materiais, cálculo, verificação e aprovação.",
+      "itens": [
+        {"chave": "objetivo", "item": "Objetivo e escopo aprovados pelo solicitante", "categoria": "Base de projeto", "critico": true, "papel": "responsavel"},
+        {"chave": "documentos", "item": "Documentos de entrada recebidos, com código e revisão registrados", "categoria": "Documentos", "critico": true, "papel": "responsavel"},
+        {"chave": "carregamentos", "item": "Base dos carregamentos e condições de operação documentadas", "categoria": "Base de projeto", "critico": true, "papel": "responsavel"},
+        {"chave": "criterios", "item": "Critérios técnicos do projeto definidos (fator de segurança, utilização, norma principal)", "categoria": "Critérios", "critico": false, "papel": "responsavel"},
+        {"chave": "normas", "item": "Matriz normativa conferida nos documentos-fonte, com edição", "categoria": "Normas", "critico": false, "papel": "responsavel"},
+        {"chave": "materiais", "item": "Materiais do escopo com fonte (norma, certificado ou especificação)", "categoria": "Materiais", "critico": false, "papel": "responsavel"},
+        {"chave": "calculos", "item": "Cálculos registrados no projeto com entradas, resultados e conclusão", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "verificacao", "item": "Verificação independente do memorial concluída", "categoria": "Verificação", "critico": true, "papel": "verificador"},
+        {"chave": "aprovacao", "item": "Aprovação e emissão do memorial", "categoria": "Emissão", "critico": true, "papel": "aprovador"}
+      ]
+    },
+    {
+      "id": "estrutura_metalica",
+      "nome": "Estrutura metálica / suporte",
+      "tipo_projeto": "Estrutura metálica",
+      "descricao": "Estruturas de aço, suportes, plataformas e mezaninos: cargas, combinações, barras, ligações, deslocamentos e interfaces.",
+      "itens": [
+        {"chave": "desenhos", "item": "Receber desenhos de arranjo e detalhamento com revisão registrada", "categoria": "Documentos", "critico": true, "papel": "responsavel"},
+        {"chave": "cargas", "item": "Confirmar cargas: peso próprio, equipamentos, sobrecarga, vento e ações dinâmicas", "categoria": "Carregamentos", "critico": true, "papel": "responsavel"},
+        {"chave": "combinacoes", "item": "Definir combinações ELU e ELS com a referência dos fatores", "categoria": "Carregamentos", "critico": true, "papel": "responsavel"},
+        {"chave": "aco", "item": "Confirmar a especificação do aço e a fonte das propriedades (norma ou certificado)", "categoria": "Materiais", "critico": true, "papel": "responsavel"},
+        {"chave": "barras", "item": "Verificar barras à tração, compressão, flexão, cisalhamento e interação N–M", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "flambagem", "item": "Verificar flambagem das colunas e a eficácia dos travamentos", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "flecha", "item": "Verificar flechas e deslocamentos contra o limite de serviço", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "ligacoes", "item": "Verificar ligações parafusadas e soldadas, incluindo chapa e cisalhamento de bloco", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "normas", "item": "Conferir a edição da norma de estruturas de aço aplicável e marcá-la como conferida", "categoria": "Normas", "critico": false, "papel": "responsavel"},
+        {"chave": "interfaces", "item": "Declarar interfaces e exclusões: fundação, chumbadores, ligações fora do escopo", "categoria": "Escopo", "critico": false, "papel": "responsavel"},
+        {"chave": "verificacao", "item": "Verificação independente do memorial concluída", "categoria": "Verificação", "critico": true, "papel": "verificador"},
+        {"chave": "aprovacao", "item": "Aprovação e emissão do memorial", "categoria": "Emissão", "critico": true, "papel": "aprovador"}
+      ]
+    },
+    {
+      "id": "vaso_tanque",
+      "nome": "Vaso de pressão / tanque",
+      "tipo_projeto": "Vaso de pressão / tanque",
+      "descricao": "Vasos, tanques e reservatórios: condições de projeto, classificação, materiais, espessuras, bocais, suportes, teste e inspeção.",
+      "itens": [
+        {"chave": "folha_dados", "item": "Folha de dados com pressão e temperatura de projeto, fluido e sobre-espessura de corrosão", "categoria": "Base de projeto", "critico": true, "papel": "responsavel"},
+        {"chave": "classificacao", "item": "Classificação do equipamento e norma de projeto aplicável definidas", "categoria": "Normas", "critico": true, "papel": "responsavel"},
+        {"chave": "materiais", "item": "Materiais do costado, tampos e bocais com certificado ou especificação", "categoria": "Materiais", "critico": true, "papel": "responsavel"},
+        {"chave": "espessuras", "item": "Verificar espessuras mínimas do costado e dos tampos", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "bocais", "item": "Verificar bocais, reforços e cargas externas nos bocais", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "suportes", "item": "Verificar suportes (saia, pernas ou berços) com vento e demais ações externas", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "teste", "item": "Definir pressão e condição do teste hidrostático", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "inspecao", "item": "Plano de inspeção e ensaios não destrutivos definido", "categoria": "Fabricação", "critico": false, "papel": "responsavel"},
+        {"chave": "verificacao", "item": "Verificação independente do memorial concluída", "categoria": "Verificação", "critico": true, "papel": "verificador"},
+        {"chave": "aprovacao", "item": "Aprovação e emissão do memorial", "categoria": "Emissão", "critico": true, "papel": "aprovador"}
+      ]
+    },
+    {
+      "id": "transportador",
+      "nome": "Transportador de correia",
+      "tipo_projeto": "Transportador de correia",
+      "descricao": "Transportadores e seus componentes: dados de processo, casos de carga operacionais, estrutura, eixos de tambores, mancais e fixações.",
+      "itens": [
+        {"chave": "processo", "item": "Dados de processo confirmados: capacidade, material, densidade, inclinação e velocidade", "categoria": "Base de projeto", "critico": true, "papel": "responsavel"},
+        {"chave": "cargas", "item": "Cargas na estrutura: peso próprio, material, tensões da correia, partida e bloqueio", "categoria": "Carregamentos", "critico": true, "papel": "responsavel"},
+        {"chave": "casos", "item": "Casos de carga cadastrados: operação, partida, parada, bloqueio do chute e manutenção", "categoria": "Carregamentos", "critico": true, "papel": "responsavel"},
+        {"chave": "estrutura", "item": "Verificar estrutura de suporte, cavaletes e passarelas", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "eixos", "item": "Verificar eixos dos tambores à flexão, torção e fadiga", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "mancais", "item": "Verificar mancais e rolamentos e estimar a vida", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "parafusos", "item": "Verificar parafusos de fixação de tambores, mancais e acionamento", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "materiais", "item": "Confirmar materiais e certificados dos componentes verificados", "categoria": "Materiais", "critico": false, "papel": "responsavel"},
+        {"chave": "normas", "item": "Conferir a norma ou o critério do cliente aplicável ao transportador", "categoria": "Normas", "critico": false, "papel": "responsavel"},
+        {"chave": "verificacao", "item": "Verificação independente do memorial concluída", "categoria": "Verificação", "critico": true, "papel": "verificador"},
+        {"chave": "aprovacao", "item": "Aprovação e emissão do memorial", "categoria": "Emissão", "critico": true, "papel": "aprovador"}
+      ]
+    },
+    {
+      "id": "eixo_maquina",
+      "nome": "Eixo / elemento de máquina",
+      "tipo_projeto": "Eixo / elemento de máquina",
+      "descricao": "Eixos, pinos e elementos sob carga variável: cargas, material, seção crítica, estática, fadiga, concentração de tensão e deflexão.",
+      "itens": [
+        {"chave": "cargas", "item": "Dados de carga confirmados: torque, forças, rotação e número de ciclos", "categoria": "Carregamentos", "critico": true, "papel": "responsavel"},
+        {"chave": "material", "item": "Material com Sy e Sut de fonte controlada e tratamento térmico definido", "categoria": "Materiais", "critico": true, "papel": "responsavel"},
+        {"chave": "diagramas", "item": "Diagramas de esforços e identificação da seção crítica", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "estatica", "item": "Verificação estática da seção crítica (von Mises)", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "fadiga", "item": "Verificação à fadiga: fatores de Marin, critério de Goodman ou Soderberg e vida estimada", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "entalhes", "item": "Concentração de tensão em rasgos de chaveta, escalonamentos e roscas", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "deflexao", "item": "Deflexão, rotação nos mancais e velocidade crítica", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "verificacao", "item": "Verificação independente do memorial concluída", "categoria": "Verificação", "critico": true, "papel": "verificador"},
+        {"chave": "aprovacao", "item": "Aprovação e emissão do memorial", "categoria": "Emissão", "critico": true, "papel": "aprovador"}
+      ]
+    }
+  ]
+}

@@ -12,6 +12,18 @@ import streamlit as st
 
 from components.project_tools import contexto_sessao_projeto, sincronizar_projeto_ativo
 from components.ui import cabecalho_pagina
+from core.checklist_templates import (
+    ARQUIVO_USUARIO as ARQUIVO_MODELOS_USUARIO,
+)
+from core.checklist_templates import (
+    ModeloChecklist,
+    ModeloChecklistErro,
+    aplicar_modelo,
+    itens_ja_aplicados,
+    listar_modelos,
+    modelo_para_tipo,
+    tipos_de_projeto,
+)
 from core.project_checklist import (
     ESTADOS_CHECKLIST,
     interpretar_prazo,
@@ -227,6 +239,38 @@ def _numero_ou_none(valor: Any) -> float | None:
         return None
 
 
+def _modelos_disponiveis() -> tuple[list[ModeloChecklist], str]:
+    """Catálogo de modelos e, se o arquivo do usuário estiver quebrado, o erro.
+
+    Um JSON malformado em ``data/modelos_checklist_usuario.json`` não pode
+    derrubar a página de projetos inteira: a lista fica vazia e a mensagem
+    aparece onde o modelo seria usado.
+    """
+    try:
+        return listar_modelos(), ""
+    except ModeloChecklistErro as erro:
+        return [], str(erro)
+
+
+def _tipos_com_atual(tipo_atual: str) -> list[str]:
+    """Tipos do catálogo, mantendo o tipo já gravado mesmo que não tenha modelo."""
+    try:
+        tipos = tipos_de_projeto()
+    except ModeloChecklistErro:
+        tipos = ["Projeto industrial"]
+    if tipo_atual and tipo_atual not in tipos:
+        tipos.append(tipo_atual)
+    return tipos
+
+
+def _semear_checklist(projeto: Mapping[str, Any], modelo: ModeloChecklist) -> dict[str, Any]:
+    documento, novos, _ = aplicar_modelo(projeto, modelo)
+    return salvar_projeto(
+        documento,
+        motivo=f"Checklist semeado do modelo {modelo.nome} ({len(novos)} item(ns))",
+    )
+
+
 @st.dialog("Novo projeto industrial")
 def _dialogo_novo_projeto() -> None:
     # Só os três campos que bloqueiam a emissão. A versão anterior pedia
@@ -238,6 +282,27 @@ def _dialogo_novo_projeto() -> None:
         "e o primeiro cálculo registrado — o painel da aba **Dados e base** "
         "mostra o que falta e onde resolver."
     )
+    # O tipo fica fora do formulário para a prévia do modelo reagir à escolha.
+    modelos, erro_modelos = _modelos_disponiveis()
+    tipo = st.selectbox(
+        "Tipo de projeto",
+        _tipos_com_atual(""),
+        help="Define o modelo de checklist semeado no projeto. Pode ser trocado depois em Identificação.",
+    )
+    modelo_sugerido = next((m for m in modelos if m.tipo_projeto.casefold() == tipo.casefold()), None)
+    if modelo_sugerido is None:
+        modelo_sugerido = next((m for m in modelos if m.id == "generico"), None)
+    if erro_modelos:
+        st.error(erro_modelos)
+    if modelo_sugerido is not None:
+        semear = st.checkbox(
+            f"Semear o checklist com o modelo **{modelo_sugerido.nome}** "
+            f"({len(modelo_sugerido.itens)} itens)",
+            value=True,
+            help=modelo_sugerido.descricao or None,
+        )
+    else:
+        semear = False
     with st.form("form_novo_projeto", border=False):
         nome = st.text_input(
             "Nome do projeto *", placeholder="Adequação do transportador CV-204"
@@ -272,7 +337,9 @@ def _dialogo_novo_projeto() -> None:
             )
             return
         try:
-            projeto = criar_projeto(nome, codigo=codigo, objetivo=objetivo)
+            projeto = criar_projeto(nome, codigo=codigo, objetivo=objetivo, tipo_projeto=tipo)
+            if semear and modelo_sugerido is not None:
+                projeto = _semear_checklist(projeto, modelo_sugerido)
         except ProjetoPersistenciaErro as erro:
             st.error(str(erro))
             return
@@ -616,6 +683,14 @@ with abas[1]:
             regime = f.text_input(
                 "Regime de operação", value=projeto.get("regime_operacao", "")
             )
+            tipos_projeto = _tipos_com_atual(str(projeto.get("tipo_projeto") or ""))
+            tipo_atual = str(projeto.get("tipo_projeto") or tipos_projeto[0])
+            tipo_projeto = st.selectbox(
+                "Tipo de projeto",
+                tipos_projeto,
+                index=tipos_projeto.index(tipo_atual) if tipo_atual in tipos_projeto else 0,
+                help="Sugere o modelo de checklist na aba Checklist. Trocar o tipo não altera itens já existentes.",
+            )
             g, h, i = st.columns(3)
             resp = g.text_input(
                 "Responsável técnico" + _marca(estado, "responsavel"),
@@ -643,6 +718,7 @@ with abas[1]:
                     "tag_equipamento": tag,
                     "processo": processo,
                     "regime_operacao": regime,
+                    "tipo_projeto": tipo_projeto,
                     "responsavel": resp,
                     "verificador": verif,
                     "aprovador": aprov,
@@ -1319,6 +1395,78 @@ with abas[7]:
             ":material/info: Prazos que não são datas e por isso não entram na cobrança: "
             + "; ".join(f"{linha['item']} ({linha['prazo_texto']})" for linha in resumo_check["ilegiveis"])
             + ". Eles aparecem em branco na tabela; ao reescrever como data, a cobrança passa a valer."
+        )
+
+    # Modelos por tipo de projeto: o mesmo catálogo que semeia o checklist
+    # na criação, disponível aqui para projetos antigos ou para acrescentar a
+    # lista de outra disciplina sem duplicar o que já existe.
+    modelos, erro_modelos = _modelos_disponiveis()
+    with st.expander("Modelos de checklist", expanded=not projeto["checklist"]):
+        if erro_modelos:
+            st.error(erro_modelos)
+        if modelos:
+            sugerido = modelo_para_tipo(str(projeto.get("tipo_projeto") or ""))
+            ids_modelos = [modelo.id for modelo in modelos]
+            indice_sugerido = ids_modelos.index(sugerido.id) if sugerido and sugerido.id in ids_modelos else 0
+            rotulos_modelos = {
+                modelo.id: f"{modelo.nome} · {len(modelo.itens)} itens"
+                + (" · sugerido para este tipo" if sugerido and modelo.id == sugerido.id else "")
+                + (" · do usuário" if modelo.editavel else "")
+                for modelo in modelos
+            }
+            modelo_id = st.selectbox(
+                "Modelo",
+                ids_modelos,
+                index=indice_sugerido,
+                format_func=lambda valor: rotulos_modelos[valor],
+                key=f"modelo_checklist_{projeto['id']}",
+            )
+            modelo = next(item for item in modelos if item.id == modelo_id)
+            if modelo.descricao:
+                st.caption(modelo.descricao)
+            aplicados = itens_ja_aplicados(projeto, modelo)
+            papeis = {"responsavel": "Responsável técnico", "verificador": "Verificador", "aprovador": "Aprovador"}
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Já no checklist": item.chave in aplicados,
+                            "Item": item.item,
+                            "Categoria": item.categoria,
+                            "Crítico": item.critico,
+                            "Responsável (papel)": (
+                                f"{str(projeto.get(item.papel) or '').strip() or '—'} ({papeis.get(item.papel, item.papel)})"
+                                if item.papel
+                                else "—"
+                            ),
+                        }
+                        for item in modelo.itens
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+            )
+            faltantes = len(modelo.itens) - len(aplicados)
+            if faltantes:
+                if st.button(
+                    f"Adicionar {faltantes} item(ns) do modelo ao checklist",
+                    icon=":material/playlist_add:",
+                    type="primary",
+                    key=f"aplicar_modelo_{projeto['id']}",
+                    help="Só entram os itens que ainda não estão no checklist; os existentes não são alterados.",
+                ):
+                    documento, novos, _ = aplicar_modelo(projeto, modelo)
+                    _salvar(
+                        documento,
+                        f"Checklist: {len(novos)} item(ns) adicionados do modelo {modelo.nome}",
+                    )
+                    st.rerun()
+            else:
+                st.success("Todos os itens deste modelo já estão no checklist.", icon=":material/check_circle:")
+        st.caption(
+            "Os modelos vêm de `data/modelos_checklist.json`. Para adaptar à sua empresa, crie "
+            f"`{ARQUIVO_MODELOS_USUARIO.name}` na pasta `data` com o mesmo formato: um modelo com o mesmo "
+            "`id` substitui o embutido; um `id` novo acrescenta um tipo de projeto."
         )
 
     colunas_check = ["id", "item", "categoria", "responsavel", "prazo", "estado", "evidencia", "critico"]

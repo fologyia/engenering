@@ -18,6 +18,7 @@ tmp/
 # Catalogo de perfis cadastrados pelo usuario (dado local)
 data/perfis_usuario.json
 data/materiais_usuario.json
+data/modelos_checklist_usuario.json
 
 # Banco de projetos: dado de trabalho do usuario, nao codigo.
 # Versiona-lo transformava cada alteracao de projeto em diff binario e

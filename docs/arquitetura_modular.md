@@ -77,6 +77,12 @@ projeto, o painel de carteira e a validação lerem a mesma coisa:
 - `core/project_checklist.py` — leitura do prazo (ISO e formatos
   brasileiros), classificação de cada item em relação a hoje e resumo de
   vencidos, a vencer e ilegíveis.
+- `core/checklist_templates.py` — modelos de checklist por tipo de
+  projeto, lidos de `data/modelos_checklist.json` e sobrepostos por
+  `data/modelos_checklist_usuario.json` (mesmo `id` substitui; `id` novo
+  acrescenta um tipo). `aplicar_modelo` só acrescenta itens que ainda não
+  estão no checklist — reconhecidos por `origem_modelo` ou por texto igual —
+  e resolve o responsável pelo papel declarado no item.
 - `core/project_records.py` — superar e remover registros já gravados, e
   resumir cada um (peça, atualidade das fontes, menor fator, utilização).
   Um registro com `status = "Superado"` sai das cobranças da validação, da

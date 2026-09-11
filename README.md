@@ -60,6 +60,12 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - checklist com responsável, **prazo como data**, estado, evidência e
   criticidade — itens vencidos e a vencer na semana são apontados na página, no
   painel e na validação;
+- **modelos de checklist por tipo de projeto** (genérico, estrutura metálica,
+  vaso de pressão/tanque, transportador de correia, eixo/elemento de máquina):
+  o tipo escolhido na criação semeia a lista de verificação com responsável
+  preenchido pelo papel (responsável, verificador, aprovador); um modelo pode
+  ser aplicado depois a qualquer projeto sem duplicar itens, e
+  `data/modelos_checklist_usuario.json` adapta ou acrescenta modelos da empresa;
 - **fluxo de situação com portões**: elaboração → verificação exige verificador
   e um cálculo vigente; verificação → emitido exige aprovador, zero bloqueios e
   nenhum cálculo desatualizado, e cria revisão controlada; reabrir um projeto
@@ -349,6 +355,7 @@ mecanica_toolkit/
 │   ├── project_validation.py
 │   ├── project_workflow.py
 │   ├── project_checklist.py
+│   ├── checklist_templates.py
 │   ├── project_records.py
 │   ├── project_diff.py
 │   ├── project_portfolio.py
@@ -358,6 +365,7 @@ mecanica_toolkit/
 │   └── ...
 ├── components/
 ├── data/
+│   ├── modelos_checklist.json
 │   ├── normas_catalogo.json
 │   ├── materiais_ref_anglo.json
 │   ├── materiais_ref_gerdau.json

@@ -296,14 +296,14 @@ elif modulo == "Projetos permanentes":
     st.subheader("Sequência recomendada")
     st.markdown(
         """
-        1. Clique em **Novo projeto** e preencha a identificação mínima.
+        1. Clique em **Novo projeto**, escolha o **tipo** (define o modelo de checklist) e preencha a identificação mínima.
         2. Em **Dados e base**, registre objetivo, documentos, condições de operação e critérios.
         3. Em **Critérios**, defina fator de segurança mínimo, utilização máxima, norma principal e referência dos fatores — sem isso, vale o padrão do programa.
         4. Em **Escopo físico**, cadastre cada TAG ou ponto analisado; em **Documentos**, a lista controlada com revisão e situação.
         5. Estruture operação, partida, parada, teste e exceções em **Casos de carga**.
         6. Em **Normas**, registre a edição e marque *Conferida* somente após abrir o documento-fonte.
         7. Execute os módulos e clique em **Registrar no projeto ativo**. Um cálculo refeito supera o antigo em **Registros técnicos**, sem apagá-lo.
-        8. Mantenha responsáveis, prazos (como data) e evidências em **Checklist**: o programa avisa o que venceu.
+        8. Mantenha responsáveis, prazos (como data) e evidências em **Checklist**. O tipo do projeto semeia a lista com um modelo (estrutura, vaso, transportador, eixo ou genérico); outros modelos podem ser acrescentados depois, sem duplicar. O programa avisa o que venceu.
         9. Em **Fluxo e revisões**, avance a situação (elaboração → verificação → emitido); cada passagem confere o que falta. Crie uma **revisão controlada** antes de uma emissão e compare revisões para ver o que mudou.
         10. Exporte o arquivo JSON como cópia transportável do projeto.
         """

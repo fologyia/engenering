@@ -149,3 +149,49 @@ def test_painel_lista_o_projeto_e_seus_alertas(banco_com_projeto):
     assert "PRJ-2026-014" in textos
     assert "prazo(s) vencido(s)" in textos
 
+
+@pytest.fixture
+def banco_com_projeto_vazio(tmp_path, monkeypatch):
+    banco = tmp_path / "vazio.sqlite3"
+    monkeypatch.setattr(project_store, "BANCO_PADRAO", banco)
+    projeto = criar_projeto(
+        "Mezanino da britagem",
+        codigo="PRJ-MEZ-01",
+        objetivo="Verificar o mezanino.",
+        tipo_projeto="Estrutura metálica",
+    )
+    projeto.update({"responsavel": "Eng. Ana", "verificador": "Eng. Bruno"})
+    salvar_projeto(projeto)
+    return projeto["id"]
+
+
+def test_aba_checklist_semeia_o_modelo_do_tipo_do_projeto(banco_com_projeto_vazio):
+    from core.checklist_templates import obter_modelo
+    from core.project_store import historico_eventos, obter_projeto
+
+    teste = AppTest.from_file(APP, default_timeout=180)
+    teste.run()
+    teste.switch_page("app_pages/gestao_projetos.py")
+    teste.run()
+    assert not teste.exception
+
+    modelo = obter_modelo("estrutura_metalica")
+    botao = next(
+        botao for botao in teste.button if botao.label.startswith("Adicionar") and "do modelo" in botao.label
+    )
+    assert botao.label.startswith(f"Adicionar {len(modelo.itens)} item")
+    botao.click()
+    teste.run()
+    assert not teste.exception, [str(e.value) for e in teste.exception]
+
+    projeto = obter_projeto(banco_com_projeto_vazio)
+    assert len(projeto["checklist"]) == len(modelo.itens)
+    origens = {item["origem_modelo"] for item in projeto["checklist"]}
+    assert all(origem.startswith("estrutura_metalica:") for origem in origens)
+    responsaveis = {item["responsavel"] for item in projeto["checklist"]}
+    assert {"Eng. Ana", "Eng. Bruno", ""} == responsaveis  # aprovador ainda vazio
+    assert any("do modelo Estrutura metálica" in evento["descricao"] for evento in historico_eventos(banco_com_projeto_vazio))
+
+    # Depois de semear, o botão some: nada mais a acrescentar deste modelo.
+    teste.run()
+    assert not any("do modelo" in botao.label for botao in teste.button if botao.label.startswith("Adicionar"))
