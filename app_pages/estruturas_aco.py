@@ -59,6 +59,135 @@ st.warning(
     icon=":material/gavel:",
 )
 
+with st.expander(
+    "Como usar este módulo — leia antes de começar (clique para abrir)",
+    icon=":material/school:",
+):
+    st.markdown(
+        """
+Esta página **não é uma ferramenta única**: são 5 sub-ferramentas
+independentes, escolhidas no seletor "Módulo" logo abaixo. O fluxo normal
+de trabalho é passar por elas **nesta ordem**, copiando o resultado de uma
+para o formulário da próxima — nada é preenchido automaticamente entre um
+módulo e outro.
+"""
+    )
+
+    st.markdown("##### 1. Perfis — só consulta")
+    st.markdown(
+        """
+Filtre por família (I, W, U, tubo…) e escolha um perfil para ver área,
+massa, Ix, Iy, Sx, Zx, rx, ry etc. Se o perfil que você precisa não está
+no catálogo, abra "Criar perfil paramétrico personalizado" e digite as
+dimensões (h, bf, tw, tf…) — o programa calcula as propriedades na hora.
+Use este módulo só para conferir números; ele não verifica nada.
+"""
+    )
+
+    st.markdown("##### 2. Barras — o cálculo principal (NBR 8800)")
+    st.markdown(
+        """
+Verifica uma barra isolada (tração, compressão, flexão, cisalhamento e a
+interação entre elas), mais a flecha. Preencha:
+
+- **Perfil**: escolhido no catálogo do módulo 1.
+- **Material**: Fy (escoamento), Fu (ruptura), E e G — o padrão já vem
+  preenchido para um aço ASTM A36 comum (250 / 400 / 200 / 77).
+- **Esforços de cálculo** (|Nd|, |Mdx|, |Mdy|, |Vd|): estes valores
+  **já precisam estar majorados** pelos coeficientes γ da norma — é o
+  módulo 3 (Combinações) que faz essa conta, não este.
+- **Comprimentos**: L é o comprimento real da barra; Kx/Ky é o fator de
+  comprimento efetivo (1,0 para apoio rotulado-rotulado nos dois eixos,
+  maior se houver menos restrição); **Lb é diferente de L** — é só o
+  trecho da mesa comprimida sem travamento lateral. Se uma laje trava a
+  mesa continuamente, Lb pode ser bem menor que L, e isso aumenta bastante
+  a resistência à flexão calculada.
+- **Reduções** (Q, Cv, Cb, área líquida): Q = 1,0 assume seção compacta —
+  o programa **não classifica a seção automaticamente**, então se o seu
+  perfil for esbelto (mesa ou alma fina), reduza Q manualmente conforme a
+  norma. Cb = 1,0 é uma hipótese conservadora para o gradiente de momento.
+  Área líquida e Ct só importam em barras tracionadas com furos.
+
+O resultado mostra a **utilização** de cada verificação (demanda dividida
+pela resistência): valores até 1,0 atendem; acima de 1,0, a barra falha
+com esses esforços e precisa de um perfil maior ou menor comprimento
+destravado.
+"""
+    )
+
+    st.markdown("##### 3. Combinações — majora as ações para você")
+    st.markdown(
+        """
+Uma tabela editável onde cada linha é uma ação característica (peso
+próprio, sobrecarga, vento…) com N, V, M e os coeficientes γ (ponderador)
+e ψ0/ψ1/ψ2 (fatores de combinação). **Os valores padrão da tabela são só
+um exemplo** — substitua pelos coeficientes da NBR 8681 aplicáveis à sua
+situação de projeto antes de usar o resultado. O programa monta
+automaticamente todas as combinações ELU e ELS e indica qual é a
+governante. É o |N|, |V| e |M| governantes daqui que você leva para o
+módulo 2 — mas repare que o maior N, o maior V e o maior M podem vir de
+combinações **diferentes**; não trate os três como simultâneos sem
+conferir a linha de origem na tabela.
+"""
+    )
+
+    st.markdown("##### 4. Ligações — parafuso, chapa/bloco e solda")
+    st.markdown(
+        """
+Três verificações independentes, escolhidas no segmented control interno:
+ligação parafusada (tração, cisalhamento, esmagamento e interação
+quadrática), chapa com bloco de cisalhamento e seção líquida, e solda de
+filete. Os esforços de entrada também devem vir já majorados das
+combinações de cálculo na ligação — geralmente diferentes dos esforços na
+barra, porque a ligação está num ponto específico (extremidade, emenda).
+"""
+    )
+
+    st.markdown("##### 5. Análise 2D — treliça ou pórtico plano")
+    st.markdown(
+        """
+Um solver de elementos finitos simplificado. Você monta duas tabelas:
+**nós** (posição x/y, quais direções estão travadas, forças aplicadas) e
+**elementos** (qual nó liga a qual, perfil, módulo de elasticidade). Ao
+clicar em "Analisar estrutura", o programa devolve deslocamentos, reações
+de apoio e esforços internos por barra. Use isto **antes** do módulo 2
+quando a peça faz parte de uma estrutura (pórtico, treliça) e não é uma
+viga isolada — os esforços de cada barra que saem daqui alimentam a
+verificação do módulo 2.
+
+**Importante**: é um solver linear de primeira ordem — não considera
+efeito P-Δ, imperfeições geométricas, flambagem global do conjunto nem
+ligações semirrígidas. Serve para achar os esforços internos, não para
+verificar estabilidade global do pórtico.
+"""
+    )
+
+    st.markdown("##### Erros comuns")
+    st.markdown(
+        """
+- Informar esforços **sem** majorar no módulo 2 (esqueceu de passar pelo
+  módulo 3 primeiro).
+- Confundir **L** (comprimento da barra) com **Lb** (comprimento
+  destravado lateralmente) — são quase sempre diferentes.
+- Deixar **Q = 1,0** para um perfil esbelto sem verificar a classificação
+  da seção pela norma.
+- Achar que o maior N, V e M da tabela de combinações acontecem ao mesmo
+  tempo — confira a combinação de origem de cada um.
+- Esperar que o módulo 5 alimente o módulo 2 sozinho — os números
+  precisam ser copiados manualmente de um formulário para o outro.
+"""
+    )
+
+    st.caption(
+        "Cada um dos 5 módulos tem um exemplo numérico completo e "
+        "reproduzível no Guia geral."
+    )
+    st.page_link(
+        "app_pages/guia_geral.py",
+        label="Abrir exemplos passo a passo no Guia geral",
+        icon=":material/menu_book:",
+    )
+
 modulo = st.segmented_control(
     "Módulo",
     ["1. Perfis", "2. Barras", "3. Combinações", "4. Ligações", "5. Análise 2D"],
