@@ -13,6 +13,7 @@ de conseguir traço suavizado sem uma biblioteca vetorial.
 
 from __future__ import annotations
 
+import functools
 import io
 import math
 from collections.abc import Sequence
@@ -65,13 +66,30 @@ class ImagemDiagrama:
     altura_px: int
 
 
-def _fonte(tamanho: int) -> ImageFont.ImageFont:
-    """Fonte escalável sem depender de arquivo do sistema.
+_FONTES_SISTEMA = (
+    "segoeui.ttf",
+    "arial.ttf",
+    "calibri.ttf",
+    "DejaVuSans.ttf",
+    "LiberationSans-Regular.ttf",
+    "NotoSans-Regular.ttf",
+)
 
-    ``load_default(size=...)`` existe desde o Pillow 10.1 e devolve a fonte
-    embutida em qualquer plataforma — importante porque o memorial pode ser
-    gerado tanto no Windows do usuário quanto no Linux do CI.
+
+@functools.lru_cache(maxsize=None)
+def _fonte(tamanho: int) -> ImageFont.ImageFont:
+    """Fonte escalável, com acentos e letras gregas quando o sistema tiver.
+
+    A fonte embutida do Pillow não desenha "ã", "σ" ou "λ" — sai um
+    quadrado no lugar —, então tentamos primeiro uma TrueType comum do
+    sistema (Windows ou Linux do CI). Só sem nenhuma delas caímos na
+    embutida, que ``load_default(size=...)`` oferece desde o Pillow 10.1.
     """
+    for nome in _FONTES_SISTEMA:
+        try:
+            return ImageFont.truetype(nome, tamanho)
+        except OSError:
+            continue
     try:
         return ImageFont.load_default(size=tamanho)
     except TypeError:  # pragma: no cover - Pillow antigo

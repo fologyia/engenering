@@ -293,6 +293,7 @@ def _secao_vigas_eixos(
     número, mas não a seção que o governou nem a combinação que o produziu.
     """
     registros = _registros_do_modulo(projeto, "vigas_eixos")
+    diagramas_nos_registros = "registros" in set(contexto.get("secoes_ativas", ()))
 
     imagens: list[dict[str, Any]] = []
     avisos_diagrama: list[str] = []
@@ -395,10 +396,13 @@ def _secao_vigas_eixos(
                 ]
             )
 
-        desenhos, aviso = _diagramas_do_registro(registro, projeto)
-        imagens.extend(desenhos)
-        if aviso:
-            avisos_diagrama.append(f"{titulo}: {aviso}")
+        # Com o capítulo de registros ativo, cada viga já leva seus diagramas
+        # no próprio capítulo; repeti-los aqui só engordaria o memorial.
+        if not diagramas_nos_registros:
+            desenhos, aviso = _diagramas_do_registro(registro, projeto)
+            imagens.extend(desenhos)
+            if aviso:
+                avisos_diagrama.append(f"{titulo}: {aviso}")
 
         governantes = resultados.get("envoltoria_governantes")
         for item in governantes if isinstance(governantes, list) else []:
@@ -432,6 +436,10 @@ def _secao_vigas_eixos(
         paragrafos.append(
             "Os diagramas abaixo foram redesenhados a partir do modelo guardado "
             "em cada registro e conferidos contra os valores registrados."
+        )
+    elif diagramas_nos_registros and registros:
+        paragrafos.append(
+            "Os diagramas de cada barra estão no capítulo do respectivo registro técnico."
         )
     paragrafos.extend(avisos_diagrama)
 

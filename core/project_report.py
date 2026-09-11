@@ -14,6 +14,7 @@ from typing import Any
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.memorial_word import CAUTION, POSITIVE, RISK, gerar_memorial_word_padrao
 from core.project_validation import validar_projeto
+from core.record_charts import imagens_do_registro
 from core.report_plugins import listar_provedores, titulos_secoes_extensao
 from core.technical_records import (
     agrupar_registros_por_componente,
@@ -298,6 +299,7 @@ def montar_modelo_relatorio(
         "registros": registros,
         "validacao": validacao,
         "metadata": metadata,
+        "secoes_ativas": sorted(ativas),
     }
 
     def anexar_extensoes(chave: str) -> None:
@@ -477,6 +479,7 @@ def montar_modelo_relatorio(
             resultados = registro.get("resultados", {}) if isinstance(registro.get("resultados"), Mapping) else {}
             contrato = avaliar_contrato_registro(registro)
             peca = _peca_registro(registro, componentes_por_id)
+            imagens, aviso_imagens = imagens_do_registro(registro, projeto)
             return {
                 "titulo": f"{numeracao} {_texto(registro.get('titulo'), 'Registro técnico')}",
                 "nivel": nivel,
@@ -490,7 +493,9 @@ def montar_modelo_relatorio(
                         f"assinatura {'válida' if contrato['assinatura_valida'] else 'não disponível ou divergente'}."
                     ),
                     f"Conclusão: {_texto(registro.get('conclusao'))}",
-                ],
+                ]
+                + ([aviso_imagens] if aviso_imagens else []),
+                "imagens": imagens,
                 "bullets": [f"Premissa: {_valor(item)}" for item in registro.get("premissas", [])]
                 + [f"Critério: {_valor(item)}" for item in registro.get("criterios", [])]
                 + [f"Alerta: {_valor(item)}" for item in registro.get("alertas", [])]

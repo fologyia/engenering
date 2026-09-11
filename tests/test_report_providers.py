@@ -239,10 +239,32 @@ class SecaoDeVigasTests(unittest.TestCase):
 
 class DiagramasNoMemorialTests(unittest.TestCase):
     def secao(self, projeto) -> dict:
+        """Capítulo do registro da viga — é lá que os diagramas moram agora.
+
+        Com o capítulo de registros ativo, a seção-provedora de vigas não
+        repete os diagramas; ela só os desenha quando o memorial sai sem os
+        registros (ver ``test_provedor_desenha_quando_nao_ha_capitulo``).
+        """
         modelo = montar_modelo_relatorio(projeto)
-        return next(
-            s for s in modelo["secoes"] if "Vigas e eixos" in s.get("titulo", "")
+        secoes = modelo["secoes"]
+        inicio = next(
+            indice for indice, s in enumerate(secoes) if "Registros técnicos" in s.get("titulo", "")
         )
+        return next(s for s in secoes[inicio + 1 :] if "imagens" in s)
+
+    def test_provedor_desenha_quando_nao_ha_capitulo(self):
+        modelo = montar_modelo_relatorio(
+            projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)),
+            secoes_incluidas=["vigas_eixos"],
+        )
+        secao = next(s for s in modelo["secoes"] if "Vigas e eixos" in s.get("titulo", ""))
+        self.assertTrue(secao["imagens"])
+
+    def test_provedor_nao_repete_os_diagramas_do_capitulo(self):
+        modelo = montar_modelo_relatorio(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
+        secao = next(s for s in modelo["secoes"] if "Vigas e eixos" in s.get("titulo", ""))
+        self.assertEqual(secao["imagens"], [])
+        self.assertTrue(any("capítulo do respectivo registro" in p for p in secao["paragrafos"]))
 
     def test_diagramas_entram_como_imagem(self):
         secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
