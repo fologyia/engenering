@@ -1,24 +1,16 @@
 import math
-import sys
-from pathlib import Path
 
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
+from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import column_buckling as flambagem
 from core import material_catalog as mat
 from core import section_catalog as catalogo_perfis
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
 
-st.set_page_config(
-    page_title="Flambagem de colunas",
-    page_icon=":material/architecture:",
-    layout="wide",
-)
+configurar_pagina("Flambagem de colunas", ":material/architecture:")
 cabecalho_pagina(
     "Flambagem de colunas",
     "Índice de esbeltez • carga crítica de Euler • transição de Johnson",

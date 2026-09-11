@@ -1,23 +1,14 @@
-import sys
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from components import load_models as catalogo
 from components.project_tools import contexto_sessao_projeto
-from components.ui import cabecalho_pagina
+from components.ui import cabecalho_pagina, configurar_pagina
 from core import project_assistant as projetos
 from core import unit_converter as unidades
 from core.project_store import criar_item, criar_projeto, salvar_projeto
 
-st.set_page_config(
-    page_title="Assistente de projeto",
-    page_icon=":material/route:",
-    layout="wide",
-)
+configurar_pagina("Assistente de projeto", ":material/route:")
 
 st.session_state.setdefault("projeto_assistente_etapa", 1)
 st.session_state.setdefault("projeto_ativo", None)

@@ -1,19 +1,10 @@
-import sys
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
-from components.ui import cabecalho_pagina, fronteira_modelo
+from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import material_catalog as catalogo
 
-st.set_page_config(
-    page_title="Catálogo de materiais",
-    page_icon=":material/science:",
-    layout="wide",
-)
+configurar_pagina("Catálogo de materiais", ":material/science:")
 
 cabecalho_pagina(
     "Catálogo de materiais",

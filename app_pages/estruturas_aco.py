@@ -1,16 +1,12 @@
 import math
-import sys
 from dataclasses import asdict
-from pathlib import Path
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.ui import cabecalho_pagina, fronteira_modelo
+from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import bolt_design as parafusos
 from core import load_combinations as combinacoes
 from core import section_catalog as catalogo_perfis
@@ -19,11 +15,7 @@ from core import steel_member_design as barras
 from core import steel_sections as secoes
 from core import structural_2d as estrutural
 
-st.set_page_config(
-    page_title="Estruturas de aço",
-    page_icon=":material/domain:",
-    layout="wide",
-)
+configurar_pagina("Estruturas de aço", ":material/domain:")
 
 
 def fator_texto(valor: float) -> str:

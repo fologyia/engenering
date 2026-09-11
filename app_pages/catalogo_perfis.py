@@ -1,20 +1,11 @@
-import sys
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
-from components.ui import cabecalho_pagina, fronteira_modelo
+from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import section_catalog as catalogo
 from core import steel_sections as secoes
 
-st.set_page_config(
-    page_title="Catálogo de perfis",
-    page_icon=":material/view_in_ar:",
-    layout="wide",
-)
+configurar_pagina("Catálogo de perfis", ":material/view_in_ar:")
 
 CHAVE_EDICAO = "perfis_em_edicao"
 

@@ -11,7 +11,7 @@ from components.project_tools import (
     construir_registro_tecnico,
     sincronizar_projeto_ativo,
 )
-from components.ui import cabecalho_pagina
+from components.ui import cabecalho_pagina, configurar_pagina
 from core.project_store import obter_projeto_ativo
 from core.sensitivity import (
     DISTRIBUICOES,
@@ -22,11 +22,7 @@ from core.sensitivity import (
     sugerir_de_registro,
 )
 
-st.set_page_config(
-    page_title="Análise de sensibilidade",
-    page_icon=":material/tune:",
-    layout="wide",
-)
+configurar_pagina("Análise de sensibilidade", ":material/tune:")
 
 cabecalho_pagina(
     "Análise de sensibilidade",

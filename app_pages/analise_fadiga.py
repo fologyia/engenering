@@ -1,28 +1,20 @@
 import math
-import sys
 from datetime import date
 from functools import partial
-from pathlib import Path
 
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
+from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import fatigue as fat
 from core import fatigue_report, memorial_word
 from core import material_catalog as mat
 from core import size_effect as size
 
-st.set_page_config(
-    page_title="Análise de fadiga",
-    page_icon=":material/cycle:",
-    layout="wide",
-)
+configurar_pagina("Análise de fadiga", ":material/cycle:")
 cabecalho_pagina(
     "Análise de fadiga",
     "Fatores de Marin • Goodman e Soderberg • curva S–N • estimativa de vida",

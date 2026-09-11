@@ -1,21 +1,13 @@
 import math
-import sys
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
+from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import bolt_design as parafusos
 
-st.set_page_config(
-    page_title="Projeto de parafusos",
-    page_icon=":material/build:",
-    layout="wide",
-)
+configurar_pagina("Projeto de parafusos", ":material/build:")
 
 
 def formatar_fator(valor: float) -> str:

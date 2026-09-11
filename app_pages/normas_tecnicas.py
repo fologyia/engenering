@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from components.project_tools import contexto_sessao_projeto
-from components.ui import cabecalho_pagina
+from components.ui import cabecalho_pagina, configurar_pagina
 from core.project_store import criar_item, obter_projeto_ativo, salvar_projeto
 from core.standards_library import (
     CATALOGO_PADRAO,
@@ -96,11 +96,7 @@ def _mostrar_visualizador(caminho: str, *, chave: str) -> None:
         )
 
 
-st.set_page_config(
-    page_title="Normas técnicas",
-    page_icon=":material/library_books:",
-    layout="wide",
-)
+configurar_pagina("Normas técnicas", ":material/library_books:")
 
 cabecalho_pagina(
     "Biblioteca de normas técnicas",

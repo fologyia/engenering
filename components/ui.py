@@ -131,6 +131,11 @@ def comparador_cenarios(
         st.dataframe(tabela, hide_index=True, width="stretch")
 
 
+def configurar_pagina(titulo: str, icone: str) -> None:
+    """Aplica a configuração padrão (layout largo) usada por todas as páginas."""
+    st.set_page_config(page_title=titulo, page_icon=icone, layout="wide")
+
+
 def cabecalho_pagina(
     titulo: str,
     subtitulo: str,

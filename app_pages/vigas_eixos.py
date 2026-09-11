@@ -1,19 +1,15 @@
 import math
-import sys
-from pathlib import Path
 
 import altair as alt
 import pandas as pd
 import streamlit as st
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
     id_registro_existente,
 )
-from components.ui import cabecalho_pagina, comparador_cenarios, fronteira_modelo
+from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import beam_analysis as vigas
 from core import beam_script as escrita
 from core import materials as materiais_base
@@ -22,11 +18,7 @@ from core.materials_registry import avaliar_material
 from core.project_criteria import normalizar_criterios_projeto
 from core.project_store import obter_projeto_ativo
 
-st.set_page_config(
-    page_title="Vigas e eixos",
-    page_icon=":material/linear_scale:",
-    layout="wide",
-)
+configurar_pagina("Vigas e eixos", ":material/linear_scale:")
 
 CHAVE_SCRIPT = "vigas_script"
 CHAVE_RESULTADO = "vigas_resultado"

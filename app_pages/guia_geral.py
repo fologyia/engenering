@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from components.ui import cabecalho_pagina
+from components.ui import cabecalho_pagina, configurar_pagina
 
 
 def mostrar_tabela_campos(linhas: list[list[str]]) -> None:
@@ -37,11 +37,7 @@ def link_modulo(destino: str, rotulo: str) -> None:
     )
 
 
-st.set_page_config(
-    page_title="Guia geral",
-    page_icon=":material/help:",
-    layout="wide",
-)
+configurar_pagina("Guia geral", ":material/help:")
 
 cabecalho_pagina(
     "Guia geral do Mecânica Toolkit",

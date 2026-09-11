@@ -1,10 +1,5 @@
-import sys
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from components import load_models as catalogo
 from components.project_tools import (
@@ -12,15 +7,11 @@ from components.project_tools import (
     construir_registro_tecnico,
     id_registro_existente,
 )
-from components.ui import cabecalho_pagina, fronteira_modelo
+from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import additional_load_models as modelos
 from core import load_to_stress as cargas
 
-st.set_page_config(
-    page_title="Assistente de cargas",
-    page_icon=":material/manufacturing:",
-    layout="wide",
-)
+configurar_pagina("Assistente de cargas", ":material/manufacturing:")
 
 
 def enviar_para_mohr(

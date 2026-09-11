@@ -1,20 +1,12 @@
 import math
-import sys
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
-from components.ui import cabecalho_pagina
+from components.ui import cabecalho_pagina, configurar_pagina
 from core import unit_converter as unidades
 
-st.set_page_config(
-    page_title="Conversor de unidades",
-    page_icon=":material/swap_horiz:",
-    layout="wide",
-)
+configurar_pagina("Conversor de unidades", ":material/swap_horiz:")
 
 cabecalho_pagina(
     "Conversor global de unidades",

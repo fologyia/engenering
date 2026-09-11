@@ -1,13 +1,9 @@
 import math
-import sys
-from pathlib import Path
 
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from components.material_verification import mostrar_verificacao_material
 from components.project_tools import (
@@ -15,14 +11,10 @@ from components.project_tools import (
     construir_registro_tecnico,
     id_registro_existente,
 )
-from components.ui import cabecalho_pagina, fronteira_modelo
+from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import mohr_analysis as mohr
 
-st.set_page_config(
-    page_title="Círculo de Mohr",
-    page_icon=":material/donut_large:",
-    layout="wide",
-)
+configurar_pagina("Círculo de Mohr", ":material/donut_large:")
 
 
 EXEMPLOS_2D = {
