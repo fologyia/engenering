@@ -784,16 +784,16 @@ elif modulo == "Vigas e eixos":
     mostrar_exemplo(
         [
             ["Comprimento", "6 m"],
-            ["Seção", "Perfil W ideal 200×200×8×12 do catálogo"],
+            ["Seção", "Perfil W 200 x 46,1 (H) do catálogo"],
             ["Material", "aço (E = 200 GPa, Sy = 250 MPa)"],
             ["Apoios", "pino em x = 0 e rolete em x = 6 m"],
             ["Carga distribuída", "15 kN/m para baixo em todo o vão"],
             ["Carga pontual", "20 kN para baixo em x = 3 m"],
         ],
         "Resultado esperado: reações de 55 kN em cada apoio, V máx = 55 kN nos "
-        "apoios, M máx = 97,5 kN·m no meio do vão, flecha máxima de 37,21 mm "
-        "para baixo (também no meio) e von Mises de 211,5 MPa, com fator de "
-        "segurança 1,18 contra o escoamento. A flecha não passa em L/350 "
+        "apoios, M máx = 97,5 kN·m no meio do vão, flecha máxima de 37,76 mm "
+        "para baixo (também no meio) e von Mises de 217,8 MPa, com fator de "
+        "segurança 1,15 contra o escoamento. A flecha não passa em L/350 "
         "(17,14 mm admissíveis) — é um caso em que a resistência atende, mas o "
         "deslocamento não.",
     )
@@ -1322,16 +1322,17 @@ else:
         )
         mostrar_exemplo(
             [
-                ["Família", "Perfil I idealizado"],
-                ["Perfil", "I ideal 200×100×5,5×8"],
+                ["Família", "Perfil I duplamente simétrico (bitola real Gerdau)"],
+                ["Perfil", 'I 6" x 22,00'],
             ],
-            "Valores aproximados: área = 26,12 cm², massa = 20,50 kg/m, "
-            "Ix = 1.760,93 cm⁴, Sx = 176,09 cm³ e ry = 2,26 cm.",
+            "Valores da tabela do fabricante: área = 27,97 cm², massa = 22,00 kg/m, "
+            "Ix = 1.003,00 cm⁴, Sx = 131,63 cm³ e ry = 1,74 cm.",
         )
-        st.warning(
-            "Os perfis são idealizações geométricas. Confirme propriedades e "
-            "tolerâncias no catálogo comercial do fabricante.",
-            icon=":material/warning:",
+        st.caption(
+            "Os perfis I, U, T, W e HP vêm da tabela de bitolas do fabricante "
+            "(Gerdau); os demais (C enrijecido, tubos, barras) continuam "
+            "geométricos idealizados. Confirme sempre no catálogo comercial "
+            "vigente antes de usar em projeto."
         )
 
     elif parte == "Barras":
@@ -1345,7 +1346,7 @@ else:
         )
         mostrar_exemplo(
             [
-                ["Perfil", "I ideal 200×100×5,5×8"],
+                ["Perfil", 'I 6" x 22,00'],
                 ["Material", "Fy = 250 MPa, Fu = 400 MPa, E = 200 GPa, G = 77 GPa"],
                 ["Solicitação", "Compressão"],
                 ["Nd / Mdx / Mdy / Vd", "100 kN / 20 kN·m / 0 / 20 kN"],
@@ -1353,8 +1354,9 @@ else:
                 ["Q / Cv / Cb", "1,0 / 1,0 / 1,0"],
                 ["Flecha", "Biapoiada, q = 5 kN/m e limite L/300"],
             ],
-            "Resultado aproximado: resistência à compressão = 231,22 kN, "
-            "interação N–M = 0,899 e flecha = 1,50 mm para limite de 10 mm.",
+            "Resultado: resistência à compressão = 146,97 kN, interação N–M = "
+            "1,23 (não atende — a interação combinada supera a unidade) e "
+            "flecha = 2,63 mm para limite de 10 mm.",
         )
         st.caption(
             "Utilização até 1 significa apenas que a demanda não excedeu a "
@@ -1432,7 +1434,7 @@ else:
                 ["Apoios", "Nó 1 fixo em x/y; nó 2 fixo em y"],
                 ["Carga", "Fy = −100 kN no nó 3"],
                 ["Elementos", "1–2, 1–3 e 2–3"],
-                ["Perfil / E", "I ideal 200×100×5,5×8 / 200 GPa"],
+                ["Perfil / E", 'I 4" x 11,46 / 200 GPa'],
             ],
             "Este exemplo já está preenchido. Após analisar, confira primeiro "
             "reações e equilíbrio; depois leia deslocamentos e esforços axiais.",

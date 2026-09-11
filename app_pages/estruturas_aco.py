@@ -1289,7 +1289,7 @@ else:
         key="estrutura_2d_modelo",
         persist_state="session",
     )
-    perfil_padrao = "I ideal 200×100×5.5×8"
+    perfil_padrao = "I 4\" x 11,46"
     if modelo == "Treliça 2D":
         nos_padrao = pd.DataFrame(
             [

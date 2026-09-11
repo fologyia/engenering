@@ -470,7 +470,7 @@ def _comando_secao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
     if not pos:
         raise ErroDeScript(
             "Informe o tipo de seção. Ex.: `secao retangular 100 200`, "
-            "`secao circular 50`, `secao tubo 60 48`, `secao perfil W ideal 200x200x8x12`.",
+            "`secao circular 50`, `secao tubo 60 48`, `secao perfil W 200 x 46,1 (H)`.",
             linha=n,
             texto=texto,
         )
@@ -484,7 +484,7 @@ def _comando_secao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
     if tipo in {"perfil", "catalogo"}:
         if not argumentos:
             raise ErroDeScript(
-                "Informe o nome do perfil do catálogo. Ex.: `secao perfil W ideal 200x200x8x12`.",
+                "Informe o nome do perfil do catálogo. Ex.: `secao perfil W 200 x 46,1 (H)`.",
                 linha=n,
                 texto=texto,
             )
@@ -1119,7 +1119,7 @@ def gerar_script(viga: vb.Viga) -> str:
 EXEMPLOS: dict[str, str] = {
     "Viga biapoiada com carga distribuída": """# Viga biapoiada — o caso mais comum
 viga 6
-secao perfil W ideal 200x200x8x12
+secao perfil W 200 x 46,1 (H)
 material aco
 apoio 0 pino
 apoio 6 rolete
@@ -1136,7 +1136,7 @@ P 2.5 12 baixo
 """,
     "Viga contínua de dois vãos": """# Viga contínua — hiperestática, resolvida por rigidez direta
 viga 10
-secao perfil W ideal 250x250x9x14
+secao perfil W 250 x 32,7
 material aco
 apoio 0 pino
 apoio 5 rolete
@@ -1145,7 +1145,7 @@ q 0 10 20 baixo
 """,
     "Viga Gerber (com rótula interna)": """# Rótula interna: transmite cortante, mas o momento é zero nela
 viga 9
-secao perfil I ideal 300x150x6.5x10
+secao perfil W 310 x 32,7
 material aco
 apoio 0 pino
 apoio 6 rolete
@@ -1178,7 +1178,7 @@ peso_proprio
     "Envoltória de combinações (viga de piso)": """# Cada carga pertence a um caso; cada combinação pesa os casos.
 # O programa resolve a barra uma vez por combinação e envelopa o resultado.
 viga 8
-secao perfil W ideal 250x250x9x14
+secao perfil W 250 x 32,7
 material catalogo ASTM A572 grau 50
 apoio 0 pino
 apoio 8 rolete
@@ -1228,7 +1228,7 @@ AJUDA_SINTAXE = """\
 | `secao tubo de di` | Tubo circular, em mm | `secao tubo 60 48` |
 | `secao tubo_retangular b h t` | Tubo retangular, em mm | `secao tubo_retangular 100 200 6` |
 | `secao perfil_i h bf tw tf` | Perfil I soldado, em mm | `secao perfil_i 300 150 8 12` |
-| `secao perfil <nome>` | Perfil do catálogo do programa | `secao perfil W ideal 200x200x8x12` |
+| `secao perfil <nome>` | Perfil do catálogo do programa | `secao perfil W 200 x 46,1 (H)` |
 | `secao manual A= I= c= Q= t= J= Wt= Av=` | Propriedades diretas | `secao manual A=5000 I=2.5e7 c=100` |
 | `apoio x <tipo>` | pino, rolete, engaste, deslizante, trava_axial | `apoio 0 pino` |
 | `apoio x mola kv= kr=` | Apoio elástico: kv em N/mm, kr em N·mm/rad | `apoio 3 mola kv=500` |

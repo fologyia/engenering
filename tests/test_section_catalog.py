@@ -298,17 +298,30 @@ class CatalogoDeReferenciaTests(unittest.TestCase):
         ]
         self.assertGreater(len(gerdau), 50)
 
-    def test_catalogo_cobre_as_bitolas_correntes_ate_310(self):
+    def test_catalogo_cobre_as_bitolas_w_ate_610(self):
         import re
 
         alturas = set()
         for nome, item in catalogo.listar_cadastrados().items():
-            if "Gerdau" not in item.origem:
+            if "Gerdau" not in item.origem or not nome.startswith(("W ", "HP ")):
                 continue
-            achado = re.search(r"\s(\d+)\s*x", nome)
+            achado = re.search(r"^(?:W|HP)\s+(\d+)\s*x", nome)
             if achado:
                 alturas.add(int(achado.group(1)))
-        self.assertEqual(sorted(alturas), [150, 200, 250, 310])
+        self.assertEqual(
+            sorted(alturas), [150, 200, 250, 310, 360, 410, 460, 530, 610]
+        )
+
+    def test_catalogo_gerdau_cobre_i_u_e_t(self):
+        completo = catalogo.listar_cadastrados()
+        familias_gerdau = {
+            item.perfil.familia
+            for item in completo.values()
+            if "Gerdau" in item.origem
+        }
+        self.assertIn("I duplamente simétrico", familias_gerdau)
+        self.assertIn("U (canal laminado)", familias_gerdau)
+        self.assertIn("T (perfil tê)", familias_gerdau)
 
     def test_perfil_de_referencia_nao_e_editavel(self):
         item = catalogo.obter("W 250 x 25,3")

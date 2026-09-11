@@ -502,39 +502,14 @@ def barra_retangular(
 
 
 def _criar_catalogo() -> dict[str, PerfilAco]:
+    # I, W, U e T deliberadamente NÃO entram aqui: são bitolas reais,
+    # carregadas de data/perfis_ref_gerdau*.json (ver core/section_catalog.py)
+    # em vez de dimensões idealizadas inventadas para exemplo. As funções
+    # perfil_i_simetrico/perfil_w_mesa_larga/perfil_u/perfil_t continuam
+    # existindo e são usadas pelo "perfil paramétrico personalizado" da
+    # interface, que precisa calcular a partir de dimensões arbitrárias
+    # digitadas pelo usuário.
     perfis: list[PerfilAco] = []
-    for h, b, tw, tf in (
-        (100, 55, 4.1, 5.7),
-        (150, 75, 5.0, 7.0),
-        (200, 100, 5.5, 8.0),
-        (250, 125, 6.0, 9.0),
-        (300, 150, 6.5, 10.0),
-        (350, 175, 7.0, 11.0),
-        (400, 200, 8.0, 13.0),
-        (500, 200, 10.0, 16.0),
-    ):
-        nome = f"I ideal {h}×{b}×{tw:g}×{tf:g}"
-        perfis.append(perfil_i_simetrico(nome, h, b, tw, tf))
-    for h, b, tw, tf in (
-        (100, 100, 6.0, 8.0),
-        (150, 150, 7.0, 10.0),
-        (200, 200, 8.0, 12.0),
-        (250, 250, 9.0, 14.0),
-        (300, 300, 10.0, 15.0),
-        (350, 350, 12.0, 19.0),
-    ):
-        nome = f"W ideal {h}×{b}×{tw:g}×{tf:g}"
-        perfis.append(perfil_w_mesa_larga(nome, h, b, tw, tf))
-    for h, b, tw, tf in (
-        (75, 40, 5.0, 7.0),
-        (100, 50, 5.0, 7.5),
-        (150, 75, 6.5, 9.5),
-        (200, 75, 7.0, 11.0),
-        (250, 90, 8.0, 12.5),
-        (300, 95, 9.0, 13.5),
-    ):
-        nome = f"U ideal {h}×{b}×{tw:g}×{tf:g}"
-        perfis.append(perfil_u(nome, h, b, tw, tf))
     for h, b, d, t in (
         (75, 40, 15.0, 2.0),
         (100, 40, 15.0, 2.0),
@@ -545,15 +520,6 @@ def _criar_catalogo() -> dict[str, PerfilAco]:
     ):
         nome = f"C ideal {h}×{b}×{d:g}×{t:g}"
         perfis.append(perfil_c_enrijecido(nome, h, b, d, t))
-    for d, b, tw, tf in (
-        (50, 50, 5.0, 7.0),
-        (75, 75, 5.5, 8.0),
-        (100, 100, 6.0, 9.0),
-        (150, 150, 7.5, 10.5),
-        (200, 200, 9.0, 13.0),
-    ):
-        nome = f"T ideal {d}×{b}×{tw:g}×{tf:g}"
-        perfis.append(perfil_t(nome, d, b, tw, tf))
     for diametro in (12.5, 16.0, 19.0, 25.0, 32.0, 38.0, 50.0):
         nome = f"Barra circular Ø{diametro:g}"
         perfis.append(barra_circular(nome, diametro))

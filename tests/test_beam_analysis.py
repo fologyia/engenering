@@ -84,7 +84,7 @@ class SecoesTests(CasoDeViga):
     def test_perfil_do_catalogo_usa_area_de_cisalhamento(self):
         from core import steel_sections as secoes
 
-        perfil = secoes.obter_perfil("W ideal 200×200×8×12")
+        perfil = secoes.obter_perfil("C ideal 200×75×20×3")
         secao = vb.secao_de_perfil_catalogo(perfil)
         self.assertProximo(secao.inercia_mm4, perfil.ix_mm4)
         self.assertProximo(secao.area_cisalhamento_mm2, perfil.area_cisalhamento_mm2)
@@ -576,12 +576,12 @@ class ScriptTests(CasoDeViga):
 
     def test_perfil_do_catalogo_aceita_x_no_lugar_do_sinal_de_multiplicacao(self):
         viga = bs.interpretar(
-            "viga 6\nsecao perfil W ideal 200x200x8x12\nmaterial aco\napoio 0 pino\napoio 6 rolete\n"
+            "viga 6\nsecao perfil C ideal 200x75x20x3\nmaterial aco\napoio 0 pino\napoio 6 rolete\n"
         )
         from core import steel_sections as secoes
 
         self.assertProximo(
-            viga.secao.inercia_mm4, secoes.obter_perfil("W ideal 200×200×8×12").ix_mm4
+            viga.secao.inercia_mm4, secoes.obter_perfil("C ideal 200×75×20×3").ix_mm4
         )
 
     def test_g_e_estimado_quando_nao_informado(self):
