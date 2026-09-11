@@ -59,7 +59,7 @@ CATEGORIAS: dict[str, dict[str, Unidade]] = {
         "MPa": Unidade("MPa", 1.0),
         "GPa": Unidade("GPa", 1_000.0),
         "bar": Unidade("bar", 0.1),
-        "psi": Unidade("psi", 0.006894757293168),
+        "psi": Unidade("psi", MPA_PER_KSI / 1000),
         "ksi": Unidade("ksi", MPA_PER_KSI),
         "kgf/cm²": Unidade("kgf/cm²", 0.0980665),
     },

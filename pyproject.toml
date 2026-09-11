@@ -71,7 +71,6 @@ files = [
     "core/technical_modules.py",
     "core/technical_records.py",
     "core/unit_converter.py",
-    "core/units.py",
 ]
 # Fora da lista acima ainda faltam anotações; a interface (app_pages) não é
 # verificada de propósito, porque o Streamlit devolve Any em quase tudo e o
