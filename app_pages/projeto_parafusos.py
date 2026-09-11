@@ -476,6 +476,15 @@ st.dataframe(
         "Fator calculado": st.column_config.NumberColumn(format="%.3f"),
     },
 )
+st.download_button(
+    "Baixar resultado em CSV",
+    data=tabela_criterios.to_csv(index=False).encode("utf-8-sig"),
+    file_name="projeto_parafusos.csv",
+    mime="text/csv",
+    icon=":material/download:",
+    width="stretch",
+    key="parafusos_baixar",
+)
 
 with st.expander(
     "Diagnóstico de cada modo de falha",
@@ -645,7 +654,7 @@ with st.container(border=True):
                 key=lambda item: item.fator_goodman,
             )
         except ValueError as erro:
-            st.error(f"Não foi possível analisar a fadiga: {erro}")
+            st.error(f"Não foi possível analisar a fadiga: {erro}", icon=":material/error:")
         else:
             with st.container(horizontal=True):
                 st.metric(

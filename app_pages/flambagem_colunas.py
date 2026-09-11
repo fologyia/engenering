@@ -1,5 +1,6 @@
 import math
 
+import pandas as pd
 import streamlit as st
 
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
@@ -215,7 +216,7 @@ with st.container(border=True):
     try:
         nomes_materiais = mat.listar_nomes()
     except (FileNotFoundError, ValueError) as erro:
-        st.error(f"Não foi possível carregar a base de materiais: {erro}")
+        st.error(f"Não foi possível carregar a base de materiais: {erro}", icon=":material/error:")
         st.stop()
 
     projeto_ativo = obter_projeto_ativo()
@@ -361,6 +362,34 @@ with st.container(border=True):
     st.latex(
         r"P_{cr,Euler}=\frac{\pi^2 EI}{(KL)^2},\qquad "
         r"\sigma_{cr,Johnson}=S_y-\left(\frac{S_y}{2\pi}\right)^2\frac{\lambda^2}{E}"
+    )
+    tabela_resumo_flambagem = pd.DataFrame(
+        {
+            "Grandeza": [
+                "λx", "λy", "λ governante", "λ de transição",
+                "Carga crítica de Euler (kN)", "Carga crítica governante (kN)",
+                "Carga admissível (kN)", "Fator de segurança real",
+            ],
+            "Valor": [
+                resultado.esbeltez_x,
+                resultado.esbeltez_y,
+                resultado.esbeltez_governante,
+                resultado.esbeltez_transicao,
+                resultado.carga_critica_euler_N / 1_000.0,
+                resultado.carga_critica_N / 1_000.0,
+                resultado.carga_admissivel_N / 1_000.0,
+                None if math.isinf(resultado.fator_seguranca) else resultado.fator_seguranca,
+            ],
+        }
+    )
+    st.download_button(
+        "Baixar resultado em CSV",
+        data=tabela_resumo_flambagem.to_csv(index=False).encode("utf-8-sig"),
+        file_name="flambagem_colunas.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        width="stretch",
+        key="flambagem_baixar",
     )
 
 if resultado.utilizacao > 1.0:

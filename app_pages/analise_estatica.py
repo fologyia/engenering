@@ -30,7 +30,7 @@ st.session_state.setdefault("estatica_tau_xy", 0.0)
 try:
     nomes = mat.listar_nomes()
 except (FileNotFoundError, ValueError) as erro:
-    st.error(f"Não foi possível carregar a base de materiais: {erro}")
+    st.error(f"Não foi possível carregar a base de materiais: {erro}", icon=":material/error:")
     st.stop()
 
 projeto_ativo = obter_projeto_ativo()
@@ -84,13 +84,14 @@ if dados:
         f"— {dados['observacao']}"
     )
     if dados.get("nivel_confianca") == "Referência":
-        st.warning("Valor de catálogo orientativo: confirme a propriedade antes de emitir o memorial.")
+        st.warning("Valor de catálogo orientativo: confirme a propriedade antes de emitir o memorial.", icon=":material/warning:")
     else:
         st.info(f"Confiança documental do cadastro: {dados.get('nivel_confianca')}. A aplicabilidade técnica ainda deve ser conferida.")
     if not base_valida:
         st.warning(
             "Este material não possui Sy válido para o critério de von Mises. "
-            "Informe propriedades manuais ou use um critério apropriado a materiais frágeis."
+            "Informe propriedades manuais ou use um critério apropriado a materiais frágeis.",
+            icon=":material/warning:",
         )
 
 with st.form("formulario_estatico"):
@@ -148,7 +149,7 @@ if calcular:
         n_esc = est.fator_seguranca_escoamento(sigma_vm, Sy)
         n_rup = est.fator_seguranca_ruptura(sigma_vm, Sut)
     except ValueError as erro:
-        st.error(str(erro))
+        st.error(str(erro), icon=":material/error:")
     else:
         # Guardado em session_state (e não só na variável local) para que o
         # resultado sobreviva ao clique em "Registrar no projeto ativo": esse
@@ -204,10 +205,37 @@ if resultado_estatica:
             border=True,
         )
 
+    tabela_resumo_estatica = pd.DataFrame(
+        {
+            "Componente": ["σx", "σy", "τxy", "σ1", "σ2", "von Mises", "Sy", "Sut", "n_esc", "n_rup"],
+            "Valor (MPa)": [
+                sigma_x,
+                sigma_y,
+                tau_xy,
+                s1,
+                s2,
+                sigma_vm,
+                Sy,
+                Sut,
+                None if math.isinf(n_esc) else n_esc,
+                None if math.isinf(n_rup) else n_rup,
+            ],
+        }
+    )
+    st.download_button(
+        "Baixar resultado em CSV",
+        data=tabela_resumo_estatica.to_csv(index=False).encode("utf-8-sig"),
+        file_name="analise_estatica.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        width="stretch",
+        key="estatica_baixar",
+    )
+
     if n_esc < 1:
-        st.error("Escoamento previsto: a tensão equivalente supera Sy.")
+        st.error("Escoamento previsto: a tensão equivalente supera Sy.", icon=":material/error:")
     elif n_esc < 1.5:
-        st.warning("Margem contra escoamento baixa: n < 1,5.")
+        st.warning("Margem contra escoamento baixa: n < 1,5.", icon=":material/warning:")
     else:
         st.success("O estado informado permanece abaixo do limite de escoamento.")
 

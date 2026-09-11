@@ -154,6 +154,15 @@ if modulo == "1. Perfis":
                 "Valor": st.column_config.NumberColumn(format="%.4g")
             },
         )
+        st.download_button(
+            "Baixar propriedades do perfil em CSV",
+            data=propriedades.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"perfil_{perfil.nome}.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            width="stretch",
+            key="aco_baixar_perfil",
+        )
         st.caption(perfil.descricao)
 
     with st.expander(
@@ -291,7 +300,7 @@ if modulo == "1. Perfis":
                 )
                 custom = secoes.barra_retangular("Personalizado", h, b)
         except ValueError as erro:
-            st.error(str(erro))
+            st.error(str(erro), icon=":material/error:")
         else:
             with st.container(horizontal=True):
                 st.metric("Área", f"{custom.area_mm2 / 100:.3f} cm²", border=True)
@@ -326,7 +335,7 @@ elif modulo == "2. Barras":
             "G (GPa)", 1.0, value=77.0, step=1.0, key="estrutura_barra_g"
         )
         if fu < fy:
-            st.error("Fu deve ser maior ou igual a Fy.")
+            st.error("Fu deve ser maior ou igual a Fy.", icon=":material/error:")
             st.stop()
         tipo_axial = st.segmented_control(
             "Solicitação axial",
@@ -478,7 +487,7 @@ elif modulo == "2. Barras":
             resistencia_my,
         )
     except ValueError as erro:
-        st.error(f"Não foi possível verificar a barra: {erro}")
+        st.error(f"Não foi possível verificar a barra: {erro}", icon=":material/error:")
         st.stop()
 
     st.subheader("Resistências e utilização")
@@ -507,6 +516,40 @@ elif modulo == "2. Barras":
     mostrar_utilizacao("Flexão no eixo x", flexao.utilizacao_momento)
     mostrar_utilizacao("Cisalhamento", flexao.utilizacao_cisalhamento)
     mostrar_utilizacao("Interação N–Mx–My", interacao.indice_interacao)
+
+    tabela_resumo_barra = pd.DataFrame(
+        {
+            "Grandeza": [
+                f"Resistência axial — {modo_axial} (kN)",
+                "Resistência à flexão x (kN·m)",
+                "Resistência ao cisalhamento (kN)",
+                "Índice de interação",
+                "Utilização axial",
+                "Utilização flexão x",
+                "Utilização cisalhamento",
+                "Utilização interação",
+            ],
+            "Valor": [
+                resistencia_axial / 1e3,
+                flexao.resistencia_flexao_Nmm / 1e6,
+                flexao.resistencia_cisalhamento_N / 1e3,
+                interacao.indice_interacao,
+                utilizacao_axial,
+                flexao.utilizacao_momento,
+                flexao.utilizacao_cisalhamento,
+                interacao.indice_interacao,
+            ],
+        }
+    )
+    st.download_button(
+        "Baixar resultado da barra em CSV",
+        data=tabela_resumo_barra.to_csv(index=False).encode("utf-8-sig"),
+        file_name="estrutura_aco_barra.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        width="stretch",
+        key="aco_baixar_barra",
+    )
 
     if tipo_axial == "Compressão":
         detalhes = pd.DataFrame(
@@ -681,7 +724,7 @@ elif modulo == "3. Combinações":
         ]
         resultados = combinacoes.gerar_combinacoes(lista_acoes)
     except (ValueError, TypeError) as erro:
-        st.error(f"Revise a tabela: {erro}")
+        st.error(f"Revise a tabela: {erro}", icon=":material/error:")
         st.stop()
 
     tabela_resultados = pd.DataFrame([asdict(item) for item in resultados]).rename(
@@ -703,6 +746,15 @@ elif modulo == "3. Combinações":
             "V (kN)": st.column_config.NumberColumn(format="%.3f"),
             "M (kN·m)": st.column_config.NumberColumn(format="%.3f"),
         },
+    )
+    st.download_button(
+        "Baixar combinações em CSV",
+        data=tabela_resultados.to_csv(index=False).encode("utf-8-sig"),
+        file_name="estrutura_aco_combinacoes.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        width="stretch",
+        key="aco_baixar_combinacoes",
     )
     with st.container(horizontal=True):
         st.metric(
@@ -792,7 +844,7 @@ elif modulo == "4. Ligações":
         try:
             classe = parafusos.obter_classe(classe_nome, rosca.diametro_mm)
         except ValueError as erro:
-            st.error(str(erro))
+            st.error(str(erro), icon=":material/error:")
             st.stop()
         dados = st.columns(4)
         n_parafusos = dados[0].number_input(
@@ -909,6 +961,15 @@ elif modulo == "4. Ligações":
                 "Fator": st.column_config.NumberColumn(format="%.3f"),
             },
         )
+        st.download_button(
+            "Baixar resultado da ligação parafusada em CSV",
+            data=criterios.to_csv(index=False).encode("utf-8-sig"),
+            file_name="estrutura_aco_ligacao_parafusos.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            width="stretch",
+            key="aco_baixar_ligacao_parafusos",
+        )
         st.metric(
             "Interação quadrática tração–cisalhamento",
             f"{resultado.interacao_parafuso:.3f}",
@@ -976,6 +1037,31 @@ elif modulo == "4. Ligações":
             if not math.isinf(resultado.fator_cisalhamento_bloco)
             else 0.0,
         )
+        tabela_resumo_bloco = pd.DataFrame(
+            {
+                "Grandeza": [
+                    "Resistência da seção líquida (kN)",
+                    "Resistência ao cisalhamento de bloco (kN)",
+                    "Fator seção líquida",
+                    "Fator cisalhamento de bloco",
+                ],
+                "Valor": [
+                    resultado.resistencia_secao_liquida_N / 1e3,
+                    resultado.resistencia_cisalhamento_bloco_N / 1e3,
+                    None if math.isinf(resultado.fator_secao_liquida) else resultado.fator_secao_liquida,
+                    None if math.isinf(resultado.fator_cisalhamento_bloco) else resultado.fator_cisalhamento_bloco,
+                ],
+            }
+        )
+        st.download_button(
+            "Baixar resultado da chapa e bloco em CSV",
+            data=tabela_resumo_bloco.to_csv(index=False).encode("utf-8-sig"),
+            file_name="estrutura_aco_ligacao_bloco.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            width="stretch",
+            key="aco_baixar_ligacao_bloco",
+        )
 
     else:
         solda = st.columns(4)
@@ -1030,6 +1116,26 @@ elif modulo == "4. Ligações":
             1.0 / resultado.fator_seguranca
             if not math.isinf(resultado.fator_seguranca)
             else 0.0,
+        )
+        tabela_resumo_solda = pd.DataFrame(
+            {
+                "Grandeza": ["Garganta efetiva (mm)", "Área efetiva (mm²)", "Resistência (kN)", "Fator"],
+                "Valor": [
+                    0.707 * perna,
+                    resultado.area_efetiva_mm2,
+                    resultado.resistencia_N / 1e3,
+                    None if math.isinf(resultado.fator_seguranca) else resultado.fator_seguranca,
+                ],
+            }
+        )
+        st.download_button(
+            "Baixar resultado da solda de filete em CSV",
+            data=tabela_resumo_solda.to_csv(index=False).encode("utf-8-sig"),
+            file_name="estrutura_aco_ligacao_solda.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            width="stretch",
+            key="aco_baixar_ligacao_solda",
         )
 
     st.caption(
@@ -1226,10 +1332,37 @@ else:
         resultados_tabs = st.tabs(["Deslocamentos", "Reações", "Esforços"])
         with resultados_tabs[0]:
             st.dataframe(deslocamentos, hide_index=True)
+            st.download_button(
+                "Baixar deslocamentos em CSV",
+                data=deslocamentos.to_csv(index=False).encode("utf-8-sig"),
+                file_name="estrutura_aco_2d_deslocamentos.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+                key="aco_baixar_2d_deslocamentos",
+            )
         with resultados_tabs[1]:
             st.dataframe(reacoes, hide_index=True)
+            st.download_button(
+                "Baixar reações em CSV",
+                data=reacoes.to_csv(index=False).encode("utf-8-sig"),
+                file_name="estrutura_aco_2d_reacoes.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+                key="aco_baixar_2d_reacoes",
+            )
         with resultados_tabs[2]:
             st.dataframe(esforcos, hide_index=True)
+            st.download_button(
+                "Baixar esforços em CSV",
+                data=esforcos.to_csv(index=False).encode("utf-8-sig"),
+                file_name="estrutura_aco_2d_esforcos.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+                key="aco_baixar_2d_esforcos",
+            )
 
         coordenadas = {
             int(no.id): (no.x_mm / 1e3, no.y_mm / 1e3)

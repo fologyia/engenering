@@ -534,6 +534,35 @@ if modo == "Estado plano (2D)":
         st.metric("τx'y' no plano escolhido", formatar_tensao(transformada.tau_x_linha_y_linha), border=True)
         st.metric("τmáx absoluto (3D)", formatar_tensao(resultado_2d.tau_max_absoluta), border=True)
 
+    tabela_resumo_mohr_2d = pd.DataFrame(
+        {
+            "Grandeza": [
+                "σ1 no plano", "σ2 no plano", "τmáx no plano", "von Mises",
+                "σx' no plano escolhido", "σy' no plano escolhido",
+                "τx'y' no plano escolhido", "τmáx absoluto (3D)",
+            ],
+            "Valor (MPa)": [
+                resultado_2d.sigma_1_plana,
+                resultado_2d.sigma_2_plana,
+                resultado_2d.tau_max_plana,
+                resultado_2d.von_mises,
+                transformada.sigma_x_linha,
+                transformada.sigma_y_linha,
+                transformada.tau_x_linha_y_linha,
+                resultado_2d.tau_max_absoluta,
+            ],
+        }
+    )
+    st.download_button(
+        "Baixar resultado 2D em CSV",
+        data=tabela_resumo_mohr_2d.to_csv(index=False).encode("utf-8-sig"),
+        file_name="circulo_mohr_2d.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        width="stretch",
+        key="mohr_baixar_2d",
+    )
+
     if math.isclose(resultado_2d.raio, 0.0, abs_tol=1e-12):
         st.info(
             "Estado equibiaxial: todo plano no plano xy é principal e a orientação "
@@ -842,6 +871,34 @@ else:
         st.metric("Tresca equivalente", formatar_tensao(resultado_3d.tresca_equivalente), border=True)
         st.metric("Tensão média", formatar_tensao(resultado_3d.tensao_media), border=True)
         st.metric("τ octaédrica", formatar_tensao(resultado_3d.tau_octaedrica), border=True)
+
+    tabela_resumo_mohr_3d = pd.DataFrame(
+        {
+            "Grandeza": [
+                "σ1", "σ2", "σ3", "τmáx absoluto", "von Mises",
+                "Tresca equivalente", "Tensão média", "τ octaédrica",
+            ],
+            "Valor (MPa)": [
+                sigma_1,
+                sigma_2,
+                sigma_3,
+                resultado_3d.tau_max_absoluta,
+                resultado_3d.von_mises,
+                resultado_3d.tresca_equivalente,
+                resultado_3d.tensao_media,
+                resultado_3d.tau_octaedrica,
+            ],
+        }
+    )
+    st.download_button(
+        "Baixar resultado 3D em CSV",
+        data=tabela_resumo_mohr_3d.to_csv(index=False).encode("utf-8-sig"),
+        file_name="circulo_mohr_3d.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        width="stretch",
+        key="mohr_baixar_3d",
+    )
 
     escala = max(1.0, max(abs(valor) for valor in resultado_3d.tensoes_principais))
     if (
