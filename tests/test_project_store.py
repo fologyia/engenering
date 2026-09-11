@@ -77,3 +77,22 @@ def test_ciclo_permanente_com_revisoes_exportacao_e_importacao(tmp_path):
     restaurado = restaurar_revisao(projeto["id"], 0, caminho_banco=banco)
     assert restaurado["revisao"] == 2
     assert restaurado["objetivo"] == ""
+
+
+def test_banco_padrao_redirecionado_isola_de_verdade(tmp_path, monkeypatch):
+    """Apontar BANCO_PADRAO para outro arquivo precisa ter efeito.
+
+    Enquanto o caminho era argumento padrão (``= BANCO_PADRAO``), ele ficava
+    congelado no momento do import: redirecionar o módulo não mudava nada e a
+    escrita continuava indo para o banco real, sem aviso nenhum. Foi assim
+    que projetos de teste acabaram no banco de trabalho.
+    """
+    from core import project_store
+
+    alvo = tmp_path / "isolado.sqlite3"
+    monkeypatch.setattr(project_store, "BANCO_PADRAO", alvo)
+
+    criar_projeto("Isolado", codigo="ISO-1")
+
+    assert alvo.exists()
+    assert [item["codigo"] for item in listar_projetos()] == ["ISO-1"]

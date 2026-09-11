@@ -45,8 +45,21 @@ def _json_seguro(valor: Any) -> Any:
         ) from erro
 
 
-def _conectar(caminho_banco: str | Path = BANCO_PADRAO) -> sqlite3.Connection:
-    caminho = Path(caminho_banco).expanduser().resolve()
+def _banco(caminho_banco: str | Path | None) -> str | Path:
+    """Resolve o banco na hora da chamada, e não na definição da função.
+
+    Com ``= BANCO_PADRAO`` no argumento, o valor ficava congelado no momento
+    em que o módulo era importado: apontar ``BANCO_PADRAO`` para outro
+    arquivo — como um teste faria para se isolar — não tinha efeito nenhum, e
+    a escrita ia parar no banco real sem nenhum aviso.
+    """
+    return BANCO_PADRAO if caminho_banco is None else caminho_banco
+
+
+def _conectar(caminho_banco: str | Path | None = None) -> sqlite3.Connection:
+    # Único ponto que materializa o caminho: todas as demais funções apenas
+    # repassam o parâmetro, então resolver aqui cobre o módulo inteiro.
+    caminho = Path(_banco(caminho_banco)).expanduser().resolve()
     caminho.parent.mkdir(parents=True, exist_ok=True)
     conexao = sqlite3.connect(caminho, timeout=15.0)
     conexao.row_factory = sqlite3.Row
@@ -55,7 +68,7 @@ def _conectar(caminho_banco: str | Path = BANCO_PADRAO) -> sqlite3.Connection:
     return conexao
 
 
-def inicializar_banco(caminho_banco: str | Path = BANCO_PADRAO) -> None:
+def inicializar_banco(caminho_banco: str | Path | None = None) -> None:
     with _conectar(caminho_banco) as conexao:
         conexao.executescript(
             """
@@ -192,7 +205,7 @@ def _validar_documento(projeto: Mapping[str, Any]) -> dict[str, Any]:
 def criar_projeto(
     nome: str,
     *,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
     ativar: bool = True,
     **campos: Any,
 ) -> dict[str, Any]:
@@ -239,7 +252,7 @@ def criar_projeto(
 def listar_projetos(
     *,
     incluir_arquivados: bool = False,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     inicializar_banco(caminho_banco)
     sql = (
@@ -270,7 +283,7 @@ def listar_projetos(
 def obter_projeto(
     projeto_id: str,
     *,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any] | None:
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
@@ -287,7 +300,7 @@ def salvar_projeto(
     *,
     motivo: str = "Salvamento",
     criar_revisao: bool = False,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
     inicializar_banco(caminho_banco)
     documento = _validar_documento(projeto)
@@ -341,7 +354,7 @@ def salvar_projeto(
 def historico_revisoes(
     projeto_id: str,
     *,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
@@ -367,7 +380,7 @@ def restaurar_revisao(
     projeto_id: str,
     revisao: int,
     *,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
@@ -393,7 +406,7 @@ def restaurar_revisao(
 def definir_projeto_ativo(
     projeto_id: str | None,
     *,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> None:
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
@@ -415,7 +428,7 @@ def definir_projeto_ativo(
 
 
 def obter_projeto_ativo(
-    *, caminho_banco: str | Path = BANCO_PADRAO
+    *, caminho_banco: str | Path | None = None
 ) -> dict[str, Any] | None:
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
@@ -434,7 +447,7 @@ def arquivar_projeto(
     projeto_id: str,
     *,
     arquivado: bool = True,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
     projeto = obter_projeto(projeto_id, caminho_banco=caminho_banco)
     if projeto is None:
@@ -523,7 +536,7 @@ def duplicar_projeto(
     projeto_id: str,
     *,
     novo_nome: str | None = None,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
     origem = obter_projeto(projeto_id, caminho_banco=caminho_banco)
     if origem is None:
@@ -567,7 +580,7 @@ def adicionar_registro_tecnico(
     projeto_id: str,
     registro: Mapping[str, Any],
     *,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
     projeto = obter_projeto(projeto_id, caminho_banco=caminho_banco)
     if projeto is None:
@@ -582,7 +595,7 @@ def registrar_calculo_tecnico(
     registro: Mapping[str, Any],
     *,
     dependencias_chaves: Sequence[str] = (),
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
     """Anexa um registro técnico fotografando as fontes que ele consumiu.
 
@@ -609,7 +622,7 @@ def exportar_projeto(
     projeto_id: str,
     *,
     incluir_historico: bool = True,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> bytes:
     projeto = obter_projeto(projeto_id, caminho_banco=caminho_banco)
     if projeto is None:
@@ -631,7 +644,7 @@ def exportar_projeto(
 def importar_projeto(
     conteudo: bytes | str,
     *,
-    caminho_banco: str | Path = BANCO_PADRAO,
+    caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
     try:
         texto = conteudo.decode("utf-8-sig") if isinstance(conteudo, bytes) else conteudo

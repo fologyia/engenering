@@ -19,6 +19,11 @@ tmp/
 data/perfis_usuario.json
 data/materiais_usuario.json
 
+# Banco de projetos: dado de trabalho do usuario, nao codigo.
+# Versiona-lo transformava cada alteracao de projeto em diff binario e
+# publicava dados de projeto no repositorio.
+data/projetos_industriais.sqlite3
+
 # Sistema operacional
 Thumbs.db
 desktop.ini
