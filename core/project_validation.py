@@ -154,6 +154,44 @@ def pendencias_de_preenchimento(projeto: Mapping[str, Any]) -> list[dict[str, An
     return sorted(faltando, key=lambda item: (ordem.get(item["severidade"], 3), item["rotulo"]))
 
 
+# Campos que cada linha do escopo físico precisa ter, com a severidade da
+# falta. Igual aos campos do cadastro: a tabela da interface e a validação
+# leem a mesma lista, para não divergirem.
+CAMPOS_COMPONENTE: tuple[tuple[str, str, str], ...] = (
+    ("tag", "TAG", "Pendência"),
+    ("descricao", "descrição", "Pendência"),
+    ("material", "material", "Pendência"),
+)
+
+
+def diagnostico_componente(item: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Problemas de uma linha do escopo físico, como (severidade, mensagem)."""
+    problemas: list[tuple[str, str]] = []
+    for campo, rotulo, severidade in CAMPOS_COMPONENTE:
+        if not _texto(item.get(campo)):
+            problemas.append((severidade, f"{rotulo} ausente"))
+    if _texto(item.get("material")) and not _texto(item.get("fonte_material")):
+        problemas.append(
+            (
+                "Atenção",
+                "material informado sem a fonte (norma, certificado ou especificação)",
+            )
+        )
+    return problemas
+
+
+def diagnostico_norma(item: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Problemas de uma linha da matriz normativa."""
+    problemas: list[tuple[str, str]] = []
+    if not _texto(item.get("codigo")):
+        problemas.append(("Pendência", "sem código de identificação"))
+    if not _texto(item.get("edicao")):
+        problemas.append(("Atenção", "edição ou revisão não informada"))
+    if not bool(item.get("conferida", False)):
+        problemas.append(("Pendência", "ainda não conferida no documento-fonte"))
+    return problemas
+
+
 def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
     """Executa a matriz de validação e devolve achados e indicadores.
 
@@ -221,13 +259,13 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
         )
     for indice, item in enumerate(componentes, start=1):
         identificacao = _texto(item.get("tag")) or _texto(item.get("descricao")) or f"item {indice}"
-        for campo, rotulo in (("tag", "TAG"), ("descricao", "descrição"), ("material", "material")):
+        for campo, rotulo, severidade_campo in CAMPOS_COMPONENTE:
             pontos_totais += 1
             if _texto(item.get(campo)):
                 preenchidos += 1
             else:
                 adicionar(
-                    "Pendência",
+                    severidade_campo,
                     "Escopo físico",
                     f"{identificacao}: {rotulo} ausente",
                     "O cadastro do item não contém informação suficiente para rastreá-lo.",

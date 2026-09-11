@@ -28,6 +28,8 @@ from core.project_store import (
     salvar_projeto,
 )
 from core.project_validation import (
+    diagnostico_componente,
+    diagnostico_norma,
     estado_de_preenchimento,
     pendencias_de_preenchimento,
     validar_projeto,
@@ -71,6 +73,37 @@ def _marca(estado: Mapping[str, Any], campo: str) -> str:
         "Pendência": " · pendência",
         "Atenção": " · recomendado",
     }.get(dados["severidade"], "")
+
+
+def _avisos_por_linha(linhas: list[dict[str, Any]], diagnosticar, rotular) -> None:
+    """Mostra, embaixo da tabela, o que falta em cada linha.
+
+    A Central de Validação já apontava isso, mas só depois de sair da tela.
+    Aqui o retorno chega enquanto a linha ainda está à vista.
+    """
+    problemas = []
+    for indice, linha in enumerate(linhas, start=1):
+        for severidade, mensagem in diagnosticar(linha):
+            problemas.append(
+                {
+                    "Linha": rotular(linha, indice),
+                    "Situação": severidade,
+                    "O que falta": mensagem,
+                }
+            )
+    if not problemas:
+        if linhas:
+            st.success(
+                "Todas as linhas estão completas.", icon=":material/check_circle:"
+            )
+        return
+    bloqueios = sum(1 for item in problemas if item["Situação"] == "Pendência")
+    st.warning(
+        f"{len(problemas)} ponto(s) a completar em {len(linhas)} linha(s)"
+        + (f", sendo {bloqueios} pendência(s)." if bloqueios else "."),
+        icon=":material/pending:",
+    )
+    st.dataframe(pd.DataFrame(problemas), hide_index=True, width="stretch")
 
 
 def _limpar(valor: Any) -> Any:
@@ -506,7 +539,53 @@ with abas[1]:
             st.rerun()
 
 with abas[2]:
-    st.caption("Cadastre equipamentos, linhas, estruturas, suportes, pontos críticos ou sistemas — não apenas elementos de máquinas.")
+    st.caption(
+        "Cadastre equipamentos, linhas, estruturas, suportes, pontos críticos "
+        "ou sistemas — não apenas elementos de máquinas."
+    )
+    with st.container(border=True):
+        st.markdown("**Como preencher uma linha**")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "TAG": "CV-204-SUP-01",
+                        "Descrição": "Suporte do transportador CV-204",
+                        "Serviço / função": "Sustenta o trecho elevado entre os pórticos P3 e P4",
+                        "Material": "ASTM A572 Gr. 50",
+                        "Fonte do material": "Certificado do lote MTR 88213",
+                        "Desenho": "DE-1042 rev. C",
+                        "Criticidade": "Alta",
+                    }
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+        st.caption(
+            "TAG, descrição e material são cobrados pela validação. A fonte do "
+            "material é o que separa um valor de catálogo de um dado do lote."
+        )
+    if not projeto["componentes"] and st.button(
+        "Começar com esta linha de exemplo",
+        icon=":material/playlist_add:",
+        key="semear_componente",
+        help="Cria a linha acima para você editar, em vez de partir da tabela vazia.",
+    ):
+        projeto["componentes"] = [
+            {
+                **criar_item(),
+                "tag": "CV-204-SUP-01",
+                "descricao": "Suporte do transportador CV-204",
+                "servico": "Sustenta o trecho elevado entre os pórticos P3 e P4",
+                "material": "ASTM A572 Gr. 50",
+                "fonte_material": "Certificado do lote MTR 88213",
+                "desenho": "DE-1042 rev. C",
+                "criticidade": "Alta",
+            }
+        ]
+        _salvar(projeto, "Linha de exemplo do escopo físico")
+        st.rerun()
     colunas_componentes = ["id", "tag", "descricao", "servico", "material", "fonte_material", "desenho", "criticidade"]
     df_componentes = pd.DataFrame(projeto["componentes"])
     for coluna in colunas_componentes:
@@ -529,6 +608,11 @@ with abas[2]:
         },
         key=f"componentes_{projeto['id']}",
     )
+    _avisos_por_linha(
+        _linhas_editor(editado),
+        diagnostico_componente,
+        lambda linha, indice: str(linha.get("tag") or linha.get("descricao") or f"linha {indice}"),
+    )
     if st.button("Salvar escopo físico", type="primary", icon=":material/save:"):
         linhas = _linhas_editor(editado)
         projeto["componentes"] = [
@@ -539,7 +623,50 @@ with abas[2]:
         st.rerun()
 
 with abas[3]:
-    st.caption("Registre a referência aplicável e marque 'Conferida' somente após verificar o documento-fonte e sua edição.")
+    st.caption(
+        "Registre a referência aplicável e marque 'Conferida' somente após "
+        "verificar o documento-fonte e sua edição."
+    )
+    with st.container(border=True):
+        st.markdown("**Como preencher uma linha**")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Código / título": "ABNT NBR 8800",
+                        "Edição": "2024",
+                        "Aplicação no projeto": "Dimensionamento das barras e das ligações da estrutura de suporte",
+                        "Obrigatória": True,
+                        "Conferida": True,
+                        "PDF / fonte": "normas_pdf/NBR8800-2024.pdf",
+                    }
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+        st.caption(
+            "A aplicação no projeto é o campo que o memorial cita: escreva o "
+            "que a norma governa aqui, não o título dela outra vez."
+        )
+    if not projeto["normas"] and st.button(
+        "Começar com esta linha de exemplo",
+        icon=":material/playlist_add:",
+        key="semear_norma",
+    ):
+        projeto["normas"] = [
+            {
+                **criar_item(),
+                "codigo": "ABNT NBR 8800",
+                "edicao": "2024",
+                "escopo": "Dimensionamento das barras e das ligações da estrutura de suporte",
+                "obrigatoria": True,
+                "conferida": False,
+                "fonte": "",
+            }
+        ]
+        _salvar(projeto, "Linha de exemplo da matriz normativa")
+        st.rerun()
     colunas_normas = ["id", "codigo", "edicao", "escopo", "obrigatoria", "conferida", "fonte"]
     df_normas = pd.DataFrame(projeto["normas"])
     for coluna in colunas_normas:
@@ -560,6 +687,11 @@ with abas[3]:
             "fonte": st.column_config.TextColumn("PDF / fonte", width="large"),
         },
         key=f"normas_{projeto['id']}",
+    )
+    _avisos_por_linha(
+        _linhas_editor(editado_normas),
+        diagnostico_norma,
+        lambda linha, indice: str(linha.get("codigo") or f"linha {indice}"),
     )
     if st.button("Salvar matriz normativa", type="primary", icon=":material/save:"):
         linhas = _linhas_editor(editado_normas)

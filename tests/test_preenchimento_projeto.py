@@ -12,8 +12,11 @@ import unittest
 from core.project_store import novo_projeto_documento
 from core.project_validation import (
     CAMPOS_BASE,
+    CAMPOS_COMPONENTE,
     CAMPOS_IDENTIFICACAO,
     CAMPOS_RESPONSABILIDADE,
+    diagnostico_componente,
+    diagnostico_norma,
     estado_de_preenchimento,
     pendencias_de_preenchimento,
     validar_projeto,
@@ -140,6 +143,94 @@ class IndiceDocumentalTests(unittest.TestCase):
         pendentes = pendencias_de_preenchimento(projeto)
         preenchidos = sum(1 for dados in estado.values() if dados["preenchido"])
         self.assertEqual(preenchidos + len(pendentes), len(estado))
+
+
+class DiagnosticoPorLinhaTests(unittest.TestCase):
+    """As tabelas avisam o que falta em cada linha, ali mesmo.
+
+    Antes, um componente sem material só aparecia como pendência depois de
+    sair da tela e abrir a Central de Validação.
+    """
+
+    def test_componente_completo_nao_gera_aviso(self):
+        completo = {
+            "tag": "CV-204-SUP-01",
+            "descricao": "Suporte do transportador",
+            "material": "ASTM A572 Gr. 50",
+            "fonte_material": "Certificado MTR 88213",
+        }
+        self.assertEqual(diagnostico_componente(completo), [])
+
+    def test_campos_cobrados_do_componente_geram_aviso(self):
+        vazio: dict = {}
+        mensagens = [mensagem for _sev, mensagem in diagnostico_componente(vazio)]
+        for _campo, rotulo, _sev in CAMPOS_COMPONENTE:
+            with self.subTest(campo=rotulo):
+                self.assertIn(f"{rotulo} ausente", mensagens)
+
+    def test_material_sem_fonte_e_apontado(self):
+        # O caso que separa um valor de catálogo de um dado do lote.
+        item = {
+            "tag": "T1",
+            "descricao": "Item",
+            "material": "ASTM A36",
+            "fonte_material": "",
+        }
+        severidades = dict(
+            (mensagem, severidade) for severidade, mensagem in diagnostico_componente(item)
+        )
+        self.assertTrue(any("sem a fonte" in mensagem for mensagem in severidades))
+        for mensagem, severidade in severidades.items():
+            if "sem a fonte" in mensagem:
+                self.assertEqual(severidade, "Atenção")
+
+    def test_sem_material_nao_cobra_a_fonte(self):
+        # Cobrar a fonte de um material que não existe seria ruído.
+        item = {"tag": "T1", "descricao": "Item"}
+        mensagens = [mensagem for _sev, mensagem in diagnostico_componente(item)]
+        self.assertFalse(any("sem a fonte" in mensagem for mensagem in mensagens))
+
+    def test_norma_completa_nao_gera_aviso(self):
+        completa = {"codigo": "ABNT NBR 8800", "edicao": "2024", "conferida": True}
+        self.assertEqual(diagnostico_norma(completa), [])
+
+    def test_norma_nao_conferida_e_pendencia(self):
+        item = {"codigo": "ABNT NBR 8800", "edicao": "2024", "conferida": False}
+        self.assertEqual(diagnostico_norma(item), [("Pendência", "ainda não conferida no documento-fonte")])
+
+    def test_norma_sem_edicao_e_atencao(self):
+        item = {"codigo": "ABNT NBR 8800", "conferida": True}
+        self.assertEqual(
+            diagnostico_norma(item), [("Atenção", "edição ou revisão não informada")]
+        )
+
+    def test_linha_semeada_de_norma_nasce_pendente_de_conferencia(self):
+        # O botão de exemplo não pode marcar como conferida uma norma que o
+        # usuário não abriu; a pendência tem de continuar aparecendo.
+        semeada = {
+            "codigo": "ABNT NBR 8800",
+            "edicao": "2024",
+            "escopo": "Dimensionamento das barras",
+            "obrigatoria": True,
+            "conferida": False,
+        }
+        problemas = diagnostico_norma(semeada)
+        self.assertEqual(len(problemas), 1)
+        self.assertIn("conferida", problemas[0][1])
+
+    def test_diagnostico_bate_com_a_validacao_completa(self):
+        # Se a tabela dissesse uma coisa e a Central de Validação outra, o
+        # usuário perderia a confiança nas duas.
+        projeto = novo_projeto_documento("Viga", codigo="PRJ-01", objetivo="x")
+        projeto["componentes"] = [{"tag": "T1", "descricao": "", "material": ""}]
+        achados = [
+            achado
+            for achado in validar_projeto(projeto)["achados"]
+            if achado["categoria"] == "Escopo físico"
+            and achado["titulo"].startswith("T1:")
+        ]
+        da_linha = diagnostico_componente(projeto["componentes"][0])
+        self.assertEqual(len(achados), len(da_linha))
 
 
 if __name__ == "__main__":  # pragma: no cover

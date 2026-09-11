@@ -88,6 +88,114 @@ with st.container(border=True):
             "Sem bloqueios abertos no projeto.", icon=":material/check_circle:"
         )
 
+# ---------------------------------------------------------------------------
+# Emissão direta
+# ---------------------------------------------------------------------------
+# O caso mais comum é "quero o memorial padrão agora". Antes ele exigia
+# descer a página inteira — perfil, seções, composição, identificação — só
+# para chegar ao botão. Este bloco usa a configuração já salva do projeto e
+# não depende de nenhum widget abaixo, o que é o que torna possível colocá-lo
+# no topo: o Streamlit executa de cima para baixo.
+
+_config_projeto = projeto.get("configuracao_relatorio", {})
+_ident_projeto = _config_projeto.get("identificacao", {})
+_perfil_rapido = _config_projeto.get("perfil", "Memorial industrial completo")
+if _perfil_rapido not in PERFIS:
+    _perfil_rapido = "Memorial industrial completo"
+_secoes_rapidas = _config_projeto.get("secoes") or PERFIS[_perfil_rapido]
+_registros_rapidos = _config_projeto.get("registros_incluidos") or [
+    item["id"] for item in projeto.get("registros_tecnicos", [])
+]
+_metadata_rapida = {
+    "titulo": _ident_projeto.get("titulo") or "Memorial técnico do projeto industrial",
+    "subtitulo": _ident_projeto.get("subtitulo")
+    or "Base de projeto, registros técnicos e central de validação",
+    "codigo": _ident_projeto.get("codigo") or projeto["codigo"],
+    "revisao": f"{int(projeto.get('revisao', 0)):02d}",
+    "responsavel": projeto.get("responsavel", ""),
+    "verificador": projeto.get("verificador", ""),
+    "aprovador": projeto.get("aprovador", ""),
+    "situacao": _ident_projeto.get("situacao") or "Para revisão",
+    "emissao": date.today().strftime("%d/%m/%Y"),
+}
+
+_chave_rapida = f"relatorio_rapido_{projeto['id']}"
+with st.container(border=True):
+    st.markdown("##### Emitir agora")
+    _descricao_config = (
+        f"perfil **{_perfil_rapido}**, {len(_secoes_rapidas)} seção(ões) e "
+        f"{len(_registros_rapidos)} registro(s)"
+    )
+    st.caption(
+        ("Usando a configuração salva deste projeto: " if _config_projeto.get("secoes") else "Usando o padrão: ")
+        + _descricao_config
+        + ". Para escolher outras seções, registros ou identificação, ajuste "
+        "abaixo e use o botão do fim da página."
+    )
+    if st.button(
+        "Gerar Word e PDF com esta configuração",
+        type="primary",
+        icon=":material/bolt:",
+        width="stretch",
+        key="gerar_rapido",
+    ):
+        with st.spinner("Montando o memorial…"):
+            try:
+                _word_rapido = gerar_relatorio_industrial_word(
+                    projeto,
+                    secoes_incluidas=_secoes_rapidas,
+                    registros_ids=_registros_rapidos,
+                    metadata_extra=_metadata_rapida,
+                )
+                _pdf_rapido = gerar_relatorio_industrial_pdf(
+                    projeto,
+                    secoes_incluidas=_secoes_rapidas,
+                    registros_ids=_registros_rapidos,
+                    metadata_extra=_metadata_rapida,
+                )
+            except Exception as erro:  # noqa: BLE001 - a falha precisa aparecer
+                st.exception(erro)
+            else:
+                st.session_state[_chave_rapida] = {
+                    "word": _word_rapido,
+                    "pdf": _pdf_rapido,
+                    "codigo": _metadata_rapida["codigo"],
+                    "revisao": _metadata_rapida["revisao"],
+                }
+
+    _gerado_rapido = st.session_state.get(_chave_rapida)
+    if _gerado_rapido:
+        _nome = re.sub(
+            r"[^A-Za-z0-9._-]+", "_", str(_gerado_rapido["codigo"])
+        ).strip("_") or "memorial_industrial"
+        _c1, _c2 = st.columns(2)
+        _c1.download_button(
+            "Baixar Word editável",
+            data=_gerado_rapido["word"],
+            file_name=f"{_nome}_R{_gerado_rapido['revisao']}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            icon=":material/download:",
+            type="primary",
+            width="stretch",
+            key="baixar_rapido_word",
+        )
+        _c2.download_button(
+            "Baixar PDF para distribuição",
+            data=_gerado_rapido["pdf"],
+            file_name=f"{_nome}_R{_gerado_rapido['revisao']}.pdf",
+            mime="application/pdf",
+            icon=":material/picture_as_pdf:",
+            width="stretch",
+            key="baixar_rapido_pdf",
+        )
+
+st.divider()
+st.markdown("### Ajustar a composição")
+st.caption(
+    "Só é preciso mexer aqui quando o memorial desta emissão for diferente do "
+    "padrão do projeto."
+)
+
 perfil_padrao = projeto.get("configuracao_relatorio", {}).get("perfil", "Memorial industrial completo")
 if perfil_padrao not in PERFIS:
     perfil_padrao = "Memorial industrial completo"
