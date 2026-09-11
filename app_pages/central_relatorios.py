@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -17,9 +17,9 @@ from core.project_report import (
     gerar_relatorio_industrial_word,
     montar_modelo_relatorio,
 )
-from core.project_store import obter_projeto_ativo, salvar_projeto
+from core.project_store import EVENTO_EMISSAO, obter_projeto_ativo, salvar_projeto
 from core.project_validation import validar_projeto
-from core.technical_records import rotulo_componente
+from core.technical_records import registro_superado, rotulo_componente
 
 PERFIS = {
     "Memorial industrial completo": list(SECOES_RELATORIO),
@@ -50,6 +50,40 @@ if projeto is None:
     st.warning("Abra um projeto permanente para montar o memorial.")
     st.page_link("app_pages/gestao_projetos.py", label="Abrir Gestão de projetos", icon=":material/folder_managed:")
     st.stop()
+
+
+def _registrar_emissao(
+    documento: dict, *, perfil: str, secoes: list, registros_ids: list, metadata: dict, snapshot: str
+) -> None:
+    """Anota a emissão no projeto: histórico próprio e evento na linha do tempo.
+
+    Antes só o último snapshot ficava guardado; a pergunta "qual memorial foi
+    emitido em março, com quais registros?" não tinha resposta no programa.
+    """
+    configuracao = dict(documento.get("configuracao_relatorio", {}))
+    emissoes = [item for item in configuracao.get("emissoes", []) if isinstance(item, dict)]
+    emissoes.append(
+        {
+            "quando": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "codigo": metadata["codigo"],
+            "revisao": metadata["revisao"],
+            "situacao": metadata["situacao"],
+            "perfil": perfil,
+            "secoes": len(secoes),
+            "registros": len(registros_ids),
+            "snapshot_hash": snapshot,
+            "emissao": metadata["emissao"],
+        }
+    )
+    configuracao["emissoes"] = emissoes[-50:]
+    configuracao["ultimo_snapshot_hash"] = snapshot
+    configuracao["ultima_emissao"] = metadata["emissao"]
+    documento["configuracao_relatorio"] = configuracao
+    salvar_projeto(
+        documento,
+        motivo=f"Memorial gerado: {metadata['codigo']} R{metadata['revisao']} ({metadata['situacao']}, perfil {perfil})",
+        tipo_evento=EVENTO_EMISSAO,
+    )
 
 st.subheader(f"{projeto['codigo']} · {projeto['nome']}")
 st.caption(
@@ -104,8 +138,14 @@ _perfil_rapido = _config_projeto.get("perfil", "Memorial industrial completo")
 if _perfil_rapido not in PERFIS:
     _perfil_rapido = "Memorial industrial completo"
 _secoes_rapidas = _config_projeto.get("secoes") or PERFIS[_perfil_rapido]
-_registros_rapidos = _config_projeto.get("registros_incluidos") or [
-    item["id"] for item in projeto.get("registros_tecnicos", [])
+# Registros superados não entram por padrão: o cálculo que os substituiu é
+# o que responde pela peça. Quem quiser anexá-los marca na composição abaixo.
+_ids_vigentes = [
+    item["id"] for item in projeto.get("registros_tecnicos", []) if not registro_superado(item)
+]
+_registros_rapidos = [
+    valor for valor in (_config_projeto.get("registros_incluidos") or _ids_vigentes)
+    if valor in _ids_vigentes
 ]
 _metadata_rapida = {
     "titulo": _ident_projeto.get("titulo") or "Memorial técnico do projeto industrial",
@@ -163,6 +203,20 @@ with st.container(border=True):
                     "codigo": _metadata_rapida["codigo"],
                     "revisao": _metadata_rapida["revisao"],
                 }
+                _modelo_rapido = montar_modelo_relatorio(
+                    projeto,
+                    secoes_incluidas=_secoes_rapidas,
+                    registros_ids=_registros_rapidos,
+                    metadata_extra=_metadata_rapida,
+                )
+                _registrar_emissao(
+                    projeto,
+                    perfil=_perfil_rapido,
+                    secoes=list(_secoes_rapidas),
+                    registros_ids=list(_registros_rapidos),
+                    metadata=_metadata_rapida,
+                    snapshot=_modelo_rapido["snapshot_hash"],
+                )
 
     _gerado_rapido = st.session_state.get(_chave_rapida)
     if _gerado_rapido:
@@ -240,7 +294,7 @@ for indice, item in enumerate(registros, start=1):
     linhas_composicao.append(
         {
             "id": item["id"],
-            "Incluir": item["id"] in config_salva.get("registros_incluidos", [registro["id"] for registro in registros]),
+            "Incluir": item["id"] in config_salva.get("registros_incluidos", _ids_vigentes) and not registro_superado(item),
             "Ordem": ordem_salva.get(item["id"], indice - 1) + 1,
             "Peça": item.get("peca") or ", ".join(pecas_vinculadas) or "—",
             "Módulo": item.get("modulo", "Módulo"),
@@ -407,8 +461,6 @@ if st.button(
                     "secoes": list(selecoes),
                     "ordem_registros": list(ids_registros),
                     "registros_incluidos": list(ids_registros),
-                    "ultimo_snapshot_hash": modelo["snapshot_hash"],
-                    "ultima_emissao": metadata["emissao"],
                     "identificacao": {
                         "titulo": titulo,
                         "subtitulo": subtitulo,
@@ -418,7 +470,14 @@ if st.button(
                 }
             )
             projeto["configuracao_relatorio"] = configuracao
-            salvar_projeto(projeto, motivo="Configuração da central de relatórios")
+            _registrar_emissao(
+                projeto,
+                perfil=perfil,
+                secoes=list(selecoes),
+                registros_ids=list(ids_registros),
+                metadata=metadata,
+                snapshot=modelo["snapshot_hash"],
+            )
             st.success("Documentos gerados a partir da mesma revisão de dados.")
 
 arquivos = st.session_state.get(chave_arquivos)
@@ -448,6 +507,37 @@ if arquivos:
     )
 
 st.divider()
+_emissoes = [
+    item
+    for item in projeto.get("configuracao_relatorio", {}).get("emissoes", [])
+    if isinstance(item, dict)
+]
+with st.expander(f"Histórico de emissões ({len(_emissoes)})", expanded=False):
+    if _emissoes:
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Gerado em": item.get("quando", "")[:16].replace("T", " "),
+                        "Documento": f"{item.get('codigo')} R{item.get('revisao')}",
+                        "Situação": item.get("situacao"),
+                        "Perfil": item.get("perfil"),
+                        "Seções": item.get("secoes"),
+                        "Registros": item.get("registros"),
+                        "Data no documento": item.get("emissao"),
+                        "Snapshot": str(item.get("snapshot_hash", ""))[:16],
+                    }
+                    for item in reversed(_emissoes)
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+        st.caption(
+            "Dois memoriais com o mesmo snapshot foram gerados a partir dos mesmos dados, seções e registros."
+        )
+    else:
+        st.caption("Nenhum memorial foi gerado ainda para este projeto.")
 st.warning(
     "A geração do relatório organiza os dados e achados disponíveis. Ela não substitui a conferência dos "
     "cálculos, das normas aplicáveis, dos documentos de entrada nem a aprovação do responsável técnico.",

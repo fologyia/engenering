@@ -51,7 +51,12 @@ casos, combinações e envelope ao memorial.
 
 ## Regras de validação
 
-`core/validation_plugins.py` registra regras independentes. Cada regra devolve:
+`core/validation_plugins.py` registra regras independentes. Além das regras
+de contrato, cargas, dependências, margens e deslocamentos, há três regras
+de gestão: `prazos-checklist` (vencido, a vencer, prazo ilegível),
+`criterios-projeto` (critérios ausentes ou incompletos) e
+`documentos-entrada` (revisão ausente, aguardando recebimento, superado
+ainda citado no escopo). Cada regra devolve:
 
 - achados com severidade, categoria, detalhe, recomendação e evidência;
 - pontos documentais preenchidos e totais, quando aplicável;
@@ -59,6 +64,35 @@ casos, combinações e envelope ao memorial.
 
 A Central de Validação agrega esses resultados às regras gerais. O índice
 continua sendo documental; não representa conformidade ou aprovação.
+
+## Gestão do projeto: fluxo, eventos, registros e comparação
+
+A camada de gestão fica em módulos puros, sem Streamlit, para a página do
+projeto, o painel de carteira e a validação lerem a mesma coisa:
+
+- `core/project_workflow.py` — situações, transições permitidas e portões.
+  `avaliar_transicao` devolve impedimentos (travam), avisos (não travam) e
+  se a passagem cria revisão controlada. A interface nunca altera `status`
+  sem passar por aqui.
+- `core/project_checklist.py` — leitura do prazo (ISO e formatos
+  brasileiros), classificação de cada item em relação a hoje e resumo de
+  vencidos, a vencer e ilegíveis.
+- `core/project_records.py` — superar e remover registros já gravados, e
+  resumir cada um (peça, atualidade das fontes, menor fator, utilização).
+  Um registro com `status = "Superado"` sai das cobranças da validação, da
+  sequência sugerida e da seleção padrão do memorial, mas continua no
+  documento e nas dependências.
+- `core/project_diff.py` — comparação campo a campo entre dois documentos
+  (revisão × revisão ou revisão × atual), ignorando datas, hashes e estados
+  recalculados.
+- `core/project_portfolio.py` — resumo comparável de cada projeto, agregação
+  da carteira, vencimentos consolidados e próximos passos sugeridos.
+
+`core/project_store.py` mantém a tabela `project_events`: todo
+`salvar_projeto` grava o motivo, e uma mudança de `status` sempre gera um
+evento próprio, seja qual for a página que a provocou. Criação, cópia,
+importação, registro técnico e emissão de memorial têm tipos de evento
+específicos. A exportação JSON leva os eventos junto com o histórico.
 
 ## Fluxo para adicionar um novo módulo
 

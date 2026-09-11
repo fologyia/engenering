@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.load_cases import CHAVES_CARGA, calcular_envelope
-from core.project_criteria import normalizar_criterios_projeto
+from core.project_checklist import (
+    SITUACAO_HOJE,
+    SITUACAO_ILEGIVEL,
+    SITUACAO_PROXIMO,
+    SITUACAO_VENCIDO,
+    resumo_checklist,
+)
+from core.project_criteria import avaliar_criterios_projeto, normalizar_criterios_projeto
 from core.project_dependencies import (
     STATUS_ATUAL,
     STATUS_AUSENTE,
@@ -17,7 +24,7 @@ from core.project_dependencies import (
     STATUS_SEM_DEPENDENCIAS,
     sincronizar_estados_dependencias,
 )
-from core.technical_records import avaliar_contrato_registro
+from core.technical_records import avaliar_contrato_registro, registro_superado
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +256,8 @@ def _regra_dependencias(projeto: Mapping[str, Any]) -> ResultadoRegra:
     preenchidos = 0
     total = 0
     for indice, registro in enumerate(registros, start=1):
+        if registro_superado(registro):
+            continue
         estado = (
             registro.get("estado_dependencias", {})
             if isinstance(registro.get("estado_dependencias"), Mapping)
@@ -343,6 +352,8 @@ def _regra_margens_calculadas(projeto: Mapping[str, Any]) -> ResultadoRegra:
     dentro_do_criterio = 0
 
     for indice, registro in enumerate(registros, start=1):
+        if registro_superado(registro):
+            continue
         titulo = _texto(registro.get("titulo")) or f"Registro {indice}"
         modulo = _texto(registro.get("modulo")) or "Registro técnico"
         resultados = registro.get("resultados")
@@ -448,6 +459,8 @@ def _regra_deslocamentos(projeto: Mapping[str, Any]) -> ResultadoRegra:
         [i for i in projeto.get("registros_tecnicos", []) if isinstance(i, Mapping)],
         start=1,
     ):
+        if registro_superado(registro):
+            continue
         resultados = registro.get("resultados")
         resultados = resultados if isinstance(resultados, Mapping) else {}
         flecha = _float_ou_none(resultados.get("flecha_maxima_mm"))
@@ -472,8 +485,184 @@ def _regra_deslocamentos(projeto: Mapping[str, Any]) -> ResultadoRegra:
     return ResultadoRegra(achados=tuple(achados))
 
 
+# ---------------------------------------------------------------------------
+# Regras de gestão: prazos, critérios e documentos de entrada
+# ---------------------------------------------------------------------------
+
+
+def _regra_prazos_checklist(projeto: Mapping[str, Any]) -> ResultadoRegra:
+    """Um item aberto com prazo vencido é mais que "aberto".
+
+    A regra geral já cobra todo item em aberto; esta acrescenta a dimensão
+    de tempo, que antes o programa não lia: vencido vira Atenção, a vencer
+    na semana vira Informação, e um prazo que não dá para interpretar
+    ("após a parada") é apontado para virar data.
+    """
+    achados: list[AchadoRegra] = []
+    resumo = resumo_checklist(projeto.get("checklist", []))
+    for linha in resumo["itens_abertos"]:
+        responsavel = linha["responsavel"] or "sem responsável"
+        if linha["situacao"] == SITUACAO_VENCIDO:
+            achados.append(
+                AchadoRegra(
+                    "Atenção",
+                    "Prazos",
+                    f"Prazo vencido: {linha['item']}",
+                    f"Venceu em {linha['prazo_texto']} ({abs(linha['dias'])} dia(s) atrás); "
+                    f"responsável: {responsavel}; estado: {linha['estado']}.",
+                    "Conclua o item, registre a evidência ou renegocie o prazo com o responsável.",
+                    modulo="Checklist",
+                    evidencia=f"{linha['dias']} dia(s)" + (" · crítico" if linha["critico"] else ""),
+                )
+            )
+        elif linha["situacao"] in {SITUACAO_HOJE, SITUACAO_PROXIMO}:
+            achados.append(
+                AchadoRegra(
+                    "Informação",
+                    "Prazos",
+                    f"Vence em breve: {linha['item']}",
+                    f"Prazo em {linha['prazo_texto']} ({linha['dias']} dia(s)); responsável: {responsavel}.",
+                    "Confirme com o responsável se o prazo será cumprido.",
+                    modulo="Checklist",
+                )
+            )
+        elif linha["situacao"] == SITUACAO_ILEGIVEL:
+            achados.append(
+                AchadoRegra(
+                    "Informação",
+                    "Prazos",
+                    f"Prazo não interpretável: {linha['item']}",
+                    f"O prazo '{linha['prazo_texto']}' não é uma data; o programa não consegue avisar quando vencer.",
+                    "Registre o prazo como data (dd/mm/aaaa) no checklist.",
+                    modulo="Checklist",
+                )
+            )
+    return ResultadoRegra(achados=tuple(achados))
+
+
+def _regra_criterios_projeto(projeto: Mapping[str, Any]) -> ResultadoRegra:
+    """Critérios técnicos: sem eles, a validação usa o padrão do programa.
+
+    Não é bloqueio nem pendência — um projeto pode legitimamente aceitar
+    n ≥ 1,5 e utilização ≤ 1,0 — mas a pessoa precisa saber que os limites
+    contra os quais os cálculos estão sendo cobrados não foram escolhidos
+    por ela.
+    """
+    criterios = projeto.get("criterios_projeto")
+    if not isinstance(criterios, Mapping):
+        return ResultadoRegra(
+            achados=(
+                AchadoRegra(
+                    "Informação",
+                    "Critérios do projeto",
+                    "Critérios técnicos ainda não definidos",
+                    "As metas de fator de segurança, utilização e risco usadas pela validação "
+                    "são o padrão do programa (n ≥ 1,5; utilização ≤ 1,0; risco ≤ 5%).",
+                    "Defina os critérios em Gestão de projetos > Critérios para que os limites sejam os do projeto.",
+                    modulo="Critérios",
+                ),
+            )
+        )
+    avaliacao = avaliar_criterios_projeto(criterios)
+    achados: list[AchadoRegra] = []
+    if avaliacao["faltantes"]:
+        achados.append(
+            AchadoRegra(
+                "Atenção",
+                "Critérios do projeto",
+                "Critérios técnicos incompletos",
+                "Faltam: " + "; ".join(avaliacao["faltantes"]) + ".",
+                "Complete a base normativa e a referência dos fatores em Gestão de projetos > Critérios.",
+                modulo="Critérios",
+            )
+        )
+    for alerta in avaliacao["alertas"]:
+        achados.append(
+            AchadoRegra(
+                "Informação",
+                "Critérios do projeto",
+                alerta,
+                "Os critérios do projeto foram definidos, mas este ponto ficou em aberto.",
+                "Estruture o valor nos critérios ou registre por que não se aplica.",
+                modulo="Critérios",
+            )
+        )
+    total = 3
+    preenchidos = total - min(len(avaliacao["faltantes"]), total)
+    return ResultadoRegra(tuple(achados), preenchidos, total)
+
+
+_SITUACOES_DOCUMENTO_VIGENTE = frozenset({"vigente", "recebido", "aprovado"})
+_SITUACOES_DOCUMENTO_AGUARDANDO = frozenset({"aguardando recebimento", "aguardando", "pendente"})
+_SITUACOES_DOCUMENTO_SUPERADO = frozenset({"superado", "cancelado", "obsoleto"})
+
+
+def _regra_documentos_entrada(projeto: Mapping[str, Any]) -> ResultadoRegra:
+    """Documentos de entrada: o que o cálculo assume que recebeu.
+
+    Um desenho "aguardando recebimento" citado por um componente significa
+    que o escopo foi montado sobre um documento que ainda não existe; um
+    desenho superado ainda citado significa que a peça aponta para uma
+    revisão que já não vale.
+    """
+    achados: list[AchadoRegra] = []
+    documentos = [item for item in projeto.get("anexos", []) if isinstance(item, Mapping)]
+    if not documentos:
+        return ResultadoRegra()
+    componentes = [item for item in projeto.get("componentes", []) if isinstance(item, Mapping)]
+    citados = " ".join(_texto(item.get("desenho")).casefold() for item in componentes)
+    preenchidos = 0
+    total = 0
+    for indice, documento in enumerate(documentos, start=1):
+        codigo = _texto(documento.get("codigo")) or _texto(documento.get("titulo")) or f"documento {indice}"
+        situacao = _texto(documento.get("situacao")).casefold()
+        total += 1
+        completo = bool(_texto(documento.get("codigo")) and _texto(documento.get("revisao")))
+        if completo and situacao in _SITUACOES_DOCUMENTO_VIGENTE:
+            preenchidos += 1
+        if not _texto(documento.get("revisao")):
+            achados.append(
+                AchadoRegra(
+                    "Atenção",
+                    "Documentos de entrada",
+                    f"{codigo}: revisão não informada",
+                    "Sem a revisão, não dá para saber contra qual emissão do documento o cálculo foi feito.",
+                    "Informe a revisão do documento na aba Documentos.",
+                    modulo="Documentos",
+                )
+            )
+        citado = bool(_texto(documento.get("codigo"))) and _texto(documento.get("codigo")).casefold() in citados
+        if situacao in _SITUACOES_DOCUMENTO_AGUARDANDO:
+            achados.append(
+                AchadoRegra(
+                    "Pendência",
+                    "Documentos de entrada",
+                    f"{codigo}: aguardando recebimento",
+                    "O documento está previsto como entrada do projeto, mas ainda não foi recebido."
+                    + (" Um componente do escopo já o cita." if citado else ""),
+                    "Cobre o emitente ou registre a premissa adotada enquanto o documento não chega.",
+                    modulo="Documentos",
+                )
+            )
+        elif situacao in _SITUACOES_DOCUMENTO_SUPERADO and citado:
+            achados.append(
+                AchadoRegra(
+                    "Atenção",
+                    "Documentos de entrada",
+                    f"{codigo}: documento superado ainda citado no escopo",
+                    "Um componente do escopo físico aponta para um documento marcado como superado.",
+                    "Atualize a referência do componente para a revisão vigente e confira o cálculo.",
+                    modulo="Documentos",
+                )
+            )
+    return ResultadoRegra(tuple(achados), preenchidos, total)
+
+
 registrar_regra(RegraValidacao("contrato-registro", "Contrato dos registros técnicos", "1.0", _regra_contratos))
 registrar_regra(RegraValidacao("casos-carga", "Casos e combinações de carga", "1.0", _regra_casos_carga))
 registrar_regra(RegraValidacao("dependencias-calculo", "Atualidade dos cálculos dependentes", "1.0", _regra_dependencias))
 registrar_regra(RegraValidacao("margens-calculadas", "Margens de segurança calculadas", "1.0", _regra_margens_calculadas))
 registrar_regra(RegraValidacao("deslocamentos", "Deslocamentos em serviço", "1.0", _regra_deslocamentos))
+registrar_regra(RegraValidacao("prazos-checklist", "Prazos do checklist", "1.0", _regra_prazos_checklist))
+registrar_regra(RegraValidacao("criterios-projeto", "Critérios técnicos do projeto", "1.0", _regra_criterios_projeto))
+registrar_regra(RegraValidacao("documentos-entrada", "Documentos de entrada", "1.0", _regra_documentos_entrada))

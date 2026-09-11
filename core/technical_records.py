@@ -28,6 +28,12 @@ def _lista(valor: Any) -> list[Any]:
 
 
 SEPARADOR_PECA = " — "
+STATUS_SUPERADO = "Superado"
+
+
+def registro_superado(registro: Mapping[str, Any]) -> bool:
+    """Registro substituído por outro: fica no histórico, sai das cobranças."""
+    return str(registro.get("status") or "").strip().casefold() == STATUS_SUPERADO.casefold()
 
 
 def identificar_peca_registro(

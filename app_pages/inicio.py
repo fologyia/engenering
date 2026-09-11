@@ -99,10 +99,18 @@ if projeto_ativo:
 
 modulos = [
     (
+        "Painel industrial",
+        ":material/dashboard:",
+        "Carteira de projetos",
+        "Situação, prontidão, bloqueios, prazos vencidos e cálculos desatualizados de todos os projetos.",
+        "app_pages/painel_industrial.py",
+        "blue",
+    ),
+    (
         "Projetos permanentes",
         ":material/folder_managed:",
         "Sistema industrial",
-        "Mantém base de projeto, escopo, normas, registros, checklist e revisões no banco local.",
+        "Base de projeto, critérios, escopo, documentos, normas, registros, checklist com prazos, fluxo de situação e revisões comparáveis.",
         "app_pages/gestao_projetos.py",
         "blue",
     ),
@@ -245,6 +253,7 @@ with st.container(border=True):
     st.badge("Rota rápida", icon=":material/route:", color="blue")
     st.subheader("Por onde devo começar?")
     situacoes = [
+        "Quero ver a carteira inteira: o que está travado, vencido ou desatualizado",
         "Quero manter dados, cálculos e revisões de um projeto industrial",
         "Quero conferir pendências e preparar a liberação de um projeto",
         "Quero gerar um memorial consolidado em Word ou PDF",
@@ -264,85 +273,91 @@ with st.container(border=True):
 
     recomendacoes = {
         situacoes[0]: (
+            "Painel industrial",
+            "Resume todos os projetos: situação, prontidão, bloqueios, prazos vencidos e cálculos desatualizados.",
+            "app_pages/painel_industrial.py",
+            ":material/dashboard:",
+        ),
+        situacoes[1]: (
             "Projetos permanentes",
-            "Centraliza identificação, base de projeto, escopo físico, normas, registros, checklist e revisões.",
+            "Centraliza identificação, base de projeto, critérios, escopo físico, documentos, normas, registros, checklist e revisões.",
             "app_pages/gestao_projetos.py",
             ":material/folder_managed:",
         ),
-        situacoes[1]: (
+        situacoes[2]: (
             "Central de validação",
             "Separa bloqueios, atenções e pendências e permite convertê-los em ações rastreáveis.",
             "app_pages/central_validacao.py",
             ":material/fact_check:",
         ),
-        situacoes[2]: (
+        situacoes[3]: (
             "Central de relatórios",
             "Seleciona seções e registros e gera Word editável e PDF a partir da mesma revisão.",
             "app_pages/central_relatorios.py",
             ":material/description:",
         ),
-        situacoes[3]: (
+        situacoes[4]: (
             "Assistente de projeto",
             "Organiza objetivo, dados e checklist antes de abrir o cálculo correto.",
             "app_pages/assistente_projeto.py",
             ":material/route:",
         ),
-        situacoes[4]: (
+        situacoes[5]: (
             "Conversor de unidades",
             "Converte grandezas de engenharia para as unidades indicadas nos campos.",
             "app_pages/conversor_unidades.py",
             ":material/swap_horiz:",
         ),
-        situacoes[5]: (
+        situacoes[6]: (
             "Casos e combinações de carga",
             "Mantém cenários físicos, fatores explícitos e o vetor governante de cada componente.",
             "app_pages/casos_carga.py",
             ":material/layers:",
         ),
-        situacoes[6]: (
+        situacoes[7]: (
             "Assistente de cargas",
             "Transforma cargas e geometria em σx, σy e τxy.",
             "app_pages/assistente_cargas.py",
             ":material/manufacturing:",
         ),
-        situacoes[7]: (
+        situacoes[8]: (
             "Análise estática",
             "Verifica von Mises, tensões principais e segurança ao escoamento. "
             "Use Mohr quando precisar girar o plano ou analisar um tensor 3D.",
             "app_pages/analise_estatica.py",
             ":material/analytics:",
         ),
-        situacoes[8]: (
+        situacoes[9]: (
             "Análise de fadiga",
             "Corrige o limite de resistência e avalia Goodman, Soderberg e vida S–N.",
             "app_pages/analise_fadiga.py",
             ":material/cycle:",
         ),
-        situacoes[9]: (
+        situacoes[10]: (
             "Projeto de parafusos",
             "Avalia pré-carga, torque, separação, deslizamento, chapa e fadiga axial.",
             "app_pages/projeto_parafusos.py",
             ":material/build:",
         ),
-        situacoes[10]: (
+        situacoes[11]: (
             "Estruturas de aço",
             "Reúne perfis, barras, combinações, ligações e análise estrutural 2D.",
             "app_pages/estruturas_aco.py",
             ":material/domain:",
         ),
-        situacoes[11]: (
+        situacoes[12]: (
             "Normas técnicas",
             "Organiza referências por segmento e pesquisa seus PDFs por arquivo e página.",
             "app_pages/normas_tecnicas.py",
             ":material/library_books:",
         ),
-        situacoes[12]: (
+        situacoes[13]: (
             "Materiais técnicos",
             "Separa referência preliminar de propriedade rastreada a certificado, norma, fabricante ou ensaio.",
             "app_pages/materiais_tecnicos.py",
             ":material/science:",
         ),
-        situacoes[13]: (
+        situacoes[14]: (
             "Análise de sensibilidade",
             "Ordena entradas por influência e propaga as incertezas declaradas com OAT e Monte Carlo.",
             "app_pages/analise_sensibilidade.py",

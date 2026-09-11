@@ -58,6 +58,7 @@ st.info(
 
 opcoes = [
     "Comece aqui",
+    "Painel industrial",
     "Projetos permanentes",
     "Casos de carga",
     "Central de validação",
@@ -93,6 +94,11 @@ if modulo == "Comece aqui":
     st.header("Escolha o caminho pelos dados que você possui")
     caminhos = pd.DataFrame(
         [
+            [
+                "Tenho vários projetos e quero saber o que está travado ou vencido",
+                "Painel industrial",
+                "Ler a carteira inteira e escolher por onde atacar",
+            ],
             [
                 "Quero guardar dados, cálculos e revisões entre sessões",
                 "Projetos permanentes",
@@ -235,6 +241,39 @@ if modulo == "Comece aqui":
     )
 
 
+elif modulo == "Painel industrial":
+    st.header("Painel da carteira de projetos")
+    st.write(
+        "O painel lê todos os projetos do banco local e resume cada um numa linha comparável: "
+        "situação, prontidão, bloqueios, pendências, avanço do checklist, prazos vencidos e "
+        "cálculos desatualizados. É a pergunta inversa da página de projetos — não *o que falta "
+        "neste projeto*, mas *quais projetos precisam de mim hoje*."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Com bloqueio", "Projetos com ao menos um bloqueio na validação", "Regras da Central de validação"],
+            ["Prazos vencidos", "Itens de checklist abertos com prazo anterior a hoje", "Prazo gravado como data no checklist"],
+            ["Cálculos desatualizados", "Registros cujas fontes (material, caso de carga, critério, origem) mudaram", "Grafo de dependências dos registros"],
+            ["Parado (dias)", "Dias desde o último salvamento", "Linha do tempo do projeto"],
+        ]
+    )
+    st.subheader("Como usar")
+    st.markdown(
+        """
+        1. Leia o bloco **Atenção imediata**: são os projetos com resultado que não atende, bloqueio, prazo vencido ou cálculo desatualizado.
+        2. Filtre por situação ou cliente e use a busca por código, TAG ou responsável.
+        3. Em **Prazos vencidos e da semana**, cobre os responsáveis — a tabela junta todos os projetos.
+        4. Escolha um projeto em **Próximos passos** para ver a ordem de trabalho sugerida e abri-lo como ativo.
+        5. Baixe a carteira em CSV para reuniões de acompanhamento.
+        """
+    )
+    st.info(
+        "Índice documental e prontidão medem preenchimento e rastreabilidade no aplicativo. "
+        "Não certificam conformidade nem substituem a aprovação de engenharia."
+    )
+    link_modulo("app_pages/painel_industrial.py", "Abrir painel industrial")
+
+
 elif modulo == "Projetos permanentes":
     st.header("Sistema permanente de projetos industriais")
     st.write(
@@ -248,7 +287,9 @@ elif modulo == "Projetos permanentes":
             ["Objetivo", "O que deve ser verificado e decidido", "Escopo aprovado pelo solicitante"],
             ["Base dos carregamentos", "Casos, combinações e condições", "Memorial de processo, operação, modelo ou DCL"],
             ["Critérios de aceitação", "Limites de tensão, utilização, flecha, vida etc.", "Norma, especificação ou requisito do cliente"],
+            ["Critérios técnicos", "n mínimo, utilização máxima, risco, temperatura, vida, norma principal e fatores", "Aba Critérios — é contra isso que a validação cobra os cálculos"],
             ["Escopo físico", "Equipamentos, linhas, estruturas e pontos", "Lista de TAGs e desenhos controlados"],
+            ["Documentos de entrada", "Código, revisão, emitente e situação de cada documento recebido", "Lista de documentos do cliente ou do projeto"],
             ["Matriz normativa", "Código, edição, aplicação e fonte", "Contrato, legislação e análise de aplicabilidade"],
         ]
     )
@@ -257,13 +298,14 @@ elif modulo == "Projetos permanentes":
         """
         1. Clique em **Novo projeto** e preencha a identificação mínima.
         2. Em **Dados e base**, registre objetivo, documentos, condições de operação e critérios.
-        3. Em **Escopo físico**, cadastre cada TAG ou ponto analisado.
-        4. Estruture operação, partida, parada, teste e exceções em **Casos de carga**.
-        5. Em **Normas**, registre a edição e marque *Conferida* somente após abrir o documento-fonte.
-        6. Execute os módulos e clique em **Registrar no projeto ativo**.
-        7. Mantenha responsáveis, prazos e evidências em **Checklist**.
-        8. Crie uma **revisão controlada** antes de uma emissão ou mudança relevante.
-        9. Exporte o arquivo JSON como cópia transportável do projeto.
+        3. Em **Critérios**, defina fator de segurança mínimo, utilização máxima, norma principal e referência dos fatores — sem isso, vale o padrão do programa.
+        4. Em **Escopo físico**, cadastre cada TAG ou ponto analisado; em **Documentos**, a lista controlada com revisão e situação.
+        5. Estruture operação, partida, parada, teste e exceções em **Casos de carga**.
+        6. Em **Normas**, registre a edição e marque *Conferida* somente após abrir o documento-fonte.
+        7. Execute os módulos e clique em **Registrar no projeto ativo**. Um cálculo refeito supera o antigo em **Registros técnicos**, sem apagá-lo.
+        8. Mantenha responsáveis, prazos (como data) e evidências em **Checklist**: o programa avisa o que venceu.
+        9. Em **Fluxo e revisões**, avance a situação (elaboração → verificação → emitido); cada passagem confere o que falta. Crie uma **revisão controlada** antes de uma emissão e compare revisões para ver o que mudou.
+        10. Exporte o arquivo JSON como cópia transportável do projeto.
         """
     )
     mostrar_exemplo(
@@ -279,8 +321,21 @@ elif modulo == "Projetos permanentes":
         "Depois de salvar, abra Estruturas de aço ou outro módulo aplicável e registre cada resultado no mesmo projeto.",
     )
     st.warning(
-        "Salvamentos comuns atualizam os dados atuais. A revisão controlada cria um marco histórico. "
+        "Salvamentos comuns atualizam os dados atuais e ficam na linha do tempo. A revisão controlada cria um marco histórico. "
         "Restaurar um marco não apaga a história: cria uma nova revisão a partir dele."
+    )
+    st.subheader("Fluxo de situação")
+    st.dataframe(
+        pd.DataFrame(
+            [
+                ["Em elaboração → Em verificação", "Verificador definido e ao menos um registro técnico vigente", "Bloqueios abertos só avisam"],
+                ["Em verificação → Emitido", "Aprovador e verificador definidos, zero bloqueios, nenhum cálculo desatualizado", "Cria revisão controlada"],
+                ["Emitido → Em elaboração", "Sempre permitida", "Cria revisão controlada (a emitida continua restaurável)"],
+                ["Qualquer → Suspenso / Arquivado", "Sempre permitida", "Registre o motivo na linha do tempo"],
+            ],
+            columns=["Passagem", "O que exige", "Efeito"],
+        ),
+        hide_index=True,
     )
     link_modulo("app_pages/gestao_projetos.py", "Abrir projetos permanentes")
 

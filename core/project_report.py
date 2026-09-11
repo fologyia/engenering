@@ -13,6 +13,7 @@ from typing import Any
 
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.memorial_word import CAUTION, POSITIVE, RISK, gerar_memorial_word_padrao
+from core.project_criteria import normalizar_criterios_projeto, resumo_criterios_projeto
 from core.project_validation import validar_projeto
 from core.record_charts import imagens_do_registro
 from core.report_plugins import listar_provedores, titulos_secoes_extensao
@@ -344,25 +345,70 @@ def montar_modelo_relatorio(
             "nota": "O memorial é válido somente para o escopo, os dados e as revisões identificados neste documento.",
         },
     )
-    adicionar(
-        "base",
-        {
-            "tabelas": [{
-                "legenda": "Base de projeto e critérios adotados.",
-                "cabecalhos": ["Tópico", "Registro"],
-                "linhas": [
-                    ["Desenhos e documentos", _texto(base.get("referencias_desenho"))],
-                    ["Base dos carregamentos", _texto(base.get("base_carregamentos"))],
-                    ["Condições de operação", _texto(base.get("condicoes_operacao"))],
-                    ["Critérios de aceitação", _texto(base.get("criterio_aceitacao"))],
-                    ["Vida requerida", _texto(base.get("vida_requerida"))],
-                    ["Limitações e exclusões", _texto(base.get("limitacoes"))],
-                ],
-                "larguras": [2600, 6760],
-                "fonte": 8.2,
-            }]
-        },
-    )
+    # Critérios estruturados e documentos de entrada entram na base de
+    # projeto quando existem: são eles que dizem contra o que os cálculos
+    # foram cobrados e sobre quais documentos o escopo foi montado.
+    criterios_estruturados = projeto.get("criterios_projeto")
+    linhas_base = [
+        ["Desenhos e documentos", _texto(base.get("referencias_desenho"))],
+        ["Base dos carregamentos", _texto(base.get("base_carregamentos"))],
+        ["Condições de operação", _texto(base.get("condicoes_operacao"))],
+        ["Critérios de aceitação", _texto(base.get("criterio_aceitacao"))],
+        ["Vida requerida", _texto(base.get("vida_requerida"))],
+        ["Limitações e exclusões", _texto(base.get("limitacoes"))],
+    ]
+    if isinstance(criterios_estruturados, Mapping):
+        criterios_norm = normalizar_criterios_projeto(criterios_estruturados)
+        normativo = criterios_norm["normativo"]
+        combinacoes_criterio = criterios_norm["combinacoes"]
+        linhas_base.append(["Critérios técnicos do projeto", resumo_criterios_projeto(criterios_norm)])
+        linhas_base.append(
+            [
+                "Norma principal e aceitação",
+                f"{_texto(normativo.get('norma_principal'))} {_texto(normativo.get('edicao'), '')}".strip()
+                + f" — {_texto(normativo.get('criterio_aceitacao'))}",
+            ]
+        )
+        linhas_base.append(
+            [
+                "Combinações de ações",
+                f"{_texto(combinacoes_criterio.get('metodo'))}; referência: {_texto(combinacoes_criterio.get('referencia'))}",
+            ]
+        )
+    else:
+        linhas_base.append(
+            [
+                "Critérios técnicos do projeto",
+                "Não definidos no projeto; a validação usou o padrão do programa (n ≥ 1,5; utilização ≤ 1,0).",
+            ]
+        )
+    tabelas_base = [{
+        "legenda": "Base de projeto e critérios adotados.",
+        "cabecalhos": ["Tópico", "Registro"],
+        "linhas": linhas_base,
+        "larguras": [2600, 6760],
+        "fonte": 8.2,
+    }]
+    documentos_entrada = [item for item in projeto.get("anexos", []) if isinstance(item, Mapping)]
+    if documentos_entrada:
+        tabelas_base.append({
+            "legenda": "Documentos de entrada controlados.",
+            "cabecalhos": ["Código", "Título", "Tipo", "Revisão", "Emitente", "Situação"],
+            "linhas": [
+                [
+                    _texto(item.get("codigo")),
+                    _texto(item.get("titulo")),
+                    _texto(item.get("tipo")),
+                    _texto(item.get("revisao")),
+                    _texto(item.get("emitente")),
+                    _texto(item.get("situacao")),
+                ]
+                for item in documentos_entrada
+            ],
+            "larguras": [1300, 2900, 1500, 900, 1600, 1160],
+            "fonte": 7.3,
+        })
+    adicionar("base", {"tabelas": tabelas_base})
     adicionar(
         "componentes",
         {

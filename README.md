@@ -24,17 +24,52 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - navegação explícita e uma única página de tutoriais;
 - indicação do projeto ativo nos cabeçalhos dos módulos.
 
+### Painel industrial
+
+- a carteira inteira numa tela: situação, revisão, prontidão, índice documental,
+  bloqueios, pendências, avanço do checklist, prazos vencidos, registros vigentes
+  e cálculos desatualizados de cada projeto;
+- bloco de **atenção imediata** com os projetos que têm resultado não atendido,
+  bloqueio, prazo vencido ou cálculo cuja fonte mudou;
+- prazos vencidos e da semana de todos os projetos numa única tabela de cobrança;
+- próximos passos sugeridos por projeto, na mesma ordem que a página do projeto
+  recomenda, e abertura direta como projeto ativo;
+- filtros por situação e cliente, busca por código, TAG ou responsável e
+  exportação da carteira em CSV.
+
 ### Projetos permanentes
 
 - persistência local em `data/projetos_industriais.sqlite3`;
 - identificação, cliente, unidade, área, TAG, processo e responsabilidades;
 - base de projeto com documentos, carregamentos, condições, critérios e limitações;
+- **critérios técnicos** do projeto — fator de segurança mínimo, utilização
+  máxima, risco probabilístico, condições de operação, norma principal,
+  referência dos fatores e unidades — lidos pelos módulos e pela validação;
+  sem eles, vale o padrão do programa, e a validação avisa;
 - casos de carga vetoriais, combinações com fatores explícitos e envelopes governantes;
 - escopo físico para equipamentos, linhas, estruturas, sistemas e pontos críticos;
+- **documentos de entrada** controlados: código, título, tipo, revisão,
+  emitente e situação (vigente, aguardando recebimento, superado), com a
+  validação apontando revisão ausente e documento superado ainda citado no escopo;
 - matriz normativa com edição, aplicação, fonte e conferência no original;
-- registros técnicos padronizados com entradas, resultados, premissas, alertas e conclusão;
-- checklist com responsável, prazo, estado, evidência e criticidade;
-- marcos de revisão restauráveis, duplicação, arquivamento e exportação/importação JSON;
+- registros técnicos padronizados com entradas, resultados, premissas, alertas e
+  conclusão; tabela de gestão com peça, atualidade das fontes, menor fator e
+  utilização; um cálculo refeito **supera** o antigo (sai do memorial padrão e
+  das cobranças, fica no histórico) ou pode ser excluído, com aviso sobre os
+  cálculos que dependiam dele;
+- checklist com responsável, **prazo como data**, estado, evidência e
+  criticidade — itens vencidos e a vencer na semana são apontados na página, no
+  painel e na validação;
+- **fluxo de situação com portões**: elaboração → verificação exige verificador
+  e um cálculo vigente; verificação → emitido exige aprovador, zero bloqueios e
+  nenhum cálculo desatualizado, e cria revisão controlada; reabrir um projeto
+  emitido também cria revisão;
+- **linha do tempo** com cada salvamento, mudança de situação, registro técnico
+  incluído, revisão e emissão de memorial;
+- **comparação entre revisões** (ou entre uma revisão e o projeto atual), campo a
+  campo, ignorando o que muda sozinho, com exportação em CSV;
+- marcos de revisão restauráveis, duplicação, arquivamento, exclusão e
+  exportação/importação JSON (com histórico e eventos);
 - integração com o Assistente de projeto e com os módulos técnicos.
 
 ### Central de validação
@@ -43,7 +78,12 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - verifica identificação, responsabilidades, base de projeto, escopo físico e materiais;
 - aponta referências sem edição ou ainda não conferidas no documento-fonte;
 - detecta registros incompletos e critérios numéricos conhecidos, como utilização acima de 1;
-- permite transformar um achado em item rastreável do checklist;
+- permite transformar um achado em item rastreável do checklist, já com
+  responsável e prazo, ou converter todos os bloqueios de uma vez;
+- cobra prazos vencidos do checklist, critérios técnicos definidos pelo projeto e
+  documentos de entrada recebidos e revisados;
+- mostra o que a validação significa para o fluxo (para onde a situação pode ir
+  e o que trava cada passagem), resume achados por categoria e exporta a fila em CSV;
 - calcula um índice de completude documental, explicitamente separado de conformidade ou aprovação.
 
 ### Central de relatórios
@@ -54,6 +94,9 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - Word editável e PDF estável gerados a partir do mesmo modelo de dados;
 - provedores de seção independentes, permitindo que novos módulos acrescentem capítulos sem acoplamento ao renderizador;
 - resumo básico no início, seguido de base, escopo, normas, memória técnica, validação e checklist;
+- a base de projeto traz os critérios técnicos estruturados e a lista de documentos de entrada;
+- registros superados ficam fora da seleção padrão; cada emissão entra num histórico
+  próprio (documento, revisão, perfil, snapshot) e na linha do tempo do projeto;
 - quadros de integração, aprovações e apêndice consolidado de entradas e resultados.
 
 ## Recursos
@@ -273,6 +316,7 @@ mecanica_toolkit/
 ├── assets/
 ├── app_pages/
 │   ├── inicio.py
+│   ├── painel_industrial.py
 │   ├── gestao_projetos.py
 │   ├── central_validacao.py
 │   ├── central_relatorios.py
@@ -303,6 +347,11 @@ mecanica_toolkit/
 │   ├── project_assistant.py
 │   ├── project_store.py
 │   ├── project_validation.py
+│   ├── project_workflow.py
+│   ├── project_checklist.py
+│   ├── project_records.py
+│   ├── project_diff.py
+│   ├── project_portfolio.py
 │   ├── project_report.py
 │   ├── unit_converter.py
 │   ├── standards_library.py

@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from core.materials_registry import avaliar_material
+from core.technical_records import registro_superado
 from core.validation_plugins import executar_regras
 
 SEVERIDADES = ("Bloqueio", "Atenção", "Pendência", "Informação")
@@ -366,7 +367,13 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 "Abra o PDF da norma, valide edição e cláusulas aplicáveis e marque a conferência.",
             )
 
-    registros = [item for item in projeto.get("registros_tecnicos", []) if isinstance(item, Mapping)]
+    # Registros superados ficam no histórico e fora da cobrança: o cálculo
+    # que os substituiu é o que responde pela peça agora.
+    registros = [
+        item
+        for item in projeto.get("registros_tecnicos", [])
+        if isinstance(item, Mapping) and not registro_superado(item)
+    ]
     pontos_totais += 1
     if registros:
         preenchidos += 1

@@ -100,8 +100,90 @@ def inicializar_banco(caminho_banco: str | Path | None = None) -> None:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS project_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                description TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_events_project
+                ON project_events(project_id, id DESC);
             """
         )
+
+
+# Tipos de evento da linha do tempo. Um salvamento comum antes não deixava
+# rastro nenhum: só a revisão controlada era guardada. Agora cada gravação
+# registra o motivo, e a mudança de situação vira um evento próprio.
+EVENTO_CRIACAO = "criacao"
+EVENTO_SALVAMENTO = "salvamento"
+EVENTO_REVISAO = "revisao"
+EVENTO_SITUACAO = "situacao"
+EVENTO_REGISTRO = "registro"
+EVENTO_EMISSAO = "emissao"
+EVENTO_ADMINISTRACAO = "administracao"
+
+
+def _registrar_evento(
+    conexao: sqlite3.Connection,
+    projeto_id: str,
+    tipo: str,
+    descricao: str,
+    *,
+    revisao: int,
+    status: str,
+    instante: str | None = None,
+) -> None:
+    conexao.execute(
+        """
+        INSERT INTO project_events
+            (project_id, created_at, kind, description, revision, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            str(projeto_id),
+            instante or _agora(),
+            str(tipo).strip() or EVENTO_SALVAMENTO,
+            str(descricao).strip() or "Salvamento",
+            int(revisao),
+            str(status),
+        ),
+    )
+
+
+def historico_eventos(
+    projeto_id: str,
+    *,
+    limite: int | None = None,
+    caminho_banco: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Linha do tempo do projeto, do evento mais recente para o mais antigo."""
+    inicializar_banco(caminho_banco)
+    sql = (
+        "SELECT created_at, kind, description, revision, status FROM project_events "
+        "WHERE project_id=? ORDER BY id DESC"
+    )
+    parametros: tuple[Any, ...] = (str(projeto_id),)
+    if limite is not None:
+        sql += " LIMIT ?"
+        parametros = (*parametros, int(limite))
+    with _conectar(caminho_banco) as conexao:
+        linhas = conexao.execute(sql, parametros).fetchall()
+    return [
+        {
+            "quando": linha["created_at"],
+            "tipo": linha["kind"],
+            "descricao": linha["description"],
+            "revisao": linha["revision"],
+            "status": linha["status"],
+        }
+        for linha in linhas
+    ]
 
 
 def novo_projeto_documento(
@@ -238,6 +320,15 @@ def criar_projeto(
             """,
             (projeto["id"], 0, "Criação do projeto", projeto["criado_em"], payload),
         )
+        _registrar_evento(
+            conexao,
+            projeto["id"],
+            EVENTO_CRIACAO,
+            "Criação do projeto",
+            revisao=0,
+            status=projeto["status"],
+            instante=projeto["criado_em"],
+        )
         if ativar:
             conexao.execute(
                 """
@@ -280,6 +371,29 @@ def listar_projetos(
     ]
 
 
+def carregar_projetos(
+    *,
+    incluir_arquivados: bool = False,
+    caminho_banco: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Documentos completos de todos os projetos, na ordem de :func:`listar_projetos`.
+
+    O painel de carteira precisa validar cada projeto, e isso exige o
+    documento inteiro — não a linha de resumo. Uma consulta só, em vez de
+    uma por projeto.
+    """
+    inicializar_banco(caminho_banco)
+    sql = "SELECT payload_json FROM projects"
+    parametros: tuple[Any, ...] = ()
+    if not incluir_arquivados:
+        sql += " WHERE status <> ?"
+        parametros = ("Arquivado",)
+    sql += " ORDER BY updated_at DESC, name COLLATE NOCASE"
+    with _conectar(caminho_banco) as conexao:
+        linhas = conexao.execute(sql, parametros).fetchall()
+    return [_validar_documento(json.loads(linha["payload_json"])) for linha in linhas]
+
+
 def obter_projeto(
     projeto_id: str,
     *,
@@ -300,19 +414,28 @@ def salvar_projeto(
     *,
     motivo: str = "Salvamento",
     criar_revisao: bool = False,
+    tipo_evento: str = "",
     caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
+    """Grava o documento e anota o motivo na linha do tempo.
+
+    Uma mudança de situação (``status``) sempre gera um evento próprio, seja
+    qual for o caminho que a provocou — formulário, fluxo com portões,
+    arquivamento ou restauração — para a linha do tempo não depender de cada
+    página lembrar de avisar.
+    """
     inicializar_banco(caminho_banco)
     documento = _validar_documento(projeto)
     instante = _agora()
     with _conectar(caminho_banco) as conexao:
         atual = conexao.execute(
-            "SELECT revision, created_at FROM projects WHERE id = ?",
+            "SELECT revision, created_at, status FROM projects WHERE id = ?",
             (documento["id"],),
         ).fetchone()
         if atual is None:
             raise ProjetoPersistenciaErro("Projeto nao encontrado no banco.")
         revisao = int(atual["revision"]) + (1 if criar_revisao else 0)
+        status_anterior = str(atual["status"])
         documento["revisao"] = revisao
         documento["criado_em"] = atual["created_at"]
         documento["atualizado_em"] = instante
@@ -348,6 +471,33 @@ def salvar_projeto(
                     payload,
                 ),
             )
+        tipo = str(tipo_evento).strip() or (
+            EVENTO_REVISAO if criar_revisao else EVENTO_SALVAMENTO
+        )
+        descricao = str(motivo).strip() or (
+            f"Revisão {revisao:02d} criada" if criar_revisao else "Salvamento"
+        )
+        if criar_revisao and tipo == EVENTO_REVISAO:
+            descricao = f"Revisão {revisao:02d}: {descricao}"
+        _registrar_evento(
+            conexao,
+            documento["id"],
+            tipo,
+            descricao,
+            revisao=revisao,
+            status=documento["status"],
+            instante=instante,
+        )
+        if documento["status"] != status_anterior:
+            _registrar_evento(
+                conexao,
+                documento["id"],
+                EVENTO_SITUACAO,
+                f"Situação alterada de {status_anterior} para {documento['status']}",
+                revisao=revisao,
+                status=documento["status"],
+                instante=instante,
+            )
     return deepcopy(documento)
 
 
@@ -376,12 +526,13 @@ def historico_revisoes(
     ]
 
 
-def restaurar_revisao(
+def obter_revisao(
     projeto_id: str,
     revisao: int,
     *,
     caminho_banco: str | Path | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
+    """Documento fotografado numa revisão controlada, sem alterar nada."""
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
         linha = conexao.execute(
@@ -392,8 +543,19 @@ def restaurar_revisao(
             (str(projeto_id), int(revisao)),
         ).fetchone()
     if linha is None:
+        return None
+    return _validar_documento(json.loads(linha["snapshot_json"]))
+
+
+def restaurar_revisao(
+    projeto_id: str,
+    revisao: int,
+    *,
+    caminho_banco: str | Path | None = None,
+) -> dict[str, Any]:
+    documento = obter_revisao(projeto_id, revisao, caminho_banco=caminho_banco)
+    if documento is None:
         raise ProjetoPersistenciaErro("Revisao nao encontrada.")
-    documento = json.loads(linha["snapshot_json"])
     documento["status"] = "Em elaboração"
     return salvar_projeto(
         documento,
@@ -453,7 +615,12 @@ def arquivar_projeto(
     if projeto is None:
         raise ProjetoPersistenciaErro("Projeto nao encontrado.")
     projeto["status"] = "Arquivado" if arquivado else "Em elaboração"
-    salvo = salvar_projeto(projeto, caminho_banco=caminho_banco)
+    salvo = salvar_projeto(
+        projeto,
+        motivo="Projeto arquivado" if arquivado else "Projeto desarquivado",
+        tipo_evento=EVENTO_ADMINISTRACAO,
+        caminho_banco=caminho_banco,
+    )
     ativo = obter_projeto_ativo(caminho_banco=caminho_banco)
     if arquivado and ativo and ativo["id"] == projeto_id:
         definir_projeto_ativo(None, caminho_banco=caminho_banco)
@@ -594,8 +761,23 @@ def duplicar_projeto(
             """,
             (copia["id"], f"Cópia de {origem['codigo']}", instante, payload),
         )
+        _registrar_evento(
+            conexao,
+            copia["id"],
+            EVENTO_CRIACAO,
+            f"Criado como cópia de {origem['codigo']} · {origem['nome']}",
+            revisao=0,
+            status=copia["status"],
+            instante=instante,
+        )
     definir_projeto_ativo(copia["id"], caminho_banco=caminho_banco)
     return deepcopy(copia)
+
+
+def _motivo_registro(registro: Mapping[str, Any]) -> str:
+    modulo = str(registro.get("modulo") or "Registro técnico").strip()
+    titulo = str(registro.get("titulo") or "").strip()
+    return f"Registro técnico incluído: {modulo} · {titulo}" if titulo else f"Registro técnico incluído: {modulo}"
 
 
 def adicionar_registro_tecnico(
@@ -609,7 +791,12 @@ def adicionar_registro_tecnico(
         raise ProjetoPersistenciaErro("Projeto nao encontrado.")
     item = _json_seguro(normalizar_registro_tecnico(registro))
     projeto["registros_tecnicos"].append(item)
-    return salvar_projeto(projeto, caminho_banco=caminho_banco)
+    return salvar_projeto(
+        projeto,
+        motivo=_motivo_registro(item),
+        tipo_evento=EVENTO_REGISTRO,
+        caminho_banco=caminho_banco,
+    )
 
 
 def registrar_calculo_tecnico(
@@ -637,7 +824,12 @@ def registrar_calculo_tecnico(
         _json_seguro(item),
     ]
     projeto = sincronizar_estados_dependencias(projeto)
-    return salvar_projeto(projeto, caminho_banco=caminho_banco)
+    return salvar_projeto(
+        projeto,
+        motivo=_motivo_registro(item),
+        tipo_evento=EVENTO_REGISTRO,
+        caminho_banco=caminho_banco,
+    )
 
 
 def exportar_projeto(
@@ -656,6 +848,11 @@ def exportar_projeto(
         "projeto": projeto,
         "historico": (
             historico_revisoes(projeto_id, caminho_banco=caminho_banco)
+            if incluir_historico
+            else []
+        ),
+        "eventos": (
+            historico_eventos(projeto_id, caminho_banco=caminho_banco)
             if incluir_historico
             else []
         ),
@@ -707,6 +904,15 @@ def importar_projeto(
             VALUES (?, 0, 'Importação de projeto', ?, ?)
             """,
             (copia["id"], instante, payload),
+        )
+        _registrar_evento(
+            conexao,
+            copia["id"],
+            EVENTO_CRIACAO,
+            f"Importado do arquivo exportado de {origem['codigo']} · {origem['nome']}",
+            revisao=0,
+            status=copia["status"],
+            instante=instante,
         )
     definir_projeto_ativo(copia["id"], caminho_banco=caminho_banco)
     return deepcopy(copia)

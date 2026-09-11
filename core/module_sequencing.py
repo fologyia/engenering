@@ -23,6 +23,7 @@ from core.project_dependencies import (
     sincronizar_estados_dependencias,
 )
 from core.technical_modules import obter_modulo
+from core.technical_records import registro_superado
 
 # Cada fluxo é uma sequência típica de módulos, do primeiro ao último. Um
 # módulo pode pertencer a mais de um fluxo (ex.: Análise estática participa
@@ -90,7 +91,7 @@ def _ultimo_registro_por_modulo(
 ) -> dict[str, dict[str, Any]]:
     por_modulo: dict[str, dict[str, Any]] = {}
     for registro in projeto_sincronizado.get("registros_tecnicos", []):
-        if not isinstance(registro, Mapping):
+        if not isinstance(registro, Mapping) or registro_superado(registro):
             continue
         modulo_id = str(registro.get("modulo_id") or "").strip().casefold()
         if not modulo_id:
