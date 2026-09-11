@@ -599,7 +599,7 @@ elif visao == "Pesquisar nos PDFs":
             if (indice := _indice_atual(arquivo)) is not None
         ]
         if len(normalizar_texto(consulta)) < 2:
-            st.warning("Informe pelo menos dois caracteres para pesquisar.")
+            st.warning("Informe pelo menos dois caracteres para pesquisar.", icon=":material/warning:")
         elif not indices_validos:
             st.warning(
                 "Indexe pelo menos um PDF antes de pesquisar.",

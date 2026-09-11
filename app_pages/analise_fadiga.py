@@ -78,7 +78,7 @@ st.caption(f"Fonte ativa: {fat.FONTES_MARIN[modelo]}.")
 try:
     nomes = mat.listar_nomes()
 except (FileNotFoundError, ValueError) as erro:
-    st.error(f"Não foi possível carregar a base de materiais: {erro}")
+    st.error(f"Não foi possível carregar a base de materiais: {erro}", icon=":material/error:")
     st.stop()
 
 with st.container(border=True):
@@ -150,7 +150,8 @@ Sy = float(dados["Sy_MPa"]) if usar_base else Sy_manual
 if Sy > Sut:
     st.error(
         "Dados incompatíveis: Sy não pode ser maior que Sut. "
-        "Corrija as propriedades do material para continuar."
+        "Corrija as propriedades do material para continuar.",
+        icon=":material/error:",
     )
     st.stop()
 Se_linha, vida_infinita = fat.se_linha(Sut, material)
@@ -267,7 +268,7 @@ with st.container(border=True):
                         st.latex(r"d_e=\sqrt{\frac{A_{0,95\sigma}}{0,0766}}")
                     diametro_mm = size.diametro_equivalente_por_area_95(area_95)
                 except ValueError as erro:
-                    st.error(str(erro))
+                    st.error(str(erro), icon=":material/error:")
                     st.stop()
             with desenho_geometria:
                 st.image(size.desenho_svg(rotulo_svg), width="stretch")
@@ -279,7 +280,7 @@ with st.container(border=True):
         try:
             Ctamanho = fat.fator_tamanho(diametro_mm, tipo_carga, modelo)
         except ValueError as erro:
-            st.error(str(erro))
+            st.error(str(erro), icon=":material/error:")
             st.stop()
         st.metric("Ctamanho", f"{Ctamanho:.3f}", border=True)
         if tipo_carga == "axial":
@@ -298,7 +299,7 @@ with st.container(border=True):
             st.code(f"Shigley: d = {diametro_mm:.2f} mm -> kb = {Ctamanho:.3f}")
         st.caption("Norton: PDF p. 357, Eq. 6.7b. Shigley: PDF pp. 300 e 307-308, Eqs. 6-20, 6-21 e Tabela 6-3.")
         if material != "aco":
-            st.warning("A correlacao de tamanho foi levantada principalmente para aco. Para materiais nao ferrosos, use validacao experimental ou um fator documentado.")
+            st.warning("A correlacao de tamanho foi levantada principalmente para aco. Para materiais nao ferrosos, use validacao experimental ou um fator documentado.", icon=":material/warning:")
 
     with tamanho_grafico:
         limite_grafico = max(250.0, diametro_mm * 1.15) if modelo == "norton" else 254.0
@@ -343,7 +344,8 @@ with st.container(border=True):
             st.warning(
                 "As curvas de acabamento foram obtidas principalmente para aços. "
                 "Para aplicações críticas em metais não ferrosos, prefira ensaio "
-                "ou valor manual documentado."
+                "ou valor manual documentado.",
+                icon=":material/warning:",
             )
         if modo_superficie == "Valor manual":
             Csuperf = st.slider(
@@ -360,7 +362,8 @@ with st.container(border=True):
                 persist_state="session",
             )
             st.warning(
-                "Modo manual ativo: o valor informado será usado no produto de Marin."
+                "Modo manual ativo: o valor informado será usado no produto de Marin.",
+                icon=":material/warning:",
             )
         else:
             Csuperf = Csuperf_calculado
@@ -567,22 +570,26 @@ with st.container(border=True):
         if modelo == "norton" and temperatura < 20:
             st.warning(
                 "Ctemp = 1 nesta correlação, mas isso não verifica a transição "
-                "dúctil-frágil nem a tenacidade à fratura em baixa temperatura."
+                "dúctil-frágil nem a tenacidade à fratura em baixa temperatura.",
+                icon=":material/warning:",
             )
         if modelo == "norton" and temperatura > fat.NORTON_TEMPERATURA_INICIO_C:
             st.warning(
                 "A redução de Norton começa em 450 °F (232,2 °C). A correlação "
-                "não substitui propriedades do material medidas na temperatura da peça."
+                "não substitui propriedades do material medidas na temperatura da peça.",
+                icon=":material/warning:",
             )
         if modelo == "shigley" and temperatura > 450:
             st.warning(
                 "Em temperatura elevada, confirme também Sy na temperatura de "
-                "operação e avalie fluência ou interação fadiga-fluência."
+                "operação e avalie fluência ou interação fadiga-fluência.",
+                icon=":material/warning:",
             )
         if material != "aco":
             st.warning(
                 "A correlação de temperatura selecionada é baseada em dados de "
-                "aços. Não a trate como validada para este material."
+                "aços. Não a trate como validada para este material.",
+                icon=":material/warning:",
             )
 
     with temperatura_grafico:
@@ -1026,20 +1033,21 @@ with st.container(border=True):
             )
             menor_fator = min(n_goodman, n_soderberg, n_escoamento)
             if menor_fator < 1:
-                st.error("O estado informado não é seguro: há fator de segurança < 1.")
+                st.error("O estado informado não é seguro: há fator de segurança < 1.", icon=":material/error:")
             elif menor_fator < 1.5:
-                st.warning("O menor fator de segurança está entre 1 e 1,5.")
+                st.warning("O menor fator de segurança está entre 1 e 1,5.", icon=":material/warning:")
             else:
                 st.success("Os critérios calculados apresentam fator de segurança ≥ 1,5.")
         else:
             st.warning(
                 "Soderberg não pode ser calculado: informe Sy maior que zero "
-                "e não superior a Sut. Goodman permanece disponível."
+                "e não superior a Sut. Goodman permanece disponível.",
+                icon=":material/warning:",
             )
             if n_goodman < 1:
-                st.error("O estado informado falha pelo critério de Goodman.")
+                st.error("O estado informado falha pelo critério de Goodman.", icon=":material/error:")
             elif n_goodman < 1.5:
-                st.warning("Goodman fornece fator de segurança entre 1 e 1,5.")
+                st.warning("Goodman fornece fator de segurança entre 1 e 1,5.", icon=":material/warning:")
             else:
                 st.success("Goodman fornece fator de segurança ≥ 1,5.")
 
@@ -1162,14 +1170,16 @@ with st.container(border=True):
     if tipo_carga == "torcao":
         st.warning(
             "A curva S–N em torção comparada diretamente com τ é aproximada. "
-            "Quando possível, prefira a opção de tensão equivalente de von Mises."
+            "Quando possível, prefira a opção de tensão equivalente de von Mises.",
+            icon=":material/warning:",
         )
 
     if Sm <= Se:
         resultado_vida = "Curva não construída: Sm ≤ resistência corrigida"
         st.warning(
             "Não foi possível montar a curva: a resistência em 10³ ciclos "
-            "não supera a resistência corrigida de alto ciclo."
+            "não supera a resistência corrigida de alto ciclo.",
+            icon=":material/warning:",
         )
     else:
         a, b = fat.parametros_curva_sn(Sm, Se, N2, N1)
@@ -1246,7 +1256,8 @@ with st.container(border=True):
             resultado_vida = "Fora do domínio: σm ≥ Sut"
             st.error(
                 "A tensão média alcança ou supera Sut; a reta de Goodman não "
-                "possui margem e a vida S–N não pode ser estimada."
+                "possui margem e a vida S–N não pode ser estimada.",
+                icon=":material/error:",
             )
         elif tensao_equivalente_vida <= 0:
             resultado_vida = "Sem componente alternada equivalente"
@@ -1258,7 +1269,8 @@ with st.container(border=True):
             resultado_vida = "Inferior a 10³ ciclos; fora do modelo"
             st.error(
                 "A amplitude equivalente está acima do início da curva; "
-                "a vida é inferior a 10³ ciclos e exige outro modelo."
+                "a vida é inferior a 10³ ciclos e exige outro modelo.",
+                icon=":material/error:",
             )
         elif tensao_equivalente_vida <= Se:
             if vida_infinita:
@@ -1283,7 +1295,8 @@ with st.container(border=True):
 if not vida_infinita:
     st.warning(
         "Alumínio e cobre não apresentam limite de fadiga verdadeiro neste "
-        "modelo. O valor final é uma resistência de referência em 5×10⁸ ciclos."
+        "modelo. O valor final é uma resistência de referência em 5×10⁸ ciclos.",
+        icon=":material/warning:",
     )
 
 with st.container(border=True):

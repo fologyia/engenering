@@ -6,7 +6,7 @@ from core import section_catalog as catalogo_perfis
 try:
     materiais = mat.carregar_materiais()
 except (FileNotFoundError, ValueError) as erro:
-    st.error(f"Não foi possível carregar a base de materiais: {erro}")
+    st.error(f"Não foi possível carregar a base de materiais: {erro}", icon=":material/error:")
     st.stop()
 
 with st.container(border=True):

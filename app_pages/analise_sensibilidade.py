@@ -161,7 +161,7 @@ if calcular:
             criterio=criterio,
         )
     except ValueError as erro:
-        st.error(str(erro))
+        st.error(str(erro), icon=":material/error:")
     else:
         st.session_state["sens_resultado"] = {
             "modelo_id": modelo_id,
@@ -274,7 +274,7 @@ if resultado and resultado.get("modelo_id") == modelo_id:
             width="stretch",
         )
         st.write(f"Amostras válidas: {mc['amostras_validas']} de {mc['amostras_solicitadas']}; semente {mc['semente']}.")
-        st.warning(mc["aviso"])
+        st.warning(mc["aviso"], icon=":material/warning:")
 
     atende_nominal = True
     if resultado["criterio"].get("ativo"):

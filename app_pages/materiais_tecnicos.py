@@ -101,7 +101,7 @@ if modo == "Catálogo de referência":
 
 elif modo == "Biblioteca do projeto":
     if projeto is None:
-        st.warning("Abra um projeto permanente para cadastrar materiais rastreáveis.")
+        st.warning("Abra um projeto permanente para cadastrar materiais rastreáveis.", icon=":material/warning:")
         st.page_link("app_pages/gestao_projetos.py", label="Abrir Gestão de projetos", icon=":material/folder_managed:")
         st.stop()
 
@@ -189,7 +189,7 @@ elif modo == "Biblioteca do projeto":
                 observacoes=observacoes,
             )
         except ValueError as erro:
-            st.error(str(erro))
+            st.error(str(erro), icon=":material/error:")
         else:
             projeto["materiais_projeto"].append(novo)
             salvar_projeto(projeto, motivo=f"Material {novo['nome']} cadastrado")
@@ -291,6 +291,6 @@ else:
             hide_index=True,
             width="stretch",
         )
-        st.warning("A comparação ajuda na triagem; não substitui critérios de seleção, soldabilidade, corrosão, fabricação e requisitos normativos.")
+        st.warning("A comparação ajuda na triagem; não substitui critérios de seleção, soldabilidade, corrosão, fabricação e requisitos normativos.", icon=":material/warning:")
     else:
         st.info("Escolha materiais do catálogo e, quando houver projeto ativo, da biblioteca rastreada.")

@@ -507,7 +507,7 @@ elif etapa == 3:
                     st.metric("σa calculada", f"{alternada:.2f} MPa", border=True)
             else:
                 pode_continuar = False
-                st.error("A tensão máxima não pode ser menor que a mínima.")
+                st.error("A tensão máxima não pode ser menor que a mínima.", icon=":material/error:")
 
         elif rota.chave == "parafusos":
             junta = st.columns(2)

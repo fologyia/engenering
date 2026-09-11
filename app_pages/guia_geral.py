@@ -318,7 +318,8 @@ elif modulo == "Projetos permanentes":
     )
     st.warning(
         "Salvamentos comuns atualizam os dados atuais e ficam na linha do tempo. A revisão controlada cria um marco histórico. "
-        "Restaurar um marco não apaga a história: cria uma nova revisão a partir dele."
+        "Restaurar um marco não apaga a história: cria uma nova revisão a partir dele.",
+        icon=":material/warning:",
     )
     st.subheader("Fluxo de situação")
     st.dataframe(
@@ -379,7 +380,8 @@ elif modulo == "Casos de carga":
         "Os valores de Fy e Fx são governados por combinações diferentes; eles não formam automaticamente um único vetor simultâneo.",
     )
     st.warning(
-        "O aplicativo não define fatores normativos. Confirme-os na norma, especificação, contrato ou base de projeto aplicável."
+        "O aplicativo não define fatores normativos. Confirme-os na norma, especificação, contrato ou base de projeto aplicável.",
+        icon=":material/warning:",
     )
     link_modulo("app_pages/casos_carga.py", "Abrir casos e combinações de carga")
 
@@ -473,7 +475,8 @@ elif modulo == "Central de relatórios":
     )
     st.warning(
         "Gerar o documento não aprova o projeto. Antes da emissão, confira fontes, cálculos, "
-        "edições normativas, pendências e assinaturas."
+        "edições normativas, pendências e assinaturas.",
+        icon=":material/warning:",
     )
     link_modulo("app_pages/central_relatorios.py", "Abrir central de relatórios")
 
@@ -550,7 +553,7 @@ elif modulo == "Análise de sensibilidade":
         ],
         "Como a flecha varia com L⁴, o vão tende a apresentar elasticidade próxima de 4 e merece controle dimensional cuidadoso.",
     )
-    st.warning("Distribuições escolhidas sem base metrológica ou histórica podem produzir uma precisão apenas aparente.")
+    st.warning("Distribuições escolhidas sem base metrológica ou histórica podem produzir uma precisão apenas aparente.", icon=":material/warning:")
     link_modulo("app_pages/analise_sensibilidade.py", "Abrir análise de sensibilidade")
 
 
