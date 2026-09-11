@@ -27,6 +27,91 @@ def _lista(valor: Any) -> list[Any]:
     return [valor]
 
 
+SEPARADOR_PECA = " — "
+
+
+def identificar_peca_registro(
+    registro: Mapping[str, Any],
+    *,
+    peca: str = "",
+    componentes_ids: Sequence[Any] = (),
+) -> dict[str, Any]:
+    """Amarra um registro à peça que ele verifica.
+
+    Os módulos geram o título a partir do modelo e da seção ("Flambagem de
+    coluna — W 200 x 26,6"), o que não distingue duas colunas iguais do mesmo
+    mezanino. A identificação da peça entra na frente do título e o vínculo
+    com o componente cadastrado (``componentes_ids``) permite ao memorial
+    agrupar os cálculos por peça, em vez de listá-los soltos.
+    """
+    item = deepcopy(dict(registro))
+    nome = str(peca or "").strip()
+    if nome:
+        item["peca"] = nome
+        titulo = str(item.get("titulo") or "").strip()
+        if not titulo.startswith(f"{nome}{SEPARADOR_PECA}"):
+            item["titulo"] = f"{nome}{SEPARADOR_PECA}{titulo}" if titulo else nome
+    ids = [str(valor) for valor in _lista(componentes_ids) if str(valor).strip()]
+    if ids:
+        existentes = [str(valor) for valor in _lista(item.get("componentes_ids"))]
+        item["componentes_ids"] = existentes + [valor for valor in ids if valor not in existentes]
+    return item
+
+
+def agrupar_registros_por_componente(
+    registros: Sequence[Mapping[str, Any]],
+    componentes: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Distribui os registros pelos componentes do escopo físico.
+
+    Retorna grupos na ordem em que os componentes foram cadastrados, cada um
+    com ``componente`` (ou ``None`` para o grupo "sem vínculo"), ``rotulo``
+    e a lista de ``registros``. Um registro ligado a mais de um componente
+    aparece em cada um deles; grupos vazios são omitidos. Os registros sem
+    vínculo ficam por último, para que o memorial deixe claro o que ainda
+    não foi amarrado a uma peça.
+    """
+    por_id = {
+        str(item.get("id")): item
+        for item in componentes
+        if isinstance(item, Mapping) and str(item.get("id") or "").strip()
+    }
+    grupos: dict[str | None, list[Mapping[str, Any]]] = {chave: [] for chave in por_id}
+    grupos[None] = []
+    for registro in registros:
+        vinculados = [
+            valor for valor in _lista(registro.get("componentes_ids")) if str(valor) in por_id
+        ]
+        if not vinculados:
+            grupos[None].append(registro)
+            continue
+        for valor in vinculados:
+            grupos[str(valor)].append(registro)
+    resultado: list[dict[str, Any]] = []
+    for chave, itens in grupos.items():
+        if not itens:
+            continue
+        componente = por_id.get(chave) if chave is not None else None
+        resultado.append(
+            {
+                "componente": componente,
+                "rotulo": rotulo_componente(componente),
+                "registros": list(itens),
+            }
+        )
+    return resultado
+
+
+def rotulo_componente(componente: Mapping[str, Any] | None) -> str:
+    if componente is None:
+        return "Registros sem peça vinculada"
+    tag = str(componente.get("tag") or "").strip()
+    descricao = str(componente.get("descricao") or "").strip()
+    if tag and descricao:
+        return f"{tag} · {descricao}"
+    return tag or descricao or "Componente sem identificação"
+
+
 def calcular_hash_registro(registro: Mapping[str, Any]) -> str:
     """Assina o conteúdo técnico, excluindo campos administrativos mutáveis."""
     campos = {
@@ -78,6 +163,7 @@ def normalizar_registro_tecnico(registro: Mapping[str, Any]) -> dict[str, Any]:
     item.setdefault("metodo_versao", item.get("modulo_versao", "1.0"))
     item.setdefault("schema_registro", modulo.schema_registro if modulo else SCHEMA_REGISTRO)
     item.setdefault("titulo", "Verificação técnica")
+    item["peca"] = str(item.get("peca") or "").strip()
     item.setdefault("status", "Pendente")
     item.setdefault("resumo", "")
     item["entradas"] = dict(item.get("entradas") or {})

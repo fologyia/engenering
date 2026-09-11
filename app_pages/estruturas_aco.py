@@ -759,6 +759,7 @@ elif modulo == "3. Combinações":
         key="registrar_estrutura_combinacoes",
         rotulo="Registrar combinações no projeto",
         tipo="secondary",
+        identificar_peca=False,
     )
 
 
@@ -1330,6 +1331,7 @@ else:
             registro_modelo_2d,
             key="registrar_estrutura_2d",
             rotulo="Registrar análise 2D no projeto",
+            identificar_peca=False,
         )
 
 st.caption(

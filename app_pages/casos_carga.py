@@ -459,6 +459,7 @@ with aba_envelope:
             registro,
             key=f"registrar_envelope_cargas_{projeto['id']}",
             rotulo="Registrar envelope no projeto ativo",
+            identificar_peca=False,
         )
 
 st.divider()

@@ -19,6 +19,7 @@ from core.project_report import (
 )
 from core.project_store import obter_projeto_ativo, salvar_projeto
 from core.project_validation import validar_projeto
+from core.technical_records import rotulo_componente
 
 PERFIS = {
     "Memorial industrial completo": list(SECOES_RELATORIO),
@@ -223,14 +224,25 @@ selecoes = st.multiselect(
 registros = projeto.get("registros_tecnicos", [])
 config_salva = projeto.get("configuracao_relatorio", {})
 ordem_salva = {str(valor): indice for indice, valor in enumerate(config_salva.get("ordem_registros", []))}
+componentes_por_id = {
+    str(item.get("id")): item
+    for item in projeto.get("componentes", [])
+    if isinstance(item, dict) and str(item.get("id") or "").strip()
+}
 linhas_composicao = []
 for indice, item in enumerate(registros, start=1):
     integridade = avaliar_integridade_registro(item)
+    pecas_vinculadas = [
+        rotulo_componente(componentes_por_id[str(valor)])
+        for valor in item.get("componentes_ids", []) or []
+        if str(valor) in componentes_por_id
+    ]
     linhas_composicao.append(
         {
             "id": item["id"],
             "Incluir": item["id"] in config_salva.get("registros_incluidos", [registro["id"] for registro in registros]),
             "Ordem": ordem_salva.get(item["id"], indice - 1) + 1,
+            "Peça": item.get("peca") or ", ".join(pecas_vinculadas) or "—",
             "Módulo": item.get("modulo", "Módulo"),
             "Registro": item.get("titulo", "Registro"),
             "Situação": item.get("status", "Pendente"),
@@ -245,11 +257,12 @@ if linhas_composicao:
         pd.DataFrame(linhas_composicao),
         hide_index=True,
         width="stretch",
-        disabled=["id", "Módulo", "Registro", "Situação", "Integridade (%)", "Contrato", "Lacunas"],
+        disabled=["id", "Peça", "Módulo", "Registro", "Situação", "Integridade (%)", "Contrato", "Lacunas"],
         column_config={
             "id": None,
             "Incluir": st.column_config.CheckboxColumn("Incluir"),
             "Ordem": st.column_config.NumberColumn("Ordem", min_value=1, max_value=max(1, len(registros)), step=1, required=True),
+            "Peça": st.column_config.TextColumn(width="small", help="Peça do escopo físico à qual o registro está vinculado."),
             "Módulo": st.column_config.TextColumn(width="medium"),
             "Registro": st.column_config.TextColumn(width="large"),
             "Integridade (%)": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d%%"),
@@ -258,7 +271,7 @@ if linhas_composicao:
         },
         key=f"composicao_relatorio_{projeto['id']}",
     )
-    linhas_selecionadas = composicao[composicao["Incluir"]].sort_values(["Ordem", "Módulo", "Registro"])
+    linhas_selecionadas = composicao[composicao["Incluir"]].sort_values(["Ordem", "Peça", "Módulo", "Registro"])
     ids_registros = linhas_selecionadas["id"].astype(str).tolist()
 else:
     ids_registros = []

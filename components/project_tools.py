@@ -9,15 +9,23 @@ import streamlit as st
 
 from core.project_store import (
     ProjetoPersistenciaErro,
+    criar_item,
     criar_projeto,
     obter_projeto_ativo,
     registrar_calculo_tecnico,
+    revisar_listas,
+    salvar_projeto,
 )
 from core.technical_records import (
     calcular_hash_registro,
     criar_registro_tecnico,
+    identificar_peca_registro,
     normalizar_registro_tecnico,
+    rotulo_componente,
 )
+
+_OPCAO_SEM_COMPONENTE = "__sem_componente__"
+_OPCAO_NOVO_COMPONENTE = "__novo_componente__"
 
 
 def contexto_sessao_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
@@ -115,15 +123,130 @@ def id_registro_existente(registro: Mapping[str, Any]) -> str | None:
     return None
 
 
+def selecionar_peca_registro(
+    projeto: Mapping[str, Any] | None,
+    *,
+    key: str,
+) -> tuple[str, str | None, bool]:
+    """Pergunta qual peça o cálculo verifica antes de registrá-lo.
+
+    Devolve ``(nome_da_peca, id_do_componente, cadastrar_nova)``. O nome é
+    livre ("Coluna P1", "Mão francesa esquerda") e entra na frente do título
+    do registro; o componente vincula o registro ao escopo físico já
+    cadastrado no projeto, o que permite ao memorial agrupar por peça. Quem
+    ainda não cadastrou o escopo pode pedir para criar o componente na hora,
+    com o próprio nome informado.
+    """
+    componentes = [
+        item
+        for item in (projeto or {}).get("componentes", [])
+        if isinstance(item, Mapping) and str(item.get("id") or "").strip()
+    ]
+    coluna_nome, coluna_componente = st.columns([1, 1])
+    nome_peca = coluna_nome.text_input(
+        "Identificação da peça",
+        key=f"{key}_peca_nome",
+        placeholder="Ex.: Coluna P1, Viga principal, Mão francesa esquerda",
+        help=(
+            "Aparece na frente do título do registro e no quadro-resumo do "
+            "memorial, para distinguir peças iguais do mesmo projeto."
+        ),
+    ).strip()
+    opcoes = [_OPCAO_SEM_COMPONENTE, _OPCAO_NOVO_COMPONENTE, *[str(item["id"]) for item in componentes]]
+    rotulos = {
+        _OPCAO_SEM_COMPONENTE: "Sem vínculo com o escopo físico",
+        _OPCAO_NOVO_COMPONENTE: "Cadastrar nova peça no escopo com este nome",
+        **{str(item["id"]): rotulo_componente(item) for item in componentes},
+    }
+    # Sugere o componente cujo TAG ou descrição coincide com o nome digitado,
+    # para que quem já cadastrou o escopo não precise escolher duas vezes.
+    indice_padrao = 0
+    if nome_peca:
+        chave_nome = nome_peca.casefold()
+        for indice, item in enumerate(componentes, start=2):
+            candidatos = {
+                str(item.get("tag") or "").strip().casefold(),
+                str(item.get("descricao") or "").strip().casefold(),
+            }
+            if chave_nome in candidatos:
+                indice_padrao = indice
+                break
+    escolha = coluna_componente.selectbox(
+        "Componente do escopo físico",
+        options=opcoes,
+        index=indice_padrao,
+        format_func=lambda valor: rotulos.get(valor, valor),
+        key=f"{key}_peca_componente",
+        help=(
+            "Vincula o registro a um item do escopo físico (Gestão de projetos). "
+            "No memorial, os cálculos ficam agrupados por peça."
+        ),
+    )
+    if escolha == _OPCAO_NOVO_COMPONENTE:
+        return nome_peca, None, True
+    if escolha == _OPCAO_SEM_COMPONENTE:
+        return nome_peca, None, False
+    return nome_peca, escolha, False
+
+
+def _aplicar_peca(
+    projeto: Mapping[str, Any],
+    registro: Mapping[str, Any],
+    *,
+    nome_peca: str,
+    componente_id: str | None,
+    cadastrar_novo: bool,
+) -> tuple[dict[str, Any], str | None]:
+    """Vincula o registro à peça, criando o componente no projeto se pedido.
+
+    Retorna o registro identificado e uma mensagem de erro quando o cadastro
+    da nova peça não é possível (por exemplo, sem nome). O componente novo é
+    gravado antes do registro, porque ``registrar_calculo_tecnico`` relê o
+    projeto do banco para fotografar as dependências.
+    """
+    if cadastrar_novo:
+        if not nome_peca:
+            return dict(registro), "Informe a identificação da peça para cadastrá-la no escopo físico."
+        novo = criar_item(
+            tag=nome_peca,
+            descricao="",
+            servico="",
+            material="",
+            fonte_material="",
+            desenho="",
+            criticidade="",
+        )
+        documento = revisar_listas(projeto, componentes=[*projeto.get("componentes", []), novo])
+        salvar_projeto(documento)
+        componente_id = novo["id"]
+    return (
+        identificar_peca_registro(
+            registro,
+            peca=nome_peca,
+            componentes_ids=[componente_id] if componente_id else (),
+        ),
+        None,
+    )
+
+
 def botao_registrar_calculo(
     registro: Mapping[str, Any],
     *,
     key: str,
     rotulo: str = "Registrar no projeto ativo",
     tipo: str = "primary",
+    identificar_peca: bool = True,
 ) -> bool:
-    """Mostra uma ação explícita e persiste o resultado no projeto ativo."""
+    """Mostra uma ação explícita e persiste o resultado no projeto ativo.
+
+    Com ``identificar_peca`` (padrão), pergunta antes qual peça o cálculo
+    verifica; desligue em registros que não pertencem a uma peça específica,
+    como combinações de ações ou cadastros de casos de carga.
+    """
     projeto = projeto_ativo_persistente()
+    nome_peca, componente_id, cadastrar_novo = "", None, False
+    if identificar_peca:
+        nome_peca, componente_id, cadastrar_novo = selecionar_peca_registro(projeto, key=key)
     if projeto is None:
         with st.container(border=True):
             st.caption(
@@ -156,7 +279,17 @@ def botao_registrar_calculo(
                     return False
                 try:
                     novo_projeto = criar_projeto(nome_limpo)
-                    salvo = registrar_calculo_tecnico(novo_projeto["id"], registro)
+                    registro_final, erro_peca = _aplicar_peca(
+                        novo_projeto,
+                        registro,
+                        nome_peca=nome_peca,
+                        componente_id=componente_id,
+                        cadastrar_novo=cadastrar_novo,
+                    )
+                    if erro_peca:
+                        st.error(erro_peca)
+                        return False
+                    salvo = registrar_calculo_tecnico(novo_projeto["id"], registro_final)
                 except ProjetoPersistenciaErro as erro:
                     st.error(f"Não foi possível criar o projeto: {erro}")
                     return False
@@ -179,7 +312,17 @@ def botao_registrar_calculo(
         ),
     ):
         try:
-            salvo = registrar_calculo_tecnico(projeto["id"], registro)
+            registro_final, erro_peca = _aplicar_peca(
+                projeto,
+                registro,
+                nome_peca=nome_peca,
+                componente_id=componente_id,
+                cadastrar_novo=cadastrar_novo,
+            )
+            if erro_peca:
+                st.error(erro_peca)
+                return False
+            salvo = registrar_calculo_tecnico(projeto["id"], registro_final)
         except ProjetoPersistenciaErro as erro:
             st.error(f"Não foi possível salvar o registro: {erro}")
             return False

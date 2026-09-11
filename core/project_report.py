@@ -15,7 +15,11 @@ from core.materials_registry import avaliar_material, resumir_fonte
 from core.memorial_word import CAUTION, POSITIVE, RISK, gerar_memorial_word_padrao
 from core.project_validation import validar_projeto
 from core.report_plugins import listar_provedores, titulos_secoes_extensao
-from core.technical_records import avaliar_contrato_registro
+from core.technical_records import (
+    agrupar_registros_por_componente,
+    avaliar_contrato_registro,
+    rotulo_componente,
+)
 
 _SECOES_BASE = (
     ("escopo", "Objetivo e escopo"),
@@ -170,6 +174,26 @@ def avaliar_integridade_registro(registro: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _peca_registro(
+    registro: Mapping[str, Any], componentes_por_id: Mapping[str, Mapping[str, Any]]
+) -> str:
+    """Nome curto da peça verificada, para quadros e legendas.
+
+    Prefere o nome livre informado no registro; sem ele, usa o TAG do
+    componente vinculado. Registros antigos, sem nenhum dos dois, aparecem
+    como "-", e não como um texto inventado.
+    """
+    peca = _texto(registro.get("peca"), "")
+    if peca:
+        return peca
+    vinculados = [
+        componentes_por_id[str(valor)]
+        for valor in registro.get("componentes_ids", []) or []
+        if str(valor) in componentes_por_id
+    ]
+    return ", ".join(rotulo_componente(item) for item in vinculados) or "-"
+
+
 def _hash_snapshot(
     projeto: Mapping[str, Any],
     registros: Sequence[Mapping[str, Any]],
@@ -228,6 +252,9 @@ def montar_modelo_relatorio(
     metadata = _metadados(projeto, metadata_extra)
     registros = _filtrar_registros(projeto, registros_ids)
     componentes = [item for item in projeto.get("componentes", []) if isinstance(item, Mapping)]
+    componentes_por_id = {
+        str(item.get("id")): item for item in componentes if str(item.get("id") or "").strip()
+    }
     materiais = [item for item in projeto.get("materiais_projeto", []) if isinstance(item, Mapping)]
     normas = [item for item in projeto.get("normas", []) if isinstance(item, Mapping)]
     checklist = [item for item in projeto.get("checklist", []) if isinstance(item, Mapping)]
@@ -406,10 +433,11 @@ def montar_modelo_relatorio(
                 "O plano abaixo define a ordem dos capítulos selecionados e evidencia campos ausentes antes da emissão. A sequência é preservada no Word e no PDF."
             ],
             "tabelas": [{
-                "cabecalhos": ["Ordem", "Módulo / registro", "Situação", "Integridade", "Lacunas"],
+                "cabecalhos": ["Ordem", "Peça", "Módulo / registro", "Situação", "Integridade", "Lacunas"],
                 "linhas": [
                     [
                         str(indice),
+                        _peca_registro(item, componentes_por_id),
                         (
                             f"{_texto(item.get('modulo'))}\n{_texto(item.get('titulo'))}\n"
                             f"{_texto(item.get('modulo_id'), 'legado')} v{_texto(item.get('modulo_versao'), '-')}"
@@ -419,8 +447,8 @@ def montar_modelo_relatorio(
                         ", ".join(avaliar_integridade_registro(item)["faltantes"]) or "Nenhuma lacuna estrutural",
                     ]
                     for indice, item in enumerate(registros, start=1)
-                ] or [["-", "Nenhum registro selecionado", "Pendente", "Incompleto", "Anexar cálculos"]],
-                "larguras": [700, 2900, 1300, 1900, 2560],
+                ] or [["-", "-", "Nenhum registro selecionado", "Pendente", "Incompleto", "Anexar cálculos"]],
+                "larguras": [600, 1500, 2500, 1200, 1600, 1960],
                 "fonte": 7.2,
             }],
         },
@@ -428,19 +456,32 @@ def montar_modelo_relatorio(
 
     if "registros" in ativas:
         titulo_secao = f"{numero}. {SECOES_RELATORIO['registros']}"
+        grupos = agrupar_registros_por_componente(registros_capitulos, componentes)
+        # Só vale a pena abrir um nível por peça quando há vínculo com o escopo
+        # físico; um projeto sem componentes cadastrados segue com a lista
+        # plana de antes, sem um subtítulo "sem peça vinculada" inútil.
+        agrupar = any(grupo["componente"] is not None for grupo in grupos)
         secoes.append({
             "titulo": titulo_secao,
-            "paragrafos": ["Cada registro abaixo preserva entradas, resultados, premissas, alertas e conclusão do módulo que o originou."],
+            "paragrafos": [
+                "Cada registro abaixo preserva entradas, resultados, premissas, alertas e conclusão do módulo que o originou."
+                + (
+                    " Os registros estão agrupados pela peça do escopo físico que verificam; os que não têm vínculo ficam ao final."
+                    if agrupar
+                    else ""
+                )
+            ],
         })
-        for indice, registro in enumerate(registros_capitulos, start=1):
+        def capitulo_registro(numeracao: str, nivel: int, registro: Mapping[str, Any]) -> dict[str, Any]:
             entradas = registro.get("entradas", {}) if isinstance(registro.get("entradas"), Mapping) else {}
             resultados = registro.get("resultados", {}) if isinstance(registro.get("resultados"), Mapping) else {}
             contrato = avaliar_contrato_registro(registro)
-            secoes.append({
-                "titulo": f"{numero}.{indice} {_texto(registro.get('titulo'), 'Registro técnico')}",
-                "nivel": 2,
+            peca = _peca_registro(registro, componentes_por_id)
+            return {
+                "titulo": f"{numeracao} {_texto(registro.get('titulo'), 'Registro técnico')}",
+                "nivel": nivel,
                 "paragrafos": [
-                    f"Módulo: {_texto(registro.get('modulo'))}. Situação: {_texto(registro.get('status'))}.",
+                    f"Módulo: {_texto(registro.get('modulo'))}. Peça: {peca}. Situação: {_texto(registro.get('status'))}.",
                     _texto(registro.get("resumo"), "Resumo não informado."),
                     f"Método: {_texto(registro.get('metodo'), 'Não detalhado no registro de origem.')} Integridade: {avaliar_integridade_registro(registro)['percentual']}%.",
                     (
@@ -471,7 +512,35 @@ def montar_modelo_relatorio(
                         "fonte": 7.8,
                     },
                 ],
-            })
+            }
+
+        # Sem agrupamento os registros ficam em ``N.i``; com ele, cada peça vira
+        # ``N.g`` e os cálculos dela vêm logo abaixo, em ``N.g.i``.
+        if agrupar:
+            for indice_grupo, grupo in enumerate(grupos, start=1):
+                componente = grupo["componente"]
+                descricao_grupo = (
+                    [
+                        f"Serviço: {_texto(componente.get('servico'))}. Material: {_texto(componente.get('material'))}. "
+                        f"Desenho: {_texto(componente.get('desenho'))}. Criticidade: {_texto(componente.get('criticidade'))}.",
+                        f"{len(grupo['registros'])} registro(s) técnico(s) vinculado(s) a esta peça.",
+                    ]
+                    if componente is not None
+                    else [
+                        "Registros salvos sem vínculo com um item do escopo físico. Para que apareçam sob a peça "
+                        "correspondente, informe a identificação da peça ao registrar o cálculo."
+                    ]
+                )
+                secoes.append({
+                    "titulo": f"{numero}.{indice_grupo} {grupo['rotulo']}",
+                    "nivel": 2,
+                    "paragrafos": descricao_grupo,
+                })
+                for indice, registro in enumerate(grupo["registros"], start=1):
+                    secoes.append(capitulo_registro(f"{numero}.{indice_grupo}.{indice}", 3, registro))
+        else:
+            for indice, registro in enumerate(registros_capitulos, start=1):
+                secoes.append(capitulo_registro(f"{numero}.{indice}", 2, registro))
         if not registros_capitulos:
             secoes[-1]["nota"] = "Nenhum registro técnico foi selecionado para esta emissão."
         numero += 1
@@ -725,6 +794,7 @@ def gerar_relatorio_industrial_pdf(
         "subtitulo": ParagraphStyle("IndustrialSubtitulo", parent=base["Normal"], fontSize=8.7, leading=11.5, textColor=cinza, spaceAfter=4 * mm),
         "h1": ParagraphStyle("IndustrialH1", parent=base["Heading1"], fontName="Helvetica-Bold", fontSize=12, leading=15, textColor=azul, spaceBefore=4 * mm, spaceAfter=2.3 * mm, keepWithNext=True),
         "h2": ParagraphStyle("IndustrialH2", parent=base["Heading2"], fontName="Helvetica-Bold", fontSize=10, leading=13, textColor=azul_medio, spaceBefore=3 * mm, spaceAfter=2 * mm, keepWithNext=True),
+        "h3": ParagraphStyle("IndustrialH3", parent=base["Heading3"], fontName="Helvetica-Bold", fontSize=9, leading=12, textColor=azul_medio, spaceBefore=2.5 * mm, spaceAfter=1.5 * mm, keepWithNext=True),
         "corpo": ParagraphStyle("IndustrialCorpo", parent=base["BodyText"], fontSize=8.2, leading=11.2, textColor=colors.HexColor("#26323D"), spaceAfter=1.8 * mm),
         "corpo_keep": ParagraphStyle("IndustrialCorpoKeep", parent=base["BodyText"], fontSize=8.2, leading=11.2, textColor=colors.HexColor("#26323D"), spaceAfter=1.8 * mm, keepWithNext=True),
         "pequeno": ParagraphStyle("IndustrialPequeno", parent=base["BodyText"], fontSize=6.6, leading=8.2, textColor=colors.HexColor("#26323D")),
@@ -788,7 +858,7 @@ def gerar_relatorio_industrial_pdf(
     historia.extend([par("2. Controle do documento", "h1"), tabela(["Rev.", "Data", "Situação", "Elaborado", "Verificado"], [[metadata["revisao"], metadata["emissao"], metadata["situacao"], metadata["responsavel"], metadata["verificador"]]], [14, 25, 46, 48, 47])])
 
     for secao in modelo["secoes"]:
-        historia.append(par(secao.get("titulo"), "h2" if int(secao.get("nivel", 1)) == 2 else "h1"))
+        historia.append(par(secao.get("titulo"), {2: "h2", 3: "h3"}.get(int(secao.get("nivel", 1)), "h1")))
         paragrafos_secao = list(secao.get("paragrafos", []))
         for indice_paragrafo, texto in enumerate(paragrafos_secao):
             manter_com_tabela = bool(secao.get("tabelas")) and indice_paragrafo == len(paragrafos_secao) - 1
