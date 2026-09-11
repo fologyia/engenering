@@ -81,6 +81,50 @@ class NucleoCompartilhadoTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             tensoes.ponto("fibra do meio")
 
+    def test_na_linha_neutra_cortante_e_torcao_somam_em_modulo(self):
+        # Num eixo, τ de V e τ de T são paralelas na linha neutra: de um
+        # lado da seção somam, do outro subtraem. O sinal relativo entre V
+        # e T é só convenção de eixos — não pode reduzir a tensão de projeto.
+        secao = vb.secao_circular_macica(60)
+        mesmo_sinal = ss.tensoes_combinadas(
+            ss.EsforcosSecao(cortante_N=10_000.0, torque_Nmm=1.5e6), secao
+        )
+        sinais_opostos = ss.tensoes_combinadas(
+            ss.EsforcosSecao(cortante_N=10_000.0, torque_Nmm=-1.5e6), secao
+        )
+        neutra_a = mesmo_sinal.ponto(ss.NOME_NEUTRA)
+        neutra_b = sinais_opostos.ponto(ss.NOME_NEUTRA)
+        esperado = abs(mesmo_sinal.cisalhamento_MPa) + abs(mesmo_sinal.torcao_MPa)
+        self.assertAlmostEqual(abs(neutra_a.tau_MPa), esperado)
+        self.assertAlmostEqual(abs(neutra_b.tau_MPa), esperado)
+        self.assertAlmostEqual(neutra_a.von_mises_MPa, neutra_b.von_mises_MPa)
+        # O sinal segue a parcela dominante (aqui a torção), para o estado
+        # plano repassado ao Círculo de Mohr manter a orientação.
+        self.assertGreater(abs(mesmo_sinal.torcao_MPa), abs(mesmo_sinal.cisalhamento_MPa))
+        self.assertLess(neutra_b.tau_MPa, 0.0)
+
+    def test_von_mises_da_viga_nao_depende_do_sentido_do_torque(self):
+        # Eixo biapoiado com carga transversal e torque: inverter o sentido
+        # do torque não muda a física, então não pode mudar o pior ponto.
+        def eixo(sentido: float) -> vb.ResultadoViga:
+            return vb.analisar_viga(
+                vb.Viga(
+                    comprimento_mm=1_000.0,
+                    secao=vb.secao_circular_macica(40),
+                    material=vb.MaterialViga("Aço", E_MPA, G_MPA, 350.0),
+                    apoios=(vb.Apoio(0.0, "pino"), vb.Apoio(1_000.0, "rolete")),
+                    cargas_pontuais=(vb.CargaPontual(500.0, -30_000.0),),
+                    torques=(vb.Torque(0.0, sentido * 2e6), vb.Torque(1_000.0, -sentido * 2e6)),
+                )
+            )
+
+        direto, invertido = eixo(1.0), eixo(-1.0)
+        self.assertAlmostEqual(
+            direto.extremos["von_mises"].valor, invertido.extremos["von_mises"].valor
+        )
+        for a, b in zip(direto.pontos, invertido.pontos, strict=True):
+            self.assertAlmostEqual(a.von_mises_MPa, b.von_mises_MPa, places=9)
+
 
 class ConcordanciaEntreModulosTests(unittest.TestCase):
     """A mesma seção precisa dar a mesma resposta nos dois caminhos."""

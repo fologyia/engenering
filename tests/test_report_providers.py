@@ -57,6 +57,9 @@ def registro_de_viga(script: str, *, titulo="Viga do mezanino", com_envoltoria=F
         "flecha_admissivel_mm": verificacao["flecha_admissivel_mm"],
         "criterio_flecha": verificacao["criterio"],
         "grau_hiperestaticidade": resultado.grau_hiperestaticidade,
+        "fator_carga_critica": resultado.fator_carga_critica,
+        "fator_carga_critica_transversal": resultado.fator_carga_critica_transversal,
+        "segunda_ordem": resultado.segunda_ordem,
     }
     if com_envoltoria:
         envoltoria = vb.analisar_envoltoria(viga, bs.combinacoes_do_script(script))
@@ -150,6 +153,24 @@ class SecaoDeVigasTests(unittest.TestCase):
         self.assertIn("0 análise(s)", " ".join(secao["paragrafos"]))
         for tabela in secao["tabelas"]:
             self.assertTrue(tabela["linhas"])
+
+    def test_barra_comprimida_ganha_tabela_de_estabilidade(self):
+        # Perfil I fletido em x e comprimido: a carga crítica fora do plano
+        # (Iy) é a que manda, e o memorial precisa mostrar as duas.
+        comprimida = (
+            "viga 6\nsecao perfil_i 300 150 8 12\nmaterial aco\napoio 0 pino\n"
+            "apoio 6 rolete\nq 0 6 5 baixo\nN 6 50 compressao"
+        )
+        secao = self.secao(projeto_minimo(registro_de_viga(comprimida)))
+        tabela = next(t for t in secao["tabelas"] if "Estabilidade" in t["legenda"])
+        linha = tabela["linhas"][0]
+        self.assertEqual(linha[0], "Viga do mezanino")
+        self.assertLess(float(linha[2].replace(".", "").replace(",", ".")), float(linha[1].replace(".", "").replace(",", ".")))
+        self.assertIn(linha[4], {"Folgada", "Sensível à segunda ordem", "Compressão acima da carga crítica"})
+
+    def test_barra_sem_compressao_nao_tem_tabela_de_estabilidade(self):
+        secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
+        self.assertFalse(any("Estabilidade" in t["legenda"] for t in secao["tabelas"]))
 
     def test_viga_registrada_aparece_com_a_secao_governante(self):
         secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))

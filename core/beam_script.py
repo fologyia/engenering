@@ -138,16 +138,69 @@ _TIPOS_APOIO_ALIAS = {
 # continua sendo um número decimal, como se escreve em português.
 _SEPARADOR = re.compile(r"[\s;]+|(?<![0-9]),|,(?![0-9])")
 
+# Um trecho entre aspas (retas ou tipográficas) é um único campo, mesmo com
+# espaço, vírgula ou "#" dentro: é o que permite `nome "Viga do mezanino"` e
+# `secao manual ... nome="W 200 x 46,1 (H)"` sobreviverem à ida e volta.
+_ENTRE_ASPAS = re.compile(r'"([^"]*)"|“([^”]*)”')
+_MARCADOR = "\x00"
+
 
 def _tokenizar(linha: str) -> list[str]:
-    sem_comentario = linha.split("#", 1)[0]
-    return [token for token in _SEPARADOR.split(sem_comentario.strip()) if token]
+    protegidos: list[str] = []
+
+    def guardar(match: re.Match[str]) -> str:
+        texto = match.group(1) if match.group(1) is not None else match.group(2)
+        protegidos.append(texto)
+        return f"{_MARCADOR}{len(protegidos) - 1}{_MARCADOR}"
+
+    protegida = _ENTRE_ASPAS.sub(guardar, linha)
+    sem_comentario = protegida.split("#", 1)[0]
+    tokens = [token for token in _SEPARADOR.split(sem_comentario.strip()) if token]
+    if not protegidos:
+        return tokens
+    return [
+        re.sub(
+            f"{_MARCADOR}(\\d+){_MARCADOR}",
+            lambda match: protegidos[int(match.group(1))],
+            token,
+        )
+        for token in tokens
+    ]
+
+
+def formatar_numero(valor: float) -> str:
+    """Menor texto que reconstrói o double exatamente ("0.1", "4", "1.5e-05").
+
+    ``:g`` corta em seis algarismos — uma posição digitada como 12,3457 m
+    ou uma carga de 123,4567 kN voltariam diferentes do texto — e ``.17g``
+    escreve "0.10000000000000001". O ``repr`` do Python é o meio-termo
+    exato; só o ".0" final é removido, para o script continuar legível.
+    """
+    texto = repr(float(valor))
+    return texto[:-2] if texto.endswith(".0") else texto
+
+
+def texto_entre_aspas(texto: str) -> str:
+    """Campo de texto protegido por aspas, preservando o conteúdo.
+
+    Nomes de bitola em polegadas têm aspas retas dentro (``I 3" x 8,48``);
+    esses vão entre aspas tipográficas ``“…”``, que o tokenizador também
+    entende, para o nome chegar intacto ao catálogo. Só quando o texto
+    mistura os dois tipos é que as tipográficas internas viram retas.
+    """
+    texto = str(texto)
+    if '"' not in texto:
+        return f'"{texto}"'
+    return "“" + texto.replace("“", '"').replace("”", '"') + "”"
 
 
 def _numero(token: str, *, campo: str, linha: int, texto: str) -> float:
     bruto = token.replace(" ", "").strip()
     # "1.5e3", "1,5" e "2_000" são todos aceitos; a vírgula só vira ponto
     # quando não há nenhum ponto no token (senão "1,234.5" viraria lixo).
+    # O sinal de menos tipográfico ("−", U+2212) e o travessão curto vêm
+    # colados em texto copiado de documentos e planilhas; float() não os lê.
+    bruto = bruto.replace("−", "-").replace("–", "-")
     if "," in bruto and "." not in bruto:
         bruto = bruto.replace(",", ".")
     bruto = bruto.replace("_", "")
@@ -443,6 +496,10 @@ def _comando_material(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: 
     if g_gpa is None:
         # Coeficiente de Poisson típico de metais: G = E / (2(1+ν)) com ν = 0,3.
         g_gpa = e_gpa / 2.6
+    # ``nome=`` só rotula: é o que a ida e volta do modelo usa para o material
+    # não voltar como "personalizado" depois de escrito em texto.
+    if str(nom.get("nome") or "").strip():
+        nome_material = str(nom["nome"]).strip()
     try:
         acc.material = vb.MaterialViga(
             nome=nome_material,
@@ -491,7 +548,10 @@ def _comando_secao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
         nome_perfil = " ".join(argumentos)
         perfil = _buscar_perfil(nome_perfil, n, texto)
         eixo = nom.get("eixo", "x")
-        acc.secao = vb.secao_de_perfil_catalogo(perfil, eixo=eixo)
+        try:
+            acc.secao = vb.secao_de_perfil_catalogo(perfil, eixo=eixo)
+        except ValueError as erro:
+            raise ErroDeScript(str(erro), linha=n, texto=texto) from None
         return
 
     if tipo not in _SECOES_POSICIONAIS:
@@ -528,8 +588,15 @@ def _comando_secao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
 
 
 def _normalizar_perfil(nome: str) -> str:
-    """Compara nomes de perfil ignorando caixa, acento, espaço e × vs x."""
-    return _sem_acento(nome).lower().replace("×", "x").replace("ø", "o").replace(" ", "")
+    """Compara nomes de perfil ignorando caixa, acento, espaço, × vs x e aspas.
+
+    As aspas entram na lista porque a polegada é escrita de vários jeitos —
+    ``3"``, ``3''``, ``3″`` — e nenhum deles deveria impedir de achar a bitola.
+    """
+    normalizado = _sem_acento(nome).lower().replace("×", "x").replace("ø", "o")
+    for aspas in ('"', "'", "″", "′", "“", "”", "‘", "’"):
+        normalizado = normalizado.replace(aspas, "")
+    return normalizado.replace(" ", "")
 
 
 def _buscar_perfil(nome: str, n: int, texto: str):
@@ -586,13 +653,30 @@ def _secao_manual(nom: dict[str, str], n: int, texto: str) -> vb.SecaoViga:
     c_inf = c_inf if c_inf is not None else c
     assert c_sup is not None and c_inf is not None
     q = pegar(("q", "momento_estatico"), "Q (mm³)", obrigatorio=False) or 0.0
-    t = pegar(("t", "espessura", "b"), "t (mm)", obrigatorio=False) or 1.0
+    t = pegar(("t", "espessura", "b"), "t (mm)", obrigatorio=False) or 0.0
     j = pegar(("j", "torcao"), "J (mm⁴)", obrigatorio=False) or 0.0
     wt = pegar(("wt", "modulo_torcao"), "Wt (mm³)", obrigatorio=False) or 0.0
     av = pegar(("av", "area_cisalhamento"), "Av (mm²)", obrigatorio=False) or 0.0
+    # Inércia em torno do outro eixo: só serve para a carga crítica fora do plano.
+    iy = pegar(("iy", "i_transversal", "inercia_transversal"), "Iy (mm⁴)", obrigatorio=False) or 0.0
+    # Q sem t não é um caminho de cisalhamento: antes o programa assumia
+    # t = 1 mm em silêncio, e τ = V·Q/(I·1) saía absurdo. (t sem Q é normal:
+    # os perfis de catálogo trazem a espessura da alma e usam Av.)
+    if q > 0 and t <= 0:
+        raise ErroDeScript(
+            "A seção manual informou Q mas não t: a tensão V·Q/(I·t) precisa dos "
+            "dois. Informe t= (espessura na linha neutra, em mm), ou use só Av= "
+            "(área de cisalhamento) para τ = V/Av.",
+            linha=n,
+            texto=texto,
+        )
+    nome = str(nom.get("nome") or "Manual").strip() or "Manual"
+    descricao = str(nom.get("descricao") or "").strip() or (
+        "Seção informada diretamente pelas propriedades."
+    )
     try:
         return vb.SecaoViga(
-            nome="Manual",
+            nome=nome,
             area_mm2=area,
             inercia_mm4=inercia,
             c_superior_mm=c_sup,
@@ -602,7 +686,8 @@ def _secao_manual(nom: dict[str, str], n: int, texto: str) -> vb.SecaoViga:
             constante_torcao_mm4=j,
             modulo_torcao_mm3=wt,
             area_cisalhamento_mm2=av,
-            descricao="Seção informada diretamente pelas propriedades.",
+            inercia_transversal_mm4=iy,
+            descricao=descricao,
         )
     except ValueError as erro:
         raise ErroDeScript(str(erro), linha=n, texto=texto) from None
@@ -720,9 +805,23 @@ def _comando_axial(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
         )
     x = _numero(pos[0], campo="posição da carga axial", linha=n, texto=texto)
     valor = _numero(pos[1], campo="valor da carga axial (kN)", linha=n, texto=texto)
-    acc.axiais.append(
-        vb.CargaAxial(x_mm=x * 1_000.0, fx_N=sinal * valor * 1_000.0, caso=_caso(nom))
-    )
+    fx_N = sinal * valor * 1_000.0
+    acc.axiais.append(vb.CargaAxial(x_mm=x * 1_000.0, fx_N=fx_N, caso=_caso(nom)))
+    # Excentricidade: uma axial aplicada acima (e > 0) ou abaixo do centroide
+    # é a mesma axial mais um momento M = −e·Fx (M_z = x·Fy − y·Fx). É o caso
+    # da carga que entra pela mesa, não pelo eixo da barra.
+    excentricidade = nom.get("e") or nom.get("exc") or nom.get("excentricidade")
+    if excentricidade is not None:
+        e_mm = _numero(excentricidade, campo="excentricidade e (mm)", linha=n, texto=texto)
+        if e_mm != 0.0:
+            acc.momentos.append(
+                vb.MomentoConcentrado(
+                    x_mm=x * 1_000.0,
+                    mz_Nmm=-e_mm * fx_N,
+                    caso=_caso(nom),
+                    rotulo=f"Excentricidade de {e_mm:g} mm da carga axial",
+                )
+            )
 
 
 def _comando_axial_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
@@ -893,7 +992,9 @@ def interpretar(script: str, *, materiais_projeto: Sequence[Mapping] = ()) -> vb
             "seção, material, apoios e cargas."
         )
     acc = _Acumulador(materiais_projeto=tuple(materiais_projeto))
-    for numero, linha_texto in enumerate(str(script).splitlines(), start=1):
+    # Um arquivo salvo pelo Bloco de Notas começa com BOM (U+FEFF); sem
+    # tirá-lo, o primeiro comando viraria "\ufeffviga" e seria "desconhecido".
+    for numero, linha_texto in enumerate(str(script).lstrip("\ufeff").splitlines(), start=1):
         tokens = _tokenizar(linha_texto)
         if not tokens:
             continue
@@ -1018,10 +1119,22 @@ def linhas_de_combinacoes_do_projeto(
     return linhas
 
 
+_PRECISA_DE_ASPAS = re.compile(r'[\s;,#"“”=]')
+
+
+def _campo_de_texto(texto: str) -> str:
+    """Texto como um único campo: entre aspas se algo o quebraria em dois."""
+    return texto_entre_aspas(texto) if _PRECISA_DE_ASPAS.search(texto) else texto
+
+
 def _sufixo_caso(carga: object) -> str:
-    """Escreve `caso=` só quando não é o permanente, para não poluir."""
+    """Escreve `caso=` só quando não é o permanente, para não poluir.
+
+    Um caso criado pelo projeto pode ter espaço ("Peso próprio"); sem as
+    aspas o nome viraria dois campos e a carga cairia em outro caso.
+    """
     nome = str(getattr(carga, "caso", vb.CASO_PADRAO) or vb.CASO_PADRAO)
-    return "" if nome == vb.CASO_PADRAO else f" caso={nome}"
+    return "" if nome == vb.CASO_PADRAO else f" caso={_campo_de_texto(nome)}"
 
 
 def gerar_script(viga: vb.Viga) -> str:
@@ -1031,76 +1144,96 @@ def gerar_script(viga: vb.Viga) -> str:
     usuário monte a viga nos campos e depois não consiga salvar/compartilhar
     o mesmo modelo como texto.
     """
-    linhas = [f"# {viga.nome}", f"viga {viga.comprimento_mm / 1_000.0:g}"]
+    num = formatar_numero
+    linhas = [
+        f"nome {texto_entre_aspas(viga.nome)}",
+        f"viga {num(viga.comprimento_mm / 1_000.0)}",
+    ]
     secao = viga.secao
-    # ``.17g`` preserva o double exatamente: com menos dígitos o modelo
+    # Toda propriedade sai com precisão total: com menos dígitos o modelo
     # reconstruído a partir do texto devolveria tensões um pouco diferentes.
+    # Nome e descrição vão entre aspas para a seção não virar "Manual" no
+    # registro e no memorial depois da ida e volta.
     linhas.append(
-        f"secao manual A={secao.area_mm2:.17g} I={secao.inercia_mm4:.17g} "
-        f"c_sup={secao.c_superior_mm:.17g} c_inf={secao.c_inferior_mm:.17g} "
-        f"Q={secao.momento_estatico_mm3:.17g} t={secao.espessura_cisalhamento_mm:.17g} "
-        f"J={secao.constante_torcao_mm4:.17g} Wt={secao.modulo_torcao_mm3:.17g} "
-        f"Av={secao.area_cisalhamento_mm2:.17g}"
-        f"   # {secao.nome}"
+        f"secao manual A={num(secao.area_mm2)} I={num(secao.inercia_mm4)} "
+        f"c_sup={num(secao.c_superior_mm)} c_inf={num(secao.c_inferior_mm)} "
+        f"Q={num(secao.momento_estatico_mm3)} t={num(secao.espessura_cisalhamento_mm)} "
+        f"J={num(secao.constante_torcao_mm4)} Wt={num(secao.modulo_torcao_mm3)} "
+        f"Av={num(secao.area_cisalhamento_mm2)} "
+        + (f"Iy={num(secao.inercia_transversal_mm4)} " if secao.inercia_transversal_mm4 > 0 else "")
+        + f"nome={texto_entre_aspas(secao.nome)}"
+        + (f" descricao={texto_entre_aspas(secao.descricao)}" if secao.descricao else "")
     )
     material = viga.material
     partes = [
-        f"E={material.modulo_elasticidade_MPa / 1_000.0:.17g}",
-        f"G={material.modulo_cisalhamento_MPa / 1_000.0:.17g}",
+        f"E={num(material.modulo_elasticidade_MPa / 1_000.0)}",
+        f"G={num(material.modulo_cisalhamento_MPa / 1_000.0)}",
     ]
     if material.escoamento_MPa:
-        partes.append(f"Sy={material.escoamento_MPa:.17g}")
-    partes.append(f"densidade={material.densidade_kg_m3:.17g}")
+        partes.append(f"Sy={num(material.escoamento_MPa)}")
+    partes.append(f"densidade={num(material.densidade_kg_m3)}")
     if material.material_id:
         # Preserva o vínculo com o material do projeto sem depender de o
         # projeto estar aberto na hora de reler o texto.
         partes.append(f"id={material.material_id}")
-    linhas.append("material " + " ".join(partes) + f"   # {material.nome}")
+    partes.append(f"nome={texto_entre_aspas(material.nome)}")
+    if material.fonte:
+        partes.append(f"fonte={texto_entre_aspas(material.fonte)}")
+    linhas.append("material " + " ".join(partes))
 
     for apoio in viga.apoios:
         extras = ""
         if apoio.rigidez_vertical_N_mm > 0:
-            extras += f" kv={apoio.rigidez_vertical_N_mm:.17g}"
+            extras += f" kv={num(apoio.rigidez_vertical_N_mm)}"
         if apoio.rigidez_rotacional_Nmm_rad > 0:
-            extras += f" kr={apoio.rigidez_rotacional_Nmm_rad:.17g}"
+            extras += f" kr={num(apoio.rigidez_rotacional_Nmm_rad)}"
         linhas.append(
-            f"apoio {apoio.x_mm / 1_000.0:g} "
+            f"apoio {num(apoio.x_mm / 1_000.0)} "
             f"{ALIAS_CANONICO.get(apoio.tipo, apoio.tipo)}{extras}"
         )
     for rotula in viga.rotulas:
-        linhas.append(f"rotula {rotula.x_mm / 1_000.0:g}")
+        linhas.append(f"rotula {num(rotula.x_mm / 1_000.0)}")
     for pontual in viga.cargas_pontuais:
         linhas.append(
-            f"P {pontual.x_mm / 1_000.0:g} {pontual.fy_N / 1_000.0:g}"
+            f"P {num(pontual.x_mm / 1_000.0)} {num(pontual.fy_N / 1_000.0)}"
             f"{_sufixo_caso(pontual)}"
         )
     for momento in viga.momentos:
         linhas.append(
-            f"M {momento.x_mm / 1_000.0:g} {momento.mz_Nmm / 1e6:g}"
+            f"M {num(momento.x_mm / 1_000.0)} {num(momento.mz_Nmm / 1e6)}"
             f"{_sufixo_caso(momento)}"
         )
     for distribuida in viga.cargas_distribuidas:
+        # Uniforme sai com um único valor, como o usuário costuma escrever.
+        final = (
+            "" if distribuida.w_final_N_mm is None else f" {num(distribuida.w_final)}"
+        )
         linhas.append(
-            f"q {distribuida.x_inicial_mm / 1_000.0:g} "
-            f"{distribuida.x_final_mm / 1_000.0:g} "
-            f"{distribuida.w_inicial_N_mm:g} {distribuida.w_final:g}"
+            f"q {num(distribuida.x_inicial_mm / 1_000.0)} "
+            f"{num(distribuida.x_final_mm / 1_000.0)} "
+            f"{num(distribuida.w_inicial_N_mm)}{final}"
             f"{_sufixo_caso(distribuida)}"
         )
     for axial in viga.cargas_axiais:
         linhas.append(
-            f"N {axial.x_mm / 1_000.0:g} {axial.fx_N / 1_000.0:g}"
+            f"N {num(axial.x_mm / 1_000.0)} {num(axial.fx_N / 1_000.0)}"
             f"{_sufixo_caso(axial)}"
         )
     for axial_distribuida in viga.cargas_axiais_distribuidas:
+        final = (
+            ""
+            if axial_distribuida.a_final_N_mm is None
+            else f" {num(axial_distribuida.a_final)}"
+        )
         linhas.append(
-            f"qn {axial_distribuida.x_inicial_mm / 1_000.0:g} "
-            f"{axial_distribuida.x_final_mm / 1_000.0:g} "
-            f"{axial_distribuida.a_inicial_N_mm:g} {axial_distribuida.a_final:g}"
+            f"qn {num(axial_distribuida.x_inicial_mm / 1_000.0)} "
+            f"{num(axial_distribuida.x_final_mm / 1_000.0)} "
+            f"{num(axial_distribuida.a_inicial_N_mm)}{final}"
             f"{_sufixo_caso(axial_distribuida)}"
         )
     for torque in viga.torques:
         linhas.append(
-            f"T {torque.x_mm / 1_000.0:g} {torque.t_Nmm / 1e6:g}"
+            f"T {num(torque.x_mm / 1_000.0)} {num(torque.t_Nmm / 1e6)}"
             f"{_sufixo_caso(torque)}"
         )
     if viga.considerar_peso_proprio:
@@ -1229,26 +1362,27 @@ AJUDA_SINTAXE = """\
 | `secao tubo_retangular b h t` | Tubo retangular, em mm | `secao tubo_retangular 100 200 6` |
 | `secao perfil_i h bf tw tf` | Perfil I soldado, em mm | `secao perfil_i 300 150 8 12` |
 | `secao perfil <nome>` | Perfil do catálogo do programa | `secao perfil W 200 x 46,1 (H)` |
-| `secao manual A= I= c= Q= t= J= Wt= Av=` | Propriedades diretas | `secao manual A=5000 I=2.5e7 c=100` |
+| `secao manual A= I= c= Q= t= J= Wt= Av= Iy= nome=` | Propriedades diretas (Q **e** t juntos, ou só Av; Iy para a carga crítica fora do plano) | `secao manual A=5000 I=2.5e7 c=100 Av=3000 Iy=4e6 nome="Perfil da lista"` |
 | `apoio x <tipo>` | pino, rolete, engaste, deslizante, trava_axial | `apoio 0 pino` |
 | `apoio x mola kv= kr=` | Apoio elástico: kv em N/mm, kr em N·mm/rad | `apoio 3 mola kv=500` |
 | `rotula x` | Articulação interna (M = 0) | `rotula 4.5` |
 | `P x valor` | Força concentrada, em kN | `P 3 20 baixo` |
 | `M x valor` | Momento concentrado, em kN·m | `M 2 15` |
 | `q x1 x2 w1 [w2]` | Distribuída, em kN/m (trapezoidal se houver w2) | `q 0 6 15 baixo` |
-| `N x valor` | Carga axial, em kN | `N 4 180 compressao` |
+| `N x valor [e=mm]` | Carga axial, em kN; `e=` é a excentricidade em mm acima do centroide (vira momento M = −e·N) | `N 4 180 compressao e=60` |
 | `qn x1 x2 a1 [a2]` | Axial distribuída, em kN/m | `qn 0 6 2` |
 | `T x valor` | Torque, em kN·m | `T 0.4 1.5` |
 | `peso_proprio` | Soma o peso da própria barra | `peso_proprio` |
 | `segunda_ordem` | Inclui o efeito P–Δ: a compressão amplifica a flecha | `segunda_ordem` |
-| `divisoes n` | Refina a malha de cada trecho (só afeta a segunda ordem) | `divisoes 12` |
+| `divisoes n` | Refina a malha (até n elementos por trecho, proporcional ao comprimento); só afeta a segunda ordem | `divisoes 12` |
 | `caso=<nome>` | Marca a que ação a carga pertence (sufixo de qualquer carga) | `q 0 6 15 baixo caso=Sobrecarga` |
 | `combinacao <nome> <Caso>=<fator>` | Combinação a envelopar | `combinacao ELU Permanente=1.4 Sobrecarga=1.5` |
 
 Posições em **metros**, forças em **kN**, momentos e torques em **kN·m**,
 dimensões de seção em **mm**. Tudo depois de `#` é comentário. Valores
 positivos apontam para **cima**; escreva `baixo` (ou `compressao`) no fim da
-linha para inverter o sinal sem digitar o menos.
+linha para inverter o sinal sem digitar o menos. Um texto entre aspas é um
+único campo, mesmo com espaços: `nome "Viga do mezanino"`.
 
 Carga sem `caso=` é **Permanente**. Quando há pelo menos uma `combinacao`,
 o programa resolve a barra uma vez por combinação e desenha a envoltória;

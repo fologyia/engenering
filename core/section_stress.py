@@ -178,6 +178,25 @@ def tensao_normal_em(
     )
 
 
+def cisalhamento_na_linha_neutra(cisalhamento_MPa: float, torcao_MPa: float) -> float:
+    """``|τ_V| + |τ_T|``, com o sinal da parcela dominante.
+
+    Na linha neutra as duas tensões são paralelas (tangentes ao contorno,
+    na direção de ``V``): de um lado da seção elas se somam, do outro se
+    subtraem. O ponto que governa é o lado em que somam — e o sinal
+    relativo entre ``V`` e ``T`` depende só da convenção de eixos, não da
+    física, então não pode reduzir a tensão. Somar com sinal, como se
+    fazia antes, subestimava o von Mises sempre que ``V`` e ``T`` tinham
+    sinais opostos — o que acontece em metade de qualquer eixo com torque
+    e carga transversal.
+    """
+    magnitude = abs(cisalhamento_MPa) + abs(torcao_MPa)
+    dominante = (
+        cisalhamento_MPa if abs(cisalhamento_MPa) >= abs(torcao_MPa) else torcao_MPa
+    )
+    return math.copysign(magnitude, dominante)
+
+
 def tensoes_combinadas(
     esforcos: EsforcosSecao, secao: SecaoTensionavel
 ) -> TensoesCombinadas:
@@ -187,7 +206,8 @@ def tensoes_combinadas(
     os três — em vez de somar a flexão máxima com o cisalhamento máximo —
     evita o erro clássico de superpor tensões que ocorrem em pontos
     diferentes: na fibra extrema o cisalhamento de ``V`` é nulo, e na linha
-    neutra a tensão de flexão é nula.
+    neutra a tensão de flexão é nula. Na linha neutra, ``V`` e ``T`` somam
+    em módulo (ver :func:`cisalhamento_na_linha_neutra`).
     """
     axial = esforcos.normal_N / secao.area_mm2
     flexao_superior = -esforcos.momento_Nmm * secao.c_superior_mm / secao.inercia_mm4
@@ -204,6 +224,8 @@ def tensoes_combinadas(
         pontos=(
             PontoTensao(NOME_SUPERIOR, axial + flexao_superior, torcao),
             PontoTensao(NOME_INFERIOR, axial + flexao_inferior, torcao),
-            PontoTensao(NOME_NEUTRA, axial, cisalhamento + torcao),
+            PontoTensao(
+                NOME_NEUTRA, axial, cisalhamento_na_linha_neutra(cisalhamento, torcao)
+            ),
         ),
     )

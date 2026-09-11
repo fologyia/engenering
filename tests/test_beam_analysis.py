@@ -421,7 +421,7 @@ class TorcaoSemModuloTests(CasoDeViga):
         secao = vb.SecaoViga(
             nome="sem Wt",
             area_mm2=1_000.0,
-            inercia_mm4=1e6,
+            inercia_mm4=5e5,
             c_superior_mm=25.0,
             c_inferior_mm=25.0,
             momento_estatico_mm3=0.0,

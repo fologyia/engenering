@@ -23,6 +23,27 @@ descontinuidade — apoios, rótulas, cargas concentradas, momentos, torques e
 os extremos de cada carga distribuída. Como consequência, dentro de um
 elemento a carga distribuída é sempre uma única função linear.
 
+Duas posições a menos de `max(1e-6 mm, 1e-4·L)` uma da outra caem no
+**mesmo nó**, e o modelo devolvido em `ResultadoViga.viga` já vem com as
+posições movidas para os nós. Sem isso, duas cargas a 0,1 mm uma da outra
+numa viga de 6 m criavam um elemento minúsculo cuja rigidez `EI/L³` era
+bilhões de vezes maior que a dos vizinhos — a matriz perdia o
+condicionamento e o solver acusava "mecanismo" numa viga estável. Fundir
+cargas a 0,6 mm numa viga de 6 m muda os braços de alavanca em 1e-4. Uma
+distribuída mais curta que essa distância é recusada com a sugestão de
+trocá-la por uma carga pontual.
+
+A malha é limitada a `ELEMENTOS_MAXIMOS = 2 000` elementos (o teste de
+posto e o solver são O(n³) na matriz cheia) e a amostragem dos diagramas
+mira `PONTOS_TOTAIS_ALVO = 4 000` pontos no total, nunca abaixo de 3 por
+elemento — os extremos não dependem disso, porque as raízes entram sempre.
+Também existe um sanity check geométrico na seção: `I ≤ A·c²`,
+`Q ≤ A·c/2` e `Av ≤ A` valem para qualquer seção real; violá-los é
+unidade trocada (cm⁴ por mm⁴), e o programa recusa em vez de calcular
+tensões absurdas. Para o material, E fora de 0,5–1 000 GPa, `G > E/2`
+(Poisson negativo) e `Sy/E > 5 %` geram **avisos** — não erros, porque
+madeira e polímeros existem — que vão junto no registro.
+
 Cada nó tem quatro graus de liberdade desacoplados em três sistemas:
 
 | Sistema | Graus de liberdade | Matriz elementar |
@@ -55,7 +76,10 @@ no nó: o elemento à esquerda e o da direita passam a ter rotações
 independentes, e o momento fletor resulta nulo naquele ponto sem nenhuma
 equação de restrição adicional. Uma rótula sobre um apoio que impede a
 rotação é recusada, porque os dois se anulariam; uma rótula na extremidade
-também é recusada, porque ali a rotação já é livre.
+também é recusada, porque ali a rotação já é livre. Uma mola rotacional
+`kr` sobre a rótula também é recusada: com duas rotações no nó, a mola
+teria de escolher um lado em silêncio, e uma ligação semirrígida (mola
+entre os dois lados) é outro modelo, que o programa não oferece.
 
 ## Recuperação analítica dos esforços
 
@@ -75,6 +99,28 @@ Verifica-se `dM/dx = V(x)` e `E I v'' = M(x)`. A linha elástica é, portanto,
 a integração analítica de `M(x)/EI`, **não** uma interpolação do gráfico nem
 um refinamento de malha.
 
+Com a segunda ordem ligada a recuperação usa **dois** vetores de
+extremidade. `f_e = K_e u − f_eq` continua gerando `θ(x)` e `v(x)` — é o
+conjunto que, integrado pela teoria de primeira ordem, reproduz exatamente
+`v_j` e `θ_j` no outro nó. Já os esforços internos saem de
+`f = (K_e + K_g) u − f_eq = [Q_i, Mz_i, Q_j, Mz_j]`, que é o conjunto em
+equilíbrio com os nós na configuração deformada, e do equilíbrio do trecho
+`[0, x]` com o esforço normal médio `N̄` do elemento agindo no braço da
+flecha:
+
+```text
+Q(x) = Q_i + w_i x + Δw x² / 2                      (força transversal, eixo indeformado)
+M(x) = Q_i x − Mz_i + w_i x²/2 + Δw x³/6 + N̄ (v(x) − v_i)
+V(x) = dM/dx = Q(x) + N̄ θ(x)                       (cortante na seção, ⟂ ao eixo deformado)
+```
+
+`N̄ (v − v_i)` é o momento P–Δ dentro do elemento; `V` é o que gera a
+tensão de cisalhamento. Recuperar com `K_e u` sozinho — como se fazia —
+deixava `M` e `V` com um salto em cada nó interno da malha refinada e o
+momento máximo até 1 % acima da solução fechada de coluna-viga; com a
+recuperação consistente o desvio fica abaixo de 0,02 % já na malha padrão.
+Sem segunda ordem `N̄ = 0` e as expressões voltam às de primeira ordem.
+
 Para os demais sistemas:
 
 ```text
@@ -87,10 +133,19 @@ T(x) = constante no elemento
 ### Amostragem e extremos
 
 Além de pontos igualmente espaçados, a malha de saída inclui as raízes
-analíticas de `V(x) = 0` (quadrática) e de `θ(x) = 0` (quártica) dentro de
-cada elemento. Assim o momento máximo e a flecha máxima caem **exatamente**
-sobre uma amostra, em vez de dependerem da densidade da malha. O extremo
-reportado é o valor de maior módulo, com o sinal preservado.
+analíticas de `V(x) = 0` (quadrática; quártica em segunda ordem, por causa
+do termo `N̄ θ`), de `θ(x) = 0` (quártica) e de `M(x) = 0` (cúbica; quíntica
+em segunda ordem) dentro de cada elemento. Assim o momento máximo, a flecha
+máxima e a rotação máxima (que ocorre onde `M = 0`, pois `dθ/dx = M/EI`)
+caem **exatamente** sobre uma amostra, em vez de dependerem da densidade da
+malha. O extremo reportado é o valor de maior módulo, com o sinal
+preservado.
+
+As raízes são calculadas em `t = x/L ∈ [0, 1]`, não em `x` (mm): com
+coeficientes que vão de N/mm² a N·mm a matriz companheira do `np.roots`
+fica mal condicionada, e a mudança de variável leva todos os termos à mesma
+ordem de grandeza. Um termo de grau alto desprezível nessa escala é
+descartado, em vez de virar uma raiz "no infinito" cheia de ruído.
 
 Nos nós há dois valores por grandeza — o do elemento à esquerda e o do
 elemento à direita —, o que reproduz corretamente os saltos de `V` sob carga
@@ -118,6 +173,14 @@ retangular maciça usa-se a aproximação de Roark, `W_t = a² b² / (3a + 1.8b)
 com `a ≥ b`; para seções fechadas de parede fina, Bredt (`W_t = 2 A_m t`);
 para perfis abertos, `W_t = J / t_máx`.
 
+Os perfis do catálogo seguem a mesma regra **por família**: tubo e barra
+circulares `J/(d/2)`, tubo retangular Bredt, barra retangular Roark, e só
+os perfis abertos (I, W, U, C, T, HP…) usam `J/t_máx`. Aplicar `J/t_máx`
+a um tubo — como se fazia — dava um `W_t` seis vezes maior que o de Bredt,
+isto é, tensão de torção seis vezes menor que a real. Um perfil cadastrado
+com família desconhecida recebe `J/t_máx` e uma nota na descrição pedindo
+a família "Tubo …" ou "Barra …" se for o caso.
+
 O critério é avaliado em **três pontos** de cada seção e o programa reporta o
 pior deles:
 
@@ -125,7 +188,7 @@ pior deles:
 | --- | --- | --- |
 | Fibra superior | `σ_sup` | `τ_T` |
 | Fibra inferior | `σ_inf` | `τ_T` |
-| Linha neutra | `N/A` | `τ_V + τ_T` |
+| Linha neutra | `N/A` | `|τ_V| + |τ_T|` |
 
 ```text
 σ_VM     = sqrt(σ² + 3 τ²)
@@ -135,6 +198,14 @@ pior deles:
 Isso evita o erro clássico de somar a flexão máxima com o cisalhamento
 máximo: onde `|M|` é máximo o cisalhamento de `V` é nulo na fibra extrema, e
 na linha neutra a tensão de flexão é nula.
+
+Na linha neutra as duas tensões de cisalhamento são **paralelas** (tangentes
+ao contorno, na direção de `V`): de um lado da seção elas se somam, do outro
+se subtraem, e o ponto que governa é o lado em que somam. Por isso a soma é
+em módulo — o sinal relativo entre `V` e `T` é só convenção de eixos, e
+somar com sinal subestimava o von Mises em metade de qualquer eixo com
+torque e carga transversal. O sinal do `τ` repassado ao Círculo de Mohr é o
+da parcela dominante.
 
 ## Apoios (Tabela 12.1)
 
@@ -168,6 +239,16 @@ dimensão. Um posto menor indica mecanismo, e a quantidade de movimentos de
 corpo rígido é informada na mensagem de erro — em vez de devolver uma
 solução numérica sem sentido ou uma exceção de álgebra linear.
 
+O posto é medido na matriz **escalonada** `D K D`, com `D = 1/√|diag K|`
+(escalonamento de Jacobi), e o sistema é resolvido nela também. Translação
+(N/mm) e rotação (N·mm/rad) diferem por um fator `L²` só por causa das
+unidades; sem o escalonamento, uma barra longa e flexível com uma centena de
+elementos era acusada de "mecanismo" — um mau condicionamento de unidades,
+não da estrutura. Na matriz escalonada um mecanismo aparece como valor
+singular na casa de `1e-17` do maior (ruído de máquina), enquanto o modo
+mais flexível de uma barra estável decai com `n⁴` e ainda está em `1e-13`
+com 2 000 elementos num vão; o corte fica em `1e-14`.
+
 Nos sistemas axial e de torção, quando não há restrição alguma **e** a
 resultante aplicada é nula, o programa ancora um nó apenas como referência e
 avisa: os esforços internos são autoequilibrados e não dependem dessa
@@ -178,7 +259,16 @@ escolha. Se a resultante não for nula, o modelo é recusado.
 `conferir_equilibrio` soma reações e cargas aplicadas e devolve os resíduos
 de `ΣFy`, `ΣFx`, `ΣM` e `ΣT`. É um controle numérico do próprio solver,
 exibido na interface: valores muito acima do zero de máquina indicam
-problema no modelo ou no condicionamento.
+problema no modelo ou no condicionamento. `residuo_relativo` é o pior dos
+quatro, cada um dividido pela escala da sua grandeza (força, força × L,
+torque).
+
+Com a segunda ordem ligada, as reações equilibram as cargas na
+**configuração deformada**: cada esforço normal age no braço da flecha, e o
+momento P–Δ resultante (`∫ N dv`, somado pelos pontos do diagrama e
+devolvido em `momento_p_delta_Nmm`) entra em `ΣM`. Sem ele, o "resíduo" de
+momento seria exatamente o efeito de segunda ordem — e a interface o
+mostrava como se fosse erro do solver.
 
 ## Segunda ordem (P–Δ) e carga crítica
 
@@ -202,9 +292,17 @@ há iteração a fazer.
 O programa também resolve `K_e φ = λ (−K_g) φ` e reporta o **fator de carga
 crítica**: o multiplicador das cargas *axiais* que levaria o modelo à
 flambagem elástica. Um fator 3,2 quer dizer que a compressão poderia
-triplicar antes da instabilidade. Quando o fator fica abaixo de 10 e a
-segunda ordem está desligada, o resultado traz um aviso; quando a carga já
-passou da crítica, a análise é recusada em vez de devolver um número sem
+triplicar antes da instabilidade. O problema de autovalor é levado à forma
+simétrica `L⁻¹ (−K_g) L⁻ᵀ ψ = μ ψ` pela fatoração de Cholesky `K_e = L Lᵀ`
+(na matriz escalonada), com `λ = 1/μ_máx`: os autovalores saem reais por
+construção, sem o filtro de parte imaginária que a forma não simétrica
+`K_e⁻¹ (−K_g)` exigia e que podia descartar o modo crítico por ruído.
+
+Quando o fator fica abaixo de 10 e a segunda ordem está desligada, o
+resultado traz um aviso; abaixo de 1 o aviso diz que a barra flamba antes
+de chegar à carga aplicada e que os diagramas de primeira ordem não
+representam a resposta real. Com a segunda ordem ligada e a carga já acima
+da crítica, a análise é recusada em vez de devolver um número sem
 significado.
 
 ### Malha
@@ -216,6 +314,15 @@ aplicado sempre que há carga axial, não apenas quando a segunda ordem está
 ligada. Com um elemento por trecho, a carga crítica de uma coluna biapoiada
 sai `12EI/L²` em vez de `π²EI/L²`, ou seja **21,6% alta** — e alto é
 exatamente o lado inseguro. Com oito divisões o erro cai para 0,003%.
+
+O refino mira um comprimento de elemento uniforme, `L/(trechos ×
+divisões)`, com pelo menos um elemento por trecho: um trecho curto (uma
+carga a 20 mm do apoio) recebe um elemento, não oito lascas ao lado de
+elementos de metros — o que devolveria o mau condicionamento pela porta
+dos fundos. Num modelo com centenas de trechos e carga axial, o refino
+automático se limita ao teto de elementos em vez de recusar a análise, e
+o resultado avisa que o fator de carga crítica pode sair alguns por cento
+alto.
 
 `divisoes n` refina ainda mais, quando se quer conferir a convergência.
 
@@ -314,9 +421,39 @@ zero e joga tudo na média, em vez de inventar um ciclo que não existe.
   repasse, mas a verificação é do módulo próprio;
 - ligações e apoios reais — engaste, pino e rolete são idealizados.
 
-Para perfis monossimétricos do catálogo (U, C, T) mantém-se `c = altura/2`,
-a mesma convenção já usada em `sx_mm3` de `core/steel_sections.py`. É uma
-aproximação: a fibra mais distante do centroide real fica subestimada.
+### Perfis do catálogo: centroide, cisalhamento em y e eixo fraco
+
+`PerfilAco` guarda o **centroide** (`centroide_x_mm` da face esquerda,
+`centroide_y_mm` da base; zero = meio). As fábricas idealizadas de U, T e C
+já o calculavam e passaram a guardá-lo; um perfil cadastrado pode informá-lo
+no formulário do catálogo. Quando ele existe, as distâncias `c_sup` e
+`c_inf` saem dele — exatas —, e `sx_mm3`/`sy_mm3` passam a ser o módulo da
+fibra mais afastada (o Sy do C 75×40×15×2 cai 21 %, de `bf/2` para o valor
+real). Nas bitolas de catálogo (Gerdau), que não tabelam o centroide, o
+módulo de vigas estima-o pela composição dos retângulos idealizados nos
+casos em que ele fica longe do meio: **T fletido em x** (mesa para cima,
+talão para baixo) e **U fletido em y** (fibra superior = pontas das mesas,
+fibra inferior = dorso da alma). Usar `altura/2` num T subestimava a
+tensão no talão em mais de 30 % nas bitolas comuns. Só o C de catálogo sem
+centroide fica com `largura/2`, e a descrição da seção sinaliza isso.
+
+Na flexão em torno de **y** o cortante é resistido pelas **mesas**, não pela
+alma: a área de cisalhamento passa a ser `2·bf·tf` nos perfis I, W, HP, U e
+C, `bf·tf` no T, as duas paredes horizontais no tubo retangular e a área
+tabelada nos maciços e circulares. Usar a alma tabelada — como se fazia —
+dava τ cerca de três vezes maior que o real. Uma família desconhecida
+mantém a área tabelada, com nota.
+
+A carga crítica do modelo é a do **plano da flexão**. Uma barra comprimida
+flamba em torno do eixo de menor inércia, e um perfil I fletido em x tem
+`Iy` dez vezes menor que `Ix`. Por isso a `SecaoViga` leva a inércia
+transversal (`inercia_transversal_mm4`; `Iy=` na seção manual) e o
+resultado traz `fator_carga_critica_transversal = fator × I⊥/I` — a
+estimativa de mão, com o mesmo comprimento de flambagem nos dois planos —
+com aviso quando ele fica abaixo de 10 e a página, o registro e o memorial
+(tabela de estabilidade) mostrando os dois fatores. Travamento lateral,
+comprimento de flambagem diferente fora do plano e flambagem lateral com
+torção continuam sendo assunto de Flambagem de colunas e Estruturas de aço.
 
 ## Linguagem de texto
 
@@ -329,10 +466,34 @@ tendo dois campos.
 O sufixo de sentido (`baixo`, `cima`, `tracao`, `compressao`) inverte o
 sinal do valor digitado, para quem prefere informar só a intensidade.
 
+Um trecho entre aspas (retas ou tipográficas) é um único campo mesmo com
+espaço, vírgula ou `#` dentro: `nome "Viga do mezanino"`,
+`secao perfil "W 200 x 46,1 (H)" eixo=x`, `secao manual ... nome="..."`,
+`caso="Peso próprio"`. O sinal de menos tipográfico (`−`) colado de
+documentos e o BOM de um arquivo salvo pelo Bloco de Notas são aceitos.
+
+`secao manual` exige `Q` **e** `t` juntos (ou só `Av`): antes, `Q` sem `t`
+entrava com `t = 1 mm` em silêncio e `τ = V·Q/(I·1)` saía absurdo. `Iy=`
+informa a inércia transversal, usada só na carga crítica fora do plano.
+
+`N x valor e=<mm>` aplica a axial fora do centroide: o programa acrescenta
+o momento `M = −e·Fx` no mesmo ponto e no mesmo caso de carga (`M_z = x·Fy −
+y·Fx`, com `e` positivo acima do centroide) — é a carga que entra pela mesa,
+não pelo eixo da barra.
+
 Todo erro traz o número da linha, o texto original e o que era esperado.
-O modo formulário gera exatamente o mesmo script, de modo que as duas
-entradas compartilham parser e validações — não há dois caminhos que possam
-divergir.
+O modo formulário gera exatamente o mesmo script — com o comando
+paramétrico da seção (`secao retangular 100 200`, `secao perfil "..." eixo=x`),
+não um `secao manual` com propriedades já calculadas —, de modo que as duas
+entradas compartilham parser e validações, e o nome da seção chega intacto
+ao registro e ao memorial.
+
+`gerar_script` escreve o modelo de volta como texto de forma **exata**:
+nome do modelo, nome e descrição da seção, nome e fonte do material vão
+entre aspas, e todo número usa a menor representação que reconstrói o
+double (`formatar_numero`), em vez de `:g`, que cortava em seis algarismos.
+Interpretar o texto gerado devolve uma `Viga` igual à original, campo a
+campo.
 
 ## Referências
 

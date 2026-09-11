@@ -126,6 +126,100 @@ class AmplificacaoTests(unittest.TestCase):
             abs(primeira.extremos["momento"].valor),
         )
 
+    def test_momento_reproduz_a_solucao_fechada_de_coluna_viga(self):
+        # Biapoiada com w uniforme e compressão P (Timoshenko & Gere):
+        # M_máx = (wL²/8) · 2(sec u − 1)/u², com u = (L/2)·√(P/EI).
+        ei = E_MPA * secao().inercia_mm4
+        critica = carga_critica_euler()
+        for fracao in (0.2, 0.4, 0.6, 0.8):
+            with self.subTest(fracao=fracao):
+                u = (L_MM / 2.0) * math.sqrt(fracao * critica / ei)
+                esperado = abs(W_N_MM) * L_MM**2 / 8.0 * 2.0 * (1.0 / math.cos(u) - 1.0) / u**2
+                resultado = vb.analisar_viga(
+                    coluna_viga(critica * fracao, considerar_segunda_ordem=True)
+                )
+                # Com a malha padrão (8 divisões) o desvio fica abaixo de 0,02 %;
+                # antes da recuperação consistente ele chegava a 1 %.
+                self.assertAlmostEqual(
+                    abs(resultado.extremos["momento"].valor),
+                    esperado,
+                    delta=esperado * 2e-4,
+                )
+
+    def test_balanco_reproduz_a_amplificacao_tan_kl_sobre_kl(self):
+        # Engastada-livre com F transversal e P na ponta: M_base = F·L·tan(kL)/(kL).
+        ei = E_MPA * secao().inercia_mm4
+        forca = -100.0
+        for fracao in (0.2, 0.5):
+            with self.subTest(fracao=fracao):
+                compressao = fracao * carga_critica_euler(k=2.0)
+                k = math.sqrt(compressao / ei)
+                esperado = abs(forca) * L_MM * math.tan(k * L_MM) / (k * L_MM)
+                resultado = vb.analisar_viga(
+                    vb.Viga(
+                        comprimento_mm=L_MM,
+                        secao=secao(),
+                        material=vb.MaterialViga("Aço", E_MPA, G_MPA),
+                        apoios=(vb.Apoio(0.0, "engaste"),),
+                        cargas_pontuais=(vb.CargaPontual(L_MM, forca),),
+                        cargas_axiais=(vb.CargaAxial(L_MM, -compressao),),
+                        considerar_segunda_ordem=True,
+                    )
+                )
+                self.assertAlmostEqual(
+                    abs(resultado.extremos["momento"].valor), esperado, delta=esperado * 2e-4
+                )
+                # A reação de momento do engaste e o diagrama no mesmo ponto
+                # são o mesmo número: os esforços recuperados estão em
+                # equilíbrio com os nós na configuração deformada.
+                self.assertAlmostEqual(
+                    abs(resultado.reacoes[0].mz_Nmm), esperado, delta=esperado * 2e-4
+                )
+
+    def test_diagramas_de_segunda_ordem_sao_continuos_entre_elementos(self):
+        # Sem a parcela geométrica nos esforços de extremidade, V e M davam
+        # um salto em cada nó interno da malha refinada.
+        resultado = vb.analisar_viga(
+            coluna_viga(carga_critica_euler() * 0.6, considerar_segunda_ordem=True)
+        )
+        por_x: dict[float, list[vb.PontoDiagrama]] = {}
+        for ponto in resultado.pontos:
+            por_x.setdefault(round(ponto.x_mm, 6), []).append(ponto)
+        escala_v = abs(resultado.extremos["cortante"].valor)
+        escala_m = abs(resultado.extremos["momento"].valor)
+        nos_internos = [x for x, grupo in por_x.items() if len(grupo) > 1 and 0 < x < L_MM]
+        self.assertGreaterEqual(len(nos_internos), 7)
+        for x in nos_internos:
+            esquerda, direita = por_x[x][0], por_x[x][-1]
+            self.assertAlmostEqual(
+                esquerda.cortante_N, direita.cortante_N, delta=1e-9 * escala_v
+            )
+            self.assertAlmostEqual(
+                esquerda.momento_Nmm, direita.momento_Nmm, delta=1e-9 * escala_m
+            )
+
+    def test_equilibrio_fecha_com_o_momento_p_delta(self):
+        resultado = vb.analisar_viga(
+            vb.Viga(
+                comprimento_mm=L_MM,
+                secao=secao(),
+                material=vb.MaterialViga("Aço", E_MPA, G_MPA),
+                apoios=(vb.Apoio(0.0, "engaste"),),
+                cargas_pontuais=(vb.CargaPontual(L_MM, -100.0),),
+                cargas_axiais=(vb.CargaAxial(L_MM, -0.3 * carga_critica_euler(k=2.0)),),
+                considerar_segunda_ordem=True,
+            )
+        )
+        residuos = vb.conferir_equilibrio(resultado)
+        # O momento P·Δ não é zero — e é exatamente o que fecha ΣM.
+        self.assertGreater(abs(residuos["momento_p_delta_Nmm"]), 1e3)
+        self.assertLess(residuos["residuo_relativo"], 1e-9)
+
+    def test_compressao_acima_da_critica_sem_segunda_ordem_avisa(self):
+        resultado = vb.analisar_viga(coluna_viga(carga_critica_euler() * 1.2))
+        self.assertLess(resultado.fator_carga_critica, 1.0)
+        self.assertTrue(any("ultrapassa" in aviso for aviso in resultado.avisos))
+
     def test_tracao_enrijece_a_barra(self):
         critica = carga_critica_euler()
         sem_axial = vb.analisar_viga(coluna_viga(0.0, considerar_segunda_ordem=True))

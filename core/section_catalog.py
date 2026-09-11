@@ -54,6 +54,10 @@ CAMPOS_NUMERICOS: tuple[tuple[str, str, str], ...] = (
     ("espessura_mesa_mm", "Espessura da mesa tf", "mm"),
     ("area_cisalhamento_mm2", "Área de cisalhamento", "mm²"),
     ("massa_kg_m", "Massa linear", "kg/m"),
+    # Só importam nos perfis monossimétricos (U, C em y; T em x): medidos da
+    # face esquerda e da base; zero = meio da dimensão.
+    ("centroide_x_mm", "Centroide x̄ (0 = meio da largura)", "mm"),
+    ("centroide_y_mm", "Centroide ȳ (0 = meia altura)", "mm"),
 )
 
 _OBRIGATORIOS_POSITIVOS = (
@@ -158,6 +162,15 @@ def conferir_coerencia(perfil: PerfilAco) -> list[str]:
             )
     if perfil.area_cisalhamento_mm2 > perfil.area_mm2:
         avisos.append("A área de cisalhamento é maior que a área total.")
+    for rotulo, valor, dimensao in (
+        ("x̄", perfil.centroide_x_mm, perfil.largura_mm),
+        ("ȳ", perfil.centroide_y_mm, perfil.altura_mm),
+    ):
+        if valor and not (0.0 < valor < dimensao):
+            avisos.append(
+                f"O centroide {rotulo} = {valor:.2f} mm cai fora do perfil "
+                f"(0 a {dimensao:.2f} mm) e será ignorado: vale o meio da dimensão."
+            )
     return avisos
 
 
@@ -418,6 +431,8 @@ def catalogo_dataframe():
                 "rx_mm": perfil.rx_mm,
                 "ry_mm": perfil.ry_mm,
                 "area_cisalhamento_mm2": perfil.area_cisalhamento_mm2,
+                "centroide_x_mm": perfil.centroide_x_mm,
+                "centroide_y_mm": perfil.centroide_y_mm,
                 "descricao": perfil.descricao,
             }
         )

@@ -32,6 +32,13 @@ class PerfilAco:
     area_cisalhamento_mm2: float
     massa_kg_m: float
     descricao: str
+    # Posição do centroide medida da face esquerda (x̄) e da base (ȳ) do
+    # retângulo envolvente. Zero significa "não informado": vale o meio da
+    # dimensão, exato nos perfis simétricos. Nos monossimétricos (U em y, T
+    # em x, C em y) é o que separa a fibra mais afastada da meia altura —
+    # e a fábrica idealizada, que já calcula o centroide, passa a guardá-lo.
+    centroide_x_mm: float = 0.0
+    centroide_y_mm: float = 0.0
 
     @property
     def rx_mm(self) -> float:
@@ -42,12 +49,27 @@ class PerfilAco:
         return math.sqrt(self.iy_mm4 / self.area_mm2)
 
     @property
+    def distancias_fibras_x_mm(self) -> tuple[float, float]:
+        """(topo, base) até o centroide, para a flexão em torno de x."""
+        if 0.0 < self.centroide_y_mm < self.altura_mm:
+            return self.altura_mm - self.centroide_y_mm, self.centroide_y_mm
+        return self.altura_mm / 2.0, self.altura_mm / 2.0
+
+    @property
+    def distancias_fibras_y_mm(self) -> tuple[float, float]:
+        """(direita, esquerda) até o centroide, para a flexão em torno de y."""
+        if 0.0 < self.centroide_x_mm < self.largura_mm:
+            return self.largura_mm - self.centroide_x_mm, self.centroide_x_mm
+        return self.largura_mm / 2.0, self.largura_mm / 2.0
+
+    @property
     def sx_mm3(self) -> float:
-        return self.ix_mm4 / (self.altura_mm / 2.0)
+        """Módulo elástico da fibra mais afastada (o menor dos dois)."""
+        return self.ix_mm4 / max(self.distancias_fibras_x_mm)
 
     @property
     def sy_mm3(self) -> float:
-        return self.iy_mm4 / (self.largura_mm / 2.0)
+        return self.iy_mm4 / max(self.distancias_fibras_y_mm)
 
 
 def _positivo(nome: str, valor: float) -> float:
@@ -218,7 +240,7 @@ def perfil_u(
         _retangulo(tw + (b - tw) / 2.0, tf / 2.0, b - tw, tf),
         _retangulo(tw + (b - tw) / 2.0, h - tf / 2.0, b - tw, tf),
     ]
-    area, _xbar, ybar, ix, iy = _combinar(pecas)
+    area, xbar, ybar, ix, iy = _combinar(pecas)
     retangulos_abs = [
         (0.0, tw, 0.0, h),
         (tw, b, 0.0, tf),
@@ -245,11 +267,12 @@ def perfil_u(
         area_cisalhamento_mm2=hw * tw,
         massa_kg_m=_massa(area),
         descricao=(
-            "Perfil U idealizado, sem raios de concordância. Iy e Zy já "
-            "consideram o centroide deslocado (seção monossimétrica); "
-            f"centroide a {ybar - h / 2.0:+.2f} mm do meio da alma em y "
-            "(deve ser ~0, pois é simétrico em x)."
+            "Perfil U idealizado, sem raios de concordância. Iy, Zy e Sy já "
+            "consideram o centroide deslocado (seção monossimétrica): "
+            f"centroide a {xbar:.2f} mm do dorso da alma."
         ),
+        centroide_x_mm=xbar,
+        centroide_y_mm=ybar,
     )
 
 
@@ -279,7 +302,7 @@ def perfil_c_enrijecido(
         _retangulo(b - t / 2.0, t + d / 2.0, t, d),
         _retangulo(b - t / 2.0, h - t - d / 2.0, t, d),
     ]
-    area, _xbar, ybar, ix, iy = _combinar(pecas)
+    area, xbar, ybar, ix, iy = _combinar(pecas)
     retangulos_abs = [
         (0.0, t, 0.0, h),
         (t, b, 0.0, t),
@@ -309,8 +332,11 @@ def perfil_c_enrijecido(
         massa_kg_m=_massa(area),
         descricao=(
             "Perfil C enrijecido idealizado (chapa dobrada, espessura única, "
-            f"sem raios de dobra); centroide em y = {ybar:.2f} mm."
+            f"sem raios de dobra); centroide a {xbar:.2f} mm do dorso da alma "
+            f"e a {ybar:.2f} mm da base."
         ),
+        centroide_x_mm=xbar,
+        centroide_y_mm=ybar,
     )
 
 
@@ -364,6 +390,8 @@ def perfil_t(
             "Perfil T idealizado, sem raios de concordância; centroide a "
             f"{ybar:.2f} mm da base do talão (x̄ = {xbar:.2f} mm, no eixo de simetria)."
         ),
+        centroide_x_mm=xbar,
+        centroide_y_mm=ybar,
     )
 
 

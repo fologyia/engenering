@@ -159,7 +159,19 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - diagramas de esforço normal, cortante, momento fletor, linha elástica (flecha),
   rotação, torque e ângulo de torção;
 - tensões combinadas: N/A ± M·c/I, V·Q/(I·t), T/Wt, von Mises e Tresca avaliados
-  na fibra superior, na fibra inferior e na linha neutra;
+  na fibra superior, na fibra inferior e na linha neutra (onde τ de V e de T
+  somam em módulo — o sentido do torque não pode reduzir a tensão);
+- perfis do catálogo com o centroide guardado (U, T, C idealizados e perfis
+  cadastrados) ou estimado pela geometria (bitolas T em x e U em y), não com a
+  meia altura; módulo de torção por família (Bredt para tubos, Roark para
+  barras, J/t_máx só nos perfis abertos) e área de cisalhamento das mesas na
+  flexão em torno de y;
+- barra comprimida: fator de carga crítica no plano da flexão e estimativa
+  fora do plano (eixo de menor inércia), na página, no registro e no memorial;
+- posições quase coincidentes (menos de 0,01 % de L) caem no mesmo nó, em vez
+  de gerar um elemento minúsculo e um falso "mecanismo"; malha e amostragem
+  com teto, seção e material com verificação de plausibilidade (unidades
+  trocadas viram erro ou aviso, não tensão absurda);
 - verificação de flecha admissível por L/limite e fator de segurança ao escoamento;
 - entrada por **texto e números** (uma instrução por linha) ou por formulário —
   os dois modos usam o mesmo interpretador;
@@ -174,7 +186,10 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
   o vínculo de rastreabilidade gravado no registro;
 - meta de fator de segurança lida dos critérios do projeto ativo;
 - efeito de segunda ordem (P–Δ) opcional e fator de carga crítica elástica,
-  com aviso quando a compressão se aproxima da instabilidade;
+  com aviso quando a compressão se aproxima da instabilidade; os diagramas
+  de segunda ordem são recuperados em equilíbrio na configuração deformada
+  (M e V contínuos, momento máximo a menos de 0,02 % da solução fechada de
+  coluna-viga) e a conferência de ΣM inclui o momento P·Δ;
 - capítulo próprio no memorial, com barras, esforços governantes, reações e
   combinações;
 - registro rastreável do modelo e dos resultados no projeto industrial ativo.

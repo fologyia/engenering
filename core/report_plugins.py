@@ -301,6 +301,7 @@ def _secao_vigas_eixos(
     linhas_barras = []
     linhas_esforcos = []
     linhas_verificacao = []
+    linhas_estabilidade = []
     linhas_reacoes = []
     linhas_combinacoes = []
 
@@ -380,6 +381,30 @@ def _secao_vigas_eixos(
                 ),
             ]
         )
+
+        # Estabilidade elástica: só existe onde há compressão. A carga
+        # crítica do modelo é a do plano da flexão; a estimativa fora do
+        # plano (inércia transversal, mesmo comprimento de flambagem) é a
+        # que costuma mandar num perfil I sem travamento lateral.
+        fator_critico = _float_seguro(resultados.get("fator_carga_critica"))
+        if fator_critico is not None:
+            transversal = _float_seguro(resultados.get("fator_carga_critica_transversal"))
+            governante = min(fator_critico, transversal) if transversal is not None else fator_critico
+            if governante <= 1.0:
+                situacao_estabilidade = "Compressão acima da carga crítica"
+            elif governante < 10.0:
+                situacao_estabilidade = "Sensível à segunda ordem"
+            else:
+                situacao_estabilidade = "Folgada"
+            linhas_estabilidade.append(
+                [
+                    titulo,
+                    _numero(fator_critico),
+                    "Não estimado" if transversal is None else _numero(transversal),
+                    "Incluído" if resultados.get("segunda_ordem") else "Não incluído",
+                    situacao_estabilidade,
+                ]
+            )
 
         reacoes = resultados.get("reacoes")
         for reacao in reacoes if isinstance(reacoes, list) else []:
@@ -473,6 +498,19 @@ def _secao_vigas_eixos(
             "fonte": 6.8,
         },
     ]
+    if linhas_estabilidade:
+        tabelas.append(
+            {
+                "legenda": (
+                    "Estabilidade elástica das barras comprimidas: fator de carga "
+                    "crítica no plano da flexão e estimativa fora do plano."
+                ),
+                "cabecalhos": ["Barra", "Fator no plano", "Fator fora do plano", "P–Δ", "Situação"],
+                "linhas": linhas_estabilidade,
+                "larguras": [2400, 1500, 1700, 1400, 2360],
+                "fonte": 6.8,
+            }
+        )
     if linhas_combinacoes:
         tabelas.append(
             {

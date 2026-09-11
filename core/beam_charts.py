@@ -76,7 +76,7 @@ _FONTES_SISTEMA = (
 )
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _fonte(tamanho: int) -> ImageFont.ImageFont:
     """Fonte escalável, com acentos e letras gregas quando o sistema tiver.
 
