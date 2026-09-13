@@ -247,9 +247,21 @@ elif modulo == "Painel industrial":
     )
     mostrar_tabela_campos(
         [
-            ["Com bloqueio", "Projetos com ao menos um bloqueio na validação", "Regras da Central de validação"],
-            ["Prazos vencidos", "Itens de checklist abertos com prazo anterior a hoje", "Prazo gravado como data no checklist"],
-            ["Cálculos desatualizados", "Registros cujas fontes (material, caso de carga, critério, origem) mudaram", "Grafo de dependências dos registros"],
+            [
+                "Com bloqueio",
+                "Projetos com ao menos um bloqueio na validação",
+                "Regras da Central de validação",
+            ],
+            [
+                "Prazos vencidos",
+                "Itens de checklist abertos com prazo anterior a hoje",
+                "Prazo gravado como data no checklist",
+            ],
+            [
+                "Cálculos desatualizados",
+                "Registros cujas fontes (material, caso de carga, critério, origem) mudaram",
+                "Grafo de dependências dos registros",
+            ],
             ["Parado (dias)", "Dias desde o último salvamento", "Linha do tempo do projeto"],
         ]
     )
@@ -278,15 +290,51 @@ elif modulo == "Projetos permanentes":
     )
     mostrar_tabela_campos(
         [
-            ["Nome e código", "Identificação única do trabalho", "Ordem de serviço, contrato ou padrão interno"],
-            ["Unidade, área e TAG", "Local e sistema físico", "Cadastro de ativos, fluxograma ou desenho"],
-            ["Objetivo", "O que deve ser verificado e decidido", "Escopo aprovado pelo solicitante"],
-            ["Base dos carregamentos", "Casos, combinações e condições", "Memorial de processo, operação, modelo ou DCL"],
-            ["Critérios de aceitação", "Limites de tensão, utilização, flecha, vida etc.", "Norma, especificação ou requisito do cliente"],
-            ["Critérios técnicos", "n mínimo, utilização máxima, risco, temperatura, vida, norma principal e fatores", "Aba Critérios — é contra isso que a validação cobra os cálculos"],
-            ["Escopo físico", "Equipamentos, linhas, estruturas e pontos", "Lista de TAGs e desenhos controlados"],
-            ["Documentos de entrada", "Código, revisão, emitente e situação de cada documento recebido", "Lista de documentos do cliente ou do projeto"],
-            ["Matriz normativa", "Código, edição, aplicação e fonte", "Contrato, legislação e análise de aplicabilidade"],
+            [
+                "Nome e código",
+                "Identificação única do trabalho",
+                "Ordem de serviço, contrato ou padrão interno",
+            ],
+            [
+                "Unidade, área e TAG",
+                "Local e sistema físico",
+                "Cadastro de ativos, fluxograma ou desenho",
+            ],
+            [
+                "Objetivo",
+                "O que deve ser verificado e decidido",
+                "Escopo aprovado pelo solicitante",
+            ],
+            [
+                "Base dos carregamentos",
+                "Casos, combinações e condições",
+                "Memorial de processo, operação, modelo ou DCL",
+            ],
+            [
+                "Critérios de aceitação",
+                "Limites de tensão, utilização, flecha, vida etc.",
+                "Norma, especificação ou requisito do cliente",
+            ],
+            [
+                "Critérios técnicos",
+                "n mínimo, utilização máxima, risco, temperatura, vida, norma principal e fatores",
+                "Aba Critérios — é contra isso que a validação cobra os cálculos",
+            ],
+            [
+                "Escopo físico",
+                "Equipamentos, linhas, estruturas e pontos",
+                "Lista de TAGs e desenhos controlados",
+            ],
+            [
+                "Documentos de entrada",
+                "Código, revisão, emitente e situação de cada documento recebido",
+                "Lista de documentos do cliente ou do projeto",
+            ],
+            [
+                "Matriz normativa",
+                "Código, edição, aplicação e fonte",
+                "Contrato, legislação e análise de aplicabilidade",
+            ],
         ]
     )
     st.subheader("Sequência recomendada")
@@ -325,10 +373,26 @@ elif modulo == "Projetos permanentes":
     st.dataframe(
         pd.DataFrame(
             [
-                ["Em elaboração → Em verificação", "Verificador definido e ao menos um registro técnico vigente", "Bloqueios abertos só avisam"],
-                ["Em verificação → Emitido", "Aprovador e verificador definidos, zero bloqueios, nenhum cálculo desatualizado", "Cria revisão controlada"],
-                ["Emitido → Em elaboração", "Sempre permitida", "Cria revisão controlada (a emitida continua restaurável)"],
-                ["Qualquer → Suspenso / Arquivado", "Sempre permitida", "Registre o motivo na linha do tempo"],
+                [
+                    "Em elaboração → Em verificação",
+                    "Verificador definido e ao menos um registro técnico vigente",
+                    "Bloqueios abertos só avisam",
+                ],
+                [
+                    "Em verificação → Emitido",
+                    "Aprovador e verificador definidos, zero bloqueios, nenhum cálculo desatualizado",
+                    "Cria revisão controlada",
+                ],
+                [
+                    "Emitido → Em elaboração",
+                    "Sempre permitida",
+                    "Cria revisão controlada (a emitida continua restaurável)",
+                ],
+                [
+                    "Qualquer → Suspenso / Arquivado",
+                    "Sempre permitida",
+                    "Registre o motivo na linha do tempo",
+                ],
             ],
             columns=["Passagem", "O que exige", "Efeito"],
         ),
@@ -345,14 +409,46 @@ elif modulo == "Casos de carga":
     )
     mostrar_tabela_campos(
         [
-            ["Código e nome", "Identificação única do cenário", "Lista de cargas, DCL ou memorial de processo"],
-            ["Condição", "Operação, partida, parada, teste, emergência etc.", "Filosofia operacional e análise de risco"],
-            ["Natureza", "Permanente, variável, térmica, pressão, ambiental etc.", "Origem física da ação"],
-            ["TAG", "Equipamento, linha, suporte ou estrutura afetada", "Cadastro do projeto e desenhos"],
-            ["Fx, Fy, Fz", "Forças com sinais nos eixos comuns", "DCL, relatório de processo ou modelo"],
-            ["Mx, My, Mz", "Momentos simultâneos do mesmo cenário", "Ponto de referência declarado"],
-            ["Pressão e ΔT", "Pressão relativa e variação térmica", "Folha de dados e casos operacionais"],
-            ["Origem / referência", "Documento, revisão e método de obtenção", "Fonte controlada do projeto"],
+            [
+                "Código e nome",
+                "Identificação única do cenário",
+                "Lista de cargas, DCL ou memorial de processo",
+            ],
+            [
+                "Condição",
+                "Operação, partida, parada, teste, emergência etc.",
+                "Filosofia operacional e análise de risco",
+            ],
+            [
+                "Natureza",
+                "Permanente, variável, térmica, pressão, ambiental etc.",
+                "Origem física da ação",
+            ],
+            [
+                "TAG",
+                "Equipamento, linha, suporte ou estrutura afetada",
+                "Cadastro do projeto e desenhos",
+            ],
+            [
+                "Fx, Fy, Fz",
+                "Forças com sinais nos eixos comuns",
+                "DCL, relatório de processo ou modelo",
+            ],
+            [
+                "Mx, My, Mz",
+                "Momentos simultâneos do mesmo cenário",
+                "Ponto de referência declarado",
+            ],
+            [
+                "Pressão e ΔT",
+                "Pressão relativa e variação térmica",
+                "Folha de dados e casos operacionais",
+            ],
+            [
+                "Origem / referência",
+                "Documento, revisão e método de obtenção",
+                "Fonte controlada do projeto",
+            ],
         ]
     )
     st.subheader("Passo a passo")
@@ -395,9 +491,21 @@ elif modulo == "Central de validação":
     st.dataframe(
         pd.DataFrame(
             [
-                ["Bloqueio", "Impede tratar o projeto como pronto", "Matriz normativa vazia, utilização > 1 ou checklist crítico aberto"],
-                ["Pendência", "Precisa ser preenchida ou concluída", "Conclusão ausente ou referência ainda não conferida"],
-                ["Atenção", "Exige julgamento e registro da decisão", "Material sem fonte ou cadeia de aprovação incompleta"],
+                [
+                    "Bloqueio",
+                    "Impede tratar o projeto como pronto",
+                    "Matriz normativa vazia, utilização > 1 ou checklist crítico aberto",
+                ],
+                [
+                    "Pendência",
+                    "Precisa ser preenchida ou concluída",
+                    "Conclusão ausente ou referência ainda não conferida",
+                ],
+                [
+                    "Atenção",
+                    "Exige julgamento e registro da decisão",
+                    "Material sem fonte ou cadeia de aprovação incompleta",
+                ],
                 ["Informação", "Orienta a leitura", "Avisos metodológicos e de escopo"],
             ],
             columns=["Severidade", "Significado", "Exemplo"],
@@ -441,10 +549,26 @@ elif modulo == "Central de relatórios":
     st.dataframe(
         pd.DataFrame(
             [
-                ["Resumo executivo", "Decisão rápida e situação geral", "Escopo, itens, normas, validação e conclusão"],
-                ["Memorial industrial completo", "Revisão técnica e arquivo do projeto", "Todas as seções, cargas, registros e apêndices"],
-                ["Dossiê de validação", "Tratamento de lacunas e liberação", "Base, normas, cálculos, achados e checklist"],
-                ["Memorial de cálculos", "Verificação detalhada", "Plano, materiais, capítulos, sensibilidade e conclusão"],
+                [
+                    "Resumo executivo",
+                    "Decisão rápida e situação geral",
+                    "Escopo, itens, normas, validação e conclusão",
+                ],
+                [
+                    "Memorial industrial completo",
+                    "Revisão técnica e arquivo do projeto",
+                    "Todas as seções, cargas, registros e apêndices",
+                ],
+                [
+                    "Dossiê de validação",
+                    "Tratamento de lacunas e liberação",
+                    "Base, normas, cálculos, achados e checklist",
+                ],
+                [
+                    "Memorial de cálculos",
+                    "Verificação detalhada",
+                    "Plano, materiais, capítulos, sensibilidade e conclusão",
+                ],
             ],
             columns=["Perfil", "Uso", "Conteúdo sugerido"],
         ),
@@ -491,9 +615,21 @@ elif modulo == "Materiais técnicos":
         pd.DataFrame(
             [
                 ["Referência", "Valor típico ou literatura", "Não liberar cálculo final"],
-                ["Condicional", "Parte da origem está documentada", "Completar lacunas e aplicabilidade"],
-                ["Rastreável", "Norma, fabricante ou documento controlado", "Conferir condição e produto"],
-                ["Confirmado", "Certificado do lote ou ensaio conferido", "Ainda requer aprovação de engenharia"],
+                [
+                    "Condicional",
+                    "Parte da origem está documentada",
+                    "Completar lacunas e aplicabilidade",
+                ],
+                [
+                    "Rastreável",
+                    "Norma, fabricante ou documento controlado",
+                    "Conferir condição e produto",
+                ],
+                [
+                    "Confirmado",
+                    "Certificado do lote ou ensaio conferido",
+                    "Ainda requer aprovação de engenharia",
+                ],
             ],
             columns=["Nível", "Evidência típica", "Uso recomendado"],
         ),
@@ -553,7 +689,10 @@ elif modulo == "Análise de sensibilidade":
         ],
         "Como a flecha varia com L⁴, o vão tende a apresentar elasticidade próxima de 4 e merece controle dimensional cuidadoso.",
     )
-    st.warning("Distribuições escolhidas sem base metrológica ou histórica podem produzir uma precisão apenas aparente.", icon=":material/warning:")
+    st.warning(
+        "Distribuições escolhidas sem base metrológica ou histórica podem produzir uma precisão apenas aparente.",
+        icon=":material/warning:",
+    )
     link_modulo("app_pages/analise_sensibilidade.py", "Abrir análise de sensibilidade")
 
 
@@ -570,7 +709,11 @@ elif modulo == "Assistente de projeto":
         [
             ["Nome e descrição", "Componente e função", "Desenho, ordem de serviço ou escopo"],
             ["Objetivo", "O que deseja calcular ou verificar", "Pergunta de engenharia do projeto"],
-            ["Dados disponíveis", "Cargas, tensões, ciclo, junta ou estrutura", "Medição, CAD, cálculo ou simulação"],
+            [
+                "Dados disponíveis",
+                "Cargas, tensões, ciclo, junta ou estrutura",
+                "Medição, CAD, cálculo ou simulação",
+            ],
             ["Regime", "Estático, variável/cíclico ou desconhecido", "Histórico de operação"],
             ["Checklist", "Itens já conferidos", "DCL, material, casos de carga e norma"],
         ]
@@ -620,7 +763,11 @@ elif modulo == "Conversor de unidades":
             ["Grandeza", "Tipo físico do dado", "Rótulo, desenho ou ficha técnica"],
             ["Valor", "Número recebido da fonte", "Medição ou relatório"],
             ["Unidade de origem", "Unidade usada pela fonte", "Cabeçalho da tabela ou instrumento"],
-            ["Unidade de destino", "Unidade indicada no campo do app", "Rótulo do módulo de cálculo"],
+            [
+                "Unidade de destino",
+                "Unidade indicada no campo do app",
+                "Rótulo do módulo de cálculo",
+            ],
         ]
     )
     st.subheader("Como usar")
@@ -732,8 +879,18 @@ elif modulo == "Vigas e eixos":
                 ["Extremidade fixa", "engaste", "Δ = 0, θ = 0", "Impede deslocamento e rotação"],
                 ["Extremidade livre", "(não declare nada)", "V = 0, M = 0", "Ponta em balanço"],
                 ["Pino / articulação interna", "rotula", "M = 0", "Transmite V e N, libera o giro"],
-                ["Engaste deslizante", "deslizante", "θ = 0, V = 0", "Guiado: gira travado, desliza livre"],
-                ["Apoio elástico", "mola kv=… kr=…", "F = −k·Δ", "Recua sob carga, em vez de travar"],
+                [
+                    "Engaste deslizante",
+                    "deslizante",
+                    "θ = 0, V = 0",
+                    "Guiado: gira travado, desliza livre",
+                ],
+                [
+                    "Apoio elástico",
+                    "mola kv=… kr=…",
+                    "F = −k·Δ",
+                    "Recua sob carga, em vez de travar",
+                ],
             ],
             columns=["Situação", "Como escrever", "O que vale no ponto", "O que o apoio impede"],
         ),
@@ -748,11 +905,27 @@ elif modulo == "Vigas e eixos":
     mostrar_tabela_campos(
         [
             ["`viga L`", "Comprimento total em metros", "Desenho ou medição"],
-            ["`secao ...`", "Geometria da seção em mm, ou um perfil do catálogo", "Desenho da peça"],
-            ["`material ...`", "Atalho (aco, aluminio…) ou E, G e Sy próprios", "Certificado do material"],
-            ["`apoio x tipo`", "Posição em metros e tipo do apoio", "Projeto / condição de montagem"],
+            [
+                "`secao ...`",
+                "Geometria da seção em mm, ou um perfil do catálogo",
+                "Desenho da peça",
+            ],
+            [
+                "`material ...`",
+                "Atalho (aco, aluminio…) ou E, G e Sy próprios",
+                "Certificado do material",
+            ],
+            [
+                "`apoio x tipo`",
+                "Posição em metros e tipo do apoio",
+                "Projeto / condição de montagem",
+            ],
             ["`P x valor`", "Força concentrada em kN (negativo = para baixo)", "Casos de carga"],
-            ["`q x1 x2 w1 [w2]`", "Distribuída em kN/m; com w2 vira trapezoidal", "Peso, pressão, empuxo"],
+            [
+                "`q x1 x2 w1 [w2]`",
+                "Distribuída em kN/m; com w2 vira trapezoidal",
+                "Peso, pressão, empuxo",
+            ],
             ["`M x valor`", "Momento concentrado em kN·m", "Excentricidade, engaste vizinho"],
             ["`N x valor`", "Carga axial em kN (positivo = tração)", "Tirante, coluna-viga"],
             ["`T x valor`", "Torque em kN·m", "Engrenagem, polia, acoplamento"],
@@ -908,12 +1081,24 @@ elif modulo == "Flambagem de colunas":
     )
     mostrar_tabela_campos(
         [
-            ["Seção", "Geometria da peça (retangular, circular, tubo, perfil ou A/r direto)", "Desenho ou catálogo do perfil"],
+            [
+                "Seção",
+                "Geometria da peça (retangular, circular, tubo, perfil ou A/r direto)",
+                "Desenho ou catálogo do perfil",
+            ],
             ["L", "Comprimento real da coluna, em mm", "Desenho ou montagem"],
-            ["Condição de apoio", "K teórico do caso mais próximo do apoio real", "Croqui de fixação nas extremidades"],
+            [
+                "Condição de apoio",
+                "K teórico do caso mais próximo do apoio real",
+                "Croqui de fixação nas extremidades",
+            ],
             ["E", "Módulo de elasticidade do material, em MPa", "Certificado ou catálogo"],
             ["Sy", "Limite de escoamento, em MPa", "Certificado ou base do material"],
-            ["P", "Força de compressão atuante, em kN (só magnitude)", "Assistente de cargas ou análise do equipamento"],
+            [
+                "P",
+                "Força de compressão atuante, em kN (só magnitude)",
+                "Assistente de cargas ou análise do equipamento",
+            ],
         ]
     )
     st.subheader("Passo a passo")
@@ -1110,7 +1295,11 @@ elif modulo == "Círculo de Mohr":
     )
     mostrar_tabela_campos(
         [
-            ["σx, σy e τxy", "Componentes do estado plano, em MPa", "Assistente, fórmula ou simulação"],
+            [
+                "σx, σy e τxy",
+                "Componentes do estado plano, em MPa",
+                "Assistente, fórmula ou simulação",
+            ],
             ["θ", "Rotação física do eixo x para x'", "Orientação do plano desejado"],
             ["σz, τxz e τyz", "Componentes adicionais do estado 3D", "Tensor da simulação"],
             ["nx, ny e nz", "Normal do plano 3D", "Geometria ou CAD"],
@@ -1176,13 +1365,16 @@ elif modulo == "Círculo de Mohr":
 elif modulo == "Projeto de parafusos":
     st.header("Projeto de juntas parafusadas")
     st.markdown(
-        "Use para uma junta pré-carregada com parafusos igualmente espaçados "
-        "em um círculo."
+        "Use para uma junta pré-carregada com parafusos igualmente espaçados em um círculo."
     )
     mostrar_tabela_campos(
         [
             ["Rosca e classe", "Designação e classe do parafuso", "Desenho e certificado"],
-            ["Número e círculo", "Quantidade e diâmetro entre parafusos opostos", "Desenho da junta"],
+            [
+                "Número e círculo",
+                "Quantidade e diâmetro entre parafusos opostos",
+                "Desenho da junta",
+            ],
             ["K e incerteza", "Relação torque–pré-carga e dispersão", "Ensaio ou processo"],
             ["P, V, M e T", "Cargas de serviço da junta", "Análise do equipamento"],
             ["Atrito", "Coeficiente e número de interfaces", "Tratamento superficial/ensaio"],
@@ -1249,7 +1441,11 @@ elif modulo == "Normas técnicas":
     )
     mostrar_tabela_campos(
         [
-            ["Pasta monitorada", "Pasta padrão ou outro caminho local", "Local onde você guarda PDFs licenciados"],
+            [
+                "Pasta monitorada",
+                "Pasta padrão ou outro caminho local",
+                "Local onde você guarda PDFs licenciados",
+            ],
             ["Segmento", "Área do projeto", "Escopo, contrato e tipo de equipamento"],
             ["Edição", "Ano, emenda e errata", "Capa, catálogo oficial e especificação do cliente"],
             ["Busca", "Termos técnicos específicos", "Item que precisa ser confirmado no projeto"],

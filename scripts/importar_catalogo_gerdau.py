@@ -131,10 +131,7 @@ def conferir(valores: dict[str, float]) -> str:
         inercia_mm4 = inercia_cm4 * 1e4
         raio_calculado = math.sqrt(inercia_mm4 / area_mm2) / 10.0
         if abs(raio_calculado - raio_cm) > TOLERANCIA_COERENCIA * raio_cm:
-            return (
-                f"r{eixo} tabelado {raio_cm:.2f} cm contra "
-                f"{raio_calculado:.2f} cm de sqrt(I/A)"
-            )
+            return f"r{eixo} tabelado {raio_cm:.2f} cm contra {raio_calculado:.2f} cm de sqrt(I/A)"
         modulo_calculado = inercia_mm4 / (dimensao_mm / 2.0) / 1e3
         if abs(modulo_calculado - modulo_cm3) > TOLERANCIA_COERENCIA * modulo_cm3:
             return (
@@ -143,10 +140,7 @@ def conferir(valores: dict[str, float]) -> str:
             )
     esperada = area_mm2 * 7_850.0 / 1e6
     if abs(esperada - valores["massa_kg_m"]) > 0.05 * valores["massa_kg_m"]:
-        return (
-            f"massa {valores['massa_kg_m']:.1f} kg/m contra {esperada:.1f} kg/m "
-            "da área em aço"
-        )
+        return f"massa {valores['massa_kg_m']:.1f} kg/m contra {esperada:.1f} kg/m da área em aço"
     return ""
 
 
@@ -199,9 +193,7 @@ def extrair(
             # Fora da faixa pedida não é rejeição: é escolha de escopo, e
             # listá-la junto dos erros de leitura esconderia os erros reais.
             altura = altura_nominal(nome)
-            if altura_maxima_mm is not None and (
-                altura is None or altura > altura_maxima_mm
-            ):
+            if altura_maxima_mm is not None and (altura is None or altura > altura_maxima_mm):
                 continue
 
             valores: dict[str, float] = {}
@@ -253,9 +245,7 @@ def extrair(
                     "espessura_mesa_mm": valores["tf_mm"],
                     # Convenção usual para perfis I e W: só a alma resiste ao
                     # cortante, e é a mesma que o catálogo embutido adota.
-                    "area_cisalhamento_mm2": round(
-                        valores["d_mm"] * valores["tw_mm"], 2
-                    ),
+                    "area_cisalhamento_mm2": round(valores["d_mm"] * valores["tw_mm"], 2),
                     "massa_kg_m": valores["massa_kg_m"],
                     "descricao": (
                         f"{nome} — d {valores['d_mm']:.0f} mm, bf "
@@ -270,12 +260,8 @@ def extrair(
 def principal() -> int:
     analisador = argparse.ArgumentParser(description=__doc__)
     analisador.add_argument("pdf", type=Path)
-    analisador.add_argument(
-        "--saida", type=Path, default=Path("data/perfis_ref_gerdau.json")
-    )
-    analisador.add_argument(
-        "--origem", default="Gerdau — Tabela de bitolas (perfis W e HP)"
-    )
+    analisador.add_argument("--saida", type=Path, default=Path("data/perfis_ref_gerdau.json"))
+    analisador.add_argument("--origem", default="Gerdau — Tabela de bitolas (perfis W e HP)")
     analisador.add_argument(
         "--altura-maxima",
         type=int,
@@ -288,9 +274,7 @@ def principal() -> int:
     )
     argumentos = analisador.parse_args()
 
-    perfis, rejeitados = extrair(
-        argumentos.pdf, altura_maxima_mm=argumentos.altura_maxima
-    )
+    perfis, rejeitados = extrair(argumentos.pdf, altura_maxima_mm=argumentos.altura_maxima)
     print(f"Perfis aceitos: {len(perfis)} (até W/HP {argumentos.altura_maxima})")
     print(f"Rejeitados: {len(rejeitados)}")
     for nome, motivo in rejeitados[:25]:

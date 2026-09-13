@@ -147,16 +147,12 @@ class MargensCalculadasTests(unittest.TestCase):
         self.assertIn("130%", achados[0].detalhe)
 
     def test_status_nao_atende_e_bloqueio(self):
-        achados = achados_da_regra(
-            projeto_com(registro(status="Não atende")), "margens-calculadas"
-        )
+        achados = achados_da_regra(projeto_com(registro(status="Não atende")), "margens-calculadas")
         self.assertEqual(len(achados), 1)
         self.assertEqual(achados[0].severidade, "Bloqueio")
 
     def test_status_atencao_gera_ressalva(self):
-        achados = achados_da_regra(
-            projeto_com(registro(status="Atenção")), "margens-calculadas"
-        )
+        achados = achados_da_regra(projeto_com(registro(status="Atenção")), "margens-calculadas")
         self.assertEqual(len(achados), 1)
         self.assertEqual(achados[0].severidade, "Atenção")
 
@@ -213,17 +209,13 @@ class DeslocamentosTests(unittest.TestCase):
         # Flecha para baixo é negativa; o critério compara magnitudes.
         para_baixo = achados_da_regra(
             projeto_com(
-                registro(
-                    resultados={"flecha_maxima_mm": -20.0, "flecha_admissivel_mm": 10.0}
-                )
+                registro(resultados={"flecha_maxima_mm": -20.0, "flecha_admissivel_mm": 10.0})
             ),
             "deslocamentos",
         )
         para_cima = achados_da_regra(
             projeto_com(
-                registro(
-                    resultados={"flecha_maxima_mm": 20.0, "flecha_admissivel_mm": 10.0}
-                )
+                registro(resultados={"flecha_maxima_mm": 20.0, "flecha_admissivel_mm": 10.0})
             ),
             "deslocamentos",
         )
@@ -233,9 +225,7 @@ class DeslocamentosTests(unittest.TestCase):
         self.assertEqual(
             achados_da_regra(
                 projeto_com(
-                    registro(
-                        resultados={"flecha_maxima_mm": -8.0, "flecha_admissivel_mm": 17.1}
-                    )
+                    registro(resultados={"flecha_maxima_mm": -8.0, "flecha_admissivel_mm": 17.1})
                 ),
                 "deslocamentos",
             ),

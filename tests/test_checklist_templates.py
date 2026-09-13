@@ -40,7 +40,13 @@ def test_catalogo_embutido_e_integro():
     modelos = listar_modelos(arquivo_usuario=ARQUIVO_MODELOS.with_name("inexistente.json"))
     ids = [modelo.id for modelo in modelos]
     assert len(ids) == len(set(ids))
-    assert {"generico", "estrutura_metalica", "vaso_tanque", "transportador", "eixo_maquina"} <= set(ids)
+    assert {
+        "generico",
+        "estrutura_metalica",
+        "vaso_tanque",
+        "transportador",
+        "eixo_maquina",
+    } <= set(ids)
     for modelo in modelos:
         assert modelo.itens, modelo.id
         assert not modelo.editavel
@@ -131,7 +137,12 @@ def test_arquivo_do_usuario_sobrepoe_por_id_e_acrescenta(tmp_path):
                         "nome": "Genérico da empresa",
                         "tipo_projeto": "Projeto industrial",
                         "itens": [
-                            {"chave": "a", "item": "Item da empresa", "papel": "responsavel", "prazo_dias": 7},
+                            {
+                                "chave": "a",
+                                "item": "Item da empresa",
+                                "papel": "responsavel",
+                                "prazo_dias": 7,
+                            },
                             {"chave": "verificacao", "item": "Verificar", "papel": "verificador"},
                         ],
                     },
@@ -166,7 +177,11 @@ def test_arquivo_do_usuario_sobrepoe_por_id_e_acrescenta(tmp_path):
     [
         {"id": "x", "nome": "X", "itens": [{"item": ""}]},
         {"id": "x", "nome": "X", "itens": [{"item": "a", "papel": "gerente"}]},
-        {"id": "x", "nome": "X", "itens": [{"chave": "k", "item": "a"}, {"chave": "k", "item": "b"}]},
+        {
+            "id": "x",
+            "nome": "X",
+            "itens": [{"chave": "k", "item": "a"}, {"chave": "k", "item": "b"}],
+        },
         {"id": "x", "nome": "X", "itens": [{"item": "a", "prazo_dias": "sete"}]},
         {"id": "", "nome": "X", "itens": []},
         {"id": "x", "nome": "X"},
@@ -187,5 +202,8 @@ def test_json_invalido_e_recusado(tmp_path):
 
 
 def test_tipo_de_projeto_entra_na_criacao():
-    assert novo_projeto_documento("A", tipo_projeto="Estrutura metálica")["tipo_projeto"] == "Estrutura metálica"
+    assert (
+        novo_projeto_documento("A", tipo_projeto="Estrutura metálica")["tipo_projeto"]
+        == "Estrutura metálica"
+    )
     assert novo_projeto_documento("A", tipo_projeto="  ")["tipo_projeto"] == TIPO_PROJETO_PADRAO

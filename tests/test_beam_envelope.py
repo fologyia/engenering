@@ -69,9 +69,7 @@ class ViaCombinacaoTests(unittest.TestCase):
             viga_de_tres_casos(),
             vb.CombinacaoCarga("ELU", {"Permanente": 1.4, "Sobrecarga": 1.5}),
         )
-        intensidades = [
-            carga.w_inicial_N_mm for carga in combinada.cargas_distribuidas
-        ]
+        intensidades = [carga.w_inicial_N_mm for carga in combinada.cargas_distribuidas]
         self.assertAlmostEqual(intensidades[0], -12.0 * 1.4)
         self.assertAlmostEqual(intensidades[1], -20.0 * 1.5)
         # Vento não participa desta combinação.
@@ -79,30 +77,22 @@ class ViaCombinacaoTests(unittest.TestCase):
 
     def test_geometria_e_apoios_nao_mudam(self):
         original = viga_de_tres_casos()
-        combinada = vb.viga_da_combinacao(
-            original, vb.CombinacaoCarga("ELU", {"Permanente": 1.4})
-        )
+        combinada = vb.viga_da_combinacao(original, vb.CombinacaoCarga("ELU", {"Permanente": 1.4}))
         self.assertEqual(combinada.comprimento_mm, original.comprimento_mm)
         self.assertEqual(combinada.apoios, original.apoios)
         self.assertEqual(combinada.secao, original.secao)
 
     def test_peso_proprio_e_escalado_junto_com_o_permanente(self):
         viga = viga_de_tres_casos(considerar_peso_proprio=True)
-        combinada = vb.viga_da_combinacao(
-            viga, vb.CombinacaoCarga("ELU", {"Permanente": 1.4})
-        )
+        combinada = vb.viga_da_combinacao(viga, vb.CombinacaoCarga("ELU", {"Permanente": 1.4}))
         peso = viga.secao.area_mm2 * 1e-6 * 7_850.0 * vb.GRAVIDADE_M_S2 / 1_000.0
         # O peso próprio foi materializado como distribuída e escalado.
         self.assertFalse(combinada.considerar_peso_proprio)
-        self.assertAlmostEqual(
-            combinada.cargas_distribuidas[-1].w_inicial_N_mm, -peso * 1.4
-        )
+        self.assertAlmostEqual(combinada.cargas_distribuidas[-1].w_inicial_N_mm, -peso * 1.4)
 
     def test_momento_da_combinacao_confere_com_a_formula_fechada(self):
         combinacao = vb.CombinacaoCarga("ELU", {"Permanente": 1.4, "Sobrecarga": 1.5})
-        resultado = vb.analisar_viga(
-            vb.viga_da_combinacao(viga_de_tres_casos(), combinacao)
-        )
+        resultado = vb.analisar_viga(vb.viga_da_combinacao(viga_de_tres_casos(), combinacao))
         w = 12.0 * 1.4 + 20.0 * 1.5
         self.assertAlmostEqual(
             resultado.extremos["momento"].valor,
@@ -124,15 +114,9 @@ class EnvoltoriaTests(unittest.TestCase):
         for ponto in envoltoria.pontos:
             for resultado in envoltoria.resultados.values():
                 individual = vb.ponto_em(resultado, ponto.x_mm)
-                self.assertLessEqual(
-                    individual.momento_Nmm, ponto.momento_max_Nmm + 1e-6
-                )
-                self.assertGreaterEqual(
-                    individual.momento_Nmm, ponto.momento_min_Nmm - 1e-6
-                )
-                self.assertLessEqual(
-                    individual.deslocamento_mm, ponto.flecha_max_mm + 1e-9
-                )
+                self.assertLessEqual(individual.momento_Nmm, ponto.momento_max_Nmm + 1e-6)
+                self.assertGreaterEqual(individual.momento_Nmm, ponto.momento_min_Nmm - 1e-6)
+                self.assertLessEqual(individual.deslocamento_mm, ponto.flecha_max_mm + 1e-9)
 
     def test_combinacao_governante_e_identificada(self):
         envoltoria = vb.analisar_envoltoria(viga_de_tres_casos(), self.combinacoes())
@@ -216,9 +200,7 @@ class ScriptDeCombinacoesTests(unittest.TestCase):
 
     def test_casos_e_combinacoes_sao_lidos(self):
         viga = bs.interpretar(self.SCRIPT)
-        self.assertEqual(
-            vb.casos_declarados(viga), ("Permanente", "Sobrecarga", "Vento")
-        )
+        self.assertEqual(vb.casos_declarados(viga), ("Permanente", "Sobrecarga", "Vento"))
         combinacoes = bs.combinacoes_do_script(self.SCRIPT)
         self.assertEqual([c.nome for c in combinacoes], ["ELU", "ELS"])
         self.assertAlmostEqual(combinacoes[0].fator("Sobrecarga"), 1.5)
@@ -235,9 +217,7 @@ class ScriptDeCombinacoesTests(unittest.TestCase):
 
     def test_combinacao_duplicada_e_recusada(self):
         with self.assertRaises(bs.ErroDeScript):
-            bs.combinacoes_do_script(
-                "combinacao ELU Permanente=1.4\ncombinacao ELU Permanente=1.0"
-            )
+            bs.combinacoes_do_script("combinacao ELU Permanente=1.4\ncombinacao ELU Permanente=1.0")
 
     def test_leitura_de_combinacoes_ignora_o_resto_do_modelo(self):
         # Serve para a página decidir se mostra a envoltória sem ter de
@@ -248,9 +228,7 @@ class ScriptDeCombinacoesTests(unittest.TestCase):
     def test_ida_e_volta_preserva_os_casos(self):
         viga = bs.interpretar(self.SCRIPT)
         reconstruida = bs.interpretar(bs.gerar_script(viga))
-        self.assertEqual(
-            vb.casos_declarados(reconstruida), vb.casos_declarados(viga)
-        )
+        self.assertEqual(vb.casos_declarados(reconstruida), vb.casos_declarados(viga))
 
     def test_exemplo_de_envoltoria_resolve(self):
         script = bs.EXEMPLOS["Envoltória de combinações (viga de piso)"]
@@ -295,9 +273,7 @@ class PonteComOProjetoTests(unittest.TestCase):
         self.assertAlmostEqual(lidas[0].fator("Peso_próprio"), 1.4)
 
     def test_id_sem_caso_correspondente_vira_o_proprio_id(self):
-        linhas = bs.linhas_de_combinacoes_do_projeto(
-            [], [{"nome": "C", "fatores": {"orfao": 1.0}}]
-        )
+        linhas = bs.linhas_de_combinacoes_do_projeto([], [{"nome": "C", "fatores": {"orfao": 1.0}}])
         self.assertIn("orfao=1", linhas[0])
 
 

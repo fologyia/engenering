@@ -37,17 +37,13 @@ def test_series_do_resultado_traz_cortante_momento_e_flecha_biapoiada():
 
 
 def test_series_do_resultado_inclui_normal_quando_ha_carga_axial():
-    resultado = vb.analisar_viga(
-        viga_padrao(cargas_axiais=(vb.CargaAxial(6_000.0, 10_000.0),))
-    )
+    resultado = vb.analisar_viga(viga_padrao(cargas_axiais=(vb.CargaAxial(6_000.0, 10_000.0),)))
     titulos = [serie.titulo for serie in series_do_resultado(resultado)]
     assert any("normal" in titulo.lower() for titulo in titulos)
 
 
 def test_series_do_resultado_inclui_torque_quando_ha_torcao():
-    resultado = vb.analisar_viga(
-        viga_padrao(torques=(vb.Torque(3_000.0, 5_000_000.0),))
-    )
+    resultado = vb.analisar_viga(viga_padrao(torques=(vb.Torque(3_000.0, 5_000_000.0),)))
     titulos = [serie.titulo for serie in series_do_resultado(resultado)]
     assert any("torque" in titulo.lower() for titulo in titulos)
 

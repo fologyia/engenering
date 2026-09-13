@@ -56,27 +56,61 @@ incluir_arquivados = st.toggle("Incluir projetos arquivados", value=False)
 projetos = carregar_projetos(incluir_arquivados=incluir_arquivados)
 if not projetos:
     st.info("Nenhum projeto no banco. Crie o primeiro em Projetos permanentes.")
-    st.page_link("app_pages/gestao_projetos.py", label="Abrir Projetos permanentes", icon=":material/folder_managed:")
+    st.page_link(
+        "app_pages/gestao_projetos.py",
+        label="Abrir Projetos permanentes",
+        icon=":material/folder_managed:",
+    )
     st.stop()
 
 hoje = date.today()
 resumos = [resumir_projeto(projeto, hoje=hoje) for projeto in projetos]
-por_id = {resumo["id"]: (projeto, resumo) for projeto, resumo in zip(projetos, resumos, strict=True)}
+por_id = {
+    resumo["id"]: (projeto, resumo) for projeto, resumo in zip(projetos, resumos, strict=True)
+}
 carteira = resumir_carteira(resumos)
 
 m1, m2, m3, m4, m5, m6 = st.columns(6)
 m1.metric("Projetos", carteira["total"], border=True)
-m2.metric("Com bloqueio", carteira["com_bloqueio"], border=True, help="Projetos com ao menos um bloqueio na validação.")
-m3.metric("Prontos", carteira["prontos"], border=True, help="Prontos para revisão: sem bloqueios nem pendências documentais.")
-m4.metric("Vencidos", carteira["checklist_vencidos"], border=True, help="Itens de checklist abertos com prazo anterior a hoje, somados na carteira.")
-m5.metric("Desatualizados", carteira["registros_desatualizados"], border=True, help="Cálculos cujas fontes mudaram depois do registro.")
-m6.metric("Índice médio", f"{carteira['indice_medio']}%", border=True, help="Média do índice documental dos projetos listados.")
+m2.metric(
+    "Com bloqueio",
+    carteira["com_bloqueio"],
+    border=True,
+    help="Projetos com ao menos um bloqueio na validação.",
+)
+m3.metric(
+    "Prontos",
+    carteira["prontos"],
+    border=True,
+    help="Prontos para revisão: sem bloqueios nem pendências documentais.",
+)
+m4.metric(
+    "Vencidos",
+    carteira["checklist_vencidos"],
+    border=True,
+    help="Itens de checklist abertos com prazo anterior a hoje, somados na carteira.",
+)
+m5.metric(
+    "Desatualizados",
+    carteira["registros_desatualizados"],
+    border=True,
+    help="Cálculos cujas fontes mudaram depois do registro.",
+)
+m6.metric(
+    "Índice médio",
+    f"{carteira['indice_medio']}%",
+    border=True,
+    help="Média do índice documental dos projetos listados.",
+)
 
 situacoes_presentes = [situacao for situacao in SITUACOES if carteira["por_situacao"].get(situacao)]
 if situacoes_presentes:
     st.caption(
         "Por situação: "
-        + " · ".join(f"**{situacao}** {carteira['por_situacao'][situacao]}" for situacao in situacoes_presentes)
+        + " · ".join(
+            f"**{situacao}** {carteira['por_situacao'][situacao]}"
+            for situacao in situacoes_presentes
+        )
     )
 
 # ------------------------------------------------------------- Filtros
@@ -86,6 +120,7 @@ clientes = sorted({resumo["cliente"] for resumo in resumos if resumo["cliente"]}
 filtro_cliente = f2.multiselect("Cliente", clientes, default=clientes)
 busca = f3.text_input("Buscar", placeholder="código, nome, TAG, unidade, responsável…")
 
+
 def _corresponde(resumo: dict[str, Any]) -> bool:
     if resumo["status"] not in filtro_situacao:
         return False
@@ -93,7 +128,8 @@ def _corresponde(resumo: dict[str, Any]) -> bool:
         return False
     if busca.strip():
         alvo = " ".join(
-            str(resumo[chave]) for chave in ("codigo", "nome", "tag", "unidade", "area", "responsavel", "cliente")
+            str(resumo[chave])
+            for chave in ("codigo", "nome", "tag", "unidade", "area", "responsavel", "cliente")
         ).casefold()
         return busca.strip().casefold() in alvo
     return True
@@ -105,7 +141,10 @@ visiveis = [resumo for resumo in resumos if _corresponde(resumo)]
 urgentes = [
     resumo
     for resumo in visiveis
-    if resumo["bloqueios"] or resumo["checklist_vencidos"] or resumo["registros_desatualizados"] or resumo["registros_nao_atendem"]
+    if resumo["bloqueios"]
+    or resumo["checklist_vencidos"]
+    or resumo["registros_desatualizados"]
+    or resumo["registros_nao_atendem"]
 ]
 if urgentes:
     with st.container(border=True):
@@ -120,7 +159,11 @@ if urgentes:
                 motivos.append(f"{resumo['checklist_vencidos']} prazo(s) vencido(s)")
             if resumo["registros_desatualizados"]:
                 motivos.append(f"{resumo['registros_desatualizados']} cálculo(s) desatualizado(s)")
-            st.markdown(f"- **{resumo['codigo']} · {resumo['nome']}** ({resumo['status']}): " + "; ".join(motivos) + ".")
+            st.markdown(
+                f"- **{resumo['codigo']} · {resumo['nome']}** ({resumo['status']}): "
+                + "; ".join(motivos)
+                + "."
+            )
 else:
     st.success("Nenhum projeto visível exige atenção imediata.", icon=":material/check_circle:")
 
@@ -147,7 +190,9 @@ tabela = pd.DataFrame(
             "Cliente": resumo["cliente"] or "—",
             "Atualizado": _data_curta(resumo["atualizado_em"]),
             "Parado (dias)": (
-                resumo["dias_sem_atualizacao"] if resumo["dias_sem_atualizacao"] is not None else float("nan")
+                resumo["dias_sem_atualizacao"]
+                if resumo["dias_sem_atualizacao"] is not None
+                else float("nan")
             ),
         }
         for resumo in visiveis
@@ -163,8 +208,12 @@ else:
         column_config={
             "id": None,
             "Ativo": st.column_config.CheckboxColumn("Ativo", disabled=True, width="small"),
-            "Índice": st.column_config.ProgressColumn("Índice documental", min_value=0, max_value=100, format="%d%%"),
-            "Checklist": st.column_config.ProgressColumn("Checklist", min_value=0, max_value=100, format="%d%%"),
+            "Índice": st.column_config.ProgressColumn(
+                "Índice documental", min_value=0, max_value=100, format="%d%%"
+            ),
+            "Checklist": st.column_config.ProgressColumn(
+                "Checklist", min_value=0, max_value=100, format="%d%%"
+            ),
             "Projeto": st.column_config.TextColumn(width="large"),
         },
     )
@@ -209,16 +258,26 @@ with col_detalhe, st.container(border=True):
         opcoes = {resumo["id"]: f"{resumo['codigo']} · {resumo['nome']}" for resumo in visiveis}
         ids = list(opcoes)
         indice_padrao = ids.index(ativo["id"]) if ativo.get("id") in ids else 0
-        escolhido = st.selectbox("Projeto", ids, index=indice_padrao, format_func=lambda valor: opcoes[valor])
+        escolhido = st.selectbox(
+            "Projeto", ids, index=indice_padrao, format_func=lambda valor: opcoes[valor]
+        )
         projeto_escolhido, resumo_escolhido = por_id[escolhido]
-        for numero, passo in enumerate(proximos_passos(projeto_escolhido, resumo=resumo_escolhido), start=1):
+        for numero, passo in enumerate(
+            proximos_passos(projeto_escolhido, resumo=resumo_escolhido), start=1
+        ):
             st.markdown(f"**{numero}. {passo['titulo']}** — {passo['detalhe']}")
         if escolhido != ativo.get("id"):
-            if st.button("Abrir como projeto ativo", icon=":material/folder_open:", key="painel_abrir"):
+            if st.button(
+                "Abrir como projeto ativo", icon=":material/folder_open:", key="painel_abrir"
+            ):
                 definir_projeto_ativo(escolhido)
                 st.rerun()
         else:
-            st.page_link("app_pages/gestao_projetos.py", label="Este é o projeto ativo — abrir", icon=":material/folder_managed:")
+            st.page_link(
+                "app_pages/gestao_projetos.py",
+                label="Este é o projeto ativo — abrir",
+                icon=":material/folder_managed:",
+            )
     else:
         st.caption("Sem projetos visíveis.")
 

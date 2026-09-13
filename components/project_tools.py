@@ -152,7 +152,11 @@ def selecionar_peca_registro(
             "memorial, para distinguir peças iguais do mesmo projeto."
         ),
     ).strip()
-    opcoes = [_OPCAO_SEM_COMPONENTE, _OPCAO_NOVO_COMPONENTE, *[str(item["id"]) for item in componentes]]
+    opcoes = [
+        _OPCAO_SEM_COMPONENTE,
+        _OPCAO_NOVO_COMPONENTE,
+        *[str(item["id"]) for item in componentes],
+    ]
     rotulos = {
         _OPCAO_SEM_COMPONENTE: "Sem vínculo com o escopo físico",
         _OPCAO_NOVO_COMPONENTE: "Cadastrar nova peça no escopo com este nome",
@@ -206,7 +210,9 @@ def _aplicar_peca(
     """
     if cadastrar_novo:
         if not nome_peca:
-            return dict(registro), "Informe a identificação da peça para cadastrá-la no escopo físico."
+            return dict(
+                registro
+            ), "Informe a identificação da peça para cadastrá-la no escopo físico."
         novo = criar_item(
             tag=nome_peca,
             descricao="",

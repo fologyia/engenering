@@ -95,9 +95,7 @@ def eixo_circular_macico(
         propriedades,
     )
     # Momento entra em módulo: quem define o lado é ``face_flexao``.
-    ponto = tensoes.ponto(
-        NOME_INFERIOR if face_flexao == "tracionada" else NOME_SUPERIOR
-    )
+    ponto = tensoes.ponto(NOME_INFERIOR if face_flexao == "tracionada" else NOME_SUPERIOR)
     return EstadoPlanoCalculado(
         sigma_x=ponto.sigma_MPa,
         sigma_y=0.0,
@@ -178,13 +176,9 @@ def vaso_cilindrico_parede_fina(
     if pressao_MPa < 0:
         raise ValueError("pressao_MPa não pode ser negativa neste modelo.")
 
-    sigma_circunferencial = (
-        pressao_MPa * diametro_medio_mm / (2.0 * espessura_mm)
-    )
+    sigma_circunferencial = pressao_MPa * diametro_medio_mm / (2.0 * espessura_mm)
     sigma_longitudinal = (
-        pressao_MPa * diametro_medio_mm / (4.0 * espessura_mm)
-        if extremidades_fechadas
-        else 0.0
+        pressao_MPa * diametro_medio_mm / (4.0 * espessura_mm) if extremidades_fechadas else 0.0
     )
     return EstadoPlanoCalculado(
         sigma_x=sigma_longitudinal,
@@ -200,9 +194,7 @@ def vaso_cilindrico_parede_fina(
     )
 
 
-def relacao_diametro_espessura(
-    diametro_medio_mm: float, espessura_mm: float
-) -> float:
+def relacao_diametro_espessura(diametro_medio_mm: float, espessura_mm: float) -> float:
     """Retorna D/t para avaliar a hipótese de parede fina."""
     return _positivo("diametro_medio_mm", diametro_medio_mm) / _positivo(
         "espessura_mm", espessura_mm

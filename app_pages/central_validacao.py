@@ -60,7 +60,9 @@ if contagens["Bloqueio"]:
 elif contagens["Pendência"]:
     st.warning("Não há bloqueios automáticos, porém o projeto ainda está em consolidação.")
 else:
-    st.success("Não há bloqueios automáticos. Mantenha a verificação independente antes da emissão.")
+    st.success(
+        "Não há bloqueios automáticos. Mantenha a verificação independente antes da emissão."
+    )
 
 # O que a validação significa para o fluxo: a mesma leitura que a aba
 # "Fluxo e revisões" usa para liberar ou travar cada passagem de situação.
@@ -72,15 +74,24 @@ with st.container(border=True):
         if _item["destino"] == "Arquivado":
             continue
         if _item["permitida"]:
-            st.markdown(f":material/check_circle: Pode passar para **{_item['destino']}**" + (" — " + "; ".join(_item["avisos"]) if _item["avisos"] else "."))
+            st.markdown(
+                f":material/check_circle: Pode passar para **{_item['destino']}**"
+                + (" — " + "; ".join(_item["avisos"]) if _item["avisos"] else ".")
+            )
         else:
-            st.markdown(f":material/lock: **{_item['destino']}** exige: " + "; ".join(_item["impedimentos"]))
+            st.markdown(
+                f":material/lock: **{_item['destino']}** exige: " + "; ".join(_item["impedimentos"])
+            )
     if _resumo_checklist["vencidos"]:
         st.markdown(
             f":material/schedule: {len(_resumo_checklist['vencidos'])} item(ns) do checklist com prazo vencido — "
             "veja a categoria **Prazos** abaixo."
         )
-    st.page_link("app_pages/gestao_projetos.py", label="Mudar a situação em Fluxo e revisões", icon=":material/arrow_forward:")
+    st.page_link(
+        "app_pages/gestao_projetos.py",
+        label="Mudar a situação em Fluxo e revisões",
+        icon=":material/arrow_forward:",
+    )
 st.info(resultado["aviso"], icon=":material/info:")
 
 # Leitura por categoria: onde os achados se concentram.
@@ -88,12 +99,17 @@ _achados_todos = resultado["achados"]
 if _achados_todos:
     _linhas_categoria = {}
     for _achado in _achados_todos:
-        _linha = _linhas_categoria.setdefault(_achado["categoria"], {severidade: 0 for severidade in SEVERIDADES})
+        _linha = _linhas_categoria.setdefault(
+            _achado["categoria"], {severidade: 0 for severidade in SEVERIDADES}
+        )
         _linha[_achado["severidade"]] += 1
     with st.expander("Achados por categoria", expanded=False):
         st.dataframe(
             pd.DataFrame(
-                [{"Categoria": categoria, **valores, "Total": sum(valores.values())} for categoria, valores in _linhas_categoria.items()]
+                [
+                    {"Categoria": categoria, **valores, "Total": sum(valores.values())}
+                    for categoria, valores in _linhas_categoria.items()
+                ]
             ).sort_values(["Bloqueio", "Total"], ascending=False),
             hide_index=True,
             width="stretch",
@@ -107,7 +123,8 @@ categorias_sel = f2.multiselect("Categoria", categorias, default=categorias)
 busca = f3.text_input("Buscar", placeholder="material, norma, carregamento, checklist...")
 
 filtrados = [
-    item for item in achados
+    item
+    for item in achados
     if item["severidade"] in severidades
     and item["categoria"] in categorias_sel
     and (
@@ -117,18 +134,20 @@ filtrados = [
 ]
 
 if filtrados:
-    tabela = pd.DataFrame([
-        {
-            "ID": item["id"],
-            "Severidade": item["severidade"],
-            "Categoria": item["categoria"],
-            "Módulo": item["modulo"],
-            "Achado": item["titulo"],
-            "Detalhe": item["detalhe"],
-            "Ação recomendada": item["recomendacao"],
-        }
-        for item in filtrados
-    ])
+    tabela = pd.DataFrame(
+        [
+            {
+                "ID": item["id"],
+                "Severidade": item["severidade"],
+                "Categoria": item["categoria"],
+                "Módulo": item["modulo"],
+                "Achado": item["titulo"],
+                "Detalhe": item["detalhe"],
+                "Ação recomendada": item["recomendacao"],
+            }
+            for item in filtrados
+        ]
+    )
     st.dataframe(
         tabela,
         hide_index=True,
@@ -181,7 +200,8 @@ if filtrados:
                     )
                 )
             salvo = salvar_projeto(
-                projeto, motivo=f"{len(_bloqueios_sem_item)} bloqueio(s) da validação convertidos em checklist"
+                projeto,
+                motivo=f"{len(_bloqueios_sem_item)} bloqueio(s) da validação convertidos em checklist",
             )
             st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
             st.rerun()
@@ -189,7 +209,9 @@ if filtrados:
     achado_id = st.selectbox(
         "Detalhar e tratar achado",
         list(mapa),
-        format_func=lambda valor: f"{mapa[valor]['severidade']} · {valor} · {mapa[valor]['titulo']}",
+        format_func=lambda valor: (
+            f"{mapa[valor]['severidade']} · {valor} · {mapa[valor]['titulo']}"
+        ),
     )
     achado = mapa[achado_id]
     with st.container(border=True):
@@ -200,7 +222,8 @@ if filtrados:
         if achado.get("evidencia"):
             st.code(achado["evidencia"], language=None)
         existente = next(
-            (item for item in projeto["checklist"] if item.get("origem_validacao") == achado_id), None
+            (item for item in projeto["checklist"] if item.get("origem_validacao") == achado_id),
+            None,
         )
         if achado["categoria"] in {"Checklist", "Prazos"}:
             st.caption(
@@ -216,9 +239,13 @@ if filtrados:
         else:
             _c1, _c2 = st.columns([2, 1])
             _responsavel = _c1.text_input(
-                "Responsável pelo tratamento", value=projeto.get("responsavel", ""), key=f"resp_{achado_id}"
+                "Responsável pelo tratamento",
+                value=projeto.get("responsavel", ""),
+                key=f"resp_{achado_id}",
             )
-            _prazo = _c2.date_input("Prazo", value=None, format="DD/MM/YYYY", key=f"prazo_{achado_id}")
+            _prazo = _c2.date_input(
+                "Prazo", value=None, format="DD/MM/YYYY", key=f"prazo_{achado_id}"
+            )
             if st.button("Converter em item de checklist", icon=":material/add_task:"):
                 projeto["checklist"].append(
                     criar_item(
@@ -241,21 +268,51 @@ else:
 st.divider()
 st.subheader("Leitura por camada")
 camadas = [
-    ("1. Identificação e responsabilidades", "Define quem, onde, qual equipamento e com qual objetivo."),
-    ("2. Base de projeto", "Confere documentos de entrada, carregamentos, condições de operação, critérios e limitações."),
-    ("3. Casos e combinações de carga", "Confere vetores não nulos, TAG, origem, referências internas, fatores e consistência do envelope."),
-    ("4. Escopo físico e materiais", "Verifica TAGs, vínculos, condição de fornecimento, lote, fonte, aplicabilidade e confiança das propriedades."),
+    (
+        "1. Identificação e responsabilidades",
+        "Define quem, onde, qual equipamento e com qual objetivo.",
+    ),
+    (
+        "2. Base de projeto",
+        "Confere documentos de entrada, carregamentos, condições de operação, critérios e limitações.",
+    ),
+    (
+        "3. Casos e combinações de carga",
+        "Confere vetores não nulos, TAG, origem, referências internas, fatores e consistência do envelope.",
+    ),
+    (
+        "4. Escopo físico e materiais",
+        "Verifica TAGs, vínculos, condição de fornecimento, lote, fonte, aplicabilidade e confiança das propriedades.",
+    ),
     ("5. Matriz normativa", "Exige referência, edição, escopo e conferência no documento-fonte."),
-    ("6. Registros e contratos técnicos", "Avalia entradas, resultados, versão do módulo, assinatura, premissas, alertas, conclusão e critérios conhecidos."),
-    ("7. Sensibilidade e incerteza", "Sinaliza risco probabilístico relevante e exige que faixas, distribuições e método permaneçam documentados."),
-    ("8. Checklist de emissão", "Expõe itens abertos, responsáveis, evidências e pendências críticas."),
-    ("9. Prazos, critérios e documentos", "Cobra prazos vencidos do checklist, critérios técnicos definidos pelo projeto e documentos de entrada recebidos e revisados."),
+    (
+        "6. Registros e contratos técnicos",
+        "Avalia entradas, resultados, versão do módulo, assinatura, premissas, alertas, conclusão e critérios conhecidos.",
+    ),
+    (
+        "7. Sensibilidade e incerteza",
+        "Sinaliza risco probabilístico relevante e exige que faixas, distribuições e método permaneçam documentados.",
+    ),
+    (
+        "8. Checklist de emissão",
+        "Expõe itens abertos, responsáveis, evidências e pendências críticas.",
+    ),
+    (
+        "9. Prazos, critérios e documentos",
+        "Cobra prazos vencidos do checklist, critérios técnicos definidos pelo projeto e documentos de entrada recebidos e revisados.",
+    ),
 ]
 for titulo, descricao in camadas:
     with st.expander(titulo):
         st.write(descricao)
 
 with st.container(horizontal=True, horizontal_alignment="right"):
-    st.page_link("app_pages/gestao_projetos.py", label="Corrigir dados do projeto", icon=":material/edit_note:")
+    st.page_link(
+        "app_pages/gestao_projetos.py",
+        label="Corrigir dados do projeto",
+        icon=":material/edit_note:",
+    )
     st.page_link("app_pages/casos_carga.py", label="Revisar cargas", icon=":material/layers:")
-    st.page_link("app_pages/central_relatorios.py", label="Montar memorial", icon=":material/description:")
+    st.page_link(
+        "app_pages/central_relatorios.py", label="Montar memorial", icon=":material/description:"
+    )

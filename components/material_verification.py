@@ -90,14 +90,9 @@ def mostrar_verificacao_material(
             Sy = float(dados["Sy_MPa"])
             Sut = float(dados["Sut_MPa"])
             comportamento_padrao = (
-                "fragil"
-                if dados["categoria"] == "ferro_fundido" or Sy <= 0
-                else "ductil"
+                "fragil" if dados["categoria"] == "ferro_fundido" or Sy <= 0 else "ductil"
             )
-            st.caption(
-                f"Base: Sy = {Sy:.1f} MPa | Sut = {Sut:.1f} MPa — "
-                f"{dados['observacao']}"
-            )
+            st.caption(f"Base: Sy = {Sy:.1f} MPa | Sut = {Sut:.1f} MPa — {dados['observacao']}")
         else:
             comportamento_padrao = "ductil"
             propriedades = st.columns(2)
@@ -126,10 +121,7 @@ def mostrar_verificacao_material(
             default=comportamento_padrao,
             required=True,
             width="stretch",
-            key=(
-                f"{prefixo}_comportamento_"
-                f"{dados['nome'] if dados else 'manual'}"
-            ),
+            key=(f"{prefixo}_comportamento_{dados['nome'] if dados else 'manual'}"),
         )
 
         precisa_compressao = sigma_3 < 0
@@ -138,36 +130,21 @@ def mostrar_verificacao_material(
             min_value=0.0,
             value=0.0,
             step=10.0,
-            key=(
-                f"{prefixo}_suc_"
-                f"{dados['nome'] if dados else 'manual'}"
-            ),
+            key=(f"{prefixo}_suc_{dados['nome'] if dados else 'manual'}"),
             help=(
                 "Necessária para concluir Rankine quando existe tensão principal "
                 "compressiva. Use valor de norma, ensaio ou certificado."
             ),
         )
         if precisa_compressao and Suc == 0:
-            st.caption(
-                "O estado possui σ3 compressiva. Informe Suc para completar Rankine."
-            )
+            st.caption("O estado possui σ3 compressiva. Informe Suc para completar Rankine.")
 
         if Sy > Sut and comportamento == "ductil":
-            st.error(
-                "Dados incompatíveis para este modelo: Sy não deve superar Sut."
-            )
+            st.error("Dados incompatíveis para este modelo: Sy não deve superar Sut.")
             return
 
-        n_vm = (
-            falha.fator_seguranca_von_mises(tensao_von_mises, Sy)
-            if Sy > 0
-            else None
-        )
-        n_tresca = (
-            falha.fator_seguranca_tresca(principais, Sy)
-            if Sy > 0
-            else None
-        )
+        n_vm = falha.fator_seguranca_von_mises(tensao_von_mises, Sy) if Sy > 0 else None
+        n_tresca = falha.fator_seguranca_tresca(principais, Sy) if Sy > 0 else None
         rankine = falha.fator_seguranca_rankine(
             principais,
             Sut_MPa=Sut,

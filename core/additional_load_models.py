@@ -38,9 +38,7 @@ def eixo_circular_vazado(
     if di < 0:
         raise ValueError("O diâmetro interno não pode ser negativo.")
     if di >= de:
-        raise ValueError(
-            "O diâmetro interno deve ser menor que o diâmetro externo."
-        )
+        raise ValueError("O diâmetro interno deve ser menor que o diâmetro externo.")
     forca = _finito("forca_axial_N", forca_axial_N)
     momento = _finito("momento_fletor_Nmm", momento_fletor_Nmm)
     torque = _finito("torque_Nmm", torque_Nmm)
@@ -92,11 +90,7 @@ def secao_retangular_flexao_biaxial(
     area = largura * altura
     inercia_y = altura * largura**3 / 12.0
     inercia_z = largura * altura**3 / 12.0
-    sigma = (
-        forca / area
-        + momento_y * z / inercia_y
-        - momento_z * y / inercia_z
-    )
+    sigma = forca / area + momento_y * z / inercia_y - momento_z * y / inercia_z
     return EstadoPlanoCalculado(
         sigma_x=sigma,
         sigma_y=0.0,
@@ -139,9 +133,7 @@ def secao_i_flexao(
 
     altura_alma = altura - 2.0 * t_mesa
     area = 2.0 * mesa * t_mesa + t_alma * altura_alma
-    inercia = (
-        mesa * altura**3 - (mesa - t_alma) * altura_alma**3
-    ) / 12.0
+    inercia = (mesa * altura**3 - (mesa - t_alma) * altura_alma**3) / 12.0
 
     # Fluxo de cisalhamento de Jourawski: o momento estático e a largura
     # resistente mudam conforme o ponto caia na mesa ou na alma.
@@ -152,8 +144,7 @@ def secao_i_flexao(
     else:
         largura_resistente = t_alma
         momento_estatico = (
-            mesa * t_mesa * (altura - t_mesa) / 2.0
-            + t_alma * (meia_alma**2 - y**2) / 2.0
+            mesa * t_mesa * (altura - t_mesa) / 2.0 + t_alma * (meia_alma**2 - y**2) / 2.0
         )
     tau = cortante * momento_estatico / (inercia * largura_resistente)
 
@@ -161,9 +152,7 @@ def secao_i_flexao(
         sigma_x=forca / area - momento * y / inercia,
         sigma_y=0.0,
         tau_xy=tau,
-        descricao=(
-            "Seção I duplamente simétrica sob força axial, flexão e cortante"
-        ),
+        descricao=("Seção I duplamente simétrica sob força axial, flexão e cortante"),
         hipoteses=(
             "Seção I idealizada, duplamente simétrica e sem concordâncias.",
             "Flexão em torno do eixo centroidal forte.",
@@ -226,9 +215,7 @@ def tubo_fino_pressao_axial_torcao(
 
     sigma_circunferencial = pressao * diametro / (2.0 * espessura)
     sigma_pressao_longitudinal = (
-        pressao * diametro / (4.0 * espessura)
-        if extremidades_fechadas
-        else 0.0
+        pressao * diametro / (4.0 * espessura) if extremidades_fechadas else 0.0
     )
     area_parede = math.pi * diametro * espessura
     sigma_longitudinal = sigma_pressao_longitudinal + forca / area_parede
@@ -315,11 +302,7 @@ def barra_axial_excentrica(
         raise ValueError("A coordenada z deve estar dentro da largura.")
 
     area = largura * altura
-    sigma = (forca / area) * (
-        1.0
-        + 12.0 * ey * y / altura**2
-        + 12.0 * ez * z / largura**2
-    )
+    sigma = (forca / area) * (1.0 + 12.0 * ey * y / altura**2 + 12.0 * ez * z / largura**2)
     return EstadoPlanoCalculado(
         sigma_x=sigma,
         sigma_y=0.0,
@@ -353,18 +336,14 @@ def secao_tubular_retangular(
     momento = _finito("momento_fletor_Nmm", momento_fletor_Nmm)
     torque = _finito("torque_Nmm", torque_Nmm)
     if 2.0 * espessura >= min(largura, altura):
-        raise ValueError(
-            "A espessura deve ser menor que metade do menor lado da seção."
-        )
+        raise ValueError("A espessura deve ser menor que metade do menor lado da seção.")
     if abs(y) > altura / 2.0:
         raise ValueError("A coordenada y deve estar dentro da altura.")
 
     largura_interna = largura - 2.0 * espessura
     altura_interna = altura - 2.0 * espessura
     area = largura * altura - largura_interna * altura_interna
-    inercia = (
-        largura * altura**3 - largura_interna * altura_interna**3
-    ) / 12.0
+    inercia = (largura * altura**3 - largura_interna * altura_interna**3) / 12.0
     # Torção de tubo fechado de parede fina (fórmula de Bredt), com a área
     # delimitada pela linha média da parede.
     area_media = (largura - espessura) * (altura - espessura)
@@ -404,15 +383,8 @@ def tensoes_lame(
         raise ValueError("O raio avaliado deve estar dentro da parede.")
 
     denominador = raio_externo**2 - raio_interno**2
-    uniforme = (
-        pressao_interna * raio_interno**2 - pressao_externa * raio_externo**2
-    ) / denominador
-    variavel = (
-        (pressao_interna - pressao_externa)
-        * raio_interno**2
-        * raio_externo**2
-        / denominador
-    )
+    uniforme = (pressao_interna * raio_interno**2 - pressao_externa * raio_externo**2) / denominador
+    variavel = (pressao_interna - pressao_externa) * raio_interno**2 * raio_externo**2 / denominador
     sigma_radial = uniforme - variavel / raio**2
     sigma_circunferencial = uniforme + variavel / raio**2
     sigma_longitudinal = uniforme if extremidades_fechadas else 0.0
@@ -452,8 +424,7 @@ def cilindro_parede_espessa(
         rotulo_plano = "plano longitudinal-circunferencial"
     else:
         raise ValueError(
-            "plano deve ser 'radial-circunferencial' ou "
-            "'longitudinal-circunferencial'."
+            "plano deve ser 'radial-circunferencial' ou 'longitudinal-circunferencial'."
         )
 
     return EstadoPlanoCalculado(
@@ -478,9 +449,7 @@ def indice_mola(diametro_medio_mm: float, diametro_fio_mm: float) -> float:
     diametro_medio = _positivo("diametro_medio_mm", diametro_medio_mm)
     diametro_fio = _positivo("diametro_fio_mm", diametro_fio_mm)
     if diametro_medio <= diametro_fio:
-        raise ValueError(
-            "O diâmetro médio da mola deve ser maior que o do fio."
-        )
+        raise ValueError("O diâmetro médio da mola deve ser maior que o do fio.")
     return diametro_medio / diametro_fio
 
 
@@ -505,24 +474,16 @@ def mola_helicoidal(
     diametro_fio = float(diametro_fio_mm)
     fator = fator_wahl(indice) if usar_fator_wahl else 1.0
     tau = fator * 8.0 * forca * diametro_medio / (math.pi * diametro_fio**3)
-    correcao = (
-        f"fator de Wahl K = {fator:.3f}"
-        if usar_fator_wahl
-        else "sem fator de correção"
-    )
+    correcao = f"fator de Wahl K = {fator:.3f}" if usar_fator_wahl else "sem fator de correção"
     return EstadoPlanoCalculado(
         sigma_x=0.0,
         sigma_y=0.0,
         tau_xy=tau,
-        descricao=(
-            f"Mola helicoidal de espiras circulares, C = {indice:.2f}, "
-            f"{correcao}"
-        ),
+        descricao=(f"Mola helicoidal de espiras circulares, C = {indice:.2f}, {correcao}"),
         hipoteses=(
             "Espiras circulares de seção cheia e passo pequeno.",
             "Tensão avaliada na fibra interna da espira, onde é máxima.",
-            "Flambagem da mola, atrito entre espiras e efeitos das "
-            "extremidades não incluídos.",
+            "Flambagem da mola, atrito entre espiras e efeitos das extremidades não incluídos.",
             "Para carga variável, trate a parcela alternada em Fadiga.",
         ),
     )
@@ -546,23 +507,17 @@ def tensao_flexao_assimetrica(
     seção simétrica. Com Iyz != 0 — cantoneira, por exemplo — os dois momentos
     se acoplam e a linha neutra deixa de ser paralela ao eixo do momento.
     """
-    determinante = (
-        inercia_y_mm4 * inercia_z_mm4 - produto_inercia_mm4**2
-    )
+    determinante = inercia_y_mm4 * inercia_z_mm4 - produto_inercia_mm4**2
     if determinante <= 0:
-        raise ValueError(
-            "Iy·Iz deve ser maior que Iyz²; verifique as propriedades da seção."
-        )
+        raise ValueError("Iy·Iz deve ser maior que Iyz²; verifique as propriedades da seção.")
     coeficiente_z = (
         momento_y_Nmm * inercia_z_mm4 + momento_z_Nmm * produto_inercia_mm4
     ) / determinante
-    coeficiente_y = -(
-        momento_y_Nmm * produto_inercia_mm4 + momento_z_Nmm * inercia_y_mm4
-    ) / determinante
+    coeficiente_y = (
+        -(momento_y_Nmm * produto_inercia_mm4 + momento_z_Nmm * inercia_y_mm4) / determinante
+    )
     return (
-        forca_axial_N / area_mm2
-        + coeficiente_y * coordenada_y_mm
-        + coeficiente_z * coordenada_z_mm
+        forca_axial_N / area_mm2 + coeficiente_y * coordenada_y_mm + coeficiente_z * coordenada_z_mm
     )
 
 
@@ -579,19 +534,15 @@ def angulo_linha_neutra(
     próprio eixo z. Um valor diferente de zero indica que a peça flexiona
     fora do plano de carregamento.
     """
-    determinante = (
-        inercia_y_mm4 * inercia_z_mm4 - produto_inercia_mm4**2
-    )
+    determinante = inercia_y_mm4 * inercia_z_mm4 - produto_inercia_mm4**2
     if determinante <= 0:
-        raise ValueError(
-            "Iy·Iz deve ser maior que Iyz²; verifique as propriedades da seção."
-        )
+        raise ValueError("Iy·Iz deve ser maior que Iyz²; verifique as propriedades da seção.")
     coeficiente_z = (
         momento_y_Nmm * inercia_z_mm4 + momento_z_Nmm * produto_inercia_mm4
     ) / determinante
-    coeficiente_y = -(
-        momento_y_Nmm * produto_inercia_mm4 + momento_z_Nmm * inercia_y_mm4
-    ) / determinante
+    coeficiente_y = (
+        -(momento_y_Nmm * produto_inercia_mm4 + momento_z_Nmm * inercia_y_mm4) / determinante
+    )
     if coeficiente_y == 0.0 and coeficiente_z == 0.0:
         return 0.0
     angulo = math.degrees(math.atan2(-coeficiente_z, coeficiente_y))
@@ -628,29 +579,22 @@ def propriedades_perfil_u(
     aba = mesa - t_alma
     area = altura * t_alma + 2.0 * aba * t_mesa
     z_centroide = (
-        altura * t_alma * (t_alma / 2.0)
-        + 2.0 * aba * t_mesa * ((mesa + t_alma) / 2.0)
+        altura * t_alma * (t_alma / 2.0) + 2.0 * aba * t_mesa * ((mesa + t_alma) / 2.0)
     ) / area
     inercia_z = t_alma * altura**3 / 12.0 + 2.0 * (
-        aba * t_mesa**3 / 12.0
-        + aba * t_mesa * ((altura - t_mesa) / 2.0) ** 2
+        aba * t_mesa**3 / 12.0 + aba * t_mesa * ((altura - t_mesa) / 2.0) ** 2
     )
     inercia_y = (
         altura * t_alma**3 / 12.0
         + altura * t_alma * (t_alma / 2.0 - z_centroide) ** 2
-        + 2.0
-        * (
-            t_mesa * aba**3 / 12.0
-            + aba * t_mesa * ((mesa + t_alma) / 2.0 - z_centroide) ** 2
-        )
+        + 2.0 * (t_mesa * aba**3 / 12.0 + aba * t_mesa * ((mesa + t_alma) / 2.0 - z_centroide) ** 2)
     )
     # Centro de cisalhamento pela teoria de parede fina, medido a partir da
     # linha média da alma e para o lado oposto ao das mesas.
     mesa_media = mesa - t_alma / 2.0
     altura_media = altura - t_mesa
     excentricidade = (
-        3.0 * mesa_media**2 * t_mesa
-        / (altura_media * t_alma + 6.0 * mesa_media * t_mesa)
+        3.0 * mesa_media**2 * t_mesa / (altura_media * t_alma + 6.0 * mesa_media * t_mesa)
     )
     return {
         "area": area,
@@ -734,9 +678,7 @@ def propriedades_cantoneira_abas_iguais(
     area_vertical = espessura * aba
     area_horizontal = (aba - espessura) * espessura
     area = area_vertical + area_horizontal
-    centroide = (
-        area_vertical * (aba / 2.0) + area_horizontal * (espessura / 2.0)
-    ) / area
+    centroide = (area_vertical * (aba / 2.0) + area_horizontal * (espessura / 2.0)) / area
 
     distancia_v_y = aba / 2.0 - centroide
     distancia_h_y = espessura / 2.0 - centroide

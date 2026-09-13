@@ -100,15 +100,15 @@ def normalizar_criterios_projeto(valor: Mapping[str, Any] | None) -> dict[str, A
 
     for grandeza, opcoes in UNIDADES_PROJETO.items():
         unidade = str(resultado["unidades"].get(grandeza) or padrao["unidades"][grandeza])
-        resultado["unidades"][grandeza] = unidade if unidade in opcoes else padrao["unidades"][grandeza]
+        resultado["unidades"][grandeza] = (
+            unidade if unidade in opcoes else padrao["unidades"][grandeza]
+        )
 
     seguranca = resultado["seguranca"]
     seguranca["fator_seguranca_minimo"] = _numero(
         seguranca.get("fator_seguranca_minimo"), 1.5, minimo=0.01
     )
-    seguranca["utilizacao_maxima"] = _numero(
-        seguranca.get("utilizacao_maxima"), 1.0, minimo=0.01
-    )
+    seguranca["utilizacao_maxima"] = _numero(seguranca.get("utilizacao_maxima"), 1.0, minimo=0.01)
     seguranca["probabilidade_nao_atendimento_max_pct"] = min(
         100.0,
         _numero(
@@ -120,15 +120,9 @@ def normalizar_criterios_projeto(valor: Mapping[str, Any] | None) -> dict[str, A
     )
 
     operacao = resultado["operacao"]
-    operacao["temperatura_projeto_C"] = _numero(
-        operacao.get("temperatura_projeto_C"), None
-    )
-    operacao["pressao_projeto_bar"] = _numero(
-        operacao.get("pressao_projeto_bar"), None, minimo=0.0
-    )
-    operacao["vida_util_anos"] = _numero(
-        operacao.get("vida_util_anos"), None, minimo=0.0
-    )
+    operacao["temperatura_projeto_C"] = _numero(operacao.get("temperatura_projeto_C"), None)
+    operacao["pressao_projeto_bar"] = _numero(operacao.get("pressao_projeto_bar"), None, minimo=0.0)
+    operacao["vida_util_anos"] = _numero(operacao.get("vida_util_anos"), None, minimo=0.0)
     operacao["regime"] = str(operacao.get("regime") or "").strip()
 
     combinacoes = resultado["combinacoes"]
@@ -152,7 +146,15 @@ def conteudo_tecnico_criterios(valor: Mapping[str, Any] | None) -> dict[str, Any
     criterios = normalizar_criterios_projeto(valor)
     return {
         chave: criterios[chave]
-        for chave in ("schema_criterios", "versao", "unidades", "seguranca", "operacao", "combinacoes", "normativo")
+        for chave in (
+            "schema_criterios",
+            "versao",
+            "unidades",
+            "seguranca",
+            "operacao",
+            "combinacoes",
+            "normativo",
+        )
     }
 
 

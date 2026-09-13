@@ -168,14 +168,9 @@ def tensao_torcao(esforcos: EsforcosSecao, secao: SecaoTensionavel) -> float:
     return esforcos.torque_Nmm / secao.modulo_torcao_mm3
 
 
-def tensao_normal_em(
-    esforcos: EsforcosSecao, secao: SecaoTensionavel, y_mm: float
-) -> float:
+def tensao_normal_em(esforcos: EsforcosSecao, secao: SecaoTensionavel, y_mm: float) -> float:
     """Tensão normal a ``y_mm`` do centroide (positivo para cima)."""
-    return (
-        esforcos.normal_N / secao.area_mm2
-        - esforcos.momento_Nmm * y_mm / secao.inercia_mm4
-    )
+    return esforcos.normal_N / secao.area_mm2 - esforcos.momento_Nmm * y_mm / secao.inercia_mm4
 
 
 def cisalhamento_na_linha_neutra(cisalhamento_MPa: float, torcao_MPa: float) -> float:
@@ -191,15 +186,11 @@ def cisalhamento_na_linha_neutra(cisalhamento_MPa: float, torcao_MPa: float) -> 
     e carga transversal.
     """
     magnitude = abs(cisalhamento_MPa) + abs(torcao_MPa)
-    dominante = (
-        cisalhamento_MPa if abs(cisalhamento_MPa) >= abs(torcao_MPa) else torcao_MPa
-    )
+    dominante = cisalhamento_MPa if abs(cisalhamento_MPa) >= abs(torcao_MPa) else torcao_MPa
     return math.copysign(magnitude, dominante)
 
 
-def tensoes_combinadas(
-    esforcos: EsforcosSecao, secao: SecaoTensionavel
-) -> TensoesCombinadas:
+def tensoes_combinadas(esforcos: EsforcosSecao, secao: SecaoTensionavel) -> TensoesCombinadas:
     """Parcelas de tensão e os três pontos candidatos da seção.
 
     Os candidatos são fibra superior, fibra inferior e linha neutra. Avaliar
@@ -224,8 +215,6 @@ def tensoes_combinadas(
         pontos=(
             PontoTensao(NOME_SUPERIOR, axial + flexao_superior, torcao),
             PontoTensao(NOME_INFERIOR, axial + flexao_inferior, torcao),
-            PontoTensao(
-                NOME_NEUTRA, axial, cisalhamento_na_linha_neutra(cisalhamento, torcao)
-            ),
+            PontoTensao(NOME_NEUTRA, axial, cisalhamento_na_linha_neutra(cisalhamento, torcao)),
         ),
     )

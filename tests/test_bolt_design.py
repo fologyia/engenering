@@ -36,24 +36,18 @@ class BoltGroupTests(unittest.TestCase):
         self.assertTrue(all(abs(v - 5_000.0) < 1e-9 for v in grupo.forcas_cisalhantes_N))
 
     def test_overturning_moment_load_distribution(self):
-        grupo = bolts.distribuir_cargas_grupo_circular(
-            4, 50.0, momento_tombamento_Nmm=1_000_000.0
-        )
+        grupo = bolts.distribuir_cargas_grupo_circular(4, 50.0, momento_tombamento_Nmm=1_000_000.0)
         # Soma x² = 2R²; o parafuso em x=R recebe M/(2R).
         self.assertAlmostEqual(grupo.maior_tracao_N, 10_000.0)
         self.assertAlmostEqual(sum(grupo.forcas_axiais_N), 0.0)
 
     def test_torsion_is_equal_for_circular_pattern(self):
-        grupo = bolts.distribuir_cargas_grupo_circular(
-            6, 40.0, torque_grupo_Nmm=240_000.0
-        )
+        grupo = bolts.distribuir_cargas_grupo_circular(6, 40.0, torque_grupo_Nmm=240_000.0)
         self.assertTrue(all(abs(v - 1_000.0) < 1e-9 for v in grupo.forcas_cisalhantes_N))
 
     def test_zero_radius_rejects_moment(self):
         with self.assertRaises(ValueError):
-            bolts.distribuir_cargas_grupo_circular(
-                1, 0.0, momento_tombamento_Nmm=10.0
-            )
+            bolts.distribuir_cargas_grupo_circular(1, 0.0, momento_tombamento_Nmm=10.0)
 
 
 class BoltJointTests(unittest.TestCase):
@@ -112,8 +106,7 @@ class BoltJointTests(unittest.TestCase):
     def test_combined_stress_uses_von_mises(self):
         resultado = self._resultado()
         esperado = math.sqrt(
-            resultado.tensao_axial_MPa**2
-            + 3.0 * resultado.tensao_cisalhante_MPa**2
+            resultado.tensao_axial_MPa**2 + 3.0 * resultado.tensao_cisalhante_MPa**2
         )
         self.assertAlmostEqual(resultado.tensao_von_mises_MPa, esperado)
 

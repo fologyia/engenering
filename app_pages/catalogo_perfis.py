@@ -176,16 +176,13 @@ with st.container(border=True):
     if gravar:
         dados = {"nome": nome, "familia": familia, "descricao": descricao, **valores}
         try:
-            salvo = catalogo.salvar_perfil(
-                dados, origem=origem, observacoes=observacoes
-            )
+            salvo = catalogo.salvar_perfil(dados, origem=origem, observacoes=observacoes)
         except catalogo.ErroDeCatalogo as erro:
             st.error(str(erro), icon=":material/error:")
         else:
             avisos = catalogo.conferir_coerencia(salvo.perfil)
             st.success(
-                f"Perfil **{salvo.perfil.nome}** salvo e já disponível nos módulos "
-                "de cálculo.",
+                f"Perfil **{salvo.perfil.nome}** salvo e já disponível nos módulos de cálculo.",
                 icon=":material/check_circle:",
             )
             for aviso in avisos:
@@ -237,9 +234,7 @@ with st.container(border=True):
                 st.error(str(erro), icon=":material/error:")
             else:
                 st.session_state.pop("perfis_excluir_confirma", None)
-                st.success(
-                    f"Perfil **{escolhido}** excluído.", icon=":material/check_circle:"
-                )
+                st.success(f"Perfil **{escolhido}** excluído.", icon=":material/check_circle:")
                 st.rerun()
 
 
@@ -286,7 +281,13 @@ with st.container(border=True):
         try:
             from io import StringIO
 
-            separador = "\t" if "\t" in texto.splitlines()[0] else ";" if ";" in texto.splitlines()[0] else ","
+            separador = (
+                "\t"
+                if "\t" in texto.splitlines()[0]
+                else ";"
+                if ";" in texto.splitlines()[0]
+                else ","
+            )
             tabela = pd.read_csv(StringIO(texto), sep=separador)
         except Exception as erro:  # noqa: BLE001 - erro de formato do usuário
             st.error(f"Não foi possível ler a tabela: {erro}", icon=":material/error:")
@@ -309,9 +310,7 @@ with st.container(border=True):
                     icon=":material/check_circle:",
                 )
             if rejeitados:
-                st.error(
-                    f"{len(rejeitados)} linha(s) recusada(s).", icon=":material/error:"
-                )
+                st.error(f"{len(rejeitados)} linha(s) recusada(s).", icon=":material/error:")
                 st.dataframe(
                     pd.DataFrame(rejeitados, columns=["Perfil", "Motivo"]),
                     hide_index=True,

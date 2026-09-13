@@ -270,9 +270,7 @@ def criar_tabela_transformacoes(
     ]
     linhas = []
     for nome, angulo in estados:
-        transformacao = mohr.transformar_tensoes_planas(
-            sigma_x, sigma_y, tau_xy, angulo
-        )
+        transformacao = mohr.transformar_tensoes_planas(sigma_x, sigma_y, tau_xy, angulo)
         linhas.append(
             {
                 "Estado": nome,
@@ -392,11 +390,7 @@ def criar_grafico_mohr_3d(
             ],
         )
     )
-    return (
-        (linha_zero + linhas + principais + rotulos + plano)
-        .properties(height=500)
-        .interactive()
-    )
+    return (linha_zero + linhas + principais + rotulos + plano).properties(height=500).interactive()
 
 
 def mostrar_diagnostico_equivalente(von_mises: float, tresca: float | None = None) -> None:
@@ -434,7 +428,9 @@ cabecalho_pagina(
     icone=":material/donut_large:",
     cor="blue",
     ajuda_modulo="Círculo de Mohr",
-    acoes=(("app_pages/assistente_cargas.py", "Calcular pelas cargas", ":material/manufacturing:"),),
+    acoes=(
+        ("app_pages/assistente_cargas.py", "Calcular pelas cargas", ":material/manufacturing:"),
+    ),
     modulo_id="circulo_mohr",
 )
 st.info(
@@ -510,9 +506,7 @@ if modo == "Estado plano (2D)":
             persist_state="session",
         )
 
-    resultado_2d = mohr.analisar_estado_plano(
-        sigma_x, sigma_y, tau_xy, theta_graus
-    )
+    resultado_2d = mohr.analisar_estado_plano(sigma_x, sigma_y, tau_xy, theta_graus)
     transformada = resultado_2d.transformacao
 
     st.subheader("Resultados principais")
@@ -529,17 +523,30 @@ if modo == "Estado plano (2D)":
         st.metric("τmáx no plano", formatar_tensao(resultado_2d.tau_max_plana), border=True)
         st.metric("von Mises", formatar_tensao(resultado_2d.von_mises), border=True)
     with st.container(horizontal=True):
-        st.metric("σx' no plano escolhido", formatar_tensao(transformada.sigma_x_linha), border=True)
-        st.metric("σy' no plano escolhido", formatar_tensao(transformada.sigma_y_linha), border=True)
-        st.metric("τx'y' no plano escolhido", formatar_tensao(transformada.tau_x_linha_y_linha), border=True)
+        st.metric(
+            "σx' no plano escolhido", formatar_tensao(transformada.sigma_x_linha), border=True
+        )
+        st.metric(
+            "σy' no plano escolhido", formatar_tensao(transformada.sigma_y_linha), border=True
+        )
+        st.metric(
+            "τx'y' no plano escolhido",
+            formatar_tensao(transformada.tau_x_linha_y_linha),
+            border=True,
+        )
         st.metric("τmáx absoluto (3D)", formatar_tensao(resultado_2d.tau_max_absoluta), border=True)
 
     tabela_resumo_mohr_2d = pd.DataFrame(
         {
             "Grandeza": [
-                "σ1 no plano", "σ2 no plano", "τmáx no plano", "von Mises",
-                "σx' no plano escolhido", "σy' no plano escolhido",
-                "τx'y' no plano escolhido", "τmáx absoluto (3D)",
+                "σ1 no plano",
+                "σ2 no plano",
+                "τmáx no plano",
+                "von Mises",
+                "σx' no plano escolhido",
+                "σy' no plano escolhido",
+                "τx'y' no plano escolhido",
+                "τmáx absoluto (3D)",
             ],
             "Valor (MPa)": [
                 resultado_2d.sigma_1_plana,
@@ -586,9 +593,7 @@ if modo == "Estado plano (2D)":
         with st.container(border=True):
             st.subheader("Original × transformado")
             st.altair_chart(
-                criar_grafico_componentes_2d(
-                    sigma_x, sigma_y, tau_xy, resultado_2d
-                ),
+                criar_grafico_componentes_2d(sigma_x, sigma_y, tau_xy, resultado_2d),
                 width="stretch",
             )
             st.markdown(
@@ -704,7 +709,9 @@ if modo == "Estado plano (2D)":
             "Tensor simétrico e estado plano de tensões, com sigma_z = 0.",
             "Ângulos representam rotação física anti-horária do elemento.",
         ],
-        referencias=["Vincular o tensor ao ponto, caso de carga e revisão do modelo ou memória de origem."],
+        referencias=[
+            "Vincular o tensor ao ponto, caso de carga e revisão do modelo ou memória de origem."
+        ],
         conclusao="Estado transformado calculado; a aceitação depende do material e do critério do projeto.",
     )
     if exemplo == "assistente" and not origem_assistente:
@@ -749,17 +756,26 @@ else:
         normais = st.columns(3)
         with normais[0]:
             sigma_x = st.number_input(
-                "σx (MPa)", value=padroes[0], step=5.0, key=f"mohr_3d_sx_{exemplo}",
+                "σx (MPa)",
+                value=padroes[0],
+                step=5.0,
+                key=f"mohr_3d_sx_{exemplo}",
                 persist_state="session",
             )
         with normais[1]:
             sigma_y = st.number_input(
-                "σy (MPa)", value=padroes[1], step=5.0, key=f"mohr_3d_sy_{exemplo}",
+                "σy (MPa)",
+                value=padroes[1],
+                step=5.0,
+                key=f"mohr_3d_sy_{exemplo}",
                 persist_state="session",
             )
         with normais[2]:
             sigma_z = st.number_input(
-                "σz (MPa)", value=padroes[2], step=5.0, key=f"mohr_3d_sz_{exemplo}",
+                "σz (MPa)",
+                value=padroes[2],
+                step=5.0,
+                key=f"mohr_3d_sz_{exemplo}",
                 persist_state="session",
             )
         cisalhamentos = st.columns(3)
@@ -806,11 +822,17 @@ else:
         if modo_normal == "Componentes":
             componentes = st.columns(3)
             with componentes[0]:
-                normal_x = st.number_input("nx", value=1.0, step=0.1, key="normal_x_3d", persist_state="session")
+                normal_x = st.number_input(
+                    "nx", value=1.0, step=0.1, key="normal_x_3d", persist_state="session"
+                )
             with componentes[1]:
-                normal_y = st.number_input("ny", value=1.0, step=0.1, key="normal_y_3d", persist_state="session")
+                normal_y = st.number_input(
+                    "ny", value=1.0, step=0.1, key="normal_y_3d", persist_state="session"
+                )
             with componentes[2]:
-                normal_z = st.number_input("nz", value=0.0, step=0.1, key="normal_z_3d", persist_state="session")
+                normal_z = st.number_input(
+                    "nz", value=0.0, step=0.1, key="normal_z_3d", persist_state="session"
+                )
             normal = (normal_x, normal_y, normal_z)
         else:
             angulos_normal = st.columns(2)
@@ -868,15 +890,23 @@ else:
         st.metric("τmáx absoluto", formatar_tensao(resultado_3d.tau_max_absoluta), border=True)
     with st.container(horizontal=True):
         st.metric("von Mises", formatar_tensao(resultado_3d.von_mises), border=True)
-        st.metric("Tresca equivalente", formatar_tensao(resultado_3d.tresca_equivalente), border=True)
+        st.metric(
+            "Tresca equivalente", formatar_tensao(resultado_3d.tresca_equivalente), border=True
+        )
         st.metric("Tensão média", formatar_tensao(resultado_3d.tensao_media), border=True)
         st.metric("τ octaédrica", formatar_tensao(resultado_3d.tau_octaedrica), border=True)
 
     tabela_resumo_mohr_3d = pd.DataFrame(
         {
             "Grandeza": [
-                "σ1", "σ2", "σ3", "τmáx absoluto", "von Mises",
-                "Tresca equivalente", "Tensão média", "τ octaédrica",
+                "σ1",
+                "σ2",
+                "σ3",
+                "τmáx absoluto",
+                "von Mises",
+                "Tresca equivalente",
+                "Tensão média",
+                "τ octaédrica",
             ],
             "Valor (MPa)": [
                 sigma_1,
@@ -901,10 +931,7 @@ else:
     )
 
     escala = max(1.0, max(abs(valor) for valor in resultado_3d.tensoes_principais))
-    if (
-        abs(sigma_1 - sigma_2) <= 1e-9 * escala
-        or abs(sigma_2 - sigma_3) <= 1e-9 * escala
-    ):
+    if abs(sigma_1 - sigma_2) <= 1e-9 * escala or abs(sigma_2 - sigma_3) <= 1e-9 * escala:
         st.info(
             "Há tensões principais repetidas. Dentro do subespaço repetido, "
             "as direções principais não são únicas.",
@@ -979,9 +1006,7 @@ else:
                 "nz": st.column_config.NumberColumn(format="%.5f"),
             },
         )
-        st.caption(
-            "Cada linha fornece o vetor unitário normal ao plano principal correspondente."
-        )
+        st.caption("Cada linha fornece o vetor unitário normal ao plano principal correspondente.")
 
     with st.expander(
         "Avançado — invariantes do tensor (I1, I2, I3, J2, J3)",
@@ -1049,9 +1074,7 @@ else:
             """
         )
 
-    mostrar_diagnostico_equivalente(
-        resultado_3d.von_mises, resultado_3d.tresca_equivalente
-    )
+    mostrar_diagnostico_equivalente(resultado_3d.von_mises, resultado_3d.tresca_equivalente)
     mostrar_verificacao_material(
         resultado_3d.tensoes_principais,
         resultado_3d.von_mises,
@@ -1088,7 +1111,9 @@ else:
             "Tensor de Cauchy simétrico no ponto e sistema de coordenadas informado.",
             "A normal do plano é normalizada automaticamente.",
         ],
-        referencias=["Rastrear o tensor ao nó/elemento, caso de carga e revisão da análise de origem."],
+        referencias=[
+            "Rastrear o tensor ao nó/elemento, caso de carga e revisão da análise de origem."
+        ],
         conclusao="Estado tridimensional calculado; a aceitação depende do critério de falha e da base normativa do projeto.",
     )
     botao_registrar_calculo(

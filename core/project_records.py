@@ -73,9 +73,7 @@ def _numero(valor: Any) -> float | None:
     return numero if math.isfinite(numero) else None
 
 
-def _localizar(
-    projeto: Mapping[str, Any], registro_id: str
-) -> tuple[int, Mapping[str, Any]]:
+def _localizar(projeto: Mapping[str, Any], registro_id: str) -> tuple[int, Mapping[str, Any]]:
     alvo = _texto(registro_id)
     for indice, registro in enumerate(projeto.get("registros_tecnicos", [])):
         if isinstance(registro, Mapping) and _texto(registro.get("id")) == alvo:
@@ -223,7 +221,9 @@ def resumir_registros(projeto: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "criterio_fator": fator[0] if fator else "",
                 "utilizacao": utilizacao_registro(registro),
                 "criado_em": _texto(registro.get("criado_em")),
-                "dependentes": len(dependentes_do_registro(sincronizado, _texto(registro.get("id")))),
+                "dependentes": len(
+                    dependentes_do_registro(sincronizado, _texto(registro.get("id")))
+                ),
             }
         )
     return linhas

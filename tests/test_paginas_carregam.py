@@ -19,9 +19,7 @@ from streamlit.testing.v1 import AppTest
 RAIZ = Path(__file__).resolve().parent.parent
 APP = str(RAIZ / "app.py")
 
-PAGINAS = sorted(
-    f"app_pages/{caminho.name}" for caminho in (RAIZ / "app_pages").glob("*.py")
-)
+PAGINAS = sorted(f"app_pages/{caminho.name}" for caminho in (RAIZ / "app_pages").glob("*.py"))
 
 
 class PaginasTests(unittest.TestCase):

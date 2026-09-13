@@ -1,4 +1,5 @@
 """Acesso e validação da base local de materiais."""
+
 from pathlib import Path
 
 import pandas as pd
@@ -16,8 +17,7 @@ def carregar_materiais() -> pd.DataFrame:
     faltantes = COLUNAS_OBRIGATORIAS.difference(df.columns)
     if faltantes:
         raise ValueError(
-            "Base de materiais inválida. Colunas ausentes: "
-            + ", ".join(sorted(faltantes))
+            "Base de materiais inválida. Colunas ausentes: " + ", ".join(sorted(faltantes))
         )
     if df.empty:
         raise ValueError("A base de materiais está vazia.")

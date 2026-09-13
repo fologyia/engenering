@@ -92,9 +92,7 @@ def _vetor_nao_nulo(vetor: Mapping[str, Any]) -> bool:
 def _regra_contratos(projeto: Mapping[str, Any]) -> ResultadoRegra:
     achados: list[AchadoRegra] = []
     registros = [
-        item
-        for item in projeto.get("registros_tecnicos", [])
-        if isinstance(item, Mapping)
+        item for item in projeto.get("registros_tecnicos", []) if isinstance(item, Mapping)
     ]
     for indice, registro in enumerate(registros, start=1):
         avaliacao = avaliar_contrato_registro(registro)
@@ -141,9 +139,7 @@ def _regra_casos_carga(projeto: Mapping[str, Any]) -> ResultadoRegra:
     achados: list[AchadoRegra] = []
     casos = [item for item in projeto.get("casos_carga", []) if isinstance(item, Mapping)]
     combinacoes = [
-        item
-        for item in projeto.get("combinacoes_carga", [])
-        if isinstance(item, Mapping)
+        item for item in projeto.get("combinacoes_carga", []) if isinstance(item, Mapping)
     ]
     if not casos:
         return ResultadoRegra(
@@ -202,7 +198,9 @@ def _regra_casos_carga(projeto: Mapping[str, Any]) -> ResultadoRegra:
             )
         )
     for combinacao in combinacoes:
-        fatores = combinacao.get("fatores") if isinstance(combinacao.get("fatores"), Mapping) else {}
+        fatores = (
+            combinacao.get("fatores") if isinstance(combinacao.get("fatores"), Mapping) else {}
+        )
         ausentes = sorted(str(caso_id) for caso_id in fatores if str(caso_id) not in ids)
         if ausentes:
             achados.append(
@@ -249,9 +247,7 @@ def _regra_dependencias(projeto: Mapping[str, Any]) -> ResultadoRegra:
     achados: list[AchadoRegra] = []
     sincronizado = sincronizar_estados_dependencias(projeto)
     registros = [
-        item
-        for item in sincronizado.get("registros_tecnicos", [])
-        if isinstance(item, Mapping)
+        item for item in sincronizado.get("registros_tecnicos", []) if isinstance(item, Mapping)
     ]
     preenchidos = 0
     total = 0
@@ -342,9 +338,7 @@ def _regra_margens_calculadas(projeto: Mapping[str, Any]) -> ResultadoRegra:
     """
     achados: list[AchadoRegra] = []
     registros = [
-        item
-        for item in projeto.get("registros_tecnicos", [])
-        if isinstance(item, Mapping)
+        item for item in projeto.get("registros_tecnicos", []) if isinstance(item, Mapping)
     ]
     meta = _meta_do_projeto(projeto)
     limite_utilizacao = _utilizacao_maxima(projeto)
@@ -512,7 +506,8 @@ def _regra_prazos_checklist(projeto: Mapping[str, Any]) -> ResultadoRegra:
                     f"responsável: {responsavel}; estado: {linha['estado']}.",
                     "Conclua o item, registre a evidência ou renegocie o prazo com o responsável.",
                     modulo="Checklist",
-                    evidencia=f"{linha['dias']} dia(s)" + (" · crítico" if linha["critico"] else ""),
+                    evidencia=f"{linha['dias']} dia(s)"
+                    + (" · crítico" if linha["critico"] else ""),
                 )
             )
         elif linha["situacao"] in {SITUACAO_HOJE, SITUACAO_PROXIMO}:
@@ -614,7 +609,11 @@ def _regra_documentos_entrada(projeto: Mapping[str, Any]) -> ResultadoRegra:
     preenchidos = 0
     total = 0
     for indice, documento in enumerate(documentos, start=1):
-        codigo = _texto(documento.get("codigo")) or _texto(documento.get("titulo")) or f"documento {indice}"
+        codigo = (
+            _texto(documento.get("codigo"))
+            or _texto(documento.get("titulo"))
+            or f"documento {indice}"
+        )
         situacao = _texto(documento.get("situacao")).casefold()
         total += 1
         completo = bool(_texto(documento.get("codigo")) and _texto(documento.get("revisao")))
@@ -631,7 +630,10 @@ def _regra_documentos_entrada(projeto: Mapping[str, Any]) -> ResultadoRegra:
                     modulo="Documentos",
                 )
             )
-        citado = bool(_texto(documento.get("codigo"))) and _texto(documento.get("codigo")).casefold() in citados
+        citado = (
+            bool(_texto(documento.get("codigo")))
+            and _texto(documento.get("codigo")).casefold() in citados
+        )
         if situacao in _SITUACOES_DOCUMENTO_AGUARDANDO:
             achados.append(
                 AchadoRegra(
@@ -658,11 +660,33 @@ def _regra_documentos_entrada(projeto: Mapping[str, Any]) -> ResultadoRegra:
     return ResultadoRegra(tuple(achados), preenchidos, total)
 
 
-registrar_regra(RegraValidacao("contrato-registro", "Contrato dos registros técnicos", "1.0", _regra_contratos))
-registrar_regra(RegraValidacao("casos-carga", "Casos e combinações de carga", "1.0", _regra_casos_carga))
-registrar_regra(RegraValidacao("dependencias-calculo", "Atualidade dos cálculos dependentes", "1.0", _regra_dependencias))
-registrar_regra(RegraValidacao("margens-calculadas", "Margens de segurança calculadas", "1.0", _regra_margens_calculadas))
-registrar_regra(RegraValidacao("deslocamentos", "Deslocamentos em serviço", "1.0", _regra_deslocamentos))
-registrar_regra(RegraValidacao("prazos-checklist", "Prazos do checklist", "1.0", _regra_prazos_checklist))
-registrar_regra(RegraValidacao("criterios-projeto", "Critérios técnicos do projeto", "1.0", _regra_criterios_projeto))
-registrar_regra(RegraValidacao("documentos-entrada", "Documentos de entrada", "1.0", _regra_documentos_entrada))
+registrar_regra(
+    RegraValidacao("contrato-registro", "Contrato dos registros técnicos", "1.0", _regra_contratos)
+)
+registrar_regra(
+    RegraValidacao("casos-carga", "Casos e combinações de carga", "1.0", _regra_casos_carga)
+)
+registrar_regra(
+    RegraValidacao(
+        "dependencias-calculo", "Atualidade dos cálculos dependentes", "1.0", _regra_dependencias
+    )
+)
+registrar_regra(
+    RegraValidacao(
+        "margens-calculadas", "Margens de segurança calculadas", "1.0", _regra_margens_calculadas
+    )
+)
+registrar_regra(
+    RegraValidacao("deslocamentos", "Deslocamentos em serviço", "1.0", _regra_deslocamentos)
+)
+registrar_regra(
+    RegraValidacao("prazos-checklist", "Prazos do checklist", "1.0", _regra_prazos_checklist)
+)
+registrar_regra(
+    RegraValidacao(
+        "criterios-projeto", "Critérios técnicos do projeto", "1.0", _regra_criterios_projeto
+    )
+)
+registrar_regra(
+    RegraValidacao("documentos-entrada", "Documentos de entrada", "1.0", _regra_documentos_entrada)
+)

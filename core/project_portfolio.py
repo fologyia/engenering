@@ -57,9 +57,7 @@ def resumir_projeto(
     checklist = resumo_checklist(projeto.get("checklist", []), hoje=referencia)
     sincronizado = sincronizar_estados_dependencias(projeto)
     registros = [
-        item
-        for item in sincronizado.get("registros_tecnicos", [])
-        if isinstance(item, Mapping)
+        item for item in sincronizado.get("registros_tecnicos", []) if isinstance(item, Mapping)
     ]
     vigentes = [item for item in registros if not registro_superado(item)]
     desatualizados = [
@@ -122,7 +120,9 @@ def resumir_carteira(resumos: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "por_situacao": por_situacao,
         "com_bloqueio": sum(1 for item in resumos if item["bloqueios"]),
         "prontos": sum(
-            1 for item in resumos if item["prontidao"] in {"Pronto para revisão", "Pronto com ressalvas"}
+            1
+            for item in resumos
+            if item["prontidao"] in {"Pronto para revisão", "Pronto com ressalvas"}
         ),
         "emitidos": sum(1 for item in resumos if item["status"] == EMITIDO),
         "em_verificacao": sum(1 for item in resumos if item["status"] == EM_VERIFICACAO),
@@ -158,7 +158,9 @@ def vencimentos_da_carteira(
                     **dict(item),
                 }
             )
-    linhas.sort(key=lambda linha: (linha["dias"] if linha["dias"] is not None else 0, not linha["critico"]))
+    linhas.sort(
+        key=lambda linha: (linha["dias"] if linha["dias"] is not None else 0, not linha["critico"])
+    )
     return linhas
 
 
@@ -208,13 +210,15 @@ def proximos_passos(
         passo(
             "Cobrar itens vencidos do checklist",
             f"{linha['checklist_vencidos']} item(ns) com prazo vencido"
-            + (f", {linha['criticos_abertos']} crítico(s) em aberto." if linha["criticos_abertos"] else "."),
+            + (
+                f", {linha['criticos_abertos']} crítico(s) em aberto."
+                if linha["criticos_abertos"]
+                else "."
+            ),
             "app_pages/gestao_projetos.py",
         )
     bloqueios = [
-        achado
-        for achado in resultado.get("achados", [])
-        if achado.get("severidade") == "Bloqueio"
+        achado for achado in resultado.get("achados", []) if achado.get("severidade") == "Bloqueio"
     ]
     categorias = list(dict.fromkeys(achado.get("categoria", "") for achado in bloqueios))
     if bloqueios:

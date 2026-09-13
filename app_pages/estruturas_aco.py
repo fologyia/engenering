@@ -179,8 +179,7 @@ verificar estabilidade global do pórtico.
     )
 
     st.caption(
-        "Cada um dos 5 módulos tem um exemplo numérico completo e "
-        "reproduzível no Guia geral."
+        "Cada um dos 5 módulos tem um exemplo numérico completo e reproduzível no Guia geral."
     )
     st.page_link(
         "app_pages/guia_geral.py",
@@ -208,14 +207,12 @@ if modulo == "1. Perfis":
     catalogo = catalogo_perfis.catalogo_dataframe()
     familias = sorted(catalogo["familia"].unique())
     familia = st.selectbox(
-        "Família", ["Todas"] + familias, key="estrutura_perfil_familia_filtro",
+        "Família",
+        ["Todas"] + familias,
+        key="estrutura_perfil_familia_filtro",
         persist_state="session",
     )
-    filtrado = (
-        catalogo
-        if familia == "Todas"
-        else catalogo[catalogo["familia"] == familia]
-    )
+    filtrado = catalogo if familia == "Todas" else catalogo[catalogo["familia"] == familia]
     tabela_catalogo = pd.DataFrame(
         {
             "Perfil": filtrado["nome"],
@@ -258,7 +255,15 @@ if modulo == "1. Perfis":
         propriedades = pd.DataFrame(
             {
                 "Propriedade": [
-                    "Sx", "Sy", "Zx", "Zy", "rx", "ry", "J", "Cw", "Área de cisalhamento"
+                    "Sx",
+                    "Sy",
+                    "Zx",
+                    "Zy",
+                    "rx",
+                    "ry",
+                    "J",
+                    "Cw",
+                    "Área de cisalhamento",
                 ],
                 "Valor": [
                     perfil.sx_mm3 / 1e3,
@@ -271,17 +276,13 @@ if modulo == "1. Perfis":
                     perfil.cw_mm6 / 1e6,
                     perfil.area_cisalhamento_mm2 / 100,
                 ],
-                "Unidade": [
-                    "cm³", "cm³", "cm³", "cm³", "cm", "cm", "cm⁴", "cm⁶", "cm²"
-                ],
+                "Unidade": ["cm³", "cm³", "cm³", "cm³", "cm", "cm", "cm⁴", "cm⁶", "cm²"],
             }
         )
         st.dataframe(
             propriedades,
             hide_index=True,
-            column_config={
-                "Valor": st.column_config.NumberColumn(format="%.4g")
-            },
+            column_config={"Valor": st.column_config.NumberColumn(format="%.4g")},
         )
         st.download_button(
             "Baixar propriedades do perfil em CSV",
@@ -353,9 +354,7 @@ if modulo == "1. Perfis":
                 h = dimensoes[0].number_input(
                     "h (mm)", 1.0, value=150.0, key="estrutura_custom_u_h"
                 )
-                b = dimensoes[1].number_input(
-                    "b (mm)", 1.0, value=75.0, key="estrutura_custom_u_b"
-                )
+                b = dimensoes[1].number_input("b (mm)", 1.0, value=75.0, key="estrutura_custom_u_b")
                 tw = dimensoes[2].number_input(
                     "tw (mm)", 0.1, value=6.5, key="estrutura_custom_u_tw"
                 )
@@ -368,15 +367,11 @@ if modulo == "1. Perfis":
                 h = dimensoes[0].number_input(
                     "h (mm)", 1.0, value=150.0, key="estrutura_custom_c_h"
                 )
-                b = dimensoes[1].number_input(
-                    "b (mm)", 1.0, value=50.0, key="estrutura_custom_c_b"
-                )
+                b = dimensoes[1].number_input("b (mm)", 1.0, value=50.0, key="estrutura_custom_c_b")
                 d = dimensoes[2].number_input(
                     "aba enrijecedora (mm)", 0.1, value=17.0, key="estrutura_custom_c_d"
                 )
-                t = dimensoes[3].number_input(
-                    "t (mm)", 0.1, value=3.0, key="estrutura_custom_c_t"
-                )
+                t = dimensoes[3].number_input("t (mm)", 0.1, value=3.0, key="estrutura_custom_c_t")
                 custom = secoes.perfil_c_enrijecido("Personalizado", h, b, d, t)
             elif familia_custom == "T (tê)":
                 dimensoes = st.columns(4)
@@ -457,12 +452,8 @@ elif modulo == "2. Barras":
         fu = material[1].number_input(
             "Fu (MPa)", 1.0, value=400.0, step=10.0, key="estrutura_barra_fu"
         )
-        e = material[2].number_input(
-            "E (GPa)", 1.0, value=200.0, step=5.0, key="estrutura_barra_e"
-        )
-        g = material[3].number_input(
-            "G (GPa)", 1.0, value=77.0, step=1.0, key="estrutura_barra_g"
-        )
+        e = material[2].number_input("E (GPa)", 1.0, value=200.0, step=5.0, key="estrutura_barra_e")
+        g = material[3].number_input("G (GPa)", 1.0, value=77.0, step=1.0, key="estrutura_barra_g")
         if fu < fy:
             st.error("Fu deve ser maior ou igual a Fy.", icon=":material/error:")
             st.stop()
@@ -476,18 +467,12 @@ elif modulo == "2. Barras":
             persist_state="session",
         )
         esforcos = st.columns(4)
-        nd_kN = esforcos[0].number_input(
-            "|Nd| (kN)", 0.0, step=10.0, key="estrutura_nd_kN"
-        )
-        mdx_kNm = esforcos[1].number_input(
-            "|Mdx| (kN·m)", 0.0, step=5.0, key="estrutura_mdx_kNm"
-        )
+        nd_kN = esforcos[0].number_input("|Nd| (kN)", 0.0, step=10.0, key="estrutura_nd_kN")
+        mdx_kNm = esforcos[1].number_input("|Mdx| (kN·m)", 0.0, step=5.0, key="estrutura_mdx_kNm")
         mdy_kNm = esforcos[2].number_input(
             "|Mdy| (kN·m)", 0.0, value=0.0, step=5.0, key="estrutura_mdy_kNm"
         )
-        vd_kN = esforcos[3].number_input(
-            "|Vd| (kN)", 0.0, step=5.0, key="estrutura_vd_kN"
-        )
+        vd_kN = esforcos[3].number_input("|Vd| (kN)", 0.0, step=5.0, key="estrutura_vd_kN")
 
     with st.container(border=True):
         st.subheader("Comprimentos e reduções")
@@ -498,12 +483,8 @@ elif modulo == "2. Barras":
             step=0.25,
             key="estrutura_comprimento_m",
         )
-        kx = estabilidade[1].number_input(
-            "Kx", 0.01, value=1.0, step=0.1, key="estrutura_kx"
-        )
-        ky = estabilidade[2].number_input(
-            "Ky", 0.01, value=1.0, step=0.1, key="estrutura_ky"
-        )
+        kx = estabilidade[1].number_input("Kx", 0.01, value=1.0, step=0.1, key="estrutura_kx")
+        ky = estabilidade[2].number_input("Ky", 0.01, value=1.0, step=0.1, key="estrutura_ky")
         lb_m = estabilidade[3].number_input(
             "Comprimento destravado Lb (m)",
             0.001,
@@ -523,9 +504,7 @@ elif modulo == "2. Barras":
             step=0.05,
             key="estrutura_cv",
         )
-        cb = reducoes[2].number_input(
-            "Cb", 0.01, value=1.0, step=0.1, key="estrutura_cb"
-        )
+        cb = reducoes[2].number_input("Cb", 0.01, value=1.0, step=0.1, key="estrutura_cb")
         area_liquida_pct = reducoes[3].number_input(
             "Área líquida / bruta (%)",
             1.0,
@@ -546,21 +525,11 @@ elif modulo == "2. Barras":
 
     with st.expander("Coeficientes de resistência", icon=":material/settings:"):
         coef = st.columns(5)
-        phi_y = coef[0].number_input(
-            "φ escoamento", 0.01, 1.0, value=0.90, key="estrutura_phi_y"
-        )
-        phi_u = coef[1].number_input(
-            "φ ruptura", 0.01, 1.0, value=0.75, key="estrutura_phi_u"
-        )
-        phi_c = coef[2].number_input(
-            "φ compressão", 0.01, 1.0, value=0.90, key="estrutura_phi_c"
-        )
-        phi_b = coef[3].number_input(
-            "φ flexão", 0.01, 1.0, value=0.90, key="estrutura_phi_b"
-        )
-        phi_v = coef[4].number_input(
-            "φ cisalhamento", 0.01, 1.0, value=0.90, key="estrutura_phi_v"
-        )
+        phi_y = coef[0].number_input("φ escoamento", 0.01, 1.0, value=0.90, key="estrutura_phi_y")
+        phi_u = coef[1].number_input("φ ruptura", 0.01, 1.0, value=0.75, key="estrutura_phi_u")
+        phi_c = coef[2].number_input("φ compressão", 0.01, 1.0, value=0.90, key="estrutura_phi_c")
+        phi_b = coef[3].number_input("φ flexão", 0.01, 1.0, value=0.90, key="estrutura_phi_b")
+        phi_v = coef[4].number_input("φ cisalhamento", 0.01, 1.0, value=0.90, key="estrutura_phi_v")
 
     try:
         if tipo_axial == "Tração":
@@ -707,15 +676,9 @@ elif modulo == "2. Barras":
     ):
         els = st.columns(4)
         condicao = els[0].selectbox("Viga", ["Biapoiada", "Balanço"])
-        q_servico = els[1].number_input(
-            "Carga distribuída de serviço (kN/m)", 0.0, value=5.0
-        )
-        p_servico = els[2].number_input(
-            "Carga concentrada de serviço (kN)", 0.0, value=0.0
-        )
-        limite_relativo = els[3].number_input(
-            "Limite L/divisor", 1.0, value=300.0
-        )
+        q_servico = els[1].number_input("Carga distribuída de serviço (kN/m)", 0.0, value=5.0)
+        p_servico = els[2].number_input("Carga concentrada de serviço (kN)", 0.0, value=0.0)
+        limite_relativo = els[3].number_input("Limite L/divisor", 1.0, value=300.0)
         flecha = barras.verificar_deflexao_viga(
             perfil,
             e * 1e3,
@@ -730,7 +693,9 @@ elif modulo == "2. Barras":
             st.metric("Limite", f"{flecha.limite_mm:.2f} mm", border=True)
             st.metric(
                 "Relação obtida",
-                "∞" if math.isinf(flecha.razao_vao_deflexao) else f"L/{flecha.razao_vao_deflexao:.0f}",
+                "∞"
+                if math.isinf(flecha.razao_vao_deflexao)
+                else f"L/{flecha.razao_vao_deflexao:.0f}",
                 border=True,
             )
         mostrar_utilizacao("Flecha", flecha.utilizacao)
@@ -790,7 +755,9 @@ elif modulo == "2. Barras":
             "Coeficientes de resistência, comprimentos efetivos e reduções são entradas do usuário.",
         ],
         alertas=[] if utilizacao_governante <= 1.0 else ["Ao menos uma utilização supera 100%."],
-        referencias=["ABNT NBR 8800 — confirmar edição, cláusulas, classificação da seção e estados-limites aplicáveis."],
+        referencias=[
+            "ABNT NBR 8800 — confirmar edição, cláusulas, classificação da seção e estados-limites aplicáveis."
+        ],
         conclusao=(
             f"Maior índice de utilização = {utilizacao_governante:.3f}; o pré-dimensionamento atende."
             if utilizacao_governante <= 1.0
@@ -924,7 +891,9 @@ elif modulo == "3. Combinações":
         },
         premissas=["Coeficientes gama e psi foram informados pelo usuário para cada ação."],
         alertas=["Os máximos independentes do envelope podem pertencer a combinações diferentes."],
-        referencias=["ABNT NBR 8681 e documentos de carregamento — confirmar edição e coeficientes aplicáveis."],
+        referencias=[
+            "ABNT NBR 8681 e documentos de carregamento — confirmar edição e coeficientes aplicáveis."
+        ],
         conclusao="Combinações geradas; selecionar casos simultâneos governantes para cada verificação.",
     )
     botao_registrar_calculo(
@@ -979,19 +948,11 @@ elif modulo == "4. Ligações":
         n_parafusos = dados[0].number_input(
             "Número de parafusos", 1, value=4, key="estrutura_lig_n_parafusos"
         )
-        planos = dados[1].number_input(
-            "Planos de corte", 1, value=1, key="estrutura_lig_planos"
-        )
-        vd = dados[2].number_input(
-            "|Vd| (kN)", 0.0, value=100.0, key="estrutura_lig_vd"
-        )
-        td = dados[3].number_input(
-            "|Td| (kN)", 0.0, value=20.0, key="estrutura_lig_td"
-        )
+        planos = dados[1].number_input("Planos de corte", 1, value=1, key="estrutura_lig_planos")
+        vd = dados[2].number_input("|Vd| (kN)", 0.0, value=100.0, key="estrutura_lig_vd")
+        td = dados[3].number_input("|Td| (kN)", 0.0, value=20.0, key="estrutura_lig_td")
         chapa = st.columns(4)
-        t = chapa[0].number_input(
-            "Espessura da chapa (mm)", 0.1, value=10.0, key="estrutura_lig_t"
-        )
+        t = chapa[0].number_input("Espessura da chapa (mm)", 0.1, value=10.0, key="estrutura_lig_t")
         fu_chapa = chapa[1].number_input(
             "Fu da chapa (MPa)", 1.0, value=400.0, key="estrutura_lig_fu_chapa"
         )
@@ -1019,9 +980,7 @@ elif modulo == "4. Ligações":
             cnv = cs[0].number_input(
                 "Coef. cisalhamento", 0.01, value=0.48, key="estrutura_lig_cnv"
             )
-            cnt = cs[1].number_input(
-                "Coef. tração", 0.01, value=0.75, key="estrutura_lig_cnt"
-            )
+            cnt = cs[1].number_input("Coef. tração", 0.01, value=0.75, key="estrutura_lig_cnt")
             phi_b = cs[2].number_input(
                 "φ parafuso", 0.01, 1.0, value=0.75, key="estrutura_lig_phi_b"
             )
@@ -1029,9 +988,7 @@ elif modulo == "4. Ligações":
                 "φ contato", 0.01, 1.0, value=0.75, key="estrutura_lig_phi_c"
             )
             cc = st.columns(3)
-            c_lc = cc[0].number_input(
-                "Coef. Lc", 0.01, value=1.20, key="estrutura_lig_c_lc"
-            )
+            c_lc = cc[0].number_input("Coef. Lc", 0.01, value=1.20, key="estrutura_lig_c_lc")
             c_lim = cc[1].number_input(
                 "Coef. limite contato", 0.01, value=2.40, key="estrutura_lig_c_lim"
             )
@@ -1117,9 +1074,7 @@ elif modulo == "4. Ligações":
         fu = material[1].number_input(
             "Fu da chapa (MPa)", 1.0, value=400.0, key="estrutura_bloco_fu"
         )
-        sd = material[2].number_input(
-            "|Sd| (kN)", 0.0, value=100.0, key="estrutura_bloco_sd"
-        )
+        sd = material[2].number_input("|Sd| (kN)", 0.0, value=100.0, key="estrutura_bloco_sd")
         areas = st.columns(4)
         ant = areas[0].number_input(
             "An de tração (mm²)", 0.1, value=800.0, key="estrutura_bloco_ant"
@@ -1134,12 +1089,8 @@ elif modulo == "4. Ligações":
             "Ant do bloco (mm²)", 0.1, value=400.0, key="estrutura_bloco_antb"
         )
         fatores = st.columns(2)
-        ubs = fatores[0].number_input(
-            "Ubs", 0.01, 1.0, value=1.0, key="estrutura_bloco_ubs"
-        )
-        phi = fatores[1].number_input(
-            "φ ruptura", 0.01, 1.0, value=0.75, key="estrutura_bloco_phi"
-        )
+        ubs = fatores[0].number_input("Ubs", 0.01, 1.0, value=1.0, key="estrutura_bloco_ubs")
+        phi = fatores[1].number_input("φ ruptura", 0.01, 1.0, value=0.75, key="estrutura_bloco_phi")
         resultado = ligacoes.verificar_chapa_ligacao(
             fu, fy, ant, agv, anv, antb, ubs, phi, sd * 1e3
         )
@@ -1177,8 +1128,12 @@ elif modulo == "4. Ligações":
                 "Valor": [
                     resultado.resistencia_secao_liquida_N / 1e3,
                     resultado.resistencia_cisalhamento_bloco_N / 1e3,
-                    None if math.isinf(resultado.fator_secao_liquida) else resultado.fator_secao_liquida,
-                    None if math.isinf(resultado.fator_cisalhamento_bloco) else resultado.fator_cisalhamento_bloco,
+                    None
+                    if math.isinf(resultado.fator_secao_liquida)
+                    else resultado.fator_secao_liquida,
+                    None
+                    if math.isinf(resultado.fator_cisalhamento_bloco)
+                    else resultado.fator_cisalhamento_bloco,
                 ],
             }
         )
@@ -1203,19 +1158,13 @@ elif modulo == "4. Ligações":
             value=300.0,
             key="estrutura_solda_comprimento",
         )
-        fexx = solda[2].number_input(
-            "FEXX (MPa)", 1.0, value=490.0, key="estrutura_solda_fexx"
-        )
-        sd = solda[3].number_input(
-            "|Sd| (kN)", 0.0, value=100.0, key="estrutura_solda_sd"
-        )
+        fexx = solda[2].number_input("FEXX (MPa)", 1.0, value=490.0, key="estrutura_solda_fexx")
+        sd = solda[3].number_input("|Sd| (kN)", 0.0, value=100.0, key="estrutura_solda_sd")
         coef = st.columns(2)
         c_solda = coef[0].number_input(
             "Coeficiente resistente", 0.01, value=0.60, key="estrutura_solda_c_solda"
         )
-        phi = coef[1].number_input(
-            "φ solda", 0.01, 1.0, value=0.75, key="estrutura_solda_phi"
-        )
+        phi = coef[1].number_input("φ solda", 0.01, 1.0, value=0.75, key="estrutura_solda_phi")
         resultado = ligacoes.verificar_solda_filete(
             perna, comprimento, fexx, c_solda, phi, sd * 1e3
         )
@@ -1242,13 +1191,16 @@ elif modulo == "4. Ligações":
             )
         mostrar_utilizacao(
             "Solda de filete",
-            1.0 / resultado.fator_seguranca
-            if not math.isinf(resultado.fator_seguranca)
-            else 0.0,
+            1.0 / resultado.fator_seguranca if not math.isinf(resultado.fator_seguranca) else 0.0,
         )
         tabela_resumo_solda = pd.DataFrame(
             {
-                "Grandeza": ["Garganta efetiva (mm)", "Área efetiva (mm²)", "Resistência (kN)", "Fator"],
+                "Grandeza": [
+                    "Garganta efetiva (mm)",
+                    "Área efetiva (mm²)",
+                    "Resistência (kN)",
+                    "Fator",
+                ],
                 "Valor": [
                     0.707 * perna,
                     resultado.area_efetiva_mm2,
@@ -1289,7 +1241,7 @@ else:
         key="estrutura_2d_modelo",
         persist_state="session",
     )
-    perfil_padrao = "I 4\" x 11,46"
+    perfil_padrao = 'I 4" x 11,46'
     if modelo == "Treliça 2D":
         nos_padrao = pd.DataFrame(
             [
@@ -1316,8 +1268,15 @@ else:
                 [4, 4.0, 0.0, True, True, True, 0.0, 0.0, 0.0],
             ],
             columns=[
-                "id", "x (m)", "y (m)", "fixa x", "fixa y", "fixa rotação",
-                "Fx (kN)", "Fy (kN)", "Mz (kN·m)"
+                "id",
+                "x (m)",
+                "y (m)",
+                "fixa x",
+                "fixa y",
+                "fixa rotação",
+                "Fx (kN)",
+                "Fy (kN)",
+                "Mz (kN·m)",
             ],
         )
         elementos_padrao = pd.DataFrame(
@@ -1409,9 +1368,7 @@ else:
                             area_mm2=perfil_elemento.area_mm2,
                             inercia_mm4=perfil_elemento.ix_mm4,
                             modulo_elasticidade_MPa=float(linha["E (GPa)"]) * 1e3,
-                            carga_distribuida_local_y_N_mm=float(
-                                linha["qy local (kN/m)"]
-                            ),
+                            carga_distribuida_local_y_N_mm=float(linha["qy local (kN/m)"]),
                         )
                     )
                 resultado = estrutural.analisar_portico(nos, elementos)
@@ -1493,10 +1450,7 @@ else:
                 key="aco_baixar_2d_esforcos",
             )
 
-        coordenadas = {
-            int(no.id): (no.x_mm / 1e3, no.y_mm / 1e3)
-            for no in nos
-        }
+        coordenadas = {int(no.id): (no.x_mm / 1e3, no.y_mm / 1e3) for no in nos}
         desloc_por_no = {
             int(item["no"]): (item["ux_mm"], item["uy_mm"])
             for item in resultado.deslocamentos_nodais
@@ -1577,8 +1531,12 @@ else:
                 "Análise linear elástica, pequenas deformações e ligações idealizadas.",
                 "Propriedades geométricas e módulos são os valores informados no modelo.",
             ],
-            alertas=["Estabilidade, imperfeições, segunda ordem, ligações e combinações não são verificadas automaticamente por este modelo."],
-            referencias=["Vincular o modelo aos desenhos, combinações de ações e critérios de deslocamento do projeto."],
+            alertas=[
+                "Estabilidade, imperfeições, segunda ordem, ligações e combinações não são verificadas automaticamente por este modelo."
+            ],
+            referencias=[
+                "Vincular o modelo aos desenhos, combinações de ações e critérios de deslocamento do projeto."
+            ],
             conclusao="Modelo resolvido sem singularidade; validar idealização, deslocamentos admissíveis e dimensionar cada elemento.",
         )
         botao_registrar_calculo(

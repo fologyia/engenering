@@ -241,9 +241,7 @@ with st.container(border=True):
     dados_material = None
     if escolha_id.startswith("projeto::"):
         material_id = escolha_id.split("::", 1)[1]
-        material_projeto = next(
-            item for item in materiais_projeto if item["id"] == material_id
-        )
+        material_projeto = next(item for item in materiais_projeto if item["id"] == material_id)
         props = material_projeto.get("propriedades", {})
         dados_material = {
             "Sy_MPa": props.get("Sy_MPa") or 0.0,
@@ -366,9 +364,14 @@ with st.container(border=True):
     tabela_resumo_flambagem = pd.DataFrame(
         {
             "Grandeza": [
-                "λx", "λy", "λ governante", "λ de transição",
-                "Carga crítica de Euler (kN)", "Carga crítica governante (kN)",
-                "Carga admissível (kN)", "Fator de segurança real",
+                "λx",
+                "λy",
+                "λ governante",
+                "λ de transição",
+                "Carga crítica de Euler (kN)",
+                "Carga crítica governante (kN)",
+                "Carga admissível (kN)",
+                "Fator de segurança real",
             ],
             "Valor": [
                 resultado.esbeltez_x,
@@ -423,8 +426,10 @@ fronteira_modelo(
 with st.container(border=True):
     st.subheader("Registrar no projeto")
     status_registro = (
-        "Não atende" if resultado.utilizacao > 1.0
-        else "Atenção" if resultado.utilizacao > 0.8
+        "Não atende"
+        if resultado.utilizacao > 1.0
+        else "Atenção"
+        if resultado.utilizacao > 0.8
         else "Atende"
     )
     conclusao_registro = (
@@ -445,7 +450,9 @@ with st.container(border=True):
             "λ governante": f"{resultado.esbeltez_governante:.1f}",
             "Regime": resultado.regime.split(" ")[0],
             "Pcr (kN)": f"{resultado.carga_critica_N / 1_000.0:.2f}",
-            "FS": "∞" if math.isinf(resultado.fator_seguranca) else f"{resultado.fator_seguranca:.2f}",
+            "FS": "∞"
+            if math.isinf(resultado.fator_seguranca)
+            else f"{resultado.fator_seguranca:.2f}",
         },
     )
 

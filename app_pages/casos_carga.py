@@ -78,16 +78,17 @@ st.caption(
 )
 
 casos = [item for item in projeto.get("casos_carga", []) if isinstance(item, Mapping)]
-combinacoes = [
-    item for item in projeto.get("combinacoes_carga", []) if isinstance(item, Mapping)
-]
+combinacoes = [item for item in projeto.get("combinacoes_carga", []) if isinstance(item, Mapping)]
 ativos = [item for item in casos if bool(item.get("ativo", True))]
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Casos", len(casos))
 m2.metric("Casos ativos", len(ativos))
 m3.metric("Combinações", len(combinacoes))
-m4.metric("TAGs cobertos", len({str(item.get("tag")) for item in casos if str(item.get("tag") or "").strip()}))
+m4.metric(
+    "TAGs cobertos",
+    len({str(item.get("tag")) for item in casos if str(item.get("tag") or "").strip()}),
+)
 
 aba_casos, aba_combinacoes, aba_envelope = st.tabs(
     ["1. Casos de carga", "2. Combinações", "3. Envelope e registro"]
@@ -116,8 +117,17 @@ with aba_casos:
         linha.update({chave: float(cargas.get(chave, 0.0) or 0.0) for chave in CHAVES_CARGA})
         linhas_casos.append(linha)
     colunas = [
-        "id", "Ativo", "Código", "Nome", "Condição", "Natureza", "TAG",
-        *CHAVES_CARGA, "Origem", "Referência", "Observações",
+        "id",
+        "Ativo",
+        "Código",
+        "Nome",
+        "Condição",
+        "Natureza",
+        "TAG",
+        *CHAVES_CARGA,
+        "Origem",
+        "Referência",
+        "Observações",
     ]
     quadro = pd.DataFrame(linhas_casos, columns=colunas)
     editor_casos = st.data_editor(
@@ -131,8 +141,12 @@ with aba_casos:
             "Ativo": st.column_config.CheckboxColumn("Ativo"),
             "Código": st.column_config.TextColumn("Código", required=True, width="small"),
             "Nome": st.column_config.TextColumn("Nome do cenário", required=True, width="large"),
-            "Condição": st.column_config.SelectboxColumn("Condição", options=list(CONDICOES_OPERACIONAIS), required=True),
-            "Natureza": st.column_config.SelectboxColumn("Natureza", options=list(NATUREZAS_CARGA), required=True),
+            "Condição": st.column_config.SelectboxColumn(
+                "Condição", options=list(CONDICOES_OPERACIONAIS), required=True
+            ),
+            "Natureza": st.column_config.SelectboxColumn(
+                "Natureza", options=list(NATUREZAS_CARGA), required=True
+            ),
             "TAG": st.column_config.TextColumn("TAG / sistema"),
             "Fx_kN": st.column_config.NumberColumn("Fx [kN]", format="%.4g"),
             "Fy_kN": st.column_config.NumberColumn("Fy [kN]", format="%.4g"),
@@ -180,7 +194,9 @@ with aba_casos:
             except ValueError as erro:
                 erros.append(f"Linha {indice}: {erro}")
         if erros:
-            st.error("Revise os casos antes de salvar:\n\n" + "\n".join(f"- {item}" for item in erros))
+            st.error(
+                "Revise os casos antes de salvar:\n\n" + "\n".join(f"- {item}" for item in erros)
+            )
         else:
             projeto["casos_carga"] = novos_casos
             _salvar(projeto, "Atualização dos casos de carga")
@@ -209,14 +225,17 @@ with aba_combinacoes:
                 width="stretch",
             )
         opcoes = {str(item.get("id")): str(item.get("nome")) for item in combinacoes}
-        modo = st.segmented_control(
-            "Operação",
-            ["Nova combinação", "Editar combinação"],
-            default="Nova combinação",
-            selection_mode="single",
-            key="casos_carga_modo_combinacao",
-            persist_state="session",
-        ) or "Nova combinação"
+        modo = (
+            st.segmented_control(
+                "Operação",
+                ["Nova combinação", "Editar combinação"],
+                default="Nova combinação",
+                selection_mode="single",
+                key="casos_carga_modo_combinacao",
+                persist_state="session",
+            )
+            or "Nova combinação"
+        )
         selecionada_id = None
         selecionada: Mapping[str, Any] = {}
         if modo == "Editar combinação" and opcoes:
@@ -233,12 +252,18 @@ with aba_combinacoes:
                 key="casos_carga_combinacao_selecionada",
                 persist_state="session",
             )
-            selecionada = next(item for item in combinacoes if str(item.get("id")) == selecionada_id)
+            selecionada = next(
+                item for item in combinacoes if str(item.get("id")) == selecionada_id
+            )
         elif modo == "Editar combinação":
             st.info("Ainda não há combinações para editar.")
 
         if modo == "Nova combinação" or selecionada:
-            fatores_atuais = selecionada.get("fatores", {}) if isinstance(selecionada.get("fatores"), Mapping) else {}
+            fatores_atuais = (
+                selecionada.get("fatores", {})
+                if isinstance(selecionada.get("fatores"), Mapping)
+                else {}
+            )
             dados_fatores = pd.DataFrame(
                 [
                     {
@@ -248,20 +273,31 @@ with aba_combinacoes:
                         "Caso": caso.get("nome"),
                         "Fator": float(fatores_atuais.get(str(caso.get("id")), 1.0)),
                     }
-                    for caso in casos if caso.get("ativo", True)
+                    for caso in casos
+                    if caso.get("ativo", True)
                 ]
             )
             identidade_form = selecionada_id or "nova"
             with st.form(f"form_combinacao_{identidade_form}"):
                 a, b, c = st.columns([2, 2, 1])
-                nome_combinacao = a.text_input("Nome", value=str(selecionada.get("nome", "")), placeholder="OP-01 · Operação + térmico")
+                nome_combinacao = a.text_input(
+                    "Nome",
+                    value=str(selecionada.get("nome", "")),
+                    placeholder="OP-01 · Operação + térmico",
+                )
                 tipo_combinacao = b.selectbox(
                     "Tipo",
                     list(TIPOS_COMBINACAO),
-                    index=(list(TIPOS_COMBINACAO).index(selecionada.get("tipo")) if selecionada.get("tipo") in TIPOS_COMBINACAO else 0),
+                    index=(
+                        list(TIPOS_COMBINACAO).index(selecionada.get("tipo"))
+                        if selecionada.get("tipo") in TIPOS_COMBINACAO
+                        else 0
+                    ),
                 )
                 ativa_combinacao = c.checkbox("Ativa", value=bool(selecionada.get("ativo", True)))
-                descricao_combinacao = st.text_area("Origem e finalidade da combinação", value=str(selecionada.get("descricao", "")))
+                descricao_combinacao = st.text_area(
+                    "Origem e finalidade da combinação", value=str(selecionada.get("descricao", ""))
+                )
                 editor_fatores = st.data_editor(
                     dados_fatores,
                     hide_index=True,
@@ -299,7 +335,11 @@ with aba_combinacoes:
                 except ValueError as erro:
                     st.error(str(erro))
                 else:
-                    atualizadas = [dict(item) for item in combinacoes if str(item.get("id")) != str(selecionada_id)]
+                    atualizadas = [
+                        dict(item)
+                        for item in combinacoes
+                        if str(item.get("id")) != str(selecionada_id)
+                    ]
                     atualizadas.append(nova)
                     projeto["combinacoes_carga"] = atualizadas
                     _salvar(projeto, "Atualização das combinações de carga")
@@ -376,7 +416,10 @@ with aba_envelope:
         grafico = pd.DataFrame(
             {
                 "Componente": [item.rotulo for item in COMPONENTES_CARGA],
-                "Máximo absoluto": [envelope["componentes"][item.chave]["maximo_absoluto"] for item in COMPONENTES_CARGA],
+                "Máximo absoluto": [
+                    envelope["componentes"][item.chave]["maximo_absoluto"]
+                    for item in COMPONENTES_CARGA
+                ],
             }
         ).set_index("Componente")
         st.bar_chart(grafico)
@@ -403,7 +446,10 @@ with aba_envelope:
             {
                 texto
                 for item in casos
-                for texto in (str(item.get("origem") or "").strip(), str(item.get("referencia") or "").strip())
+                for texto in (
+                    str(item.get("origem") or "").strip(),
+                    str(item.get("referencia") or "").strip(),
+                )
                 if texto
             }
         )
@@ -431,7 +477,11 @@ with aba_envelope:
             metodo_versao="1.0",
             entradas={
                 "casos": [
-                    {"id": item.get("id"), "codigo": item.get("codigo"), "cargas": item.get("cargas")}
+                    {
+                        "id": item.get("id"),
+                        "codigo": item.get("codigo"),
+                        "cargas": item.get("cargas"),
+                    }
                     for item in casos
                 ],
                 "combinacoes": [
@@ -447,7 +497,9 @@ with aba_envelope:
                 envelope.get("aviso", ""),
             ],
             equacoes=["R_j = Σ(γ_i · R_ij)"],
-            criterios=["Preservar o vetor completo da combinação governante antes de transferir esforços para outro módulo."],
+            criterios=[
+                "Preservar o vetor completo da combinação governante antes de transferir esforços para outro módulo."
+            ],
             alertas=[],
             referencias=referencias,
             conclusao=f"Envelope calculado para {envelope['total_cenarios']} cenário(s), sem atribuir aprovação normativa aos fatores.",

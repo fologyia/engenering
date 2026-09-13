@@ -213,9 +213,7 @@ def extrair_pdf(
         from pypdf import PdfReader
         from pypdf.errors import PdfReadError
     except ImportError as erro:
-        raise DependenciaPdfAusente(
-            "Instale 'pypdf' para indexar o conteúdo das normas."
-        ) from erro
+        raise DependenciaPdfAusente("Instale 'pypdf' para indexar o conteúdo das normas.") from erro
 
     arquivo = Path(caminho).expanduser().resolve()
     if not arquivo.is_file() or arquivo.suffix.casefold() != ".pdf":
@@ -238,9 +236,7 @@ def extrair_pdf(
                     f"O PDF '{arquivo.name}' é protegido por senha."
                 ) from erro
             if not desbloqueado:
-                raise BibliotecaNormasErro(
-                    f"O PDF '{arquivo.name}' é protegido por senha."
-                )
+                raise BibliotecaNormasErro(f"O PDF '{arquivo.name}' é protegido por senha.")
 
         paginas: list[PaginaNorma] = []
         erros_paginas: list[str] = []
@@ -261,9 +257,7 @@ def extrair_pdf(
 
     texto_amostra = " ".join(pagina.texto[:4000] for pagina in paginas[:5])
     norma = identificar_norma(f"{arquivo.stem} {texto_amostra}", catalogo)
-    paginas_com_texto = sum(
-        pagina.caracteres >= MINIMO_CARACTERES_POR_PAGINA for pagina in paginas
-    )
+    paginas_com_texto = sum(pagina.caracteres >= MINIMO_CARACTERES_POR_PAGINA for pagina in paginas)
     cobertura = paginas_com_texto / len(paginas) if paginas else 0.0
 
     return {
@@ -358,4 +352,3 @@ def duplicidades_por_norma(arquivos: Sequence[ArquivoNorma]) -> dict[str, list[s
         if arquivo.norma_id:
             grupos.setdefault(arquivo.norma_id, []).append(arquivo.caminho_relativo)
     return {chave: nomes for chave, nomes in grupos.items() if len(nomes) > 1}
-

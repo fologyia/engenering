@@ -42,7 +42,10 @@ def test_ciclo_permanente_com_revisoes_exportacao_e_importacao(tmp_path):
         caminho_banco=banco,
     )
     assert projeto["revisao"] == 1
-    assert [item["revisao"] for item in historico_revisoes(projeto["id"], caminho_banco=banco)] == [1, 0]
+    assert [item["revisao"] for item in historico_revisoes(projeto["id"], caminho_banco=banco)] == [
+        1,
+        0,
+    ]
 
     projeto = adicionar_registro_tecnico(
         projeto["id"],
@@ -99,8 +102,9 @@ def test_banco_padrao_redirecionado_isola_de_verdade(tmp_path, monkeypatch):
 
 
 def test_excluir_projeto_apaga_revisoes_e_limpa_ativo(tmp_path):
-    from core.project_store import ProjetoPersistenciaErro, excluir_projeto, obter_projeto
     import pytest
+
+    from core.project_store import ProjetoPersistenciaErro, excluir_projeto, obter_projeto
 
     banco = tmp_path / "projetos.sqlite3"
     projeto = criar_projeto("Para apagar", codigo="PRJ-DEL", caminho_banco=banco)

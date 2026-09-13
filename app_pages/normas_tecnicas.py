@@ -54,9 +54,7 @@ def _formatar_tamanho(tamanho: int) -> str:
 
 
 def _formatar_data(modificado_ns: int) -> str:
-    return datetime.fromtimestamp(modificado_ns / 1_000_000_000).strftime(
-        "%d/%m/%Y %H:%M"
-    )
+    return datetime.fromtimestamp(modificado_ns / 1_000_000_000).strftime("%d/%m/%Y %H:%M")
 
 
 def _rotulo_norma(item: dict) -> str:
@@ -125,7 +123,9 @@ catalogo_ids = catalogo_por_id(catalogo)
 segmentos = segmentos_catalogo(catalogo)
 
 pasta_ambiente = os.environ.get("MECANICA_TOOLKIT_NORMAS_DIR")
-pasta_inicial = str(Path(pasta_ambiente).expanduser()) if pasta_ambiente else str(PASTA_NORMAS_PADRAO)
+pasta_inicial = (
+    str(Path(pasta_ambiente).expanduser()) if pasta_ambiente else str(PASTA_NORMAS_PADRAO)
+)
 st.session_state.setdefault("normas_pasta", pasta_inicial)
 st.session_state.setdefault("normas_pasta_digitada", st.session_state["normas_pasta"])
 st.session_state.setdefault("normas_indices", {})
@@ -150,9 +150,7 @@ with st.container(horizontal=True, vertical_alignment="bottom"):
                 key="normas_aplicar_pasta",
             ):
                 try:
-                    pasta_validada = resolver_pasta(
-                        st.session_state["normas_pasta_digitada"]
-                    )
+                    pasta_validada = resolver_pasta(st.session_state["normas_pasta_digitada"])
                 except BibliotecaNormasErro as erro:
                     st.error(str(erro), icon=":material/error:")
                 else:
@@ -322,11 +320,7 @@ if visao == "Catálogo por segmento":
                 st.write(norma_escolhida["quando_consultar"])
             with conferencia:
                 st.markdown("**Pontos que merecem conferência**")
-                st.markdown(
-                    "\n".join(
-                        f"- {ponto}" for ponto in norma_escolhida["pontos_chave"]
-                    )
-                )
+                st.markdown("\n".join(f"- {ponto}" for ponto in norma_escolhida["pontos_chave"]))
             st.warning(
                 norma_escolhida.get(
                     "nota_edicao",
@@ -372,7 +366,9 @@ if visao == "Catálogo por segmento":
                     st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
                     st.rerun()
             else:
-                st.caption("Abra um projeto permanente para vincular esta referência à matriz normativa.")
+                st.caption(
+                    "Abra um projeto permanente para vincular esta referência à matriz normativa."
+                )
 
 elif visao == "Meus PDFs":
     st.subheader("Arquivos encontrados na pasta monitorada")
@@ -520,9 +516,7 @@ elif visao == "Pesquisar nos PDFs":
                 icon=":material/manage_search:",
                 color="green" if not faltantes and arquivos else "orange",
             )
-            st.caption(
-                f"{indexados} de {len(arquivos)} PDF(s) prontos para pesquisa."
-            )
+            st.caption(f"{indexados} de {len(arquivos)} PDF(s) prontos para pesquisa.")
         if arquivos and st.button(
             "Indexar ou atualizar toda a biblioteca",
             type="primary",
@@ -594,12 +588,12 @@ elif visao == "Pesquisar nos PDFs":
 
     if pesquisar:
         indices_validos = [
-            indice
-            for arquivo in arquivos
-            if (indice := _indice_atual(arquivo)) is not None
+            indice for arquivo in arquivos if (indice := _indice_atual(arquivo)) is not None
         ]
         if len(normalizar_texto(consulta)) < 2:
-            st.warning("Informe pelo menos dois caracteres para pesquisar.", icon=":material/warning:")
+            st.warning(
+                "Informe pelo menos dois caracteres para pesquisar.", icon=":material/warning:"
+            )
         elif not indices_validos:
             st.warning(
                 "Indexe pelo menos um PDF antes de pesquisar.",
@@ -655,8 +649,7 @@ elif visao == "Pesquisar nos PDFs":
                 color="violet",
             )
             st.subheader(
-                f"{resultado_escolhido['codigo']} · página "
-                f"{resultado_escolhido['pagina']}"
+                f"{resultado_escolhido['codigo']} · página {resultado_escolhido['pagina']}"
             )
             st.write(resultado_escolhido["trecho"])
             st.caption(

@@ -112,7 +112,9 @@ def test_validacao_bloqueia_material_orientativo_vinculado_e_risco_alto():
         )
     )
     resultado = validar_projeto(projeto)
-    bloqueios = [item["titulo"] for item in resultado["achados"] if item["severidade"] == "Bloqueio"]
+    bloqueios = [
+        item["titulo"] for item in resultado["achados"] if item["severidade"] == "Bloqueio"
+    ]
     assert any("dado orientativo vinculado" in titulo for titulo in bloqueios)
     assert any("risco probabilístico relevante" in titulo for titulo in bloqueios)
 
@@ -132,9 +134,7 @@ def test_validacao_sinaliza_calculo_com_material_alterado_depois_do_registro():
         "resultados": {"von_mises_MPa": 100.0},
         "materiais_ids": ["MAT-1"],
     }
-    projeto["registros_tecnicos"].append(
-        preparar_registro_dependencias(projeto, registro_base)
-    )
+    projeto["registros_tecnicos"].append(preparar_registro_dependencias(projeto, registro_base))
 
     # Recém-criado, o registro está em dia: nenhum achado de rastreabilidade.
     projeto_sincronizado = sincronizar_estados_dependencias(projeto)
@@ -147,7 +147,9 @@ def test_validacao_sinaliza_calculo_com_material_alterado_depois_do_registro():
     projeto_sincronizado["materiais_projeto"][0]["propriedades"]["Sy_MPa"] = 300.0
     resultado_depois = validar_projeto(projeto_sincronizado)
     achados = [
-        item for item in resultado_depois["achados"] if item["categoria"] == "Rastreabilidade de cálculo"
+        item
+        for item in resultado_depois["achados"]
+        if item["categoria"] == "Rastreabilidade de cálculo"
     ]
     assert achados
     assert achados[0]["severidade"] == "Atenção"

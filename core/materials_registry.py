@@ -205,7 +205,11 @@ def _validar_propriedades(propriedades: Mapping[str, Any]) -> None:
 
 def avaliar_material(material: Mapping[str, Any]) -> dict[str, Any]:
     """Pontua rastreabilidade, sem transformar o índice em aprovação técnica."""
-    props = material.get("propriedades", {}) if isinstance(material.get("propriedades"), Mapping) else {}
+    props = (
+        material.get("propriedades", {})
+        if isinstance(material.get("propriedades"), Mapping)
+        else {}
+    )
     pontos = 0
     pendencias: list[str] = []
 
@@ -236,7 +240,9 @@ def avaliar_material(material: Mapping[str, Any]) -> dict[str, Any]:
     }.get(origem, 0)
     pontos += peso_origem
     if peso_origem < 13:
-        pendencias.append("Substituir o valor orientativo por fonte controlada aplicável ao produto real.")
+        pendencias.append(
+            "Substituir o valor orientativo por fonte controlada aplicável ao produto real."
+        )
 
     if _texto(material.get("fonte")):
         pontos += 8
@@ -262,14 +268,19 @@ def avaliar_material(material: Mapping[str, Any]) -> dict[str, Any]:
         pontos += 5
     else:
         pendencias.append("Justificar a aplicabilidade à forma, condição e temperatura de serviço.")
-    if _numero(props.get("temperatura_min_C")) is not None and _numero(props.get("temperatura_max_C")) is not None:
+    if (
+        _numero(props.get("temperatura_min_C")) is not None
+        and _numero(props.get("temperatura_max_C")) is not None
+    ):
         pontos += 5
     else:
         pendencias.append("Registrar a faixa de temperatura qualificada quando relevante.")
 
     pontos = min(100, pontos)
     fonte_primaria = origem in {"Certificado do lote / MTR", "Relatório de ensaio"}
-    verificado = bool(_texto(material.get("responsavel_verificacao")) and _texto(material.get("data_verificacao")))
+    verificado = bool(
+        _texto(material.get("responsavel_verificacao")) and _texto(material.get("data_verificacao"))
+    )
     if pontos >= 85 and fonte_primaria and verificado:
         nivel = "Confirmado"
     elif pontos >= 70 and origem not in {"Literatura técnica", "Valor típico / estimativa"}:
@@ -293,18 +304,33 @@ def material_com_avaliacao(material: Mapping[str, Any]) -> dict[str, Any]:
     return atualizado
 
 
-def verificar_temperatura(material: Mapping[str, Any], temperatura_c: float | None) -> dict[str, str]:
+def verificar_temperatura(
+    material: Mapping[str, Any], temperatura_c: float | None
+) -> dict[str, str]:
     """Confere apenas a faixa cadastrada; não estima redução de propriedades."""
     if temperatura_c is None:
         return {"status": "Não avaliada", "mensagem": "Temperatura de serviço não informada."}
-    props = material.get("propriedades", {}) if isinstance(material.get("propriedades"), Mapping) else {}
+    props = (
+        material.get("propriedades", {})
+        if isinstance(material.get("propriedades"), Mapping)
+        else {}
+    )
     tmin = _numero(props.get("temperatura_min_C"))
     tmax = _numero(props.get("temperatura_max_C"))
     if tmin is None or tmax is None:
-        return {"status": "Pendente", "mensagem": "A fonte cadastrada não possui faixa de temperatura qualificada."}
+        return {
+            "status": "Pendente",
+            "mensagem": "A fonte cadastrada não possui faixa de temperatura qualificada.",
+        }
     if tmin <= float(temperatura_c) <= tmax:
-        return {"status": "Dentro da faixa", "mensagem": f"{temperatura_c:g} °C está entre {tmin:g} e {tmax:g} °C."}
-    return {"status": "Fora da faixa", "mensagem": f"{temperatura_c:g} °C está fora da faixa cadastrada de {tmin:g} a {tmax:g} °C."}
+        return {
+            "status": "Dentro da faixa",
+            "mensagem": f"{temperatura_c:g} °C está entre {tmin:g} e {tmax:g} °C.",
+        }
+    return {
+        "status": "Fora da faixa",
+        "mensagem": f"{temperatura_c:g} °C está fora da faixa cadastrada de {tmin:g} a {tmax:g} °C.",
+    }
 
 
 def resumir_fonte(material: Mapping[str, Any]) -> str:

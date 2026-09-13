@@ -158,9 +158,7 @@ def _avisos_por_linha(linhas: list[dict[str, Any]], diagnosticar, rotular) -> No
             )
     if not problemas:
         if linhas:
-            st.success(
-                "Todas as linhas estão completas.", icon=":material/check_circle:"
-            )
+            st.success("Todas as linhas estão completas.", icon=":material/check_circle:")
         return
     bloqueios = sum(1 for item in problemas if item["Situação"] == "Pendência")
     st.warning(
@@ -185,7 +183,9 @@ def _limpar(valor: Any) -> Any:
 
 
 def _linhas_editor(df: pd.DataFrame) -> list[dict[str, Any]]:
-    return [{chave: _limpar(valor) for chave, valor in linha.items()} for linha in df.to_dict("records")]
+    return [
+        {chave: _limpar(valor) for chave, valor in linha.items()} for linha in df.to_dict("records")
+    ]
 
 
 def _mesclar_linhas(
@@ -213,7 +213,9 @@ def _mesclar_linhas(
     return resultado
 
 
-def _salvar(documento: Mapping[str, Any], motivo: str, *, revisao: bool = False, tipo_evento: str = "") -> dict[str, Any]:
+def _salvar(
+    documento: Mapping[str, Any], motivo: str, *, revisao: bool = False, tipo_evento: str = ""
+) -> dict[str, Any]:
     salvo = salvar_projeto(documento, motivo=motivo, criar_revisao=revisao, tipo_evento=tipo_evento)
     st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
     st.toast("Projeto salvo no banco local.", icon=":material/check_circle:")
@@ -289,7 +291,9 @@ def _dialogo_novo_projeto() -> None:
         _tipos_com_atual(""),
         help="Define o modelo de checklist semeado no projeto. Pode ser trocado depois em Identificação.",
     )
-    modelo_sugerido = next((m for m in modelos if m.tipo_projeto.casefold() == tipo.casefold()), None)
+    modelo_sugerido = next(
+        (m for m in modelos if m.tipo_projeto.casefold() == tipo.casefold()), None
+    )
     if modelo_sugerido is None:
         modelo_sugerido = next((m for m in modelos if m.id == "generico"), None)
     if erro_modelos:
@@ -304,9 +308,7 @@ def _dialogo_novo_projeto() -> None:
     else:
         semear = False
     with st.form("form_novo_projeto", border=False):
-        nome = st.text_input(
-            "Nome do projeto *", placeholder="Adequação do transportador CV-204"
-        )
+        nome = st.text_input("Nome do projeto *", placeholder="Adequação do transportador CV-204")
         codigo = st.text_input("Código *", placeholder="PRJ-2026-014")
         objetivo = st.text_area(
             "Objetivo e resultado esperado *",
@@ -331,8 +333,7 @@ def _dialogo_novo_projeto() -> None:
         ]
         if faltando:
             st.error(
-                "Preencha " + ", ".join(faltando) + " para o projeto não nascer "
-                "bloqueado.",
+                "Preencha " + ", ".join(faltando) + " para o projeto não nascer bloqueado.",
                 icon=":material/error:",
             )
             return
@@ -355,9 +356,18 @@ ativo_contexto = st.session_state.get("projeto_ativo")
 with st.container(border=True):
     topo1, topo2 = st.columns([4, 1])
     with topo1:
-        opcoes = {item["id"]: f"{item['codigo']} · {item['nome']} · Rev. {item['revisao']:02d} · {item['status']}" for item in projetos}
+        opcoes = {
+            item[
+                "id"
+            ]: f"{item['codigo']} · {item['nome']} · Rev. {item['revisao']:02d} · {item['status']}"
+            for item in projetos
+        }
         ids = list(opcoes)
-        indice = ids.index(ativo_contexto["id"]) if ativo_contexto and ativo_contexto.get("id") in ids else 0
+        indice = (
+            ids.index(ativo_contexto["id"])
+            if ativo_contexto and ativo_contexto.get("id") in ids
+            else 0
+        )
         selecionado = st.selectbox(
             "Projeto do banco",
             ids,
@@ -414,10 +424,18 @@ c5.metric(
 )
 
 with st.container(horizontal=True):
-    st.page_link("app_pages/central_validacao.py", label="Central de validação", icon=":material/fact_check:")
-    st.page_link("app_pages/central_relatorios.py", label="Central de relatórios", icon=":material/description:")
+    st.page_link(
+        "app_pages/central_validacao.py", label="Central de validação", icon=":material/fact_check:"
+    )
+    st.page_link(
+        "app_pages/central_relatorios.py",
+        label="Central de relatórios",
+        icon=":material/description:",
+    )
     st.page_link("app_pages/casos_carga.py", label="Casos de carga", icon=":material/layers:")
-    st.page_link("app_pages/materiais_tecnicos.py", label="Materiais técnicos", icon=":material/science:")
+    st.page_link(
+        "app_pages/materiais_tecnicos.py", label="Materiais técnicos", icon=":material/science:"
+    )
     pacote = exportar_projeto(projeto["id"])
     st.download_button(
         "Exportar projeto",
@@ -427,25 +445,29 @@ with st.container(horizontal=True):
         icon=":material/download:",
     )
 
-abas = st.tabs([
-    "Visão geral",
-    "Dados e base",
-    "Critérios",
-    "Escopo físico",
-    "Normas",
-    "Documentos",
-    "Registros técnicos",
-    "Checklist",
-    "Fluxo e revisões",
-    "Administração",
-])
+abas = st.tabs(
+    [
+        "Visão geral",
+        "Dados e base",
+        "Critérios",
+        "Escopo físico",
+        "Normas",
+        "Documentos",
+        "Registros técnicos",
+        "Checklist",
+        "Fluxo e revisões",
+        "Administração",
+    ]
+)
 
 # ============================================================== Visão geral
 with abas[0]:
     col_a, col_b = st.columns([3, 2])
     with col_a:
         st.subheader(projeto["nome"])
-        st.caption(f"{projeto['codigo']} · {_limpar(projeto.get('unidade_industrial'))} · {_limpar(projeto.get('area'))}")
+        st.caption(
+            f"{projeto['codigo']} · {_limpar(projeto.get('unidade_industrial'))} · {_limpar(projeto.get('area'))}"
+        )
         st.write(projeto.get("descricao") or "Descrição ainda não preenchida.")
         st.markdown(f"**Objetivo:** {projeto.get('objetivo') or 'não definido'}")
         st.markdown(f"**TAG principal:** {projeto.get('tag_equipamento') or 'não definido'}")
@@ -460,9 +482,15 @@ with abas[0]:
             st.caption(DESCRICOES.get(situacao_atual(projeto), ""))
             transicoes = avaliar_todas_transicoes(projeto, validacao=validacao)
             liberadas = [item["destino"] for item in transicoes if item["permitida"]]
-            travadas = [item for item in transicoes if not item["permitida"] and item["destino"] != ARQUIVADO]
+            travadas = [
+                item
+                for item in transicoes
+                if not item["permitida"] and item["destino"] != ARQUIVADO
+            ]
             if liberadas:
-                st.markdown("Pode avançar para: " + ", ".join(f"**{destino}**" for destino in liberadas))
+                st.markdown(
+                    "Pode avançar para: " + ", ".join(f"**{destino}**" for destino in liberadas)
+                )
             for item in travadas:
                 st.markdown(
                     f":material/lock: **{item['destino']}** exige: "
@@ -515,7 +543,9 @@ with abas[0]:
     col_passos, col_tempo = st.columns([3, 2])
     with col_passos, st.container(border=True):
         st.markdown("##### Próximos passos sugeridos")
-        st.caption("Da ação que mais destrava para a que menos. A ordem vem das mesmas regras da validação.")
+        st.caption(
+            "Da ação que mais destrava para a que menos. A ordem vem das mesmas regras da validação."
+        )
         for numero, passo in enumerate(passos, start=1):
             st.markdown(f"**{numero}. {passo['titulo']}** — {passo['detalhe']}")
             if passo["pagina"] != "app_pages/gestao_projetos.py":
@@ -569,14 +599,11 @@ with abas[1]:
             ),
         }
         bloqueios_validacao = [
-            achado
-            for achado in validacao["achados"]
-            if achado["severidade"] == "Bloqueio"
+            achado for achado in validacao["achados"] if achado["severidade"] == "Bloqueio"
         ]
         if bloqueios_validacao:
             st.error(
-                f"{len(bloqueios_validacao)} bloqueio(s) impedem a emissão do "
-                "memorial.",
+                f"{len(bloqueios_validacao)} bloqueio(s) impedem a emissão do memorial.",
                 icon=":material/block:",
             )
             for achado in bloqueios_validacao:
@@ -585,9 +612,7 @@ with abas[1]:
                 )
                 st.markdown(f"- **{achado['titulo']}** — resolva {destino}.")
                 if pagina:
-                    st.page_link(
-                        pagina, label=rotulo_link, icon=":material/arrow_forward:"
-                    )
+                    st.page_link(pagina, label=rotulo_link, icon=":material/arrow_forward:")
         elif faltando:
             st.warning(
                 f"Nada bloqueia a emissão. Ainda faltam {len(faltando)} "
@@ -618,9 +643,7 @@ with abas[1]:
         st.caption("Sem estes campos o memorial não pode ser emitido.")
         with st.form("projeto_essencial"):
             a, b = st.columns(2)
-            nome = a.text_input(
-                "Nome" + _marca(estado, "nome"), value=projeto.get("nome", "")
-            )
+            nome = a.text_input("Nome" + _marca(estado, "nome"), value=projeto.get("nome", ""))
             codigo = b.text_input(
                 "Código" + _marca(estado, "codigo"), value=projeto.get("codigo", "")
             )
@@ -633,9 +656,7 @@ with abas[1]:
                     "memorial e o que a conclusão retoma."
                 ),
             )
-            descricao = st.text_area(
-                "Descrição", value=projeto.get("descricao", ""), height=90
-            )
+            descricao = st.text_area("Descrição", value=projeto.get("descricao", ""), height=90)
             salvar_essencial = st.form_submit_button(
                 "Salvar essencial", type="primary", icon=":material/save:"
             )
@@ -677,12 +698,8 @@ with abas[1]:
                 "TAG principal" + _marca(estado, "tag_equipamento"),
                 value=projeto.get("tag_equipamento", ""),
             )
-            processo = e.text_input(
-                "Processo / serviço", value=projeto.get("processo", "")
-            )
-            regime = f.text_input(
-                "Regime de operação", value=projeto.get("regime_operacao", "")
-            )
+            processo = e.text_input("Processo / serviço", value=projeto.get("processo", ""))
+            regime = f.text_input("Regime de operação", value=projeto.get("regime_operacao", ""))
             tipos_projeto = _tipos_com_atual(str(projeto.get("tipo_projeto") or ""))
             tipo_atual = str(projeto.get("tipo_projeto") or tipos_projeto[0])
             tipo_projeto = st.selectbox(
@@ -796,7 +813,9 @@ with abas[1]:
 # =============================================================== Critérios
 with abas[2]:
     criterios_salvos = projeto.get("criterios_projeto")
-    criterios = normalizar_criterios_projeto(criterios_salvos if isinstance(criterios_salvos, Mapping) else None)
+    criterios = normalizar_criterios_projeto(
+        criterios_salvos if isinstance(criterios_salvos, Mapping) else None
+    )
     avaliacao_criterios = avaliar_criterios_projeto(criterios)
     st.caption(
         "Limites e condições que os módulos consultam e contra os quais a Central de "
@@ -814,7 +833,10 @@ with abas[2]:
             icon=":material/check_circle:",
         )
         if avaliacao_criterios["faltantes"]:
-            st.warning("Faltam: " + "; ".join(avaliacao_criterios["faltantes"]) + ".", icon=":material/pending:")
+            st.warning(
+                "Faltam: " + "; ".join(avaliacao_criterios["faltantes"]) + ".",
+                icon=":material/pending:",
+            )
         for alerta in avaliacao_criterios["alertas"]:
             st.caption(f":material/info: {alerta}")
     st.warning(
@@ -883,13 +905,17 @@ with abas[2]:
             value=criterios["normativo"]["norma_principal"],
             placeholder="ABNT NBR 8800",
         )
-        edicao_norma = n2.text_input("Edição", value=criterios["normativo"]["edicao"], placeholder="2024")
+        edicao_norma = n2.text_input(
+            "Edição", value=criterios["normativo"]["edicao"], placeholder="2024"
+        )
         criterio_aceitacao = st.text_input(
             "Critério de aceitação (descrição)",
             value=criterios["normativo"]["criterio_aceitacao"],
             placeholder="ELU e ELS conforme NBR 8800; flecha ≤ L/350",
         )
-        obs_normativo = st.text_input("Observações normativas", value=criterios["normativo"]["observacoes"])
+        obs_normativo = st.text_input(
+            "Observações normativas", value=criterios["normativo"]["observacoes"]
+        )
         st.markdown("**Combinações de ações**")
         c1_, c2_ = st.columns(2)
         metodo_comb = c1_.text_input(
@@ -902,7 +928,9 @@ with abas[2]:
             value=criterios["combinacoes"]["referencia"],
             placeholder="NBR 8681:2003, tabela 1",
         )
-        obs_comb = st.text_input("Observações das combinações", value=criterios["combinacoes"]["observacoes"])
+        obs_comb = st.text_input(
+            "Observações das combinações", value=criterios["combinacoes"]["observacoes"]
+        )
         maximos = st.checkbox(
             "Autorizar tratar máximos independentes como simultâneos",
             value=bool(criterios["combinacoes"]["maximos_independentes_simultaneos"]),
@@ -911,7 +939,9 @@ with abas[2]:
         st.markdown("**Unidades preferidas do projeto**")
         colunas_unidades = st.columns(len(UNIDADES_PROJETO))
         unidades_escolhidas = {}
-        for coluna, (grandeza, opcoes_unidade) in zip(colunas_unidades, UNIDADES_PROJETO.items(), strict=True):
+        for coluna, (grandeza, opcoes_unidade) in zip(
+            colunas_unidades, UNIDADES_PROJETO.items(), strict=True
+        ):
             atual = criterios["unidades"].get(grandeza, opcoes_unidade[0])
             unidades_escolhidas[grandeza] = coluna.selectbox(
                 grandeza.capitalize(),
@@ -1006,7 +1036,16 @@ with abas[3]:
         ]
         _salvar(projeto, "Linha de exemplo do escopo físico")
         st.rerun()
-    colunas_componentes = ["id", "tag", "descricao", "servico", "material", "fonte_material", "desenho", "criticidade"]
+    colunas_componentes = [
+        "id",
+        "tag",
+        "descricao",
+        "servico",
+        "material",
+        "fonte_material",
+        "desenho",
+        "criticidade",
+    ]
     df_componentes = pd.DataFrame(projeto["componentes"])
     for coluna in colunas_componentes:
         if coluna not in df_componentes:
@@ -1024,7 +1063,9 @@ with abas[3]:
             "material": st.column_config.TextColumn("Material"),
             "fonte_material": st.column_config.TextColumn("Fonte do material", width="large"),
             "desenho": st.column_config.TextColumn("Desenho / documento"),
-            "criticidade": st.column_config.SelectboxColumn("Criticidade", options=["Baixa", "Média", "Alta", "Crítica"]),
+            "criticidade": st.column_config.SelectboxColumn(
+                "Criticidade", options=["Baixa", "Média", "Alta", "Crítica"]
+            ),
         },
         key=f"componentes_{projeto['id']}",
     )
@@ -1116,7 +1157,11 @@ with abas[4]:
         lambda linha, indice: str(linha.get("codigo") or f"linha {indice}"),
     )
     if st.button("Salvar matriz normativa", type="primary", icon=":material/save:"):
-        linhas = [linha for linha in _linhas_editor(editado_normas) if str(linha.get("codigo", "")).strip()]
+        linhas = [
+            linha
+            for linha in _linhas_editor(editado_normas)
+            if str(linha.get("codigo", "")).strip()
+        ]
         projeto["normas"] = _mesclar_linhas(projeto["normas"], linhas)
         _salvar(projeto, "Atualização da matriz normativa")
         st.rerun()
@@ -1149,7 +1194,17 @@ with abas[5]:
         ]
         _salvar(projeto, "Linha de exemplo dos documentos de entrada")
         st.rerun()
-    colunas_documentos = ["id", "codigo", "titulo", "tipo", "revisao", "data", "emitente", "situacao", "observacao"]
+    colunas_documentos = [
+        "id",
+        "codigo",
+        "titulo",
+        "tipo",
+        "revisao",
+        "data",
+        "emitente",
+        "situacao",
+        "observacao",
+    ]
     df_documentos = pd.DataFrame(documentos)
     for coluna in colunas_documentos:
         if coluna not in df_documentos:
@@ -1167,15 +1222,25 @@ with abas[5]:
             "revisao": st.column_config.TextColumn("Revisão", width="small"),
             "data": st.column_config.TextColumn("Data", width="small"),
             "emitente": st.column_config.TextColumn("Emitente"),
-            "situacao": st.column_config.SelectboxColumn("Situação", options=list(SITUACOES_DOCUMENTO)),
+            "situacao": st.column_config.SelectboxColumn(
+                "Situação", options=list(SITUACOES_DOCUMENTO)
+            ),
             "observacao": st.column_config.TextColumn("Observação", width="large"),
         },
         key=f"documentos_{projeto['id']}",
     )
     linhas_documentos = _linhas_editor(editado_documentos)
     if linhas_documentos:
-        aguardando = [linha for linha in linhas_documentos if str(linha.get("situacao")) == "Aguardando recebimento"]
-        sem_revisao = [linha for linha in linhas_documentos if str(linha.get("codigo", "")).strip() and not str(linha.get("revisao", "")).strip()]
+        aguardando = [
+            linha
+            for linha in linhas_documentos
+            if str(linha.get("situacao")) == "Aguardando recebimento"
+        ]
+        sem_revisao = [
+            linha
+            for linha in linhas_documentos
+            if str(linha.get("codigo", "")).strip() and not str(linha.get("revisao", "")).strip()
+        ]
         if aguardando or sem_revisao:
             st.warning(
                 f"{len(aguardando)} documento(s) aguardando recebimento · "
@@ -1183,7 +1248,9 @@ with abas[5]:
                 icon=":material/pending:",
             )
         else:
-            st.success("Todos os documentos têm revisão e estão recebidos.", icon=":material/check_circle:")
+            st.success(
+                "Todos os documentos têm revisão e estão recebidos.", icon=":material/check_circle:"
+            )
     if st.button("Salvar documentos de entrada", type="primary", icon=":material/save:"):
         linhas = [linha for linha in linhas_documentos if str(linha.get("codigo", "")).strip()]
         projeto["anexos"] = _mesclar_linhas(documentos, linhas)
@@ -1198,7 +1265,9 @@ with abas[6]:
         f1, f2, f3 = st.columns([2, 2, 1])
         situacoes_registro = sorted({linha["status"] for linha in linhas_registros})
         filtro_situacao = f1.multiselect(
-            "Situação", situacoes_registro, default=[s for s in situacoes_registro if s != STATUS_SUPERADO]
+            "Situação",
+            situacoes_registro,
+            default=[s for s in situacoes_registro if s != STATUS_SUPERADO],
         )
         pecas_registro = sorted({linha["peca"] or "(sem peça)" for linha in linhas_registros})
         filtro_peca = f2.multiselect("Peça", pecas_registro, default=pecas_registro)
@@ -1220,8 +1289,12 @@ with abas[6]:
                         "Situação": linha["status"],
                         "Atualidade": linha["atualidade"],
                         # NaN, e não None: a coluna numérica mostra vazio em vez de "None".
-                        "Menor fator": linha["menor_fator"] if linha["menor_fator"] is not None else float("nan"),
-                        "Utilização": linha["utilizacao"] if linha["utilizacao"] is not None else float("nan"),
+                        "Menor fator": linha["menor_fator"]
+                        if linha["menor_fator"] is not None
+                        else float("nan"),
+                        "Utilização": linha["utilizacao"]
+                        if linha["utilizacao"] is not None
+                        else float("nan"),
                         "Dependentes": linha["dependentes"],
                         "Registrado em": _data_curta(linha["criado_em"]),
                     }
@@ -1235,7 +1308,9 @@ with abas[6]:
                 "Utilização": st.column_config.NumberColumn(format="%.2f"),
             },
         )
-        desatualizados = [linha for linha in linhas_registros if not linha["atualizado"] and not linha["superado"]]
+        desatualizados = [
+            linha for linha in linhas_registros if not linha["atualizado"] and not linha["superado"]
+        ]
         if desatualizados:
             st.warning(
                 f"{len(desatualizados)} registro(s) usam fontes que mudaram depois do cálculo: "
@@ -1243,15 +1318,22 @@ with abas[6]:
                 + ("…" if len(desatualizados) > 4 else "."),
                 icon=":material/history:",
             )
-        opcoes_registro = {linha["id"]: f"{linha['modulo']} · {linha['titulo']} · {linha['status']}" for linha in filtrados}
+        opcoes_registro = {
+            linha["id"]: f"{linha['modulo']} · {linha['titulo']} · {linha['status']}"
+            for linha in filtrados
+        }
         if opcoes_registro:
             registro_id = st.selectbox(
-                "Inspecionar registro", list(opcoes_registro), format_func=lambda valor: opcoes_registro[valor]
+                "Inspecionar registro",
+                list(opcoes_registro),
+                format_func=lambda valor: opcoes_registro[valor],
             )
             registro = next(item for item in registros if item["id"] == registro_id)
             linha_registro = next(linha for linha in linhas_registros if linha["id"] == registro_id)
             with st.container(border=True):
-                st.markdown(f"**{registro.get('titulo')}** · {registro.get('modulo')} · {registro.get('status')}")
+                st.markdown(
+                    f"**{registro.get('titulo')}** · {registro.get('modulo')} · {registro.get('status')}"
+                )
                 if registro.get("conclusao"):
                     st.write(registro["conclusao"])
                 if linha_registro["motivos"]:
@@ -1259,7 +1341,11 @@ with abas[6]:
                 if registro.get("superado_em"):
                     st.caption(
                         f"Superado em {_data_curta(registro['superado_em'])}"
-                        + (f" — {registro.get('superado_motivo')}" if registro.get("superado_motivo") else "")
+                        + (
+                            f" — {registro.get('superado_motivo')}"
+                            if registro.get("superado_motivo")
+                            else ""
+                        )
                     )
                 dependentes = dependentes_do_registro(projeto, registro_id)
                 if dependentes:
@@ -1284,7 +1370,9 @@ with abas[6]:
                         substituto = st.selectbox(
                             "Superado por",
                             ["", *outros],
-                            format_func=lambda valor: outros.get(valor, "(sem substituto declarado)"),
+                            format_func=lambda valor: outros.get(
+                                valor, "(sem substituto declarado)"
+                            ),
                             key=f"substituto_{registro_id}",
                         )
                         motivo_superar = st.text_input(
@@ -1300,7 +1388,10 @@ with abas[6]:
                         ):
                             try:
                                 documento = superar_registro(
-                                    projeto, registro_id, motivo=motivo_superar, substituto_id=substituto or None
+                                    projeto,
+                                    registro_id,
+                                    motivo=motivo_superar,
+                                    substituto_id=substituto or None,
                                 )
                             except ValueError as erro:
                                 st.error(str(erro))
@@ -1329,7 +1420,9 @@ with abas[6]:
         else:
             st.info("Nenhum registro corresponde aos filtros.")
     else:
-        st.info("Ainda não há registros técnicos. Os módulos de cálculo podem gravar resultados aqui.")
+        st.info(
+            "Ainda não há registros técnicos. Os módulos de cálculo podem gravar resultados aqui."
+        )
     st.subheader("Adicionar verificação manual")
     with st.form("registro_manual"):
         r1, r2, r3 = st.columns(3)
@@ -1337,12 +1430,16 @@ with abas[6]:
         titulo = r2.text_input("Título", placeholder="Verificação do suporte SP-104")
         status_reg = r3.selectbox("Situação", ["Pendente", "Atende", "Não atende", "Inconclusivo"])
         resumo_manual = st.text_area("Escopo e método")
-        entradas_json = st.text_area("Entradas em JSON", value='{"Documento de entrada": "A preencher"}')
+        entradas_json = st.text_area(
+            "Entradas em JSON", value='{"Documento de entrada": "A preencher"}'
+        )
         resultados_json = st.text_area("Resultados em JSON", value='{"Critério": "A preencher"}')
         premissas = st.text_area("Premissas — uma por linha")
         referencias = st.text_area("Referências — uma por linha")
         conclusao = st.text_area("Conclusão")
-        adicionar = st.form_submit_button("Adicionar registro", type="primary", icon=":material/note_add:")
+        adicionar = st.form_submit_button(
+            "Adicionar registro", type="primary", icon=":material/note_add:"
+        )
     if adicionar:
         try:
             entradas = json.loads(entradas_json or "{}")
@@ -1352,11 +1449,20 @@ with abas[6]:
             adicionar_registro_tecnico(
                 projeto["id"],
                 {
-                    "modulo": modulo, "titulo": titulo, "status": status_reg,
-                    "resumo": resumo_manual, "entradas": entradas, "resultados": resultados,
-                    "premissas": [linha.strip() for linha in premissas.splitlines() if linha.strip()],
-                    "referencias": [linha.strip() for linha in referencias.splitlines() if linha.strip()],
-                    "conclusao": conclusao, "responsavel": projeto.get("responsavel", ""),
+                    "modulo": modulo,
+                    "titulo": titulo,
+                    "status": status_reg,
+                    "resumo": resumo_manual,
+                    "entradas": entradas,
+                    "resultados": resultados,
+                    "premissas": [
+                        linha.strip() for linha in premissas.splitlines() if linha.strip()
+                    ],
+                    "referencias": [
+                        linha.strip() for linha in referencias.splitlines() if linha.strip()
+                    ],
+                    "conclusao": conclusao,
+                    "responsavel": projeto.get("responsavel", ""),
                 },
             )
             st.success("Registro técnico adicionado e salvo.")
@@ -1393,7 +1499,9 @@ with abas[7]:
     if resumo_check["ilegiveis"]:
         st.caption(
             ":material/info: Prazos que não são datas e por isso não entram na cobrança: "
-            + "; ".join(f"{linha['item']} ({linha['prazo_texto']})" for linha in resumo_check["ilegiveis"])
+            + "; ".join(
+                f"{linha['item']} ({linha['prazo_texto']})" for linha in resumo_check["ilegiveis"]
+            )
             + ". Eles aparecem em branco na tabela; ao reescrever como data, a cobrança passa a valer."
         )
 
@@ -1407,7 +1515,9 @@ with abas[7]:
         if modelos:
             sugerido = modelo_para_tipo(str(projeto.get("tipo_projeto") or ""))
             ids_modelos = [modelo.id for modelo in modelos]
-            indice_sugerido = ids_modelos.index(sugerido.id) if sugerido and sugerido.id in ids_modelos else 0
+            indice_sugerido = (
+                ids_modelos.index(sugerido.id) if sugerido and sugerido.id in ids_modelos else 0
+            )
             rotulos_modelos = {
                 modelo.id: f"{modelo.nome} · {len(modelo.itens)} itens"
                 + (" · sugerido para este tipo" if sugerido and modelo.id == sugerido.id else "")
@@ -1425,7 +1535,11 @@ with abas[7]:
             if modelo.descricao:
                 st.caption(modelo.descricao)
             aplicados = itens_ja_aplicados(projeto, modelo)
-            papeis = {"responsavel": "Responsável técnico", "verificador": "Verificador", "aprovador": "Aprovador"}
+            papeis = {
+                "responsavel": "Responsável técnico",
+                "verificador": "Verificador",
+                "aprovador": "Aprovador",
+            }
             st.dataframe(
                 pd.DataFrame(
                     [
@@ -1462,14 +1576,26 @@ with abas[7]:
                     )
                     st.rerun()
             else:
-                st.success("Todos os itens deste modelo já estão no checklist.", icon=":material/check_circle:")
+                st.success(
+                    "Todos os itens deste modelo já estão no checklist.",
+                    icon=":material/check_circle:",
+                )
         st.caption(
             "Os modelos vêm de `data/modelos_checklist.json`. Para adaptar à sua empresa, crie "
             f"`{ARQUIVO_MODELOS_USUARIO.name}` na pasta `data` com o mesmo formato: um modelo com o mesmo "
             "`id` substitui o embutido; um `id` novo acrescenta um tipo de projeto."
         )
 
-    colunas_check = ["id", "item", "categoria", "responsavel", "prazo", "estado", "evidencia", "critico"]
+    colunas_check = [
+        "id",
+        "item",
+        "categoria",
+        "responsavel",
+        "prazo",
+        "estado",
+        "evidencia",
+        "critico",
+    ]
     df_check = pd.DataFrame(projeto["checklist"])
     for coluna in colunas_check:
         if coluna not in df_check:
@@ -1481,14 +1607,17 @@ with abas[7]:
         for item in projeto["checklist"]
         if isinstance(item, Mapping)
     }
-    df_check["prazo"] = pd.to_datetime(
-        df_check["prazo"].map(interpretar_prazo), errors="coerce"
-    )
+    df_check["prazo"] = pd.to_datetime(df_check["prazo"].map(interpretar_prazo), errors="coerce")
     editado_check = st.data_editor(
-        df_check[colunas_check], num_rows="dynamic", hide_index=True, width="stretch",
+        df_check[colunas_check],
+        num_rows="dynamic",
+        hide_index=True,
+        width="stretch",
         column_config={
             "id": None,
-            "item": st.column_config.TextColumn("Item de verificação", required=True, width="large"),
+            "item": st.column_config.TextColumn(
+                "Item de verificação", required=True, width="large"
+            ),
             "categoria": st.column_config.TextColumn("Categoria"),
             "responsavel": st.column_config.TextColumn("Responsável"),
             "prazo": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
@@ -1536,7 +1665,9 @@ with abas[8]:
             motivo_transicao = ""
             if transicao["destino"] == SUSPENSO:
                 motivo_transicao = st.text_input(
-                    "Motivo da suspensão", key=f"motivo_suspensao_{projeto['id']}", placeholder="Aguardando dados do cliente"
+                    "Motivo da suspensão",
+                    key=f"motivo_suspensao_{projeto['id']}",
+                    placeholder="Aguardando dados do cliente",
                 )
             if st.button(
                 f"Mudar para {transicao['destino']}",
@@ -1566,8 +1697,12 @@ with abas[8]:
         "marco histórico restaurável para emissão ou mudança relevante de engenharia."
     )
     with st.form("nova_revisao"):
-        motivo = st.text_input("Motivo da nova revisão", placeholder="Consolidação para verificação interdisciplinar")
-        confirmar = st.form_submit_button("Criar revisão controlada", type="primary", icon=":material/history:")
+        motivo = st.text_input(
+            "Motivo da nova revisão", placeholder="Consolidação para verificação interdisciplinar"
+        )
+        confirmar = st.form_submit_button(
+            "Criar revisão controlada", type="primary", icon=":material/history:"
+        )
     if confirmar:
         _salvar(projeto, motivo or "Nova revisão controlada", revisao=True)
         st.rerun()
@@ -1575,7 +1710,11 @@ with abas[8]:
     st.dataframe(
         pd.DataFrame(
             [
-                {"Revisão": f"{item['revisao']:02d}", "Motivo": item["motivo"], "Criada em": _data_curta(item["criado_em"])}
+                {
+                    "Revisão": f"{item['revisao']:02d}",
+                    "Motivo": item["motivo"],
+                    "Criada em": _data_curta(item["criado_em"]),
+                }
                 for item in historico
             ]
         ),
@@ -1583,9 +1722,19 @@ with abas[8]:
         width="stretch",
     )
     if len(historico) > 1:
-        alvo = st.selectbox("Revisão histórica", [item["revisao"] for item in historico[1:]], format_func=lambda valor: f"Revisão {valor:02d}")
-        confirmar_restaura = st.checkbox("Confirmo que a restauração criará uma nova revisão a partir deste marco.")
-        if st.button("Restaurar como nova revisão", disabled=not confirmar_restaura, icon=":material/restore:"):
+        alvo = st.selectbox(
+            "Revisão histórica",
+            [item["revisao"] for item in historico[1:]],
+            format_func=lambda valor: f"Revisão {valor:02d}",
+        )
+        confirmar_restaura = st.checkbox(
+            "Confirmo que a restauração criará uma nova revisão a partir deste marco."
+        )
+        if st.button(
+            "Restaurar como nova revisão",
+            disabled=not confirmar_restaura,
+            icon=":material/restore:",
+        ):
             restaurar_revisao(projeto["id"], alvo)
             st.rerun()
 
@@ -1596,13 +1745,20 @@ with abas[8]:
         "Datas, hashes e estados recalculados ficam de fora."
     )
     opcoes_comparacao = {"atual": "Projeto atual (não salvo como revisão)"}
-    opcoes_comparacao.update({str(item["revisao"]): f"Revisão {item['revisao']:02d} · {item['motivo']}" for item in historico})
+    opcoes_comparacao.update(
+        {
+            str(item["revisao"]): f"Revisão {item['revisao']:02d} · {item['motivo']}"
+            for item in historico
+        }
+    )
     chaves_comparacao = list(opcoes_comparacao)
     comp1, comp2 = st.columns(2)
     base_comparacao = comp1.selectbox(
         "De",
         chaves_comparacao,
-        index=min(1, len(chaves_comparacao) - 1) if len(chaves_comparacao) > 2 else len(chaves_comparacao) - 1,
+        index=min(1, len(chaves_comparacao) - 1)
+        if len(chaves_comparacao) > 2
+        else len(chaves_comparacao) - 1,
         format_func=lambda valor: opcoes_comparacao[valor],
         key=f"comparar_de_{projeto['id']}",
     )
@@ -1652,12 +1808,17 @@ with abas[8]:
                 st.download_button(
                     "Baixar comparação (CSV)",
                     data=tabela_diferencas.to_csv(index=False).encode("utf-8-sig"),
-                    file_name=f"{projeto['codigo']}_comparacao_{base_comparacao}_{alvo_comparacao}.csv".replace("/", "-"),
+                    file_name=f"{projeto['codigo']}_comparacao_{base_comparacao}_{alvo_comparacao}.csv".replace(
+                        "/", "-"
+                    ),
                     mime="text/csv",
                     icon=":material/download:",
                 )
             else:
-                st.success("Nenhuma diferença de engenharia entre os dois marcos.", icon=":material/check_circle:")
+                st.success(
+                    "Nenhuma diferença de engenharia entre os dois marcos.",
+                    icon=":material/check_circle:",
+                )
 
     st.divider()
     st.subheader("Linha do tempo")
@@ -1702,7 +1863,9 @@ with abas[9]:
     if st.button("Arquivar projeto", disabled=not confirmar_arquivo, icon=":material/archive:"):
         arquivar_projeto(projeto["id"])
         st.rerun()
-    if projeto.get("status") == "Arquivado" and st.button("Desarquivar projeto", icon=":material/unarchive:"):
+    if projeto.get("status") == "Arquivado" and st.button(
+        "Desarquivar projeto", icon=":material/unarchive:"
+    ):
         arquivar_projeto(projeto["id"], arquivado=False)
         st.rerun()
 
@@ -1727,7 +1890,9 @@ with abas[9]:
         st.success(f"Projeto {projeto['codigo']} · {projeto['nome']} excluído.")
         st.rerun()
     st.subheader("Importar outro projeto")
-    novo_arquivo = st.file_uploader("Arquivo JSON exportado", type=["json"], key="importar_administracao")
+    novo_arquivo = st.file_uploader(
+        "Arquivo JSON exportado", type=["json"], key="importar_administracao"
+    )
     if novo_arquivo and st.button("Importar e abrir", icon=":material/upload:"):
         try:
             importar_projeto(novo_arquivo.getvalue())

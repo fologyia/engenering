@@ -87,10 +87,7 @@ def verificar_ligacao_parafusada(
         raise ValueError("numero_parafusos deve ser um inteiro positivo.")
     if int(numero_planos_corte) != numero_planos_corte or numero_planos_corte < 1:
         raise ValueError("numero_planos_corte deve ser um inteiro positivo.")
-    if (
-        int(numero_interfaces_atrito) != numero_interfaces_atrito
-        or numero_interfaces_atrito < 1
-    ):
+    if int(numero_interfaces_atrito) != numero_interfaces_atrito or numero_interfaces_atrito < 1:
         raise ValueError("numero_interfaces_atrito deve ser inteiro positivo.")
     n = int(numero_parafusos)
     nc = int(numero_planos_corte)
@@ -107,9 +104,7 @@ def verificar_ligacao_parafusada(
     d = _positivo("diametro_parafuso_mm", diametro_parafuso_mm)
     lc = _positivo("distancia_livre_carga_mm", distancia_livre_carga_mm)
     c_lc = _positivo("coeficiente_contato_lc", coeficiente_contato_lc)
-    c_lim = _positivo(
-        "coeficiente_limite_contato", coeficiente_limite_contato
-    )
+    c_lim = _positivo("coeficiente_limite_contato", coeficiente_limite_contato)
     phi_c = _fracao("phi_contato", phi_contato)
     tb = _nao_negativo("pre_tensao_parafuso_N", pre_tensao_parafuso_N)
     mu = _nao_negativo("coeficiente_atrito", coeficiente_atrito)
@@ -123,11 +118,7 @@ def verificar_ligacao_parafusada(
     )
     rc = n * contato_por_furo
     rs = phi_s * mu * ns * n * tb
-    interacao = (
-        (vd / rv) ** 2 + (td / rt) ** 2
-        if rv > 0 and rt > 0
-        else math.inf
-    )
+    interacao = (vd / rv) ** 2 + (td / rt) ** 2 if rv > 0 and rt > 0 else math.inf
     return ResultadoLigacaoParafusada(
         resistencia_cisalhamento_parafusos_N=rv,
         resistencia_tracao_parafusos_N=rt,
@@ -155,15 +146,9 @@ def verificar_chapa_ligacao(
     fu = _positivo("fu_chapa_MPa", fu_chapa_MPa)
     fy = _positivo("fy_chapa_MPa", fy_chapa_MPa)
     ant = _positivo("area_liquida_tracao_mm2", area_liquida_tracao_mm2)
-    agv = _positivo(
-        "area_bruta_cisalhamento_mm2", area_bruta_cisalhamento_mm2
-    )
-    anv = _positivo(
-        "area_liquida_cisalhamento_mm2", area_liquida_cisalhamento_mm2
-    )
-    ant_bloco = _positivo(
-        "area_liquida_tracao_bloco_mm2", area_liquida_tracao_bloco_mm2
-    )
+    agv = _positivo("area_bruta_cisalhamento_mm2", area_bruta_cisalhamento_mm2)
+    anv = _positivo("area_liquida_cisalhamento_mm2", area_liquida_cisalhamento_mm2)
+    ant_bloco = _positivo("area_liquida_tracao_bloco_mm2", area_liquida_tracao_bloco_mm2)
     ubs = _fracao("fator_distribuicao_tracao", fator_distribuicao_tracao)
     phi = _fracao("phi_ruptura", phi_ruptura)
     sd = _nao_negativo("forca_solicitante_N", forca_solicitante_N)
@@ -191,9 +176,7 @@ def verificar_solda_filete(
     perna = _positivo("tamanho_perna_mm", tamanho_perna_mm)
     comprimento = _positivo("comprimento_total_mm", comprimento_total_mm)
     fexx = _positivo("resistencia_eletrodo_MPa", resistencia_eletrodo_MPa)
-    coeficiente = _positivo(
-        "coeficiente_resistencia_solda", coeficiente_resistencia_solda
-    )
+    coeficiente = _positivo("coeficiente_resistencia_solda", coeficiente_resistencia_solda)
     phi = _fracao("phi_solda", phi_solda)
     sd = _nao_negativo("forca_solicitante_N", forca_solicitante_N)
     area = 0.707 * perna * comprimento

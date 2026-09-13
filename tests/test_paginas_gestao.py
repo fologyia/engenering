@@ -50,7 +50,9 @@ def banco_com_projeto(tmp_path, monkeypatch):
         tag_equipamento="CV-204",
         objetivo="Verificar a estrutura de suporte para a nova carga.",
     )
-    projeto.update({"responsavel": "Eng. Ana", "verificador": "Eng. Bruno", "aprovador": "Eng. Carla"})
+    projeto.update(
+        {"responsavel": "Eng. Ana", "verificador": "Eng. Bruno", "aprovador": "Eng. Carla"}
+    )
     componente = criar_item(
         tag="CV-204-SUP-01",
         descricao="Suporte principal",
@@ -60,19 +62,43 @@ def banco_com_projeto(tmp_path, monkeypatch):
         criticidade="Alta",
     )
     projeto["componentes"] = [componente]
-    projeto["normas"] = [criar_item(codigo="ABNT NBR 8800", edicao="2024", escopo="Barras", conferida=True)]
+    projeto["normas"] = [
+        criar_item(codigo="ABNT NBR 8800", edicao="2024", escopo="Barras", conferida=True)
+    ]
     projeto["anexos"] = [
-        criar_item(codigo="DE-1042", titulo="Arranjo geral", tipo="Desenho", revisao="B", situacao="Superado"),
-        criar_item(codigo="FD-77", titulo="Folha de dados", tipo="Folha de dados", revisao="", situacao="Aguardando recebimento"),
+        criar_item(
+            codigo="DE-1042",
+            titulo="Arranjo geral",
+            tipo="Desenho",
+            revisao="B",
+            situacao="Superado",
+        ),
+        criar_item(
+            codigo="FD-77",
+            titulo="Folha de dados",
+            tipo="Folha de dados",
+            revisao="",
+            situacao="Aguardando recebimento",
+        ),
     ]
     projeto["criterios_projeto"] = {
         "seguranca": {"fator_seguranca_minimo": 1.8},
         "normativo": {"norma_principal": "ABNT NBR 8800", "criterio_aceitacao": "ELU/ELS"},
     }
     projeto["checklist"] = [
-        criar_item(item="Cobrar folha de dados", responsavel="Eng. Ana", prazo=(date.today() - timedelta(days=3)).isoformat(), estado="Aberto", critico=True),
+        criar_item(
+            item="Cobrar folha de dados",
+            responsavel="Eng. Ana",
+            prazo=(date.today() - timedelta(days=3)).isoformat(),
+            estado="Aberto",
+            critico=True,
+        ),
         criar_item(item="Revisão independente", prazo="após a parada", estado="Aberto"),
-        criar_item(item="Conferir desenho", prazo=(date.today() + timedelta(days=2)).isoformat(), estado="Em andamento"),
+        criar_item(
+            item="Conferir desenho",
+            prazo=(date.today() + timedelta(days=2)).isoformat(),
+            estado="Em andamento",
+        ),
         criar_item(item="Feito", estado="Concluído"),
     ]
     projeto = salvar_projeto(projeto, motivo="Marco inicial", criar_revisao=True)
@@ -106,7 +132,9 @@ def banco_com_projeto(tmp_path, monkeypatch):
         },
     )
     antigo = projeto["registros_tecnicos"][1]["id"]
-    documento = superar_registro(projeto, antigo, motivo="Refeito", substituto_id=projeto["registros_tecnicos"][0]["id"])
+    documento = superar_registro(
+        projeto, antigo, motivo="Refeito", substituto_id=projeto["registros_tecnicos"][0]["id"]
+    )
     salvar_projeto(documento, motivo="Registro superado")
     return banco
 
@@ -177,7 +205,9 @@ def test_aba_checklist_semeia_o_modelo_do_tipo_do_projeto(banco_com_projeto_vazi
 
     modelo = obter_modelo("estrutura_metalica")
     botao = next(
-        botao for botao in teste.button if botao.label.startswith("Adicionar") and "do modelo" in botao.label
+        botao
+        for botao in teste.button
+        if botao.label.startswith("Adicionar") and "do modelo" in botao.label
     )
     assert botao.label.startswith(f"Adicionar {len(modelo.itens)} item")
     botao.click()
@@ -190,8 +220,13 @@ def test_aba_checklist_semeia_o_modelo_do_tipo_do_projeto(banco_com_projeto_vazi
     assert all(origem.startswith("estrutura_metalica:") for origem in origens)
     responsaveis = {item["responsavel"] for item in projeto["checklist"]}
     assert {"Eng. Ana", "Eng. Bruno", ""} == responsaveis  # aprovador ainda vazio
-    assert any("do modelo Estrutura metálica" in evento["descricao"] for evento in historico_eventos(banco_com_projeto_vazio))
+    assert any(
+        "do modelo Estrutura metálica" in evento["descricao"]
+        for evento in historico_eventos(banco_com_projeto_vazio)
+    )
 
     # Depois de semear, o botão some: nada mais a acrescentar deste modelo.
     teste.run()
-    assert not any("do modelo" in botao.label for botao in teste.button if botao.label.startswith("Adicionar"))
+    assert not any(
+        "do modelo" in botao.label for botao in teste.button if botao.label.startswith("Adicionar")
+    )

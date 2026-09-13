@@ -183,13 +183,8 @@ with st.container(border=True):
         tabela_carga = pd.DataFrame(
             {
                 "Carregamento": [ROTULOS_CARGA[chave] for chave in ROTULOS_CARGA],
-                "Fator": [
-                    fat.fator_carregamento(chave, modelo)
-                    for chave in ROTULOS_CARGA
-                ],
-                "Selecionado": [
-                    "Sim" if chave == tipo_carga else "" for chave in ROTULOS_CARGA
-                ],
+                "Fator": [fat.fator_carregamento(chave, modelo) for chave in ROTULOS_CARGA],
+                "Selecionado": ["Sim" if chave == tipo_carga else "" for chave in ROTULOS_CARGA],
             }
         )
         st.dataframe(
@@ -199,10 +194,7 @@ with st.container(border=True):
                 "Fator": st.column_config.NumberColumn(format="%.3f"),
             },
         )
-        st.caption(
-            "Norton: PDF p. 356, Eq. 6.7a. "
-            "Shigley: PDF p. 302, Eq. 6-26."
-        )
+        st.caption("Norton: PDF p. 356, Eq. 6.7a. Shigley: PDF p. 302, Eq. 6-26.")
 
 with st.container(border=True):
     st.subheader("3. Fator de tamanho")
@@ -214,57 +206,188 @@ with st.container(border=True):
         modo_diametro = st.segmented_control(
             "Como obter o diametro equivalente?",
             ["Informar d equivalente", "Calcular pela geometria"],
-            default="Informar d equivalente", required=True, width="stretch",
+            default="Informar d equivalente",
+            required=True,
+            width="stretch",
             key=f"modo_diametro_{modelo}_{tipo_carga}",
             persist_state="session",
         )
         if modo_diametro == "Informar d equivalente":
             diametro_mm = st.number_input(
-                "Diametro equivalente da secao (mm)", min_value=diametro_minimo,
-                max_value=diametro_maximo, value=max(diametro_minimo, 20.0), step=1.0,
+                "Diametro equivalente da secao (mm)",
+                min_value=diametro_minimo,
+                max_value=diametro_maximo,
+                value=max(diametro_minimo, 20.0),
+                step=1.0,
                 key=f"diametro_{modelo}_{tipo_carga}",
                 help="Para secoes nao circulares, informe o diametro equivalente obtido pela area submetida a pelo menos 95% da tensao maxima.",
                 persist_state="session",
             )
-            st.caption("Use esta opcao quando A0,95sigma ja tiver sido determinada por outro metodo.")
+            st.caption(
+                "Use esta opcao quando A0,95sigma ja tiver sido determinada por outro metodo."
+            )
         else:
             st.markdown("**Calculadora de diametro equivalente (A0,95sigma)**")
-            geometria = st.selectbox("Geometria e condicao de flexao", ["Cilindro macico rotativo", "Circulo nao rotativo", "Retangulo", "Perfil I", "Perfil canal", "Area A0,95sigma manual"], key="geometria_diametro_equivalente", persist_state="session")
-            rotulo_svg = {"Cilindro macico rotativo": "Circulo rotativo", "Circulo nao rotativo": "Circulo nao rotativo", "Retangulo": "Retangulo", "Perfil I": "Perfil I", "Perfil canal": "Perfil canal", "Area A0,95sigma manual": "Area manual"}[geometria]
+            geometria = st.selectbox(
+                "Geometria e condicao de flexao",
+                [
+                    "Cilindro macico rotativo",
+                    "Circulo nao rotativo",
+                    "Retangulo",
+                    "Perfil I",
+                    "Perfil canal",
+                    "Area A0,95sigma manual",
+                ],
+                key="geometria_diametro_equivalente",
+                persist_state="session",
+            )
+            rotulo_svg = {
+                "Cilindro macico rotativo": "Circulo rotativo",
+                "Circulo nao rotativo": "Circulo nao rotativo",
+                "Retangulo": "Retangulo",
+                "Perfil I": "Perfil I",
+                "Perfil canal": "Perfil canal",
+                "Area A0,95sigma manual": "Area manual",
+            }[geometria]
             entrada_geometria, desenho_geometria = st.columns(2)
             with entrada_geometria:
                 try:
                     if geometria == "Cilindro macico rotativo":
-                        d_fisico = st.number_input("d (mm)", min_value=0.1, value=20.0, step=1.0, key="de_circulo_rotativo", persist_state="session")
+                        d_fisico = st.number_input(
+                            "d (mm)",
+                            min_value=0.1,
+                            value=20.0,
+                            step=1.0,
+                            key="de_circulo_rotativo",
+                            persist_state="session",
+                        )
                         area_95 = size.area_95_circulo_rotativo(d_fisico)
                         st.latex(r"A_{0,95\sigma}=0,0766d^2 \quad\Rightarrow\quad d_e=d")
                     elif geometria == "Circulo nao rotativo":
-                        d_fisico = st.number_input("d (mm)", min_value=0.1, value=60.0, step=1.0, key="de_circulo_nao_rotativo", persist_state="session")
+                        d_fisico = st.number_input(
+                            "d (mm)",
+                            min_value=0.1,
+                            value=60.0,
+                            step=1.0,
+                            key="de_circulo_nao_rotativo",
+                            persist_state="session",
+                        )
                         area_95 = size.area_95_circulo_nao_rotativo(d_fisico)
                         st.latex(r"A_{0,95\sigma}=0,01046d^2 \quad\Rightarrow\quad d_e=0,370d")
                     elif geometria == "Retangulo":
-                        h_mm = st.number_input("h (mm)", min_value=0.1, value=60.0, step=1.0, key="de_retangulo_h", persist_state="session")
-                        b_mm = st.number_input("b (mm)", min_value=0.1, value=40.0, step=1.0, key="de_retangulo_b", persist_state="session")
+                        h_mm = st.number_input(
+                            "h (mm)",
+                            min_value=0.1,
+                            value=60.0,
+                            step=1.0,
+                            key="de_retangulo_h",
+                            persist_state="session",
+                        )
+                        b_mm = st.number_input(
+                            "b (mm)",
+                            min_value=0.1,
+                            value=40.0,
+                            step=1.0,
+                            key="de_retangulo_b",
+                            persist_state="session",
+                        )
                         area_95 = size.area_95_retangulo(h_mm, b_mm)
                         st.latex(r"A_{0,95\sigma}=0,05hb \quad\Rightarrow\quad d_e=0,808\sqrt{hb}")
                     elif geometria == "Perfil I":
-                        a_mm = st.number_input("a (mm)", min_value=0.1, value=100.0, step=1.0, key="de_i_a", persist_state="session")
-                        b_mm = st.number_input("b (mm)", min_value=0.1, value=200.0, step=1.0, key="de_i_b", persist_state="session")
-                        tf_mm = st.number_input("tf (mm)", min_value=0.1, value=10.0, step=0.5, key="de_i_tf", persist_state="session")
-                        eixo = st.segmented_control("Eixo de flexao", ["eixo 1-1", "eixo 2-2"], default="eixo 1-1", required=True, width="stretch", key="de_i_eixo", persist_state="session")
+                        a_mm = st.number_input(
+                            "a (mm)",
+                            min_value=0.1,
+                            value=100.0,
+                            step=1.0,
+                            key="de_i_a",
+                            persist_state="session",
+                        )
+                        b_mm = st.number_input(
+                            "b (mm)",
+                            min_value=0.1,
+                            value=200.0,
+                            step=1.0,
+                            key="de_i_b",
+                            persist_state="session",
+                        )
+                        tf_mm = st.number_input(
+                            "tf (mm)",
+                            min_value=0.1,
+                            value=10.0,
+                            step=0.5,
+                            key="de_i_tf",
+                            persist_state="session",
+                        )
+                        eixo = st.segmented_control(
+                            "Eixo de flexao",
+                            ["eixo 1-1", "eixo 2-2"],
+                            default="eixo 1-1",
+                            required=True,
+                            width="stretch",
+                            key="de_i_eixo",
+                            persist_state="session",
+                        )
                         area_95 = size.area_95_perfil_i(a_mm, b_mm, tf_mm, eixo)
-                        st.latex(r"A_{0,95\sigma}=0,10at_f\ (eixo\ 1\text{-}1)\quad;\quad A_{0,95\sigma}=0,05ba\ (eixo\ 2\text{-}2)")
+                        st.latex(
+                            r"A_{0,95\sigma}=0,10at_f\ (eixo\ 1\text{-}1)\quad;\quad A_{0,95\sigma}=0,05ba\ (eixo\ 2\text{-}2)"
+                        )
                         st.caption("Validade desta aproximacao: tf > 0,025a.")
                     elif geometria == "Perfil canal":
-                        a_mm = st.number_input("a (mm)", min_value=0.1, value=100.0, step=1.0, key="de_canal_a", persist_state="session")
-                        b_mm = st.number_input("b (mm)", min_value=0.1, value=200.0, step=1.0, key="de_canal_b", persist_state="session")
-                        tf_mm = st.number_input("tf (mm)", min_value=0.1, value=10.0, step=0.5, key="de_canal_tf", persist_state="session")
-                        x_mm = st.number_input("x (mm)", min_value=0.0, max_value=b_mm, value=min(70.0, b_mm), step=1.0, key="de_canal_x", persist_state="session")
-                        eixo = st.segmented_control("Eixo de flexao", ["eixo 1-1", "eixo 2-2"], default="eixo 1-1", required=True, width="stretch", key="de_canal_eixo", persist_state="session")
+                        a_mm = st.number_input(
+                            "a (mm)",
+                            min_value=0.1,
+                            value=100.0,
+                            step=1.0,
+                            key="de_canal_a",
+                            persist_state="session",
+                        )
+                        b_mm = st.number_input(
+                            "b (mm)",
+                            min_value=0.1,
+                            value=200.0,
+                            step=1.0,
+                            key="de_canal_b",
+                            persist_state="session",
+                        )
+                        tf_mm = st.number_input(
+                            "tf (mm)",
+                            min_value=0.1,
+                            value=10.0,
+                            step=0.5,
+                            key="de_canal_tf",
+                            persist_state="session",
+                        )
+                        x_mm = st.number_input(
+                            "x (mm)",
+                            min_value=0.0,
+                            max_value=b_mm,
+                            value=min(70.0, b_mm),
+                            step=1.0,
+                            key="de_canal_x",
+                            persist_state="session",
+                        )
+                        eixo = st.segmented_control(
+                            "Eixo de flexao",
+                            ["eixo 1-1", "eixo 2-2"],
+                            default="eixo 1-1",
+                            required=True,
+                            width="stretch",
+                            key="de_canal_eixo",
+                            persist_state="session",
+                        )
                         area_95 = size.area_95_perfil_canal(a_mm, b_mm, tf_mm, x_mm, eixo)
-                        st.latex(r"A_{0,95\sigma}=0,05ab\ (eixo\ 1\text{-}1)\quad;\quad A_{0,95\sigma}=0,052xa+0,10t_f(b-x)\ (eixo\ 2\text{-}2)")
+                        st.latex(
+                            r"A_{0,95\sigma}=0,05ab\ (eixo\ 1\text{-}1)\quad;\quad A_{0,95\sigma}=0,052xa+0,10t_f(b-x)\ (eixo\ 2\text{-}2)"
+                        )
                     else:
-                        area_95 = st.number_input("A0,95sigma (mm2)", min_value=0.001, value=100.0, step=1.0, key="de_area_manual", persist_state="session")
+                        area_95 = st.number_input(
+                            "A0,95sigma (mm2)",
+                            min_value=0.001,
+                            value=100.0,
+                            step=1.0,
+                            key="de_area_manual",
+                            persist_state="session",
+                        )
                         st.latex(r"d_e=\sqrt{\frac{A_{0,95\sigma}}{0,0766}}")
                     diametro_mm = size.diametro_equivalente_por_area_95(area_95)
                 except ValueError as erro:
@@ -287,7 +410,9 @@ with st.container(border=True):
             st.latex(r"C_{tamanho}=1\quad\mathrm{para\ carga\ axial}")
             st.code("Secao solicitada axialmente -> Ctamanho = 1,000")
         elif modelo == "norton":
-            st.latex(r"C_{tamanho}=\begin{cases}1, & d\leq 8\ \mathrm{mm}\\1{,}189\,d^{-0{,}097}, & 8<d\leq250\ \mathrm{mm}\\0{,}6, & d>250\ \mathrm{mm}\end{cases}")
+            st.latex(
+                r"C_{tamanho}=\begin{cases}1, & d\leq 8\ \mathrm{mm}\\1{,}189\,d^{-0{,}097}, & 8<d\leq250\ \mathrm{mm}\\0{,}6, & d>250\ \mathrm{mm}\end{cases}"
+            )
             if diametro_mm <= 8:
                 st.code(f"d = {diametro_mm:.2f} mm -> Ctamanho = 1,000")
             elif diametro_mm <= 250:
@@ -295,23 +420,73 @@ with st.container(border=True):
             else:
                 st.code(f"d = {diametro_mm:.2f} mm > 250 mm -> Ctamanho = 0,600")
         else:
-            st.latex(r"k_b=\begin{cases}1{,}24\,d^{-0{,}107}, & 2{,}79\leq d\leq51\ \mathrm{mm}\\1{,}51\,d^{-0{,}157}, & 51<d\leq254\ \mathrm{mm}\end{cases}")
+            st.latex(
+                r"k_b=\begin{cases}1{,}24\,d^{-0{,}107}, & 2{,}79\leq d\leq51\ \mathrm{mm}\\1{,}51\,d^{-0{,}157}, & 51<d\leq254\ \mathrm{mm}\end{cases}"
+            )
             st.code(f"Shigley: d = {diametro_mm:.2f} mm -> kb = {Ctamanho:.3f}")
-        st.caption("Norton: PDF p. 357, Eq. 6.7b. Shigley: PDF pp. 300 e 307-308, Eqs. 6-20, 6-21 e Tabela 6-3.")
+        st.caption(
+            "Norton: PDF p. 357, Eq. 6.7b. Shigley: PDF pp. 300 e 307-308, Eqs. 6-20, 6-21 e Tabela 6-3."
+        )
         if material != "aco":
-            st.warning("A correlacao de tamanho foi levantada principalmente para aco. Para materiais nao ferrosos, use validacao experimental ou um fator documentado.", icon=":material/warning:")
+            st.warning(
+                "A correlacao de tamanho foi levantada principalmente para aco. Para materiais nao ferrosos, use validacao experimental ou um fator documentado.",
+                icon=":material/warning:",
+            )
 
     with tamanho_grafico:
         limite_grafico = max(250.0, diametro_mm * 1.15) if modelo == "norton" else 254.0
         inicio_grafico = 0.1 if modelo == "norton" or tipo_carga == "axial" else 2.79
         diametros_fator = np.geomspace(inicio_grafico, limite_grafico, 180)
-        df_tamanho = pd.DataFrame({"Diametro (mm)": diametros_fator, "Ctamanho": [fat.fator_tamanho(float(diametro), tipo_carga, modelo) for diametro in diametros_fator]})
-        curva_tamanho = alt.Chart(df_tamanho).mark_line(strokeWidth=3).encode(x=alt.X("Diametro (mm):Q", scale=alt.Scale(type="log"), title="Diametro equivalente (mm, escala log)"), y=alt.Y("Ctamanho:Q", scale=alt.Scale(zero=False), title="Fator de tamanho"), tooltip=[alt.Tooltip("Diametro (mm):Q", format=".2f"), alt.Tooltip("Ctamanho:Q", format=".3f")])
-        ponto_tamanho = alt.Chart(pd.DataFrame({"Diametro (mm)": [diametro_mm], "Ctamanho": [Ctamanho]})).mark_point(size=140, filled=True, color="#e05a47").encode(x="Diametro (mm):Q", y="Ctamanho:Q", tooltip=[alt.Tooltip("Diametro (mm):Q", format=".2f"), alt.Tooltip("Ctamanho:Q", format=".3f")])
+        df_tamanho = pd.DataFrame(
+            {
+                "Diametro (mm)": diametros_fator,
+                "Ctamanho": [
+                    fat.fator_tamanho(float(diametro), tipo_carga, modelo)
+                    for diametro in diametros_fator
+                ],
+            }
+        )
+        curva_tamanho = (
+            alt.Chart(df_tamanho)
+            .mark_line(strokeWidth=3)
+            .encode(
+                x=alt.X(
+                    "Diametro (mm):Q",
+                    scale=alt.Scale(type="log"),
+                    title="Diametro equivalente (mm, escala log)",
+                ),
+                y=alt.Y("Ctamanho:Q", scale=alt.Scale(zero=False), title="Fator de tamanho"),
+                tooltip=[
+                    alt.Tooltip("Diametro (mm):Q", format=".2f"),
+                    alt.Tooltip("Ctamanho:Q", format=".3f"),
+                ],
+            )
+        )
+        ponto_tamanho = (
+            alt.Chart(pd.DataFrame({"Diametro (mm)": [diametro_mm], "Ctamanho": [Ctamanho]}))
+            .mark_point(size=140, filled=True, color="#e05a47")
+            .encode(
+                x="Diametro (mm):Q",
+                y="Ctamanho:Q",
+                tooltip=[
+                    alt.Tooltip("Diametro (mm):Q", format=".2f"),
+                    alt.Tooltip("Ctamanho:Q", format=".3f"),
+                ],
+            )
+        )
         transicoes = [8.0, 250.0] if modelo == "norton" else [2.79, 51.0]
-        linhas_transicao = alt.Chart(pd.DataFrame({"Transicao": transicoes})).mark_rule(strokeDash=[5, 5], color="#777").encode(x="Transicao:Q")
-        st.altair_chart((curva_tamanho + ponto_tamanho + linhas_transicao).properties(height=315), width="stretch")
-        st.caption("As linhas tracejadas indicam as mudancas de trecho da correlacao. Para Norton, d > 250 mm usa 0,600.")
+        linhas_transicao = (
+            alt.Chart(pd.DataFrame({"Transicao": transicoes}))
+            .mark_rule(strokeDash=[5, 5], color="#777")
+            .encode(x="Transicao:Q")
+        )
+        st.altair_chart(
+            (curva_tamanho + ponto_tamanho + linhas_transicao).properties(height=315),
+            width="stretch",
+        )
+        st.caption(
+            "As linhas tracejadas indicam as mudancas de trecho da correlacao. Para Norton, d > 250 mm usa 0,600."
+        )
 with st.container(border=True):
     st.subheader("4. Fator de acabamento superficial")
     superficie_controle, superficie_grafico = st.columns([0.8, 1.2])
@@ -332,9 +507,7 @@ with st.container(border=True):
             key="fadiga_modo_superficie",
             persist_state="session",
         )
-        Csuperf_calculado = fat.fator_superficie(
-            Sut, acabamento, material=material
-        )
+        Csuperf_calculado = fat.fator_superficie(Sut, acabamento, material=material)
         if material == "ferro":
             st.info(
                 "Para ferro fundido, Norton recomenda Csuperf = 1 porque as "
@@ -375,8 +548,7 @@ with st.container(border=True):
             st.code("Ferro fundido → Csuperf = 1,000 (recomendação de Norton)")
         else:
             st.code(
-                f"Csuperf = min({A:g} × {Sut:.1f}^({expoente_b:.3f}), 1) "
-                f"= {Csuperf_calculado:.3f}"
+                f"Csuperf = min({A:g} × {Sut:.1f}^({expoente_b:.3f}), 1) = {Csuperf_calculado:.3f}"
             )
         st.caption(
             "Coeficientes coincidentes nas duas referências: "
@@ -385,8 +557,7 @@ with st.container(border=True):
         )
         if modo_superficie == "Valor manual":
             st.caption(
-                f"Curva selecionada: {Csuperf_calculado:.3f}. "
-                f"Valor manual aplicado: {Csuperf:.3f}."
+                f"Curva selecionada: {Csuperf_calculado:.3f}. Valor manual aplicado: {Csuperf:.3f}."
             )
 
     with superficie_grafico:
@@ -400,69 +571,75 @@ with st.container(border=True):
                     {
                         "Sut (MPa)": float(sut_curva),
                         "Sut (kpsi)": float(sut_curva / 6.894757),
-                        "Csuperf": fat.fator_superficie(
-                            float(sut_curva), acabamento_chave
-                        ),
+                        "Csuperf": fat.fator_superficie(float(sut_curva), acabamento_chave),
                         "Acabamento": acabamento_rotulo,
                     }
                 )
         df_superficie = pd.DataFrame(linhas_superficie)
         acabamento_selecionado = ROTULOS_ACABAMENTO[acabamento]
-        curvas_superficie = alt.Chart(df_superficie).mark_line().encode(
-            x=alt.X(
-                "Sut (MPa):Q",
-                title="Resistência à tração, Sut (MPa)",
-                scale=alt.Scale(zero=False),
-            ),
-            y=alt.Y(
-                "Csuperf:Q",
-                title="Fator de superfície",
-                scale=alt.Scale(domain=[0, 1.02]),
-            ),
-            color=alt.Color("Acabamento:N", title="Acabamento"),
-            strokeWidth=alt.condition(
-                alt.datum.Acabamento == acabamento_selecionado,
-                alt.value(4),
-                alt.value(1.5),
-            ),
-            opacity=alt.condition(
-                alt.datum.Acabamento == acabamento_selecionado,
-                alt.value(1.0),
-                alt.value(0.55),
-            ),
-            tooltip=[
-                "Acabamento:N",
-                alt.Tooltip("Sut (MPa):Q", format=".0f"),
-                alt.Tooltip("Sut (kpsi):Q", format=".1f"),
-                alt.Tooltip("Csuperf:Q", format=".3f"),
-            ],
-        )
-        ponto_superficie = alt.Chart(
-            pd.DataFrame(
-                {
-                    "Sut (MPa)": [Sut],
-                    "Csuperf": [Csuperf],
-                    "Origem": [
-                        "Manual"
-                        if modo_superficie == "Valor manual"
-                        else "Curva calculada"
-                    ],
-                }
+        curvas_superficie = (
+            alt.Chart(df_superficie)
+            .mark_line()
+            .encode(
+                x=alt.X(
+                    "Sut (MPa):Q",
+                    title="Resistência à tração, Sut (MPa)",
+                    scale=alt.Scale(zero=False),
+                ),
+                y=alt.Y(
+                    "Csuperf:Q",
+                    title="Fator de superfície",
+                    scale=alt.Scale(domain=[0, 1.02]),
+                ),
+                color=alt.Color("Acabamento:N", title="Acabamento"),
+                strokeWidth=alt.condition(
+                    alt.datum.Acabamento == acabamento_selecionado,
+                    alt.value(4),
+                    alt.value(1.5),
+                ),
+                opacity=alt.condition(
+                    alt.datum.Acabamento == acabamento_selecionado,
+                    alt.value(1.0),
+                    alt.value(0.55),
+                ),
+                tooltip=[
+                    "Acabamento:N",
+                    alt.Tooltip("Sut (MPa):Q", format=".0f"),
+                    alt.Tooltip("Sut (kpsi):Q", format=".1f"),
+                    alt.Tooltip("Csuperf:Q", format=".3f"),
+                ],
             )
-        ).mark_point(size=170, filled=True, color="#111").encode(
-            x="Sut (MPa):Q",
-            y="Csuperf:Q",
-            tooltip=[
-                "Origem:N",
-                alt.Tooltip("Sut (MPa):Q", format=".1f"),
-                alt.Tooltip("Csuperf:Q", format=".3f"),
-            ],
+        )
+        ponto_superficie = (
+            alt.Chart(
+                pd.DataFrame(
+                    {
+                        "Sut (MPa)": [Sut],
+                        "Csuperf": [Csuperf],
+                        "Origem": [
+                            "Manual" if modo_superficie == "Valor manual" else "Curva calculada"
+                        ],
+                    }
+                )
+            )
+            .mark_point(size=170, filled=True, color="#111")
+            .encode(
+                x="Sut (MPa):Q",
+                y="Csuperf:Q",
+                tooltip=[
+                    "Origem:N",
+                    alt.Tooltip("Sut (MPa):Q", format=".1f"),
+                    alt.Tooltip("Csuperf:Q", format=".3f"),
+                ],
+            )
         )
         camadas_superficie = [curvas_superficie, ponto_superficie]
         if modo_superficie == "Valor manual":
-            regra_manual = alt.Chart(
-                pd.DataFrame({"Manual": [Csuperf]})
-            ).mark_rule(color="#111", strokeDash=[6, 4]).encode(y="Manual:Q")
+            regra_manual = (
+                alt.Chart(pd.DataFrame({"Manual": [Csuperf]}))
+                .mark_rule(color="#111", strokeDash=[6, 4])
+                .encode(y="Manual:Q")
+            )
             camadas_superficie.append(regra_manual)
         st.altair_chart(
             alt.layer(*camadas_superficie).properties(height=360),
@@ -490,9 +667,7 @@ with st.container(border=True):
             ),
             persist_state="session",
         )
-        temp_min, temp_max = fat.limites_temperatura_entrada(
-            modelo, unidade_temperatura
-        )
+        temp_min, temp_max = fat.limites_temperatura_entrada(modelo, unidade_temperatura)
         temperatura_padrao = 68.0 if unidade_temperatura == "°F" else 20.0
         temperatura_entrada = st.number_input(
             f"Temperatura estimada do corpo da peça ({unidade_temperatura})",
@@ -507,13 +682,9 @@ with st.container(border=True):
             ),
             persist_state="session",
         )
-        temperatura = fat.temperatura_para_celsius(
-            temperatura_entrada, unidade_temperatura
-        )
+        temperatura = fat.temperatura_para_celsius(temperatura_entrada, unidade_temperatura)
         temperatura_f = fat.celsius_para_fahrenheit(temperatura)
-        Ctemp = fat.fator_temperatura_na_unidade(
-            temperatura_entrada, unidade_temperatura, modelo
-        )
+        Ctemp = fat.fator_temperatura_na_unidade(temperatura_entrada, unidade_temperatura, modelo)
         with st.container(horizontal=True):
             st.metric("Ctemp", f"{Ctemp:.3f}", border=True)
             st.metric(
@@ -538,13 +709,14 @@ with st.container(border=True):
                 r"\end{cases}"
             )
             if temperatura_f <= 450:
-                st.code(f"T = {temperatura:.1f} °C = {temperatura_f:.1f} °F ≤ 450 °F → Ctemp = 1,000")
-            else:
                 st.code(
-                    f"Ctemp = 1 - 0,0058 × ({temperatura_f:.1f} - 450) "
-                    f"= {Ctemp:.3f}"
+                    f"T = {temperatura:.1f} °C = {temperatura_f:.1f} °F ≤ 450 °F → Ctemp = 1,000"
                 )
-            st.caption("Norton: PDF p. 361, Eq. 6.7f; a equação usa °F e é válida até 550 °F (287,8 °C), para aços.")
+            else:
+                st.code(f"Ctemp = 1 - 0,0058 × ({temperatura_f:.1f} - 450) = {Ctemp:.3f}")
+            st.caption(
+                "Norton: PDF p. 361, Eq. 6.7f; a equação usa °F e é válida até 550 °F (287,8 °C), para aços."
+            )
         else:
             st.latex(
                 r"k_d=0{,}9877+0{,}6507\!\times\!10^{-3}T"
@@ -558,10 +730,7 @@ with st.container(border=True):
                     f"T = {temperatura:.1f} °C → kd = {Ctemp:.3f}"
                 )
             else:
-                st.code(
-                    f"Shigley: polinômio em T = {temperatura:.1f} °C "
-                    f"→ kd = {Ctemp:.3f}"
-                )
+                st.code(f"Shigley: polinômio em T = {temperatura:.1f} °C → kd = {Ctemp:.3f}")
             st.caption(
                 "Shigley: PDF pp. 303–304, Tabela 6-4 e Eq. 6-27. "
                 "A equação polinomial é indicada para 37–540 °C."
@@ -605,14 +774,11 @@ with st.container(border=True):
             transicao_c = [37.0]
 
         temperaturas_f_curva = [
-            fat.celsius_para_fahrenheit(float(temp_c))
-            for temp_c in temperaturas_c_curva
+            fat.celsius_para_fahrenheit(float(temp_c)) for temp_c in temperaturas_c_curva
         ]
         if unidade_temperatura == "°F":
             temperaturas_exibidas = temperaturas_f_curva
-            transicoes_exibidas = [
-                fat.celsius_para_fahrenheit(temp_c) for temp_c in transicao_c
-            ]
+            transicoes_exibidas = [fat.celsius_para_fahrenheit(temp_c) for temp_c in transicao_c]
         else:
             temperaturas_exibidas = temperaturas_c_curva
             transicoes_exibidas = transicao_c
@@ -623,56 +789,59 @@ with st.container(border=True):
                 "Temperatura (°C)": temperaturas_c_curva,
                 "Temperatura (°F)": temperaturas_f_curva,
                 "Ctemp": [
-                    fat.fator_temperatura(float(temp_c), modelo)
-                    for temp_c in temperaturas_c_curva
+                    fat.fator_temperatura(float(temp_c), modelo) for temp_c in temperaturas_c_curva
                 ],
             }
         )
-        curva_temperatura = alt.Chart(df_temperatura).mark_line(
-            strokeWidth=3
-        ).encode(
-            x=alt.X(
-                "Temperatura informada:Q",
-                title=f"Temperatura ({unidade_temperatura})",
-            ),
-            y=alt.Y(
-                "Ctemp:Q",
-                scale=alt.Scale(zero=False),
-                title="Fator de temperatura",
-            ),
-            tooltip=[
-                alt.Tooltip("Temperatura (°C):Q", format=".1f"),
-                alt.Tooltip("Temperatura (°F):Q", format=".1f"),
-                alt.Tooltip("Ctemp:Q", format=".3f"),
-            ],
-        )
-        ponto_temperatura = alt.Chart(
-            pd.DataFrame(
-                {
-                    "Temperatura informada": [temperatura_entrada],
-                    "Temperatura (°C)": [temperatura],
-                    "Temperatura (°F)": [temperatura_f],
-                    "Ctemp": [Ctemp],
-                }
+        curva_temperatura = (
+            alt.Chart(df_temperatura)
+            .mark_line(strokeWidth=3)
+            .encode(
+                x=alt.X(
+                    "Temperatura informada:Q",
+                    title=f"Temperatura ({unidade_temperatura})",
+                ),
+                y=alt.Y(
+                    "Ctemp:Q",
+                    scale=alt.Scale(zero=False),
+                    title="Fator de temperatura",
+                ),
+                tooltip=[
+                    alt.Tooltip("Temperatura (°C):Q", format=".1f"),
+                    alt.Tooltip("Temperatura (°F):Q", format=".1f"),
+                    alt.Tooltip("Ctemp:Q", format=".3f"),
+                ],
             )
-        ).mark_point(size=150, filled=True, color="#e05a47").encode(
-            x="Temperatura informada:Q",
-            y="Ctemp:Q",
-            tooltip=[
-                alt.Tooltip("Temperatura (°C):Q", format=".1f"),
-                alt.Tooltip("Temperatura (°F):Q", format=".1f"),
-                alt.Tooltip("Ctemp:Q", format=".3f"),
-            ],
         )
-        limite_temperatura = alt.Chart(
-            pd.DataFrame({"Transição": transicoes_exibidas})
-        ).mark_rule(strokeDash=[5, 5], color="#777").encode(x="Transição:Q")
+        ponto_temperatura = (
+            alt.Chart(
+                pd.DataFrame(
+                    {
+                        "Temperatura informada": [temperatura_entrada],
+                        "Temperatura (°C)": [temperatura],
+                        "Temperatura (°F)": [temperatura_f],
+                        "Ctemp": [Ctemp],
+                    }
+                )
+            )
+            .mark_point(size=150, filled=True, color="#e05a47")
+            .encode(
+                x="Temperatura informada:Q",
+                y="Ctemp:Q",
+                tooltip=[
+                    alt.Tooltip("Temperatura (°C):Q", format=".1f"),
+                    alt.Tooltip("Temperatura (°F):Q", format=".1f"),
+                    alt.Tooltip("Ctemp:Q", format=".3f"),
+                ],
+            )
+        )
+        limite_temperatura = (
+            alt.Chart(pd.DataFrame({"Transição": transicoes_exibidas}))
+            .mark_rule(strokeDash=[5, 5], color="#777")
+            .encode(x="Transição:Q")
+        )
         st.altair_chart(
-            (
-                curva_temperatura
-                + ponto_temperatura
-                + limite_temperatura
-            ).properties(height=315),
+            (curva_temperatura + ponto_temperatura + limite_temperatura).properties(height=315),
             width="stretch",
         )
         st.caption(
@@ -700,9 +869,7 @@ with st.container(border=True):
     with confiabilidade_tabela:
         df_confiabilidade = pd.DataFrame(
             {
-                "Confiabilidade": [
-                    f"{valor:g}%" for valor in fat.FATORES_CONFIABILIDADE
-                ],
+                "Confiabilidade": [f"{valor:g}%" for valor in fat.FATORES_CONFIABILIDADE],
                 "Cconf": list(fat.FATORES_CONFIABILIDADE.values()),
             }
         )
@@ -749,18 +916,14 @@ with st.container(border=True):
         )
 
     substituicao = " × ".join(f"{valor:.3f}" for valor in fatores.values())
-    st.code(
-        f"Se = ({substituicao}) × {Se_linha:.1f} MPa = {Se:.1f} MPa"
-    )
+    st.code(f"Se = ({substituicao}) × {Se_linha:.1f} MPa = {Se:.1f} MPa")
     st.caption(f"Resultado calculado integralmente segundo {fat.FONTES_MARIN[modelo]}.")
 
     acumulado = 1.0
     linhas_impacto = [{"Etapa": "Teórico", "Multiplicador acumulado": acumulado}]
     for nome, valor in fatores.items():
         acumulado *= valor
-        linhas_impacto.append(
-            {"Etapa": nome, "Multiplicador acumulado": acumulado}
-        )
+        linhas_impacto.append({"Etapa": nome, "Multiplicador acumulado": acumulado})
     df_impacto = pd.DataFrame(linhas_impacto)
     grafico_impacto = (
         alt.Chart(df_impacto)
@@ -844,9 +1007,7 @@ with st.container(border=True):
             fator_entalhe = fat.fator_concentracao_fadiga(Kt, q)
             nome_fator_entalhe = "Kf"
 
-        tensao_alternada = fat.tensao_com_concentracao(
-            tensao_alternada_nominal, fator_entalhe
-        )
+        tensao_alternada = fat.tensao_com_concentracao(tensao_alternada_nominal, fator_entalhe)
         with st.container(horizontal=True):
             st.metric(
                 f"Fator aplicado ({nome_fator_entalhe})",
@@ -909,8 +1070,10 @@ with st.container(border=True):
                 ],
             )
         )
-        q_destacado = q if modo_entalhe == "Usar Kf com q" else (
-            1.0 if modo_entalhe == "Usar Kt diretamente" else 0.0
+        q_destacado = (
+            q
+            if modo_entalhe == "Usar Kf com q"
+            else (1.0 if modo_entalhe == "Usar Kt diretamente" else 0.0)
         )
         ponto_sensibilidade = (
             alt.Chart(
@@ -955,11 +1118,7 @@ with st.container(border=True):
         st.metric(
             "Tensão alternada efetiva, σa",
             f"{tensao_alternada:.1f} MPa",
-            delta=(
-                None
-                if fator_entalhe == 1
-                else f"{fator_entalhe:.3f} × tensão nominal"
-            ),
+            delta=(None if fator_entalhe == 1 else f"{fator_entalhe:.3f} × tensão nominal"),
             border=True,
         )
         tensao_media = st.number_input(
@@ -974,26 +1133,16 @@ with st.container(border=True):
             ),
             persist_state="session",
         )
-        st.latex(
-            r"\frac{1}{n_G}=\frac{\sigma_a}{S_e}+\frac{\sigma_m}{S_{ut}}"
-        )
-        st.latex(
-            r"\frac{1}{n_S}=\frac{\sigma_a}{S_e}+\frac{\sigma_m}{S_y}"
-        )
+        st.latex(r"\frac{1}{n_G}=\frac{\sigma_a}{S_e}+\frac{\sigma_m}{S_{ut}}")
+        st.latex(r"\frac{1}{n_S}=\frac{\sigma_a}{S_e}+\frac{\sigma_m}{S_y}")
 
-    n_goodman = fat.fator_seguranca_goodman(
-        tensao_alternada, tensao_media, Se, Sut
-    )
+    n_goodman = fat.fator_seguranca_goodman(tensao_alternada, tensao_media, Se, Sut)
     sy_valido = 0 < Sy <= Sut
     n_soderberg = None
     n_escoamento = None
     if sy_valido:
-        n_soderberg = fat.fator_seguranca_soderberg(
-            tensao_alternada, tensao_media, Se, Sy
-        )
-        n_escoamento = fat.fator_seguranca_escoamento_flutuante(
-            tensao_alternada, tensao_media, Sy
-        )
+        n_soderberg = fat.fator_seguranca_soderberg(tensao_alternada, tensao_media, Se, Sy)
+        n_escoamento = fat.fator_seguranca_escoamento_flutuante(tensao_alternada, tensao_media, Sy)
 
     with resultados_criterios:
         with st.container(horizontal=True):
@@ -1014,18 +1163,14 @@ with st.container(border=True):
                     border=True,
                 )
 
-        inverso_goodman = (
-            tensao_alternada / Se + tensao_media / Sut
-        )
+        inverso_goodman = tensao_alternada / Se + tensao_media / Sut
         st.code(
             f"Goodman: 1/n = {tensao_alternada:.1f}/{Se:.1f} + "
             f"{tensao_media:.1f}/{Sut:.1f} = {inverso_goodman:.4f} "
             f"→ n = {'∞' if math.isinf(n_goodman) else f'{n_goodman:.2f}'}"
         )
         if n_soderberg is not None:
-            inverso_soderberg = (
-                tensao_alternada / Se + tensao_media / Sy
-            )
+            inverso_soderberg = tensao_alternada / Se + tensao_media / Sy
             st.code(
                 f"Soderberg: 1/n = {tensao_alternada:.1f}/{Se:.1f} + "
                 f"{tensao_media:.1f}/{Sy:.1f} = {inverso_soderberg:.4f} "
@@ -1033,9 +1178,14 @@ with st.container(border=True):
             )
             menor_fator = min(n_goodman, n_soderberg, n_escoamento)
             if menor_fator < 1:
-                st.error("O estado informado não é seguro: há fator de segurança < 1.", icon=":material/error:")
+                st.error(
+                    "O estado informado não é seguro: há fator de segurança < 1.",
+                    icon=":material/error:",
+                )
             elif menor_fator < 1.5:
-                st.warning("O menor fator de segurança está entre 1 e 1,5.", icon=":material/warning:")
+                st.warning(
+                    "O menor fator de segurança está entre 1 e 1,5.", icon=":material/warning:"
+                )
             else:
                 st.success("Os critérios calculados apresentam fator de segurança ≥ 1,5.")
         else:
@@ -1045,9 +1195,13 @@ with st.container(border=True):
                 icon=":material/warning:",
             )
             if n_goodman < 1:
-                st.error("O estado informado falha pelo critério de Goodman.", icon=":material/error:")
+                st.error(
+                    "O estado informado falha pelo critério de Goodman.", icon=":material/error:"
+                )
             elif n_goodman < 1.5:
-                st.warning("Goodman fornece fator de segurança entre 1 e 1,5.", icon=":material/warning:")
+                st.warning(
+                    "Goodman fornece fator de segurança entre 1 e 1,5.", icon=":material/warning:"
+                )
             else:
                 st.success("Goodman fornece fator de segurança ≥ 1,5.")
 
@@ -1056,9 +1210,7 @@ with st.container(border=True):
         linhas_criterios.append(
             {
                 "Tensão média (MPa)": sigma_m_curva,
-                "Tensão alternada admissível (MPa)": max(
-                    0.0, Se * (1 - sigma_m_curva / Sut)
-                ),
+                "Tensão alternada admissível (MPa)": max(0.0, Se * (1 - sigma_m_curva / Sut)),
                 "Critério": "Goodman modificado",
             }
         )
@@ -1067,46 +1219,52 @@ with st.container(border=True):
             linhas_criterios.append(
                 {
                     "Tensão média (MPa)": sigma_m_curva,
-                    "Tensão alternada admissível (MPa)": max(
-                        0.0, Se * (1 - sigma_m_curva / Sy)
-                    ),
+                    "Tensão alternada admissível (MPa)": max(0.0, Se * (1 - sigma_m_curva / Sy)),
                     "Critério": "Soderberg",
                 }
             )
 
     df_criterios = pd.DataFrame(linhas_criterios)
-    curvas_criterios = alt.Chart(df_criterios).mark_line(strokeWidth=3).encode(
-        x=alt.X(
-            "Tensão média (MPa):Q",
-            title="Tensão média de tração, σm (MPa)",
-        ),
-        y=alt.Y(
-            "Tensão alternada admissível (MPa):Q",
-            title="Tensão alternada, σa (MPa)",
-        ),
-        color=alt.Color("Critério:N", title=None),
-        tooltip=[
-            "Critério:N",
-            alt.Tooltip("Tensão média (MPa):Q", format=".1f"),
-            alt.Tooltip("Tensão alternada admissível (MPa):Q", format=".1f"),
-        ],
-    )
-    ponto_operacao = alt.Chart(
-        pd.DataFrame(
-            {
-                "Tensão média (MPa)": [tensao_media],
-                "Tensão alternada (MPa)": [tensao_alternada],
-                "Ponto": ["Operação"],
-            }
+    curvas_criterios = (
+        alt.Chart(df_criterios)
+        .mark_line(strokeWidth=3)
+        .encode(
+            x=alt.X(
+                "Tensão média (MPa):Q",
+                title="Tensão média de tração, σm (MPa)",
+            ),
+            y=alt.Y(
+                "Tensão alternada admissível (MPa):Q",
+                title="Tensão alternada, σa (MPa)",
+            ),
+            color=alt.Color("Critério:N", title=None),
+            tooltip=[
+                "Critério:N",
+                alt.Tooltip("Tensão média (MPa):Q", format=".1f"),
+                alt.Tooltip("Tensão alternada admissível (MPa):Q", format=".1f"),
+            ],
         )
-    ).mark_point(size=180, filled=True, color="#111").encode(
-        x="Tensão média (MPa):Q",
-        y="Tensão alternada (MPa):Q",
-        tooltip=[
-            "Ponto:N",
-            alt.Tooltip("Tensão média (MPa):Q", format=".1f"),
-            alt.Tooltip("Tensão alternada (MPa):Q", format=".1f"),
-        ],
+    )
+    ponto_operacao = (
+        alt.Chart(
+            pd.DataFrame(
+                {
+                    "Tensão média (MPa)": [tensao_media],
+                    "Tensão alternada (MPa)": [tensao_alternada],
+                    "Ponto": ["Operação"],
+                }
+            )
+        )
+        .mark_point(size=180, filled=True, color="#111")
+        .encode(
+            x="Tensão média (MPa):Q",
+            y="Tensão alternada (MPa):Q",
+            tooltip=[
+                "Ponto:N",
+                alt.Tooltip("Tensão média (MPa):Q", format=".1f"),
+                alt.Tooltip("Tensão alternada (MPa):Q", format=".1f"),
+            ],
+        )
     )
     st.altair_chart(
         (curvas_criterios + ponto_operacao).properties(height=390),
@@ -1136,11 +1294,7 @@ with st.container(border=True):
         )
         st.metric(
             "Amplitude equivalente de Goodman",
-            (
-                "∞"
-                if math.isinf(tensao_equivalente_vida)
-                else f"{tensao_equivalente_vida:.1f} MPa"
-            ),
+            ("∞" if math.isinf(tensao_equivalente_vida) else f"{tensao_equivalente_vida:.1f} MPa"),
             border=True,
         )
 
@@ -1185,8 +1339,7 @@ with st.container(border=True):
         a, b = fat.parametros_curva_sn(Sm, Se, N2, N1)
         ciclos_finitos = np.geomspace(N1, N2, 180)
         resistencias = [
-            fat.resistencia_para_N(float(numero_ciclos), a, b)
-            for numero_ciclos in ciclos_finitos
+            fat.resistencia_para_N(float(numero_ciclos), a, b) for numero_ciclos in ciclos_finitos
         ]
         df_sn = pd.DataFrame(
             {
@@ -1210,42 +1363,38 @@ with st.container(border=True):
                 ignore_index=True,
             )
 
-        curva_sn = alt.Chart(df_sn).mark_line(strokeWidth=3).encode(
-            x=alt.X(
-                "Ciclos:Q",
-                scale=alt.Scale(type="log"),
-                title="Número de ciclos, N (escala log)",
-            ),
-            y=alt.Y(
-                "Resistência (MPa):Q",
-                scale=alt.Scale(zero=False),
-                title="Amplitude totalmente reversa equivalente (MPa)",
-            ),
-            color=alt.Color("Trecho:N", title=None),
-            tooltip=[
-                alt.Tooltip("Ciclos:Q", format=".3e"),
-                alt.Tooltip("Resistência (MPa):Q", format=".1f"),
-                "Trecho:N",
-            ],
+        curva_sn = (
+            alt.Chart(df_sn)
+            .mark_line(strokeWidth=3)
+            .encode(
+                x=alt.X(
+                    "Ciclos:Q",
+                    scale=alt.Scale(type="log"),
+                    title="Número de ciclos, N (escala log)",
+                ),
+                y=alt.Y(
+                    "Resistência (MPa):Q",
+                    scale=alt.Scale(zero=False),
+                    title="Amplitude totalmente reversa equivalente (MPa)",
+                ),
+                color=alt.Color("Trecho:N", title=None),
+                tooltip=[
+                    alt.Tooltip("Ciclos:Q", format=".3e"),
+                    alt.Tooltip("Resistência (MPa):Q", format=".1f"),
+                    "Trecho:N",
+                ],
+            )
         )
         camadas_sn = [curva_sn]
         if math.isfinite(tensao_equivalente_vida) and tensao_equivalente_vida > 0:
             camadas_sn.append(
                 alt.Chart(
-                    pd.DataFrame(
-                        {
-                            "Amplitude equivalente de Goodman": [
-                                tensao_equivalente_vida
-                            ]
-                        }
-                    )
+                    pd.DataFrame({"Amplitude equivalente de Goodman": [tensao_equivalente_vida]})
                 )
                 .mark_rule(color="#d62728", strokeDash=[6, 4])
                 .encode(y="Amplitude equivalente de Goodman:Q")
             )
-        st.altair_chart(
-            alt.layer(*camadas_sn).properties(height=390), width="stretch"
-        )
+        st.altair_chart(alt.layer(*camadas_sn).properties(height=390), width="stretch")
         st.caption(
             "A vida é estimada com a amplitude totalmente reversa equivalente "
             "de Goodman, incorporando o efeito da tensão média de tração. "
@@ -1262,8 +1411,7 @@ with st.container(border=True):
         elif tensao_equivalente_vida <= 0:
             resultado_vida = "Sem componente alternada equivalente"
             st.info(
-                "A amplitude equivalente é zero; não há dano por fadiga "
-                "alternada neste modelo."
+                "A amplitude equivalente é zero; não há dano por fadiga alternada neste modelo."
             )
         elif tensao_equivalente_vida > Sm:
             resultado_vida = "Inferior a 10³ ciclos; fora do modelo"
@@ -1282,13 +1430,10 @@ with st.container(border=True):
             else:
                 resultado_vida = "Superior a 5×10⁸ ciclos; sem extrapolação"
                 st.info(
-                    "A vida supera 5×10⁸ ciclos; a extrapolação não é "
-                    "suportada para este material."
+                    "A vida supera 5×10⁸ ciclos; a extrapolação não é suportada para este material."
                 )
         else:
-            ciclos_estimados = fat.ciclos_para_S(
-                tensao_equivalente_vida, a, b
-            )
+            ciclos_estimados = fat.ciclos_para_S(tensao_equivalente_vida, a, b)
             resultado_vida = f"{ciclos_estimados:,.0f} ciclos"
             st.metric("Vida estimada", resultado_vida)
 
@@ -1306,11 +1451,7 @@ with st.container(border=True):
         "efetivamente usados nesta análise."
     )
 
-    origem_material = (
-        escolha
-        if usar_base
-        else f"{ROTULOS_MATERIAL[material]} — entrada manual"
-    )
+    origem_material = escolha if usar_base else f"{ROTULOS_MATERIAL[material]} — entrada manual"
     valor_kt = f"{Kt:.3f}" if modo_entalhe != "Sem entalhe" else "Não aplicado"
     valor_q = f"{q:.2f}" if modo_entalhe == "Usar Kf com q" else "Não aplicado"
     valor_soderberg = (
@@ -1325,9 +1466,7 @@ with st.container(border=True):
     )
     valor_goodman = "∞" if math.isinf(n_goodman) else f"{n_goodman:.3f}"
     valor_sigma_eq = (
-        "∞"
-        if math.isinf(tensao_equivalente_vida)
-        else f"{tensao_equivalente_vida:.2f}"
+        "∞" if math.isinf(tensao_equivalente_vida) else f"{tensao_equivalente_vida:.2f}"
     )
     produto_marin = math.prod(fatores.values())
 
@@ -1474,9 +1613,7 @@ with st.container(border=True):
             "Valor": f"{Se:.2f}",
             "Unidade": "MPa",
             "Observação": (
-                "Limite corrigido"
-                if vida_infinita
-                else "Resistência corrigida em 5×10⁸ ciclos"
+                "Limite corrigido" if vida_infinita else "Resistência corrigida em 5×10⁸ ciclos"
             ),
         },
         {
@@ -1815,10 +1952,7 @@ with st.container(border=True):
             "Baixar memorial editável em Word",
             data=gerar_word_atual,
             file_name="memorial_analise_fadiga.docx",
-            mime=(
-                "application/vnd.openxmlformats-officedocument."
-                "wordprocessingml.document"
-            ),
+            mime=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
             icon=":material/description:",
             type="primary",
             width="stretch",
@@ -1860,7 +1994,11 @@ with st.container(border=True):
         and menor_fator_registro >= fator_seguranca_minimo
         and vida_atende_registro
     )
-    status_registro = "Atende" if atende_registro else ("Inconclusivo" if menor_fator_registro is None else "Não atende")
+    status_registro = (
+        "Atende"
+        if atende_registro
+        else ("Inconclusivo" if menor_fator_registro is None else "Não atende")
+    )
     conclusao_registro = (
         f"Menor fator calculado = {menor_fator_registro:.3f} para meta {fator_seguranca_minimo:.3f}; {resultado_vida}."
         if menor_fator_registro is not None
@@ -1888,7 +2026,8 @@ with st.container(border=True):
             metricas={
                 "n Goodman": "∞" if math.isinf(n_goodman) else round(n_goodman, 2),
                 "n Soderberg": (
-                    "—" if n_soderberg is None
+                    "—"
+                    if n_soderberg is None
                     else ("∞" if math.isinf(n_soderberg) else round(n_soderberg, 2))
                 ),
                 "Vida": resultado_vida,
@@ -1920,12 +2059,20 @@ with st.container(border=True):
             "Se_corrigido_MPa": Se,
             "Ctemp": Ctemp,
             "sigma_a_efetiva_MPa": tensao_alternada,
-            "n_goodman": n_goodman if n_goodman is not None and math.isfinite(float(n_goodman)) else None,
-            "n_soderberg": n_soderberg if n_soderberg is not None and math.isfinite(float(n_soderberg)) else None,
-            "n_escoamento": n_escoamento if n_escoamento is not None and math.isfinite(float(n_escoamento)) else None,
+            "n_goodman": n_goodman
+            if n_goodman is not None and math.isfinite(float(n_goodman))
+            else None,
+            "n_soderberg": n_soderberg
+            if n_soderberg is not None and math.isfinite(float(n_soderberg))
+            else None,
+            "n_escoamento": n_escoamento
+            if n_escoamento is not None and math.isfinite(float(n_escoamento))
+            else None,
             "fator_seguranca": menor_fator_registro,
             "fator_seguranca_minimo": fator_seguranca_minimo,
-            "vida_estimada_ciclos": ciclos_estimados if ciclos_estimados is not None and math.isfinite(float(ciclos_estimados)) else None,
+            "vida_estimada_ciclos": ciclos_estimados
+            if ciclos_estimados is not None and math.isfinite(float(ciclos_estimados))
+            else None,
             "vida_requerida_ciclos": vida_requerida_ciclos,
             "vida_infinita": vida_infinita,
         },
@@ -1934,7 +2081,9 @@ with st.container(border=True):
             "As propriedades e fatores devem representar material, acabamento, tamanho e temperatura reais.",
         ],
         alertas=[] if atende_registro else [conclusao_registro],
-        referencias=[referencia_projeto or "Definir norma, desenho ou especificação de referência."],
+        referencias=[
+            referencia_projeto or "Definir norma, desenho ou especificação de referência."
+        ],
         conclusao=conclusao_registro,
         responsavel=responsavel_projeto,
     )

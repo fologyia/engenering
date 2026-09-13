@@ -37,7 +37,9 @@ projeto_ativo = obter_projeto_ativo()
 materiais_projeto = (projeto_ativo or {}).get("materiais_projeto", [])
 opcoes_materiais = {"manual": "— entrada manual —"}
 for item in materiais_projeto:
-    opcoes_materiais[f"projeto::{item['id']}"] = f"Projeto · {item.get('nome')} · {avaliar_material(item)['nivel']}"
+    opcoes_materiais[f"projeto::{item['id']}"] = (
+        f"Projeto · {item.get('nome')} · {avaliar_material(item)['nivel']}"
+    )
 for nome in nomes:
     opcoes_materiais[f"catalogo::{nome}"] = f"Catálogo orientativo · {nome}"
 if st.session_state.get("estatica_material_escolha") not in opcoes_materiais:
@@ -84,9 +86,14 @@ if dados:
         f"— {dados['observacao']}"
     )
     if dados.get("nivel_confianca") == "Referência":
-        st.warning("Valor de catálogo orientativo: confirme a propriedade antes de emitir o memorial.", icon=":material/warning:")
+        st.warning(
+            "Valor de catálogo orientativo: confirme a propriedade antes de emitir o memorial.",
+            icon=":material/warning:",
+        )
     else:
-        st.info(f"Confiança documental do cadastro: {dados.get('nivel_confianca')}. A aplicabilidade técnica ainda deve ser conferida.")
+        st.info(
+            f"Confiança documental do cadastro: {dados.get('nivel_confianca')}. A aplicabilidade técnica ainda deve ser conferida."
+        )
     if not base_valida:
         st.warning(
             "Este material não possui Sy válido para o critério de von Mises. "
@@ -100,15 +107,21 @@ with st.form("formulario_estatico"):
     with tensoes:
         st.markdown("**Estado de tensões no ponto crítico**")
         sigma_x = st.number_input(
-            "σx (MPa)", step=10.0, key="estatica_sigma_x",
+            "σx (MPa)",
+            step=10.0,
+            key="estatica_sigma_x",
             persist_state="session",
         )
         sigma_y = st.number_input(
-            "σy (MPa)", step=10.0, key="estatica_sigma_y",
+            "σy (MPa)",
+            step=10.0,
+            key="estatica_sigma_y",
             persist_state="session",
         )
         tau_xy = st.number_input(
-            "τxy (MPa)", step=10.0, key="estatica_tau_xy",
+            "τxy (MPa)",
+            step=10.0,
+            key="estatica_tau_xy",
             persist_state="session",
         )
     with propriedades:
@@ -207,7 +220,18 @@ if resultado_estatica:
 
     tabela_resumo_estatica = pd.DataFrame(
         {
-            "Componente": ["σx", "σy", "τxy", "σ1", "σ2", "von Mises", "Sy", "Sut", "n_esc", "n_rup"],
+            "Componente": [
+                "σx",
+                "σy",
+                "τxy",
+                "σ1",
+                "σ2",
+                "von Mises",
+                "Sy",
+                "Sut",
+                "n_esc",
+                "n_rup",
+            ],
             "Valor (MPa)": [
                 sigma_x,
                 sigma_y,
@@ -289,20 +313,28 @@ if resultado_estatica:
                     "Ponto": ["x", "y", "σ1", "σ2"],
                 }
             )
-            linha = alt.Chart(circulo).mark_line().encode(
-                x=alt.X("σ (MPa):Q", scale=alt.Scale(zero=False)),
-                y=alt.Y("τ (MPa):Q", scale=alt.Scale(zero=False)),
-                order="ordem:Q",
+            linha = (
+                alt.Chart(circulo)
+                .mark_line()
+                .encode(
+                    x=alt.X("σ (MPa):Q", scale=alt.Scale(zero=False)),
+                    y=alt.Y("τ (MPa):Q", scale=alt.Scale(zero=False)),
+                    order="ordem:Q",
+                )
             )
-            marcadores = alt.Chart(pontos).mark_point(size=90, filled=True).encode(
-                x="σ (MPa):Q",
-                y="τ (MPa):Q",
-                color=alt.Color("Ponto:N"),
-                tooltip=[
-                    "Ponto:N",
-                    alt.Tooltip("σ (MPa):Q", format=".2f"),
-                    alt.Tooltip("τ (MPa):Q", format=".2f"),
-                ],
+            marcadores = (
+                alt.Chart(pontos)
+                .mark_point(size=90, filled=True)
+                .encode(
+                    x="σ (MPa):Q",
+                    y="τ (MPa):Q",
+                    color=alt.Color("Ponto:N"),
+                    tooltip=[
+                        "Ponto:N",
+                        alt.Tooltip("σ (MPa):Q", format=".2f"),
+                        alt.Tooltip("τ (MPa):Q", format=".2f"),
+                    ],
+                )
             )
             st.altair_chart((linha + marcadores).properties(height=330), width="stretch")
 
@@ -314,22 +346,28 @@ if resultado_estatica:
                 "Utilização": [sigma_vm / Sy, sigma_vm / Sut],
             }
         )
-        barras = alt.Chart(utilizacao).mark_bar().encode(
-            x=alt.X("Utilização:Q", title="Tensão equivalente / resistência"),
-            y=alt.Y("Verificação:N", title=None),
-            color=alt.condition(
-                "datum.Utilização >= 1",
-                alt.value("#d62728"),
-                alt.value("#2ca02c"),
-            ),
-            tooltip=[
-                "Verificação:N",
-                alt.Tooltip("Utilização:Q", format=".1%"),
-            ],
+        barras = (
+            alt.Chart(utilizacao)
+            .mark_bar()
+            .encode(
+                x=alt.X("Utilização:Q", title="Tensão equivalente / resistência"),
+                y=alt.Y("Verificação:N", title=None),
+                color=alt.condition(
+                    "datum.Utilização >= 1",
+                    alt.value("#d62728"),
+                    alt.value("#2ca02c"),
+                ),
+                tooltip=[
+                    "Verificação:N",
+                    alt.Tooltip("Utilização:Q", format=".1%"),
+                ],
+            )
         )
-        limite = alt.Chart(pd.DataFrame({"limite": [1.0]})).mark_rule(
-            color="#d62728", strokeDash=[5, 5]
-        ).encode(x="limite:Q")
+        limite = (
+            alt.Chart(pd.DataFrame({"limite": [1.0]}))
+            .mark_rule(color="#d62728", strokeDash=[5, 5])
+            .encode(x="limite:Q")
+        )
         st.altair_chart((barras + limite).properties(height=140), width="stretch")
         st.caption(f"Fator contra ruptura: {'∞' if math.isinf(n_rup) else f'{n_rup:.2f}'}.")
 
@@ -399,7 +437,9 @@ if resultado_estatica:
             "Critério de von Mises aplicável a material dúctil isotrópico.",
         ],
         alertas=[] if n_esc >= 1.5 else [conclusao_registro],
-        referencias=["Propriedades e critérios devem ser confirmados na norma ou especificação do projeto."],
+        referencias=[
+            "Propriedades e critérios devem ser confirmados na norma ou especificação do projeto."
+        ],
         conclusao=conclusao_registro,
         materiais_ids=[material_id] if (usar_base and material_id) else [],
     )

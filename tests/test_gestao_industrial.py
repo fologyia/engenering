@@ -125,7 +125,9 @@ def projeto_documentado() -> dict:
     )
     projeto["componentes"] = [componente]
     projeto["normas"] = [
-        criar_item(codigo="ABNT NBR 8800", edicao="2024", escopo="Barras", conferida=True, obrigatoria=True)
+        criar_item(
+            codigo="ABNT NBR 8800", edicao="2024", escopo="Barras", conferida=True, obrigatoria=True
+        )
     ]
     projeto["registros_tecnicos"] = [
         criar_item(
@@ -154,7 +156,14 @@ def projeto_documentado() -> dict:
 class PrazosTests(unittest.TestCase):
     def test_interpreta_formatos_usuais_e_iso(self):
         esperado = date(2026, 3, 15)
-        for texto in ("2026-03-15", "15/03/2026", "15-03-2026", "15.03.2026", "2026-03-15T10:00:00", "15/03/26"):
+        for texto in (
+            "2026-03-15",
+            "15/03/2026",
+            "15-03-2026",
+            "15.03.2026",
+            "2026-03-15T10:00:00",
+            "15/03/26",
+        ):
             with self.subTest(texto=texto):
                 self.assertEqual(interpretar_prazo(texto), esperado)
         self.assertEqual(interpretar_prazo(esperado), esperado)
@@ -177,7 +186,9 @@ class PrazosTests(unittest.TestCase):
         }
         for prazo, situacao in casos.items():
             with self.subTest(prazo=prazo):
-                avaliacao = situacao_prazo({"item": "x", "prazo": prazo, "estado": "Aberto"}, hoje=HOJE)
+                avaliacao = situacao_prazo(
+                    {"item": "x", "prazo": prazo, "estado": "Aberto"}, hoje=HOJE
+                )
                 self.assertEqual(avaliacao["situacao"], situacao)
 
     def test_item_concluido_nunca_esta_vencido(self):
@@ -188,10 +199,27 @@ class PrazosTests(unittest.TestCase):
 
     def test_resumo_ordena_vencidos_do_mais_atrasado_para_o_menos(self):
         checklist = [
-            {"item": "Recente", "prazo": (HOJE - timedelta(days=1)).isoformat(), "estado": "Aberto"},
-            {"item": "Antigo", "prazo": (HOJE - timedelta(days=40)).isoformat(), "estado": "Aberto", "critico": True},
-            {"item": "Feito", "prazo": (HOJE - timedelta(days=40)).isoformat(), "estado": "Concluído"},
-            {"item": "Semana", "prazo": (HOJE + timedelta(days=2)).isoformat(), "estado": "Em andamento"},
+            {
+                "item": "Recente",
+                "prazo": (HOJE - timedelta(days=1)).isoformat(),
+                "estado": "Aberto",
+            },
+            {
+                "item": "Antigo",
+                "prazo": (HOJE - timedelta(days=40)).isoformat(),
+                "estado": "Aberto",
+                "critico": True,
+            },
+            {
+                "item": "Feito",
+                "prazo": (HOJE - timedelta(days=40)).isoformat(),
+                "estado": "Concluído",
+            },
+            {
+                "item": "Semana",
+                "prazo": (HOJE + timedelta(days=2)).isoformat(),
+                "estado": "Em andamento",
+            },
             {"item": "Sem data", "prazo": "", "estado": "Aberto"},
         ]
         resumo = resumo_checklist(checklist, hoje=HOJE)
@@ -210,10 +238,22 @@ class RegraPrazosTests(unittest.TestCase):
         hoje = date.today()
         projeto = {
             "checklist": [
-                {"item": "Atrasado", "prazo": (hoje - timedelta(days=2)).isoformat(), "estado": "Aberto"},
-                {"item": "Semana", "prazo": (hoje + timedelta(days=3)).isoformat(), "estado": "Aberto"},
+                {
+                    "item": "Atrasado",
+                    "prazo": (hoje - timedelta(days=2)).isoformat(),
+                    "estado": "Aberto",
+                },
+                {
+                    "item": "Semana",
+                    "prazo": (hoje + timedelta(days=3)).isoformat(),
+                    "estado": "Aberto",
+                },
                 {"item": "Texto", "prazo": "após a parada", "estado": "Aberto"},
-                {"item": "Feito", "prazo": (hoje - timedelta(days=9)).isoformat(), "estado": "Concluído"},
+                {
+                    "item": "Feito",
+                    "prazo": (hoje - timedelta(days=9)).isoformat(),
+                    "estado": "Concluído",
+                },
             ]
         }
         achados = achados_da_regra(projeto, "prazos-checklist")
@@ -235,11 +275,16 @@ class RegraPrazosTests(unittest.TestCase):
 
 class FluxoSituacaoTests(unittest.TestCase):
     def test_transicoes_declaradas_por_situacao(self):
-        self.assertEqual(transicoes_possiveis({"status": EM_ELABORACAO}), (EM_VERIFICACAO, SUSPENSO, ARQUIVADO))
+        self.assertEqual(
+            transicoes_possiveis({"status": EM_ELABORACAO}), (EM_VERIFICACAO, SUSPENSO, ARQUIVADO)
+        )
         self.assertIn(EM_ELABORACAO, transicoes_possiveis({"status": EMITIDO}))
         self.assertNotIn(EMITIDO, transicoes_possiveis({"status": EM_ELABORACAO}))
         # Situação desconhecida é tratada como Em elaboração, não como beco.
-        self.assertEqual(transicoes_possiveis({"status": "qualquer"}), transicoes_possiveis({"status": EM_ELABORACAO}))
+        self.assertEqual(
+            transicoes_possiveis({"status": "qualquer"}),
+            transicoes_possiveis({"status": EM_ELABORACAO}),
+        )
 
     def test_nao_ha_atalho_de_elaboracao_para_emitido(self):
         resultado = avaliar_transicao(projeto_documentado(), EMITIDO)
@@ -349,7 +394,9 @@ class ComparacaoTests(unittest.TestCase):
         depois["objetivo"] = "Verificar para 12 t."
         depois["base_projeto"]["criterio_aceitacao"] = "NBR 8800 e L/350"
         depois["componentes"][0]["material"] = "ASTM A36"
-        depois["componentes"].append(criar_item(tag="CV-204-SUP-02", descricao="Suporte secundário"))
+        depois["componentes"].append(
+            criar_item(tag="CV-204-SUP-02", descricao="Suporte secundário")
+        )
         del depois["normas"][0]
         depois["criterios_projeto"] = {"seguranca": {"fator_seguranca_minimo": 2.0}}
         depois["registros_tecnicos"][0]["resultados"]["fator_seguranca"] = 1.2
@@ -372,7 +419,13 @@ class ComparacaoTests(unittest.TestCase):
         criterio = por_chave[("Critérios do projeto", "", "seguranca.fator_seguranca_minimo")]
         self.assertEqual(criterio["tipo"], TIPO_INCLUIDO)
         self.assertEqual(criterio["depois"], "2")
-        fator = por_chave[("Registros técnicos", "Ponto crítico P1 · Análise estática", "resultados.fator_seguranca")]
+        fator = por_chave[
+            (
+                "Registros técnicos",
+                "Ponto crítico P1 · Análise estática",
+                "resultados.fator_seguranca",
+            )
+        ]
         self.assertEqual((fator["antes"], fator["depois"]), ("2.1", "1.2"))
 
         resumo = resumir_diferencas(diferencas)
@@ -416,7 +469,9 @@ class RegistrosTests(unittest.TestCase):
         self.assertGreater(validar_projeto(projeto)["contagens"]["Bloqueio"], 0)
         alvo = projeto["registros_tecnicos"][1]["id"]
         substituto = projeto["registros_tecnicos"][0]["id"]
-        documento = superar_registro(projeto, alvo, motivo="Refeito com a carga correta", substituto_id=substituto)
+        documento = superar_registro(
+            projeto, alvo, motivo="Refeito com a carga correta", substituto_id=substituto
+        )
         superado = next(item for item in documento["registros_tecnicos"] if item["id"] == alvo)
         self.assertEqual(superado["status"], STATUS_SUPERADO)
         self.assertEqual(superado["status_anterior"], "Não atende")
@@ -452,10 +507,14 @@ class RegistrosTests(unittest.TestCase):
         projeto["registros_tecnicos"].append(dependente)
         projeto["configuracao_relatorio"]["registros_incluidos"] = [origem["id"], dependente["id"]]
         documento = remover_registro(projeto, origem["id"])
-        self.assertEqual([item["id"] for item in documento["registros_tecnicos"]], [dependente["id"]])
+        self.assertEqual(
+            [item["id"] for item in documento["registros_tecnicos"]], [dependente["id"]]
+        )
         estado = documento["registros_tecnicos"][0]["estado_dependencias"]["status"]
         self.assertEqual(estado, STATUS_AUSENTE)
-        self.assertEqual(documento["configuracao_relatorio"]["registros_incluidos"], [dependente["id"]])
+        self.assertEqual(
+            documento["configuracao_relatorio"]["registros_incluidos"], [dependente["id"]]
+        )
 
     def test_superar_origem_deixa_dependente_desatualizado(self):
         projeto = projeto_documentado()
@@ -473,7 +532,10 @@ class RegistrosTests(unittest.TestCase):
         )
         projeto["registros_tecnicos"].append(dependente)
         documento = superar_registro(projeto, origem["id"])
-        estados = {item["id"]: item["estado_dependencias"]["status"] for item in documento["registros_tecnicos"]}
+        estados = {
+            item["id"]: item["estado_dependencias"]["status"]
+            for item in documento["registros_tecnicos"]
+        }
         self.assertEqual(estados[dependente["id"]], STATUS_DESATUALIZADO)
 
     def test_resumo_traz_peca_fator_utilizacao_e_atualidade(self):
@@ -503,10 +565,18 @@ def test_linha_do_tempo_registra_criacao_salvamento_situacao_e_registro(tmp_path
     projeto = salvar_projeto(projeto, motivo="Enviado para verificação", caminho_banco=banco)
     projeto = adicionar_registro_tecnico(
         projeto["id"],
-        {"modulo": "Análise estática", "titulo": "P1", "status": "Atende", "entradas": {}, "resultados": {}},
+        {
+            "modulo": "Análise estática",
+            "titulo": "P1",
+            "status": "Atende",
+            "entradas": {},
+            "resultados": {},
+        },
         caminho_banco=banco,
     )
-    projeto = salvar_projeto(projeto, motivo="Marco de emissão", criar_revisao=True, caminho_banco=banco)
+    projeto = salvar_projeto(
+        projeto, motivo="Marco de emissão", criar_revisao=True, caminho_banco=banco
+    )
 
     eventos = historico_eventos(projeto["id"], caminho_banco=banco)
     tipos = [evento["tipo"] for evento in eventos]
@@ -517,7 +587,9 @@ def test_linha_do_tempo_registra_criacao_salvamento_situacao_e_registro(tmp_path
     descricoes = [evento["descricao"] for evento in eventos]
     assert "Cliente informado" in descricoes
     assert "Situação alterada de Em elaboração para Em verificação" in descricoes
-    assert any(texto.startswith("Registro técnico incluído: Análise estática · P1") for texto in descricoes)
+    assert any(
+        texto.startswith("Registro técnico incluído: Análise estática · P1") for texto in descricoes
+    )
     assert any(texto.startswith("Revisão 01: Marco de emissão") for texto in descricoes)
     assert eventos[0]["revisao"] == 1
     assert len(historico_eventos(projeto["id"], limite=2, caminho_banco=banco)) == 2
@@ -567,7 +639,13 @@ class CarteiraTests(unittest.TestCase):
     def test_resumo_do_projeto_le_bloqueios_prazos_e_atualidade(self):
         projeto = projeto_documentado()
         projeto["checklist"] = [
-            {"id": "c1", "item": "Vencido", "prazo": (HOJE - timedelta(days=10)).isoformat(), "estado": "Aberto", "critico": True},
+            {
+                "id": "c1",
+                "item": "Vencido",
+                "prazo": (HOJE - timedelta(days=10)).isoformat(),
+                "estado": "Aberto",
+                "critico": True,
+            },
             {"id": "c2", "item": "Feito", "prazo": "", "estado": "Concluído"},
         ]
         resumo = resumir_projeto(projeto, hoje=HOJE)
@@ -578,7 +656,15 @@ class CarteiraTests(unittest.TestCase):
         self.assertEqual(resumo["criticos_abertos"], 1)
         self.assertEqual(resumo["checklist_percentual"], 50)
         self.assertFalse(resumo["criterios_definidos"])
-        self.assertIn(resumo["prontidao"], {"Pronto para revisão", "Pronto com ressalvas", "Em consolidação", "Não pronto para emissão"})
+        self.assertIn(
+            resumo["prontidao"],
+            {
+                "Pronto para revisão",
+                "Pronto com ressalvas",
+                "Em consolidação",
+                "Não pronto para emissão",
+            },
+        )
 
     def test_carteira_agrega_por_situacao_e_urgencia(self):
         limpo = projeto_documentado()
@@ -587,7 +673,12 @@ class CarteiraTests(unittest.TestCase):
         travado["status"] = EM_VERIFICACAO
         travado["normas"] = []
         travado["checklist"] = [
-            {"id": "c", "item": "Cobrar", "prazo": (HOJE - timedelta(days=1)).isoformat(), "estado": "Aberto"}
+            {
+                "id": "c",
+                "item": "Cobrar",
+                "prazo": (HOJE - timedelta(days=1)).isoformat(),
+                "estado": "Aberto",
+            }
         ]
         resumos = [resumir_projeto(limpo, hoje=HOJE), resumir_projeto(travado, hoje=HOJE)]
         carteira = resumir_carteira(resumos)
@@ -604,7 +695,12 @@ class CarteiraTests(unittest.TestCase):
         projeto = projeto_documentado()
         projeto["normas"] = []
         projeto["checklist"] = [
-            {"id": "c", "item": "Cobrar", "prazo": (date.today() - timedelta(days=1)).isoformat(), "estado": "Aberto"}
+            {
+                "id": "c",
+                "item": "Cobrar",
+                "prazo": (date.today() - timedelta(days=1)).isoformat(),
+                "estado": "Aberto",
+            }
         ]
         passos = proximos_passos(projeto)
         titulos = [passo["titulo"] for passo in passos]
@@ -626,7 +722,10 @@ class CarteiraTests(unittest.TestCase):
         titulos = [passo["titulo"] for passo in proximos_passos(projeto)]
         self.assertIn("Emitir o memorial", titulos)
         projeto["status"] = SUSPENSO
-        self.assertEqual([passo["titulo"] for passo in proximos_passos(projeto)], ["Retomar ou arquivar o projeto"])
+        self.assertEqual(
+            [passo["titulo"] for passo in proximos_passos(projeto)],
+            ["Retomar ou arquivar o projeto"],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -663,14 +762,21 @@ class RegrasGestaoTests(unittest.TestCase):
             "componentes": [{"id": "c1", "tag": "SUP-01", "desenho": "DE-1042 rev. B"}],
             "anexos": [
                 {"id": "d1", "codigo": "DE-1042", "revisao": "B", "situacao": "Superado"},
-                {"id": "d2", "codigo": "FD-77", "revisao": "0", "situacao": "Aguardando recebimento"},
+                {
+                    "id": "d2",
+                    "codigo": "FD-77",
+                    "revisao": "0",
+                    "situacao": "Aguardando recebimento",
+                },
                 {"id": "d3", "codigo": "MTR-88213", "revisao": "", "situacao": "Vigente"},
                 {"id": "d4", "codigo": "DE-2000", "revisao": "A", "situacao": "Vigente"},
             ],
         }
         achados = achados_da_regra(projeto, "documentos-entrada")
         por_titulo = {achado.titulo: achado.severidade for achado in achados}
-        self.assertEqual(por_titulo["DE-1042: documento superado ainda citado no escopo"], "Atenção")
+        self.assertEqual(
+            por_titulo["DE-1042: documento superado ainda citado no escopo"], "Atenção"
+        )
         self.assertEqual(por_titulo["FD-77: aguardando recebimento"], "Pendência")
         self.assertEqual(por_titulo["MTR-88213: revisão não informada"], "Atenção")
         self.assertFalse(any("DE-2000" in titulo for titulo in por_titulo))

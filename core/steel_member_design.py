@@ -209,15 +209,11 @@ def verificar_flexao_cisalhamento(
 ) -> ResultadoFlexao:
     fy = _positivo("fy_MPa", fy_MPa)
     q = _fracao("fator_local_Q", fator_local_Q)
-    cv = _fracao(
-        "fator_reducao_cisalhamento", fator_reducao_cisalhamento
-    )
+    cv = _fracao("fator_reducao_cisalhamento", fator_reducao_cisalhamento)
     phi_b = _fracao("phi_flexao", phi_flexao)
     phi_v = _fracao("phi_cisalhamento", phi_cisalhamento)
     momento = _nao_negativo("momento_solicitante_Nmm", momento_solicitante_Nmm)
-    cortante = _nao_negativo(
-        "cortante_solicitante_N", cortante_solicitante_N
-    )
+    cortante = _nao_negativo("cortante_solicitante_N", cortante_solicitante_N)
 
     mn_secao = q * fy * perfil.zx_mm3
     mcr = momento_critico_ltb(
@@ -228,13 +224,7 @@ def verificar_flexao_cisalhamento(
         cb,
     )
     md = phi_b * min(mn_secao, mcr)
-    vd = (
-        phi_v
-        * 0.60
-        * fy
-        * perfil.area_cisalhamento_mm2
-        * cv
-    )
+    vd = phi_v * 0.60 * fy * perfil.area_cisalhamento_mm2 * cv
     return ResultadoFlexao(
         resistencia_secao_Nmm=phi_b * mn_secao,
         momento_critico_ltb_Nmm=mcr,
@@ -263,9 +253,7 @@ def verificar_interacao(
             raise ValueError("Informe a resistência à flexão no eixo y.")
         mry = 1.0
     else:
-        mry = _positivo(
-            "resistencia_momento_y_Nmm", resistencia_momento_y_Nmm
-        )
+        mry = _positivo("resistencia_momento_y_Nmm", resistencia_momento_y_Nmm)
     rn = n / nr
     rmx = mx / mrx
     rmy = my / mry

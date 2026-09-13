@@ -222,9 +222,7 @@ def _comparar_colecao(
         _, novo = mapa_depois[chave]
         rotulo_novo = _rotulo_item(novo, nomes, posicao)
         diferencas.extend(
-            _comparar_mapeamentos(
-                secao, rotulo_novo, item, novo, ignorar=_IGNORAR_EM_ITENS
-            )
+            _comparar_mapeamentos(secao, rotulo_novo, item, novo, ignorar=_IGNORAR_EM_ITENS)
         )
     for chave, (posicao, item) in mapa_depois.items():
         if chave in mapa_antes:
@@ -259,8 +257,12 @@ def comparar_documentos(
         if not _iguais(base_antes.get(campo), base_depois.get(campo)):
             diferencas.append(
                 _diferenca(
-                    "Base de projeto", "", rotulo, TIPO_ALTERADO,
-                    base_antes.get(campo), base_depois.get(campo),
+                    "Base de projeto",
+                    "",
+                    rotulo,
+                    TIPO_ALTERADO,
+                    base_antes.get(campo),
+                    base_depois.get(campo),
                 )
             )
 
@@ -276,7 +278,9 @@ def comparar_documentos(
 
     for campo, secao, nomes in _COLECOES:
         diferencas.extend(
-            _comparar_colecao(secao, nomes, _sequencia(antes.get(campo)), _sequencia(depois.get(campo)))
+            _comparar_colecao(
+                secao, nomes, _sequencia(antes.get(campo)), _sequencia(depois.get(campo))
+            )
         )
     return diferencas
 

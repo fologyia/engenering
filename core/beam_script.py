@@ -290,7 +290,9 @@ class _Acumulador:
 # ---------------------------------------------------------------------------
 
 
-def _comando_viga(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_viga(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     if not pos:
         raise ErroDeScript(
             "Informe o comprimento da viga em metros. Ex.: `viga 6`.", linha=n, texto=texto
@@ -302,7 +304,9 @@ def _comando_viga(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int,
         acc.nome = " ".join(pos[1:])
 
 
-def _comando_nome(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_nome(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     if not pos:
         raise ErroDeScript("Informe um nome. Ex.: `nome Viga do mezanino`.", linha=n, texto=texto)
     acc.nome = " ".join(pos)
@@ -346,7 +350,15 @@ def _material_do_catalogo(nome: str, n: int, texto: str) -> tuple:
         f"Catálogo orientativo do programa · {dados['nome']} · "
         "E e G são valores típicos da categoria"
     )
-    return str(dados["nome"]), e_gpa, g_gpa, _numero_ou_none(dados.get("Sy_MPa")), densidade, None, fonte
+    return (
+        str(dados["nome"]),
+        e_gpa,
+        g_gpa,
+        _numero_ou_none(dados.get("Sy_MPa")),
+        densidade,
+        None,
+        fonte,
+    )
 
 
 def _numero_ou_none(valor) -> float | None:
@@ -357,18 +369,17 @@ def _numero_ou_none(valor) -> float | None:
     return numero if math.isfinite(numero) and numero > 0 else None
 
 
-def _material_do_projeto(
-    identificador: str, materiais: tuple, n: int, texto: str
-) -> tuple:
+def _material_do_projeto(identificador: str, materiais: tuple, n: int, texto: str) -> tuple:
     """Resolve um material qualificado do projeto ativo, por id ou por nome."""
     from core.materials_registry import avaliar_material, resumir_fonte
 
     alvo = _chave(identificador)
     escolhido = None
     for material in materiais:
-        if _chave(str(material.get("id", ""))) == alvo or _chave(
-            str(material.get("nome", ""))
-        ) == alvo:
+        if (
+            _chave(str(material.get("id", ""))) == alvo
+            or _chave(str(material.get("nome", ""))) == alvo
+        ):
             escolhido = material
             break
     if escolhido is None:
@@ -381,8 +392,7 @@ def _material_do_projeto(
             )
         nomes = "; ".join(str(item.get("nome")) for item in materiais[:6])
         raise ErroDeScript(
-            f"Material {identificador!r} não está no projeto ativo. "
-            f"Disponíveis: {nomes}.",
+            f"Material {identificador!r} não está no projeto ativo. Disponíveis: {nomes}.",
             linha=n,
             texto=texto,
         )
@@ -416,7 +426,9 @@ def _material_do_projeto(
     )
 
 
-def _comando_material(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_material(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     e_gpa = g_gpa = sy = densidade = None
     nome_material = "personalizado"
     material_id = nom.get("id") or nom.get("material_id")
@@ -519,11 +531,16 @@ _SECOES_POSICIONAIS: dict[str, tuple[int, tuple[str, ...]]] = {
     "circular": (1, ("diâmetro (mm)",)),
     "tubo": (2, ("diâmetro externo (mm)", "diâmetro interno (mm)")),
     "tubo_retangular": (3, ("largura (mm)", "altura (mm)", "espessura (mm)")),
-    "perfil_i": (4, ("altura (mm)", "largura da mesa (mm)", "espessura da alma (mm)", "espessura da mesa (mm)")),
+    "perfil_i": (
+        4,
+        ("altura (mm)", "largura da mesa (mm)", "espessura da alma (mm)", "espessura da mesa (mm)"),
+    ),
 }
 
 
-def _comando_secao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_secao(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     if not pos:
         raise ErroDeScript(
             "Informe o tipo de seção. Ex.: `secao retangular 100 200`, "
@@ -610,9 +627,7 @@ def _buscar_perfil(nome: str, n: int, texto: str):
         if _normalizar_perfil(chave) == alvo:
             return perfil
     # Sem correspondência exata, sugere os que contêm o texto digitado.
-    parecidos = [
-        chave for chave in disponiveis if alvo and alvo in _normalizar_perfil(chave)
-    ]
+    parecidos = [chave for chave in disponiveis if alvo and alvo in _normalizar_perfil(chave)]
     if len(parecidos) == 1:
         return disponiveis[parecidos[0]]
     sugestao = parecidos[:6] or list(disponiveis)[:6]
@@ -693,7 +708,9 @@ def _secao_manual(nom: dict[str, str], n: int, texto: str) -> vb.SecaoViga:
         raise ErroDeScript(str(erro), linha=n, texto=texto) from None
 
 
-def _comando_apoio(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_apoio(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     if len(pos) < 1:
         raise ErroDeScript(
             "Informe a posição do apoio em metros. Ex.: `apoio 0 pino`.", linha=n, texto=texto
@@ -708,13 +725,9 @@ def _comando_apoio(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
             linha=n,
             texto=texto,
         )
-    rigidez_v = (
-        _numero(nom["kv"], campo="kv (N/mm)", linha=n, texto=texto) if "kv" in nom else 0.0
-    )
+    rigidez_v = _numero(nom["kv"], campo="kv (N/mm)", linha=n, texto=texto) if "kv" in nom else 0.0
     rigidez_r = (
-        _numero(nom["kr"], campo="kr (N·mm/rad)", linha=n, texto=texto)
-        if "kr" in nom
-        else 0.0
+        _numero(nom["kr"], campo="kr (N·mm/rad)", linha=n, texto=texto) if "kr" in nom else 0.0
     )
     try:
         acc.apoios.append(
@@ -729,14 +742,18 @@ def _comando_apoio(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
         raise ErroDeScript(str(erro), linha=n, texto=texto) from None
 
 
-def _comando_rotula(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_rotula(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     if not pos:
         raise ErroDeScript("Informe a posição da rótula em metros.", linha=n, texto=texto)
     x = _numero(pos[0], campo="posição da rótula", linha=n, texto=texto)
     acc.rotulas.append(vb.Rotula(x_mm=x * 1_000.0))
 
 
-def _comando_pontual(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_pontual(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     pos, sinal = _sentido(pos)
     if len(pos) < 2:
         raise ErroDeScript(
@@ -751,7 +768,9 @@ def _comando_pontual(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: i
     )
 
 
-def _comando_momento(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_momento(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     pos, sinal = _sentido(pos)
     if len(pos) < 2:
         raise ErroDeScript(
@@ -762,13 +781,13 @@ def _comando_momento(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: i
     x = _numero(pos[0], campo="posição do momento", linha=n, texto=texto)
     valor = _numero(pos[1], campo="valor do momento (kN·m)", linha=n, texto=texto)
     acc.momentos.append(
-        vb.MomentoConcentrado(
-            x_mm=x * 1_000.0, mz_Nmm=sinal * valor * 1e6, caso=_caso(nom)
-        )
+        vb.MomentoConcentrado(x_mm=x * 1_000.0, mz_Nmm=sinal * valor * 1e6, caso=_caso(nom))
     )
 
 
-def _comando_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_distribuida(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     pos, sinal = _sentido(pos)
     if len(pos) < 3:
         raise ErroDeScript(
@@ -780,7 +799,11 @@ def _comando_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], 
     x1 = _numero(pos[0], campo="x inicial", linha=n, texto=texto)
     x2 = _numero(pos[1], campo="x final", linha=n, texto=texto)
     w1 = _numero(pos[2], campo="intensidade inicial (kN/m)", linha=n, texto=texto)
-    w2 = _numero(pos[3], campo="intensidade final (kN/m)", linha=n, texto=texto) if len(pos) > 3 else None
+    w2 = (
+        _numero(pos[3], campo="intensidade final (kN/m)", linha=n, texto=texto)
+        if len(pos) > 3
+        else None
+    )
     try:
         acc.distribuidas.append(
             vb.CargaDistribuida(
@@ -795,7 +818,9 @@ def _comando_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], 
         raise ErroDeScript(str(erro), linha=n, texto=texto) from None
 
 
-def _comando_axial(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_axial(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     pos, sinal = _sentido(pos)
     if len(pos) < 2:
         raise ErroDeScript(
@@ -824,7 +849,9 @@ def _comando_axial(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int
             )
 
 
-def _comando_axial_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_axial_distribuida(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     pos, sinal = _sentido(pos)
     if len(pos) < 3:
         raise ErroDeScript(
@@ -836,7 +863,11 @@ def _comando_axial_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, 
     x1 = _numero(pos[0], campo="x inicial", linha=n, texto=texto)
     x2 = _numero(pos[1], campo="x final", linha=n, texto=texto)
     a1 = _numero(pos[2], campo="intensidade inicial (kN/m)", linha=n, texto=texto)
-    a2 = _numero(pos[3], campo="intensidade final (kN/m)", linha=n, texto=texto) if len(pos) > 3 else None
+    a2 = (
+        _numero(pos[3], campo="intensidade final (kN/m)", linha=n, texto=texto)
+        if len(pos) > 3
+        else None
+    )
     try:
         acc.axiais_distribuidas.append(
             vb.CargaAxialDistribuida(
@@ -851,7 +882,9 @@ def _comando_axial_distribuida(acc: _Acumulador, pos: list[str], nom: dict[str, 
         raise ErroDeScript(str(erro), linha=n, texto=texto) from None
 
 
-def _comando_torque(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_torque(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     pos, sinal = _sentido(pos)
     if len(pos) < 2:
         raise ErroDeScript(
@@ -861,19 +894,21 @@ def _comando_torque(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: in
         )
     x = _numero(pos[0], campo="posição do torque", linha=n, texto=texto)
     valor = _numero(pos[1], campo="valor do torque (kN·m)", linha=n, texto=texto)
-    acc.torques.append(
-        vb.Torque(x_mm=x * 1_000.0, t_Nmm=sinal * valor * 1e6, caso=_caso(nom))
-    )
+    acc.torques.append(vb.Torque(x_mm=x * 1_000.0, t_Nmm=sinal * valor * 1e6, caso=_caso(nom)))
 
 
-def _comando_segunda_ordem(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_segunda_ordem(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     ligado = True
     if pos:
         ligado = _chave(pos[0]) not in {"nao", "off", "0", "false", "desligado"}
     acc.segunda_ordem = ligado
 
 
-def _comando_divisoes(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_divisoes(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     if not pos:
         raise ErroDeScript(
             "Informe em quantas partes dividir cada trecho. Ex.: `divisoes 12`.",
@@ -890,7 +925,9 @@ def _comando_divisoes(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: 
     acc.divisoes = int(valor)
 
 
-def _comando_combinacao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_combinacao(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     if not pos:
         raise ErroDeScript(
             "Informe o nome da combinação e os fatores por caso. Ex.: "
@@ -919,13 +956,13 @@ def _comando_combinacao(acc: _Acumulador, pos: list[str], nom: dict[str, str], n
         for chave, valor in originais.items()
     }
     if any(nome == existente.nome for existente in acc.combinacoes):
-        raise ErroDeScript(
-            f"Já existe uma combinação chamada {nome!r}.", linha=n, texto=texto
-        )
+        raise ErroDeScript(f"Já existe uma combinação chamada {nome!r}.", linha=n, texto=texto)
     acc.combinacoes.append(vb.CombinacaoCarga(nome=nome, fatores=fatores))
 
 
-def _comando_peso_proprio(acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str) -> None:
+def _comando_peso_proprio(
+    acc: _Acumulador, pos: list[str], nom: dict[str, str], n: int, texto: str
+) -> None:
     ligado = True
     if pos:
         ligado = _chave(pos[0]) not in {"nao", "off", "0", "false", "desligado"}
@@ -1195,19 +1232,15 @@ def gerar_script(viga: vb.Viga) -> str:
         linhas.append(f"rotula {num(rotula.x_mm / 1_000.0)}")
     for pontual in viga.cargas_pontuais:
         linhas.append(
-            f"P {num(pontual.x_mm / 1_000.0)} {num(pontual.fy_N / 1_000.0)}"
-            f"{_sufixo_caso(pontual)}"
+            f"P {num(pontual.x_mm / 1_000.0)} {num(pontual.fy_N / 1_000.0)}{_sufixo_caso(pontual)}"
         )
     for momento in viga.momentos:
         linhas.append(
-            f"M {num(momento.x_mm / 1_000.0)} {num(momento.mz_Nmm / 1e6)}"
-            f"{_sufixo_caso(momento)}"
+            f"M {num(momento.x_mm / 1_000.0)} {num(momento.mz_Nmm / 1e6)}{_sufixo_caso(momento)}"
         )
     for distribuida in viga.cargas_distribuidas:
         # Uniforme sai com um único valor, como o usuário costuma escrever.
-        final = (
-            "" if distribuida.w_final_N_mm is None else f" {num(distribuida.w_final)}"
-        )
+        final = "" if distribuida.w_final_N_mm is None else f" {num(distribuida.w_final)}"
         linhas.append(
             f"q {num(distribuida.x_inicial_mm / 1_000.0)} "
             f"{num(distribuida.x_final_mm / 1_000.0)} "
@@ -1216,14 +1249,11 @@ def gerar_script(viga: vb.Viga) -> str:
         )
     for axial in viga.cargas_axiais:
         linhas.append(
-            f"N {num(axial.x_mm / 1_000.0)} {num(axial.fx_N / 1_000.0)}"
-            f"{_sufixo_caso(axial)}"
+            f"N {num(axial.x_mm / 1_000.0)} {num(axial.fx_N / 1_000.0)}{_sufixo_caso(axial)}"
         )
     for axial_distribuida in viga.cargas_axiais_distribuidas:
         final = (
-            ""
-            if axial_distribuida.a_final_N_mm is None
-            else f" {num(axial_distribuida.a_final)}"
+            "" if axial_distribuida.a_final_N_mm is None else f" {num(axial_distribuida.a_final)}"
         )
         linhas.append(
             f"qn {num(axial_distribuida.x_inicial_mm / 1_000.0)} "
@@ -1233,8 +1263,7 @@ def gerar_script(viga: vb.Viga) -> str:
         )
     for torque in viga.torques:
         linhas.append(
-            f"T {num(torque.x_mm / 1_000.0)} {num(torque.t_Nmm / 1e6)}"
-            f"{_sufixo_caso(torque)}"
+            f"T {num(torque.x_mm / 1_000.0)} {num(torque.t_Nmm / 1e6)}{_sufixo_caso(torque)}"
         )
     if viga.considerar_peso_proprio:
         linhas.append("peso_proprio")

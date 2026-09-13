@@ -123,9 +123,7 @@ def montar_exemplo() -> dict:
     )
     projeto["casos_carga"] = [caso_operacional, caso_termico]
     projeto["combinacoes_carga"] = [combinacao_operacao, combinacao_teste]
-    envelope_cargas = calcular_envelope(
-        projeto["casos_carga"], projeto["combinacoes_carga"]
-    )
+    envelope_cargas = calcular_envelope(projeto["casos_carga"], projeto["combinacoes_carga"])
     projeto["normas"] = [
         criar_item(
             codigo="Especificação estrutural do projeto",
@@ -196,7 +194,10 @@ def montar_exemplo() -> dict:
             "fator_seguranca_minimo": 1.5,
             "utilizacao_maxima": 0.4414,
         },
-        premissas=["Tensões extraídas no ponto P1 do caso operacional governante.", "Comportamento elástico linear e material isotrópico."],
+        premissas=[
+            "Tensões extraídas no ponto P1 do caso operacional governante.",
+            "Comportamento elástico linear e material isotrópico.",
+        ],
         alertas=[],
         referencias=["DE-SK101-004 Rev. 2", "LC-SK101-003 Rev. 1", "MTR-45821"],
         conclusao="O ponto P1 atende ao critério informado, com n = 2,266.",
@@ -244,12 +245,23 @@ def montar_exemplo() -> dict:
             "p95": mc["p95"],
             "probabilidade_nao_atendimento_pct": mc["probabilidade_nao_atendimento_pct"],
             "ranking_sensibilidade": [
-                {chave: item[chave] for chave in ("variavel", "impacto_percentual", "elasticidade", "direcao_critica")}
+                {
+                    chave: item[chave]
+                    for chave in (
+                        "variavel",
+                        "impacto_percentual",
+                        "elasticidade",
+                        "direcao_critica",
+                    )
+                }
                 for item in oat["ranking"]
             ],
             "correlacoes_spearman": mc["correlacoes_spearman"],
         },
-        premissas=["Faixas definidas para demonstração; substituir por dados metrológicos e históricos do projeto real.", "Entradas tratadas como independentes."],
+        premissas=[
+            "Faixas definidas para demonstração; substituir por dados metrológicos e históricos do projeto real.",
+            "Entradas tratadas como independentes.",
+        ],
         alertas=[],
         referencias=["Registro estático P1", "Plano de incertezas PI-SK101-001"],
         conclusao=(
@@ -264,14 +276,14 @@ def montar_exemplo() -> dict:
     sensibilidade["id"] = "00000000-0000-4000-8000-000000000105"
     projeto["registros_tecnicos"] = [registro_cargas, estatico, sensibilidade]
     checklist = criar_item(
-            item="Conferência independente das entradas e da origem do material",
-            categoria="Emissão",
-            responsavel="Engenheiro verificador",
-            prazo="Antes da emissão",
-            estado="Concluído",
-            evidencia="LV-SK101-002",
-            critico=True,
-        )
+        item="Conferência independente das entradas e da origem do material",
+        categoria="Emissão",
+        responsavel="Engenheiro verificador",
+        prazo="Antes da emissão",
+        estado="Concluído",
+        evidencia="LV-SK101-002",
+        critico=True,
+    )
     checklist["id"] = "00000000-0000-4000-8000-000000000106"
     projeto["checklist"] = [checklist]
     return projeto

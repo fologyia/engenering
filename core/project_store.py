@@ -347,10 +347,7 @@ def listar_projetos(
     caminho_banco: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     inicializar_banco(caminho_banco)
-    sql = (
-        "SELECT id, name, code, status, revision, created_at, updated_at "
-        "FROM projects"
-    )
+    sql = "SELECT id, name, code, status, revision, created_at, updated_at FROM projects"
     parametros: tuple[Any, ...] = ()
     if not incluir_arquivados:
         sql += " WHERE status <> ?"
@@ -472,9 +469,7 @@ def salvar_projeto(
                     payload,
                 ),
             )
-        tipo = str(tipo_evento).strip() or (
-            EVENTO_REVISAO if criar_revisao else EVENTO_SALVAMENTO
-        )
+        tipo = str(tipo_evento).strip() or (EVENTO_REVISAO if criar_revisao else EVENTO_SALVAMENTO)
         descricao = str(motivo).strip() or (
             f"Revisão {revisao:02d} criada" if criar_revisao else "Salvamento"
         )
@@ -576,9 +571,7 @@ def definir_projeto_ativo(
         if projeto_id is None:
             conexao.execute("DELETE FROM app_settings WHERE key='active_project_id'")
             return
-        existe = conexao.execute(
-            "SELECT 1 FROM projects WHERE id=?", (str(projeto_id),)
-        ).fetchone()
+        existe = conexao.execute("SELECT 1 FROM projects WHERE id=?", (str(projeto_id),)).fetchone()
         if existe is None:
             raise ProjetoPersistenciaErro("Projeto ativo nao encontrado.")
         conexao.execute(
@@ -590,9 +583,7 @@ def definir_projeto_ativo(
         )
 
 
-def obter_projeto_ativo(
-    *, caminho_banco: str | Path | None = None
-) -> dict[str, Any] | None:
+def obter_projeto_ativo(*, caminho_banco: str | Path | None = None) -> dict[str, Any] | None:
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
         linha = conexao.execute(
@@ -750,8 +741,13 @@ def duplicar_projeto(
             VALUES (?, ?, ?, ?, 0, ?, ?, ?)
             """,
             (
-                copia["id"], copia["nome"], copia["codigo"], copia["status"],
-                instante, instante, payload,
+                copia["id"],
+                copia["nome"],
+                copia["codigo"],
+                copia["status"],
+                instante,
+                instante,
+                payload,
             ),
         )
         conexao.execute(
@@ -778,7 +774,11 @@ def duplicar_projeto(
 def _motivo_registro(registro: Mapping[str, Any]) -> str:
     modulo = str(registro.get("modulo") or "Registro técnico").strip()
     titulo = str(registro.get("titulo") or "").strip()
-    return f"Registro técnico incluído: {modulo} · {titulo}" if titulo else f"Registro técnico incluído: {modulo}"
+    return (
+        f"Registro técnico incluído: {modulo} · {titulo}"
+        if titulo
+        else f"Registro técnico incluído: {modulo}"
+    )
 
 
 def adicionar_registro_tecnico(
@@ -848,14 +848,10 @@ def exportar_projeto(
         "exportado_em": _agora(),
         "projeto": projeto,
         "historico": (
-            historico_revisoes(projeto_id, caminho_banco=caminho_banco)
-            if incluir_historico
-            else []
+            historico_revisoes(projeto_id, caminho_banco=caminho_banco) if incluir_historico else []
         ),
         "eventos": (
-            historico_eventos(projeto_id, caminho_banco=caminho_banco)
-            if incluir_historico
-            else []
+            historico_eventos(projeto_id, caminho_banco=caminho_banco) if incluir_historico else []
         ),
     }
     return json.dumps(pacote, ensure_ascii=False, indent=2).encode("utf-8")
@@ -894,8 +890,13 @@ def importar_projeto(
             VALUES (?, ?, ?, ?, 0, ?, ?, ?)
             """,
             (
-                copia["id"], copia["nome"], copia["codigo"], copia["status"],
-                instante, instante, payload,
+                copia["id"],
+                copia["nome"],
+                copia["codigo"],
+                copia["status"],
+                instante,
+                instante,
+                payload,
             ),
         )
         conexao.execute(

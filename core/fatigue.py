@@ -1,4 +1,5 @@
 """Cálculos de resistência à fadiga em unidades SI (MPa, mm e °C)."""
+
 import math
 
 MATERIAIS_SE_LINHA = {"aco", "ferro", "aluminio", "cobre"}
@@ -38,6 +39,7 @@ def celsius_para_fahrenheit(temperatura_celsius: float) -> float:
     if not math.isfinite(temperatura_celsius):
         raise ValueError("temperatura_celsius deve ser um número finito.")
     return 1.8 * temperatura_celsius + 32.0
+
 
 def fahrenheit_para_celsius(temperatura_fahrenheit: float) -> float:
     """Converte uma temperatura em graus Fahrenheit para graus Celsius."""
@@ -89,6 +91,7 @@ def fator_temperatura_na_unidade(
         modelo,
     )
 
+
 FONTES_MARIN = {
     "norton": "Norton, Projeto de Máquinas, 4ª ed., cap. 6",
     "shigley": "Shigley, Elementos de Máquinas, 8ª ed., cap. 6",
@@ -117,9 +120,7 @@ def se_linha(Sut_MPa: float, material: str = "aco") -> tuple[float, bool]:
     _validar_positivo("Sut_MPa", Sut_MPa)
     material = material.lower()
     if material not in MATERIAIS_SE_LINHA:
-        raise ValueError(
-            f"Material '{material}' não suportado: {sorted(MATERIAIS_SE_LINHA)}"
-        )
+        raise ValueError(f"Material '{material}' não suportado: {sorted(MATERIAIS_SE_LINHA)}")
     if material == "aco":
         return (0.5 * Sut_MPa if Sut_MPa < 1400 else 700.0), True
     if material == "ferro":
@@ -174,9 +175,7 @@ def fator_tamanho(
         return 0.6
 
     if d_mm < 2.79:
-        raise ValueError(
-            "d_mm fora da faixa da correlacao de Shigley (2,79 a 254 mm)."
-        )
+        raise ValueError("d_mm fora da faixa da correlacao de Shigley (2,79 a 254 mm).")
     if d_mm <= 51:
         return 1.24 * d_mm ** (-0.107)
     if d_mm <= 254:
@@ -215,9 +214,7 @@ def fator_temperatura(
             return 1.0
         if T_fahrenheit <= NORTON_TEMPERATURA_MAX_F:
             return 1 - 0.0058 * (T_fahrenheit - NORTON_TEMPERATURA_INICIO_F)
-        raise ValueError(
-            "Norton: correlação válida até 550 °F (287,8 °C)."
-        )
+        raise ValueError("Norton: correlação válida até 550 °F (287,8 °C).")
 
     if T_celsius < 20 or T_celsius > 540:
         raise ValueError("Shigley: use temperatura entre 20 °C e 540 °C.")
@@ -235,9 +232,7 @@ def fator_temperatura(
 def fator_confiabilidade(confiabilidade_pct: float) -> float:
     """Fator tabelado de confiabilidade."""
     if confiabilidade_pct not in FATORES_CONFIABILIDADE:
-        raise ValueError(
-            f"Confiabilidade não tabelada. Use: {list(FATORES_CONFIABILIDADE)}"
-        )
+        raise ValueError(f"Confiabilidade não tabelada. Use: {list(FATORES_CONFIABILIDADE)}")
     return FATORES_CONFIABILIDADE[confiabilidade_pct]
 
 

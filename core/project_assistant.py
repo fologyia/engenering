@@ -151,10 +151,11 @@ def recomendar_rota(
     if dados_disponiveis not in DADOS_DISPONIVEIS:
         raise ValueError("Tipo de dado disponível desconhecido.")
 
-    if (
-        dados_disponiveis == DADOS_DISPONIVEIS[0]
-        and objetivo in {OBJETIVOS[1], OBJETIVOS[2], OBJETIVOS[3]}
-    ):
+    if dados_disponiveis == DADOS_DISPONIVEIS[0] and objetivo in {
+        OBJETIVOS[1],
+        OBJETIVOS[2],
+        OBJETIVOS[3],
+    }:
         return ROTAS["cargas"]
 
     if objetivo == OBJETIVOS[6]:

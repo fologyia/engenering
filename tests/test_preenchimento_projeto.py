@@ -48,8 +48,7 @@ class FonteUnicaTests(unittest.TestCase):
         vazio = projeto_novo()
         vazio["nome"] = ""
         achados = {
-            achado["titulo"]: achado["severidade"]
-            for achado in validar_projeto(vazio)["achados"]
+            achado["titulo"]: achado["severidade"] for achado in validar_projeto(vazio)["achados"]
         }
         for campo, rotulo, severidade in CAMPOS_IDENTIFICACAO:
             with self.subTest(campo=campo):
@@ -62,9 +61,7 @@ class FonteUnicaTests(unittest.TestCase):
         self.assertIn("objetivo", antes)
         com_objetivo = projeto_novo()
         com_objetivo["objetivo"] = "Verificar a viga"
-        depois = {
-            item["campo"] for item in pendencias_de_preenchimento(com_objetivo)
-        }
+        depois = {item["campo"] for item in pendencias_de_preenchimento(com_objetivo)}
         self.assertNotIn("objetivo", depois)
 
     def test_pendencias_vem_ordenadas_por_gravidade(self):
@@ -85,15 +82,11 @@ class CriacaoDeProjetoTests(unittest.TestCase):
     def test_objetivo_pode_ser_informado_na_criacao(self):
         # Antes o construtor não aceitava objetivo, então todo projeto nascia
         # com um bloqueio que o formulário de criação nem mencionava.
-        projeto = novo_projeto_documento(
-            "Viga", codigo="PRJ-01", objetivo="Verificar a viga"
-        )
+        projeto = novo_projeto_documento("Viga", codigo="PRJ-01", objetivo="Verificar a viga")
         self.assertEqual(projeto["objetivo"], "Verificar a viga")
 
     def test_os_tres_campos_removem_os_bloqueios_de_identificacao(self):
-        projeto = novo_projeto_documento(
-            "Viga", codigo="PRJ-01", objetivo="Verificar a viga"
-        )
+        projeto = novo_projeto_documento("Viga", codigo="PRJ-01", objetivo="Verificar a viga")
         bloqueios = [
             achado
             for achado in validar_projeto(projeto)["achados"]
@@ -108,9 +101,7 @@ class CriacaoDeProjetoTests(unittest.TestCase):
         # O diálogo de criação promete resolver os bloqueios de CAMPO; os de
         # conteúdo (escopo, normas, cálculo) continuam e têm de ser
         # apresentados como tais, senão a promessa seria falsa.
-        projeto = novo_projeto_documento(
-            "Viga", codigo="PRJ-01", objetivo="Verificar a viga"
-        )
+        projeto = novo_projeto_documento("Viga", codigo="PRJ-01", objetivo="Verificar a viga")
         categorias = {
             achado["categoria"]
             for achado in validar_projeto(projeto)["achados"]
@@ -196,13 +187,13 @@ class DiagnosticoPorLinhaTests(unittest.TestCase):
 
     def test_norma_nao_conferida_e_pendencia(self):
         item = {"codigo": "ABNT NBR 8800", "edicao": "2024", "conferida": False}
-        self.assertEqual(diagnostico_norma(item), [("Pendência", "ainda não conferida no documento-fonte")])
+        self.assertEqual(
+            diagnostico_norma(item), [("Pendência", "ainda não conferida no documento-fonte")]
+        )
 
     def test_norma_sem_edicao_e_atencao(self):
         item = {"codigo": "ABNT NBR 8800", "conferida": True}
-        self.assertEqual(
-            diagnostico_norma(item), [("Atenção", "edição ou revisão não informada")]
-        )
+        self.assertEqual(diagnostico_norma(item), [("Atenção", "edição ou revisão não informada")])
 
     def test_linha_semeada_de_norma_nasce_pendente_de_conferencia(self):
         # O botão de exemplo não pode marcar como conferida uma norma que o
@@ -226,8 +217,7 @@ class DiagnosticoPorLinhaTests(unittest.TestCase):
         achados = [
             achado
             for achado in validar_projeto(projeto)["achados"]
-            if achado["categoria"] == "Escopo físico"
-            and achado["titulo"].startswith("T1:")
+            if achado["categoria"] == "Escopo físico" and achado["titulo"].startswith("T1:")
         ]
         da_linha = diagnostico_componente(projeto["componentes"][0])
         self.assertEqual(len(achados), len(da_linha))

@@ -269,8 +269,7 @@ with st.container(border=True):
             st.error(str(erro), icon=":material/error:")
         else:
             st.success(
-                f"Material **{salvo.nome}** salvo e já disponível nos módulos de "
-                "cálculo.",
+                f"Material **{salvo.nome}** salvo e já disponível nos módulos de cálculo.",
                 icon=":material/check_circle:",
             )
             for aviso in catalogo.conferir_coerencia(salvo):
@@ -290,9 +289,7 @@ with st.container(border=True):
             "valer no seu uso."
         )
     else:
-        escolhido = st.selectbox(
-            "Material a excluir", editaveis, key="materiais_excluir_alvo"
-        )
+        escolhido = st.selectbox("Material a excluir", editaveis, key="materiais_excluir_alvo")
         detalhe = catalogo.obter(escolhido)
         st.caption(
             f"{detalhe.origem}"
@@ -385,9 +382,7 @@ with st.container(border=True):
                     icon=":material/check_circle:",
                 )
             if rejeitados:
-                st.error(
-                    f"{len(rejeitados)} linha(s) recusada(s).", icon=":material/error:"
-                )
+                st.error(f"{len(rejeitados)} linha(s) recusada(s).", icon=":material/error:")
                 st.dataframe(
                     pd.DataFrame(rejeitados, columns=["Material", "Motivo"]),
                     hide_index=True,

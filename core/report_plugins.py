@@ -30,9 +30,7 @@ class ProvedorSecaoRelatorio:
 _PROVEDORES: dict[str, ProvedorSecaoRelatorio] = {}
 
 
-def registrar_provedor(
-    provedor: ProvedorSecaoRelatorio, *, substituir: bool = False
-) -> None:
+def registrar_provedor(provedor: ProvedorSecaoRelatorio, *, substituir: bool = False) -> None:
     chave = provedor.id.strip().casefold()
     if chave in _PROVEDORES and not substituir:
         raise ValueError(f"Provedor de relatório já registrado: {provedor.id}.")
@@ -74,16 +72,10 @@ def _float_seguro(valor: Any) -> float | None:
     return numero if math.isfinite(numero) else None
 
 
-def _secao_carregamentos(
-    projeto: Mapping[str, Any], contexto: Mapping[str, Any]
-) -> dict[str, Any]:
-    casos = [
-        item for item in projeto.get("casos_carga", []) if isinstance(item, Mapping)
-    ]
+def _secao_carregamentos(projeto: Mapping[str, Any], contexto: Mapping[str, Any]) -> dict[str, Any]:
+    casos = [item for item in projeto.get("casos_carga", []) if isinstance(item, Mapping)]
     combinacoes = [
-        item
-        for item in projeto.get("combinacoes_carga", [])
-        if isinstance(item, Mapping)
+        item for item in projeto.get("combinacoes_carga", []) if isinstance(item, Mapping)
     ]
     try:
         envelope = calcular_envelope(
@@ -105,9 +97,7 @@ def _secao_carregamentos(
             if valor is None:
                 ativos.append(f"{ROTULOS_CARGA[chave]}=valor inválido")
             elif abs(valor) > 1e-12:
-                ativos.append(
-                    f"{ROTULOS_CARGA[chave]}={_numero(valor)} {UNIDADES_CARGA[chave]}"
-                )
+                ativos.append(f"{ROTULOS_CARGA[chave]}={_numero(valor)} {UNIDADES_CARGA[chave]}")
         linhas_casos.append(
             [
                 _texto(caso.get("codigo")),
@@ -158,7 +148,14 @@ def _secao_carregamentos(
         "tabelas": [
             {
                 "legenda": "Casos de carga permanentes do projeto.",
-                "cabecalhos": ["Código", "Caso", "Condição / natureza", "TAG", "Vetor não nulo", "Origem / referência"],
+                "cabecalhos": [
+                    "Código",
+                    "Caso",
+                    "Condição / natureza",
+                    "TAG",
+                    "Vetor não nulo",
+                    "Origem / referência",
+                ],
                 "linhas": linhas_casos or [["-", "Nenhum caso cadastrado", "-", "-", "-", "-"]],
                 "larguras": [1000, 1600, 1500, 900, 2600, 1760],
                 "fonte": 6.8,
@@ -166,13 +163,21 @@ def _secao_carregamentos(
             {
                 "legenda": "Combinações registradas; os fatores não são definidos automaticamente como normativos.",
                 "cabecalhos": ["Combinação", "Tipo", "Parcelas e fatores", "Estado", "Descrição"],
-                "linhas": linhas_combinacoes or [["-", "-", "Nenhuma combinação cadastrada", "-", "-"]],
+                "linhas": linhas_combinacoes
+                or [["-", "-", "Nenhuma combinação cadastrada", "-", "-"]],
                 "larguras": [1800, 1400, 3000, 1000, 2160],
                 "fonte": 7.0,
             },
             {
                 "legenda": "Envelope algébrico por componente.",
-                "cabecalhos": ["Componente", "Mínimo", "Máximo", "Governante", "Unidade", "Cenário governante"],
+                "cabecalhos": [
+                    "Componente",
+                    "Mínimo",
+                    "Máximo",
+                    "Governante",
+                    "Unidade",
+                    "Cenário governante",
+                ],
                 "linhas": linhas_envelope or [["-", "-", "-", "-", "-", "Sem cenários válidos"]],
                 "larguras": [1700, 1100, 1100, 1200, 900, 3360],
                 "fonte": 7.2,
@@ -239,16 +244,12 @@ def _diagramas_do_registro(
         modelo = escrita.interpretar(
             script,
             materiais_projeto=[
-                item
-                for item in projeto.get("materiais_projeto", [])
-                if isinstance(item, Mapping)
+                item for item in projeto.get("materiais_projeto", []) if isinstance(item, Mapping)
             ],
         )
         resultado = vigas.analisar_viga(modelo)
         combinacoes = escrita.combinacoes_do_script(script)
-        envoltoria = (
-            vigas.analisar_envoltoria(modelo, combinacoes) if combinacoes else None
-        )
+        envoltoria = vigas.analisar_envoltoria(modelo, combinacoes) if combinacoes else None
     except Exception as erro:  # noqa: BLE001 - o memorial não pode cair por isto
         return [], f"Não foi possível redesenhar os diagramas: {erro}"
 
@@ -283,9 +284,7 @@ def _diagramas_do_registro(
     ], ""
 
 
-def _secao_vigas_eixos(
-    projeto: Mapping[str, Any], contexto: Mapping[str, Any]
-) -> dict[str, Any]:
+def _secao_vigas_eixos(projeto: Mapping[str, Any], contexto: Mapping[str, Any]) -> dict[str, Any]:
     """Diagramas e seções governantes das barras analisadas.
 
     Sem esta seção, uma viga registrada aparecia no memorial apenas como
@@ -309,9 +308,7 @@ def _secao_vigas_eixos(
         entradas, resultados = _entradas(registro), _resultados(registro)
         titulo = _texto(registro.get("titulo"))
         secao = entradas.get("secao") if isinstance(entradas.get("secao"), Mapping) else {}
-        material = (
-            entradas.get("material") if isinstance(entradas.get("material"), Mapping) else {}
-        )
+        material = entradas.get("material") if isinstance(entradas.get("material"), Mapping) else {}
         apoios = entradas.get("apoios") if isinstance(entradas.get("apoios"), list) else []
         comprimento = _float_seguro(entradas.get("comprimento_mm"))
 
@@ -320,11 +317,7 @@ def _secao_vigas_eixos(
                 titulo,
                 _texto(secao.get("nome")),
                 _texto(material.get("fonte")) or _texto(material.get("nome")),
-                (
-                    "Não informado"
-                    if comprimento is None
-                    else f"{_numero(comprimento / 1_000.0)} m"
-                ),
+                ("Não informado" if comprimento is None else f"{_numero(comprimento / 1_000.0)} m"),
                 "; ".join(
                     f"{_texto(item.get('tipo'))} em "
                     f"{_numero((_float_seguro(item.get('x_mm')) or 0.0) / 1_000.0)} m"
@@ -389,7 +382,9 @@ def _secao_vigas_eixos(
         fator_critico = _float_seguro(resultados.get("fator_carga_critica"))
         if fator_critico is not None:
             transversal = _float_seguro(resultados.get("fator_carga_critica_transversal"))
-            governante = min(fator_critico, transversal) if transversal is not None else fator_critico
+            governante = (
+                min(fator_critico, transversal) if transversal is not None else fator_critico
+            )
             if governante <= 1.0:
                 situacao_estabilidade = "Compressão acima da carga crítica"
             elif governante < 10.0:

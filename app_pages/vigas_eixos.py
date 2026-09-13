@@ -106,9 +106,7 @@ def enviar_para_estatica(estado, *, origem_id: str | None) -> None:
 
 
 def enviar_para_fadiga(amplitudes: dict) -> None:
-    st.session_state["fadiga_sigma_alternada_nominal"] = float(
-        amplitudes["sigma_alternada_MPa"]
-    )
+    st.session_state["fadiga_sigma_alternada_nominal"] = float(amplitudes["sigma_alternada_MPa"])
     st.session_state["fadiga_sigma_media"] = float(amplitudes["sigma_media_MPa"])
     st.switch_page("app_pages/analise_fadiga.py")
 
@@ -187,9 +185,7 @@ with st.container(border=True):
                 f"por exemplo `{list(catalogo_perfis.listar_perfis())[10]}`."
             )
             if materiais_projeto:
-                nomes = ", ".join(
-                    f"`{item.get('nome')}`" for item in materiais_projeto[:6]
-                )
+                nomes = ", ".join(f"`{item.get('nome')}`" for item in materiais_projeto[:6])
                 st.caption(
                     "Materiais qualificados deste projeto (use "
                     f"`material projeto <nome>` para rastreabilidade): {nomes}."
@@ -221,9 +217,7 @@ with st.container(border=True):
                     key="vigas_importar_combinacoes",
                 ):
                     atual = st.session_state[CHAVE_SCRIPT].rstrip()
-                    faltantes = [
-                        linha for linha in linhas_projeto if linha not in atual
-                    ]
+                    faltantes = [linha for linha in linhas_projeto if linha not in atual]
                     if faltantes:
                         st.session_state[CHAVE_SCRIPT] = (
                             atual + "\n\n" + "\n".join(faltantes) + "\n"
@@ -284,69 +278,115 @@ with st.container(border=True):
             if tipo_secao == "Retangular":
                 colunas = st.columns(2)
                 base = colunas[0].number_input(
-                    "Base b (mm)", min_value=0.1, value=100.0, step=5.0,
-                    key="vigas_form_ret_b", persist_state="session",
+                    "Base b (mm)",
+                    min_value=0.1,
+                    value=100.0,
+                    step=5.0,
+                    key="vigas_form_ret_b",
+                    persist_state="session",
                 )
                 altura = colunas[1].number_input(
-                    "Altura h (mm)", min_value=0.1, value=200.0, step=5.0,
-                    key="vigas_form_ret_h", persist_state="session",
+                    "Altura h (mm)",
+                    min_value=0.1,
+                    value=200.0,
+                    step=5.0,
+                    key="vigas_form_ret_h",
+                    persist_state="session",
                 )
                 secao = vigas.secao_retangular(base, altura)
                 linha_secao = f"secao retangular {num(base)} {num(altura)}"
             elif tipo_secao == "Circular maciça":
                 diametro = st.number_input(
-                    "Diâmetro d (mm)", min_value=0.1, value=60.0, step=2.0,
-                    key="vigas_form_circ_d", persist_state="session",
+                    "Diâmetro d (mm)",
+                    min_value=0.1,
+                    value=60.0,
+                    step=2.0,
+                    key="vigas_form_circ_d",
+                    persist_state="session",
                 )
                 secao = vigas.secao_circular_macica(diametro)
                 linha_secao = f"secao circular {num(diametro)}"
             elif tipo_secao == "Tubo circular":
                 colunas = st.columns(2)
                 de = colunas[0].number_input(
-                    "Diâmetro externo (mm)", min_value=0.1, value=60.3, step=1.0,
-                    key="vigas_form_tubo_de", persist_state="session",
+                    "Diâmetro externo (mm)",
+                    min_value=0.1,
+                    value=60.3,
+                    step=1.0,
+                    key="vigas_form_tubo_de",
+                    persist_state="session",
                 )
                 di = colunas[1].number_input(
-                    "Diâmetro interno (mm)", min_value=0.0, value=54.3, step=1.0,
-                    key="vigas_form_tubo_di", persist_state="session",
+                    "Diâmetro interno (mm)",
+                    min_value=0.0,
+                    value=54.3,
+                    step=1.0,
+                    key="vigas_form_tubo_di",
+                    persist_state="session",
                 )
                 secao = vigas.secao_tubo_circular(de, di)
                 linha_secao = f"secao tubo {num(de)} {num(di)}"
             elif tipo_secao == "Tubo retangular":
                 colunas = st.columns(3)
                 largura = colunas[0].number_input(
-                    "Largura (mm)", min_value=0.1, value=100.0, step=5.0,
-                    key="vigas_form_tr_b", persist_state="session",
+                    "Largura (mm)",
+                    min_value=0.1,
+                    value=100.0,
+                    step=5.0,
+                    key="vigas_form_tr_b",
+                    persist_state="session",
                 )
                 altura = colunas[1].number_input(
-                    "Altura (mm)", min_value=0.1, value=200.0, step=5.0,
-                    key="vigas_form_tr_h", persist_state="session",
+                    "Altura (mm)",
+                    min_value=0.1,
+                    value=200.0,
+                    step=5.0,
+                    key="vigas_form_tr_h",
+                    persist_state="session",
                 )
                 espessura = colunas[2].number_input(
-                    "Espessura (mm)", min_value=0.1, value=6.0, step=0.5,
-                    key="vigas_form_tr_t", persist_state="session",
+                    "Espessura (mm)",
+                    min_value=0.1,
+                    value=6.0,
+                    step=0.5,
+                    key="vigas_form_tr_t",
+                    persist_state="session",
                 )
                 secao = vigas.secao_tubo_retangular(largura, altura, espessura)
-                linha_secao = (
-                    f"secao tubo_retangular {num(largura)} {num(altura)} {num(espessura)}"
-                )
+                linha_secao = f"secao tubo_retangular {num(largura)} {num(altura)} {num(espessura)}"
             elif tipo_secao == "Perfil I soldado":
                 colunas = st.columns(4)
                 altura = colunas[0].number_input(
-                    "Altura h (mm)", min_value=1.0, value=300.0, step=10.0,
-                    key="vigas_form_i_h", persist_state="session",
+                    "Altura h (mm)",
+                    min_value=1.0,
+                    value=300.0,
+                    step=10.0,
+                    key="vigas_form_i_h",
+                    persist_state="session",
                 )
                 mesa = colunas[1].number_input(
-                    "Largura da mesa (mm)", min_value=1.0, value=150.0, step=5.0,
-                    key="vigas_form_i_bf", persist_state="session",
+                    "Largura da mesa (mm)",
+                    min_value=1.0,
+                    value=150.0,
+                    step=5.0,
+                    key="vigas_form_i_bf",
+                    persist_state="session",
                 )
                 alma = colunas[2].number_input(
-                    "Espessura da alma (mm)", min_value=0.1, value=8.0, step=0.5,
-                    key="vigas_form_i_tw", persist_state="session",
+                    "Espessura da alma (mm)",
+                    min_value=0.1,
+                    value=8.0,
+                    step=0.5,
+                    key="vigas_form_i_tw",
+                    persist_state="session",
                 )
                 espessura_mesa = colunas[3].number_input(
-                    "Espessura da mesa (mm)", min_value=0.1, value=12.0, step=0.5,
-                    key="vigas_form_i_tf", persist_state="session",
+                    "Espessura da mesa (mm)",
+                    min_value=0.1,
+                    value=12.0,
+                    step=0.5,
+                    key="vigas_form_i_tf",
+                    persist_state="session",
                 )
                 secao = vigas.secao_i_simetrica(altura, mesa, alma, espessura_mesa)
                 linha_secao = (
@@ -357,18 +397,19 @@ with st.container(border=True):
                 nome_perfil = colunas[0].selectbox(
                     "Perfil do catálogo",
                     list(catalogo_perfis.listar_perfis()),
-                    key="vigas_form_perfil", persist_state="session",
+                    key="vigas_form_perfil",
+                    persist_state="session",
                 )
                 eixo = colunas[1].selectbox(
-                    "Eixo de flexão", ["x", "y"],
-                    key="vigas_form_eixo", persist_state="session",
+                    "Eixo de flexão",
+                    ["x", "y"],
+                    key="vigas_form_eixo",
+                    persist_state="session",
                 )
                 secao = vigas.secao_de_perfil_catalogo(
                     catalogo_perfis.obter_perfil(nome_perfil), eixo=eixo
                 )
-                linha_secao = (
-                    f"secao perfil {escrita.texto_entre_aspas(nome_perfil)} eixo={eixo}"
-                )
+                linha_secao = f"secao perfil {escrita.texto_entre_aspas(nome_perfil)} eixo={eixo}"
         except ValueError as erro:
             erro_secao = str(erro)
             secao = None
@@ -396,9 +437,7 @@ with st.container(border=True):
                     f"Catálogo orientativo · {nome_catalogo}"
                 )
         except (FileNotFoundError, ValueError) as erro:
-            st.warning(
-                f"Base de materiais indisponível: {erro}", icon=":material/warning:"
-            )
+            st.warning(f"Base de materiais indisponível: {erro}", icon=":material/warning:")
         if st.session_state.get("vigas_form_material") not in opcoes_material:
             st.session_state["vigas_form_material"] = "manual"
         escolha_material = st.selectbox(
@@ -416,14 +455,12 @@ with st.container(border=True):
         linha_material = ""
         e_padrao, g_padrao, sy_padrao, densidade_padrao = escrita._MATERIAIS_PRONTOS["aco"]
         if escolha_material.startswith("projeto::"):
-            linha_material = (
-                "material projeto "
-                + escrita.texto_entre_aspas(escolha_material.split("::", 1)[1])
+            linha_material = "material projeto " + escrita.texto_entre_aspas(
+                escolha_material.split("::", 1)[1]
             )
         elif escolha_material.startswith("catalogo::"):
-            linha_material = (
-                "material catalogo "
-                + escrita.texto_entre_aspas(escolha_material.split("::", 1)[1])
+            linha_material = "material catalogo " + escrita.texto_entre_aspas(
+                escolha_material.split("::", 1)[1]
             )
 
         if linha_material:
@@ -448,23 +485,37 @@ with st.container(border=True):
             )
             colunas_material[2].metric(
                 "Sy",
-                "—" if not material_previa.escoamento_MPa else f"{material_previa.escoamento_MPa:.4g} MPa",
+                "—"
+                if not material_previa.escoamento_MPa
+                else f"{material_previa.escoamento_MPa:.4g} MPa",
                 border=True,
             )
             st.caption(f":material/verified: {material_previa.fonte}")
         else:
             colunas_material = st.columns(3)
             modulo_e = colunas_material[0].number_input(
-                "E (GPa)", min_value=0.1, value=float(e_padrao), step=5.0,
-                key="vigas_form_E", persist_state="session",
+                "E (GPa)",
+                min_value=0.1,
+                value=float(e_padrao),
+                step=5.0,
+                key="vigas_form_E",
+                persist_state="session",
             )
             modulo_g = colunas_material[1].number_input(
-                "G (GPa)", min_value=0.1, value=float(g_padrao), step=1.0,
-                key="vigas_form_G", persist_state="session",
+                "G (GPa)",
+                min_value=0.1,
+                value=float(g_padrao),
+                step=1.0,
+                key="vigas_form_G",
+                persist_state="session",
             )
             escoamento = colunas_material[2].number_input(
-                "Sy (MPa)", min_value=0.0, value=float(sy_padrao), step=10.0,
-                key="vigas_form_Sy", persist_state="session",
+                "Sy (MPa)",
+                min_value=0.0,
+                value=float(sy_padrao),
+                step=10.0,
+                key="vigas_form_Sy",
+                persist_state="session",
                 help="Zero deixa o fator de segurança em branco.",
             )
             linha_material = (
@@ -476,7 +527,8 @@ with st.container(border=True):
         peso_proprio = st.checkbox(
             "Somar o peso próprio da barra",
             value=False,
-            key="vigas_form_peso", persist_state="session",
+            key="vigas_form_peso",
+            persist_state="session",
             help=f"Densidade considerada: {densidade_padrao:.0f} kg/m³.",
         )
 
@@ -580,9 +632,7 @@ with st.container(border=True):
                 valor = linha.get(coluna)
                 if not pd.isna(valor) and float(valor) > 0:
                     rigidezes += f" {rotulo}={num(float(valor))}"
-            linhas_script.append(
-                f"apoio {num(float(linha['x (m)']))} {linha['tipo']}{rigidezes}"
-            )
+            linhas_script.append(f"apoio {num(float(linha['x (m)']))} {linha['tipo']}{rigidezes}")
         for _, linha in rotulas_editadas.dropna(subset=["x (m)"]).iterrows():
             linhas_script.append(f"rotula {num(float(linha['x (m)']))}")
         prefixos = {
@@ -607,16 +657,16 @@ with st.container(border=True):
                     st.stop()
                 valor2 = linha["valor 2"]
                 sufixo = "" if pd.isna(valor2) else f" {num(float(valor2))}"
-                linhas_script.append(
-                    f"{comando} {num(x1)} {num(float(x2))} {num(valor)}{sufixo}"
-                )
+                linhas_script.append(f"{comando} {num(x1)} {num(float(x2))} {num(valor)}{sufixo}")
             else:
                 linhas_script.append(f"{comando} {num(x1)} {num(valor)}")
         if peso_proprio:
             linhas_script.append("peso_proprio")
         texto_modelo = "\n".join(linhas_script)
 
-        with st.expander("Modelo equivalente em texto (copie para reaproveitar)", icon=":material/code:"):
+        with st.expander(
+            "Modelo equivalente em texto (copie para reaproveitar)", icon=":material/code:"
+        ):
             st.code(texto_modelo, language="text")
 
 analisar = st.button(
@@ -629,14 +679,10 @@ analisar = st.button(
 
 if analisar:
     try:
-        modelo = escrita.interpretar(
-            texto_modelo, materiais_projeto=materiais_projeto
-        )
+        modelo = escrita.interpretar(texto_modelo, materiais_projeto=materiais_projeto)
         resultado = vigas.analisar_viga(modelo)
         combinacoes = escrita.combinacoes_do_script(texto_modelo)
-        envoltoria = (
-            vigas.analisar_envoltoria(modelo, combinacoes) if combinacoes else None
-        )
+        envoltoria = vigas.analisar_envoltoria(modelo, combinacoes) if combinacoes else None
     except escrita.ErroDeScript as erro:
         st.session_state.pop(CHAVE_RESULTADO, None)
         st.error(str(erro), icon=":material/error:")
@@ -702,9 +748,7 @@ with st.container(border=True):
             y="y:Q",
             shape=alt.Shape(
                 "Apoio:N",
-                scale=alt.Scale(
-                    domain=list(FORMAS_APOIO), range=list(FORMAS_APOIO.values())
-                ),
+                scale=alt.Scale(domain=list(FORMAS_APOIO), range=list(FORMAS_APOIO.values())),
                 legend=alt.Legend(title="Apoio"),
             ),
             color=alt.value("#0f172a"),
@@ -756,19 +800,35 @@ with st.container(border=True):
     marcadores = []
     for carga in modelo.cargas_pontuais:
         marcadores.append(
-            {"x": carga.x_mm / 1_000.0, "rotulo": f"P = {carga.fy_N / 1_000.0:g} kN", "Tipo": "Força"}
+            {
+                "x": carga.x_mm / 1_000.0,
+                "rotulo": f"P = {carga.fy_N / 1_000.0:g} kN",
+                "Tipo": "Força",
+            }
         )
     for momento in modelo.momentos:
         marcadores.append(
-            {"x": momento.x_mm / 1_000.0, "rotulo": f"M = {momento.mz_Nmm / 1e6:g} kN·m", "Tipo": "Momento"}
+            {
+                "x": momento.x_mm / 1_000.0,
+                "rotulo": f"M = {momento.mz_Nmm / 1e6:g} kN·m",
+                "Tipo": "Momento",
+            }
         )
     for torque in modelo.torques:
         marcadores.append(
-            {"x": torque.x_mm / 1_000.0, "rotulo": f"T = {torque.t_Nmm / 1e6:g} kN·m", "Tipo": "Torque"}
+            {
+                "x": torque.x_mm / 1_000.0,
+                "rotulo": f"T = {torque.t_Nmm / 1e6:g} kN·m",
+                "Tipo": "Torque",
+            }
         )
     for carga in modelo.cargas_axiais:
         marcadores.append(
-            {"x": carga.x_mm / 1_000.0, "rotulo": f"N = {carga.fx_N / 1_000.0:g} kN", "Tipo": "Axial"}
+            {
+                "x": carga.x_mm / 1_000.0,
+                "rotulo": f"N = {carga.fx_N / 1_000.0:g} kN",
+                "Tipo": "Axial",
+            }
         )
     if marcadores:
         marcadores_df = pd.DataFrame(marcadores)
@@ -789,7 +849,9 @@ with st.container(border=True):
         )
 
     st.altair_chart(
-        alt.layer(*camadas).resolve_scale(y="independent", color="independent").properties(height=200)
+        alt.layer(*camadas)
+        .resolve_scale(y="independent", color="independent")
+        .properties(height=200)
     )
     detalhes = st.columns(4)
     detalhes[0].metric("Comprimento", f"{comprimento_m:g} m", border=True)
@@ -876,10 +938,7 @@ with st.container(border=True):
         "Flecha máxima",
         f"{numero(extremos['flecha'].valor, 3)} mm",
         border=True,
-        help=(
-            f"Em x = {extremos['flecha'].x_mm / 1_000.0:.3f} m. "
-            "Negativo é para baixo."
-        ),
+        help=(f"Em x = {extremos['flecha'].x_mm / 1_000.0:.3f} m. Negativo é para baixo."),
     )
     primeira[3].metric(
         "Rotação máxima",
@@ -974,7 +1033,9 @@ with st.container(border=True):
             f"para a meta n ≥ {meta_fator_seguranca:.2f} dos critérios do projeto."
         )
         if fator < 1.0:
-            st.error(mensagem + " A tensão equivalente excede o escoamento.", icon=":material/error:")
+            st.error(
+                mensagem + " A tensão equivalente excede o escoamento.", icon=":material/error:"
+            )
         elif fator < meta_fator_seguranca:
             st.warning(
                 mensagem + " Abaixo da meta — margem pequena frente às incertezas do modelo.",
@@ -1065,8 +1126,7 @@ with st.container(border=True):
                     linha[caso] = combinacao.fator(caso)
                 fatores_linhas.append(linha)
             st.caption(
-                "Fatores aplicados — um caso com fator zero não participa "
-                "daquela combinação."
+                "Fatores aplicados — um caso com fator zero não participa daquela combinação."
             )
             st.dataframe(pd.DataFrame(fatores_linhas), hide_index=True, width="stretch")
 
@@ -1099,10 +1159,17 @@ with st.container(border=True):
                 faixa("V máx (kN)", "V mín (kN)", "Envoltória de cortante (kN)", CORES["cortante"])
             )
             st.altair_chart(
-                faixa("M máx (kN·m)", "M mín (kN·m)", "Envoltória de momento (kN·m)", CORES["momento"])
+                faixa(
+                    "M máx (kN·m)", "M mín (kN·m)", "Envoltória de momento (kN·m)", CORES["momento"]
+                )
             )
             st.altair_chart(
-                faixa("Flecha máx (mm)", "Flecha mín (mm)", "Envoltória de flecha (mm)", CORES["flecha"])
+                faixa(
+                    "Flecha máx (mm)",
+                    "Flecha mín (mm)",
+                    "Envoltória de flecha (mm)",
+                    CORES["flecha"],
+                )
             )
             st.caption(
                 "Linha cheia: máximo; tracejada: mínimo. As demais abas mostram "
@@ -1140,9 +1207,7 @@ with st.container(border=True):
         st.altair_chart(
             diagrama("Flecha (mm)", "Flecha v (mm) — linha elástica", CORES["flecha"], altura=260)
         )
-        st.altair_chart(
-            diagrama("Rotação (mrad)", "Rotação θ (mrad)", "#9333ea", altura=200)
-        )
+        st.altair_chart(diagrama("Rotação (mrad)", "Rotação θ (mrad)", "#9333ea", altura=200))
         st.latex(r"E\,I\,\frac{d^2 v}{dx^2}=M(x),\qquad \theta=\frac{dv}{dx}")
         st.caption(
             "Flecha negativa é deslocamento para baixo. A curva é a integração "
@@ -1196,8 +1261,12 @@ with st.container(border=True):
     with abas[2]:
         st.altair_chart(diagrama("N (kN)", "Esforço normal N (kN)", CORES["normal"], altura=200))
         st.altair_chart(diagrama("T (kN·m)", "Torque T (kN·m)", CORES["torque"], altura=200))
-        st.altair_chart(diagrama("Giro torção (°)", "Ângulo de torção φ (°)", "#c2410c", altura=200))
-        st.latex(r"\sigma_{axial}=\frac{N}{A},\qquad \tau_{t}=\frac{T}{W_t},\qquad \varphi=\int\frac{T}{G\,J}\,dx")
+        st.altair_chart(
+            diagrama("Giro torção (°)", "Ângulo de torção φ (°)", "#c2410c", altura=200)
+        )
+        st.latex(
+            r"\sigma_{axial}=\frac{N}{A},\qquad \tau_{t}=\frac{T}{W_t},\qquad \varphi=\int\frac{T}{G\,J}\,dx"
+        )
         st.caption(
             "N positivo traciona. Em seções não circulares a tensão de torção usa "
             "o módulo de torção Wt (não T·c/J), e o empenamento não é considerado."
@@ -1205,13 +1274,17 @@ with st.container(border=True):
 
     with abas[3]:
         st.altair_chart(
-            diagrama("σ sup (MPa)", "Tensão normal na fibra superior (MPa)", CORES["tensao"], altura=200)
+            diagrama(
+                "σ sup (MPa)", "Tensão normal na fibra superior (MPa)", CORES["tensao"], altura=200
+            )
         )
         st.altair_chart(
             diagrama("σ inf (MPa)", "Tensão normal na fibra inferior (MPa)", "#0e7490", altura=200)
         )
         st.altair_chart(
-            diagrama("von Mises (MPa)", "Tensão equivalente de von Mises (MPa)", "#be123c", altura=210)
+            diagrama(
+                "von Mises (MPa)", "Tensão equivalente de von Mises (MPa)", "#be123c", altura=210
+            )
         )
         st.latex(
             r"\sigma=\frac{N}{A}\pm\frac{M\,c}{I},\qquad "
@@ -1351,9 +1424,7 @@ with st.container(border=True):
                 "densidade_kg_m3": material.densidade_kg_m3,
                 "fonte": material.fonte,
             },
-            "apoios": [
-                {"x_mm": apoio.x_mm, "tipo": apoio.tipo} for apoio in modelo.apoios
-            ],
+            "apoios": [{"x_mm": apoio.x_mm, "tipo": apoio.tipo} for apoio in modelo.apoios],
             "rotulas_mm": [rotula.x_mm for rotula in modelo.rotulas],
             "numero_cargas": (
                 len(modelo.cargas_pontuais)
@@ -1381,9 +1452,7 @@ with st.container(border=True):
             "tensao_torcao_maxima_MPa": extremos["tensao_torcao"].valor,
             "von_mises_maximo_MPa": extremos["von_mises"].valor,
             "tresca_maximo_MPa": extremos["tresca"].valor,
-            "fator_seguranca_escoamento": (
-                None if fator is None or math.isinf(fator) else fator
-            ),
+            "fator_seguranca_escoamento": (None if fator is None or math.isinf(fator) else fator),
             # O memorial usa esta meta para concluir "atende / não atende".
             "fator_seguranca_minimo": meta_fator_seguranca,
             "flecha_admissivel_mm": verificacao["flecha_admissivel_mm"],
@@ -1507,9 +1576,7 @@ with st.container(border=True):
         border=True,
         help=f"Ponto governante: {diagrama_secao.ponto_critico.lower()}.",
     )
-    tensoes_colunas[1].metric(
-        "τxy a repassar", f"{numero(estado_secao.tau_xy)} MPa", border=True
-    )
+    tensoes_colunas[1].metric("τxy a repassar", f"{numero(estado_secao.tau_xy)} MPa", border=True)
     tensoes_colunas[2].metric(
         "von Mises na seção", f"{numero(diagrama_secao.von_mises_MPa)} MPa", border=True
     )
@@ -1555,9 +1622,7 @@ with st.container(border=True):
             "mesmo momento é estático e não gera ciclo."
         ),
     )
-    amplitudes = vigas.amplitudes_de_fadiga(
-        resultado, x_repasse_mm, eixo_girante=eixo_girante
-    )
+    amplitudes = vigas.amplitudes_de_fadiga(resultado, x_repasse_mm, eixo_girante=eixo_girante)
     colunas_fadiga = st.columns(3)
     colunas_fadiga[0].metric(
         "σa (alternada)", f"{numero(amplitudes['sigma_alternada_MPa'])} MPa", border=True
@@ -1566,7 +1631,9 @@ with st.container(border=True):
         "σm (média)", f"{numero(amplitudes['sigma_media_MPa'])} MPa", border=True
     )
     colunas_fadiga[2].metric(
-        "τ de torção", f"{numero(amplitudes['tensao_torcao_MPa'])} MPa", border=True,
+        "τ de torção",
+        f"{numero(amplitudes['tensao_torcao_MPa'])} MPa",
+        border=True,
         help="A torção estática entra na fadiga como tensão média de cisalhamento; leve-a em conta no módulo de destino.",
     )
     if amplitudes["sigma_alternada_MPa"] <= 0:

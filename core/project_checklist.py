@@ -167,6 +167,7 @@ def resumo_checklist(
             proximos.append(linha)
         elif avaliacao["situacao"] == SITUACAO_ILEGIVEL:
             ilegiveis.append(linha)
+
     def urgencia(linha: Mapping[str, Any]) -> tuple[int, bool]:
         # Mais atrasado primeiro; entre iguais, o crítico vem antes.
         return (linha["dias"] if linha["dias"] is not None else 0, not linha["critico"])

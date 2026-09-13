@@ -174,7 +174,9 @@ def renderizar_diagrama(
     marca = math.ceil(x_min / passo_x) * passo_x
     while marca <= x_max + passo_x * 1e-9:
         coluna = px(marca)
-        desenho.line([(coluna, margem_topo), (coluna, margem_topo + area_a)], fill=_GRADE, width=escala)
+        desenho.line(
+            [(coluna, margem_topo), (coluna, margem_topo + area_a)], fill=_GRADE, width=escala
+        )
         rotulo = _formatar(marca, passo_x)
         largura_rotulo = desenho.textlength(rotulo, font=fonte_eixo)
         desenho.text(
@@ -209,9 +211,7 @@ def renderizar_diagrama(
         poligono = [(superior[0][0], py(0.0)), *superior, (superior[-1][0], py(0.0))]
     if len(poligono) >= 3:
         preenchimento = Image.new("RGBA", (largura, altura), (0, 0, 0, 0))
-        ImageDraw.Draw(preenchimento).polygon(
-            poligono, fill=_rgba(serie.cor, 60)
-        )
+        ImageDraw.Draw(preenchimento).polygon(poligono, fill=_rgba(serie.cor, 60))
         imagem.paste(
             Image.alpha_composite(imagem.convert("RGBA"), preenchimento).convert("RGB"),
             (0, 0),
@@ -260,7 +260,9 @@ def renderizar_diagrama(
     )
     anotacao = f"{_formatar(y_extremo, passo_y / 100)} {serie.unidade} em x = {x_extremo:.3g} m"
     largura_anotacao = desenho.textlength(anotacao, font=fonte_nota)
-    destino_x = min(max(ponto[0] - largura_anotacao / 2, margem_esq), margem_esq + area_l - largura_anotacao)
+    destino_x = min(
+        max(ponto[0] - largura_anotacao / 2, margem_esq), margem_esq + area_l - largura_anotacao
+    )
     acima = y_extremo >= 0
     destino_y = ponto[1] - 20 * escala if acima else ponto[1] + 8 * escala
     destino_y = min(max(destino_y, margem_topo), margem_topo + area_a - 14 * escala)
@@ -303,8 +305,7 @@ def _rgba(cor_hex: str, alfa: int) -> tuple[int, int, int, int]:
 
 def _serie(resultado, atributo: str, escala: float) -> tuple[tuple[float, float], ...]:
     return tuple(
-        (ponto.x_mm / 1_000.0, getattr(ponto, atributo) * escala)
-        for ponto in resultado.pontos
+        (ponto.x_mm / 1_000.0, getattr(ponto, atributo) * escala) for ponto in resultado.pontos
     )
 
 
@@ -327,9 +328,7 @@ def series_do_resultado(resultado) -> list[SerieDiagrama]:
             unidade="kN·m",
             pontos=_serie(resultado, "momento_Nmm", 1 / 1e6),
             cor=COR_MOMENTO,
-            descricao=(
-                "Diagrama de momento fletor; positivo comprime a fibra superior."
-            ),
+            descricao=("Diagrama de momento fletor; positivo comprime a fibra superior."),
         ),
         SerieDiagrama(
             titulo="Linha elástica — flecha (mm)",
@@ -364,6 +363,7 @@ def series_do_resultado(resultado) -> list[SerieDiagrama]:
 
 def series_da_envoltoria(envoltoria) -> list[SerieDiagrama]:
     """Faixas envelopadas de cortante, momento e flecha."""
+
     def faixa(atributo_max: str, atributo_min: str, escala: float):
         superior = tuple(
             (ponto.x_mm / 1_000.0, getattr(ponto, atributo_max) * escala)
@@ -376,8 +376,22 @@ def series_da_envoltoria(envoltoria) -> list[SerieDiagrama]:
         return superior, inferior
 
     definicoes = (
-        ("Envoltória de cortante V (kN)", "kN", "cortante_max_N", "cortante_min_N", 1 / 1_000.0, COR_CORTANTE),
-        ("Envoltória de momento M (kN·m)", "kN·m", "momento_max_Nmm", "momento_min_Nmm", 1 / 1e6, COR_MOMENTO),
+        (
+            "Envoltória de cortante V (kN)",
+            "kN",
+            "cortante_max_N",
+            "cortante_min_N",
+            1 / 1_000.0,
+            COR_CORTANTE,
+        ),
+        (
+            "Envoltória de momento M (kN·m)",
+            "kN·m",
+            "momento_max_Nmm",
+            "momento_min_Nmm",
+            1 / 1e6,
+            COR_MOMENTO,
+        ),
         ("Envoltória de flecha (mm)", "mm", "flecha_max_mm", "flecha_min_mm", 1.0, COR_FLECHA),
     )
     series = []
@@ -391,8 +405,7 @@ def series_da_envoltoria(envoltoria) -> list[SerieDiagrama]:
                 pontos_inferiores=inferior,
                 cor=cor,
                 descricao=(
-                    f"{titulo}: faixa entre o máximo e o mínimo de todas as "
-                    "combinações declaradas."
+                    f"{titulo}: faixa entre o máximo e o mínimo de todas as combinações declaradas."
                 ),
             )
         )
@@ -411,6 +424,5 @@ def imagens_do_resultado(
     if envoltoria is not None:
         series.extend(series_da_envoltoria(envoltoria))
     return [
-        renderizar_diagrama(serie, largura_px=largura_px, altura_px=altura_px)
-        for serie in series
+        renderizar_diagrama(serie, largura_px=largura_px, altura_px=altura_px) for serie in series
     ]

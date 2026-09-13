@@ -109,8 +109,7 @@ def _resolver(
         deslocamentos_livres = np.linalg.solve(kff, ff)
     except np.linalg.LinAlgError as exc:
         raise ValueError(
-            "A matriz de rigidez é singular. Verifique apoios, conectividade "
-            "e mecanismos internos."
+            "A matriz de rigidez é singular. Verifique apoios, conectividade e mecanismos internos."
         ) from exc
     deslocamentos = np.zeros(total)
     deslocamentos[livres] = deslocamentos_livres
@@ -156,13 +155,18 @@ def analisar_trelica(
         c, s = dx / l, dy / l
         a = _positivo("area_mm2", elemento.area_mm2)
         e = _positivo("modulo_elasticidade_MPa", elemento.modulo_elasticidade_MPa)
-        k = a * e / l * np.array(
-            [
-                [c * c, c * s, -c * c, -c * s],
-                [c * s, s * s, -c * s, -s * s],
-                [-c * c, -c * s, c * c, c * s],
-                [-c * s, -s * s, c * s, s * s],
-            ]
+        k = (
+            a
+            * e
+            / l
+            * np.array(
+                [
+                    [c * c, c * s, -c * c, -c * s],
+                    [c * s, s * s, -c * s, -s * s],
+                    [-c * c, -c * s, c * c, c * s],
+                    [-c * s, -s * s, c * s, s * s],
+                ]
+            )
         )
         dofs = [2 * i, 2 * i + 1, 2 * j, 2 * j + 1]
         k_global[np.ix_(dofs, dofs)] += k
@@ -190,16 +194,9 @@ def analisar_trelica(
     for indice, no in enumerate(lista_nos):
         ux, uy = u[2 * indice : 2 * indice + 2]
         rx, ry = reacoes[2 * indice : 2 * indice + 2]
-        deslocamentos_nos.append(
-            {"no": no.id, "ux_mm": ux, "uy_mm": uy}
-        )
-        reacoes_nos.append(
-            {"no": no.id, "rx_N": rx, "ry_N": ry}
-        )
-    maximo = max(
-        math.hypot(item["ux_mm"], item["uy_mm"])
-        for item in deslocamentos_nos
-    )
+        deslocamentos_nos.append({"no": no.id, "ux_mm": ux, "uy_mm": uy})
+        reacoes_nos.append({"no": no.id, "rx_N": rx, "ry_N": ry})
+    maximo = max(math.hypot(item["ux_mm"], item["uy_mm"]) for item in deslocamentos_nos)
     return ResultadoEstrutural(
         deslocamentos_nodais=tuple(deslocamentos_nos),
         reacoes_nodais=tuple(reacoes_nos),
@@ -327,16 +324,9 @@ def analisar_portico(
     for indice, no in enumerate(lista_nos):
         ux, uy, rz = u[3 * indice : 3 * indice + 3]
         rx, ry, mz = reacoes[3 * indice : 3 * indice + 3]
-        deslocamentos_nos.append(
-            {"no": no.id, "ux_mm": ux, "uy_mm": uy, "rz_rad": rz}
-        )
-        reacoes_nos.append(
-            {"no": no.id, "rx_N": rx, "ry_N": ry, "mz_Nmm": mz}
-        )
-    maximo = max(
-        math.hypot(item["ux_mm"], item["uy_mm"])
-        for item in deslocamentos_nos
-    )
+        deslocamentos_nos.append({"no": no.id, "ux_mm": ux, "uy_mm": uy, "rz_rad": rz})
+        reacoes_nos.append({"no": no.id, "rx_N": rx, "ry_N": ry, "mz_Nmm": mz})
+    maximo = max(math.hypot(item["ux_mm"], item["uy_mm"]) for item in deslocamentos_nos)
     return ResultadoEstrutural(
         deslocamentos_nodais=tuple(deslocamentos_nos),
         reacoes_nodais=tuple(reacoes_nos),

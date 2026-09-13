@@ -263,9 +263,6 @@ def avaliar_contrato_registro(registro: Mapping[str, Any]) -> dict[str, Any]:
         "faltantes": faltantes,
         "assinatura_presente": bool(hash_salvo),
         "assinatura_valida": assinatura_valida,
-        "modulo_conhecido": resolver_modulo(
-            registro.get("modulo_id") or registro.get("modulo")
-        )
+        "modulo_conhecido": resolver_modulo(registro.get("modulo_id") or registro.get("modulo"))
         is not None,
     }
-

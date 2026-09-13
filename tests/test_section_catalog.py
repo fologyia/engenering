@@ -73,9 +73,7 @@ class ValidacaoTests(unittest.TestCase):
 
     def test_mesas_maiores_que_a_altura_sao_recusadas(self):
         with self.assertRaises(catalogo.ErroDeCatalogo) as contexto:
-            catalogo.perfil_de_dicionario(
-                {**PERFIL_VALIDO, "espessura_mesa_mm": 110.0}
-            )
+            catalogo.perfil_de_dicionario({**PERFIL_VALIDO, "espessura_mesa_mm": 110.0})
         self.assertIn("mesas", str(contexto.exception).lower())
 
     def test_campos_opcionais_podem_ser_zero(self):
@@ -104,9 +102,7 @@ class CoerenciaTests(unittest.TestCase):
 
     def test_area_de_cisalhamento_maior_que_a_total_e_apontada(self):
         avisos = catalogo.conferir_coerencia(
-            catalogo.perfil_de_dicionario(
-                {**PERFIL_VALIDO, "area_cisalhamento_mm2": 9_999.0}
-            )
+            catalogo.perfil_de_dicionario({**PERFIL_VALIDO, "area_cisalhamento_mm2": 9_999.0})
         )
         self.assertTrue(any("cisalhamento" in aviso for aviso in avisos))
 
@@ -151,9 +147,7 @@ class CadastroTests(unittest.TestCase):
         documento = json.loads(self.arquivo.read_text(encoding="utf-8"))
         nomes = [item["nome"] for item in documento["perfis"]]
         self.assertEqual(nomes.count("W teste 200 x 20"), 1)
-        self.assertAlmostEqual(
-            catalogo.obter("W teste 200 x 20").perfil.massa_kg_m, 21.0
-        )
+        self.assertAlmostEqual(catalogo.obter("W teste 200 x 20").perfil.massa_kg_m, 21.0)
 
     def test_perfil_do_usuario_sobrepoe_o_embutido(self):
         # Cadastrar com o nome de um perfil existente é corrigir aquele valor
@@ -210,9 +204,7 @@ class ImportacaoTests(unittest.TestCase):
         self._dir.cleanup()
 
     def test_lote_valido_e_cadastrado(self):
-        entradas = [
-            {**PERFIL_VALIDO, "nome": f"W lote {indice}"} for indice in range(3)
-        ]
+        entradas = [{**PERFIL_VALIDO, "nome": f"W lote {indice}"} for indice in range(3)]
         aceitos, rejeitados = catalogo.importar_lote(entradas, origem="Tabela X")
         self.assertEqual(len(aceitos), 3)
         self.assertEqual(rejeitados, [])
@@ -293,9 +285,7 @@ class CatalogoDeReferenciaTests(unittest.TestCase):
 
     def test_perfis_de_referencia_entram_no_catalogo(self):
         completo = catalogo.listar_cadastrados()
-        gerdau = [
-            nome for nome, item in completo.items() if "Gerdau" in item.origem
-        ]
+        gerdau = [nome for nome, item in completo.items() if "Gerdau" in item.origem]
         self.assertGreater(len(gerdau), 50)
 
     def test_catalogo_cobre_as_bitolas_w_ate_610(self):
@@ -308,16 +298,12 @@ class CatalogoDeReferenciaTests(unittest.TestCase):
             achado = re.search(r"^(?:W|HP)\s+(\d+)\s*x", nome)
             if achado:
                 alturas.add(int(achado.group(1)))
-        self.assertEqual(
-            sorted(alturas), [150, 200, 250, 310, 360, 410, 460, 530, 610]
-        )
+        self.assertEqual(sorted(alturas), [150, 200, 250, 310, 360, 410, 460, 530, 610])
 
     def test_catalogo_gerdau_cobre_i_u_e_t(self):
         completo = catalogo.listar_cadastrados()
         familias_gerdau = {
-            item.perfil.familia
-            for item in completo.values()
-            if "Gerdau" in item.origem
+            item.perfil.familia for item in completo.values() if "Gerdau" in item.origem
         }
         self.assertIn("I duplamente simétrico", familias_gerdau)
         self.assertIn("U (canal laminado)", familias_gerdau)
@@ -378,9 +364,7 @@ class IntegracaoComOsModulosTests(unittest.TestCase):
         )
         resultado = vb.analisar_viga(viga)
         # M = wL²/8 = 67,5 kN·m, independente do perfil.
-        self.assertAlmostEqual(
-            resultado.extremos["momento"].valor / 1e6, 67.5, places=6
-        )
+        self.assertAlmostEqual(resultado.extremos["momento"].valor / 1e6, 67.5, places=6)
         self.assertAlmostEqual(viga.secao.inercia_mm4, 3.473e7, delta=1e4)
 
     def test_busca_parcial_encontra_o_perfil(self):

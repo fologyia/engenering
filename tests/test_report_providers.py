@@ -65,8 +65,7 @@ def registro_de_viga(script: str, *, titulo="Viga do mezanino", com_envoltoria=F
         envoltoria = vb.analisar_envoltoria(viga, bs.combinacoes_do_script(script))
         resultados["envoltoria_governantes"] = vb.resumo_governantes(envoltoria)
         resultados["envoltoria_combinacoes"] = [
-            {"nome": item.nome, "fatores": item.fatores}
-            for item in envoltoria.combinacoes
+            {"nome": item.nome, "fatores": item.fatores} for item in envoltoria.combinacoes
         ]
 
     return criar_registro_tecnico(
@@ -80,9 +79,7 @@ def registro_de_viga(script: str, *, titulo="Viga do mezanino", com_envoltoria=F
             "comprimento_mm": viga.comprimento_mm,
             "secao": {"nome": viga.secao.nome},
             "material": {"nome": viga.material.nome, "fonte": viga.material.fonte},
-            "apoios": [
-                {"x_mm": apoio.x_mm, "tipo": apoio.tipo} for apoio in viga.apoios
-            ],
+            "apoios": [{"x_mm": apoio.x_mm, "tipo": apoio.tipo} for apoio in viga.apoios],
         },
         resultados=resultados,
         conclusao="Verificação concluída",
@@ -165,8 +162,13 @@ class SecaoDeVigasTests(unittest.TestCase):
         tabela = next(t for t in secao["tabelas"] if "Estabilidade" in t["legenda"])
         linha = tabela["linhas"][0]
         self.assertEqual(linha[0], "Viga do mezanino")
-        self.assertLess(float(linha[2].replace(".", "").replace(",", ".")), float(linha[1].replace(".", "").replace(",", ".")))
-        self.assertIn(linha[4], {"Folgada", "Sensível à segunda ordem", "Compressão acima da carga crítica"})
+        self.assertLess(
+            float(linha[2].replace(".", "").replace(",", ".")),
+            float(linha[1].replace(".", "").replace(",", ".")),
+        )
+        self.assertIn(
+            linha[4], {"Folgada", "Sensível à segunda ordem", "Compressão acima da carga crítica"}
+        )
 
     def test_barra_sem_compressao_nao_tem_tabela_de_estabilidade(self):
         secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
@@ -200,9 +202,7 @@ class SecaoDeVigasTests(unittest.TestCase):
         self.assertIn(celula.splitlines()[-1], {"Atende", "Excedida"})
 
     def test_envoltoria_vira_tabela_de_combinacoes_governantes(self):
-        secao = self.secao(
-            projeto_minimo(registro_de_viga(SCRIPT_COMBINADO, com_envoltoria=True))
-        )
+        secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_COMBINADO, com_envoltoria=True)))
         tabela = next(t for t in secao["tabelas"] if "Envoltória" in t["legenda"])
         self.assertTrue(any("ELU" in str(linha) for linha in tabela["linhas"]))
         self.assertIn("governa cada grandeza", " ".join(secao["paragrafos"]))
@@ -315,9 +315,7 @@ class DiagramasNoMemorialTests(unittest.TestCase):
         self.assertNotIn("Esforço normal N (kN)", titulos)
 
     def test_envoltoria_acrescenta_as_faixas(self):
-        secao = self.secao(
-            projeto_minimo(registro_de_viga(SCRIPT_COMBINADO, com_envoltoria=True))
-        )
+        secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_COMBINADO, com_envoltoria=True)))
         titulos = [imagem["titulo"] for imagem in secao["imagens"]]
         self.assertIn("Envoltória de momento M (kN·m)", titulos)
         self.assertIn("Envoltória de flecha (mm)", titulos)
@@ -334,9 +332,7 @@ class DiagramasNoMemorialTests(unittest.TestCase):
         )
         secao = self.secao(projeto_minimo(antigo))
         self.assertEqual(secao["imagens"], [])
-        self.assertTrue(
-            any("diagramas indisponíveis" in p for p in secao["paragrafos"])
-        )
+        self.assertTrue(any("diagramas indisponíveis" in p for p in secao["paragrafos"]))
 
     def test_modelo_invalido_nao_derruba_o_memorial(self):
         quebrado = criar_registro_tecnico(
@@ -350,9 +346,7 @@ class DiagramasNoMemorialTests(unittest.TestCase):
         )
         secao = self.secao(projeto_minimo(quebrado))
         self.assertEqual(secao["imagens"], [])
-        self.assertTrue(
-            any("redesenhar os diagramas" in p for p in secao["paragrafos"])
-        )
+        self.assertTrue(any("redesenhar os diagramas" in p for p in secao["paragrafos"]))
 
     def test_resultado_divergente_omite_o_grafico(self):
         # Se o modelo guardado não reproduz mais o número registrado, o
@@ -366,9 +360,7 @@ class DiagramasNoMemorialTests(unittest.TestCase):
     def test_word_embute_as_imagens(self):
         from core.project_report import gerar_relatorio_industrial_word
 
-        conteudo = gerar_relatorio_industrial_word(
-            projeto_minimo(registro_de_viga(SCRIPT_SIMPLES))
-        )
+        conteudo = gerar_relatorio_industrial_word(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
         # As partes de mídia do .docx são um zip; contar os PNGs embutidos.
         import zipfile
 
@@ -383,9 +375,7 @@ class DiagramasNoMemorialTests(unittest.TestCase):
     def test_pdf_embute_as_imagens(self):
         from core.project_report import gerar_relatorio_industrial_pdf
 
-        conteudo = gerar_relatorio_industrial_pdf(
-            projeto_minimo(registro_de_viga(SCRIPT_SIMPLES))
-        )
+        conteudo = gerar_relatorio_industrial_pdf(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
         self.assertTrue(conteudo.startswith(b"%PDF"))
         self.assertIn(b"/Image", conteudo)
 

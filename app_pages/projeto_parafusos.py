@@ -114,9 +114,7 @@ with st.container(border=True):
         )
 
     try:
-        classe = parafusos.obter_classe(
-            classe_escolhida, rosca.diametro_mm
-        )
+        classe = parafusos.obter_classe(classe_escolhida, rosca.diametro_mm)
     except ValueError as erro:
         st.error(str(erro), icon=":material/error:")
         st.stop()
@@ -460,13 +458,8 @@ criterios = [
 tabela_criterios = pd.DataFrame(
     {
         "Critério": [nome for nome, _ in criterios],
-        "Fator calculado": [
-            None if math.isinf(valor) else valor for _, valor in criterios
-        ],
-        "Resultado": [
-            classificar_fator(valor, fator_minimo)
-            for _, valor in criterios
-        ],
+        "Fator calculado": [None if math.isinf(valor) else valor for _, valor in criterios],
+        "Resultado": [classificar_fator(valor, fator_minimo) for _, valor in criterios],
     }
 )
 st.dataframe(
@@ -531,12 +524,8 @@ with st.container(border=True):
             column_config={
                 "x (mm)": st.column_config.NumberColumn(format="%.1f"),
                 "y (mm)": st.column_config.NumberColumn(format="%.1f"),
-                "Carga axial externa (kN)": st.column_config.NumberColumn(
-                    format="%.3f"
-                ),
-                "Cisalhamento resultante (kN)": st.column_config.NumberColumn(
-                    format="%.3f"
-                ),
+                "Carga axial externa (kN)": st.column_config.NumberColumn(format="%.3f"),
+                "Cisalhamento resultante (kN)": st.column_config.NumberColumn(format="%.3f"),
             },
         )
 
@@ -732,7 +721,9 @@ with st.container(border=True):
         "fator_ruptura_tracao": (
             None if math.isinf(resultado.fator_ruptura_tracao) else resultado.fator_ruptura_tracao
         ),
-        "fator_separacao": None if math.isinf(resultado.fator_separacao) else resultado.fator_separacao,
+        "fator_separacao": None
+        if math.isinf(resultado.fator_separacao)
+        else resultado.fator_separacao,
         "fator_deslizamento": (
             None if math.isinf(resultado.fator_deslizamento) else resultado.fator_deslizamento
         ),
@@ -740,7 +731,9 @@ with st.container(border=True):
             None if math.isinf(resultado.fator_esmagamento) else resultado.fator_esmagamento
         ),
         "fator_rasgamento_borda": (
-            None if math.isinf(resultado.fator_rasgamento_borda) else resultado.fator_rasgamento_borda
+            None
+            if math.isinf(resultado.fator_rasgamento_borda)
+            else resultado.fator_rasgamento_borda
         ),
         "pre_carga_nominal_kN": resultado.pre_carga_nominal_N / 1_000.0,
         "torque_nominal_Nm": resultado.torque_nominal_Nm,
@@ -754,7 +747,9 @@ with st.container(border=True):
                 "fadiga_tensao_alternada_MPa": fadiga_resultado.tensao_alternada_MPa,
                 "fadiga_tensao_media_MPa": fadiga_resultado.tensao_media_MPa,
                 "fadiga_fator_goodman": (
-                    None if math.isinf(fadiga_resultado.fator_goodman) else fadiga_resultado.fator_goodman
+                    None
+                    if math.isinf(fadiga_resultado.fator_goodman)
+                    else fadiga_resultado.fator_goodman
                 ),
                 "fadiga_fator_escoamento_maximo": (
                     None
@@ -809,11 +804,11 @@ with st.container(border=True):
             "Pré-carga estimada por T = K·Fi·d; a dispersão real de aperto pode ser maior.",
             "Modelo de fadiga válido enquanto a junta permanece fechada (sem separação).",
         ],
-        alertas=(
-            [] if status_registro == "Atende"
-            else [conclusao_registro]
-        ),
-        referencias=["NASA Fastener Design Manual, NASA-STD-5020 e tabelas ISO 898.", "Confirmar norma, fabricante e processo de aperto do projeto."],
+        alertas=([] if status_registro == "Atende" else [conclusao_registro]),
+        referencias=[
+            "NASA Fastener Design Manual, NASA-STD-5020 e tabelas ISO 898.",
+            "Confirmar norma, fabricante e processo de aperto do projeto.",
+        ],
         conclusao=conclusao_registro,
     )
     botao_registrar_calculo(

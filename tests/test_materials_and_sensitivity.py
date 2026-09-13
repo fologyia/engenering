@@ -87,7 +87,10 @@ def test_monte_carlo_e_reproduzivel_e_calcula_probabilidade():
     primeiro = analisar_monte_carlo("utilizacao", entradas, configuracao, **kwargs)
     segundo = analisar_monte_carlo("utilizacao", entradas, configuracao, **kwargs)
     assert primeiro["p95"] == segundo["p95"]
-    assert primeiro["probabilidade_nao_atendimento_pct"] == segundo["probabilidade_nao_atendimento_pct"]
+    assert (
+        primeiro["probabilidade_nao_atendimento_pct"]
+        == segundo["probabilidade_nao_atendimento_pct"]
+    )
     assert 0.0 <= primeiro["probabilidade_nao_atendimento_pct"] <= 100.0
 
 
@@ -118,7 +121,12 @@ def test_mohr_2d_sugere_modelo_de_seguranca_sem_sy():
         {
             "modulo": "Círculo de Mohr",
             "modulo_id": "circulo_mohr",
-            "entradas": {"sigma_x_MPa": 80, "sigma_y_MPa": -20, "tau_xy_MPa": 35, "theta_graus": 10},
+            "entradas": {
+                "sigma_x_MPa": 80,
+                "sigma_y_MPa": -20,
+                "tau_xy_MPa": 35,
+                "theta_graus": 10,
+            },
         }
     )
     assert sugestao is not None

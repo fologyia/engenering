@@ -142,10 +142,7 @@ def gerar_combinacoes(acoes: Iterable[AcaoEstrutural]) -> list[Combinacao]:
                 )
             )
 
-    fatores_qp = {
-        acao.nome: 1.0 if acao.tipo == "Permanente" else acao.psi2
-        for acao in itens
-    }
+    fatores_qp = {acao.nome: 1.0 if acao.tipo == "Permanente" else acao.psi2 for acao in itens}
     n, v, m = _somar(itens, fatores_qp)
     combinacoes.append(
         Combinacao(
@@ -155,10 +152,7 @@ def gerar_combinacoes(acoes: Iterable[AcaoEstrutural]) -> list[Combinacao]:
             n_kN=n,
             v_kN=v,
             m_kNm=m,
-            expressao=" + ".join(
-                f"{fatores_qp[acao.nome]:.3g}·{acao.nome}"
-                for acao in itens
-            ),
+            expressao=" + ".join(f"{fatores_qp[acao.nome]:.3g}·{acao.nome}" for acao in itens),
         )
     )
     return combinacoes

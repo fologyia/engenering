@@ -39,9 +39,7 @@ def _principais(tensoes_principais: Iterable[float]) -> tuple[float, float, floa
     return tuple(sorted(valores, reverse=True))
 
 
-def fator_seguranca_von_mises(
-    tensao_von_mises_MPa: float, Sy_MPa: float
-) -> float:
+def fator_seguranca_von_mises(tensao_von_mises_MPa: float, Sy_MPa: float) -> float:
     """Fator de segurança ao escoamento por von Mises."""
     equivalente = _equivalente("tensao_von_mises_MPa", tensao_von_mises_MPa)
     Sy_MPa = _positivo("Sy_MPa", Sy_MPa)
@@ -56,9 +54,7 @@ def tensao_equivalente_tresca(
     return sigma_1 - sigma_3
 
 
-def fator_seguranca_tresca(
-    tensoes_principais: Iterable[float], Sy_MPa: float
-) -> float:
+def fator_seguranca_tresca(tensoes_principais: Iterable[float], Sy_MPa: float) -> float:
     """Fator de segurança ao escoamento pelo critério de Tresca."""
     Sy_MPa = _positivo("Sy_MPa", Sy_MPa)
     equivalente = tensao_equivalente_tresca(tensoes_principais)
@@ -92,9 +88,7 @@ def fator_seguranca_rankine(
         )
 
     fator_compressao = (
-        Suc_MPa / abs(sigma_3)
-        if existe_compressao and Suc_MPa is not None
-        else math.inf
+        Suc_MPa / abs(sigma_3) if existe_compressao and Suc_MPa is not None else math.inf
     )
     if fator_tracao <= fator_compressao:
         modo = "tração"

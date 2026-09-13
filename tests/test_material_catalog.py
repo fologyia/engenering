@@ -55,9 +55,7 @@ class ValidacaoTests(unittest.TestCase):
 
     def test_escoamento_maior_que_ruptura_e_recusado(self):
         with self.assertRaises(catalogo.ErroDeMaterial) as contexto:
-            catalogo.material_de_dicionario(
-                {**MATERIAL_VALIDO, "Sy_MPa": 600.0, "Sut_MPa": 450.0}
-            )
+            catalogo.material_de_dicionario({**MATERIAL_VALIDO, "Sy_MPa": 600.0, "Sut_MPa": 450.0})
         self.assertIn("não pode ser maior", str(contexto.exception))
 
     def test_categoria_desconhecida_e_recusada(self):
@@ -108,15 +106,11 @@ class CoerenciaTests(unittest.TestCase):
         self.assertTrue(any("Sy/Sut" in aviso for aviso in avisos))
 
     def test_unidade_em_psi_e_apontada(self):
-        avisos = catalogo.conferir_coerencia(
-            self.material(Sy_MPa=50_000.0, Sut_MPa=65_000.0)
-        )
+        avisos = catalogo.conferir_coerencia(self.material(Sy_MPa=50_000.0, Sut_MPa=65_000.0))
         self.assertTrue(any("MPa e não psi" in aviso for aviso in avisos))
 
     def test_material_fragil_avisa_que_sy_nao_se_aplica(self):
-        avisos = catalogo.conferir_coerencia(
-            self.material(Sy_MPa=0.0, Sut_MPa=200.0)
-        )
+        avisos = catalogo.conferir_coerencia(self.material(Sy_MPa=0.0, Sut_MPa=200.0))
         self.assertTrue(any("escoamento" in aviso for aviso in avisos))
 
     def test_propriedades_sem_procedencia_sao_apontadas(self):
@@ -251,9 +245,7 @@ class CriterioDeProjetoTests(unittest.TestCase):
     def test_aplicacao_de_parafuso_traz_so_os_de_alta_resistencia(self):
         permitidos = {
             m.nome
-            for m in catalogo.materiais_para(
-                "Parafusos de alta resistencia em ligacoes principais"
-            )
+            for m in catalogo.materiais_para("Parafusos de alta resistencia em ligacoes principais")
         }
         self.assertEqual(permitidos, {"ASTM F3125 Gr. A325", "ASTM F3125 Gr. A490"})
 
@@ -314,8 +306,14 @@ class CatalogoGerdauTests(unittest.TestCase):
     def test_equivalencia_nbr_7007_aparece_na_designacao(self):
         for nome, equivalencia in (
             ("ASTM A36 / NBR 7007 MR 250 — perfis I, U, T e cantoneiras (Gerdau)", "MR 250"),
-            ("ASTM A572 Gr. 60 / NBR 7007 AR 415 — perfis I, U, T e cantoneiras (Gerdau)", "AR 415"),
-            ("ASTM A588 / NBR 7007 AR 350 COR — perfis I, U, T e cantoneiras (Gerdau)", "AR 350 COR"),
+            (
+                "ASTM A572 Gr. 60 / NBR 7007 AR 415 — perfis I, U, T e cantoneiras (Gerdau)",
+                "AR 415",
+            ),
+            (
+                "ASTM A588 / NBR 7007 AR 350 COR — perfis I, U, T e cantoneiras (Gerdau)",
+                "AR 350 COR",
+            ),
         ):
             with self.subTest(material=nome):
                 item = catalogo.obter(nome)
@@ -325,9 +323,7 @@ class CatalogoGerdauTests(unittest.TestCase):
     def test_faixa_de_resistencia_adota_o_minimo_e_declara_a_faixa(self):
         # Onde o catálogo dá "400 a 550 MPa", o valor de projeto é o mínimo; a
         # faixa completa não pode se perder.
-        item = catalogo.obter(
-            "ASTM A36 / NBR 7007 MR 250 — perfis I, U, T e cantoneiras (Gerdau)"
-        )
+        item = catalogo.obter("ASTM A36 / NBR 7007 MR 250 — perfis I, U, T e cantoneiras (Gerdau)")
         self.assertAlmostEqual(item.sut_MPa, 400.0)
         self.assertIn("400 a 550", item.observacao)
 
@@ -349,9 +345,7 @@ class CatalogoGerdauTests(unittest.TestCase):
 
     def test_aplicacoes_separam_as_duas_tabelas(self):
         w_hp = {m.nome for m in catalogo.materiais_para("Perfis W e HP")}
-        laminados = {
-            m.nome for m in catalogo.materiais_para("Perfis I, U, T e cantoneiras")
-        }
+        laminados = {m.nome for m in catalogo.materiais_para("Perfis I, U, T e cantoneiras")}
         self.assertEqual(len(w_hp), 6)
         self.assertEqual(len(laminados), 4)
         self.assertEqual(w_hp & laminados, set())

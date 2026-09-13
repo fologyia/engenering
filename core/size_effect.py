@@ -4,6 +4,7 @@ As dimensoes de entrada sao em mm e as areas retornadas sao em mm².
 As expressoes correspondem a secoes em flexao nao rotativa, exceto o
 circulo rotativo, que e a referencia usada para definir o equivalente.
 """
+
 import math
 
 _AREA_REFERENCIA_CILINDRO_ROTATIVO = 0.0766
@@ -53,9 +54,7 @@ def area_95_perfil_i(a_mm: float, b_mm: float, tf_mm: float, eixo: str) -> float
     raise ValueError("Eixo do perfil I deve ser 'eixo 1-1' ou 'eixo 2-2'.")
 
 
-def area_95_perfil_canal(
-    a_mm: float, b_mm: float, tf_mm: float, x_mm: float, eixo: str
-) -> float:
+def area_95_perfil_canal(a_mm: float, b_mm: float, tf_mm: float, x_mm: float, eixo: str) -> float:
     """Area A0,95sigma de um perfil canal conforme a orientacao do eixo."""
     a_mm = _positivo("a_mm", a_mm)
     b_mm = _positivo("b_mm", b_mm)
@@ -73,7 +72,7 @@ def area_95_perfil_canal(
 def desenho_svg(tipo: str) -> str:
     """Retorna um esquema SVG compacto das geometrias da tabela de Shigley."""
     inicio = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="220" viewBox="0 0 360 220"><style>text{font-family:Arial,sans-serif;fill:#263238;font-size:15px}.l{stroke:#334e5c;stroke-width:3;fill:none}.a{stroke:#e05a47;stroke-width:2;fill:none;stroke-dasharray:5 4}.f{fill:#dbe9ef;stroke:#334e5c;stroke-width:3}</style>'
-    fim = '</svg>'
+    fim = "</svg>"
     if tipo == "Circulo rotativo":
         corpo = '<circle class="f" cx="155" cy="105" r="67"/><line class="a" x1="88" y1="105" x2="222" y2="105"/><text x="148" y="96">d</text><text x="58" y="200">barra circular em flexao rotativa</text>'
     elif tipo == "Circulo nao rotativo":

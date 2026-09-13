@@ -131,28 +131,18 @@ class SteelMemberTests(unittest.TestCase):
         )
 
     def test_longer_column_has_lower_resistance(self):
-        curta = barras.verificar_compressao(
-            self.perfil, 250, 200_000, 2_000, 1, 1, 1, 100_000
-        )
-        longa = barras.verificar_compressao(
-            self.perfil, 250, 200_000, 6_000, 1, 1, 1, 100_000
-        )
+        curta = barras.verificar_compressao(self.perfil, 250, 200_000, 2_000, 1, 1, 1, 100_000)
+        longa = barras.verificar_compressao(self.perfil, 250, 200_000, 6_000, 1, 1, 1, 100_000)
         self.assertLess(longa.resistencia_N, curta.resistencia_N)
         self.assertGreater(longa.esbeltez_y, curta.esbeltez_y)
 
     def test_ltb_critical_moment_reduces_with_length(self):
-        curto = barras.momento_critico_ltb(
-            self.perfil, 200_000, 77_000, 2_000
-        )
-        longo = barras.momento_critico_ltb(
-            self.perfil, 200_000, 77_000, 6_000
-        )
+        curto = barras.momento_critico_ltb(self.perfil, 200_000, 77_000, 2_000)
+        longo = barras.momento_critico_ltb(self.perfil, 200_000, 77_000, 6_000)
         self.assertLess(longo, curto)
 
     def test_interaction_equation(self):
-        resultado = barras.verificar_interacao(
-            200, 1_000, 300, 1_000
-        )
+        resultado = barras.verificar_interacao(200, 1_000, 300, 1_000)
         self.assertAlmostEqual(resultado.indice_interacao, 0.2 + 8 / 9 * 0.3)
 
     def test_simply_supported_point_load_deflection(self):
@@ -165,9 +155,7 @@ class SteelMemberTests(unittest.TestCase):
             "Biapoiada",
             300,
         )
-        esperado = 10_000 * 3_000**3 / (
-            48 * 200_000 * self.perfil.ix_mm4
-        )
+        esperado = 10_000 * 3_000**3 / (48 * 200_000 * self.perfil.ix_mm4)
         self.assertAlmostEqual(resultado.deflexao_total_mm, esperado)
 
 
@@ -246,9 +234,7 @@ class StructuralSolverTests(unittest.TestCase):
             estrut.NoPortico(1, 0, 0, True, True, True),
             estrut.NoPortico(2, 1_000, 0, False, False, False, 0, -1_000, 0),
         ]
-        elementos = [
-            estrut.ElementoPortico(1, 1, 2, 1_000, 1_000_000, 200_000)
-        ]
+        elementos = [estrut.ElementoPortico(1, 1, 2, 1_000, 1_000_000, 200_000)]
         resultado = estrut.analisar_portico(nos, elementos)
         uy = resultado.deslocamentos_nodais[1]["uy_mm"]
         esperado = -1_000 * 1_000**3 / (3 * 200_000 * 1_000_000)
@@ -260,11 +246,7 @@ class StructuralSolverTests(unittest.TestCase):
             estrut.NoPortico(1, 0, 0, True, True, False),
             estrut.NoPortico(2, 1_000, 0, False, True, False),
         ]
-        elementos = [
-            estrut.ElementoPortico(
-                1, 1, 2, 1_000, 1_000_000, 200_000, -1.0
-            )
-        ]
+        elementos = [estrut.ElementoPortico(1, 1, 2, 1_000, 1_000_000, 200_000, -1.0)]
         resultado = estrut.analisar_portico(nos, elementos)
         self.assertAlmostEqual(resultado.reacoes_nodais[0]["ry_N"], 500)
         self.assertAlmostEqual(resultado.reacoes_nodais[1]["ry_N"], 500)

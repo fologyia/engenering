@@ -14,9 +14,7 @@ from core import load_to_stress as cargas
 configurar_pagina("Assistente de cargas", ":material/manufacturing:")
 
 
-def enviar_para_mohr(
-    estado: cargas.EstadoPlanoCalculado, *, origem_id: str | None
-) -> None:
+def enviar_para_mohr(estado: cargas.EstadoPlanoCalculado, *, origem_id: str | None) -> None:
     """Guarda o estado calculado e abre a análise do Círculo de Mohr."""
     st.session_state["mohr_assistente_2d"] = {
         "sigma_x": estado.sigma_x,
@@ -37,9 +35,7 @@ def enviar_para_mohr(
     st.switch_page("app_pages/circulo_mohr.py")
 
 
-def enviar_para_estatica(
-    estado: cargas.EstadoPlanoCalculado, *, origem_id: str | None
-) -> None:
+def enviar_para_estatica(estado: cargas.EstadoPlanoCalculado, *, origem_id: str | None) -> None:
     """Guarda o estado calculado e abre a Análise estática."""
     st.session_state["estatica_sigma_x"] = estado.sigma_x
     st.session_state["estatica_sigma_y"] = estado.sigma_y
@@ -137,21 +133,18 @@ if envelope_referencia and envelope_referencia.get("componentes"):
             icon=":material/arrow_back:",
         )
 
+
 def _ao_trocar_grupo() -> None:
     """Mantém o modelo coerente com o grupo de peça recém-escolhido."""
     grupo_novo = st.session_state.get("assistente_grupo")
     modelos_do_grupo = catalogo.GRUPOS.get(grupo_novo, [])
-    if modelos_do_grupo and st.session_state.get(
-        "assistente_geometria"
-    ) not in modelos_do_grupo:
+    if modelos_do_grupo and st.session_state.get("assistente_geometria") not in modelos_do_grupo:
         st.session_state["assistente_geometria"] = modelos_do_grupo[0]
 
 
 def _ao_trocar_modelo() -> None:
     """Promove a escolha do rádio à chave canônica lida pelas outras páginas."""
-    st.session_state["assistente_geometria"] = st.session_state[
-        "assistente_modelo"
-    ]
+    st.session_state["assistente_geometria"] = st.session_state["assistente_modelo"]
 
 
 st.markdown("##### Passo 1 · Escolha a peça e o tipo de carregamento")
@@ -318,9 +311,7 @@ elif geometria == "Barra sob carga axial excêntrica":
                     key="assistente_exc_z",
                     persist_state="session",
                 )
-        estado = modelos.barra_axial_excentrica(
-            forca_kN * 1_000.0, largura, altura, ey, ez, y, z
-        )
+        estado = modelos.barra_axial_excentrica(forca_kN * 1_000.0, largura, altura, ey, ez, y, z)
         alerta_flambagem = forca_kN < 0
 
         fator_nucleo = modelos.fator_nucleo_central(largura, altura, ey, ez)
@@ -488,9 +479,7 @@ elif geometria == "Mola helicoidal de compressão":
             key="assistente_mola_wahl",
             persist_state="session",
         )
-        estado = modelos.mola_helicoidal(
-            forca_mola, diametro_medio, diametro_fio, usar_wahl
-        )
+        estado = modelos.mola_helicoidal(forca_mola, diametro_medio, diametro_fio, usar_wahl)
         indice = modelos.indice_mola(diametro_medio, diametro_fio)
         medidas = st.columns(2)
         with medidas[0]:
@@ -581,8 +570,7 @@ elif geometria == "Viga de seção retangular":
                 persist_state="session",
             )
         estado = cargas.viga_retangular(
-            largura, altura, y, forca * 1_000.0, momento * 1_000.0,
-            cortante * 1_000.0
+            largura, altura, y, forca * 1_000.0, momento * 1_000.0, cortante * 1_000.0
         )
         st.caption(f"Ponto avaliado: y = {y:.3f} mm.")
 
@@ -654,8 +642,7 @@ elif geometria == "Seção retangular com flexão biaxial":
                 persist_state="session",
             )
         estado = modelos.secao_retangular_flexao_biaxial(
-            largura, altura, y, z, forca * 1_000.0,
-            my * 1_000.0, mz * 1_000.0
+            largura, altura, y, z, forca * 1_000.0, my * 1_000.0, mz * 1_000.0
         )
 
 elif geometria == catalogo.MODELO_SECAO_I:
@@ -751,8 +738,7 @@ elif geometria == catalogo.MODELO_SECAO_I:
                 persist_state="session",
             )
         estado = modelos.secao_i_flexao(
-            altura, mesa, t_mesa, t_alma, y,
-            forca * 1_000.0, momento * 1_000.0, cortante * 1_000.0
+            altura, mesa, t_mesa, t_alma, y, forca * 1_000.0, momento * 1_000.0, cortante * 1_000.0
         )
         st.caption(f"Ponto avaliado: y = {y:.3f} mm.")
 
@@ -851,12 +837,9 @@ elif geometria == "Perfil U sob força axial, flexão e cortante":
                 persist_state="session",
             )
         estado = modelos.secao_u_flexao(
-            altura, mesa, t_mesa, t_alma, y,
-            forca * 1_000.0, momento * 1_000.0, cortante * 1_000.0
+            altura, mesa, t_mesa, t_alma, y, forca * 1_000.0, momento * 1_000.0, cortante * 1_000.0
         )
-        propriedades_u = modelos.propriedades_perfil_u(
-            altura, mesa, t_mesa, t_alma
-        )
+        propriedades_u = modelos.propriedades_perfil_u(altura, mesa, t_mesa, t_alma)
         medidas = st.columns(3)
         with medidas[0]:
             st.metric(
@@ -909,9 +892,7 @@ elif geometria == "Cantoneira de abas iguais":
                 key="assistente_cantoneira_espessura",
                 persist_state="session",
             )
-        propriedades_l = modelos.propriedades_cantoneira_abas_iguais(
-            aba, espessura
-        )
+        propriedades_l = modelos.propriedades_cantoneira_abas_iguais(aba, espessura)
         centroide = propriedades_l["centroide"]
         ponto = st.selectbox(
             "Ponto avaliado",
@@ -970,10 +951,7 @@ elif geometria == "Cantoneira de abas iguais":
                 "Momento My (N·m)",
                 value=0.0,
                 step=10.0,
-                help=(
-                    "Momento em torno do eixo y (vertical): faz a tensão "
-                    "variar ao longo de z."
-                ),
+                help=("Momento em torno do eixo y (vertical): faz a tensão variar ao longo de z."),
                 key="assistente_cantoneira_my",
                 persist_state="session",
             )
@@ -983,15 +961,13 @@ elif geometria == "Cantoneira de abas iguais":
                 value=1_000.0,
                 step=10.0,
                 help=(
-                    "Momento em torno do eixo z (horizontal): faz a "
-                    "tensão variar ao longo de y."
+                    "Momento em torno do eixo z (horizontal): faz a tensão variar ao longo de y."
                 ),
                 key="assistente_cantoneira_mz",
                 persist_state="session",
             )
         estado = modelos.cantoneira_abas_iguais(
-            aba, espessura, y, z, forca * 1_000.0,
-            my * 1_000.0, mz * 1_000.0
+            aba, espessura, y, z, forca * 1_000.0, my * 1_000.0, mz * 1_000.0
         )
         inclinacao = modelos.angulo_linha_neutra(
             my * 1_000.0,
@@ -1022,17 +998,20 @@ elif geometria == "Cantoneira de abas iguais":
         inercias = st.columns(4)
         with inercias[0]:
             st.metric(
-                "Iy", f"{propriedades_l['inercia_y'] / 1e4:.1f} cm⁴",
+                "Iy",
+                f"{propriedades_l['inercia_y'] / 1e4:.1f} cm⁴",
                 border=True,
             )
         with inercias[1]:
             st.metric(
-                "Iz", f"{propriedades_l['inercia_z'] / 1e4:.1f} cm⁴",
+                "Iz",
+                f"{propriedades_l['inercia_z'] / 1e4:.1f} cm⁴",
                 border=True,
             )
         with inercias[2]:
             st.metric(
-                "Iyz", f"{propriedades_l['produto_inercia'] / 1e4:.1f} cm⁴",
+                "Iyz",
+                f"{propriedades_l['produto_inercia'] / 1e4:.1f} cm⁴",
                 border=True,
             )
         with inercias[3]:
@@ -1063,8 +1042,7 @@ elif geometria == "Cantoneira de abas iguais":
                 icon=":material/info:",
             )
         st.caption(
-            f"Ponto avaliado: y = {y:.3f} mm, z = {z:.3f} mm, medidos a "
-            "partir do centroide."
+            f"Ponto avaliado: y = {y:.3f} mm, z = {z:.3f} mm, medidos a partir do centroide."
         )
 
 elif geometria == "Perfil tubular retangular (caixão)":
@@ -1148,13 +1126,10 @@ elif geometria == "Perfil tubular retangular (caixão)":
                 persist_state="session",
             )
         estado = modelos.secao_tubular_retangular(
-            largura, altura, espessura, y,
-            forca * 1_000.0, momento * 1_000.0, torque * 1_000.0
+            largura, altura, espessura, y, forca * 1_000.0, momento * 1_000.0, torque * 1_000.0
         )
         relacao_parede = min(largura, altura) / espessura
-        st.metric(
-            "Relação menor lado / t", f"{relacao_parede:.1f}", border=True
-        )
+        st.metric("Relação menor lado / t", f"{relacao_parede:.1f}", border=True)
         if relacao_parede < 10.0:
             st.warning(
                 "Com a parede tão grossa em relação ao lado, a fórmula de "
@@ -1204,9 +1179,7 @@ elif geometria == "Pinos ou parafusos sob cisalhamento":
                 persist_state="session",
             )
         planos = 1 if corte == "Simples" else 2
-        estado = modelos.pino_cisalhamento(
-            forca * 1_000.0, diametro, int(numero_pinos), planos
-        )
+        estado = modelos.pino_cisalhamento(forca * 1_000.0, diametro, int(numero_pinos), planos)
 
 elif geometria == "Vaso cilíndrico de parede fina":
     with st.container(border=True):
@@ -1264,8 +1237,7 @@ elif geometria == "Vaso cilíndrico de parede fina":
                 persist_state="session",
             )
         estado = modelos.tubo_fino_pressao_axial_torcao(
-            pressao, diametro, espessura, fechado,
-            forca * 1_000.0, torque * 1_000.0
+            pressao, diametro, espessura, fechado, forca * 1_000.0, torque * 1_000.0
         )
         mostrar_validacao_parede_fina(diametro, espessura)
         st.caption("Mapeamento: x = longitudinal; y = circunferencial.")
@@ -1300,9 +1272,7 @@ elif geometria == "Vaso esférico de parede fina":
                 key="assistente_esfera_espessura",
                 persist_state="session",
             )
-        estado = modelos.vaso_esferico_parede_fina(
-            pressao, diametro, espessura
-        )
+        estado = modelos.vaso_esferico_parede_fina(pressao, diametro, espessura)
         mostrar_validacao_parede_fina(diametro, espessura)
 
 else:
@@ -1421,16 +1391,10 @@ else:
         )
         with st.container(horizontal=True):
             st.metric("σr (radial)", f"{sigma_r:.3f} MPa", border=True)
-            st.metric(
-                "σθ (circunferencial)", f"{sigma_theta:.3f} MPa", border=True
-            )
-            st.metric(
-                "σlong (longitudinal)", f"{sigma_long:.3f} MPa", border=True
-            )
+            st.metric("σθ (circunferencial)", f"{sigma_theta:.3f} MPa", border=True)
+            st.metric("σlong (longitudinal)", f"{sigma_long:.3f} MPa", border=True)
         relacao_espessura = 2.0 * raio_externo / (raio_externo - raio_interno)
-        st.metric(
-            "Relação De/t", f"{relacao_espessura:.1f}", border=True
-        )
+        st.metric("Relação De/t", f"{relacao_espessura:.1f}", border=True)
         if relacao_espessura >= 20.0:
             st.info(
                 "Com De/t ≥ 20 o modelo de parede fina já daria um resultado "

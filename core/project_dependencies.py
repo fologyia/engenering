@@ -91,7 +91,14 @@ def catalogar_fontes_projeto(projeto: Mapping[str, Any]) -> dict[str, dict[str, 
             origem_id = _texto(item.get("id"))
             if not origem_id:
                 continue
-            nome = next((_texto(item.get(campo_nome)) for campo_nome in nomes if _texto(item.get(campo_nome))), origem_id)
+            nome = next(
+                (
+                    _texto(item.get(campo_nome))
+                    for campo_nome in nomes
+                    if _texto(item.get(campo_nome))
+                ),
+                origem_id,
+            )
             chave = f"{tipo}:{origem_id}"
             fontes[chave] = _fonte(chave, tipo, origem_id, f"{prefixo}: {nome}", _hash(item))
 
@@ -161,9 +168,7 @@ def preparar_registro_dependencias(
             dependencias.append(deepcopy(fonte))
         else:
             tipo, _, origem_id = chave.partition(":")
-            dependencias.append(
-                _fonte(chave, tipo or "fonte", origem_id or chave, chave, "")
-            )
+            dependencias.append(_fonte(chave, tipo or "fonte", origem_id or chave, chave, ""))
     item["dependencias"] = dependencias
     item["dependencias_ids"] = [
         dependencia["origem_id"]
@@ -237,7 +242,9 @@ def sincronizar_estados_dependencias(projeto: Mapping[str, Any]) -> dict[str, An
         status = STATUS_ATUAL
         if registro_id in ciclos:
             status = STATUS_CICLO
-            motivos.append("O registro participa de um ciclo e não possui uma ordem de atualização válida.")
+            motivos.append(
+                "O registro participa de um ciclo e não possui uma ordem de atualização válida."
+            )
         elif not dependencias:
             status = STATUS_SEM_DEPENDENCIAS
         else:
@@ -289,9 +296,18 @@ def sincronizar_estados_dependencias(projeto: Mapping[str, Any]) -> dict[str, An
     instante = _agora()
     for registro in registros:
         item = deepcopy(dict(registro))
-        estado = estados.get(_texto(item.get("id")), {"status": STATUS_SEM_DEPENDENCIAS, "motivos": []})
-        anterior = item.get("estado_dependencias", {}) if isinstance(item.get("estado_dependencias"), Mapping) else {}
-        mudou = anterior.get("status") != estado["status"] or list(anterior.get("motivos", [])) != estado["motivos"]
+        estado = estados.get(
+            _texto(item.get("id")), {"status": STATUS_SEM_DEPENDENCIAS, "motivos": []}
+        )
+        anterior = (
+            item.get("estado_dependencias", {})
+            if isinstance(item.get("estado_dependencias"), Mapping)
+            else {}
+        )
+        mudou = (
+            anterior.get("status") != estado["status"]
+            or list(anterior.get("motivos", [])) != estado["motivos"]
+        )
         item["estado_dependencias"] = {
             "status": estado["status"],
             "motivos": estado["motivos"],
@@ -326,7 +342,9 @@ def adicionar_dependencia(
         raise ValueError("Um registro não pode depender de si próprio.")
     encontrado = False
     for indice, registro in enumerate(documento.get("registros_tecnicos", [])):
-        if not isinstance(registro, Mapping) or _texto(registro.get("id")) != _texto(registro_destino_id):
+        if not isinstance(registro, Mapping) or _texto(registro.get("id")) != _texto(
+            registro_destino_id
+        ):
             continue
         encontrado = True
         item = deepcopy(dict(registro))
@@ -355,7 +373,9 @@ def remover_dependencia(
 ) -> dict[str, Any]:
     documento = deepcopy(dict(projeto))
     for indice, registro in enumerate(documento.get("registros_tecnicos", [])):
-        if not isinstance(registro, Mapping) or _texto(registro.get("id")) != _texto(registro_destino_id):
+        if not isinstance(registro, Mapping) or _texto(registro.get("id")) != _texto(
+            registro_destino_id
+        ):
             continue
         item = deepcopy(dict(registro))
         item["dependencias"] = [
@@ -378,7 +398,11 @@ def linhas_grafo_dependencias(projeto: Mapping[str, Any]) -> list[dict[str, str]
         if not isinstance(registro, Mapping):
             continue
         destino = f"{_texto(registro.get('modulo'), 'Módulo')} · {_texto(registro.get('titulo'), 'Registro')}"
-        estado = registro.get("estado_dependencias", {}) if isinstance(registro.get("estado_dependencias"), Mapping) else {}
+        estado = (
+            registro.get("estado_dependencias", {})
+            if isinstance(registro.get("estado_dependencias"), Mapping)
+            else {}
+        )
         for dependencia in registro.get("dependencias", []):
             if not isinstance(dependencia, Mapping):
                 continue

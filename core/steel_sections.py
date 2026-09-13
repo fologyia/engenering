@@ -83,7 +83,9 @@ def _massa(area_mm2: float) -> float:
     return area_mm2 * DENSIDADE_ACO_KG_M3 / 1_000_000.0
 
 
-def _retangulo(cx: float, cy: float, largura: float, altura: float) -> tuple[float, float, float, float, float]:
+def _retangulo(
+    cx: float, cy: float, largura: float, altura: float
+) -> tuple[float, float, float, float, float]:
     """Retângulo axialmente alinhado: (área, cx, cy, Ix próprio, Iy próprio)."""
     area = largura * altura
     ix_proprio = largura * altura**3 / 12.0
@@ -91,7 +93,9 @@ def _retangulo(cx: float, cy: float, largura: float, altura: float) -> tuple[flo
     return area, cx, cy, ix_proprio, iy_proprio
 
 
-def _combinar(pecas: list[tuple[float, float, float, float, float]]) -> tuple[float, float, float, float, float]:
+def _combinar(
+    pecas: list[tuple[float, float, float, float, float]],
+) -> tuple[float, float, float, float, float]:
     """Compõe retângulos pelo teorema dos eixos paralelos.
 
     Retorna (área total, x̄, ȳ, Ix em torno de ȳ, Iy em torno de x̄).
@@ -167,14 +171,9 @@ def perfil_i_simetrico(
         raise ValueError("A alma deve ser mais estreita que a mesa.")
     hw = h - 2.0 * tf
     area = 2.0 * b * tf + hw * tw
-    ix = (
-        b * h**3 - (b - tw) * hw**3
-    ) / 12.0
+    ix = (b * h**3 - (b - tw) * hw**3) / 12.0
     iy = 2.0 * tf * b**3 / 12.0 + hw * tw**3 / 12.0
-    zx = 2.0 * (
-        b * tf * (h / 2.0 - tf / 2.0)
-        + tw * (h / 2.0 - tf) ** 2 / 2.0
-    )
+    zx = 2.0 * (b * tf * (h / 2.0 - tf / 2.0) + tw * (h / 2.0 - tf) ** 2 / 2.0)
     zy = tf * b**2 / 2.0 + hw * tw**2 / 4.0
     j = (2.0 * b * tf**3 + hw * tw**3) / 3.0
     cw = tf * b**3 * (h - tf) ** 2 / 24.0
@@ -212,10 +211,16 @@ def perfil_w_mesa_larga(
     de catálogo, tratada aqui pela família atribuída.
     """
     perfil = perfil_i_simetrico(
-        nome, altura_mm, largura_mesa_mm, espessura_alma_mm, espessura_mesa_mm,
+        nome,
+        altura_mm,
+        largura_mesa_mm,
+        espessura_alma_mm,
+        espessura_mesa_mm,
         familia="W (mesa larga)",
     )
-    return PerfilAco(**{**perfil.__dict__, "descricao": "Perfil W idealizado, sem raios de concordância."})
+    return PerfilAco(
+        **{**perfil.__dict__, "descricao": "Perfil W idealizado, sem raios de concordância."}
+    )
 
 
 def perfil_u(
@@ -505,10 +510,7 @@ def barra_retangular(
     ix = b * h**3 / 12.0
     iy = h * b**3 / 12.0
     maior, menor = max(h, b), min(h, b)
-    j = maior * menor**3 * (
-        1.0 / 3.0
-        - 0.21 * menor / maior * (1.0 - menor**4 / (12.0 * maior**4))
-    )
+    j = maior * menor**3 * (1.0 / 3.0 - 0.21 * menor / maior * (1.0 - menor**4 / (12.0 * maior**4)))
     return PerfilAco(
         nome=nome,
         familia="Barra retangular",

@@ -149,9 +149,7 @@ def conferir_coerencia(perfil: PerfilAco) -> list[str]:
                 "faixa usual de 1,0 a 1,8 para perfis metálicos."
             )
     if perfil.iy_mm4 > perfil.ix_mm4:
-        avisos.append(
-            "Iy é maior que Ix: confira se os eixos não foram trocados."
-        )
+        avisos.append("Iy é maior que Ix: confira se os eixos não foram trocados.")
     if perfil.massa_kg_m > 0:
         # Aço a 7 850 kg/m³: massa esperada = área × densidade.
         esperada = perfil.area_mm2 * 7_850.0 / 1_000_000.0
@@ -185,13 +183,10 @@ def _ler_arquivo(caminho: Path) -> dict[str, Any]:
     try:
         dados = json.loads(caminho.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as erro:
-        raise ErroDeCatalogo(
-            f"Não foi possível ler o catálogo {caminho.name}: {erro}"
-        ) from erro
+        raise ErroDeCatalogo(f"Não foi possível ler o catálogo {caminho.name}: {erro}") from erro
     if not isinstance(dados, Mapping) or not isinstance(dados.get("perfis"), list):
         raise ErroDeCatalogo(
-            f"O catálogo {caminho.name} não tem o formato esperado "
-            "(objeto com a lista 'perfis')."
+            f"O catálogo {caminho.name} não tem o formato esperado (objeto com a lista 'perfis')."
         )
     return dict(dados)
 
@@ -262,11 +257,9 @@ def obter(nome: str) -> PerfilCadastrado:
     catalogo = listar_cadastrados()
     if nome in catalogo:
         return catalogo[nome]
-    parecidos = [
-        chave
-        for chave in catalogo
-        if str(nome).strip().casefold() in chave.casefold()
-    ][:6]
+    parecidos = [chave for chave in catalogo if str(nome).strip().casefold() in chave.casefold()][
+        :6
+    ]
     sugestao = f" Parecidos: {'; '.join(parecidos)}." if parecidos else ""
     raise ErroDeCatalogo(f"Perfil {nome!r} não está no catálogo.{sugestao}")
 
@@ -297,9 +290,7 @@ def salvar_perfil(
         if isinstance(item, Mapping) and str(item.get("nome")) != perfil.nome
     ]
     if len(perfis) != len(documento["perfis"]) and not substituir:
-        raise ErroDeCatalogo(
-            f"Já existe um perfil do usuário chamado {perfil.nome!r}."
-        )
+        raise ErroDeCatalogo(f"Já existe um perfil do usuário chamado {perfil.nome!r}.")
     registro = {
         **asdict(perfil),
         "origem": origem or ORIGEM_USUARIO,

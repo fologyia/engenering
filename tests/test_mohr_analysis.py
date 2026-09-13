@@ -51,30 +51,19 @@ class PlaneStressTransformationTests(unittest.TestCase):
 
 class ThreeDimensionalStressTests(unittest.TestCase):
     def test_diagonal_tensor_has_known_principal_stresses(self):
-        resultado = mohr.analisar_estado_tridimensional(
-            120.0, 40.0, -20.0, 0.0, 0.0, 0.0
-        )
+        resultado = mohr.analisar_estado_tridimensional(120.0, 40.0, -20.0, 0.0, 0.0, 0.0)
 
         self.assertEqual(resultado.tensoes_principais, (120.0, 40.0, -20.0))
         self.assertAlmostEqual(resultado.tau_max_absoluta, 70.0)
         self.assertAlmostEqual(resultado.tresca_equivalente, 140.0)
         self.assertAlmostEqual(
             resultado.von_mises,
-            math.sqrt(
-                0.5
-                * (
-                    (120.0 - 40.0) ** 2
-                    + (40.0 + 20.0) ** 2
-                    + (-20.0 - 120.0) ** 2
-                )
-            ),
+            math.sqrt(0.5 * ((120.0 - 40.0) ** 2 + (40.0 + 20.0) ** 2 + (-20.0 - 120.0) ** 2)),
         )
         np.testing.assert_allclose(resultado.direcoes_principais, np.eye(3))
 
     def test_hydrostatic_state_has_no_distortional_stress(self):
-        resultado = mohr.analisar_estado_tridimensional(
-            60.0, 60.0, 60.0, 0.0, 0.0, 0.0
-        )
+        resultado = mohr.analisar_estado_tridimensional(60.0, 60.0, 60.0, 0.0, 0.0, 0.0)
 
         self.assertAlmostEqual(resultado.tensao_media, 60.0)
         self.assertAlmostEqual(resultado.von_mises, 0.0)
@@ -82,9 +71,7 @@ class ThreeDimensionalStressTests(unittest.TestCase):
         self.assertAlmostEqual(resultado.J2, 0.0)
 
     def test_pure_shear_principal_stresses(self):
-        resultado = mohr.analisar_estado_tridimensional(
-            0.0, 0.0, 0.0, 50.0, 0.0, 0.0
-        )
+        resultado = mohr.analisar_estado_tridimensional(0.0, 0.0, 0.0, 50.0, 0.0, 0.0)
 
         np.testing.assert_allclose(
             resultado.tensoes_principais,
@@ -94,9 +81,7 @@ class ThreeDimensionalStressTests(unittest.TestCase):
         self.assertAlmostEqual(resultado.von_mises, math.sqrt(3.0) * 50.0)
 
     def test_traction_on_inclined_plane(self):
-        tensor = mohr.montar_tensor_tensoes(
-            100.0, 0.0, 0.0, 0.0, 0.0, 0.0
-        )
+        tensor = mohr.montar_tensor_tensoes(100.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         tracao = mohr.tracao_em_plano(tensor, (1.0, 1.0, 0.0))
 
         self.assertAlmostEqual(tracao.sigma_normal, 50.0)

@@ -32,9 +32,7 @@ class NucleoCompartilhadoTests(unittest.TestCase):
         tensoes = ss.tensoes_combinadas(ss.EsforcosSecao(momento_Nmm=5e6), secao)
         self.assertLess(tensoes.flexao_superior_MPa, 0.0)
         self.assertGreater(tensoes.flexao_inferior_MPa, 0.0)
-        self.assertAlmostEqual(
-            tensoes.flexao_inferior_MPa, 5e6 * 100.0 / secao.inercia_mm4
-        )
+        self.assertAlmostEqual(tensoes.flexao_inferior_MPa, 5e6 * 100.0 / secao.inercia_mm4)
 
     def test_cisalhamento_cai_para_a_area_quando_nao_ha_momento_estatico(self):
         com_q = ss.PropriedadesSecao(
@@ -71,9 +69,7 @@ class NucleoCompartilhadoTests(unittest.TestCase):
         )
         self.assertEqual(tensoes.critico.nome, ss.NOME_INFERIOR)
         for ponto in tensoes.pontos:
-            self.assertLessEqual(
-                ponto.von_mises_MPa, tensoes.critico.von_mises_MPa + 1e-9
-            )
+            self.assertLessEqual(ponto.von_mises_MPa, tensoes.critico.von_mises_MPa + 1e-9)
 
     def test_ponto_inexistente_e_recusado(self):
         secao = vb.secao_retangular(100, 200)
@@ -162,12 +158,8 @@ class ConcordanciaEntreModulosTests(unittest.TestCase):
                     face_flexao=face,
                 )
                 pela_viga = vb.estado_plano_da_secao(resultado, 0.0, ponto=ponto)
-                self.assertAlmostEqual(
-                    pela_viga.sigma_x, pelo_assistente.sigma_x, places=9
-                )
-                self.assertAlmostEqual(
-                    pela_viga.tau_xy, pelo_assistente.tau_xy, places=9
-                )
+                self.assertAlmostEqual(pela_viga.sigma_x, pelo_assistente.sigma_x, places=9)
+                self.assertAlmostEqual(pela_viga.tau_xy, pelo_assistente.tau_xy, places=9)
                 self.assertEqual(pela_viga.sigma_y, 0.0)
 
     def test_viga_retangular_do_assistente_bate_na_fibra_inferior(self):
@@ -191,9 +183,7 @@ class ConcordanciaEntreModulosTests(unittest.TestCase):
             meio.momento_Nmm,
             meio.cortante_N,
         )
-        self.assertAlmostEqual(
-            pelo_assistente.sigma_x, meio.tensao_normal_inferior_MPa, places=9
-        )
+        self.assertAlmostEqual(pelo_assistente.sigma_x, meio.tensao_normal_inferior_MPa, places=9)
 
 
 class RepasseTests(unittest.TestCase):
@@ -215,9 +205,7 @@ class RepasseTests(unittest.TestCase):
         no_ponto = [p for p in resultado.pontos if abs(p.x_mm - 3_000.0) < 1e-9]
         self.assertEqual(len(no_ponto), 2)
         escolhido = vb.ponto_em(resultado, 3_000.0)
-        self.assertAlmostEqual(
-            escolhido.von_mises_MPa, max(p.von_mises_MPa for p in no_ponto)
-        )
+        self.assertAlmostEqual(escolhido.von_mises_MPa, max(p.von_mises_MPa for p in no_ponto))
 
     def test_ponto_em_aceita_posicao_intermediaria(self):
         resultado = self.viga_exemplo()

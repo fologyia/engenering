@@ -106,12 +106,8 @@ def coletar_entradas(
         return valores, resumo
 
     if rota.chave == "parafusos":
-        forca_origem = st.session_state.get(
-            "projeto_parafuso_forca_unidade", "kN"
-        )
-        momento_origem = st.session_state.get(
-            "projeto_parafuso_momento_unidade", "N·m"
-        )
+        forca_origem = st.session_state.get("projeto_parafuso_forca_unidade", "kN")
+        momento_origem = st.session_state.get("projeto_parafuso_momento_unidade", "N·m")
         valores = {
             "rosca": st.session_state.get("projeto_parafuso_rosca", "M10"),
             "numero": int(st.session_state.get("projeto_parafuso_numero", 4)),
@@ -152,9 +148,7 @@ def coletar_entradas(
 
     if rota.chave == "aco":
         forca_origem = st.session_state.get("projeto_aco_forca_unidade", "kN")
-        momento_origem = st.session_state.get(
-            "projeto_aco_momento_unidade", "kN·m"
-        )
+        momento_origem = st.session_state.get("projeto_aco_momento_unidade", "kN·m")
         valores = {
             "nd": abs(
                 unidades.converter(
@@ -180,9 +174,7 @@ def coletar_entradas(
                     "kN·m",
                 )
             ),
-            "comprimento": valor_convertido(
-                "projeto_aco_comprimento", "Comprimento", "m"
-            ),
+            "comprimento": valor_convertido("projeto_aco_comprimento", "Comprimento", "m"),
         }
         resumo = {
             "|Nd| (kN)": valores["nd"],
@@ -192,17 +184,19 @@ def coletar_entradas(
         }
         return valores, resumo
 
-    modelo = catalogo.resolver_chave(
-        st.session_state.get("projeto_modelo_carga")
-    )
+    modelo = catalogo.resolver_chave(st.session_state.get("projeto_modelo_carga"))
     return {"modelo": modelo}, {"Modelo inicial": modelo}
 
 
 def formatar_valor_resumo(valor: object) -> str:
     if isinstance(valor, float):
-        return f"{valor:,.4f}".rstrip("0").rstrip(".").replace(
-            ",", "X"
-        ).replace(".", ",").replace("X", ".")
+        return (
+            f"{valor:,.4f}".rstrip("0")
+            .rstrip(".")
+            .replace(",", "X")
+            .replace(".", ",")
+            .replace("X", ".")
+        )
     return str(valor)
 
 
@@ -320,6 +314,7 @@ def preparar_modulo(rota: projetos.RotaProjeto) -> None:
     st.session_state["projeto_ativo"] = contexto
     st.switch_page(rota.pagina)
 
+
 cabecalho_pagina(
     "Assistente de projeto",
     "Organize o problema, descubra o fluxo correto e leve os dados iniciais ao módulo.",
@@ -337,10 +332,7 @@ cabecalho_pagina(
     mostrar_ferramentas=False,
 )
 
-if (
-    st.session_state.get("projeto_ativo")
-    or st.session_state["projeto_assistente_etapa"] > 1
-):
+if st.session_state.get("projeto_ativo") or st.session_state["projeto_assistente_etapa"] > 1:
     with st.container(horizontal=True, horizontal_alignment="right"):
         st.button(
             "Novo roteiro",
@@ -417,12 +409,8 @@ elif etapa == 2:
         )
 
         objetivo = st.session_state.get("projeto_objetivo", projetos.OBJETIVOS[0])
-        dados = st.session_state.get(
-            "projeto_dados", projetos.DADOS_DISPONIVEIS[0]
-        )
-        rota = projetos.recomendar_rota(
-        objetivo, dados, st.session_state.get("projeto_componente")
-    )
+        dados = st.session_state.get("projeto_dados", projetos.DADOS_DISPONIVEIS[0])
+        rota = projetos.recomendar_rota(objetivo, dados, st.session_state.get("projeto_componente"))
         st.info(
             f"Primeira rota sugerida: **{rota.titulo}**. "
             f"Entrada: {rota.entrada}; saída: {rota.saida}.",
@@ -431,12 +419,8 @@ elif etapa == 2:
 
 elif etapa == 3:
     objetivo = st.session_state.get("projeto_objetivo", projetos.OBJETIVOS[0])
-    dados = st.session_state.get(
-        "projeto_dados", projetos.DADOS_DISPONIVEIS[0]
-    )
-    rota = projetos.recomendar_rota(
-        objetivo, dados, st.session_state.get("projeto_componente")
-    )
+    dados = st.session_state.get("projeto_dados", projetos.DADOS_DISPONIVEIS[0])
+    rota = projetos.recomendar_rota(objetivo, dados, st.session_state.get("projeto_componente"))
 
     with st.container(border=True):
         st.subheader(f"Dados iniciais para {rota.titulo.lower()}")
@@ -492,22 +476,18 @@ elif etapa == 3:
                 key="projeto_sigma_max",
                 persist_state="session",
             )
-            minima_mpa = unidades.converter(
-                minima, "Tensão e pressão", unidade_ciclo, "MPa"
-            )
-            maxima_mpa = unidades.converter(
-                maxima, "Tensão e pressão", unidade_ciclo, "MPa"
-            )
+            minima_mpa = unidades.converter(minima, "Tensão e pressão", unidade_ciclo, "MPa")
+            maxima_mpa = unidades.converter(maxima, "Tensão e pressão", unidade_ciclo, "MPa")
             if maxima_mpa >= minima_mpa:
-                media, alternada = projetos.calcular_tensoes_ciclo(
-                    minima_mpa, maxima_mpa
-                )
+                media, alternada = projetos.calcular_tensoes_ciclo(minima_mpa, maxima_mpa)
                 with st.container(horizontal=True):
                     st.metric("σm calculada", f"{media:.2f} MPa", border=True)
                     st.metric("σa calculada", f"{alternada:.2f} MPa", border=True)
             else:
                 pode_continuar = False
-                st.error("A tensão máxima não pode ser menor que a mínima.", icon=":material/error:")
+                st.error(
+                    "A tensão máxima não pode ser menor que a mínima.", icon=":material/error:"
+                )
 
         elif rota.chave == "parafusos":
             junta = st.columns(2)
@@ -619,9 +599,7 @@ elif etapa == 3:
             st.selectbox(
                 "Modelo que mais se aproxima do componente",
                 list(catalogo.CATALOGO),
-                format_func=lambda chave: (
-                    f"{catalogo.CATALOGO[chave].grupo} · {chave}"
-                ),
+                format_func=lambda chave: f"{catalogo.CATALOGO[chave].grupo} · {chave}",
                 key="projeto_modelo_carga",
                 persist_state="session",
             )
@@ -641,12 +619,8 @@ elif etapa == 3:
 
 else:
     objetivo = st.session_state.get("projeto_objetivo", projetos.OBJETIVOS[0])
-    dados = st.session_state.get(
-        "projeto_dados", projetos.DADOS_DISPONIVEIS[0]
-    )
-    rota = projetos.recomendar_rota(
-        objetivo, dados, st.session_state.get("projeto_componente")
-    )
+    dados = st.session_state.get("projeto_dados", projetos.DADOS_DISPONIVEIS[0])
+    rota = projetos.recomendar_rota(objetivo, dados, st.session_state.get("projeto_componente"))
     sequencia = projetos.sequencia_recomendada(
         objetivo, dados, st.session_state.get("projeto_componente")
     )
@@ -663,8 +637,7 @@ else:
             f"**Regime:** {st.session_state.get('projeto_regime', 'Não informado')}"
         )
         st.info(
-            f"Comece por **{rota.titulo}**. O módulo recebe {rota.entrada} "
-            f"e entrega {rota.saida}.",
+            f"Comece por **{rota.titulo}**. O módulo recebe {rota.entrada} e entrega {rota.saida}.",
             icon=rota.icone,
         )
 
@@ -703,8 +676,7 @@ else:
                     {
                         "Entrada": list(resumo_entradas),
                         "Valor preparado": [
-                            formatar_valor_resumo(valor)
-                            for valor in resumo_entradas.values()
+                            formatar_valor_resumo(valor) for valor in resumo_entradas.values()
                         ],
                     }
                 ),

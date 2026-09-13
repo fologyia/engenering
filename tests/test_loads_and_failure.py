@@ -31,9 +31,7 @@ class LoadToStressTests(unittest.TestCase):
 
     def test_rectangular_beam_shear_is_maximum_at_neutral_axis(self):
         centro = cargas.viga_retangular(20.0, 40.0, 0.0, 0.0, 0.0, 1_000.0)
-        superficie = cargas.viga_retangular(
-            20.0, 40.0, 20.0, 0.0, 0.0, 1_000.0
-        )
+        superficie = cargas.viga_retangular(20.0, 40.0, 20.0, 0.0, 0.0, 1_000.0)
         self.assertAlmostEqual(centro.tau_xy, 1.5 * 1_000.0 / (20.0 * 40.0))
         self.assertAlmostEqual(superficie.tau_xy, 0.0)
 
@@ -80,9 +78,7 @@ class FailureCriteriaTests(unittest.TestCase):
 
     def test_zero_state_has_infinite_safety(self):
         self.assertTrue(math.isinf(falha.fator_seguranca_von_mises(0.0, 250.0)))
-        self.assertTrue(
-            math.isinf(falha.fator_seguranca_tresca((0.0, 0.0, 0.0), 250.0))
-        )
+        self.assertTrue(math.isinf(falha.fator_seguranca_tresca((0.0, 0.0, 0.0), 250.0)))
         rankine = falha.fator_seguranca_rankine((0.0, 0.0, 0.0), 400.0)
         self.assertTrue(rankine.completo)
         self.assertTrue(math.isinf(rankine.fator_seguranca))

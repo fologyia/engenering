@@ -205,7 +205,9 @@ def test_listar_pdfs_e_recursivo(tmp_path):
 
     arquivos = normas.listar_pdfs(tmp_path, CATALOGO_MINIMO)
     assert len(arquivos) == 1
-    assert arquivos[0].caminho_relativo == str(__import__("pathlib").Path("estruturas") / "NBR8800.pdf")
+    assert arquivos[0].caminho_relativo == str(
+        __import__("pathlib").Path("estruturas") / "NBR8800.pdf"
+    )
 
 
 def test_listar_pdfs_limite_de_arquivos(tmp_path):

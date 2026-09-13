@@ -87,7 +87,7 @@ def fluxos_do_modulo(modulo_id: str) -> list[str]:
 
 
 def _ultimo_registro_por_modulo(
-    projeto_sincronizado: Mapping[str, Any]
+    projeto_sincronizado: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
     por_modulo: dict[str, dict[str, Any]] = {}
     for registro in projeto_sincronizado.get("registros_tecnicos", []):
@@ -140,9 +140,7 @@ def montar_sequencia(
         registros_por_modulo = _ultimo_registro_por_modulo(sincronizado)
 
     def concluidos(nome_fluxo: str) -> int:
-        return sum(
-            1 for passo in FLUXOS[nome_fluxo] if passo.casefold() in registros_por_modulo
-        )
+        return sum(1 for passo in FLUXOS[nome_fluxo] if passo.casefold() in registros_por_modulo)
 
     nome_fluxo = max(candidatos, key=concluidos)
     chave_atual = str(modulo_id_atual or "").strip().casefold()

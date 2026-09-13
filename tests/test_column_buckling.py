@@ -62,7 +62,9 @@ class VerificarFlambagemTests(unittest.TestCase):
         resultado = self._verificar(3_000.0)
         self.assertIn("Euler", resultado.regime)
         self.assertGreaterEqual(resultado.esbeltez_governante, resultado.esbeltez_transicao)
-        self.assertAlmostEqual(resultado.tensao_critica_MPa, resultado.carga_critica_euler_N / self.geometria.area_mm2)
+        self.assertAlmostEqual(
+            resultado.tensao_critica_MPa, resultado.carga_critica_euler_N / self.geometria.area_mm2
+        )
 
     def test_coluna_curta_usa_johnson(self):
         resultado = self._verificar(200.0)

@@ -179,9 +179,7 @@ def converter(valor: float, categoria: str, origem: str, destino: str) -> float:
     return unidade_destino.da_base(valor_base)
 
 
-def conversoes_da_categoria(
-    valor: float, categoria: str, origem: str
-) -> list[tuple[str, float]]:
+def conversoes_da_categoria(valor: float, categoria: str, origem: str) -> list[tuple[str, float]]:
     """Converte um valor para todas as unidades da categoria."""
     return [
         (destino, converter(valor, categoria, origem, destino))

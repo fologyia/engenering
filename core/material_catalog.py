@@ -154,16 +154,12 @@ def material_de_dicionario(
     categoria = str(dados.get("categoria", "")).strip().lower() or "aco"
     if categoria not in CATEGORIAS:
         validas = ", ".join(CATEGORIAS)
-        raise ErroDeMaterial(
-            f"Categoria {categoria!r} desconhecida. Use uma de: {validas}."
-        )
+        raise ErroDeMaterial(f"Categoria {categoria!r} desconhecida. Use uma de: {validas}.")
 
     # Sy zero é físico, não ausência de dado: ferro fundido cinzento e outros
     # materiais frágeis rompem sem patamar de escoamento definido. Recusar o
     # zero apagaria esses materiais da base em silêncio.
-    sy = _numero(
-        "Limite de escoamento Sy (MPa)", dados.get("Sy_MPa"), permite_zero=True
-    )
+    sy = _numero("Limite de escoamento Sy (MPa)", dados.get("Sy_MPa"), permite_zero=True)
     sut = _numero("Resistência à tração Sut (MPa)", dados.get("Sut_MPa"))
     if sy > sut:
         raise ErroDeMaterial(
@@ -227,8 +223,7 @@ def conferir_coerencia(material: MaterialCadastrado) -> list[str]:
         )
     elif material.sy_MPa < 50:
         avisos.append(
-            f"Sy de {material.sy_MPa:g} MPa é muito baixo para um metal; "
-            "confirme a unidade."
+            f"Sy de {material.sy_MPa:g} MPa é muito baixo para um metal; confirme a unidade."
         )
     if not material.origem_propriedades:
         avisos.append(
@@ -249,9 +244,7 @@ def _ler_arquivo(caminho: Path) -> dict[str, Any]:
     try:
         dados = json.loads(caminho.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as erro:
-        raise ErroDeMaterial(
-            f"Não foi possível ler o catálogo {caminho.name}: {erro}"
-        ) from erro
+        raise ErroDeMaterial(f"Não foi possível ler o catálogo {caminho.name}: {erro}") from erro
     if not isinstance(dados, Mapping) or not isinstance(dados.get("materiais"), list):
         raise ErroDeMaterial(
             f"O catálogo {caminho.name} não tem o formato esperado "
@@ -265,9 +258,7 @@ def _gravar_arquivo(caminho: Path, documento: Mapping[str, Any]) -> None:
     # Grava em temporário e troca: um desligamento durante a escrita não pode
     # deixar o catálogo do usuário truncado.
     temporario = caminho.with_suffix(caminho.suffix + ".tmp")
-    temporario.write_text(
-        json.dumps(documento, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    temporario.write_text(json.dumps(documento, ensure_ascii=False, indent=2), encoding="utf-8")
     temporario.replace(caminho)
 
 
@@ -335,9 +326,7 @@ def colisoes_entre_catalogos() -> dict[str, list[str]]:
     for caminho in catalogos_de_criterio():
         for nome, material in _carregar_json(caminho, editavel=False).items():
             ocorrencias.setdefault(nome, []).append(material.origem)
-    return {
-        nome: origens for nome, origens in ocorrencias.items() if len(origens) > 1
-    }
+    return {nome: origens for nome, origens in ocorrencias.items() if len(origens) > 1}
 
 
 def listar_cadastrados() -> dict[str, MaterialCadastrado]:
@@ -427,9 +416,7 @@ def materiais_para(aplicacao: str) -> list[MaterialCadastrado]:
 
 def criterios_carregados() -> list[str]:
     criterios = {
-        material.criterio
-        for material in listar_cadastrados().values()
-        if material.criterio
+        material.criterio for material in listar_cadastrados().values() if material.criterio
     }
     return sorted(criterios)
 

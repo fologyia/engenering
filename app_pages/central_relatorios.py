@@ -23,9 +23,39 @@ from core.technical_records import registro_superado, rotulo_componente
 
 PERFIS = {
     "Memorial industrial completo": list(SECOES_RELATORIO),
-    "Resumo executivo": ["escopo", "carregamentos", "componentes", "materiais", "normas", "sensibilidade", "validacao", "conclusao"],
-    "Dossiê de validação": ["base", "carregamentos", "materiais", "normas", "plano_calculo", "registros", "sensibilidade", "validacao", "checklist", "conclusao"],
-    "Memorial de cálculos": ["escopo", "base", "carregamentos", "materiais", "normas", "plano_calculo", "registros", "sensibilidade", "conclusao"],
+    "Resumo executivo": [
+        "escopo",
+        "carregamentos",
+        "componentes",
+        "materiais",
+        "normas",
+        "sensibilidade",
+        "validacao",
+        "conclusao",
+    ],
+    "Dossiê de validação": [
+        "base",
+        "carregamentos",
+        "materiais",
+        "normas",
+        "plano_calculo",
+        "registros",
+        "sensibilidade",
+        "validacao",
+        "checklist",
+        "conclusao",
+    ],
+    "Memorial de cálculos": [
+        "escopo",
+        "base",
+        "carregamentos",
+        "materiais",
+        "normas",
+        "plano_calculo",
+        "registros",
+        "sensibilidade",
+        "conclusao",
+    ],
 }
 
 st.set_page_config(
@@ -48,12 +78,22 @@ sincronizar_projeto_ativo()
 projeto = obter_projeto_ativo()
 if projeto is None:
     st.warning("Abra um projeto permanente para montar o memorial.")
-    st.page_link("app_pages/gestao_projetos.py", label="Abrir Gestão de projetos", icon=":material/folder_managed:")
+    st.page_link(
+        "app_pages/gestao_projetos.py",
+        label="Abrir Gestão de projetos",
+        icon=":material/folder_managed:",
+    )
     st.stop()
 
 
 def _registrar_emissao(
-    documento: dict, *, perfil: str, secoes: list, registros_ids: list, metadata: dict, snapshot: str
+    documento: dict,
+    *,
+    perfil: str,
+    secoes: list,
+    registros_ids: list,
+    metadata: dict,
+    snapshot: str,
 ) -> None:
     """Anota a emissão no projeto: histórico próprio e evento na linha do tempo.
 
@@ -85,6 +125,7 @@ def _registrar_emissao(
         tipo_evento=EVENTO_EMISSAO,
     )
 
+
 st.subheader(f"{projeto['codigo']} · {projeto['nome']}")
 st.caption(
     "O Word é indicado para revisão, comentários e assinatura. O PDF preserva o layout para distribuição. "
@@ -96,9 +137,7 @@ st.caption(
 # disso depois de rolar até a prévia.
 _validacao_projeto = validar_projeto(projeto)
 _bloqueios = [
-    achado
-    for achado in _validacao_projeto["achados"]
-    if achado["severidade"] == "Bloqueio"
+    achado for achado in _validacao_projeto["achados"] if achado["severidade"] == "Bloqueio"
 ]
 with st.container(border=True):
     _a, _b, _c = st.columns(3)
@@ -119,9 +158,7 @@ with st.container(border=True):
             icon=":material/arrow_forward:",
         )
     else:
-        st.success(
-            "Sem bloqueios abertos no projeto.", icon=":material/check_circle:"
-        )
+        st.success("Sem bloqueios abertos no projeto.", icon=":material/check_circle:")
 
 # ---------------------------------------------------------------------------
 # Emissão direta
@@ -144,7 +181,8 @@ _ids_vigentes = [
     item["id"] for item in projeto.get("registros_tecnicos", []) if not registro_superado(item)
 ]
 _registros_rapidos = [
-    valor for valor in (_config_projeto.get("registros_incluidos") or _ids_vigentes)
+    valor
+    for valor in (_config_projeto.get("registros_incluidos") or _ids_vigentes)
     if valor in _ids_vigentes
 ]
 _metadata_rapida = {
@@ -168,7 +206,11 @@ with st.container(border=True):
         f"{len(_registros_rapidos)} registro(s)"
     )
     st.caption(
-        ("Usando a configuração salva deste projeto: " if _config_projeto.get("secoes") else "Usando o padrão: ")
+        (
+            "Usando a configuração salva deste projeto: "
+            if _config_projeto.get("secoes")
+            else "Usando o padrão: "
+        )
         + _descricao_config
         + ". Para escolher outras seções, registros ou identificação, ajuste "
         "abaixo e use o botão do fim da página."
@@ -220,9 +262,10 @@ with st.container(border=True):
 
     _gerado_rapido = st.session_state.get(_chave_rapida)
     if _gerado_rapido:
-        _nome = re.sub(
-            r"[^A-Za-z0-9._-]+", "_", str(_gerado_rapido["codigo"])
-        ).strip("_") or "memorial_industrial"
+        _nome = (
+            re.sub(r"[^A-Za-z0-9._-]+", "_", str(_gerado_rapido["codigo"])).strip("_")
+            or "memorial_industrial"
+        )
         _c1, _c2 = st.columns(2)
         _c1.download_button(
             "Baixar Word editável",
@@ -247,20 +290,24 @@ with st.container(border=True):
 st.divider()
 st.markdown("### Ajustar a composição")
 st.caption(
-    "Só é preciso mexer aqui quando o memorial desta emissão for diferente do "
-    "padrão do projeto."
+    "Só é preciso mexer aqui quando o memorial desta emissão for diferente do padrão do projeto."
 )
 
-perfil_padrao = projeto.get("configuracao_relatorio", {}).get("perfil", "Memorial industrial completo")
+perfil_padrao = projeto.get("configuracao_relatorio", {}).get(
+    "perfil", "Memorial industrial completo"
+)
 if perfil_padrao not in PERFIS:
     perfil_padrao = "Memorial industrial completo"
-perfil = st.segmented_control(
-    "Perfil documental",
-    list(PERFIS),
-    default=perfil_padrao,
-    selection_mode="single",
-    help="O perfil sugere seções; você pode ajustar a seleção antes de gerar.",
-) or perfil_padrao
+perfil = (
+    st.segmented_control(
+        "Perfil documental",
+        list(PERFIS),
+        default=perfil_padrao,
+        selection_mode="single",
+        help="O perfil sugere seções; você pode ajustar a seleção antes de gerar.",
+    )
+    or perfil_padrao
+)
 
 chave_perfil = f"perfil_relatorio_anterior_{projeto['id']}"
 chave_secoes = f"secoes_relatorio_{projeto['id']}"
@@ -277,7 +324,9 @@ selecoes = st.multiselect(
 
 registros = projeto.get("registros_tecnicos", [])
 config_salva = projeto.get("configuracao_relatorio", {})
-ordem_salva = {str(valor): indice for indice, valor in enumerate(config_salva.get("ordem_registros", []))}
+ordem_salva = {
+    str(valor): indice for indice, valor in enumerate(config_salva.get("ordem_registros", []))
+}
 componentes_por_id = {
     str(item.get("id")): item
     for item in projeto.get("componentes", [])
@@ -294,7 +343,8 @@ for indice, item in enumerate(registros, start=1):
     linhas_composicao.append(
         {
             "id": item["id"],
-            "Incluir": item["id"] in config_salva.get("registros_incluidos", _ids_vigentes) and not registro_superado(item),
+            "Incluir": item["id"] in config_salva.get("registros_incluidos", _ids_vigentes)
+            and not registro_superado(item),
             "Ordem": ordem_salva.get(item["id"], indice - 1) + 1,
             "Peça": item.get("peca") or ", ".join(pecas_vinculadas) or "—",
             "Módulo": item.get("modulo", "Módulo"),
@@ -311,26 +361,45 @@ if linhas_composicao:
         pd.DataFrame(linhas_composicao),
         hide_index=True,
         width="stretch",
-        disabled=["id", "Peça", "Módulo", "Registro", "Situação", "Integridade (%)", "Contrato", "Lacunas"],
+        disabled=[
+            "id",
+            "Peça",
+            "Módulo",
+            "Registro",
+            "Situação",
+            "Integridade (%)",
+            "Contrato",
+            "Lacunas",
+        ],
         column_config={
             "id": None,
             "Incluir": st.column_config.CheckboxColumn("Incluir"),
-            "Ordem": st.column_config.NumberColumn("Ordem", min_value=1, max_value=max(1, len(registros)), step=1, required=True),
-            "Peça": st.column_config.TextColumn(width="small", help="Peça do escopo físico à qual o registro está vinculado."),
+            "Ordem": st.column_config.NumberColumn(
+                "Ordem", min_value=1, max_value=max(1, len(registros)), step=1, required=True
+            ),
+            "Peça": st.column_config.TextColumn(
+                width="small", help="Peça do escopo físico à qual o registro está vinculado."
+            ),
             "Módulo": st.column_config.TextColumn(width="medium"),
             "Registro": st.column_config.TextColumn(width="large"),
-            "Integridade (%)": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d%%"),
+            "Integridade (%)": st.column_config.ProgressColumn(
+                min_value=0, max_value=100, format="%d%%"
+            ),
             "Contrato": st.column_config.TextColumn(width="medium"),
             "Lacunas": st.column_config.TextColumn(width="large"),
         },
         key=f"composicao_relatorio_{projeto['id']}",
     )
-    linhas_selecionadas = composicao[composicao["Incluir"]].sort_values(["Ordem", "Peça", "Módulo", "Registro"])
+    linhas_selecionadas = composicao[composicao["Incluir"]].sort_values(
+        ["Ordem", "Peça", "Módulo", "Registro"]
+    )
     ids_registros = linhas_selecionadas["id"].astype(str).tolist()
 else:
     ids_registros = []
 if not registros:
-    st.info("O projeto ainda não possui registros técnicos. O relatório pode ser emitido como base documental, com essa pendência sinalizada.")
+    st.info(
+        "O projeto ainda não possui registros técnicos. O relatório pode ser emitido como base documental, com essa pendência sinalizada."
+    )
 
 # O que foi usado na última emissão vira o padrão da próxima: redigitar
 # título, subtítulo e situação a cada emissão era trabalho repetido que o
@@ -341,15 +410,11 @@ _situacao_salva = _identificacao_salva.get("situacao", _situacoes[0])
 
 with st.expander("Identificação e controle do documento", expanded=True):
     if _identificacao_salva:
-        st.caption(
-            "Campos preenchidos com o que foi usado na última emissão deste "
-            "projeto."
-        )
+        st.caption("Campos preenchidos com o que foi usado na última emissão deste projeto.")
     c1, c2 = st.columns([2, 1])
     titulo = c1.text_input(
         "Título",
-        value=_identificacao_salva.get("titulo")
-        or "Memorial técnico do projeto industrial",
+        value=_identificacao_salva.get("titulo") or "Memorial técnico do projeto industrial",
     )
     subtitulo = c1.text_input(
         "Subtítulo",
@@ -369,9 +434,7 @@ with st.expander("Identificação e controle do documento", expanded=True):
     situacao = e1.selectbox(
         "Situação do documento",
         _situacoes,
-        index=_situacoes.index(_situacao_salva)
-        if _situacao_salva in _situacoes
-        else 0,
+        index=_situacoes.index(_situacao_salva) if _situacao_salva in _situacoes else 0,
     )
     emissao = e2.date_input("Data de emissão", value=date.today(), format="DD/MM/YYYY")
 
@@ -409,9 +472,13 @@ m3.metric(
 )
 m4.metric("Prontidão", modelo["validacao"]["prontidao"])
 st.caption(f"Snapshot desta composição: `{modelo['snapshot_hash']}`")
-incompletos = [item for item in modelo["registros"] if avaliar_integridade_registro(item)["percentual"] < 100]
+incompletos = [
+    item for item in modelo["registros"] if avaliar_integridade_registro(item)["percentual"] < 100
+]
 if incompletos:
-    st.warning(f"{len(incompletos)} registro(s) selecionado(s) possuem lacunas estruturais. Consulte a coluna 'Lacunas' antes da emissão.")
+    st.warning(
+        f"{len(incompletos)} registro(s) selecionado(s) possuem lacunas estruturais. Consulte a coluna 'Lacunas' antes da emissão."
+    )
 with st.expander("Sumário planejado"):
     st.markdown("\n".join(f"- {secao['titulo']}" for secao in modelo["secoes"]))
     st.markdown(f"- {modelo['numero_integracao']}. Integração com outras partes do projeto")
@@ -482,7 +549,9 @@ if st.button(
 
 arquivos = st.session_state.get(chave_arquivos)
 if arquivos:
-    nome_base = re.sub(r"[^A-Za-z0-9._-]+", "_", str(codigo_documento)).strip("_") or "memorial_industrial"
+    nome_base = (
+        re.sub(r"[^A-Za-z0-9._-]+", "_", str(codigo_documento)).strip("_") or "memorial_industrial"
+    )
     d1, d2 = st.columns(2)
     d1.download_button(
         "Baixar Word editável",

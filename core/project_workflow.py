@@ -116,8 +116,7 @@ def avaliar_transicao(
             impedimentos.append("Verificador não definido em Identificação e responsáveis.")
         if bloqueios:
             avisos.append(
-                f"{bloqueios} bloqueio(s) abertos na validação: a verificação "
-                "vai encontrá-los."
+                f"{bloqueios} bloqueio(s) abertos na validação: a verificação vai encontrá-los."
             )
         motivo = "Enviado para verificação independente"
 
@@ -127,9 +126,7 @@ def avaliar_transicao(
         if not _texto(projeto.get("verificador")):
             impedimentos.append("Verificador não definido em Identificação e responsáveis.")
         if bloqueios:
-            impedimentos.append(
-                f"{bloqueios} bloqueio(s) abertos na Central de validação."
-            )
+            impedimentos.append(f"{bloqueios} bloqueio(s) abertos na Central de validação.")
         if pendencias:
             avisos.append(f"{pendencias} pendência(s) documentais ainda abertas.")
         sincronizado = sincronizar_estados_dependencias(projeto)

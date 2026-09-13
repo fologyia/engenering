@@ -119,7 +119,11 @@ def test_relatorio_e_validacao_consumem_extensao_de_carregamentos():
     ]
     modelo = montar_modelo_relatorio(projeto)
     assert any("Casos, combinações e envelopes" in secao["titulo"] for secao in modelo["secoes"])
-    assert any("Casos de carga permanentes" in tabela.get("legenda", "") for secao in modelo["secoes"] for tabela in secao.get("tabelas", []))
+    assert any(
+        "Casos de carga permanentes" in tabela.get("legenda", "")
+        for secao in modelo["secoes"]
+        for tabela in secao.get("tabelas", [])
+    )
     validacao = validar_projeto(projeto)
     assert not any(
         item["categoria"] == "Carregamentos" and item["severidade"] == "Bloqueio"
@@ -132,7 +136,9 @@ def test_duplicacao_remapeia_casos_fatores_e_vinculos(tmp_path):
     projeto = criar_projeto("Projeto com cargas", codigo="PC-1", caminho_banco=banco)
     projeto["casos_carga"] = _casos()
     projeto["combinacoes_carga"] = [
-        criar_combinacao_carga(combinacao_id="COMB-1", nome="Operação", fatores={"LC-1": 1.0, "LC-2": 1.0})
+        criar_combinacao_carga(
+            combinacao_id="COMB-1", nome="Operação", fatores={"LC-1": 1.0, "LC-2": 1.0}
+        )
     ]
     projeto = salvar_projeto(projeto, caminho_banco=banco)
     copia = duplicar_projeto(projeto["id"], caminho_banco=banco)
@@ -140,4 +146,3 @@ def test_duplicacao_remapeia_casos_fatores_e_vinculos(tmp_path):
     ids_copia = {item["id"] for item in copia["casos_carga"]}
     assert ids_origem.isdisjoint(ids_copia)
     assert set(copia["combinacoes_carga"][0]["fatores"]) == ids_copia
-

@@ -232,7 +232,9 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 f"Defina o {rotulo} antes da emissão do memorial final.",
             )
 
-    base = projeto.get("base_projeto", {}) if isinstance(projeto.get("base_projeto"), Mapping) else {}
+    base = (
+        projeto.get("base_projeto", {}) if isinstance(projeto.get("base_projeto"), Mapping) else {}
+    )
     for campo, rotulo, severidade_base in CAMPOS_BASE:
         pontos_totais += 1
         if _texto(base.get(campo)):
@@ -348,15 +350,21 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             preenchidos += 1
         else:
             adicionar(
-                "Pendência", "Normas", "Referência sem código", "Uma linha da matriz normativa não possui identificação.",
-                "Informe o código da norma, procedimento, desenho ou especificação."
+                "Pendência",
+                "Normas",
+                "Referência sem código",
+                "Uma linha da matriz normativa não possui identificação.",
+                "Informe o código da norma, procedimento, desenho ou especificação.",
             )
         if _texto(item.get("edicao")):
             preenchidos += 1
         else:
             adicionar(
-                "Atenção", "Normas", f"{codigo}: edição não informada", "A revisão/edição aplicável não está rastreada.",
-                "Confira o PDF controlado e registre a edição ou revisão aplicável."
+                "Atenção",
+                "Normas",
+                f"{codigo}: edição não informada",
+                "A revisão/edição aplicável não está rastreada.",
+                "Confira o PDF controlado e registre a edição ou revisão aplicável.",
             )
         if not bool(item.get("conferida", False)):
             adicionar(
@@ -390,8 +398,14 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
         modulo = _texto(registro.get("modulo")) or "Registro técnico"
         titulo = _texto(registro.get("titulo")) or f"Registro {indice}"
         status = _texto(registro.get("status")).lower()
-        entradas = registro.get("entradas", {}) if isinstance(registro.get("entradas"), Mapping) else {}
-        resultados = registro.get("resultados", {}) if isinstance(registro.get("resultados"), Mapping) else {}
+        entradas = (
+            registro.get("entradas", {}) if isinstance(registro.get("entradas"), Mapping) else {}
+        )
+        resultados = (
+            registro.get("resultados", {})
+            if isinstance(registro.get("resultados"), Mapping)
+            else {}
+        )
         premissas = registro.get("premissas", [])
         referencias = registro.get("referencias", [])
         conclusao = _texto(registro.get("conclusao"))
@@ -417,13 +431,21 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
 
         if any(chave in status for chave in ("não atende", "nao atende", "reprovado")):
             adicionar(
-                "Bloqueio", "Resultado técnico", f"{titulo}: resultado não atende", conclusao or "O registro foi marcado como não atendido.",
-                "Revise dados, premissas e solução de engenharia; não emita como aprovado sem tratamento.", modulo=modulo,
+                "Bloqueio",
+                "Resultado técnico",
+                f"{titulo}: resultado não atende",
+                conclusao or "O registro foi marcado como não atendido.",
+                "Revise dados, premissas e solução de engenharia; não emita como aprovado sem tratamento.",
+                modulo=modulo,
             )
         elif any(chave in status for chave in ("pendente", "inconclusivo", "atenção", "atencao")):
             adicionar(
-                "Pendência", "Resultado técnico", f"{titulo}: resultado pendente", conclusao or "O registro não possui conclusão definitiva.",
-                "Resolva a pendência técnica e atualize o status do registro.", modulo=modulo,
+                "Pendência",
+                "Resultado técnico",
+                f"{titulo}: resultado pendente",
+                conclusao or "O registro não possui conclusão definitiva.",
+                "Resolva a pendência técnica e atualize o status do registro.",
+                modulo=modulo,
             )
 
         alertas = registro.get("alertas", [])
@@ -431,30 +453,57 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             for alerta in alertas:
                 if _texto(alerta):
                     adicionar(
-                        "Atenção", "Resultado técnico", f"{titulo}: alerta do cálculo", _texto(alerta),
-                        "Avalie o alerta e registre a decisão técnica no projeto.", modulo=modulo,
+                        "Atenção",
+                        "Resultado técnico",
+                        f"{titulo}: alerta do cálculo",
+                        _texto(alerta),
+                        "Avalie o alerta e registre a decisão técnica no projeto.",
+                        modulo=modulo,
                     )
 
-        fator = _procurar_numero(resultados, ("fator_seguranca", "fator de segurança", "fator_governante", "n_min"))
-        meta = _procurar_numero(resultados, ("fator_seguranca_minimo", "fator mínimo", "meta_fs", "n_requerido"))
-        utilizacao = _procurar_numero(resultados, ("utilizacao_maxima", "utilização máxima", "indice_utilizacao", "índice de utilização"))
+        fator = _procurar_numero(
+            resultados, ("fator_seguranca", "fator de segurança", "fator_governante", "n_min")
+        )
+        meta = _procurar_numero(
+            resultados, ("fator_seguranca_minimo", "fator mínimo", "meta_fs", "n_requerido")
+        )
+        utilizacao = _procurar_numero(
+            resultados,
+            ("utilizacao_maxima", "utilização máxima", "indice_utilizacao", "índice de utilização"),
+        )
         if fator is not None and meta is not None and fator < meta:
             adicionar(
-                "Bloqueio", "Critério numérico", f"{titulo}: fator abaixo da meta", f"Fator registrado = {fator:g}; mínimo requerido = {meta:g}.",
-                "Revise o dimensionamento e documente a disposição da não conformidade.", modulo=modulo,
+                "Bloqueio",
+                "Critério numérico",
+                f"{titulo}: fator abaixo da meta",
+                f"Fator registrado = {fator:g}; mínimo requerido = {meta:g}.",
+                "Revise o dimensionamento e documente a disposição da não conformidade.",
+                modulo=modulo,
                 evidencia=f"{fator:g} < {meta:g}",
             )
         if utilizacao is not None and utilizacao > 1.0:
             adicionar(
-                "Bloqueio", "Critério numérico", f"{titulo}: utilização superior a 100%", f"Índice de utilização registrado = {utilizacao:.3f}.",
-                "Redimensione ou justifique o critério antes de liberar o projeto.", modulo=modulo,
+                "Bloqueio",
+                "Critério numérico",
+                f"{titulo}: utilização superior a 100%",
+                f"Índice de utilização registrado = {utilizacao:.3f}.",
+                "Redimensione ou justifique o critério antes de liberar o projeto.",
+                modulo=modulo,
                 evidencia=f"utilização = {utilizacao:.3f}",
             )
         probabilidade = _procurar_numero(
             resultados,
-            ("probabilidade_nao_atendimento_pct", "probabilidade de não atendimento", "risco_nao_atendimento_pct"),
+            (
+                "probabilidade_nao_atendimento_pct",
+                "probabilidade de não atendimento",
+                "risco_nao_atendimento_pct",
+            ),
         )
-        if "sensibilidade" in modulo.casefold() and probabilidade is not None and probabilidade > 5.0:
+        if (
+            "sensibilidade" in modulo.casefold()
+            and probabilidade is not None
+            and probabilidade > 5.0
+        ):
             adicionar(
                 "Atenção" if probabilidade <= 20.0 else "Bloqueio",
                 "Sensibilidade e incerteza",
@@ -470,7 +519,13 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
         pontos_totais += 1
         estado = _texto(item.get("estado")) or "Aberto"
         titulo = _texto(item.get("item")) or f"Item {indice}"
-        concluido = estado.lower() in {"concluído", "concluido", "fechado", "não aplicável", "nao aplicavel"}
+        concluido = estado.lower() in {
+            "concluído",
+            "concluido",
+            "fechado",
+            "não aplicável",
+            "nao aplicavel",
+        }
         if concluido:
             preenchidos += 1
         else:
@@ -501,8 +556,13 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 evidencia=evidencia,
             )
 
-    achados.sort(key=lambda item: (ORDEM_SEVERIDADE.get(item.severidade, 99), item.categoria, item.titulo))
-    contagens = {severidade: sum(item.severidade == severidade for item in achados) for severidade in SEVERIDADES}
+    achados.sort(
+        key=lambda item: (ORDEM_SEVERIDADE.get(item.severidade, 99), item.categoria, item.titulo)
+    )
+    contagens = {
+        severidade: sum(item.severidade == severidade for item in achados)
+        for severidade in SEVERIDADES
+    }
     indice = round(100.0 * preenchidos / max(pontos_totais, 1))
     if contagens["Bloqueio"]:
         prontidao = "Não pronto para emissão"

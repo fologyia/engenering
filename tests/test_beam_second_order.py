@@ -60,9 +60,7 @@ class CargaCriticaTests(unittest.TestCase):
             )
         )
         esperado = carga_critica_euler(k=2.0) / 1_000.0
-        self.assertAlmostEqual(
-            resultado.fator_carga_critica, esperado, delta=esperado * 1e-3
-        )
+        self.assertAlmostEqual(resultado.fator_carga_critica, esperado, delta=esperado * 1e-3)
 
     def test_o_fator_escala_com_a_compressao(self):
         critica = carga_critica_euler()
@@ -118,9 +116,7 @@ class AmplificacaoTests(unittest.TestCase):
     def test_compressao_amplifica_tambem_o_momento(self):
         critica = carga_critica_euler()
         primeira = vb.analisar_viga(coluna_viga(critica * 0.4))
-        segunda = vb.analisar_viga(
-            coluna_viga(critica * 0.4, considerar_segunda_ordem=True)
-        )
+        segunda = vb.analisar_viga(coluna_viga(critica * 0.4, considerar_segunda_ordem=True))
         self.assertGreater(
             abs(segunda.extremos["momento"].valor),
             abs(primeira.extremos["momento"].valor),
@@ -191,12 +187,8 @@ class AmplificacaoTests(unittest.TestCase):
         self.assertGreaterEqual(len(nos_internos), 7)
         for x in nos_internos:
             esquerda, direita = por_x[x][0], por_x[x][-1]
-            self.assertAlmostEqual(
-                esquerda.cortante_N, direita.cortante_N, delta=1e-9 * escala_v
-            )
-            self.assertAlmostEqual(
-                esquerda.momento_Nmm, direita.momento_Nmm, delta=1e-9 * escala_m
-            )
+            self.assertAlmostEqual(esquerda.cortante_N, direita.cortante_N, delta=1e-9 * escala_v)
+            self.assertAlmostEqual(esquerda.momento_Nmm, direita.momento_Nmm, delta=1e-9 * escala_m)
 
     def test_equilibrio_fecha_com_o_momento_p_delta(self):
         resultado = vb.analisar_viga(
@@ -223,9 +215,7 @@ class AmplificacaoTests(unittest.TestCase):
     def test_tracao_enrijece_a_barra(self):
         critica = carga_critica_euler()
         sem_axial = vb.analisar_viga(coluna_viga(0.0, considerar_segunda_ordem=True))
-        tracionada = vb.analisar_viga(
-            coluna_viga(-critica * 0.4, considerar_segunda_ordem=True)
-        )
+        tracionada = vb.analisar_viga(coluna_viga(-critica * 0.4, considerar_segunda_ordem=True))
         self.assertLess(
             abs(tracionada.extremos["flecha"].valor),
             abs(sem_axial.extremos["flecha"].valor),
@@ -259,9 +249,7 @@ class AmplificacaoTests(unittest.TestCase):
     def test_o_resultado_declara_se_a_segunda_ordem_entrou(self):
         self.assertFalse(vb.analisar_viga(coluna_viga(1_000.0)).segunda_ordem)
         self.assertTrue(
-            vb.analisar_viga(
-                coluna_viga(1_000.0, considerar_segunda_ordem=True)
-            ).segunda_ordem
+            vb.analisar_viga(coluna_viga(1_000.0, considerar_segunda_ordem=True)).segunda_ordem
         )
 
 
@@ -345,15 +333,11 @@ class ScriptTests(unittest.TestCase):
     def test_exemplo_amplifica_a_flecha(self):
         script = bs.EXEMPLOS["Coluna-viga com efeito P–Δ (segunda ordem)"]
         com = vb.analisar_viga(bs.interpretar(script))
-        sem = vb.analisar_viga(
-            replace(bs.interpretar(script), considerar_segunda_ordem=False)
-        )
+        sem = vb.analisar_viga(replace(bs.interpretar(script), considerar_segunda_ordem=False))
         amplificacao = com.extremos["flecha"].valor / sem.extremos["flecha"].valor
         self.assertGreater(amplificacao, 1.0)
         # A amplificação tem de bater com 1/(1 − 1/fator_crítico).
-        self.assertAlmostEqual(
-            amplificacao, 1.0 / (1.0 - 1.0 / sem.fator_carga_critica), places=2
-        )
+        self.assertAlmostEqual(amplificacao, 1.0 / (1.0 - 1.0 / sem.fator_carga_critica), places=2)
 
 
 if __name__ == "__main__":  # pragma: no cover

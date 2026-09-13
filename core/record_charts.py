@@ -16,6 +16,7 @@ import io
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Any
 
 from PIL import Image, ImageDraw
@@ -125,8 +126,12 @@ def renderizar_xy(
     area_largura = largura - margem_esq - margem_dir
     area_altura = altura - margem_topo - margem_base
 
-    xs = [p[0] for curva in grafico.curvas for p in curva.pontos] + [m.x for m in grafico.marcadores]
-    ys = [p[1] for curva in grafico.curvas for p in curva.pontos] + [m.y for m in grafico.marcadores]
+    xs = [p[0] for curva in grafico.curvas for p in curva.pontos] + [
+        m.x for m in grafico.marcadores
+    ]
+    ys = [p[1] for curva in grafico.curvas for p in curva.pontos] + [
+        m.y for m in grafico.marcadores
+    ]
     x0, x1 = _dominio(xs, grafico.dominio_x)
     y0, y1 = _dominio(ys, grafico.dominio_y)
     if grafico.escalas_iguais:
@@ -149,21 +154,53 @@ def renderizar_xy(
     passo_x, passo_y = _passo(x1 - x0), _passo(y1 - y0)
     tick = math.ceil(x0 / passo_x) * passo_x
     while tick <= x1 + 1e-9:
-        desenho.line([(px(tick), margem_topo), (px(tick), margem_topo + area_altura)], fill=COR_GRADE, width=escala)
+        desenho.line(
+            [(px(tick), margem_topo), (px(tick), margem_topo + area_altura)],
+            fill=COR_GRADE,
+            width=escala,
+        )
         texto = _formatar(tick, passo_x)
-        desenho.text((px(tick) - desenho.textlength(texto, font=fonte_eixo) / 2, margem_topo + area_altura + 6 * escala), texto, fill=COR_TEXTO, font=fonte_eixo)
+        desenho.text(
+            (
+                px(tick) - desenho.textlength(texto, font=fonte_eixo) / 2,
+                margem_topo + area_altura + 6 * escala,
+            ),
+            texto,
+            fill=COR_TEXTO,
+            font=fonte_eixo,
+        )
         tick += passo_x
     tick = math.ceil(y0 / passo_y) * passo_y
     while tick <= y1 + 1e-9:
-        desenho.line([(margem_esq, py(tick)), (margem_esq + area_largura, py(tick))], fill=COR_GRADE, width=escala)
+        desenho.line(
+            [(margem_esq, py(tick)), (margem_esq + area_largura, py(tick))],
+            fill=COR_GRADE,
+            width=escala,
+        )
         texto = _formatar(tick, passo_y)
-        desenho.text((margem_esq - desenho.textlength(texto, font=fonte_eixo) - 8 * escala, py(tick) - 7 * escala), texto, fill=COR_TEXTO, font=fonte_eixo)
+        desenho.text(
+            (
+                margem_esq - desenho.textlength(texto, font=fonte_eixo) - 8 * escala,
+                py(tick) - 7 * escala,
+            ),
+            texto,
+            fill=COR_TEXTO,
+            font=fonte_eixo,
+        )
         tick += passo_y
     if x0 < 0 < x1:
-        desenho.line([(px(0), margem_topo), (px(0), margem_topo + area_altura)], fill=COR_EIXO, width=escala)
+        desenho.line(
+            [(px(0), margem_topo), (px(0), margem_topo + area_altura)], fill=COR_EIXO, width=escala
+        )
     if y0 < 0 < y1:
-        desenho.line([(margem_esq, py(0)), (margem_esq + area_largura, py(0))], fill=COR_EIXO, width=escala)
-    desenho.rectangle([margem_esq, margem_topo, margem_esq + area_largura, margem_topo + area_altura], outline=COR_EIXO, width=escala)
+        desenho.line(
+            [(margem_esq, py(0)), (margem_esq + area_largura, py(0))], fill=COR_EIXO, width=escala
+        )
+    desenho.rectangle(
+        [margem_esq, margem_topo, margem_esq + area_largura, margem_topo + area_altura],
+        outline=COR_EIXO,
+        width=escala,
+    )
 
     # Curvas
     for curva in grafico.curvas:
@@ -171,15 +208,21 @@ def renderizar_xy(
         if len(pontos) < 2:
             continue
         if curva.tracejada:
-            for inicio, fim in zip(pontos, pontos[1:]):
+            for inicio, fim in pairwise(pontos):
                 comprimento = math.hypot(fim[0] - inicio[0], fim[1] - inicio[1])
                 segmentos = max(1, int(comprimento / (8 * escala)))
                 for indice in range(0, segmentos, 2):
                     t0, t1 = indice / segmentos, min(1.0, (indice + 1) / segmentos)
                     desenho.line(
                         [
-                            (inicio[0] + (fim[0] - inicio[0]) * t0, inicio[1] + (fim[1] - inicio[1]) * t0),
-                            (inicio[0] + (fim[0] - inicio[0]) * t1, inicio[1] + (fim[1] - inicio[1]) * t1),
+                            (
+                                inicio[0] + (fim[0] - inicio[0]) * t0,
+                                inicio[1] + (fim[1] - inicio[1]) * t0,
+                            ),
+                            (
+                                inicio[0] + (fim[0] - inicio[0]) * t1,
+                                inicio[1] + (fim[1] - inicio[1]) * t1,
+                            ),
                         ],
                         fill=curva.cor,
                         width=curva.espessura * escala,
@@ -191,9 +234,19 @@ def renderizar_xy(
     raio = 4 * escala
     for marcador in grafico.marcadores:
         cx, cy = px(marcador.x), py(marcador.y)
-        desenho.ellipse([cx - raio, cy - raio, cx + raio, cy + raio], fill=marcador.cor, outline=_FUNDO, width=escala)
+        desenho.ellipse(
+            [cx - raio, cy - raio, cx + raio, cy + raio],
+            fill=marcador.cor,
+            outline=_FUNDO,
+            width=escala,
+        )
         dx, dy = marcador.deslocamento
-        desenho.text((cx + dx * escala, cy + dy * escala), marcador.rotulo, fill=marcador.cor, font=fonte_rotulo)
+        desenho.text(
+            (cx + dx * escala, cy + dy * escala),
+            marcador.rotulo,
+            fill=marcador.cor,
+            font=fonte_rotulo,
+        )
 
     # Legenda das curvas (canto superior direito da área)
     rotuladas = [curva for curva in grafico.curvas if curva.rotulo]
@@ -203,24 +256,45 @@ def renderizar_xy(
             texto = curva.rotulo
             largura_texto = desenho.textlength(texto, font=fonte_rotulo)
             x_texto = margem_esq + area_largura - largura_texto - 12 * escala
-            desenho.line([(x_texto - 26 * escala, linha_y + 7 * escala), (x_texto - 8 * escala, linha_y + 7 * escala)], fill=curva.cor, width=curva.espessura * escala)
+            desenho.line(
+                [
+                    (x_texto - 26 * escala, linha_y + 7 * escala),
+                    (x_texto - 8 * escala, linha_y + 7 * escala),
+                ],
+                fill=curva.cor,
+                width=curva.espessura * escala,
+            )
             desenho.text((x_texto, linha_y), texto, fill=COR_TEXTO, font=fonte_rotulo)
             linha_y += 16 * escala
 
     # Títulos
     desenho.text((margem_esq, 10 * escala), grafico.titulo, fill=COR_TEXTO, font=fonte_titulo)
     desenho.text(
-        (margem_esq + area_largura / 2 - desenho.textlength(grafico.eixo_x, font=fonte_eixo) / 2, margem_topo + area_altura + 22 * escala),
+        (
+            margem_esq + area_largura / 2 - desenho.textlength(grafico.eixo_x, font=fonte_eixo) / 2,
+            margem_topo + area_altura + 22 * escala,
+        ),
         grafico.eixo_x,
         fill=COR_TEXTO,
         font=fonte_eixo,
     )
-    rotulo_y = Image.new("RGBA", (int(desenho.textlength(grafico.eixo_y, font=fonte_eixo)) + 4, 16 * escala), (255, 255, 255, 0))
+    rotulo_y = Image.new(
+        "RGBA",
+        (int(desenho.textlength(grafico.eixo_y, font=fonte_eixo)) + 4, 16 * escala),
+        (255, 255, 255, 0),
+    )
     ImageDraw.Draw(rotulo_y).text((0, 0), grafico.eixo_y, fill=COR_TEXTO, font=fonte_eixo)
     rotulo_y = rotulo_y.rotate(90, expand=True)
-    imagem.paste(rotulo_y, (6 * escala, int(margem_topo + area_altura / 2 - rotulo_y.height / 2)), rotulo_y)
+    imagem.paste(
+        rotulo_y, (6 * escala, int(margem_topo + area_altura / 2 - rotulo_y.height / 2)), rotulo_y
+    )
     for indice, nota in enumerate(grafico.notas):
-        desenho.text((margem_esq, margem_topo + area_altura + (40 + 14 * indice) * escala), nota, fill=COR_NEUTRA, font=fonte_rotulo)
+        desenho.text(
+            (margem_esq, margem_topo + area_altura + (40 + 14 * indice) * escala),
+            nota,
+            fill=COR_NEUTRA,
+            font=fonte_rotulo,
+        )
 
     imagem = imagem.resize((largura_px, altura_px), Image.LANCZOS)
     buffer = io.BytesIO()
@@ -249,34 +323,61 @@ def _numero(valor: Any) -> float | None:
 
 def _circulo(centro: float, raio: float, *, passos: int = 181) -> list[tuple[float, float]]:
     return [
-        (centro + raio * math.cos(2 * math.pi * indice / (passos - 1)), raio * math.sin(2 * math.pi * indice / (passos - 1)))
+        (
+            centro + raio * math.cos(2 * math.pi * indice / (passos - 1)),
+            raio * math.sin(2 * math.pi * indice / (passos - 1)),
+        )
         for indice in range(passos)
     ]
 
 
-def imagens_mohr(entradas: Mapping[str, Any], resultados: Mapping[str, Any]) -> list[ImagemDiagrama]:
+def imagens_mohr(
+    entradas: Mapping[str, Any], resultados: Mapping[str, Any]
+) -> list[ImagemDiagrama]:
     """Círculo de Mohr a partir do que o módulo registrou.
 
     Registros 2D trazem ``sigma_x/sigma_y/tau_xy`` e o estado transformado;
     registros 3D trazem ``sigma_1/2/3`` e ganham os três círculos.
     """
-    s1, s2, s3 = (_numero(resultados.get(chave)) for chave in ("sigma_1_MPa", "sigma_2_MPa", "sigma_3_MPa"))
+    s1, s2, s3 = (
+        _numero(resultados.get(chave)) for chave in ("sigma_1_MPa", "sigma_2_MPa", "sigma_3_MPa")
+    )
     if s3 is not None and s1 is not None and s2 is not None:
         maior, medio, menor = sorted((s1, s2, s3), reverse=True)
         curvas = [
-            Curva(_circulo((maior + menor) / 2, (maior - menor) / 2), cor=COR_PRINCIPAL, rotulo="σ1–σ3"),
-            Curva(_circulo((maior + medio) / 2, (maior - medio) / 2), cor=COR_SECUNDARIA, rotulo="σ1–σ2"),
-            Curva(_circulo((medio + menor) / 2, (medio - menor) / 2), cor=COR_APOIO, rotulo="σ2–σ3"),
+            Curva(
+                _circulo((maior + menor) / 2, (maior - menor) / 2),
+                cor=COR_PRINCIPAL,
+                rotulo="σ1–σ3",
+            ),
+            Curva(
+                _circulo((maior + medio) / 2, (maior - medio) / 2),
+                cor=COR_SECUNDARIA,
+                rotulo="σ1–σ2",
+            ),
+            Curva(
+                _circulo((medio + menor) / 2, (medio - menor) / 2), cor=COR_APOIO, rotulo="σ2–σ3"
+            ),
         ]
         marcadores = [
             Marcador(maior, 0.0, f"σ1 = {maior:.1f}", deslocamento=(8, 6)),
             Marcador(medio, 0.0, f"σ2 = {medio:.1f}", deslocamento=(-28, -22)),
             Marcador(menor, 0.0, f"σ3 = {menor:.1f}", deslocamento=(-70, 6)),
-            Marcador((maior + menor) / 2, (maior - menor) / 2, f"τmáx = {(maior - menor) / 2:.1f}", cor=COR_DESTAQUE),
+            Marcador(
+                (maior + menor) / 2,
+                (maior - menor) / 2,
+                f"τmáx = {(maior - menor) / 2:.1f}",
+                cor=COR_DESTAQUE,
+            ),
         ]
-        plano = _numero(resultados.get("sigma_normal_plano_MPa")), _numero(resultados.get("tau_resultante_plano_MPa"))
+        plano = (
+            _numero(resultados.get("sigma_normal_plano_MPa")),
+            _numero(resultados.get("tau_resultante_plano_MPa")),
+        )
         if plano[0] is not None and plano[1] is not None:
-            marcadores.append(Marcador(plano[0], plano[1], "plano de interesse", cor=COR_TORQUE_SEGURA))
+            marcadores.append(
+                Marcador(plano[0], plano[1], "plano de interesse", cor=COR_TORQUE_SEGURA)
+            )
         grafico = GraficoXY(
             titulo="Círculos de Mohr — estado tridimensional",
             eixo_x="Tensão normal σ (MPa)",
@@ -284,11 +385,17 @@ def imagens_mohr(entradas: Mapping[str, Any], resultados: Mapping[str, Any]) -> 
             curvas=curvas,
             marcadores=marcadores,
             escalas_iguais=True,
-            notas=[f"von Mises = {_numero(resultados.get('von_mises_MPa')) or 0:.1f} MPa; Tresca = {_numero(resultados.get('tresca_equivalente_MPa')) or 0:.1f} MPa."],
+            notas=[
+                f"von Mises = {_numero(resultados.get('von_mises_MPa')) or 0:.1f} MPa; Tresca = {_numero(resultados.get('tresca_equivalente_MPa')) or 0:.1f} MPa."
+            ],
         )
-        return [renderizar_xy(grafico, legenda="Círculos de Mohr do tensor registrado (σ1 ≥ σ2 ≥ σ3).")]
+        return [
+            renderizar_xy(grafico, legenda="Círculos de Mohr do tensor registrado (σ1 ≥ σ2 ≥ σ3).")
+        ]
 
-    sx, sy, txy = (_numero(entradas.get(chave)) for chave in ("sigma_x_MPa", "sigma_y_MPa", "tau_xy_MPa"))
+    sx, sy, txy = (
+        _numero(entradas.get(chave)) for chave in ("sigma_x_MPa", "sigma_y_MPa", "tau_xy_MPa")
+    )
     if sx is None or sy is None or txy is None:
         return []
     centro = (sx + sy) / 2
@@ -306,10 +413,22 @@ def imagens_mohr(entradas: Mapping[str, Any], resultados: Mapping[str, Any]) -> 
     ]
     sxl, syl, txl = (
         _numero(resultados.get(chave))
-        for chave in ("sigma_x_transformada_MPa", "sigma_y_transformada_MPa", "tau_transformada_MPa")
+        for chave in (
+            "sigma_x_transformada_MPa",
+            "sigma_y_transformada_MPa",
+            "tau_transformada_MPa",
+        )
     )
     if sxl is not None and syl is not None and txl is not None:
-        curvas.append(Curva([(sxl, txl), (syl, -txl)], cor=COR_SECUNDARIA, espessura=1, tracejada=True, rotulo=f"Transformado (θ = {_numero(entradas.get('theta_graus')) or 0:g}°)"))
+        curvas.append(
+            Curva(
+                [(sxl, txl), (syl, -txl)],
+                cor=COR_SECUNDARIA,
+                espessura=1,
+                tracejada=True,
+                rotulo=f"Transformado (θ = {_numero(entradas.get('theta_graus')) or 0:g}°)",
+            )
+        )
         marcadores.append(Marcador(sxl, txl, "x'", cor=COR_SECUNDARIA))
         marcadores.append(Marcador(syl, -txl, "y'", cor=COR_SECUNDARIA))
     grafico = GraficoXY(
@@ -319,13 +438,21 @@ def imagens_mohr(entradas: Mapping[str, Any], resultados: Mapping[str, Any]) -> 
         curvas=curvas,
         marcadores=marcadores,
         escalas_iguais=True,
-        notas=[f"Centro = {centro:.1f} MPa; raio = {raio:.1f} MPa; von Mises = {_numero(resultados.get('von_mises_MPa')) or 0:.1f} MPa."],
+        notas=[
+            f"Centro = {centro:.1f} MPa; raio = {raio:.1f} MPa; von Mises = {_numero(resultados.get('von_mises_MPa')) or 0:.1f} MPa."
+        ],
     )
-    return [renderizar_xy(grafico, legenda="Círculo de Mohr do estado plano registrado, com o estado transformado no plano escolhido.")]
+    return [
+        renderizar_xy(
+            grafico,
+            legenda="Círculo de Mohr do estado plano registrado, com o estado transformado no plano escolhido.",
+        )
+    ]
 
 
-
-def imagens_flambagem(entradas: Mapping[str, Any], resultados: Mapping[str, Any]) -> list[ImagemDiagrama]:
+def imagens_flambagem(
+    entradas: Mapping[str, Any], resultados: Mapping[str, Any]
+) -> list[ImagemDiagrama]:
     """Curva σcr × λ (Euler + Johnson) com a coluna registrada marcada."""
     modulo_e = _numero(entradas.get("modulo_elasticidade_MPa"))
     escoamento = _numero(entradas.get("escoamento_MPa"))
@@ -344,11 +471,16 @@ def imagens_flambagem(entradas: Mapping[str, Any], resultados: Mapping[str, Any]
     ]
     euler = [
         (lam, math.pi**2 * modulo_e / lam**2)
-        for lam in (transicao + (lambda_max - transicao) * indice / passos for indice in range(passos + 1))
+        for lam in (
+            transicao + (lambda_max - transicao) * indice / passos for indice in range(passos + 1)
+        )
     ]
     euler_estendida = [
         (lam, math.pi**2 * modulo_e / lam**2)
-        for lam in (max(transicao * 0.45, 1.0) + (transicao - max(transicao * 0.45, 1.0)) * indice / 60 for indice in range(61))
+        for lam in (
+            max(transicao * 0.45, 1.0) + (transicao - max(transicao * 0.45, 1.0)) * indice / 60
+            for indice in range(61)
+        )
     ]
     euler_estendida = [(lam, sigma) for lam, sigma in euler_estendida if sigma <= escoamento * 1.6]
 
@@ -361,19 +493,52 @@ def imagens_flambagem(entradas: Mapping[str, Any], resultados: Mapping[str, Any]
         Curva(johnson, cor=COR_SECUNDARIA, rotulo="Johnson (coluna curta/intermediária)"),
         Curva(euler, cor=COR_PRINCIPAL, rotulo="Euler (coluna longa)"),
         Curva(euler_estendida, cor=COR_PRINCIPAL, espessura=1, tracejada=True),
-        Curva([(0.0, escoamento), (lambda_max, escoamento)], cor=COR_NEUTRA, espessura=1, tracejada=True, rotulo=f"Sy = {escoamento:.0f} MPa"),
-        Curva([(transicao, 0.0), (transicao, escoamento * 1.05)], cor=COR_NEUTRA, espessura=1, tracejada=True),
+        Curva(
+            [(0.0, escoamento), (lambda_max, escoamento)],
+            cor=COR_NEUTRA,
+            espessura=1,
+            tracejada=True,
+            rotulo=f"Sy = {escoamento:.0f} MPa",
+        ),
+        Curva(
+            [(transicao, 0.0), (transicao, escoamento * 1.05)],
+            cor=COR_NEUTRA,
+            espessura=1,
+            tracejada=True,
+        ),
     ]
-    marcadores = [Marcador(transicao, escoamento / 2, f"λt = {transicao:.1f}", cor=COR_NEUTRA, deslocamento=(6, -8))]
+    marcadores = [
+        Marcador(
+            transicao, escoamento / 2, f"λt = {transicao:.1f}", cor=COR_NEUTRA, deslocamento=(6, -8)
+        )
+    ]
     if sigma_cr is not None:
-        marcadores.append(Marcador(esbeltez, sigma_cr, f"σcr = {sigma_cr:.1f} MPa (λ = {esbeltez:.1f})", cor=COR_DESTAQUE))
+        marcadores.append(
+            Marcador(
+                esbeltez,
+                sigma_cr,
+                f"σcr = {sigma_cr:.1f} MPa (λ = {esbeltez:.1f})",
+                cor=COR_DESTAQUE,
+            )
+        )
     if sigma_atuante is not None:
-        curvas.append(Curva([(0.0, sigma_atuante), (lambda_max, sigma_atuante)], cor=COR_TORQUE_SEGURA, espessura=1, rotulo=f"σ atuante = P/A = {sigma_atuante:.1f} MPa"))
-        marcadores.append(Marcador(esbeltez, sigma_atuante, "coluna", cor=COR_TORQUE_SEGURA, deslocamento=(8, 4)))
+        curvas.append(
+            Curva(
+                [(0.0, sigma_atuante), (lambda_max, sigma_atuante)],
+                cor=COR_TORQUE_SEGURA,
+                espessura=1,
+                rotulo=f"σ atuante = P/A = {sigma_atuante:.1f} MPa",
+            )
+        )
+        marcadores.append(
+            Marcador(esbeltez, sigma_atuante, "coluna", cor=COR_TORQUE_SEGURA, deslocamento=(8, 4))
+        )
     notas = []
     fator = _numero(resultados.get("fator_seguranca"))
     if fator is not None:
-        notas.append(f"Regime: {resultados.get('regime', '-')}; fator de segurança real = {fator:.2f}.")
+        notas.append(
+            f"Regime: {resultados.get('regime', '-')}; fator de segurança real = {fator:.2f}."
+        )
     grafico = GraficoXY(
         titulo="Tensão crítica de flambagem × índice de esbeltez",
         eixo_x="Índice de esbeltez λ = KL/r",
@@ -384,7 +549,12 @@ def imagens_flambagem(entradas: Mapping[str, Any], resultados: Mapping[str, Any]
         dominio_y=(0.0, escoamento * 1.15),
         notas=notas,
     )
-    return [renderizar_xy(grafico, legenda="Curva de Euler/Johnson do material registrado, com a esbeltez governante da coluna e a tensão atuante.")]
+    return [
+        renderizar_xy(
+            grafico,
+            legenda="Curva de Euler/Johnson do material registrado, com a esbeltez governante da coluna e a tensão atuante.",
+        )
+    ]
 
 
 def imagens_do_registro(
@@ -398,7 +568,9 @@ def imagens_do_registro(
     """
     modulo_id = str(registro.get("modulo_id") or "")
     entradas = registro.get("entradas") if isinstance(registro.get("entradas"), Mapping) else {}
-    resultados = registro.get("resultados") if isinstance(registro.get("resultados"), Mapping) else {}
+    resultados = (
+        registro.get("resultados") if isinstance(registro.get("resultados"), Mapping) else {}
+    )
     try:
         if modulo_id == "vigas_eixos":
             from core.report_plugins import _diagramas_do_registro

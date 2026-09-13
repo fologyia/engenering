@@ -202,7 +202,10 @@ def gerar_memorial_fadiga_pdf(
         ["Emissão", gerado_em],
     ]
     tabela_identificacao = Table(
-        [[Paragraph(f"<b>{linha[0]}</b>", corpo), Paragraph(linha[1], corpo)] for linha in identificacao],
+        [
+            [Paragraph(f"<b>{linha[0]}</b>", corpo), Paragraph(linha[1], corpo)]
+            for linha in identificacao
+        ],
         colWidths=[34 * mm, 140 * mm],
     )
     tabela_identificacao.setStyle(
@@ -248,9 +251,7 @@ def gerar_memorial_fadiga_pdf(
         ["Vida estimada", _texto(dados.get("resultado_vida") or "Não calculada")],
     ]
     tabela_cards = Table(
-        [
-            [Paragraph(f"<b>{_texto(card[0])}</b><br/>{_texto(card[1])}", central) for card in cards]
-        ],
+        [[Paragraph(f"<b>{_texto(card[0])}</b><br/>{_texto(card[1])}", central) for card in cards]],
         colWidths=[43.5 * mm] * 4,
     )
     tabela_cards.setStyle(
@@ -301,20 +302,14 @@ def gerar_memorial_fadiga_pdf(
     if dados.get("modelo") == "norton":
         temperatura_f = float(dados.get("temperatura_f", 0.0))
         if temperatura_f <= 450.0:
-            memoria_temperatura = (
-                f"T_F = {temperatura_f:.2f} °F <= 450 °F  ->  Ctemp = 1,000"
-            )
+            memoria_temperatura = f"T_F = {temperatura_f:.2f} °F <= 450 °F  ->  Ctemp = 1,000"
         else:
             ctemp = float(dados.get("Ctemp", 0.0))
-            memoria_temperatura = (
-                f"Ctemp = 1 - 0,0058 * ({temperatura_f:.2f} - 450) "
-                f"= {ctemp:.3f}"
-            )
+            memoria_temperatura = f"Ctemp = 1 - 0,0058 * ({temperatura_f:.2f} - 450) = {ctemp:.3f}"
         historia.append(Paragraph(_texto(memoria_temperatura), formula))
         historia.append(
             Paragraph(
-                "A correlação de Norton usa graus Fahrenheit e é limitada a "
-                "550 °F (287,78 °C).",
+                "A correlação de Norton usa graus Fahrenheit e é limitada a 550 °F (287,78 °C).",
                 corpo,
             )
         )

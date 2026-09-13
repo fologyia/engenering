@@ -96,16 +96,53 @@ def test_agrupamento_segue_ordem_do_escopo_e_deixa_soltos_ao_final():
 
 def _projeto_mezanino():
     projeto = _projeto_documentado()
-    coluna_p1 = criar_item(tag="P1", descricao="Coluna principal esquerda", servico="Mezanino", material="ASTM A572", desenho="DES-01", criticidade="Alta")
-    coluna_p2 = criar_item(tag="P2", descricao="Coluna principal direita", servico="Mezanino", material="ASTM A572", desenho="DES-01", criticidade="Alta")
-    viga = criar_item(tag="V1", descricao="Viga principal com balanço", servico="Mezanino", material="ASTM A572", desenho="DES-02", criticidade="Alta")
+    coluna_p1 = criar_item(
+        tag="P1",
+        descricao="Coluna principal esquerda",
+        servico="Mezanino",
+        material="ASTM A572",
+        desenho="DES-01",
+        criticidade="Alta",
+    )
+    coluna_p2 = criar_item(
+        tag="P2",
+        descricao="Coluna principal direita",
+        servico="Mezanino",
+        material="ASTM A572",
+        desenho="DES-01",
+        criticidade="Alta",
+    )
+    viga = criar_item(
+        tag="V1",
+        descricao="Viga principal com balanço",
+        servico="Mezanino",
+        material="ASTM A572",
+        desenho="DES-02",
+        criticidade="Alta",
+    )
     projeto["componentes"] = [coluna_p1, coluna_p2, viga]
     base = _registro("Flambagem de coluna — W 200 x 26,6")
     projeto["registros_tecnicos"] = [
-        normalizar_registro_tecnico(identificar_peca_registro(base, peca="Coluna P2", componentes_ids=[coluna_p2["id"]])),
-        normalizar_registro_tecnico(identificar_peca_registro(base, peca="Coluna P1", componentes_ids=[coluna_p1["id"]])),
-        normalizar_registro_tecnico(identificar_peca_registro(_registro("Viga contínua — 3 vãos + balanço"), peca="Viga V1", componentes_ids=[viga["id"]])),
-        normalizar_registro_tecnico(identificar_peca_registro(_registro("Mão francesa — L 50x50x5"), peca="Mão francesa MF-1", componentes_ids=[coluna_p1["id"]])),
+        normalizar_registro_tecnico(
+            identificar_peca_registro(base, peca="Coluna P2", componentes_ids=[coluna_p2["id"]])
+        ),
+        normalizar_registro_tecnico(
+            identificar_peca_registro(base, peca="Coluna P1", componentes_ids=[coluna_p1["id"]])
+        ),
+        normalizar_registro_tecnico(
+            identificar_peca_registro(
+                _registro("Viga contínua — 3 vãos + balanço"),
+                peca="Viga V1",
+                componentes_ids=[viga["id"]],
+            )
+        ),
+        normalizar_registro_tecnico(
+            identificar_peca_registro(
+                _registro("Mão francesa — L 50x50x5"),
+                peca="Mão francesa MF-1",
+                componentes_ids=[coluna_p1["id"]],
+            )
+        ),
         normalizar_registro_tecnico(_registro("Combinações de ações ELU e ELS")),
     ]
     return projeto
@@ -117,7 +154,11 @@ def test_memorial_agrupa_registros_por_peca():
     secoes = modelo["secoes"]
     titulos = [item["titulo"] for item in secoes]
 
-    numero_registros = next(item["titulo"] for item in secoes if item.get("nivel", 1) == 1 and "Registros" in item["titulo"]).split(".")[0]
+    numero_registros = next(
+        item["titulo"]
+        for item in secoes
+        if item.get("nivel", 1) == 1 and "Registros" in item["titulo"]
+    ).split(".")[0]
     pecas = [item["titulo"] for item in secoes if item.get("nivel") == 2]
     assert pecas == [
         f"{numero_registros}.1 P1 · Coluna principal esquerda",
@@ -133,20 +174,35 @@ def test_memorial_agrupa_registros_por_peca():
         f"{numero_registros}.3.1 Viga V1 — Viga contínua — 3 vãos + balanço",
         f"{numero_registros}.4.1 Combinações de ações ELU e ELS",
     ]
-    assert any("Peça: Coluna P1." in paragrafo for item in secoes for paragrafo in item.get("paragrafos", []))
+    assert any(
+        "Peça: Coluna P1." in paragrafo
+        for item in secoes
+        for paragrafo in item.get("paragrafos", [])
+    )
     # Os capítulos de cada peça vêm logo abaixo do título dela, não todos ao final.
     sequencia = [item["titulo"].split(" ")[0] for item in secoes if item.get("nivel", 1) >= 2]
     assert sequencia == [
-        f"{numero_registros}.1", f"{numero_registros}.1.1", f"{numero_registros}.1.2",
-        f"{numero_registros}.2", f"{numero_registros}.2.1",
-        f"{numero_registros}.3", f"{numero_registros}.3.1",
-        f"{numero_registros}.4", f"{numero_registros}.4.1",
+        f"{numero_registros}.1",
+        f"{numero_registros}.1.1",
+        f"{numero_registros}.1.2",
+        f"{numero_registros}.2",
+        f"{numero_registros}.2.1",
+        f"{numero_registros}.3",
+        f"{numero_registros}.3.1",
+        f"{numero_registros}.4",
+        f"{numero_registros}.4.1",
     ]
 
     plano = next(item for item in secoes if "Plano" in item["titulo"])
     tabela = plano["tabelas"][0]
     assert tabela["cabecalhos"][1] == "Peça"
-    assert [linha[1] for linha in tabela["linhas"]] == ["Coluna P2", "Coluna P1", "Viga V1", "Mão francesa MF-1", "-"]
+    assert [linha[1] for linha in tabela["linhas"]] == [
+        "Coluna P2",
+        "Coluna P1",
+        "Viga V1",
+        "Mão francesa MF-1",
+        "-",
+    ]
     assert sum(tabela["larguras"]) == 9360
     assert "Registros técnicos" in " ".join(titulos)
 

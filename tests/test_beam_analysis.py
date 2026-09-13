@@ -158,9 +158,7 @@ class FlexaoIsostaticaTests(CasoDeViga):
             viga_padrao(momentos=(vb.MomentoConcentrado(L_MM / 2, aplicado),))
         )
         no_ponto = [
-            ponto.momento_Nmm
-            for ponto in resultado.pontos
-            if abs(ponto.x_mm - L_MM / 2) < 1e-9
+            ponto.momento_Nmm for ponto in resultado.pontos if abs(ponto.x_mm - L_MM / 2) < 1e-9
         ]
         self.assertEqual(len(no_ponto), 2)
         self.assertProximo(no_ponto[0] - no_ponto[1], aplicado)
@@ -221,9 +219,7 @@ class RotulaTests(CasoDeViga):
             )
         )
         na_rotula = [
-            ponto.momento_Nmm
-            for ponto in resultado.pontos
-            if abs(ponto.x_mm - 4_500.0) < 1e-9
+            ponto.momento_Nmm for ponto in resultado.pontos if abs(ponto.x_mm - 4_500.0) < 1e-9
         ]
         for momento in na_rotula:
             self.assertAlmostEqual(momento, 0.0, places=6)
@@ -262,9 +258,7 @@ class AxialETorcaoTests(CasoDeViga):
         ponta = max(resultado.pontos, key=lambda ponto: ponto.x_mm)
         self.assertAlmostEqual(resultado.extremos["normal"].valor, forca)
         self.assertAlmostEqual(ponta.tensao_axial_MPa, forca / secao.area_mm2)
-        self.assertAlmostEqual(
-            ponta.deslocamento_axial_mm, forca * L_MM / (E_MPA * secao.area_mm2)
-        )
+        self.assertAlmostEqual(ponta.deslocamento_axial_mm, forca * L_MM / (E_MPA * secao.area_mm2))
         self.assertAlmostEqual(resultado.reacoes[0].fx_N, -forca)
 
     def test_torcao_pura(self):
@@ -337,9 +331,7 @@ class ApoioElasticoTests(CasoDeViga):
 
     def test_mola_muito_rigida_converge_para_o_apoio_rigido(self):
         carga = -20_000.0
-        rigida = vb.analisar_viga(
-            viga_padrao(cargas_pontuais=(vb.CargaPontual(L_MM / 2, carga),))
-        )
+        rigida = vb.analisar_viga(viga_padrao(cargas_pontuais=(vb.CargaPontual(L_MM / 2, carga),)))
         elastica = vb.analisar_viga(
             viga_padrao(
                 apoios=(
@@ -431,9 +423,7 @@ class TorcaoSemModuloTests(CasoDeViga):
             area_cisalhamento_mm2=800.0,
         )
         with self.assertRaises(ValueError) as contexto:
-            vb.analisar_viga(
-                viga_padrao(secao=secao, torques=(vb.Torque(L_MM / 2, 1e6),))
-            )
+            vb.analisar_viga(viga_padrao(secao=secao, torques=(vb.Torque(L_MM / 2, 1e6),)))
         self.assertIn("Wt", str(contexto.exception))
 
 
@@ -491,16 +481,12 @@ class ValidacaoTests(CasoDeViga):
 
     def test_carga_fora_da_viga_e_recusada(self):
         with self.assertRaises(ValueError) as contexto:
-            vb.analisar_viga(
-                viga_padrao(cargas_pontuais=(vb.CargaPontual(L_MM * 2, -1_000.0),))
-            )
+            vb.analisar_viga(viga_padrao(cargas_pontuais=(vb.CargaPontual(L_MM * 2, -1_000.0),)))
         self.assertIn("fora da viga", str(contexto.exception))
 
     def test_dois_apoios_na_mesma_posicao_sao_recusados(self):
         with self.assertRaises(ValueError):
-            vb.analisar_viga(
-                viga_padrao(apoios=(vb.Apoio(0.0, "pino"), vb.Apoio(0.0, "rolete")))
-            )
+            vb.analisar_viga(viga_padrao(apoios=(vb.Apoio(0.0, "pino"), vb.Apoio(0.0, "rolete"))))
 
     def test_distribuida_invertida_e_recusada(self):
         with self.assertRaises(ValueError):

@@ -965,9 +965,7 @@ def _inserir(posicoes: list[float], valor: float, tolerancia: float) -> None:
 def _validar_posicao(nome: str, x: float, comprimento: float, tolerancia: float) -> float:
     x = _finito(nome, x)
     if x < -tolerancia or x > comprimento + tolerancia:
-        raise ValueError(
-            f"{nome} = {x:.4g} mm está fora da viga (0 a {comprimento:.4g} mm)."
-        )
+        raise ValueError(f"{nome} = {x:.4g} mm está fora da viga (0 a {comprimento:.4g} mm).")
     return min(max(x, 0.0), comprimento)
 
 
@@ -1014,14 +1012,24 @@ def _ajustar_modelo_a_malha(viga: Viga, malha: _Malha) -> Viga:
         ),
         momentos=tuple(replace(m, x_mm=no("posição do momento", m.x_mm)) for m in viga.momentos),
         cargas_distribuidas=tuple(
-            _distribuida_ajustada(c, no("início da carga distribuída", c.x_inicial_mm), no("fim da carga distribuída", c.x_final_mm), tolerancia)
+            _distribuida_ajustada(
+                c,
+                no("início da carga distribuída", c.x_inicial_mm),
+                no("fim da carga distribuída", c.x_final_mm),
+                tolerancia,
+            )
             for c in viga.cargas_distribuidas
         ),
         cargas_axiais=tuple(
             replace(c, x_mm=no("posição da carga axial", c.x_mm)) for c in viga.cargas_axiais
         ),
         cargas_axiais_distribuidas=tuple(
-            _distribuida_ajustada(c, no("início da carga axial distribuída", c.x_inicial_mm), no("fim da carga axial distribuída", c.x_final_mm), tolerancia)
+            _distribuida_ajustada(
+                c,
+                no("início da carga axial distribuída", c.x_inicial_mm),
+                no("fim da carga axial distribuída", c.x_final_mm),
+                tolerancia,
+            )
             for c in viga.cargas_axiais_distribuidas
         ),
         torques=tuple(replace(t, x_mm=no("posição do torque", t.x_mm)) for t in viga.torques),
@@ -1124,7 +1132,11 @@ def _carga_no_elemento(
     meio = 0.5 * (x_i + x_j)
     w_i = w_j = 0.0
     for carga in cargas:
-        if carga.x_inicial_mm - TOLERANCIA_POSICAO_MM <= meio <= carga.x_final_mm + TOLERANCIA_POSICAO_MM:
+        if (
+            carga.x_inicial_mm - TOLERANCIA_POSICAO_MM
+            <= meio
+            <= carga.x_final_mm + TOLERANCIA_POSICAO_MM
+        ):
             w_i += carga.intensidade_em(x_i)
             w_j += carga.intensidade_em(x_j)
     return w_i, w_j
@@ -1354,7 +1366,10 @@ def _avisos_de_material(material: MaterialViga) -> list[str]:
             "corresponde a coeficiente de Poisson negativo. Para metais G ≈ E/2,6; "
             "confira as unidades de E e G."
         )
-    if material.escoamento_MPa and material.escoamento_MPa > 0.05 * material.modulo_elasticidade_MPa:
+    if (
+        material.escoamento_MPa
+        and material.escoamento_MPa > 0.05 * material.modulo_elasticidade_MPa
+    ):
         avisos.append(
             f"Sy = {material.escoamento_MPa:.4g} MPa corresponde a deformação de "
             f"escoamento acima de 5 % (Sy/E = {material.escoamento_MPa / material.modulo_elasticidade_MPa:.3g}), "
@@ -1393,9 +1408,7 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
     if n_nos < 2:
         raise ValueError("A viga precisa de pelo menos dois nós.")
     n_elementos = n_nos - 1
-    amostras_por_elemento = max(
-        3, min(pontos_por_elemento, PONTOS_TOTAIS_ALVO // n_elementos)
-    )
+    amostras_por_elemento = max(3, min(pontos_por_elemento, PONTOS_TOTAIS_ALVO // n_elementos))
     if malha.divisoes_pedidas > malha.divisoes:
         avisos.append(
             f"Com {malha.trechos} trechos, a malha ficou limitada a {malha.divisoes} "
@@ -1502,7 +1515,9 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
         dofs = list(elemento.dofs_axial)
         rigidez = ea / elemento.comprimento
         k_axial[np.ix_(dofs, dofs)] += rigidez * np.array([[1.0, -1.0], [-1.0, 1.0]])
-        f_axial[dofs] += _cargas_equivalentes_axial(elemento.a_i, elemento.a_j, elemento.comprimento)
+        f_axial[dofs] += _cargas_equivalentes_axial(
+            elemento.a_i, elemento.a_j, elemento.comprimento
+        )
     for axial in viga.cargas_axiais:
         indice = no_de(axial.x_mm)
         f_axial[indice] += axial.fx_N
@@ -1582,7 +1597,9 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
         if apoio.rigidez_vertical_N_mm > 0:
             k_flexao[dof_v[indice], dof_v[indice]] += apoio.rigidez_vertical_N_mm
         if apoio.rigidez_rotacional_Nmm_rad > 0:
-            k_flexao[dof_theta_esq[indice], dof_theta_esq[indice]] += apoio.rigidez_rotacional_Nmm_rad
+            k_flexao[dof_theta_esq[indice], dof_theta_esq[indice]] += (
+                apoio.rigidez_rotacional_Nmm_rad
+            )
 
     fator_critico = _fator_carga_critica(k_flexao, k_geometrica, restritos_flexao)
     if viga.considerar_segunda_ordem:
@@ -1624,9 +1641,7 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
         indice = no_de(torque.x_mm)
         f_torcao[indice] += torque.t_Nmm
 
-    restritos_torcao = {
-        indice for indice, apoio in apoios_por_no.items() if apoio.restringe_torcao
-    }
+    restritos_torcao = {indice for indice, apoio in apoios_por_no.items() if apoio.restringe_torcao}
     if gj <= 0:
         deslocamentos_torcao = np.zeros(n_nos)
         reacoes_torcao = np.zeros(n_nos)
@@ -1652,10 +1667,9 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
     for elemento in elementos:
         dofs = list(elemento.dofs_flexao)
         u_local = deslocamentos_flexao[dofs]
-        elemento.esforcos_flexao = (
-            _rigidez_flexao(ei, elemento.comprimento) @ u_local
-            - _cargas_equivalentes_flexao(elemento.w_i, elemento.w_j, elemento.comprimento)
-        )
+        elemento.esforcos_flexao = _rigidez_flexao(
+            ei, elemento.comprimento
+        ) @ u_local - _cargas_equivalentes_flexao(elemento.w_i, elemento.w_j, elemento.comprimento)
         elemento.esforcos_equilibrio = elemento.esforcos_flexao
         if viga.considerar_segunda_ordem:
             # O mesmo N médio que entrou em K_g: só assim os esforços de
@@ -1663,8 +1677,7 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
             # e M(x) sai contínuo de um elemento para o outro.
             elemento.normal_geometrico = _normal_medio(elemento)
             elemento.esforcos_equilibrio = elemento.esforcos_flexao + (
-                _rigidez_geometrica(elemento.normal_geometrico, elemento.comprimento)
-                @ u_local
+                _rigidez_geometrica(elemento.normal_geometrico, elemento.comprimento) @ u_local
             )
         elemento.v_i = float(u_local[0])
         elemento.theta_i = float(u_local[1])
@@ -1680,9 +1693,7 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
     pontos: list[PontoDiagrama] = []
     for elemento in elementos:
         for x_local in _amostras(elemento, amostras_por_elemento, ei):
-            pontos.append(
-                _ponto_diagrama(elemento, x_local, viga, ei, ea, gj)
-            )
+            pontos.append(_ponto_diagrama(elemento, x_local, viga, ei, ea, gj))
     pontos.sort(key=lambda ponto: ponto.x_mm)
 
     # -- reações --------------------------------------------------------------
@@ -1708,7 +1719,8 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
             Reacao(
                 x_mm=posicoes[indice],
                 tipo=apoio.tipo,
-                rotulo=apoio.rotulo or f"{apoio.tipo.capitalize()} em x = {posicoes[indice] / 1000:.3g} m",
+                rotulo=apoio.rotulo
+                or f"{apoio.tipo.capitalize()} em x = {posicoes[indice] / 1000:.3g} m",
                 fy_N=fy,
                 fx_N=fx,
                 mz_Nmm=mz,
@@ -1767,9 +1779,7 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
     fator_seguranca = None
     if material.escoamento_MPa:
         maximo = extremos["von_mises"].valor
-        fator_seguranca = (
-            math.inf if maximo <= 0 else material.escoamento_MPa / maximo
-        )
+        fator_seguranca = math.inf if maximo <= 0 else material.escoamento_MPa / maximo
 
     return ResultadoViga(
         viga=viga,
@@ -1805,7 +1815,14 @@ def _amostras(elemento: _Elemento, quantidade: int, ei: float) -> list[float]:
     # EI θ(x) = EI θ_i + v_i x²/2 - m_i x + w_i x³/6 + (w_j - w_i) x⁴/(24 L)
     theta = [inclinacao / 24.0, elemento.w_i / 6.0, v_i / 2.0, -m_i, ei * elemento.theta_i]
     # EI (v(x) − v_i) = EI θ_i x + v_i x³/6 − m_i x²/2 + w_i x⁴/24 + (w_j − w_i) x⁵/(120 L)
-    flecha = [inclinacao / 120.0, elemento.w_i / 24.0, v_i / 6.0, -m_i / 2.0, ei * elemento.theta_i, 0.0]
+    flecha = [
+        inclinacao / 120.0,
+        elemento.w_i / 24.0,
+        v_i / 6.0,
+        -m_i / 2.0,
+        ei * elemento.theta_i,
+        0.0,
+    ]
     # V(x) = Q(x) + N̄ θ(x), com Q(x) = q_i + w_i x + (w_j - w_i) x² / (2 L).
     cortante = [
         theta[0] * fator,
@@ -1845,7 +1862,9 @@ def _raizes_polinomio(coeficientes: Sequence[float], limite: float) -> list[floa
     vez de produzir uma raiz "no infinito" cheia de ruído.
     """
     grau = len(coeficientes) - 1
-    escalados = [float(valor) * limite ** (grau - indice) for indice, valor in enumerate(coeficientes)]
+    escalados = [
+        float(valor) * limite ** (grau - indice) for indice, valor in enumerate(coeficientes)
+    ]
     maior = max((abs(valor) for valor in escalados), default=0.0)
     if not maior or not math.isfinite(maior):
         return []
@@ -1884,12 +1903,15 @@ def _ponto_diagrama(
     n_geo = elemento.normal_geometrico
     x = x_local
 
-    rotacao = elemento.theta_i + (
-        v_i * x**2 / 2.0 - m_i * x + w_i * x**3 / 6.0 + delta_w * x**4 / 24.0
-    ) / ei
-    flecha = elemento.v_i + elemento.theta_i * x + (
-        v_i * x**3 / 6.0 - m_i * x**2 / 2.0 + w_i * x**4 / 24.0 + delta_w * x**5 / 120.0
-    ) / ei
+    rotacao = (
+        elemento.theta_i
+        + (v_i * x**2 / 2.0 - m_i * x + w_i * x**3 / 6.0 + delta_w * x**4 / 24.0) / ei
+    )
+    flecha = (
+        elemento.v_i
+        + elemento.theta_i * x
+        + (v_i * x**3 / 6.0 - m_i * x**2 / 2.0 + w_i * x**4 / 24.0 + delta_w * x**5 / 120.0) / ei
+    )
     # Equilíbrio do trecho [0, x] na configuração deformada: o esforço normal
     # N̄ atuando no braço (v − v_i) é o momento P–Δ dentro do elemento, e
     # V = dM/dx = Q + N̄ θ é o cortante na seção (perpendicular ao eixo
@@ -1897,17 +1919,17 @@ def _ponto_diagrama(
     # ordem N̄ = 0 e as expressões voltam às de primeira ordem.
     transversal = q_i + w_i * x + delta_w * x**2 / 2.0
     momento = (
-        q_i * x - mq_i + w_i * x**2 / 2.0 + delta_w * x**3 / 6.0
-        + n_geo * (flecha - elemento.v_i)
+        q_i * x - mq_i + w_i * x**2 / 2.0 + delta_w * x**3 / 6.0 + n_geo * (flecha - elemento.v_i)
     )
     cortante = transversal + n_geo * rotacao
 
     a_i, a_j = elemento.a_i, elemento.a_j
     delta_a = (a_j - a_i) / l
     normal = -elemento.esforco_axial_i - (a_i * x + delta_a * x**2 / 2.0)
-    deslocamento_axial = elemento.u_i + (
-        -elemento.esforco_axial_i * x - a_i * x**2 / 2.0 - delta_a * x**3 / 6.0
-    ) / ea
+    deslocamento_axial = (
+        elemento.u_i
+        + (-elemento.esforco_axial_i * x - a_i * x**2 / 2.0 - delta_a * x**3 / 6.0) / ea
+    )
 
     torque = elemento.esforco_torcao_i
     giro = elemento.phi_i + (torque * x / gj if gj > 0 else 0.0)
@@ -2075,9 +2097,11 @@ def amplitudes_de_fadiga(
         x_mm = resultado.extremos["momento"].x_mm
     diagrama = ponto_em(resultado, x_mm)
     secao = resultado.viga.secao
-    flexao = abs(diagrama.momento_Nmm) * max(
-        secao.c_superior_mm, secao.c_inferior_mm
-    ) / secao.inercia_mm4
+    flexao = (
+        abs(diagrama.momento_Nmm)
+        * max(secao.c_superior_mm, secao.c_inferior_mm)
+        / secao.inercia_mm4
+    )
     axial = diagrama.normal_N / secao.area_mm2
     if eixo_girante:
         return {
@@ -2110,9 +2134,7 @@ _EXTREMOS = (
 )
 
 
-def _extremo_por_modulo(
-    pontos: Sequence[PontoDiagrama], atributo: str
-) -> PontoDiagrama:
+def _extremo_por_modulo(pontos: Sequence[PontoDiagrama], atributo: str) -> PontoDiagrama:
     """Ponto de maior módulo; empate fica com o de menor ``x``.
 
     Numa viga simétrica o cortante vale +wL/2 num apoio e −wL/2 no outro:
@@ -2127,9 +2149,7 @@ def _extremo_por_modulo(
     """
     maximo = max(abs(getattr(ponto, atributo)) for ponto in pontos)
     limite = maximo * (1.0 - 1e-9)
-    empatados = [
-        ponto for ponto in pontos if abs(getattr(ponto, atributo)) >= limite
-    ]
+    empatados = [ponto for ponto in pontos if abs(getattr(ponto, atributo)) >= limite]
     return min(empatados, key=lambda ponto: ponto.x_mm)
 
 
@@ -2296,9 +2316,7 @@ def viga_da_combinacao(viga: Viga, combinacao: CombinacaoCarga) -> Viga:
         cargas_pontuais=tuple(
             _escalar(item, fator_de(item), ("fy_N",)) for item in viga.cargas_pontuais
         ),
-        momentos=tuple(
-            _escalar(item, fator_de(item), ("mz_Nmm",)) for item in viga.momentos
-        ),
+        momentos=tuple(_escalar(item, fator_de(item), ("mz_Nmm",)) for item in viga.momentos),
         cargas_distribuidas=tuple(
             _escalar(item, fator_de(item), ("w_inicial_N_mm", "w_final_N_mm"))
             for item in viga.cargas_distribuidas
@@ -2310,9 +2328,7 @@ def viga_da_combinacao(viga: Viga, combinacao: CombinacaoCarga) -> Viga:
             _escalar(item, fator_de(item), ("a_inicial_N_mm", "a_final_N_mm"))
             for item in viga.cargas_axiais_distribuidas
         ),
-        torques=tuple(
-            _escalar(item, fator_de(item), ("t_Nmm",)) for item in viga.torques
-        ),
+        torques=tuple(_escalar(item, fator_de(item), ("t_Nmm",)) for item in viga.torques),
         considerar_peso_proprio=peso,
         considerar_segunda_ordem=viga.considerar_segunda_ordem,
         divisoes_por_trecho=viga.divisoes_por_trecho,
@@ -2355,9 +2371,7 @@ def analisar_envoltoria(
     declarados = {nome.strip().casefold() for nome in casos_declarados(viga)}
     for combinacao in lista:
         desconhecidos = [
-            nome
-            for nome in combinacao.casos()
-            if nome.strip().casefold() not in declarados
+            nome for nome in combinacao.casos() if nome.strip().casefold() not in declarados
         ]
         if desconhecidos:
             disponiveis = ", ".join(casos_declarados(viga)) or "nenhum"
@@ -2383,8 +2397,7 @@ def analisar_envoltoria(
     # da sua própria combinação, que naturalmente não coincidem — usar a
     # interseção evita comparar pontos que não existem em todas.
     conjuntos = [
-        {round(ponto.x_mm, 9) for ponto in resultado.pontos}
-        for resultado in resultados.values()
+        {round(ponto.x_mm, 9) for ponto in resultado.pontos} for resultado in resultados.values()
     ]
     comuns = sorted(set.intersection(*conjuntos))
 
@@ -2585,9 +2598,7 @@ def conferir_equilibrio(resultado: ResultadoViga) -> dict[str, float]:
     comprimento_total = viga.comprimento_mm
     soma_fy = sum(reacao.fy_N for reacao in resultado.reacoes)
     soma_fx = sum(reacao.fx_N for reacao in resultado.reacoes)
-    soma_mz = sum(
-        reacao.mz_Nmm + reacao.fy_N * reacao.x_mm for reacao in resultado.reacoes
-    )
+    soma_mz = sum(reacao.mz_Nmm + reacao.fy_N * reacao.x_mm for reacao in resultado.reacoes)
     soma_mt = sum(reacao.mt_Nmm for reacao in resultado.reacoes)
     escala_forca = escala_axial = escala_torque = 0.0
     escala_momento = 0.0
@@ -2626,8 +2637,10 @@ def conferir_equilibrio(resultado: ResultadoViga) -> dict[str, float]:
         # parcela que a rigidez geométrica acrescentou às reações.
         pontos = resultado.pontos
         for anterior, atual in zip(pontos, pontos[1:], strict=False):
-            momento_p_delta += 0.5 * (anterior.normal_N + atual.normal_N) * (
-                atual.deslocamento_mm - anterior.deslocamento_mm
+            momento_p_delta += (
+                0.5
+                * (anterior.normal_N + atual.normal_N)
+                * (atual.deslocamento_mm - anterior.deslocamento_mm)
             )
         soma_mz -= momento_p_delta
 

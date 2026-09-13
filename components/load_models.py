@@ -96,9 +96,7 @@ def _cota_vertical(x: float, y1: float, y2: float, rotulo: str) -> str:
     )
 
 
-def _cota_horizontal(
-    y: float, x1: float, x2: float, rotulo: str, *, acima: bool = False
-) -> str:
+def _cota_horizontal(y: float, x1: float, x2: float, rotulo: str, *, acima: bool = False) -> str:
     return (
         f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="{_COTA}" '
         f'stroke-width="1"/>'
@@ -106,9 +104,7 @@ def _cota_horizontal(
         f'stroke="{_COTA}" stroke-width="1"/>'
         f'<line x1="{x2}" y1="{y - 4}" x2="{x2}" y2="{y + 4}" '
         f'stroke="{_COTA}" stroke-width="1"/>'
-        + _texto(
-            (x1 + x2) / 2, y - 6 if acima else y + 15, rotulo, italico=True
-        )
+        + _texto((x1 + x2) / 2, y - 6 if acima else y + 15, rotulo, italico=True)
     )
 
 
@@ -198,8 +194,14 @@ def _croqui_barra_excentrica() -> str:
         f'<line x1="{ponto_x - 4}" y1="{ponto_y + 4}" x2="{ponto_x + 4}" '
         f'y2="{ponto_y - 4}" stroke="{_CARGA}" stroke-width="2"/>',
         _texto(
-            ponto_x + 12, ponto_y - 6, "F", cor=_CARGA, tamanho=13,
-            ancora="start", peso="700", italico=True,
+            ponto_x + 12,
+            ponto_y - 6,
+            "F",
+            cor=_CARGA,
+            tamanho=13,
+            ancora="start",
+            peso="700",
+            italico=True,
         ),
         f'<line x1="{centro_x}" y1="{centro_y}" x2="{centro_x}" '
         f'y2="{ponto_y}" stroke="{_CARGA}" stroke-width="1.2" '
@@ -207,8 +209,7 @@ def _croqui_barra_excentrica() -> str:
         f'<line x1="{centro_x}" y1="{ponto_y}" x2="{ponto_x}" '
         f'y2="{ponto_y}" stroke="{_CARGA}" stroke-width="1.2" '
         f'stroke-dasharray="3 3"/>',
-        _texto(centro_x - 6, centro_y - 12, "e", cor=_CARGA, ancora="end",
-               italico=True),
+        _texto(centro_x - 6, centro_y - 12, "e", cor=_CARGA, ancora="end", italico=True),
         _texto(centro_x + 11, ponto_y - 6, "e", cor=_CARGA, italico=True),
         _cota_horizontal(128, 95, 185, "b"),
         _cota_vertical(193, 38, 118, "h"),
@@ -272,10 +273,8 @@ def _croqui_mola() -> str:
         "".join(espiras),
         _seta(140, 26, 140, 44),
         _seta(140, 130, 140, 112),
-        _texto(148, 34, "F", cor=_CARGA, tamanho=13, ancora="start",
-               peso="700", italico=True),
-        _texto(148, 128, "F", cor=_CARGA, tamanho=13, ancora="start",
-               peso="700", italico=True),
+        _texto(148, 34, "F", cor=_CARGA, tamanho=13, ancora="start", peso="700", italico=True),
+        _texto(148, 128, "F", cor=_CARGA, tamanho=13, ancora="start", peso="700", italico=True),
         _cota_horizontal(144, 108, 172, "D/2", acima=True),
         _texto(96, 90, "d", cor=_COTA, ancora="end", italico=True),
         _seta(100, 87, 108, 84, cor=_COTA, largura=1.2, cabeca=5),
@@ -290,8 +289,7 @@ def _croqui_viga_retangular() -> str:
         _ponto_avaliado(140, 46, "y"),
         _arco_torque(62, 75, 24, "M"),
         _seta(228, 52, 228, 100),
-        _texto(236, 80, "V", cor=_CARGA, tamanho=13, ancora="start",
-               peso="700", italico=True),
+        _texto(236, 80, "V", cor=_CARGA, tamanho=13, ancora="start", peso="700", italico=True),
         _cota_horizontal(130, 100, 180, "b"),
         _cota_vertical(190, 30, 120, "h"),
     )
@@ -324,15 +322,12 @@ def _croqui_secao_i() -> str:
         _ponto_avaliado(140, 35, "y"),
         _arco_torque(52, 74, 22, "M"),
         _seta(232, 50, 232, 100),
-        _texto(240, 78, "V", cor=_CARGA, tamanho=13, ancora="start",
-               peso="700", italico=True),
+        _texto(240, 78, "V", cor=_CARGA, tamanho=13, ancora="start", peso="700", italico=True),
         _cota_horizontal(130, 95, 185, "b"),
         _cota_vertical(196, 28, 120, "h"),
-        _texto(88, 38, "tf", cor=_COTA, ancora="end", tamanho=10,
-               italico=True),
+        _texto(88, 38, "tf", cor=_COTA, ancora="end", tamanho=10, italico=True),
         _seta(166, 98, 150, 90, cor=_COTA, largura=1.2, cabeca=5),
-        _texto(169, 101, "tw", cor=_COTA, tamanho=10, ancora="start",
-               italico=True),
+        _texto(169, 101, "tw", cor=_COTA, tamanho=10, ancora="start", italico=True),
     )
 
 
@@ -361,21 +356,26 @@ def _croqui_pino() -> str:
         f'<line x1="96" y1="74" x2="184" y2="74" stroke="{_CARGA}" '
         f'stroke-width="1.5" stroke-dasharray="4 3"/>',
         _seta(66, 116, 98, 79, cor=_CARGA, largura=1.2, cabeca=5),
-        _texto(24, 126, "plano de corte", cor=_CARGA, tamanho=10,
-               ancora="start"),
+        _texto(24, 126, "plano de corte", cor=_CARGA, tamanho=10, ancora="start"),
         _seta(44, 63, 20, 63),
         _seta(236, 85, 260, 85),
         _texto(30, 54, "F", cor=_CARGA, tamanho=13, peso="700", italico=True),
-        _texto(250, 77, "F", cor=_CARGA, tamanho=13, peso="700",
-               italico=True),
+        _texto(250, 77, "F", cor=_CARGA, tamanho=13, peso="700", italico=True),
         _cota_horizontal(120, 132, 148, "d"),
     )
 
 
 def _croqui_cilindro_fino() -> str:
     pressao = "".join(
-        _seta(140, 78, 140 + 26 * math.cos(a), 78 + 26 * math.sin(a),
-              cor=_CARGA, largura=1.4, cabeca=5)
+        _seta(
+            140,
+            78,
+            140 + 26 * math.cos(a),
+            78 + 26 * math.sin(a),
+            cor=_CARGA,
+            largura=1.4,
+            cabeca=5,
+        )
         for a in (0.0, 1.05, 2.1, 3.14, 4.19, 5.24)
     )
     return _pecas(
@@ -386,10 +386,8 @@ def _croqui_cilindro_fino() -> str:
         f'<ellipse cx="70" cy="78" rx="13" ry="30" fill="none" '
         f'stroke="{_CONTORNO}" stroke-width="1.4" stroke-dasharray="4 3"/>',
         pressao,
-        _texto(140, 74, "p", cor=_CARGA, tamanho=12, peso="700",
-               italico=True),
-        _texto(105, 40, "σθ (circunferencial)", cor=_CONTORNO, tamanho=10,
-               ancora="start"),
+        _texto(140, 74, "p", cor=_CARGA, tamanho=12, peso="700", italico=True),
+        _texto(105, 40, "σθ (circunferencial)", cor=_CONTORNO, tamanho=10, ancora="start"),
         _seta(96, 108, 96, 122, cor=_CONTORNO, largura=1.4, cabeca=5),
         _texto(102, 126, "σlong", cor=_CONTORNO, tamanho=10, ancora="start"),
         _cota_vertical(232, 48, 108, "D"),
@@ -399,18 +397,22 @@ def _croqui_cilindro_fino() -> str:
 
 def _croqui_esfera() -> str:
     pressao = "".join(
-        _seta(140, 76, 140 + 34 * math.cos(a), 76 + 34 * math.sin(a),
-              cor=_CARGA, largura=1.4, cabeca=5)
+        _seta(
+            140,
+            76,
+            140 + 34 * math.cos(a),
+            76 + 34 * math.sin(a),
+            cor=_CARGA,
+            largura=1.4,
+            cabeca=5,
+        )
         for a in (0.0, 0.9, 1.8, 2.7, 3.6, 4.5, 5.4)
     )
     return _pecas(
-        f'<circle cx="140" cy="76" r="50" fill="{_CORPO}" '
-        f'stroke="{_CONTORNO}" stroke-width="2"/>',
-        f'<circle cx="140" cy="76" r="44" fill="#FFFFFF" '
-        f'stroke="{_CONTORNO}" stroke-width="1.4"/>',
+        f'<circle cx="140" cy="76" r="50" fill="{_CORPO}" stroke="{_CONTORNO}" stroke-width="2"/>',
+        f'<circle cx="140" cy="76" r="44" fill="#FFFFFF" stroke="{_CONTORNO}" stroke-width="1.4"/>',
         pressao,
-        _texto(140, 72, "p", cor=_CARGA, tamanho=12, peso="700",
-               italico=True),
+        _texto(140, 72, "p", cor=_CARGA, tamanho=12, peso="700", italico=True),
         _cota_horizontal(136, 90, 190, "D/2"),
         _seta(226, 24, 180, 47, cor=_COTA, largura=1.2, cabeca=5),
         _texto(230, 22, "t", ancora="start", italico=True),
@@ -419,39 +421,44 @@ def _croqui_esfera() -> str:
 
 def _croqui_parede_espessa() -> str:
     interna = "".join(
-        _seta(140, 76, 140 + 26 * math.cos(a), 76 + 26 * math.sin(a),
-              cor=_CARGA, largura=1.4, cabeca=5)
+        _seta(
+            140,
+            76,
+            140 + 26 * math.cos(a),
+            76 + 26 * math.sin(a),
+            cor=_CARGA,
+            largura=1.4,
+            cabeca=5,
+        )
         for a in (0.79, 2.36, 3.93, 5.50)
     )
     externa = "".join(
-        _seta(140 + 66 * math.cos(a), 76 + 66 * math.sin(a),
-              140 + 54 * math.cos(a), 76 + 54 * math.sin(a),
-              cor=_CONTORNO, largura=1.4, cabeca=5)
+        _seta(
+            140 + 66 * math.cos(a),
+            76 + 66 * math.sin(a),
+            140 + 54 * math.cos(a),
+            76 + 54 * math.sin(a),
+            cor=_CONTORNO,
+            largura=1.4,
+            cabeca=5,
+        )
         for a in (0.78, 2.36, 3.93, 5.5)
     )
     return _pecas(
-        f'<circle cx="140" cy="76" r="52" fill="{_CORPO}" '
-        f'stroke="{_CONTORNO}" stroke-width="2"/>',
-        f'<circle cx="140" cy="76" r="26" fill="#FFFFFF" '
-        f'stroke="{_CONTORNO}" stroke-width="2"/>',
+        f'<circle cx="140" cy="76" r="52" fill="{_CORPO}" stroke="{_CONTORNO}" stroke-width="2"/>',
+        f'<circle cx="140" cy="76" r="26" fill="#FFFFFF" stroke="{_CONTORNO}" stroke-width="2"/>',
         interna,
         externa,
-        _texto(140, 98, "pi", cor=_CARGA, tamanho=11, peso="700",
-               italico=True),
-        _texto(214, 30, "pe", cor=_CONTORNO, tamanho=11, peso="700",
-               italico=True),
+        _texto(140, 98, "pi", cor=_CARGA, tamanho=11, peso="700", italico=True),
+        _texto(214, 30, "pe", cor=_CONTORNO, tamanho=11, peso="700", italico=True),
         _cota_vertical(172, 50, 76, "ri"),
         _cota_vertical(200, 24, 76, "re"),
-        _texto(140, 144, "σr não é desprezível na parede espessa",
-               tamanho=10),
+        _texto(140, 144, "σr não é desprezível na parede espessa", tamanho=10),
     )
 
 
 def _croqui_perfil_u() -> str:
-    perfil = (
-        "M 96,30 L 176,30 L 176,42 L 108,42 L 108,108 L 176,108 L 176,120 "
-        "L 96,120 Z"
-    )
+    perfil = "M 96,30 L 176,30 L 176,42 L 108,42 L 108,108 L 176,108 L 176,120 L 96,120 Z"
     return _pecas(
         f'<path d="{perfil}" fill="{_CORPO}" stroke="{_CONTORNO}" '
         f'stroke-width="2" stroke-linejoin="round"/>',
@@ -468,15 +475,12 @@ def _croqui_perfil_u() -> str:
         _texto(60, 108, "cisalhamento", cor=_CARGA, tamanho=9, peso="600"),
         _cota_horizontal(132, 60, 102, "e"),
         _seta(232, 50, 232, 100),
-        _texto(240, 78, "V", cor=_CARGA, tamanho=13, ancora="start",
-               peso="700", italico=True),
+        _texto(240, 78, "V", cor=_CARGA, tamanho=13, ancora="start", peso="700", italico=True),
         _cota_vertical(188, 30, 120, "h"),
         _cota_horizontal(126, 96, 176, "bf"),
-        _texto(90, 40, "tf", cor=_COTA, ancora="end", tamanho=10,
-               italico=True),
+        _texto(90, 40, "tf", cor=_COTA, ancora="end", tamanho=10, italico=True),
         _seta(86, 62, 100, 70, cor=_COTA, largura=1.2, cabeca=5),
-        _texto(82, 59, "tw", cor=_COTA, ancora="end", tamanho=10,
-               italico=True),
+        _texto(82, 59, "tw", cor=_COTA, ancora="end", tamanho=10, italico=True),
     )
 
 
@@ -493,12 +497,9 @@ def _croqui_cantoneira() -> str:
         # Eixo principal a 45°: a linha neutra não acompanha z.
         f'<line x1="90" y1="134" x2="180" y2="44" stroke="{_CARGA}" '
         f'stroke-width="1.5" stroke-dasharray="6 4"/>',
-        _texto(184, 48, "eixo principal", cor=_CARGA, tamanho=9,
-               ancora="start", peso="600"),
-        _texto(184, 59, "a 45°", cor=_CARGA, tamanho=9, ancora="start",
-               peso="600"),
-        f'<circle cx="{centro_x}" cy="{centro_y}" r="3.5" '
-        f'fill="{_CONTORNO}"/>',
+        _texto(184, 48, "eixo principal", cor=_CARGA, tamanho=9, ancora="start", peso="600"),
+        _texto(184, 59, "a 45°", cor=_CARGA, tamanho=9, ancora="start", peso="600"),
+        f'<circle cx="{centro_x}" cy="{centro_y}" r="3.5" fill="{_CONTORNO}"/>',
         _cota_horizontal(128, 108, 198, "b (as duas abas)"),
         _texto(104, 22, "t", ancora="end", tamanho=10, italico=True),
     )
@@ -573,8 +574,7 @@ _MODELOS = (
     ModeloCarga(
         chave="Barra sob carga axial excêntrica",
         grupo=GRUPO_BARRAS,
-        resumo="Carga axial aplicada fora do centro: comprime de um lado, "
-        "traciona do outro.",
+        resumo="Carga axial aplicada fora do centro: comprime de um lado, traciona do outro.",
         descricao=(
             "A mesma barra, mas com a força deslocada do centroide — o caso "
             "de um pilar carregado na borda ou de um tirante com chapa "
@@ -695,8 +695,7 @@ _MODELOS = (
     ModeloCarga(
         chave="Perfil U sob força axial, flexão e cortante",
         grupo=GRUPO_PERFIS,
-        resumo="Canal laminado: como o I, mas com o centro de cisalhamento "
-        "fora da alma.",
+        resumo="Canal laminado: como o I, mas com o centro de cisalhamento fora da alma.",
         descricao=(
             "O perfil U (canal, canaleta) fletido no eixo forte — o de "
             "simetria. As contas de flexão e de cortante são as mesmas do "
@@ -714,8 +713,7 @@ _MODELOS = (
     ModeloCarga(
         chave="Cantoneira de abas iguais",
         grupo=GRUPO_PERFIS,
-        resumo="Perfil L: os eixos das abas não são principais, então a "
-        "flexão sai oblíqua.",
+        resumo="Perfil L: os eixos das abas não são principais, então a flexão sai oblíqua.",
         descricao=(
             "Uma cantoneira (perfil L) de abas iguais. É o caso em que a "
             "fórmula σ = My/I sozinha engana: como o produto de inércia nos "
@@ -734,8 +732,7 @@ _MODELOS = (
     ModeloCarga(
         chave="Perfil tubular retangular (caixão)",
         grupo=GRUPO_PERFIS,
-        resumo="Tubo retangular fechado: flexão mais torção pela fórmula "
-        "de Bredt.",
+        resumo="Tubo retangular fechado: flexão mais torção pela fórmula de Bredt.",
         descricao=(
             "Um perfil tubular retangular de parede fina — o tubo quadrado ou "
             "retangular usado em chassis, pórticos e estruturas soldadas. "
@@ -753,8 +750,7 @@ _MODELOS = (
     ModeloCarga(
         chave="Pinos ou parafusos sob cisalhamento",
         grupo=GRUPO_LIGACOES,
-        resumo="Pino cortado transversalmente pela força, em um ou dois "
-        "planos.",
+        resumo="Pino cortado transversalmente pela força, em um ou dois planos.",
         descricao=(
             "Um pino ou parafuso sendo cortado transversalmente pela força, "
             "como uma tesoura corta um papel. O modelo divide a carga "
@@ -802,8 +798,7 @@ _MODELOS = (
     ModeloCarga(
         chave="Cilindro de parede espessa",
         grupo=GRUPO_PRESSAO,
-        resumo="Solução de Lamé para D/t < 20, quando σr deixa de ser "
-        "desprezível.",
+        resumo="Solução de Lamé para D/t < 20, quando σr deixa de ser desprezível.",
         descricao=(
             "O modelo a usar quando a parede é grossa demais para a hipótese "
             "de membrana (D/t abaixo de 20): tubos de alta pressão, blocos "
@@ -823,8 +818,7 @@ _MODELOS = (
 CATALOGO: dict[str, ModeloCarga] = {modelo.chave: modelo for modelo in _MODELOS}
 
 GRUPOS: dict[str, list[str]] = {
-    grupo: [modelo.chave for modelo in _MODELOS if modelo.grupo == grupo]
-    for grupo in ORDEM_GRUPOS
+    grupo: [modelo.chave for modelo in _MODELOS if modelo.grupo == grupo] for grupo in ORDEM_GRUPOS
 }
 
 MODELO_PADRAO = _MODELOS[0].chave

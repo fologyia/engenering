@@ -9,17 +9,11 @@ from core import materials
 class AdditionalLoadModelsTests(unittest.TestCase):
     def test_hollow_shaft_matches_section_properties(self):
         de, di = 40.0, 20.0
-        estado = modelos.eixo_circular_vazado(
-            de, di, 10_000.0, 200_000.0, 100_000.0, "tracionada"
-        )
+        estado = modelos.eixo_circular_vazado(de, di, 10_000.0, 200_000.0, 100_000.0, "tracionada")
         area = math.pi * (de**2 - di**2) / 4.0
         inercia = math.pi * (de**4 - di**4) / 64.0
-        self.assertAlmostEqual(
-            estado.sigma_x, 10_000.0 / area + 200_000.0 * (de / 2) / inercia
-        )
-        self.assertAlmostEqual(
-            estado.tau_xy, 100_000.0 * (de / 2) / (2.0 * inercia)
-        )
+        self.assertAlmostEqual(estado.sigma_x, 10_000.0 / area + 200_000.0 * (de / 2) / inercia)
+        self.assertAlmostEqual(estado.tau_xy, 100_000.0 * (de / 2) / (2.0 * inercia))
 
     def test_hollow_shaft_rejects_invalid_diameters(self):
         with self.assertRaises(ValueError):
@@ -51,9 +45,7 @@ class AdditionalLoadModelsTests(unittest.TestCase):
             momento_fletor_Nmm=5_000_000.0,
         )
         inercia = (100.0 * 200.0**3 - 94.0 * 180.0**3) / 12.0
-        self.assertAlmostEqual(
-            estado.sigma_x, -5_000_000.0 * 100.0 / inercia
-        )
+        self.assertAlmostEqual(estado.sigma_x, -5_000_000.0 * 100.0 / inercia)
 
     def test_pin_double_shear(self):
         estado = modelos.pino_cisalhamento(
@@ -75,12 +67,8 @@ class AdditionalLoadModelsTests(unittest.TestCase):
             torque_Nmm=1_000_000.0,
         )
         self.assertAlmostEqual(estado.sigma_y, 100.0)
-        self.assertAlmostEqual(
-            estado.sigma_x, 50.0 + 10_000.0 / (math.pi * 500.0 * 5.0)
-        )
-        self.assertAlmostEqual(
-            estado.tau_xy, 2_000_000.0 / (math.pi * 500.0**2 * 5.0)
-        )
+        self.assertAlmostEqual(estado.sigma_x, 50.0 + 10_000.0 / (math.pi * 500.0 * 5.0))
+        self.assertAlmostEqual(estado.tau_xy, 2_000_000.0 / (math.pi * 500.0**2 * 5.0))
 
     def test_thin_sphere_is_equibiaxial(self):
         estado = modelos.vaso_esferico_parede_fina(2.0, 500.0, 5.0)
@@ -95,16 +83,12 @@ class ExpandedMaterialsTests(unittest.TestCase):
         self.assertGreaterEqual(len(df), 30)
         self.assertIn("Aço inoxidável duplex 2205 solubilizado", set(df["nome"]))
         self.assertIn("Alumínio 7075-T6 chapa", set(df["nome"]))
-        self.assertIn(
-            "Ferro fundido nodular ASTM A536 65-45-12", set(df["nome"])
-        )
+        self.assertIn("Ferro fundido nodular ASTM A536 65-45-12", set(df["nome"]))
 
 
 class EccentricBarTests(unittest.TestCase):
     def test_centered_load_is_uniform(self):
-        estado = modelos.barra_axial_excentrica(
-            12_000.0, 40.0, 60.0, 0.0, 0.0, 30.0, 20.0
-        )
+        estado = modelos.barra_axial_excentrica(12_000.0, 40.0, 60.0, 0.0, 0.0, 30.0, 20.0)
         self.assertAlmostEqual(estado.sigma_x, 12_000.0 / 2_400.0)
 
     def test_eccentricity_adds_bending_on_the_loaded_side(self):
@@ -125,22 +109,16 @@ class EccentricBarTests(unittest.TestCase):
         # No limite do núcleo a tensão na face oposta é exatamente zero.
         largura, altura = 40.0, 60.0
         limite = altura / 6.0
-        self.assertAlmostEqual(
-            modelos.fator_nucleo_central(largura, altura, limite, 0.0), 1.0
-        )
+        self.assertAlmostEqual(modelos.fator_nucleo_central(largura, altura, limite, 0.0), 1.0)
         estado = modelos.barra_axial_excentrica(
             10_000.0, largura, altura, limite, 0.0, -altura / 2.0, 0.0
         )
         self.assertAlmostEqual(estado.sigma_x, 0.0)
-        self.assertGreater(
-            modelos.fator_nucleo_central(largura, altura, limite, 1.0), 1.0
-        )
+        self.assertGreater(modelos.fator_nucleo_central(largura, altura, limite, 1.0), 1.0)
 
     def test_point_outside_the_section_is_rejected(self):
         with self.assertRaises(ValueError):
-            modelos.barra_axial_excentrica(
-                1_000.0, 40.0, 60.0, 0.0, 0.0, 31.0, 0.0
-            )
+            modelos.barra_axial_excentrica(1_000.0, 40.0, 60.0, 0.0, 0.0, 31.0, 0.0)
 
 
 class RectangularTubeTests(unittest.TestCase):
@@ -151,35 +129,24 @@ class RectangularTubeTests(unittest.TestCase):
             largura, altura, espessura, altura / 2.0, 0.0, momento, 0.0
         )
         inercia = (
-            largura * altura**3
-            - (largura - 2 * espessura) * (altura - 2 * espessura) ** 3
+            largura * altura**3 - (largura - 2 * espessura) * (altura - 2 * espessura) ** 3
         ) / 12.0
-        self.assertAlmostEqual(
-            estado.sigma_x, -momento * (altura / 2.0) / inercia
-        )
+        self.assertAlmostEqual(estado.sigma_x, -momento * (altura / 2.0) / inercia)
 
     def test_torsion_follows_bredt(self):
         largura, altura, espessura, torque = 60.0, 100.0, 5.0, 500_000.0
-        estado = modelos.secao_tubular_retangular(
-            largura, altura, espessura, 0.0, 0.0, 0.0, torque
-        )
+        estado = modelos.secao_tubular_retangular(largura, altura, espessura, 0.0, 0.0, 0.0, torque)
         area_media = (largura - espessura) * (altura - espessura)
-        self.assertAlmostEqual(
-            estado.tau_xy, torque / (2.0 * area_media * espessura)
-        )
+        self.assertAlmostEqual(estado.tau_xy, torque / (2.0 * area_media * espessura))
 
     def test_wall_thicker_than_half_the_side_is_rejected(self):
         with self.assertRaises(ValueError):
-            modelos.secao_tubular_retangular(
-                40.0, 100.0, 20.0, 0.0, 0.0, 0.0, 0.0
-            )
+            modelos.secao_tubular_retangular(40.0, 100.0, 20.0, 0.0, 0.0, 0.0, 0.0)
 
 
 class ThickWallCylinderTests(unittest.TestCase):
     def test_inner_radial_stress_equals_minus_internal_pressure(self):
-        sigma_r, sigma_theta, sigma_long = modelos.tensoes_lame(
-            50.0, 0.0, 50.0, 80.0, 50.0
-        )
+        sigma_r, sigma_theta, sigma_long = modelos.tensoes_lame(50.0, 0.0, 50.0, 80.0, 50.0)
         self.assertAlmostEqual(sigma_r, -50.0)
         # Equilíbrio de Lamé: σr + σθ é constante ao longo da parede.
         externa = modelos.tensoes_lame(50.0, 0.0, 50.0, 80.0, 80.0)
@@ -210,12 +177,8 @@ class ThickWallCylinderTests(unittest.TestCase):
 
     def test_plane_choice_selects_which_stress_goes_forward(self):
         comum = (50.0, 0.0, 50.0, 80.0, 50.0, True)
-        radial = modelos.cilindro_parede_espessa(
-            *comum, plano="radial-circunferencial"
-        )
-        longitudinal = modelos.cilindro_parede_espessa(
-            *comum, plano="longitudinal-circunferencial"
-        )
+        radial = modelos.cilindro_parede_espessa(*comum, plano="radial-circunferencial")
+        longitudinal = modelos.cilindro_parede_espessa(*comum, plano="longitudinal-circunferencial")
         sigma_r, sigma_theta, sigma_long = modelos.tensoes_lame(*comum)
         self.assertAlmostEqual(radial.sigma_x, sigma_r)
         self.assertAlmostEqual(longitudinal.sigma_x, sigma_long)
@@ -229,9 +192,7 @@ class ThickWallCylinderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             modelos.tensoes_lame(10.0, 0.0, 50.0, 80.0, 90.0)
         with self.assertRaises(ValueError):
-            modelos.cilindro_parede_espessa(
-                10.0, 0.0, 50.0, 80.0, 50.0, True, "axial"
-            )
+            modelos.cilindro_parede_espessa(10.0, 0.0, 50.0, 80.0, 50.0, True, "axial")
 
 
 class HelicalSpringTests(unittest.TestCase):
@@ -245,9 +206,7 @@ class HelicalSpringTests(unittest.TestCase):
         forca, diametro_medio, diametro_fio = 500.0, 40.0, 5.0
         estado = modelos.mola_helicoidal(forca, diametro_medio, diametro_fio)
         fator = modelos.fator_wahl(modelos.indice_mola(40.0, 5.0))
-        esperado = (
-            fator * 8.0 * forca * diametro_medio / (math.pi * diametro_fio**3)
-        )
+        esperado = fator * 8.0 * forca * diametro_medio / (math.pi * diametro_fio**3)
         self.assertAlmostEqual(estado.tau_xy, esperado)
         self.assertEqual(estado.sigma_x, 0.0)
         self.assertEqual(estado.sigma_y, 0.0)
@@ -264,27 +223,20 @@ class HelicalSpringTests(unittest.TestCase):
 
 class IsectionShearTests(unittest.TestCase):
     def test_shear_is_zero_at_the_extreme_fibre(self):
-        estado = modelos.secao_i_flexao(
-            200.0, 100.0, 10.0, 6.0, 100.0, 0.0, 0.0, 50_000.0
-        )
+        estado = modelos.secao_i_flexao(200.0, 100.0, 10.0, 6.0, 100.0, 0.0, 0.0, 50_000.0)
         self.assertAlmostEqual(estado.tau_xy, 0.0)
 
     def test_shear_peaks_at_the_centroid(self):
         comum = (200.0, 100.0, 10.0, 6.0)
-        no_centroide = modelos.secao_i_flexao(
-            *comum, 0.0, 0.0, 0.0, 50_000.0
-        )
+        no_centroide = modelos.secao_i_flexao(*comum, 0.0, 0.0, 0.0, 50_000.0)
         na_alma = modelos.secao_i_flexao(*comum, 60.0, 0.0, 0.0, 50_000.0)
         self.assertGreater(no_centroide.tau_xy, na_alma.tau_xy)
 
         altura, mesa, t_mesa, t_alma = comum
         altura_alma = altura - 2.0 * t_mesa
-        inercia = (
-            mesa * altura**3 - (mesa - t_alma) * altura_alma**3
-        ) / 12.0
+        inercia = (mesa * altura**3 - (mesa - t_alma) * altura_alma**3) / 12.0
         momento_estatico = (
-            mesa * t_mesa * (altura - t_mesa) / 2.0
-            + t_alma * (altura_alma / 2.0) ** 2 / 2.0
+            mesa * t_mesa * (altura - t_mesa) / 2.0 + t_alma * (altura_alma / 2.0) ** 2 / 2.0
         )
         self.assertAlmostEqual(
             no_centroide.tau_xy,
@@ -297,9 +249,7 @@ class IsectionShearTests(unittest.TestCase):
         # muda de tw para b e a tensão cai na mesma proporção.
         na_alma = modelos.secao_i_flexao(*comum, 89.9, 0.0, 0.0, 50_000.0)
         na_mesa = modelos.secao_i_flexao(*comum, 90.1, 0.0, 0.0, 50_000.0)
-        self.assertAlmostEqual(
-            na_alma.tau_xy / na_mesa.tau_xy, 100.0 / 6.0, delta=0.3
-        )
+        self.assertAlmostEqual(na_alma.tau_xy / na_mesa.tau_xy, 100.0 / 6.0, delta=0.3)
 
     def test_default_keeps_the_previous_behaviour(self):
         estado = modelos.secao_i_flexao(200.0, 100.0, 10.0, 6.0, 0.0, 0.0, 0.0)
@@ -315,9 +265,7 @@ class ChannelSectionTests(unittest.TestCase):
     def test_properties_match_the_rolled_section_table(self):
         propriedades = modelos.propriedades_perfil_u(*self.UPN200)
         self.assertAlmostEqual(propriedades["area"] / 100.0, 32.2, delta=0.3)
-        self.assertAlmostEqual(
-            propriedades["inercia_z"] / 1e4, 1910.0, delta=40.0
-        )
+        self.assertAlmostEqual(propriedades["inercia_z"] / 1e4, 1910.0, delta=40.0)
         self.assertLess(propriedades["inercia_y"], propriedades["inercia_z"])
 
     def test_shear_centre_sits_outside_the_web(self):
@@ -333,21 +281,13 @@ class ChannelSectionTests(unittest.TestCase):
         )
 
     def test_bending_and_shear_follow_the_same_law_as_the_i_section(self):
-        estado = modelos.secao_u_flexao(
-            *self.UPN200, 100.0, 0.0, 10e6, 0.0
-        )
+        estado = modelos.secao_u_flexao(*self.UPN200, 100.0, 0.0, 10e6, 0.0)
         propriedades = modelos.propriedades_perfil_u(*self.UPN200)
-        self.assertAlmostEqual(
-            estado.sigma_x, -10e6 * 100.0 / propriedades["inercia_z"]
-        )
+        self.assertAlmostEqual(estado.sigma_x, -10e6 * 100.0 / propriedades["inercia_z"])
         self.assertEqual(estado.tau_xy, 0.0)
 
-        no_centroide = modelos.secao_u_flexao(
-            *self.UPN200, 0.0, 0.0, 0.0, 60_000.0
-        )
-        na_fibra = modelos.secao_u_flexao(
-            *self.UPN200, 100.0, 0.0, 0.0, 60_000.0
-        )
+        no_centroide = modelos.secao_u_flexao(*self.UPN200, 0.0, 0.0, 0.0, 60_000.0)
+        na_fibra = modelos.secao_u_flexao(*self.UPN200, 100.0, 0.0, 0.0, 60_000.0)
         self.assertGreater(no_centroide.tau_xy, 0.0)
         self.assertAlmostEqual(na_fibra.tau_xy, 0.0)
 
@@ -389,26 +329,20 @@ class EqualLegAngleTests(unittest.TestCase):
             0.0, 1e6, p["inercia_y"], p["inercia_z"], p["produto_inercia"]
         )
         # tan(α) = Iyz/Iy para Mz puro numa seção de abas iguais.
-        esperado = math.degrees(
-            math.atan(p["produto_inercia"] / p["inercia_y"])
-        )
+        esperado = math.degrees(math.atan(p["produto_inercia"] / p["inercia_y"]))
         self.assertAlmostEqual(inclinacao, esperado, places=6)
         self.assertLess(inclinacao, -25.0)
         self.assertGreater(inclinacao, -35.0)
 
     def test_symmetric_section_keeps_the_neutral_axis_horizontal(self):
         # Sem produto de inércia a flexão é reta: 0° sob Mz puro.
-        self.assertAlmostEqual(
-            modelos.angulo_linha_neutra(0.0, 1e6, 500.0, 900.0, 0.0), 0.0
-        )
+        self.assertAlmostEqual(modelos.angulo_linha_neutra(0.0, 1e6, 500.0, 900.0, 0.0), 0.0)
 
     def test_unsymmetric_formula_reduces_to_the_principal_axes_case(self):
         # Com Iyz = 0 deve coincidir com o modelo de flexão biaxial.
         largura, altura = 40.0, 60.0
         y, z, forca, my, mz = 30.0, 20.0, 5_000.0, 100_000.0, 200_000.0
-        referencia = modelos.secao_retangular_flexao_biaxial(
-            largura, altura, y, z, forca, my, mz
-        )
+        referencia = modelos.secao_retangular_flexao_biaxial(largura, altura, y, z, forca, my, mz)
         geral = modelos.tensao_flexao_assimetrica(
             forca,
             largura * altura,
@@ -430,9 +364,7 @@ class EqualLegAngleTests(unittest.TestCase):
             (-p["centroide"], 100.0 - p["centroide"]),
             (-p["centroide"], -p["centroide"]),
         ):
-            estado = modelos.cantoneira_abas_iguais(
-                *self.L100, *ponto, 20_000.0, 0.0, 0.0
-            )
+            estado = modelos.cantoneira_abas_iguais(*self.L100, *ponto, 20_000.0, 0.0, 0.0)
             self.assertAlmostEqual(estado.sigma_x, esperado)
 
     def test_point_outside_the_section_is_rejected(self):
@@ -444,9 +376,7 @@ class EqualLegAngleTests(unittest.TestCase):
 
     def test_degenerate_inertia_is_rejected(self):
         with self.assertRaises(ValueError):
-            modelos.tensao_flexao_assimetrica(
-                0.0, 100.0, 1.0, 1.0, 100.0, 100.0, 100.0, 1.0, 1.0
-            )
+            modelos.tensao_flexao_assimetrica(0.0, 100.0, 1.0, 1.0, 100.0, 100.0, 100.0, 1.0, 1.0)
         with self.assertRaises(ValueError):
             modelos.propriedades_cantoneira_abas_iguais(10.0, 10.0)
 
@@ -456,9 +386,7 @@ class LoadModelCatalogTests(unittest.TestCase):
         self.assertEqual(
             sorted(catalogo.CATALOGO),
             sorted(
-                chave
-                for modelos_do_grupo in catalogo.GRUPOS.values()
-                for chave in modelos_do_grupo
+                chave for modelos_do_grupo in catalogo.GRUPOS.values() for chave in modelos_do_grupo
             ),
         )
         for grupo, chaves in catalogo.GRUPOS.items():
@@ -496,9 +424,7 @@ class LoadModelCatalogTests(unittest.TestCase):
     def test_comparison_table_covers_every_model(self):
         linhas = catalogo.tabela_comparativa()
         self.assertEqual(len(linhas), len(catalogo.CATALOGO))
-        self.assertEqual(
-            {linha["Modelo"] for linha in linhas}, set(catalogo.CATALOGO)
-        )
+        self.assertEqual({linha["Modelo"] for linha in linhas}, set(catalogo.CATALOGO))
 
 
 if __name__ == "__main__":

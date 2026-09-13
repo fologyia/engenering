@@ -116,7 +116,9 @@ def _modelos_de(dados: Mapping[str, Any], *, editavel: bool, origem: str) -> lis
             raise ModeloChecklistErro(f"{origem}: o modelo {posicao} precisa de 'id' e 'nome'.")
         itens_brutos = bruto.get("itens")
         if not isinstance(itens_brutos, Sequence) or isinstance(itens_brutos, (str, bytes)):
-            raise ModeloChecklistErro(f"{origem}: o modelo {modelo_id} precisa de uma lista 'itens'.")
+            raise ModeloChecklistErro(
+                f"{origem}: o modelo {modelo_id} precisa de uma lista 'itens'."
+            )
         itens = tuple(
             _item_de(item, modelo_id=modelo_id, posicao=indice)
             for indice, item in enumerate(itens_brutos, start=1)
@@ -235,9 +237,7 @@ def instanciar_modelo(
     return linhas
 
 
-def itens_ja_aplicados(
-    projeto: Mapping[str, Any], modelo: ModeloChecklist
-) -> set[str]:
+def itens_ja_aplicados(projeto: Mapping[str, Any], modelo: ModeloChecklist) -> set[str]:
     """Chaves do modelo que já estão no checklist (por origem ou por texto igual)."""
     origens = {
         _texto(item.get("origem_modelo"))
@@ -273,7 +273,9 @@ def aplicar_modelo(
     existentes = itens_ja_aplicados(documento, modelo)
     novos = [
         linha
-        for item, linha in zip(modelo.itens, instanciar_modelo(modelo, documento, hoje=hoje), strict=True)
+        for item, linha in zip(
+            modelo.itens, instanciar_modelo(modelo, documento, hoje=hoje), strict=True
+        )
         if item.chave not in existentes
     ]
     checklist = [item for item in documento.get("checklist", []) if isinstance(item, Mapping)]

@@ -124,6 +124,7 @@ class MemorialWordTests(unittest.TestCase):
         self.assertIn("NÃO ATENDE", text)
         self.assertIn("500.000 ciclos", text)
         self.assertIn("1.000.000 ciclos requeridos", text)
+
     def test_tables_have_fixed_matching_dxa_geometry(self):
         content = memorial_word.gerar_memorial_fadiga_word(self.dados, self.linhas)
         ns = {"w": W_NS}
@@ -140,8 +141,7 @@ class MemorialWordTests(unittest.TestCase):
             width_node = table.find("w:tblPr/w:tblW", ns)
             indent_node = table.find("w:tblPr/w:tblInd", ns)
             grid = [
-                int(node.get(attr("w"), "0"))
-                for node in table.findall("w:tblGrid/w:gridCol", ns)
+                int(node.get(attr("w"), "0")) for node in table.findall("w:tblGrid/w:gridCol", ns)
             ]
             self.assertIsNotNone(width_node)
             self.assertEqual(width_node.get(attr("type")), "dxa")
@@ -162,12 +162,12 @@ class MemorialWordTests(unittest.TestCase):
 
         numbering_children = list(numbering_root)
         abstract_positions = [
-            index for index, node in enumerate(numbering_children)
+            index
+            for index, node in enumerate(numbering_children)
             if node.tag == f"{{{W_NS}}}abstractNum"
         ]
         num_positions = [
-            index for index, node in enumerate(numbering_children)
-            if node.tag == f"{{{W_NS}}}num"
+            index for index, node in enumerate(numbering_children) if node.tag == f"{{{W_NS}}}num"
         ]
         self.assertLess(max(abstract_positions), min(num_positions))
 
@@ -182,15 +182,11 @@ class MemorialWordTests(unittest.TestCase):
 
         def list_format_for(text_fragment):
             for paragraph in root.findall(".//w:body/w:p", ns):
-                text = "".join(
-                    node.text or "" for node in paragraph.findall(".//w:t", ns)
-                )
+                text = "".join(node.text or "" for node in paragraph.findall(".//w:t", ns))
                 if text_fragment in text:
                     num_node = paragraph.find("w:pPr/w:numPr/w:numId", ns)
                     self.assertIsNotNone(num_node)
-                    return abstract_to_format[
-                        num_to_abstract[num_node.get(attr("val"))]
-                    ]
+                    return abstract_to_format[num_to_abstract[num_node.get(attr("val"))]]
             self.fail(f"Item de lista não encontrado: {text_fragment}")
 
         self.assertEqual(list_format_for("Carregamento proporcional"), "bullet")

@@ -54,7 +54,12 @@ def test_memorial_modular_preserva_ordem_materiais_sensibilidade_e_hash():
         condicao="Normalizado",
         forma_produto="Chapa 10 mm",
         lote="L-1",
-        propriedades={"Sut_MPa": 430, "Sy_MPa": 280, "temperatura_min_C": -20, "temperatura_max_C": 100},
+        propriedades={
+            "Sut_MPa": 430,
+            "Sy_MPa": 280,
+            "temperatura_min_C": -20,
+            "temperatura_max_C": 100,
+        },
         origem_tipo="Certificado do lote / MTR",
         fonte="Usina",
         documento="MTR-1",
@@ -76,7 +81,14 @@ def test_memorial_modular_preserva_ordem_materiais_sensibilidade_e_hash():
             "p05": 0.7,
             "p95": 0.92,
             "probabilidade_nao_atendimento_pct": 1.2,
-            "ranking_sensibilidade": [{"variavel": "Demanda", "impacto_percentual": 20, "elasticidade": 1, "direcao_critica": "aumentar"}],
+            "ranking_sensibilidade": [
+                {
+                    "variavel": "Demanda",
+                    "impacto_percentual": 20,
+                    "elasticidade": 1,
+                    "direcao_critica": "aumentar",
+                }
+            ],
             "correlacoes_spearman": [{"variavel": "Demanda", "correlacao": 0.8}],
         },
         premissas=["Entradas independentes"],

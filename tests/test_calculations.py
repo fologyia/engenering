@@ -45,17 +45,14 @@ class FatigueTests(unittest.TestCase):
             fatigue.tensao_alternada_equivalente_goodman(100, 100, 600),
             120,
         )
-        self.assertTrue(
-            math.isinf(
-                fatigue.tensao_alternada_equivalente_goodman(100, 600, 600)
-            )
-        )
+        self.assertTrue(math.isinf(fatigue.tensao_alternada_equivalente_goodman(100, 600, 600)))
 
     def test_fatigue_domain_validation(self):
         with self.assertRaises(ValueError):
             fatigue.fator_tamanho(20, tipo_carga="invalida")
         with self.assertRaises(ValueError):
             fatigue.tensao_com_concentracao(-1, 1.5)
+
     def test_norton_marin_factors(self):
         self.assertEqual(fatigue.fator_carregamento("axial", "norton"), 0.70)
         self.assertEqual(fatigue.fator_tamanho(251, modelo="norton"), 0.6)
@@ -134,9 +131,7 @@ class FatigueTests(unittest.TestCase):
         )
 
     def test_zero_fluctuating_stress_has_infinite_safety(self):
-        self.assertTrue(
-            math.isinf(fatigue.fator_seguranca_goodman(0, 0, 200, 600))
-        )
+        self.assertTrue(math.isinf(fatigue.fator_seguranca_goodman(0, 0, 200, 600)))
 
     def test_negative_mean_stress_is_rejected_by_tensile_model(self):
         with self.assertRaises(ValueError):
@@ -145,21 +140,16 @@ class FatigueTests(unittest.TestCase):
     def test_notch_factor_limits(self):
         self.assertEqual(fatigue.fator_concentracao_fadiga(2.0, 0.0), 1.0)
         self.assertEqual(fatigue.fator_concentracao_fadiga(2.0, 1.0), 2.0)
-        self.assertAlmostEqual(
-            fatigue.fator_concentracao_fadiga(2.0, 0.5), 1.5
-        )
-        self.assertAlmostEqual(
-            fatigue.tensao_com_concentracao(100.0, 1.5), 150.0
-        )
+        self.assertAlmostEqual(fatigue.fator_concentracao_fadiga(2.0, 0.5), 1.5)
+        self.assertAlmostEqual(fatigue.tensao_com_concentracao(100.0, 1.5), 150.0)
         with self.assertRaises(ValueError):
             fatigue.fator_concentracao_fadiga(0.9, 0.5)
+
 
 class SizeEffectTests(unittest.TestCase):
     def test_equivalent_diameter_from_area_95(self):
         self.assertAlmostEqual(
-            size_effect.diametro_equivalente_por_area_95(
-                size_effect.area_95_circulo_rotativo(20)
-            ),
+            size_effect.diametro_equivalente_por_area_95(size_effect.area_95_circulo_rotativo(20)),
             20,
         )
         self.assertAlmostEqual(
@@ -170,20 +160,14 @@ class SizeEffectTests(unittest.TestCase):
             places=6,
         )
         self.assertAlmostEqual(
-            size_effect.diametro_equivalente_por_area_95(
-                size_effect.area_95_retangulo(60, 40)
-            ),
+            size_effect.diametro_equivalente_por_area_95(size_effect.area_95_retangulo(60, 40)),
             0.808 * math.sqrt(60 * 40),
             places=2,
         )
 
     def test_i_and_channel_areas_follow_selected_axis(self):
-        self.assertEqual(
-            size_effect.area_95_perfil_i(100, 200, 10, "eixo 1-1"), 100
-        )
-        self.assertEqual(
-            size_effect.area_95_perfil_i(100, 200, 10, "eixo 2-2"), 1000
-        )
+        self.assertEqual(size_effect.area_95_perfil_i(100, 200, 10, "eixo 1-1"), 100)
+        self.assertEqual(size_effect.area_95_perfil_i(100, 200, 10, "eixo 2-2"), 1000)
         self.assertEqual(
             size_effect.area_95_perfil_canal(100, 200, 10, 70, "eixo 1-1"),
             1000,
@@ -200,6 +184,7 @@ class SizeEffectTests(unittest.TestCase):
             size_effect.area_95_perfil_canal(100, 200, 10, 201, "eixo 2-2")
         with self.assertRaises(ValueError):
             fatigue.fator_tamanho(2.78, modelo="shigley")
+
 
 class MaterialsTests(unittest.TestCase):
     def test_material_database_schema(self):

@@ -53,6 +53,7 @@ def _linha_material(material: dict) -> dict:
         "Rastreabilidade (%)": avaliacao["indice_rastreabilidade"],
     }
 
+
 configurar_pagina("Materiais técnicos", ":material/science:")
 
 cabecalho_pagina(
@@ -68,7 +69,9 @@ cabecalho_pagina(
 sincronizar_projeto_ativo()
 projeto = obter_projeto_ativo()
 catalogo = _catalogo()
-materiais_projeto = [material_com_avaliacao(item) for item in (projeto or {}).get("materiais_projeto", [])]
+materiais_projeto = [
+    material_com_avaliacao(item) for item in (projeto or {}).get("materiais_projeto", [])
+]
 
 st.info(
     "O catálogo é orientativo. Um material só ganha confiança quando a propriedade está ligada à forma do produto, "
@@ -76,12 +79,15 @@ st.info(
     icon=":material/policy:",
 )
 
-modo = st.segmented_control(
-    "Área de trabalho",
-    ["Catálogo de referência", "Biblioteca do projeto", "Comparar"],
-    default="Biblioteca do projeto" if projeto else "Catálogo de referência",
-    selection_mode="single",
-) or "Catálogo de referência"
+modo = (
+    st.segmented_control(
+        "Área de trabalho",
+        ["Catálogo de referência", "Biblioteca do projeto", "Comparar"],
+        default="Biblioteca do projeto" if projeto else "Catálogo de referência",
+        selection_mode="single",
+    )
+    or "Catálogo de referência"
+)
 
 if modo == "Catálogo de referência":
     f1, f2 = st.columns([2, 1])
@@ -89,11 +95,16 @@ if modo == "Catálogo de referência":
     familias = sorted({item["familia"] for item in catalogo})
     familia = f2.selectbox("Família", ["Todas", *familias])
     filtrados = [
-        item for item in catalogo
+        item
+        for item in catalogo
         if (not busca or busca.casefold() in item["nome"].casefold())
         and (familia == "Todas" or item["familia"] == familia)
     ]
-    st.dataframe(pd.DataFrame([_linha_material(item) for item in filtrados]), hide_index=True, width="stretch")
+    st.dataframe(
+        pd.DataFrame([_linha_material(item) for item in filtrados]),
+        hide_index=True,
+        width="stretch",
+    )
     st.caption(
         "Sut e Sy reproduzem a base orientativa já existente no aplicativo. Campos ausentes não são estimados. "
         "Use a biblioteca do projeto para registrar evidência e condições reais."
@@ -101,17 +112,35 @@ if modo == "Catálogo de referência":
 
 elif modo == "Biblioteca do projeto":
     if projeto is None:
-        st.warning("Abra um projeto permanente para cadastrar materiais rastreáveis.", icon=":material/warning:")
-        st.page_link("app_pages/gestao_projetos.py", label="Abrir Gestão de projetos", icon=":material/folder_managed:")
+        st.warning(
+            "Abra um projeto permanente para cadastrar materiais rastreáveis.",
+            icon=":material/warning:",
+        )
+        st.page_link(
+            "app_pages/gestao_projetos.py",
+            label="Abrir Gestão de projetos",
+            icon=":material/folder_managed:",
+        )
         st.stop()
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Materiais no projeto", len(materiais_projeto))
-    c2.metric("Confirmados / rastreáveis", sum(item["avaliacao"]["nivel"] in {"Confirmado", "Rastreável"} for item in materiais_projeto))
-    c3.metric("Vinculados ao escopo", sum(bool(item.get("vinculacoes")) for item in materiais_projeto))
+    c2.metric(
+        "Confirmados / rastreáveis",
+        sum(
+            item["avaliacao"]["nivel"] in {"Confirmado", "Rastreável"} for item in materiais_projeto
+        ),
+    )
+    c3.metric(
+        "Vinculados ao escopo", sum(bool(item.get("vinculacoes")) for item in materiais_projeto)
+    )
 
     if materiais_projeto:
-        st.dataframe(pd.DataFrame([_linha_material(item) for item in materiais_projeto]), hide_index=True, width="stretch")
+        st.dataframe(
+            pd.DataFrame([_linha_material(item) for item in materiais_projeto]),
+            hide_index=True,
+            width="stretch",
+        )
 
     st.subheader("Cadastrar ou qualificar um material")
     opcoes_base = {"Cadastro manual": None, **{item["nome"]: item for item in catalogo}}
@@ -137,11 +166,23 @@ elif modo == "Biblioteca do projeto":
         sut = p1.number_input("Sut (MPa)", min_value=0.0, value=props_base.get("Sut_MPa"), step=1.0)
         sy = p2.number_input("Sy (MPa)", min_value=0.0, value=props_base.get("Sy_MPa"), step=1.0)
         e_gpa = p3.number_input("E (GPa)", min_value=0.0, value=props_base.get("E_GPa"), step=1.0)
-        nu = p4.number_input("Poisson ν", min_value=-0.99, max_value=0.499, value=props_base.get("nu"), step=0.01)
+        nu = p4.number_input(
+            "Poisson ν", min_value=-0.99, max_value=0.499, value=props_base.get("nu"), step=0.01
+        )
         p1, p2, p3 = st.columns(3)
-        densidade = p1.number_input("Densidade (kg/m³)", min_value=0.0, value=props_base.get("densidade_kg_m3"), step=10.0)
-        tmin = p2.number_input("Temperatura mínima qualificada (°C)", value=props_base.get("temperatura_min_C"), step=5.0)
-        tmax = p3.number_input("Temperatura máxima qualificada (°C)", value=props_base.get("temperatura_max_C"), step=5.0)
+        densidade = p1.number_input(
+            "Densidade (kg/m³)", min_value=0.0, value=props_base.get("densidade_kg_m3"), step=10.0
+        )
+        tmin = p2.number_input(
+            "Temperatura mínima qualificada (°C)",
+            value=props_base.get("temperatura_min_C"),
+            step=5.0,
+        )
+        tmax = p3.number_input(
+            "Temperatura máxima qualificada (°C)",
+            value=props_base.get("temperatura_max_C"),
+            step=5.0,
+        )
 
         st.markdown("##### Proveniência e conferência")
         s1, s2 = st.columns(2)
@@ -153,13 +194,19 @@ elif modo == "Biblioteca do projeto":
         pagina = s3.text_input("Página / cláusula / tabela")
         s1, s2 = st.columns(2)
         responsavel = s1.text_input("Conferido por *", value=projeto.get("responsavel", ""))
-        data_verificacao = s2.date_input("Data da conferência", value=date.today(), format="DD/MM/YYYY")
+        data_verificacao = s2.date_input(
+            "Data da conferência", value=date.today(), format="DD/MM/YYYY"
+        )
         aplicabilidade = st.text_area(
             "Aplicabilidade ao projeto *",
             placeholder="Ex.: chapa de 12,5 mm, condição normalizada, temperatura de projeto 80 °C, TAG V-101.",
         )
-        observacoes = st.text_area("Observações e restrições", value=base.get("observacoes", "") if base else "")
-        enviar = st.form_submit_button("Salvar material no projeto", type="primary", icon=":material/save:")
+        observacoes = st.text_area(
+            "Observações e restrições", value=base.get("observacoes", "") if base else ""
+        )
+        enviar = st.form_submit_button(
+            "Salvar material no projeto", type="primary", icon=":material/save:"
+        )
 
     if enviar:
         try:
@@ -201,8 +248,13 @@ elif modo == "Biblioteca do projeto":
 
     if materiais_projeto:
         st.subheader("Inspecionar, conferir faixa e vincular")
-        mapa = {item["id"]: f"{item['nome']} · {item['avaliacao']['nivel']}" for item in materiais_projeto}
-        material_id = st.selectbox("Material do projeto", list(mapa), format_func=lambda valor: mapa[valor])
+        mapa = {
+            item["id"]: f"{item['nome']} · {item['avaliacao']['nivel']}"
+            for item in materiais_projeto
+        }
+        material_id = st.selectbox(
+            "Material do projeto", list(mapa), format_func=lambda valor: mapa[valor]
+        )
         material = next(item for item in materiais_projeto if item["id"] == material_id)
         avaliacao = material["avaliacao"]
         m1, m2 = st.columns([1, 2])
@@ -224,13 +276,17 @@ elif modo == "Biblioteca do projeto":
         componentes = projeto.get("componentes", [])
         if componentes:
             opcoes_componentes = {
-                item["id"]: f"{item.get('tag') or 'SEM TAG'} · {item.get('descricao') or 'sem descrição'}"
+                item[
+                    "id"
+                ]: f"{item.get('tag') or 'SEM TAG'} · {item.get('descricao') or 'sem descrição'}"
                 for item in componentes
             }
             vinculacoes = st.multiselect(
                 "Itens do escopo que usam este material",
                 list(opcoes_componentes),
-                default=[item for item in material.get("vinculacoes", []) if item in opcoes_componentes],
+                default=[
+                    item for item in material.get("vinculacoes", []) if item in opcoes_componentes
+                ],
                 format_func=lambda valor: opcoes_componentes[valor],
             )
             if st.button("Salvar vínculos", icon=":material/link:"):
@@ -246,24 +302,40 @@ elif modo == "Biblioteca do projeto":
                     material if item.get("id") == material["id"] else item
                     for item in projeto["materiais_projeto"]
                 ]
-                salvar_projeto(projeto, motivo=f"Vínculos do material {material['nome']} atualizados")
+                salvar_projeto(
+                    projeto, motivo=f"Vínculos do material {material['nome']} atualizados"
+                )
                 st.success("Vínculos atualizados no escopo físico e no memorial.")
                 st.rerun()
 
         confirmar_exclusao = st.checkbox("Confirmo a remoção deste cadastro do projeto.")
         if st.button("Remover cadastro", disabled=not confirmar_exclusao, icon=":material/delete:"):
-            projeto["materiais_projeto"] = [item for item in projeto["materiais_projeto"] if item.get("id") != material_id]
+            projeto["materiais_projeto"] = [
+                item for item in projeto["materiais_projeto"] if item.get("id") != material_id
+            ]
             for componente in projeto.get("componentes", []):
                 if componente.get("material_id") == material_id:
                     componente.pop("material_id", None)
             salvar_projeto(projeto, motivo=f"Material {material['nome']} removido")
-            st.success("Cadastro removido. O histórico permanece disponível nas revisões controladas já criadas.")
+            st.success(
+                "Cadastro removido. O histórico permanece disponível nas revisões controladas já criadas."
+            )
             st.rerun()
 
 else:
     todos = catalogo + materiais_projeto
-    mapa = {item["id"]: f"{item['nome']} · {'Projeto' if item.get('origem_registro') == 'projeto' else 'Referência'}" for item in todos}
-    escolhidos = st.multiselect("Selecione até três materiais", list(mapa), max_selections=3, format_func=lambda valor: mapa[valor])
+    mapa = {
+        item[
+            "id"
+        ]: f"{item['nome']} · {'Projeto' if item.get('origem_registro') == 'projeto' else 'Referência'}"
+        for item in todos
+    }
+    escolhidos = st.multiselect(
+        "Selecione até três materiais",
+        list(mapa),
+        max_selections=3,
+        format_func=lambda valor: mapa[valor],
+    )
     selecionados = [next(item for item in todos if item["id"] == valor) for valor in escolhidos]
     if selecionados:
         linhas = []
@@ -291,6 +363,11 @@ else:
             hide_index=True,
             width="stretch",
         )
-        st.warning("A comparação ajuda na triagem; não substitui critérios de seleção, soldabilidade, corrosão, fabricação e requisitos normativos.", icon=":material/warning:")
+        st.warning(
+            "A comparação ajuda na triagem; não substitui critérios de seleção, soldabilidade, corrosão, fabricação e requisitos normativos.",
+            icon=":material/warning:",
+        )
     else:
-        st.info("Escolha materiais do catálogo e, quando houver projeto ativo, da biblioteca rastreada.")
+        st.info(
+            "Escolha materiais do catálogo e, quando houver projeto ativo, da biblioteca rastreada."
+        )

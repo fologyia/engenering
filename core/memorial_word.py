@@ -46,6 +46,7 @@ def _numero(valor: float | None, casas: int = 3) -> str:
         return "Infinito"
     return f"{valor:.{casas}f}".replace(".", ",")
 
+
 def _inteiro(valor: float | None) -> str:
     if valor is None:
         return "Não informado"
@@ -104,6 +105,7 @@ def _status_calculo(dados: Mapping[str, Any]) -> tuple[str, str, str]:
         POSITIVE,
         f"Os fatores atendem à meta n ≥ {_numero(meta, 2)} e a vida calculada atende ao requisito informado.",
     )
+
 
 def _set_run_font(
     run,
@@ -344,6 +346,7 @@ def _add_data_table(
     document.add_paragraph().paragraph_format.space_after = Pt(0)
     return table
 
+
 def _next_numbering_id(numbering, tag: str, attr: str) -> int:
     values = []
     for node in numbering.findall(qn(tag)):
@@ -558,12 +561,22 @@ def _add_masthead(
     metadata_rows = [
         ["Projeto", metadata.get("projeto"), "Cliente", metadata.get("cliente")],
         ["Documento", metadata.get("codigo"), "Revisão", metadata.get("revisao")],
-        ["Elaborado por", metadata.get("responsavel"), "Verificado por", metadata.get("verificador")],
+        [
+            "Elaborado por",
+            metadata.get("responsavel"),
+            "Verificado por",
+            metadata.get("verificador"),
+        ],
         ["Situação", metadata.get("situacao"), "Emissão", metadata.get("emissao")],
     ]
     if metadata.get("snapshot_hash"):
         metadata_rows.append(
-            ["Snapshot", str(metadata.get("snapshot_hash"))[:16] + "…", "Aprovado por", metadata.get("aprovador")]
+            [
+                "Snapshot",
+                str(metadata.get("snapshot_hash"))[:16] + "…",
+                "Aprovado por",
+                metadata.get("aprovador"),
+            ]
         )
     table = document.add_table(rows=0, cols=4)
     for values in metadata_rows:
@@ -651,6 +664,7 @@ def _add_executive_summary(
         "Decisão de uso: consulte a conclusão, as pendências e o checklist antes de aprovar "
         "ou liberar o componente."
     )
+
 
 def _add_revision_control(document: Document, metadata: Mapping[str, Any]) -> None:
     document.add_heading("2. Controle do documento", level=1)
@@ -852,6 +866,7 @@ def gerar_memorial_word_padrao(
     document.save(memoria)
     return memoria.getvalue()
 
+
 def gerar_memorial_fadiga_word(
     dados: Mapping[str, Any],
     linhas_resumo: Sequence[Mapping[str, Any]],
@@ -976,22 +991,17 @@ def gerar_memorial_fadiga_word(
 
     if dados.get("modelo") == "norton":
         if temp_f <= 450.0:
-            formula_temperatura = (
-                f"T_F = {_numero(temp_f, 2)} °F <= 450 °F  =>  Ctemp = 1,000"
-            )
+            formula_temperatura = f"T_F = {_numero(temp_f, 2)} °F <= 450 °F  =>  Ctemp = 1,000"
         else:
             formula_temperatura = (
-                f"Ctemp = 1 - 0,0058 x ({_numero(temp_f, 2)} - 450) "
-                f"= {_numero(ctemp, 3)}"
+                f"Ctemp = 1 - 0,0058 x ({_numero(temp_f, 2)} - 450) = {_numero(ctemp, 3)}"
             )
         texto_temperatura = (
             "Norton utiliza a temperatura em graus Fahrenheit, com correlação "
             "limitada a 550 °F (287,78 °C)."
         )
     else:
-        formula_temperatura = (
-            f"Shigley: kd(T = {_numero(temp_c, 2)} °C) = {_numero(ctemp, 3)}"
-        )
+        formula_temperatura = f"Shigley: kd(T = {_numero(temp_c, 2)} °C) = {_numero(ctemp, 3)}"
         texto_temperatura = (
             "Shigley utiliza a temperatura em graus Celsius; para temperaturas elevadas, "
             "as propriedades mecânicas devem corresponder à condição de serviço."
@@ -1236,7 +1246,12 @@ def gerar_memorial_fadiga_word(
             "tabelas": [
                 {
                     "legenda": "Tabela 2 - Síntese das verificações.",
-                    "cabecalhos": ["Critério", "Resultado", "Referência de aceitação", "Interpretação"],
+                    "cabecalhos": [
+                        "Critério",
+                        "Resultado",
+                        "Referência de aceitação",
+                        "Interpretação",
+                    ],
                     "linhas": resultado_rows,
                     "larguras": [2300, 1500, 2400, 3160],
                     "fonte": 8.2,
@@ -1333,12 +1348,54 @@ def gerar_memorial_fadiga_word(
     ]
 
     complement_parts = [
-        ["Análise de fadiga", metadata["codigo"], metadata["revisao"], "Incluída", metadata["responsavel"], status[0]],
-        ["Análise estática", "A preencher", "-", "Não incluída", "A preencher", "Anexar resultados e conclusão"],
-        ["Círculo de Mohr", "A preencher", "-", "Não incluído", "A preencher", "Anexar estado e transformações"],
-        ["Assistente de cargas", "A preencher", "-", "Não incluído", "A preencher", "Rastrear cargas até as tensões"],
-        ["Projeto de parafusos", "A preencher", "-", "Não incluído", "A preencher", "Anexar junta e verificações"],
-        ["Estruturas de aço", "A preencher", "-", "Não incluída", "A preencher", "Anexar barras, ligações e combinações"],
+        [
+            "Análise de fadiga",
+            metadata["codigo"],
+            metadata["revisao"],
+            "Incluída",
+            metadata["responsavel"],
+            status[0],
+        ],
+        [
+            "Análise estática",
+            "A preencher",
+            "-",
+            "Não incluída",
+            "A preencher",
+            "Anexar resultados e conclusão",
+        ],
+        [
+            "Círculo de Mohr",
+            "A preencher",
+            "-",
+            "Não incluído",
+            "A preencher",
+            "Anexar estado e transformações",
+        ],
+        [
+            "Assistente de cargas",
+            "A preencher",
+            "-",
+            "Não incluído",
+            "A preencher",
+            "Rastrear cargas até as tensões",
+        ],
+        [
+            "Projeto de parafusos",
+            "A preencher",
+            "-",
+            "Não incluído",
+            "A preencher",
+            "Anexar junta e verificações",
+        ],
+        [
+            "Estruturas de aço",
+            "A preencher",
+            "-",
+            "Não incluída",
+            "A preencher",
+            "Anexar barras, ligações e combinações",
+        ],
     ]
 
     return gerar_memorial_word_padrao(

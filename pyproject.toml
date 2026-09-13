@@ -22,8 +22,13 @@ select = [
 ]
 ignore = [
     "B008",  # chamada em argumento padrão: normal nas fábricas de dataclass
-    "E501",  # comprimento de linha fica com o formatador, não com o lint
+    "E501",  # comprimento de linha fica com o formatador (ruff format), não com o lint
 ]
+
+[tool.ruff.format]
+# Padrões do ruff format. O formato é verificado no CI (`ruff format --check .`):
+# rode `ruff format .` antes de subir código. Sem isso, cada arquivo acumulava
+# um estilo próprio e a regra E501 acima virava letra morta.
 
 [tool.ruff.lint.per-file-ignores]
 # As páginas Streamlit executam de cima a baixo: import no meio do arquivo,

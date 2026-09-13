@@ -163,9 +163,7 @@ def analisar_estado_plano(
     theta_tau_positivo = _normalizar_angulo_180(theta_p1 - 45.0)
     theta_tau_negativo = _normalizar_angulo_180(theta_p1 + 45.0)
 
-    von_mises = math.sqrt(
-        sigma_x**2 - sigma_x * sigma_y + sigma_y**2 + 3.0 * tau_xy**2
-    )
+    von_mises = math.sqrt(sigma_x**2 - sigma_x * sigma_y + sigma_y**2 + 3.0 * tau_xy**2)
     principais_3d = tuple(sorted((sigma_1, sigma_2, 0.0), reverse=True))
     tau_max_absoluta = (principais_3d[0] - principais_3d[2]) / 2.0
 
@@ -182,9 +180,7 @@ def analisar_estado_plano(
         von_mises=von_mises,
         tensoes_principais_3d=principais_3d,
         tau_max_absoluta=tau_max_absoluta,
-        transformacao=transformar_tensoes_planas(
-            sigma_x, sigma_y, tau_xy, theta_graus
-        ),
+        transformacao=transformar_tensoes_planas(sigma_x, sigma_y, tau_xy, theta_graus),
     )
 
 
@@ -245,9 +241,7 @@ def circulos_mohr_3d(
     valores = np.asarray(tuple(tensoes_principais), dtype=float)
     if valores.shape != (3,) or not np.isfinite(valores).all():
         raise ValueError("Informe exatamente três tensões principais finitas.")
-    sigma_1, sigma_2, sigma_3 = sorted(
-        (float(valor) for valor in valores), reverse=True
-    )
+    sigma_1, sigma_2, sigma_3 = sorted((float(valor) for valor in valores), reverse=True)
 
     def criar(par: str, maior: float, menor: float) -> CirculoMohr3D:
         return CirculoMohr3D(
@@ -274,9 +268,7 @@ def analisar_estado_tridimensional(
     tau_yz: float,
 ) -> ResultadoEstadoTridimensional:
     """Calcula tensões principais, invariantes e equivalentes de um estado 3D."""
-    tensor = montar_tensor_tensoes(
-        sigma_x, sigma_y, sigma_z, tau_xy, tau_xz, tau_yz
-    )
+    tensor = montar_tensor_tensoes(sigma_x, sigma_y, sigma_z, tau_xy, tau_xz, tau_yz)
     autovalores, autovetores = np.linalg.eigh(tensor)
     ordem = np.argsort(autovalores)[::-1]
     principais_array = autovalores[ordem]

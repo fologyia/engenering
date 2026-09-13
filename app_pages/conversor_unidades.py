@@ -40,9 +40,13 @@ def formatar_numero(valor: float, algarismos: int = 6) -> str:
     if absoluto >= 1e7 or absoluto < 1e-4:
         return f"{valor:.{algarismos - 1}e}".replace(".", ",")
     casas = max(0, algarismos - math.floor(math.log10(absoluto)) - 1)
-    return f"{valor:,.{casas}f}".rstrip("0").rstrip(".").replace(
-        ",", "X"
-    ).replace(".", ",").replace("X", ".")
+    return (
+        f"{valor:,.{casas}f}".rstrip("0")
+        .rstrip(".")
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
 
 
 def inverter_unidades(chave_origem: str, chave_destino: str) -> None:
@@ -105,10 +109,7 @@ with st.container(border=True):
             border=True,
         )
 
-    st.code(
-        f"{formatar_numero(valor)} {origem} = "
-        f"{formatar_numero(resultado)} {destino}"
-    )
+    st.code(f"{formatar_numero(valor)} {origem} = {formatar_numero(resultado)} {destino}")
     st.caption(
         "Exibição com até seis algarismos significativos; o cálculo interno "
         "mantém a precisão completa."
@@ -123,9 +124,7 @@ with equivalencias:
                 "Unidade": simbolo,
                 "Valor convertido": formatar_numero(convertido),
             }
-            for simbolo, convertido in unidades.conversoes_da_categoria(
-                valor, categoria, origem
-            )
+            for simbolo, convertido in unidades.conversoes_da_categoria(valor, categoria, origem)
         ]
         st.dataframe(pd.DataFrame(linhas), hide_index=True)
 
@@ -162,4 +161,3 @@ with st.expander(
         - Preserve o sinal de forças, tensões e momentos depois da conversão.
         """
     )
-

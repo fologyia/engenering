@@ -43,7 +43,9 @@ class PerfisMonossimetricosTests(unittest.TestCase):
         perfil = secoes.perfil_u("U teste", h, bf, tw, tf)
         secao = vb.secao_de_perfil_catalogo(perfil, eixo="y")
         area_alma, area_mesas = h * tw, 2 * (bf - tw) * tf
-        do_dorso = (area_alma * tw / 2 + area_mesas * (tw + (bf - tw) / 2)) / (area_alma + area_mesas)
+        do_dorso = (area_alma * tw / 2 + area_mesas * (tw + (bf - tw) / 2)) / (
+            area_alma + area_mesas
+        )
         self.assertAlmostEqual(secao.c_inferior_mm, do_dorso, places=9)
         self.assertAlmostEqual(secao.c_superior_mm, bf - do_dorso, places=9)
         self.assertGreater(secao.c_superior_mm, bf / 2)
@@ -60,7 +62,9 @@ class PerfisMonossimetricosTests(unittest.TestCase):
         self.assertAlmostEqual(tubo.c_inferior_mm, 100.0)
 
     def test_eixo_invalido_no_script_vira_erro_de_script(self):
-        nome = next(iter(__import__("core.section_catalog", fromlist=["listar_perfis"]).listar_perfis()))
+        nome = next(
+            iter(__import__("core.section_catalog", fromlist=["listar_perfis"]).listar_perfis())
+        )
         with self.assertRaises(bs.ErroDeScript) as contexto:
             bs.interpretar(
                 f'viga 6\nsecao perfil "{nome}" eixo=z\nmaterial aco\napoio 0 pino\napoio 6 rolete'
@@ -210,7 +214,9 @@ class TorcaoDePerfilDoCatalogoTests(unittest.TestCase):
     def test_familia_desconhecida_avisa_na_descricao(self):
         from dataclasses import replace
 
-        perfil = replace(secoes.perfil_i_simetrico("X", 300.0, 150.0, 8.0, 12.0), familia="Personalizado")
+        perfil = replace(
+            secoes.perfil_i_simetrico("X", 300.0, 150.0, 8.0, 12.0), familia="Personalizado"
+        )
         secao = vb.secao_de_perfil_catalogo(perfil)
         self.assertIn("perfil aberto", secao.descricao)
 
@@ -229,7 +235,9 @@ class CisalhamentoEmYTests(unittest.TestCase):
     def test_perfil_t_usa_uma_mesa_e_tubo_retangular_as_paredes_horizontais(self):
         t = vb.secao_de_perfil_catalogo(secoes.perfil_t("T", 200.0, 150.0, 8.0, 12.0), eixo="y")
         self.assertAlmostEqual(t.area_cisalhamento_mm2, 150.0 * 12.0)
-        tubo = vb.secao_de_perfil_catalogo(secoes.tubo_retangular("TR", 200.0, 100.0, 6.0), eixo="y")
+        tubo = vb.secao_de_perfil_catalogo(
+            secoes.tubo_retangular("TR", 200.0, 100.0, 6.0), eixo="y"
+        )
         self.assertAlmostEqual(tubo.area_cisalhamento_mm2, 2 * 6.0 * (100.0 - 12.0))
 
     def test_secoes_simetricas_mantem_a_area_tabelada(self):
@@ -242,7 +250,9 @@ class CisalhamentoEmYTests(unittest.TestCase):
     def test_familia_desconhecida_mantem_a_alma_e_avisa(self):
         from dataclasses import replace
 
-        perfil = replace(secoes.perfil_i_simetrico("X", 300.0, 150.0, 8.0, 12.0), familia="Personalizado")
+        perfil = replace(
+            secoes.perfil_i_simetrico("X", 300.0, 150.0, 8.0, 12.0), familia="Personalizado"
+        )
         secao = vb.secao_de_perfil_catalogo(perfil, eixo="y")
         self.assertAlmostEqual(secao.area_cisalhamento_mm2, perfil.area_cisalhamento_mm2)
         self.assertIn("conservadora", secao.descricao)
@@ -304,7 +314,9 @@ class AvisosDeMaterialTests(unittest.TestCase):
         )
 
     def test_material_normal_nao_gera_aviso(self):
-        self.assertEqual(self.analisar(vb.MaterialViga("Aço", 200_000.0, 77_000.0, 250.0)).avisos, ())
+        self.assertEqual(
+            self.analisar(vb.MaterialViga("Aço", 200_000.0, 77_000.0, 250.0)).avisos, ()
+        )
 
     def test_e_em_mpa_digitado_como_gpa_e_apontado(self):
         # "material E=200000": mil vezes maior do que qualquer material.
@@ -361,9 +373,7 @@ class MalhaTests(unittest.TestCase):
     def test_distribuida_mais_curta_que_a_tolerancia_e_recusada_com_clareza(self):
         with self.assertRaises(ValueError) as contexto:
             vb.analisar_viga(
-                viga_padrao(
-                    cargas_distribuidas=(vb.CargaDistribuida(3_000.0, 3_000.2, -10.0),)
-                )
+                viga_padrao(cargas_distribuidas=(vb.CargaDistribuida(3_000.0, 3_000.2, -10.0),))
             )
         self.assertIn("carga pontual", str(contexto.exception))
 
@@ -381,7 +391,9 @@ class MalhaTests(unittest.TestCase):
         self.assertGreaterEqual(resultado.numero_elementos, 15)
         # E a carga crítica continua a de Euler para a barra inteira.
         euler = math.pi**2 * 200_000.0 * vb.secao_retangular(100, 200).inercia_mm4 / L_MM**2
-        self.assertAlmostEqual(resultado.fator_carga_critica, euler / 50_000.0, delta=euler / 50_000.0 * 1e-3)
+        self.assertAlmostEqual(
+            resultado.fator_carga_critica, euler / 50_000.0, delta=euler / 50_000.0 * 1e-3
+        )
 
     def test_malha_acima_do_teto_e_recusada(self):
         with self.assertRaises(ValueError) as contexto:
@@ -613,12 +625,14 @@ class IdaEVoltaDoScriptTests(unittest.TestCase):
         )
 
     def test_aspas_protegem_espacos_virgulas_e_cerquilha(self):
-        tokens = bs._tokenizar('secao manual A=1 nome="W 200 x 46,1 (H)" descricao="tem # e = dentro" # fora')
+        tokens = bs._tokenizar(
+            'secao manual A=1 nome="W 200 x 46,1 (H)" descricao="tem # e = dentro" # fora'
+        )
         self.assertEqual(
             tokens,
             ["secao", "manual", "A=1", "nome=W 200 x 46,1 (H)", "descricao=tem # e = dentro"],
         )
-        self.assertEqual(bs._tokenizar('nome “Viga do mezanino”'), ["nome", "Viga do mezanino"])
+        self.assertEqual(bs._tokenizar("nome “Viga do mezanino”"), ["nome", "Viga do mezanino"])
 
     def test_caso_com_espaco_sobrevive_a_ida_e_volta(self):
         viga = viga_padrao(
@@ -679,8 +693,11 @@ class IdaEVoltaDoScriptTests(unittest.TestCase):
     def test_nomes_de_bitola_com_aspas_de_polegada_sobrevivem(self):
         # 28 bitolas do catálogo têm `"` no nome (I 3" x 8,48): entre aspas
         # tipográficas o nome chega intacto, e a busca ignora aspas.
-        self.assertEqual(bs.texto_entre_aspas('I 3" x 8,48'), "“I 3\" x 8,48”")
-        self.assertEqual(bs._tokenizar('secao perfil “I 3" x 8,48” eixo=x'), ["secao", "perfil", 'I 3" x 8,48', "eixo=x"])
+        self.assertEqual(bs.texto_entre_aspas('I 3" x 8,48'), '“I 3" x 8,48”')
+        self.assertEqual(
+            bs._tokenizar('secao perfil “I 3" x 8,48” eixo=x'),
+            ["secao", "perfil", 'I 3" x 8,48', "eixo=x"],
+        )
         for linha in (
             'secao perfil “I 3" x 8,48”',
             'secao perfil I 3" x 8,48',
@@ -688,7 +705,9 @@ class IdaEVoltaDoScriptTests(unittest.TestCase):
             "secao perfil I 3 x 8,48",
         ):
             with self.subTest(linha=linha):
-                viga = bs.interpretar(f"viga 3\n{linha}\nmaterial aco\napoio 0 pino\napoio 3 rolete")
+                viga = bs.interpretar(
+                    f"viga 3\n{linha}\nmaterial aco\napoio 0 pino\napoio 3 rolete"
+                )
                 self.assertEqual(viga.secao.nome, 'I 3" x 8,48')
 
     def test_todo_perfil_do_catalogo_passa_pelo_caminho_do_formulario(self):

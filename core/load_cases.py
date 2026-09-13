@@ -295,9 +295,7 @@ def calcular_envelope(
     }
 
 
-def fatores_legiveis(
-    combinacao: Mapping[str, Any], casos: Sequence[Mapping[str, Any]]
-) -> str:
+def fatores_legiveis(combinacao: Mapping[str, Any], casos: Sequence[Mapping[str, Any]]) -> str:
     nomes = {
         str(caso.get("id")): _texto(caso.get("codigo")) or _texto(caso.get("nome"))
         for caso in casos

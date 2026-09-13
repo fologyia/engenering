@@ -67,9 +67,7 @@ def listar_modulos(*, grupo: str | None = None) -> list[ModuloTecnico]:
     if grupo is not None:
         alvo = grupo.strip().casefold()
         modulos = (
-            modulo
-            for modulo in modulos
-            if modulo.grupo_navegacao.strip().casefold() == alvo
+            modulo for modulo in modulos if modulo.grupo_navegacao.strip().casefold() == alvo
         )
     return sorted(modulos, key=lambda item: (item.ordem, item.titulo.casefold()))
 
@@ -197,4 +195,3 @@ def _registrar_padrao() -> None:
 
 
 _registrar_padrao()
-
