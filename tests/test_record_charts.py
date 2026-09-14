@@ -59,6 +59,31 @@ def test_flambagem_gera_png_e_ignora_registro_incompleto():
     assert imagens_flambagem({"modulo_elasticidade_MPa": 200000.0}, {}) == []
 
 
+def test_flambagem_marca_a_carga_de_escoamento_pela_secante():
+    transicao = math.sqrt(2 * math.pi**2 * 200000.0 / 250.0)
+    entradas = {
+        "modulo_elasticidade_MPa": 200000.0,
+        "escoamento_MPa": 250.0,
+        "area_mm2": 1963.5,
+        "forca_solicitante_kN": 50.0,
+        "excentricidade_mm": 5.0,
+    }
+    resultados = {
+        "esbeltez_governante": 160.0,
+        "esbeltez_transicao": transicao,
+        "carga_critica_kN": 151.4,
+        "fator_seguranca": 3.03,
+        "carga_escoamento_secante_kN": 109.9,
+    }
+    imagens = imagens_flambagem(entradas, resultados)
+    assert len(imagens) == 1
+    _png_valido(imagens[0].png)
+    # Sem excentricidade registrada o marcador simplesmente não entra —
+    # o gráfico continua saindo.
+    sem = imagens_flambagem({**entradas, "excentricidade_mm": 0.0}, resultados)
+    assert len(sem) == 1
+
+
 def test_imagens_do_registro_despacha_por_modulo():
     projeto = _projeto_documentado()
     mohr = normalizar_registro_tecnico(

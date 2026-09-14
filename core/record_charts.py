@@ -539,6 +539,25 @@ def imagens_flambagem(
         notas.append(
             f"Regime: {resultados.get('regime', '-')}; fator de segurança real = {fator:.2f}."
         )
+    # Com excentricidade registrada, a carga de escoamento pela secante fica
+    # abaixo da curva de Euler/Johnson: é o ponto que a coluna real alcança.
+    carga_secante = _numero(resultados.get("carga_escoamento_secante_kN"))
+    excentricidade = _numero(entradas.get("excentricidade_mm"))
+    if carga_secante and excentricidade:
+        sigma_secante = carga_secante * 1_000.0 / area
+        marcadores.append(
+            Marcador(
+                esbeltez,
+                sigma_secante,
+                f"secante: P_y/A = {sigma_secante:.1f} MPa (e = {excentricidade:g} mm)",
+                cor=COR_SECUNDARIA,
+                deslocamento=(8, 12),
+            )
+        )
+        notas.append(
+            f"Com excentricidade de {excentricidade:g} mm, a fibra extrema escoa com "
+            f"P_y = {carga_secante:.2f} kN (fórmula da secante)."
+        )
     grafico = GraficoXY(
         titulo="Tensão crítica de flambagem × índice de esbeltez",
         eixo_x="Índice de esbeltez λ = KL/r",

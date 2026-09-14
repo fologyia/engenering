@@ -1089,7 +1089,7 @@ elif modulo == "Flambagem de colunas":
             ["L", "Comprimento real da coluna, em mm", "Desenho ou montagem"],
             [
                 "Condição de apoio",
-                "K teórico do caso mais próximo do apoio real",
+                "K do caso mais próximo do apoio real — teórico ou recomendado de norma (AISC/NBR), que é maior nos casos com engaste",
                 "Croqui de fixação nas extremidades",
             ],
             ["E", "Módulo de elasticidade do material, em MPa", "Certificado ou catálogo"],
@@ -1099,16 +1099,26 @@ elif modulo == "Flambagem de colunas":
                 "Força de compressão atuante, em kN (só magnitude)",
                 "Assistente de cargas ou análise do equipamento",
             ],
+            [
+                "e (opcional)",
+                "Excentricidade da carga em relação ao centroide, em mm; L/1000 a L/500 representa a imperfeição de uma coluna real",
+                "Detalhe da ligação ou tolerância de montagem",
+            ],
         ]
     )
     st.subheader("Passo a passo")
     st.markdown(
         """
         1. Escolha o tipo de seção e informe suas dimensões (ou perfil de catálogo).
-        2. Informe o comprimento real e a condição de apoio mais próxima da real.
-        3. Informe E, Sy e a força de compressão atuante.
+        2. Informe o comprimento real e a condição de apoio mais próxima da real —
+           deixe o K recomendado de norma ligado, salvo se a ligação for de fato ideal.
+        3. Informe E, Sy e a força de compressão atuante; se a carga não passa pelo
+           centroide, informe a excentricidade.
         4. Compare a esbeltez governante com a esbeltez de transição.
-        5. Leia o regime (Euler ou Johnson) e a carga admissível.
+        5. Leia o regime (Euler ou Johnson), a carga admissível e, com excentricidade,
+           a carga de escoamento pela secante — vale o pior dos dois.
+        6. Leia os avisos: parede esbelta (flambagem local), λ acima de 200 ou K
+           fora da faixa mudam a conclusão mesmo com a conta "atendendo".
         """
     )
     mostrar_exemplo(
@@ -1139,13 +1149,20 @@ elif modulo == "Flambagem de colunas":
               segurança escolhido) foi excedida.
             - Dobrar o comprimento destravado L divide a carga crítica de
               Euler por 4 — é a variável mais sensível deste cálculo.
+            - **Secante (com excentricidade):** a carga de escoamento P_y fica
+              sempre abaixo da crítica de Euler, mesmo com e pequeno — é o que
+              uma coluna real faz. Se P_y ÷ P for menor que o fator desejado,
+              a excentricidade governa.
+            - **Aviso de flambagem local:** a parede (mesa, alma, tubo) é mais
+              esbelta que o limite de norma; a capacidade real é menor que a
+              calculada e a verificação normativa fica em Estruturas de aço.
             """
         )
     st.warning(
-        "Este é o modelo elementar de Euler/Johnson: compressão centrada, "
-        "coluna prismática, sem imperfeições, excentricidade, flambagem "
-        "local/torcional ou efeitos de 2ª ordem. Para perfis de aço conforme "
-        "norma (NBR 8800/AISC), use Estruturas de aço.",
+        "Este é o modelo elementar de Euler/Johnson com a secante como opção: "
+        "coluna prismática, elástica, sem flambagem local ou torcional "
+        "(o programa só avisa quando elas podem governar). Para perfis de aço "
+        "conforme norma (NBR 8800/AISC), use Estruturas de aço.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/flambagem_colunas.py", "Abrir Flambagem de colunas")

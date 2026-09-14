@@ -154,9 +154,40 @@ with st.container(border=True):
                 key="flambagem_direta_ry",
                 persist_state="session",
             )
-        geometria = flambagem.geometria_direta(area_mm2, raio_x_mm, raio_y_mm)
+        colunas_fibra = st.columns(2)
+        fibra_x_mm = colunas_fibra[0].number_input(
+            "c em x — centroide à fibra extrema (mm, só para excentricidade)",
+            min_value=0.0,
+            value=0.0,
+            step=1.0,
+            key="flambagem_direta_cx",
+            persist_state="session",
+            help="Meia altura numa seção simétrica. Zero = não informado.",
+        )
+        fibra_y_mm = colunas_fibra[1].number_input(
+            "c em y — centroide à fibra extrema (mm, só para excentricidade)",
+            min_value=0.0,
+            value=0.0,
+            step=1.0,
+            key="flambagem_direta_cy",
+            persist_state="session",
+            help="Meia largura numa seção simétrica. Zero = não informado.",
+        )
+        geometria = flambagem.geometria_direta(
+            area_mm2,
+            raio_x_mm,
+            raio_y_mm,
+            distancia_fibra_x_mm=fibra_x_mm,
+            distancia_fibra_y_mm=fibra_y_mm,
+        )
 
     st.caption(f":material/info: {geometria.descricao}")
+    if geometria.elementos_locais:
+        st.caption(
+            "Esbeltez das paredes conferida para aviso de flambagem local: "
+            + "; ".join(f"{item.nome} = {item.razao:.1f}" for item in geometria.elementos_locais)
+            + "."
+        )
 
 with st.container(border=True):
     st.subheader("2. Comprimento e condições de apoio")
@@ -173,11 +204,24 @@ with st.container(border=True):
         key="flambagem_condicao_apoio",
         persist_state="session",
     )
-    k_padrao = flambagem.CONDICOES_APOIO[apoio]
+    k_teorico = flambagem.CONDICOES_APOIO[apoio]
+    k_recomendado = flambagem.CONDICOES_APOIO_RECOMENDADAS[apoio]
+    usar_recomendado = st.toggle(
+        f"Usar o K recomendado para projeto ({k_recomendado:.2f}) em vez do teórico ({k_teorico:.2f})",
+        value=True,
+        key="flambagem_k_recomendado",
+        persist_state="session",
+        help=(
+            "Ligações reais nunca são um engaste ou um pino perfeitos. O AISC "
+            "(Tabela C-A-7.1) e a NBR 8800 recomendam K maior que o teórico nos "
+            "casos com engaste: 0,65 em vez de 0,50, 0,80 em vez de 0,70, "
+            "2,1 em vez de 2,0."
+        ),
+    )
+    k_padrao = k_recomendado if usar_recomendado else k_teorico
     st.caption(
-        f"Fator de comprimento efetivo teórico K = {k_padrao:.2f}. Ligações "
-        "reais raramente são um engaste ou um pino perfeitos — valores de "
-        "norma (ex.: AISC/NBR) costumam recomendar K maior que o teórico."
+        f"Fator de comprimento efetivo adotado K = {k_padrao:.2f} "
+        f"({'recomendado para projeto' if usar_recomendado else 'teórico'})."
     )
     contraventamento_assimetrico = st.checkbox(
         "Contraventamento diferente em cada eixo (Kx ≠ Ky)",
@@ -294,6 +338,47 @@ with st.container(border=True):
         help="Informe apenas a magnitude; este módulo trata sempre compressão.",
     )
 
+    st.markdown("**Excentricidade da carga** (opcional — fórmula da secante)")
+    colunas_exc = st.columns([2, 1])
+    excentricidade_mm = colunas_exc[0].number_input(
+        "Excentricidade e (mm)",
+        min_value=0.0,
+        value=0.0,
+        step=1.0,
+        key="flambagem_excentricidade_mm",
+        persist_state="session",
+        help=(
+            "Distância entre a linha de ação da carga e o centroide. Com e > 0 "
+            "o programa calcula a tensão máxima na fibra extrema pela fórmula "
+            "da secante (com a amplificação de segunda ordem) e a carga que "
+            "leva essa fibra ao escoamento. Toda coluna real tem alguma "
+            "excentricidade: L/1000 a L/500 é uma imperfeição usual."
+        ),
+    )
+    eixo_excentricidade = colunas_exc[1].selectbox(
+        "Eixo de flexão da excentricidade",
+        ["governante", "x", "y"],
+        key="flambagem_eixo_excentricidade",
+        persist_state="session",
+        help="Em torno de qual eixo a carga excêntrica flete a coluna.",
+    )
+    # Sem a distância à fibra extrema a secante não tem como ser calculada;
+    # em vez de travar a página, Euler/Johnson seguem e a secante é pulada.
+    excentricidade_efetiva = excentricidade_mm
+    if excentricidade_mm > 0:
+        eixos_necessarios = (
+            ("x", "y") if eixo_excentricidade == "governante" else (eixo_excentricidade,)
+        )
+        if any(geometria.distancia_fibra(eixo) <= 0 for eixo in eixos_necessarios):
+            st.warning(
+                "A fórmula da secante precisa da distância do centroide à fibra "
+                "extrema (c) no eixo da excentricidade. Informe-a nos campos da "
+                "seção de área e raio de giração diretos, ou escolha uma seção "
+                "geométrica. A excentricidade foi ignorada nesta verificação.",
+                icon=":material/warning:",
+            )
+            excentricidade_efetiva = 0.0
+
 try:
     resultado = flambagem.verificar_flambagem(
         geometria=geometria,
@@ -304,12 +389,17 @@ try:
         escoamento_MPa=escoamento_MPa,
         forca_solicitante_N=forca_kN * 1_000.0,
         fator_seguranca_desejado=fator_seguranca_desejado,
+        excentricidade_mm=excentricidade_efetiva,
+        eixo_excentricidade=eixo_excentricidade,
     )
 except ValueError as erro:
     st.error(f"Não foi possível calcular: {erro}", icon=":material/error:")
     st.stop()
 
 st.header("Resultados")
+
+for aviso in resultado.avisos:
+    st.warning(aviso, icon=":material/warning:")
 
 with st.container(border=True):
     st.subheader("Esbeltez")
@@ -395,6 +485,47 @@ with st.container(border=True):
         key="flambagem_baixar",
     )
 
+if resultado.carga_escoamento_secante_N is not None:
+    with st.container(border=True):
+        st.subheader("Carga excêntrica — fórmula da secante")
+        with st.container(horizontal=True):
+            st.metric(
+                "σ máxima na fibra extrema",
+                "∞"
+                if math.isinf(resultado.tensao_maxima_secante_MPa or 0.0)
+                else f"{resultado.tensao_maxima_secante_MPa:.1f} MPa",
+                border=True,
+                help="Sob a carga atuante, já com a amplificação de segunda ordem.",
+            )
+            st.metric(
+                "Carga de escoamento P_y",
+                f"{resultado.carga_escoamento_secante_N / 1_000.0:.2f} kN",
+                border=True,
+                help="Carga que leva a fibra extrema a Sy. É sempre menor que a crítica de Euler do eixo.",
+            )
+            st.metric(
+                "Fator P_y / P",
+                "∞"
+                if math.isinf(resultado.fator_seguranca_secante or 0.0)
+                else f"{resultado.fator_seguranca_secante:.2f}",
+                border=True,
+            )
+            st.metric(
+                "Eixo da excentricidade",
+                resultado.eixo_excentricidade,
+                border=True,
+                help=f"e = {resultado.excentricidade_mm:g} mm",
+            )
+        st.latex(
+            r"\sigma_{max}=\frac{P}{A}\left[1+\frac{e\,c}{r^{2}}\,"
+            r"\sec\!\left(\frac{KL}{2r}\sqrt{\frac{P}{EA}}\right)\right]"
+        )
+        st.caption(
+            "A secante inclui a excentricidade e a flecha que ela provoca; por "
+            "isso P_y fica abaixo da carga crítica de Euler mesmo com e pequeno, "
+            "e é a verificação que representa uma coluna real com imperfeição."
+        )
+
 if resultado.utilizacao > 1.0:
     st.error(
         f"A carga atuante ({forca_kN:.1f} kN) excede a carga admissível "
@@ -416,26 +547,44 @@ else:
 
 fronteira_modelo(
     [
-        "Flambagem local da parede (perfis de parede fina) e flambagem torcional ou flexo-torcional.",
-        "Imperfeições geométricas iniciais, excentricidade de carga e efeitos de segunda ordem (P–δ).",
+        "Flambagem local da parede e flambagem torcional ou flexo-torcional — o "
+        "programa avisa quando a esbeltez da parede passa do limite de norma, mas "
+        "não calcula a capacidade reduzida.",
+        "Imperfeição geométrica inicial só entra se você informar uma excentricidade "
+        "equivalente (fórmula da secante); sem ela a coluna é perfeitamente reta.",
         "Cargas dinâmicas, de impacto ou variáveis no tempo (fadiga da própria coluna).",
-        "Ligações reais nas extremidades — o fator K aqui é o valor teórico do caso idealizado escolhido.",
+        "Ligações reais nas extremidades — K teórico ou recomendado de norma, nunca a "
+        "rigidez real da ligação.",
     ]
 )
 
 with st.container(border=True):
     st.subheader("Registrar no projeto")
+    # A excentricidade governa quando a carga de escoamento pela secante
+    # fica abaixo da admissível de Euler/Johnson: o registro precisa refletir
+    # o pior dos dois, não só o modelo de coluna perfeita.
+    utilizacao_registro = resultado.utilizacao
+    if resultado.carga_escoamento_secante_N is not None and forca_kN > 0:
+        admissivel_secante = resultado.carga_escoamento_secante_N / fator_seguranca_desejado
+        utilizacao_registro = max(utilizacao_registro, forca_kN * 1_000.0 / admissivel_secante)
     status_registro = (
         "Não atende"
-        if resultado.utilizacao > 1.0
+        if utilizacao_registro > 1.0
         else "Atenção"
-        if resultado.utilizacao > 0.8
+        if utilizacao_registro > 0.8 or resultado.avisos
         else "Atende"
     )
     conclusao_registro = (
         f"Carga admissível = {resultado.carga_admissivel_N / 1_000.0:.2f} kN; "
         f"atuante = {forca_kN:.2f} kN; utilização = {resultado.utilizacao * 100:.0f}%; "
         f"regime = {resultado.regime}."
+        + (
+            f" Secante (e = {resultado.excentricidade_mm:g} mm, eixo {resultado.eixo_excentricidade}): "
+            f"P_y = {resultado.carga_escoamento_secante_N / 1_000.0:.2f} kN, "
+            f"utilização = {utilizacao_registro * 100:.0f}%."
+            if resultado.carga_escoamento_secante_N is not None
+            else ""
+        )
     )
 
     st.markdown("**Comparar cenários**")
@@ -470,14 +619,19 @@ with st.container(border=True):
             "area_mm2": geometria.area_mm2,
             "raio_giracao_x_mm": geometria.raio_giracao_x_mm,
             "raio_giracao_y_mm": geometria.raio_giracao_y_mm,
+            "distancia_fibra_x_mm": geometria.distancia_fibra_x_mm,
+            "distancia_fibra_y_mm": geometria.distancia_fibra_y_mm,
             "comprimento_mm": comprimento_mm,
             "condicao_apoio": apoio,
+            "k_recomendado_de_norma": usar_recomendado,
             "kx": kx,
             "ky": ky,
             "modulo_elasticidade_MPa": modulo_elasticidade_MPa,
             "escoamento_MPa": escoamento_MPa,
             "forca_solicitante_kN": forca_kN,
             "fator_seguranca_desejado": fator_seguranca_desejado,
+            "excentricidade_mm": excentricidade_efetiva,
+            "eixo_excentricidade": resultado.eixo_excentricidade,
         },
         resultados={
             "esbeltez_x": resultado.esbeltez_x,
@@ -492,18 +646,58 @@ with st.container(border=True):
             "fator_seguranca": (
                 None if math.isinf(resultado.fator_seguranca) else resultado.fator_seguranca
             ),
-            "utilizacao": resultado.utilizacao,
+            "utilizacao": utilizacao_registro,
+            "utilizacao_euler_johnson": resultado.utilizacao,
+            "tensao_maxima_secante_MPa": (
+                None
+                if resultado.tensao_maxima_secante_MPa is None
+                or math.isinf(resultado.tensao_maxima_secante_MPa)
+                else resultado.tensao_maxima_secante_MPa
+            ),
+            "carga_escoamento_secante_kN": (
+                None
+                if resultado.carga_escoamento_secante_N is None
+                else resultado.carga_escoamento_secante_N / 1_000.0
+            ),
+            "fator_seguranca_secante": (
+                None
+                if resultado.fator_seguranca_secante is None
+                or math.isinf(resultado.fator_seguranca_secante)
+                else resultado.fator_seguranca_secante
+            ),
+            "esbeltez_paredes": [
+                {
+                    "elemento": item.nome,
+                    "razao": item.razao,
+                    "limite": item.limite(modulo_elasticidade_MPa, escoamento_MPa),
+                }
+                for item in geometria.elementos_locais
+            ],
         },
         metodo=(
             "Euler para colunas longas (λ ≥ λ_transição) com transição parabólica "
             "de Johnson para colunas curtas/intermediárias; eixo governante é o "
             "de maior esbeltez."
+            + (
+                " Carga excêntrica verificada pela fórmula da secante (tensão máxima "
+                "na fibra extrema com amplificação de segunda ordem)."
+                if resultado.carga_escoamento_secante_N is not None
+                else ""
+            )
         ),
         premissas=[
-            "Compressão centrada, coluna prismática e material elástico linear até a transição.",
-            "K é o valor teórico da condição de apoio idealizada escolhida.",
+            "Compressão centrada, coluna prismática e material elástico linear até a transição."
+            if excentricidade_efetiva <= 0
+            else f"Coluna prismática com excentricidade de {excentricidade_efetiva:g} mm no eixo {resultado.eixo_excentricidade}; material elástico linear.",
+            (
+                "K é o valor recomendado de norma (AISC/NBR 8800) para a condição de apoio escolhida."
+                if usar_recomendado
+                else "K é o valor teórico da condição de apoio idealizada escolhida."
+            ),
+            "A esbeltez das paredes é conferida contra os limites de elemento não esbelto, mas a flambagem local não é calculada.",
         ],
-        alertas=[] if status_registro == "Atende" else [conclusao_registro],
+        alertas=([] if status_registro == "Atende" else [conclusao_registro])
+        + list(resultado.avisos),
         referencias=[
             "Shigley — Mechanical Engineering Design (Euler/Johnson).",
             "Confirmar comprimento destravado real, K de norma e imperfeições do projeto.",

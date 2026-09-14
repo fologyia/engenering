@@ -220,6 +220,22 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - três círculos de Mohr, invariantes e tabelas de transformação.
 - registro 2D ou 3D no projeto permanente.
 
+### Flambagem de colunas
+
+- esbeltez nos dois eixos, carga crítica de Euler e transição parabólica de
+  Johnson, para qualquer material e seção (retangular, circular, tubo, perfil
+  do catálogo ou A e r diretos);
+- K teórico ou **recomendado para projeto** (AISC/NBR 8800) por condição de
+  apoio, incluindo os casos deslocáveis;
+- **carga excêntrica pela fórmula da secante**: tensão máxima na fibra extrema
+  com amplificação de segunda ordem e carga que leva a fibra ao escoamento —
+  conferida contra o módulo de vigas em 2ª ordem;
+- avisos para o que o modelo não calcula mas pode governar: esbeltez de parede
+  acima do limite de elemento não esbelto (flambagem local), esbeltez global
+  acima de 200, K fora da faixa física e unidades implausíveis de E e Sy;
+- registro no projeto com o pior entre Euler/Johnson e a secante, e curva
+  σcr × λ no memorial.
+
 ### Projeto de juntas parafusadas
 
 - roscas métricas de M3 a M36 e classes 4.6 a 12.9;
