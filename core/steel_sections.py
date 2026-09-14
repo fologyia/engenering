@@ -589,6 +589,111 @@ def _criar_catalogo() -> dict[str, PerfilAco]:
 CATALOGO_PERFIS = _criar_catalogo()
 
 
+# ---------------------------------------------------------------------------
+# Geometria derivada, compartilhada pelos módulos de cálculo
+# ---------------------------------------------------------------------------
+
+
+def familia_do_perfil(perfil: PerfilAco) -> str:
+    """Primeira palavra da família em minúsculas: "i", "w", "u", "c", "t", "tubo", "barra"…"""
+    familia = str(getattr(perfil, "familia", "") or "").strip().casefold()
+    return familia.split()[0] if familia else ""
+
+
+def e_tubo_circular(perfil: PerfilAco) -> bool:
+    familia = str(getattr(perfil, "familia", "") or "").casefold()
+    return "tubo" in familia and ("circ" in familia or "redond" in familia)
+
+
+def e_tubo_retangular(perfil: PerfilAco) -> bool:
+    familia = str(getattr(perfil, "familia", "") or "").casefold()
+    return "tubo" in familia and not e_tubo_circular(perfil)
+
+
+def centroide_do_perfil(perfil: PerfilAco) -> tuple[float, float]:
+    """(x̄ da face esquerda, ȳ da base), cadastrado ou estimado pela geometria.
+
+    Os catálogos de bitolas não tabelam o centroide. Para T (mesa em cima)
+    e U/C (alma à esquerda), a composição dos retângulos idealizados dá o
+    valor com erro pequeno; nos demais vale o meio.
+    """
+    h = float(perfil.altura_mm)
+    b = float(perfil.largura_mm)
+    tw = float(perfil.espessura_alma_mm)
+    tf = float(perfil.espessura_mesa_mm)
+    x_bar = float(perfil.centroide_x_mm) if 0.0 < perfil.centroide_x_mm < b else 0.0
+    y_bar = float(perfil.centroide_y_mm) if 0.0 < perfil.centroide_y_mm < h else 0.0
+    familia = familia_do_perfil(perfil)
+    if familia == "t" and not y_bar and 0 < tf < h and 0 < tw < b:
+        area_mesa, area_alma = b * tf, tw * (h - tf)
+        do_topo = (area_mesa * tf / 2.0 + area_alma * (tf + (h - tf) / 2.0)) / (
+            area_mesa + area_alma
+        )
+        y_bar = h - do_topo
+    if familia in {"u", "c"} and not x_bar and 0 < tw < b and 0 < 2 * tf < h:
+        area_alma, area_mesas = h * tw, 2.0 * (b - tw) * tf
+        x_bar = (area_alma * tw / 2.0 + area_mesas * (tw + (b - tw) / 2.0)) / (
+            area_alma + area_mesas
+        )
+    return (x_bar or b / 2.0, y_bar or h / 2.0)
+
+
+def centro_de_cisalhamento_do_perfil(perfil: PerfilAco) -> tuple[float, float]:
+    """(x0, y0): posição do centro de cisalhamento em relação ao centroide.
+
+    Zero nas seções com dois eixos de simetria. No U/C o centro de
+    cisalhamento fica **fora** da alma, do lado oposto às mesas: é o que
+    faz uma carga aplicada no plano da alma torcer o perfil, e o que acopla
+    flexão e torção na flambagem (NBR 8800, Anexo E). Fórmulas de parede
+    fina com dimensões nas linhas médias (Galambos/Roark). No T o centro de
+    cisalhamento está no encontro mesa-alma.
+    """
+    h = float(perfil.altura_mm)
+    b = float(perfil.largura_mm)
+    tw = float(perfil.espessura_alma_mm)
+    tf = float(perfil.espessura_mesa_mm)
+    familia = familia_do_perfil(perfil)
+    x_bar, y_bar = centroide_do_perfil(perfil)
+    if familia in {"u", "c"} and 0 < tw < b and 0 < 2 * tf < h:
+        b_medio = b - tw / 2.0
+        h_medio = h - tf
+        excentricidade = 3.0 * b_medio**2 * tf / (6.0 * b_medio * tf + h_medio * tw)
+        # x̄ é medido da face externa da alma; o centro de cisalhamento fica
+        # a "excentricidade" da linha média da alma, para fora da seção.
+        return (-(excentricidade + (x_bar - tw / 2.0)), 0.0)
+    if familia == "t" and 0 < tf < h:
+        # Centroide medido da base do talão; mesa em cima.
+        return (0.0, (h - tf / 2.0) - y_bar)
+    return (0.0, 0.0)
+
+
+def constante_de_empenamento_estimada(perfil: PerfilAco) -> float:
+    """``Cw`` tabelado, ou estimado para U/C quando o catálogo não o traz.
+
+    Canal de parede fina (dimensões nas linhas médias):
+    ``Cw = tf·b³·h²/12 · (3·b·tf + 2·h·tw)/(6·b·tf + h·tw)``. Perfis I, T e
+    maciços usam o valor do catálogo (Cw de T e de seções maciças é ~0).
+    """
+    if perfil.cw_mm6 > 0:
+        return float(perfil.cw_mm6)
+    h = float(perfil.altura_mm)
+    b = float(perfil.largura_mm)
+    tw = float(perfil.espessura_alma_mm)
+    tf = float(perfil.espessura_mesa_mm)
+    if familia_do_perfil(perfil) in {"u", "c"} and 0 < tw < b and 0 < 2 * tf < h:
+        b_medio = b - tw / 2.0
+        h_medio = h - tf
+        return (
+            tf
+            * b_medio**3
+            * h_medio**2
+            / 12.0
+            * (3.0 * b_medio * tf + 2.0 * h_medio * tw)
+            / (6.0 * b_medio * tf + h_medio * tw)
+        )
+    return 0.0
+
+
 def obter_perfil(nome: str) -> PerfilAco:
     try:
         return CATALOGO_PERFIS[nome]

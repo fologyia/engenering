@@ -62,6 +62,7 @@ files = [
     "core/load_to_stress.py",
     "core/materials.py",
     "core/materials_registry.py",
+    "core/nbr8800.py",
     "core/project_assistant.py",
     "core/project_checklist.py",
     "core/project_criteria.py",
