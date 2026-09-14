@@ -12,7 +12,10 @@ from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
     contexto_sessao_projeto,
+    obter_projeto_ativo_para_edicao,
+    registrar_gravacao_vista,
     sincronizar_projeto_ativo,
+    tratar_conflito_de_gravacao,
 )
 from components.ui import cabecalho_pagina
 from core.load_cases import (
@@ -26,7 +29,7 @@ from core.load_cases import (
     criar_combinacao_carga,
     fatores_legiveis,
 )
-from core.project_store import obter_projeto_ativo, salvar_projeto
+from core.project_store import salvar_projeto
 
 st.set_page_config(
     page_title="Casos e combinações de carga",
@@ -56,12 +59,14 @@ def _limpar(valor: Any) -> Any:
 
 
 def _salvar(projeto: Mapping[str, Any], motivo: str) -> None:
-    salvo = salvar_projeto(projeto, motivo=motivo)
+    with tratar_conflito_de_gravacao():
+        salvo = salvar_projeto(projeto, motivo=motivo)
+    registrar_gravacao_vista(salvo)
     st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
 
 
 sincronizar_projeto_ativo()
-projeto = obter_projeto_ativo()
+projeto = obter_projeto_ativo_para_edicao()
 if projeto is None:
     st.warning("Abra um projeto permanente para cadastrar os carregamentos.")
     st.page_link(

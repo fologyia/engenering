@@ -5,10 +5,15 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from components.project_tools import contexto_sessao_projeto, sincronizar_projeto_ativo
+from components.project_tools import (
+    contexto_sessao_projeto,
+    obter_projeto_ativo_para_edicao,
+    sincronizar_projeto_ativo,
+    tratar_conflito_de_gravacao,
+)
 from components.ui import cabecalho_pagina
 from core.project_checklist import resumo_checklist
-from core.project_store import criar_item, obter_projeto_ativo, salvar_projeto
+from core.project_store import criar_item, salvar_projeto
 from core.project_validation import SEVERIDADES, validar_projeto
 from core.project_workflow import avaliar_todas_transicoes
 
@@ -32,7 +37,7 @@ cabecalho_pagina(
 )
 
 sincronizar_projeto_ativo()
-projeto = obter_projeto_ativo()
+projeto = obter_projeto_ativo_para_edicao()
 if projeto is None:
     st.warning("Abra um projeto permanente para executar a validação consolidada.")
     st.page_link(
@@ -199,10 +204,11 @@ if filtrados:
                         origem_validacao=item["id"],
                     )
                 )
-            salvo = salvar_projeto(
-                projeto,
-                motivo=f"{len(_bloqueios_sem_item)} bloqueio(s) da validação convertidos em checklist",
-            )
+            with tratar_conflito_de_gravacao():
+                salvo = salvar_projeto(
+                    projeto,
+                    motivo=f"{len(_bloqueios_sem_item)} bloqueio(s) da validação convertidos em checklist",
+                )
             st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
             st.rerun()
     mapa = {item["id"]: item for item in filtrados}
@@ -259,7 +265,10 @@ if filtrados:
                         origem_validacao=achado_id,
                     )
                 )
-                salvo = salvar_projeto(projeto, motivo=f"Achado {achado_id} incluído no checklist")
+                with tratar_conflito_de_gravacao():
+                    salvo = salvar_projeto(
+                        projeto, motivo=f"Achado {achado_id} incluído no checklist"
+                    )
                 st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
                 st.rerun()
 else:

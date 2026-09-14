@@ -10,7 +10,13 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from components.project_tools import contexto_sessao_projeto, sincronizar_projeto_ativo
+from components.project_tools import (
+    contexto_sessao_projeto,
+    obter_projeto_para_edicao,
+    registrar_gravacao_vista,
+    sincronizar_projeto_ativo,
+    tratar_conflito_de_gravacao,
+)
 from components.ui import cabecalho_pagina
 from core.checklist_templates import (
     ARQUIVO_USUARIO as ARQUIVO_MODELOS_USUARIO,
@@ -58,7 +64,6 @@ from core.project_store import (
     historico_revisoes,
     importar_projeto,
     listar_projetos,
-    obter_projeto,
     obter_revisao,
     restaurar_revisao,
     salvar_projeto,
@@ -216,7 +221,11 @@ def _mesclar_linhas(
 def _salvar(
     documento: Mapping[str, Any], motivo: str, *, revisao: bool = False, tipo_evento: str = ""
 ) -> dict[str, Any]:
-    salvo = salvar_projeto(documento, motivo=motivo, criar_revisao=revisao, tipo_evento=tipo_evento)
+    with tratar_conflito_de_gravacao():
+        salvo = salvar_projeto(
+            documento, motivo=motivo, criar_revisao=revisao, tipo_evento=tipo_evento
+        )
+    registrar_gravacao_vista(salvo)
     st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
     st.toast("Projeto salvo no banco local.", icon=":material/check_circle:")
     return salvo
@@ -267,10 +276,11 @@ def _tipos_com_atual(tipo_atual: str) -> list[str]:
 
 def _semear_checklist(projeto: Mapping[str, Any], modelo: ModeloChecklist) -> dict[str, Any]:
     documento, novos, _ = aplicar_modelo(projeto, modelo)
-    return salvar_projeto(
-        documento,
-        motivo=f"Checklist semeado do modelo {modelo.nome} ({len(novos)} item(ns))",
-    )
+    with tratar_conflito_de_gravacao():
+        return salvar_projeto(
+            documento,
+            motivo=f"Checklist semeado do modelo {modelo.nome} ({len(novos)} item(ns))",
+        )
 
 
 @st.dialog("Novo projeto industrial")
@@ -404,7 +414,7 @@ if not ativo_contexto:
             st.error(str(erro))
     st.stop()
 
-projeto = obter_projeto(ativo_contexto["id"])
+projeto = obter_projeto_para_edicao(ativo_contexto["id"])
 if projeto is None:
     definir_projeto_ativo(None)
     st.error("O projeto ativo não foi encontrado. Selecione outro projeto.")
@@ -1890,6 +1900,11 @@ with abas[9]:
         st.success(f"Projeto {projeto['codigo']} · {projeto['nome']} excluído.")
         st.rerun()
     st.subheader("Importar outro projeto")
+    st.page_link(
+        "app_pages/painel_industrial.py",
+        label="Backup do banco e exportação ou restauração da carteira inteira: Painel industrial",
+        icon=":material/database:",
+    )
     novo_arquivo = st.file_uploader(
         "Arquivo JSON exportado", type=["json"], key="importar_administracao"
     )

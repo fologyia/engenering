@@ -2,13 +2,44 @@
 
 O SQLite e a fonte permanente. O Streamlit usa apenas o identificador do
 projeto ativo e recarrega o documento sempre que precisa mostrar ou editar.
+
+Onde fica o banco
+-----------------
+Por padrão, na pasta de dados do usuário — ``%USERPROFILE%\\MecanicaToolkit``
+no Windows, ``$XDG_DATA_HOME/mecanica_toolkit`` (ou ``~/.local/share/...``)
+nos demais sistemas — e não dentro do repositório. O código costuma viver
+numa pasta sincronizada (OneDrive, Google Drive), e um SQLite sincronizado
+no meio de uma escrita é a causa clássica de ``database is locked`` e de
+arquivo corrompido. A variável de ambiente ``MECANICA_TOOLKIT_DB`` aponta
+para outro arquivo quando for preciso (banco de equipe, pasta de rede,
+teste manual). Um banco antigo em ``data/`` é copiado para o novo lugar na
+primeira abertura e renomeado, para não restarem duas fontes da verdade.
+
+No Windows a pasta fica na raiz do perfil, e não em ``%LOCALAPPDATA%``, de
+propósito: aplicativos empacotados (MSIX) — o Claude Desktop, por exemplo,
+quando abre o programa pela sua pré-visualização — enxergam uma cópia
+privada de ``AppData\\Local`` (``Packages\\...\\LocalCache``). Um banco
+gravado ali por esse caminho não existe para o mesmo programa aberto num
+terminal comum, e vice-versa: duas carteiras divergindo em silêncio. A raiz
+do perfil é a mesma para todos.
+
+Gravações concorrentes
+----------------------
+Cada linha de ``projects`` guarda um contador de gravações (``write_seq``),
+que sai para o documento como ``gravacao``. :func:`salvar_projeto` só grava
+se o contador do banco ainda for o que o documento carregou; duas abas (ou
+dois engenheiros num banco compartilhado) editando o mesmo projeto deixam
+de sobrescrever uma à outra em silêncio — a segunda gravação é recusada
+com :class:`ProjetoConflitoErro` e a tela precisa recarregar.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,13 +53,54 @@ from core.project_dependencies import (
 from core.technical_records import normalizar_registro_tecnico
 
 RAIZ_PROJETO = Path(__file__).resolve().parents[1]
-BANCO_PADRAO = RAIZ_PROJETO / "data" / "projetos_industriais.sqlite3"
+NOME_BANCO = "projetos_industriais.sqlite3"
+# Onde o banco vivia até setembro de 2026: dentro do repositório, ou seja,
+# dentro da pasta sincronizada. Só é lido para a migração.
+BANCO_LEGADO = RAIZ_PROJETO / "data" / NOME_BANCO
+VARIAVEL_BANCO = "MECANICA_TOOLKIT_DB"
 FORMATO_EXPORTACAO = "mecanica-toolkit-project"
+FORMATO_CARTEIRA = "mecanica-toolkit-carteira"
 VERSAO_ESQUEMA = 1
+# Campo do documento que carrega o contador de gravações da linha. Não é
+# gravado no payload nem nas fotografias de revisão: é metadado da linha,
+# injetado na leitura e conferido na escrita.
+CAMPO_GRAVACAO = "gravacao"
+
+
+def pasta_dados_usuario() -> Path:
+    """Pasta de dados por usuário: raiz do perfil no Windows, XDG nos demais.
+
+    Nada de ``%LOCALAPPDATA%`` no Windows — ver "Onde fica o banco" no
+    cabeçalho do módulo.
+    """
+    if os.name == "nt":
+        return Path.home() / "MecanicaToolkit"
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / "mecanica_toolkit"
+
+
+def caminho_banco_padrao() -> Path:
+    """Banco usado quando nenhum caminho é informado: a variável de ambiente
+    ``MECANICA_TOOLKIT_DB`` ou, sem ela, a pasta de dados do usuário."""
+    configurado = os.environ.get(VARIAVEL_BANCO, "").strip()
+    if configurado:
+        return Path(configurado).expanduser()
+    return pasta_dados_usuario() / NOME_BANCO
+
+
+# Calculados uma vez, na importação. Os testes redirecionam ``BANCO_PADRAO``
+# para um arquivo temporário; ``_banco`` lê o valor na hora da chamada, e a
+# migração do banco antigo só roda quando o padrão é o da instalação.
+_BANCO_INSTALACAO: Path = caminho_banco_padrao()
+BANCO_PADRAO: str | Path = _BANCO_INSTALACAO
 
 
 class ProjetoPersistenciaErro(RuntimeError):
     """Falha controlada de validacao ou persistencia."""
+
+
+class ProjetoConflitoErro(ProjetoPersistenciaErro):
+    """O projeto foi gravado por outra sessão depois que este documento foi lido."""
 
 
 def _agora() -> str:
@@ -56,19 +128,83 @@ def _banco(caminho_banco: str | Path | None) -> str | Path:
     return BANCO_PADRAO if caminho_banco is None else caminho_banco
 
 
-def _conectar(caminho_banco: str | Path | None = None) -> sqlite3.Connection:
-    # Único ponto que materializa o caminho: todas as demais funções apenas
-    # repassam o parâmetro, então resolver aqui cobre o módulo inteiro.
+@contextmanager
+def _conectar(caminho_banco: str | Path | None = None) -> Iterator[sqlite3.Connection]:
+    """Conexão que confirma no fim do bloco, desfaz em erro e *fecha*.
+
+    O ``with`` do próprio ``sqlite3.Connection`` só confirma ou desfaz a
+    transação: a conexão continuava aberta até o coletor de lixo passar. No
+    Windows isso mantém o arquivo preso — renomear, apagar ou copiar o banco
+    falha com "being used by another process" — e é parte do que fazia o
+    banco dentro do OneDrive travar. Único ponto que materializa o caminho:
+    todas as demais funções apenas repassam o parâmetro.
+    """
     caminho = Path(_banco(caminho_banco)).expanduser().resolve()
     caminho.parent.mkdir(parents=True, exist_ok=True)
     conexao = sqlite3.connect(caminho, timeout=15.0)
-    conexao.row_factory = sqlite3.Row
-    conexao.execute("PRAGMA foreign_keys = ON")
-    conexao.execute("PRAGMA busy_timeout = 15000")
-    return conexao
+    try:
+        conexao.row_factory = sqlite3.Row
+        conexao.execute("PRAGMA foreign_keys = ON")
+        conexao.execute("PRAGMA busy_timeout = 15000")
+        with conexao:
+            yield conexao
+    finally:
+        conexao.close()
+
+
+def caminho_banco_atual(caminho_banco: str | Path | None = None) -> Path:
+    """Arquivo que as funções deste módulo usam para o argumento dado."""
+    return Path(_banco(caminho_banco)).expanduser().resolve()
+
+
+def _migrar_banco_legado(destino: Path) -> None:
+    """Leva o banco de ``data/`` para a pasta de dados do usuário, uma vez só.
+
+    Só age quando o destino ainda não existe e o banco antigo existe: nunca
+    sobrescreve, e nunca mexe num banco apontado explicitamente pela
+    variável de ambiente. A cópia usa a API de backup do SQLite, que respeita
+    o lock de quem ainda estiver com o arquivo antigo aberto (um servidor
+    antigo, por exemplo). O original é renomeado, não apagado, para o
+    programa antigo e o novo não gravarem em bancos diferentes sem ninguém
+    perceber; se outro processo segurar o arquivo, o rename fica de fora e
+    a cópia já feita continua valendo.
+    """
+    if os.environ.get(VARIAVEL_BANCO, "").strip():
+        return
+    if destino.exists() or not BANCO_LEGADO.exists():
+        return
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    origem = sqlite3.connect(BANCO_LEGADO, timeout=15.0)
+    try:
+        copia = sqlite3.connect(destino)
+        try:
+            origem.backup(copia)
+        finally:
+            copia.close()
+    finally:
+        origem.close()
+    try:
+        BANCO_LEGADO.rename(BANCO_LEGADO.with_name(f"{BANCO_LEGADO.name}.migrado"))
+    except OSError:
+        pass
+
+
+def _garantir_colunas(conexao: sqlite3.Connection) -> None:
+    """Acrescenta colunas criadas depois do esquema original.
+
+    ``CREATE TABLE IF NOT EXISTS`` não altera uma tabela que já existe; um
+    banco criado antes da coluna precisa do ``ALTER TABLE``. O contador nasce
+    em zero para todas as linhas antigas, que é o valor que a leitura injeta
+    no documento — a primeira gravação depois da atualização passa limpa.
+    """
+    colunas = {linha["name"] for linha in conexao.execute("PRAGMA table_info(projects)")}
+    if "write_seq" not in colunas:
+        conexao.execute("ALTER TABLE projects ADD COLUMN write_seq INTEGER NOT NULL DEFAULT 0")
 
 
 def inicializar_banco(caminho_banco: str | Path | None = None) -> None:
+    if caminho_banco is None and Path(BANCO_PADRAO) == _BANCO_INSTALACAO:
+        _migrar_banco_legado(_BANCO_INSTALACAO)
     with _conectar(caminho_banco) as conexao:
         conexao.executescript(
             """
@@ -115,6 +251,7 @@ def inicializar_banco(caminho_banco: str | Path | None = None) -> None:
                 ON project_events(project_id, id DESC);
             """
         )
+        _garantir_colunas(conexao)
 
 
 # Tipos de evento da linha do tempo. Um salvamento comum antes não deixava
@@ -285,6 +422,34 @@ def _validar_documento(projeto: Mapping[str, Any]) -> dict[str, Any]:
     return documento
 
 
+def _sem_token(documento: Mapping[str, Any]) -> dict[str, Any]:
+    """Cópia do documento sem o contador de gravações."""
+    return {chave: valor for chave, valor in documento.items() if chave != CAMPO_GRAVACAO}
+
+
+def _payload(documento: Mapping[str, Any]) -> str:
+    """Serializa o documento para a linha, sem o contador de gravações."""
+    return json.dumps(_sem_token(documento), ensure_ascii=False, sort_keys=True)
+
+
+def _documento_da_linha(linha: sqlite3.Row) -> dict[str, Any]:
+    """Documento validado com o contador de gravações da linha injetado."""
+    documento = _validar_documento(json.loads(linha["payload_json"]))
+    documento[CAMPO_GRAVACAO] = int(linha["write_seq"])
+    return documento
+
+
+def _ler_pacote(conteudo: bytes | str) -> dict[str, Any]:
+    try:
+        texto = conteudo.decode("utf-8-sig") if isinstance(conteudo, bytes) else conteudo
+        pacote = json.loads(texto)
+    except (UnicodeDecodeError, json.JSONDecodeError) as erro:
+        raise ProjetoPersistenciaErro(f"Arquivo de projeto invalido: {erro}") from erro
+    if not isinstance(pacote, dict):
+        raise ProjetoPersistenciaErro("Arquivo de projeto invalido: esperava um objeto JSON.")
+    return pacote
+
+
 def criar_projeto(
     nome: str,
     *,
@@ -294,7 +459,8 @@ def criar_projeto(
 ) -> dict[str, Any]:
     inicializar_banco(caminho_banco)
     projeto = novo_projeto_documento(nome, **campos)
-    payload = json.dumps(projeto, ensure_ascii=False, sort_keys=True)
+    payload = _payload(projeto)
+    projeto[CAMPO_GRAVACAO] = 0
     with _conectar(caminho_banco) as conexao:
         conexao.execute(
             """
@@ -381,7 +547,7 @@ def carregar_projetos(
     uma por projeto.
     """
     inicializar_banco(caminho_banco)
-    sql = "SELECT payload_json FROM projects"
+    sql = "SELECT payload_json, write_seq FROM projects"
     parametros: tuple[Any, ...] = ()
     if not incluir_arquivados:
         sql += " WHERE status <> ?"
@@ -389,7 +555,7 @@ def carregar_projetos(
     sql += " ORDER BY updated_at DESC, name COLLATE NOCASE"
     with _conectar(caminho_banco) as conexao:
         linhas = conexao.execute(sql, parametros).fetchall()
-    return [_validar_documento(json.loads(linha["payload_json"])) for linha in linhas]
+    return [_documento_da_linha(linha) for linha in linhas]
 
 
 def obter_projeto(
@@ -400,11 +566,11 @@ def obter_projeto(
     inicializar_banco(caminho_banco)
     with _conectar(caminho_banco) as conexao:
         linha = conexao.execute(
-            "SELECT payload_json FROM projects WHERE id = ?", (str(projeto_id),)
+            "SELECT payload_json, write_seq FROM projects WHERE id = ?", (str(projeto_id),)
         ).fetchone()
     if linha is None:
         return None
-    return _validar_documento(json.loads(linha["payload_json"]))
+    return _documento_da_linha(linha)
 
 
 def salvar_projeto(
@@ -421,28 +587,46 @@ def salvar_projeto(
     qual for o caminho que a provocou — formulário, fluxo com portões,
     arquivamento ou restauração — para a linha do tempo não depender de cada
     página lembrar de avisar.
+
+    O documento carrega o contador de gravações que leu do banco
+    (``gravacao``). Se o banco já estiver adiante — outra aba ou outra
+    pessoa gravou no meio do caminho — a escrita é recusada com
+    :class:`ProjetoConflitoErro` em vez de sobrescrever a gravação alheia.
+    Documentos sem o campo (fotografias de revisão restauradas, documentos
+    montados à mão) não são conferidos: são sobrescritas deliberadas.
     """
     inicializar_banco(caminho_banco)
     documento = _validar_documento(projeto)
+    gravacao_lida = documento.pop(CAMPO_GRAVACAO, None)
     instante = _agora()
     with _conectar(caminho_banco) as conexao:
         atual = conexao.execute(
-            "SELECT revision, created_at, status FROM projects WHERE id = ?",
+            "SELECT revision, created_at, status, write_seq FROM projects WHERE id = ?",
             (documento["id"],),
         ).fetchone()
         if atual is None:
             raise ProjetoPersistenciaErro("Projeto nao encontrado no banco.")
+        gravacao_atual = int(atual["write_seq"])
+        if gravacao_lida is not None and int(gravacao_lida) != gravacao_atual:
+            raise ProjetoConflitoErro(
+                "Este projeto foi gravado por outra sessão depois que esta tela o carregou "
+                f"(gravação nº {gravacao_atual} no banco, nº {int(gravacao_lida)} nesta tela). "
+                "Recarregue a página e refaça a alteração, para não sobrescrever o que já foi salvo."
+            )
         revisao = int(atual["revision"]) + (1 if criar_revisao else 0)
         status_anterior = str(atual["status"])
         documento["revisao"] = revisao
         documento["criado_em"] = atual["created_at"]
         documento["atualizado_em"] = instante
-        payload = json.dumps(documento, ensure_ascii=False, sort_keys=True)
-        conexao.execute(
+        payload = _payload(documento)
+        # A condição ``write_seq=?`` fecha a janela entre o SELECT acima e
+        # este UPDATE: quem gravou nesse intervalo faz o UPDATE não casar
+        # nenhuma linha, e a recusa vale mesmo para documentos sem o campo.
+        gravados = conexao.execute(
             """
             UPDATE projects
-            SET name=?, code=?, status=?, revision=?, updated_at=?, payload_json=?
-            WHERE id=?
+            SET name=?, code=?, status=?, revision=?, updated_at=?, payload_json=?, write_seq=?
+            WHERE id=? AND write_seq=?
             """,
             (
                 documento["nome"],
@@ -451,9 +635,17 @@ def salvar_projeto(
                 revisao,
                 instante,
                 payload,
+                gravacao_atual + 1,
                 documento["id"],
+                gravacao_atual,
             ),
-        )
+        ).rowcount
+        if gravados != 1:
+            raise ProjetoConflitoErro(
+                "Este projeto foi gravado por outra sessão neste exato momento. "
+                "Recarregue a página e refaça a alteração."
+            )
+        documento[CAMPO_GRAVACAO] = gravacao_atual + 1
         if criar_revisao:
             conexao.execute(
                 """
@@ -732,7 +924,8 @@ def duplicar_projeto(
     copia["criado_em"] = instante
     copia["atualizado_em"] = instante
     _renumerar_itens_copia(copia)
-    payload = json.dumps(_validar_documento(copia), ensure_ascii=False, sort_keys=True)
+    payload = _payload(_validar_documento(copia))
+    copia[CAMPO_GRAVACAO] = 0
     with _conectar(caminho_banco) as conexao:
         conexao.execute(
             """
@@ -846,7 +1039,7 @@ def exportar_projeto(
         "formato": FORMATO_EXPORTACAO,
         "versao": VERSAO_ESQUEMA,
         "exportado_em": _agora(),
-        "projeto": projeto,
+        "projeto": _sem_token(projeto),
         "historico": (
             historico_revisoes(projeto_id, caminho_banco=caminho_banco) if incluir_historico else []
         ),
@@ -862,11 +1055,7 @@ def importar_projeto(
     *,
     caminho_banco: str | Path | None = None,
 ) -> dict[str, Any]:
-    try:
-        texto = conteudo.decode("utf-8-sig") if isinstance(conteudo, bytes) else conteudo
-        pacote = json.loads(texto)
-    except (UnicodeDecodeError, json.JSONDecodeError) as erro:
-        raise ProjetoPersistenciaErro(f"Arquivo de projeto invalido: {erro}") from erro
+    pacote = _ler_pacote(conteudo)
     if pacote.get("formato") != FORMATO_EXPORTACAO:
         raise ProjetoPersistenciaErro("O arquivo nao e um projeto do Mecanica Toolkit.")
     origem = _validar_documento(pacote.get("projeto", {}))
@@ -881,7 +1070,8 @@ def importar_projeto(
     copia["atualizado_em"] = instante
     _renumerar_itens_copia(copia)
     inicializar_banco(caminho_banco)
-    payload = json.dumps(copia, ensure_ascii=False, sort_keys=True)
+    payload = _payload(copia)
+    copia[CAMPO_GRAVACAO] = 0
     with _conectar(caminho_banco) as conexao:
         conexao.execute(
             """
@@ -918,6 +1108,238 @@ def importar_projeto(
         )
     definir_projeto_ativo(copia["id"], caminho_banco=caminho_banco)
     return deepcopy(copia)
+
+
+def pasta_backups(caminho_banco: str | Path | None = None) -> Path:
+    """Pasta ``backups/`` ao lado do banco."""
+    return caminho_banco_atual(caminho_banco).parent / "backups"
+
+
+def fazer_backup(
+    destino: str | Path | None = None,
+    *,
+    caminho_banco: str | Path | None = None,
+) -> Path:
+    """Copia íntegra e compactada do banco (``VACUUM INTO``), num arquivo novo.
+
+    Sem ``destino``, grava em ``backups/`` ao lado do banco, com data e hora
+    no nome. Nunca sobrescreve: um destino que já existe é erro, não
+    substituição. O ``VACUUM INTO`` é transacional do lado do SQLite — a
+    cópia sai consistente mesmo com o programa aberto — e não pode rodar
+    dentro de uma transação, por isso usa uma conexão própria.
+    """
+    inicializar_banco(caminho_banco)
+    origem = caminho_banco_atual(caminho_banco)
+    if destino is None:
+        carimbo = datetime.now().strftime("%Y%m%d-%H%M%S")
+        pasta = origem.parent / "backups"
+        alvo = pasta / f"{origem.stem}-{carimbo}{origem.suffix}"
+        sequencia = 1
+        while alvo.exists():
+            alvo = pasta / f"{origem.stem}-{carimbo}-{sequencia}{origem.suffix}"
+            sequencia += 1
+    else:
+        alvo = Path(destino).expanduser().resolve()
+    if alvo.exists():
+        raise ProjetoPersistenciaErro(f"Ja existe um arquivo em {alvo}; o backup nao sobrescreve.")
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    conexao = sqlite3.connect(origem, timeout=15.0)
+    try:
+        conexao.execute("VACUUM INTO ?", (str(alvo),))
+    except sqlite3.Error as erro:
+        raise ProjetoPersistenciaErro(f"Nao foi possivel gerar o backup: {erro}") from erro
+    finally:
+        conexao.close()
+    return alvo
+
+
+def listar_backups(caminho_banco: str | Path | None = None) -> list[dict[str, Any]]:
+    """Backups da pasta padrão, do mais recente para o mais antigo."""
+    pasta = pasta_backups(caminho_banco)
+    if not pasta.is_dir():
+        return []
+    arquivos = sorted(
+        (item for item in pasta.glob("*.sqlite3") if item.is_file()),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    return [
+        {
+            "caminho": arquivo,
+            "nome": arquivo.name,
+            "tamanho_bytes": arquivo.stat().st_size,
+            "modificado_em": datetime.fromtimestamp(arquivo.stat().st_mtime)
+            .astimezone()
+            .isoformat(timespec="seconds"),
+        }
+        for arquivo in arquivos
+    ]
+
+
+def exportar_carteira(
+    *,
+    incluir_arquivados: bool = True,
+    caminho_banco: str | Path | None = None,
+) -> bytes:
+    """Todos os projetos num JSON só, com revisões e linha do tempo.
+
+    Diferente de :func:`exportar_projeto`, leva a fotografia de cada revisão
+    controlada — é um pacote de restauração, não só de leitura — e por isso
+    :func:`importar_carteira` consegue devolver o histórico inteiro.
+    """
+    inicializar_banco(caminho_banco)
+    sql = "SELECT id, payload_json FROM projects"
+    parametros: tuple[Any, ...] = ()
+    if not incluir_arquivados:
+        sql += " WHERE status <> ?"
+        parametros = ("Arquivado",)
+    sql += " ORDER BY updated_at DESC, name COLLATE NOCASE"
+    pacotes: list[dict[str, Any]] = []
+    with _conectar(caminho_banco) as conexao:
+        for linha in conexao.execute(sql, parametros).fetchall():
+            revisoes = conexao.execute(
+                """
+                SELECT revision, reason, created_at, snapshot_json
+                FROM project_revisions WHERE project_id=? ORDER BY revision
+                """,
+                (linha["id"],),
+            ).fetchall()
+            eventos = conexao.execute(
+                """
+                SELECT created_at, kind, description, revision, status
+                FROM project_events WHERE project_id=? ORDER BY id
+                """,
+                (linha["id"],),
+            ).fetchall()
+            pacotes.append(
+                {
+                    "projeto": _validar_documento(json.loads(linha["payload_json"])),
+                    "revisoes": [
+                        {
+                            "revisao": item["revision"],
+                            "motivo": item["reason"],
+                            "criado_em": item["created_at"],
+                            "documento": json.loads(item["snapshot_json"]),
+                        }
+                        for item in revisoes
+                    ],
+                    "eventos": [
+                        {
+                            "quando": item["created_at"],
+                            "tipo": item["kind"],
+                            "descricao": item["description"],
+                            "revisao": item["revision"],
+                            "status": item["status"],
+                        }
+                        for item in eventos
+                    ],
+                }
+            )
+    pacote = {
+        "formato": FORMATO_CARTEIRA,
+        "versao": VERSAO_ESQUEMA,
+        "exportado_em": _agora(),
+        "projetos": pacotes,
+    }
+    return json.dumps(pacote, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def importar_carteira(
+    conteudo: bytes | str,
+    *,
+    caminho_banco: str | Path | None = None,
+) -> dict[str, list[str]]:
+    """Restaura os projetos de um pacote de carteira, com identidade e histórico.
+
+    Projetos cujo ``id`` já existe no banco são ignorados: a restauração
+    nunca sobrescreve o que está gravado. Quem quiser uma cópia de um
+    projeto que já existe usa :func:`importar_projeto` com o pacote
+    individual. Tudo entra numa transação só — um pacote malformado não
+    deixa metade dos projetos no banco. O projeto ativo não muda. Devolve
+    os códigos importados e os ignorados.
+    """
+    pacote = _ler_pacote(conteudo)
+    if pacote.get("formato") != FORMATO_CARTEIRA:
+        raise ProjetoPersistenciaErro(
+            "O arquivo nao e uma carteira exportada pelo Mecanica Toolkit."
+        )
+    itens = pacote.get("projetos")
+    if not isinstance(itens, list):
+        raise ProjetoPersistenciaErro("A carteira exportada nao traz a lista de projetos.")
+    inicializar_banco(caminho_banco)
+    importados: list[str] = []
+    ignorados: list[str] = []
+    with _conectar(caminho_banco) as conexao:
+        for item in itens:
+            if not isinstance(item, Mapping):
+                raise ProjetoPersistenciaErro("A carteira exportada tem um projeto malformado.")
+            documento = _sem_token(_validar_documento(item.get("projeto", {})))
+            existe = conexao.execute(
+                "SELECT 1 FROM projects WHERE id=?", (documento["id"],)
+            ).fetchone()
+            if existe is not None:
+                ignorados.append(str(documento["codigo"]))
+                continue
+            conexao.execute(
+                """
+                INSERT INTO projects
+                    (id, name, code, status, revision, created_at, updated_at,
+                     payload_json, write_seq)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                (
+                    documento["id"],
+                    documento["nome"],
+                    documento["codigo"],
+                    documento["status"],
+                    int(documento.get("revisao", 0)),
+                    str(documento.get("criado_em") or _agora()),
+                    str(documento.get("atualizado_em") or _agora()),
+                    _payload(documento),
+                ),
+            )
+            for revisao in item.get("revisoes", []):
+                fotografia = revisao.get("documento") if isinstance(revisao, Mapping) else None
+                if not isinstance(fotografia, Mapping):
+                    raise ProjetoPersistenciaErro(
+                        f"A carteira exportada tem uma revisao sem documento em {documento['codigo']}."
+                    )
+                conexao.execute(
+                    """
+                    INSERT INTO project_revisions
+                        (project_id, revision, reason, created_at, snapshot_json)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        documento["id"],
+                        int(revisao.get("revisao", 0)),
+                        str(revisao.get("motivo") or "Revisao"),
+                        str(revisao.get("criado_em") or documento.get("criado_em") or _agora()),
+                        json.dumps(_sem_token(fotografia), ensure_ascii=False, sort_keys=True),
+                    ),
+                )
+            for evento in item.get("eventos", []):
+                if not isinstance(evento, Mapping):
+                    continue
+                _registrar_evento(
+                    conexao,
+                    documento["id"],
+                    str(evento.get("tipo") or EVENTO_SALVAMENTO),
+                    str(evento.get("descricao") or ""),
+                    revisao=int(evento.get("revisao") or 0),
+                    status=str(evento.get("status") or documento["status"]),
+                    instante=str(evento.get("quando") or "") or None,
+                )
+            _registrar_evento(
+                conexao,
+                documento["id"],
+                EVENTO_ADMINISTRACAO,
+                "Restaurado de uma carteira exportada",
+                revisao=int(documento.get("revisao", 0)),
+                status=documento["status"],
+            )
+            importados.append(str(documento["codigo"]))
+    return {"importados": importados, "ignorados": ignorados}
 
 
 def criar_item(

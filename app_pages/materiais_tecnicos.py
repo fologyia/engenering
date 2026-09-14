@@ -8,7 +8,11 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from components.project_tools import sincronizar_projeto_ativo
+from components.project_tools import (
+    obter_projeto_ativo_para_edicao,
+    sincronizar_projeto_ativo,
+    tratar_conflito_de_gravacao,
+)
 from components.ui import cabecalho_pagina, configurar_pagina
 from core.materials_registry import (
     PROPRIEDADES,
@@ -20,7 +24,7 @@ from core.materials_registry import (
     resumir_fonte,
     verificar_temperatura,
 )
-from core.project_store import obter_projeto_ativo, salvar_projeto
+from core.project_store import salvar_projeto
 
 
 @st.cache_data(show_spinner=False)
@@ -67,7 +71,7 @@ cabecalho_pagina(
 )
 
 sincronizar_projeto_ativo()
-projeto = obter_projeto_ativo()
+projeto = obter_projeto_ativo_para_edicao()
 catalogo = _catalogo()
 materiais_projeto = [
     material_com_avaliacao(item) for item in (projeto or {}).get("materiais_projeto", [])
@@ -239,7 +243,8 @@ elif modo == "Biblioteca do projeto":
             st.error(str(erro), icon=":material/error:")
         else:
             projeto["materiais_projeto"].append(novo)
-            salvar_projeto(projeto, motivo=f"Material {novo['nome']} cadastrado")
+            with tratar_conflito_de_gravacao():
+                salvar_projeto(projeto, motivo=f"Material {novo['nome']} cadastrado")
             st.success(
                 f"Material salvo como {novo['avaliacao']['nivel']} "
                 f"({novo['avaliacao']['indice_rastreabilidade']}% de rastreabilidade)."
@@ -302,9 +307,10 @@ elif modo == "Biblioteca do projeto":
                     material if item.get("id") == material["id"] else item
                     for item in projeto["materiais_projeto"]
                 ]
-                salvar_projeto(
-                    projeto, motivo=f"Vínculos do material {material['nome']} atualizados"
-                )
+                with tratar_conflito_de_gravacao():
+                    salvar_projeto(
+                        projeto, motivo=f"Vínculos do material {material['nome']} atualizados"
+                    )
                 st.success("Vínculos atualizados no escopo físico e no memorial.")
                 st.rerun()
 
@@ -316,7 +322,8 @@ elif modo == "Biblioteca do projeto":
             for componente in projeto.get("componentes", []):
                 if componente.get("material_id") == material_id:
                     componente.pop("material_id", None)
-            salvar_projeto(projeto, motivo=f"Material {material['nome']} removido")
+            with tratar_conflito_de_gravacao():
+                salvar_projeto(projeto, motivo=f"Material {material['nome']} removido")
             st.success(
                 "Cadastro removido. O histórico permanece disponível nas revisões controladas já criadas."
             )

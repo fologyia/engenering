@@ -8,7 +8,12 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-from components.project_tools import sincronizar_projeto_ativo
+from components.project_tools import (
+    obter_projeto_ativo_para_edicao,
+    registrar_gravacao_vista,
+    sincronizar_projeto_ativo,
+    tratar_conflito_de_gravacao,
+)
 from components.ui import cabecalho_pagina
 from core.project_report import (
     SECOES_RELATORIO,
@@ -17,7 +22,7 @@ from core.project_report import (
     gerar_relatorio_industrial_word,
     montar_modelo_relatorio,
 )
-from core.project_store import EVENTO_EMISSAO, obter_projeto_ativo, salvar_projeto
+from core.project_store import EVENTO_EMISSAO, salvar_projeto
 from core.project_validation import validar_projeto
 from core.technical_records import registro_superado, rotulo_componente
 
@@ -75,7 +80,7 @@ cabecalho_pagina(
 )
 
 sincronizar_projeto_ativo()
-projeto = obter_projeto_ativo()
+projeto = obter_projeto_ativo_para_edicao()
 if projeto is None:
     st.warning("Abra um projeto permanente para montar o memorial.")
     st.page_link(
@@ -119,11 +124,13 @@ def _registrar_emissao(
     configuracao["ultimo_snapshot_hash"] = snapshot
     configuracao["ultima_emissao"] = metadata["emissao"]
     documento["configuracao_relatorio"] = configuracao
-    salvar_projeto(
-        documento,
-        motivo=f"Memorial gerado: {metadata['codigo']} R{metadata['revisao']} ({metadata['situacao']}, perfil {perfil})",
-        tipo_evento=EVENTO_EMISSAO,
-    )
+    with tratar_conflito_de_gravacao():
+        salvo = salvar_projeto(
+            documento,
+            motivo=f"Memorial gerado: {metadata['codigo']} R{metadata['revisao']} ({metadata['situacao']}, perfil {perfil})",
+            tipo_evento=EVENTO_EMISSAO,
+        )
+    registrar_gravacao_vista(salvo)
 
 
 st.subheader(f"{projeto['codigo']} · {projeto['nome']}")

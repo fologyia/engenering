@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from components.project_tools import contexto_sessao_projeto
+from components.project_tools import contexto_sessao_projeto, tratar_conflito_de_gravacao
 from components.ui import cabecalho_pagina, configurar_pagina
 from core.project_store import criar_item, obter_projeto_ativo, salvar_projeto
 from core.standards_library import (
@@ -359,10 +359,11 @@ if visao == "Catálogo por segmento":
                             fonte=norma_escolhida["fonte_url"],
                         )
                     )
-                    salvo = salvar_projeto(
-                        projeto_ativo,
-                        motivo=f"Referência {norma_escolhida['codigo']} adicionada à matriz normativa",
-                    )
+                    with tratar_conflito_de_gravacao():
+                        salvo = salvar_projeto(
+                            projeto_ativo,
+                            motivo=f"Referência {norma_escolhida['codigo']} adicionada à matriz normativa",
+                        )
                     st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
                     st.rerun()
             else:

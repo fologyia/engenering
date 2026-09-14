@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -16,7 +17,18 @@ from core.project_portfolio import (
     resumir_projeto,
     vencimentos_da_carteira,
 )
-from core.project_store import carregar_projetos, definir_projeto_ativo
+from core.project_store import (
+    VARIAVEL_BANCO,
+    ProjetoPersistenciaErro,
+    caminho_banco_atual,
+    carregar_projetos,
+    definir_projeto_ativo,
+    exportar_carteira,
+    fazer_backup,
+    importar_carteira,
+    listar_backups,
+    pasta_backups,
+)
 from core.project_workflow import SITUACOES
 
 st.set_page_config(
@@ -49,6 +61,104 @@ def _data_curta(valor: Any) -> str:
         return texto
 
 
+def _data_hora(valor: Any) -> str:
+    texto = str(valor or "").strip()
+    try:
+        return datetime.fromisoformat(texto).astimezone().strftime("%d/%m/%Y %H:%M")
+    except ValueError:
+        return texto
+
+
+def _tamanho(bytes_: int) -> str:
+    if bytes_ >= 1_048_576:
+        return f"{bytes_ / 1_048_576:.1f} MB"
+    return f"{max(1, bytes_ // 1024)} KB"
+
+
+def _secao_dados_e_backup(*, expandida: bool) -> None:
+    """Onde o banco está, backup íntegro e exportação/restauração da carteira.
+
+    Fica no painel — e não em Projetos permanentes — porque trata da carteira
+    inteira e precisa existir mesmo sem nenhum projeto no banco: restaurar
+    uma carteira exportada é justamente o que se faz num banco vazio.
+    """
+    banco = caminho_banco_atual()
+    with st.expander("Dados e backup", icon=":material/database:", expanded=expandida):
+        tamanho = _tamanho(banco.stat().st_size) if banco.exists() else "ainda não criado"
+        st.caption(
+            f"Banco de projetos: `{banco}` ({tamanho}). Para usar outro arquivo, defina a "
+            f"variável de ambiente `{VARIAVEL_BANCO}` antes de abrir o programa."
+        )
+        with st.container(horizontal=True):
+            if st.button(
+                "Gerar backup do banco",
+                icon=":material/backup:",
+                help=(
+                    "Grava uma cópia íntegra e compactada (VACUUM INTO) na pasta backups/, "
+                    "ao lado do banco. Nunca sobrescreve um backup anterior."
+                ),
+            ):
+                try:
+                    st.session_state["painel_ultimo_backup"] = str(fazer_backup())
+                except ProjetoPersistenciaErro as erro:
+                    st.error(str(erro))
+            st.download_button(
+                "Exportar carteira (JSON)",
+                data=exportar_carteira,
+                file_name=f"carteira_{date.today().isoformat()}.json",
+                mime="application/json",
+                icon=":material/download:",
+                help=(
+                    "Todos os projetos, com revisões e linha do tempo, num arquivo legível. "
+                    "É o pacote que a restauração abaixo aceita."
+                ),
+            )
+        ultimo = st.session_state.get("painel_ultimo_backup")
+        if ultimo and Path(ultimo).exists():
+            st.success(f"Backup gravado em `{ultimo}`.", icon=":material/check_circle:")
+            st.download_button(
+                "Baixar este backup",
+                data=lambda: Path(ultimo).read_bytes(),
+                file_name=Path(ultimo).name,
+                mime="application/vnd.sqlite3",
+                icon=":material/download:",
+                key="painel_baixar_backup",
+            )
+        backups = listar_backups()
+        if backups:
+            st.caption(
+                f"Backups em `{pasta_backups()}` — "
+                + " · ".join(
+                    f"{item['nome']} ({_data_hora(item['modificado_em'])}, "
+                    f"{_tamanho(item['tamanho_bytes'])})"
+                    for item in backups[:5]
+                )
+                + (f" · e mais {len(backups) - 5}" if len(backups) > 5 else "")
+                + "."
+            )
+        arquivo = st.file_uploader(
+            "Restaurar uma carteira exportada",
+            type=["json"],
+            key="painel_importar_carteira",
+            help=(
+                "Projetos que já existem no banco (mesmo id) são ignorados: a restauração "
+                "nunca sobrescreve o que está gravado."
+            ),
+        )
+        if arquivo and st.button("Restaurar projetos do arquivo", icon=":material/upload:"):
+            try:
+                resultado = importar_carteira(arquivo.getvalue())
+            except ProjetoPersistenciaErro as erro:
+                st.error(str(erro))
+            else:
+                st.toast(
+                    f"{len(resultado['importados'])} projeto(s) restaurado(s); "
+                    f"{len(resultado['ignorados'])} já existia(m) e foi/foram ignorado(s).",
+                    icon=":material/check_circle:",
+                )
+                st.rerun()
+
+
 sincronizar_projeto_ativo()
 ativo = st.session_state.get("projeto_ativo") or {}
 
@@ -61,6 +171,7 @@ if not projetos:
         label="Abrir Projetos permanentes",
         icon=":material/folder_managed:",
     )
+    _secao_dados_e_backup(expandida=True)
     st.stop()
 
 hoje = date.today()
@@ -280,6 +391,8 @@ with col_detalhe, st.container(border=True):
             )
     else:
         st.caption("Sem projetos visíveis.")
+
+_secao_dados_e_backup(expandida=False)
 
 st.info(
     "O painel lê o banco local a cada abertura. Índice documental e prontidão medem preenchimento e "

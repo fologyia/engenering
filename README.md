@@ -16,6 +16,31 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 **Gestão industrial**, **Análises técnicas**, **Dimensionamento complementar**,
 **Ferramentas**, **Referências** e **Ajuda**.
 
+### Onde ficam os dados
+
+O banco de projetos (`projetos_industriais.sqlite3`) fica na pasta de dados do
+usuário — `%USERPROFILE%\MecanicaToolkit` no Windows,
+`~/.local/share/mecanica_toolkit` nos demais sistemas — e não dentro do
+repositório: um SQLite numa pasta sincronizada (OneDrive, Google Drive) é a
+causa clássica de `database is locked` e de banco corrompido. (No Windows a
+pasta fica na raiz do perfil, e não em `%LOCALAPPDATA%`, porque aplicativos
+empacotados — o Claude Desktop, ao abrir o programa pela pré-visualização —
+enxergam uma cópia privada de `AppData\Local`, e o banco gravado ali some
+para o mesmo programa aberto num terminal comum.) Para usar outro arquivo
+(banco de equipe, outra pasta local), defina a variável de ambiente
+`MECANICA_TOOLKIT_DB` antes de abrir o programa:
+
+```bash
+set MECANICA_TOOLKIT_DB=D:\engenharia\projetos.sqlite3
+```
+
+Um banco antigo em `data/` é copiado para o novo lugar na primeira abertura e
+renomeado para `.migrado`. O **Painel industrial** gera backups íntegros do
+banco (`VACUUM INTO`, na pasta `backups/` ao lado do arquivo), exporta a
+carteira inteira em JSON — com revisões e linha do tempo — e restaura esse
+pacote num banco vazio ou parcial, sem sobrescrever projetos existentes.
+Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
+
 ## Interface
 
 - tema técnico em azul-petróleo com barra lateral de alto contraste;
@@ -35,11 +60,18 @@ O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
 - próximos passos sugeridos por projeto, na mesma ordem que a página do projeto
   recomenda, e abertura direta como projeto ativo;
 - filtros por situação e cliente, busca por código, TAG ou responsável e
-  exportação da carteira em CSV.
+  exportação da carteira em CSV;
+- **dados e backup**: caminho do banco em uso, backup íntegro com um clique,
+  exportação da carteira inteira em JSON e restauração desse pacote.
 
 ### Projetos permanentes
 
-- persistência local em `data/projetos_industriais.sqlite3`;
+- persistência local em SQLite na pasta de dados do usuário (ver *Onde
+  ficam os dados*), configurável pela variável `MECANICA_TOOLKIT_DB`;
+- gravações concorrentes detectadas: cada documento carrega o contador de
+  gravações do banco, e uma segunda aba (ou outra pessoa num banco
+  compartilhado) que tente gravar por cima de uma gravação mais nova é
+  recusada com aviso, em vez de sobrescrevê-la em silêncio;
 - identificação, cliente, unidade, área, TAG, processo e responsabilidades;
 - base de projeto com documentos, carregamentos, condições, critérios e limitações;
 - **critérios técnicos** do projeto — fator de segurança mínimo, utilização
@@ -401,7 +433,7 @@ mecanica_toolkit/
 │   ├── materiais_ref_anglo.json
 │   ├── materiais_ref_gerdau.json
 │   ├── perfis_ref_gerdau.json
-│   └── projetos_industriais.sqlite3  # criado automaticamente
+│   └── (o banco de projetos fica fora do repositório — ver "Onde ficam os dados")
 ├── docs/
 ├── normas_pdf/
 └── tests/

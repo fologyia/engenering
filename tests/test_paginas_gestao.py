@@ -1,151 +1,23 @@
-"""As páginas de gestão precisam abrir com um projeto de verdade carregado.
+"""As páginas de gestão precisam mostrar as leituras certas de um projeto real.
 
-`test_paginas_carregam` abre cada página com o banco do usuário — que pode
-estar vazio, e aí a página de projetos para no aviso inicial sem exercitar
-nenhuma aba. Aqui o banco é temporário e recebe um projeto cheio: escopo,
-normas, documentos, critérios, registros (um superado), checklist com
-prazo vencido e revisão controlada. Todas as abas, o painel e as centrais
-têm de renderizar sem exceção sobre esse projeto.
+A abertura sem exceção de cada página — com e sem projeto — fica em
+``test_paginas_carregam``. Aqui o banco temporário recebe o projeto cheio da
+fixture ``banco_com_projeto`` (``conftest.py``) e os testes conferem o que
+as páginas *mostram*: métricas, alertas, semeadura do checklist e backup.
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 from core import project_store
-from core.project_records import superar_registro
-from core.project_store import (
-    adicionar_registro_tecnico,
-    criar_item,
-    criar_projeto,
-    salvar_projeto,
-)
+from core.project_store import criar_projeto, salvar_projeto
 
 RAIZ = Path(__file__).resolve().parent.parent
 APP = str(RAIZ / "app.py")
-
-PAGINAS_GESTAO = (
-    "app_pages/painel_industrial.py",
-    "app_pages/gestao_projetos.py",
-    "app_pages/central_validacao.py",
-    "app_pages/central_relatorios.py",
-    "app_pages/inicio.py",
-)
-
-
-@pytest.fixture
-def banco_com_projeto(tmp_path, monkeypatch):
-    banco = tmp_path / "gestao.sqlite3"
-    monkeypatch.setattr(project_store, "BANCO_PADRAO", banco)
-    projeto = criar_projeto(
-        "Suporte do transportador CV-204",
-        codigo="PRJ-2026-014",
-        cliente="Mineração Norte",
-        unidade_industrial="Planta Sul",
-        area="Expedição",
-        tag_equipamento="CV-204",
-        objetivo="Verificar a estrutura de suporte para a nova carga.",
-    )
-    projeto.update(
-        {"responsavel": "Eng. Ana", "verificador": "Eng. Bruno", "aprovador": "Eng. Carla"}
-    )
-    componente = criar_item(
-        tag="CV-204-SUP-01",
-        descricao="Suporte principal",
-        material="ASTM A572 Gr. 50",
-        fonte_material="Certificado MTR 88213",
-        desenho="DE-1042 rev. B",
-        criticidade="Alta",
-    )
-    projeto["componentes"] = [componente]
-    projeto["normas"] = [
-        criar_item(codigo="ABNT NBR 8800", edicao="2024", escopo="Barras", conferida=True)
-    ]
-    projeto["anexos"] = [
-        criar_item(
-            codigo="DE-1042",
-            titulo="Arranjo geral",
-            tipo="Desenho",
-            revisao="B",
-            situacao="Superado",
-        ),
-        criar_item(
-            codigo="FD-77",
-            titulo="Folha de dados",
-            tipo="Folha de dados",
-            revisao="",
-            situacao="Aguardando recebimento",
-        ),
-    ]
-    projeto["criterios_projeto"] = {
-        "seguranca": {"fator_seguranca_minimo": 1.8},
-        "normativo": {"norma_principal": "ABNT NBR 8800", "criterio_aceitacao": "ELU/ELS"},
-    }
-    projeto["checklist"] = [
-        criar_item(
-            item="Cobrar folha de dados",
-            responsavel="Eng. Ana",
-            prazo=(date.today() - timedelta(days=3)).isoformat(),
-            estado="Aberto",
-            critico=True,
-        ),
-        criar_item(item="Revisão independente", prazo="após a parada", estado="Aberto"),
-        criar_item(
-            item="Conferir desenho",
-            prazo=(date.today() + timedelta(days=2)).isoformat(),
-            estado="Em andamento",
-        ),
-        criar_item(item="Feito", estado="Concluído"),
-    ]
-    projeto = salvar_projeto(projeto, motivo="Marco inicial", criar_revisao=True)
-    projeto = adicionar_registro_tecnico(
-        projeto["id"],
-        {
-            "modulo": "Análise estática",
-            "modulo_id": "analise_estatica",
-            "titulo": "Ponto crítico P1",
-            "status": "Atende",
-            "resumo": "von Mises",
-            "metodo": "Estado plano",
-            "entradas": {"sigma_x_MPa": 120.0},
-            "resultados": {"fator_seguranca": 2.1, "fator_seguranca_minimo": 1.5},
-            "premissas": ["Estado plano"],
-            "referencias": ["DE-1042"],
-            "conclusao": "Atende.",
-            "componentes_ids": [componente["id"]],
-        },
-    )
-    projeto = adicionar_registro_tecnico(
-        projeto["id"],
-        {
-            "modulo": "Análise estática",
-            "modulo_id": "analise_estatica",
-            "titulo": "Ponto P1 antigo",
-            "status": "Não atende",
-            "entradas": {"sigma_x_MPa": 400.0},
-            "resultados": {"fator_seguranca": 0.7},
-            "conclusao": "Não atende.",
-        },
-    )
-    antigo = projeto["registros_tecnicos"][1]["id"]
-    documento = superar_registro(
-        projeto, antigo, motivo="Refeito", substituto_id=projeto["registros_tecnicos"][0]["id"]
-    )
-    salvar_projeto(documento, motivo="Registro superado")
-    return banco
-
-
-@pytest.mark.parametrize("pagina", PAGINAS_GESTAO)
-def test_paginas_de_gestao_abrem_com_projeto_carregado(banco_com_projeto, pagina):
-    teste = AppTest.from_file(APP, default_timeout=180)
-    teste.run()
-    teste.switch_page(pagina)
-    teste.run()
-    assert not teste.exception, f"{pagina}: {[str(e.value) for e in teste.exception]}"
 
 
 def test_pagina_de_projetos_mostra_as_leituras_de_gestao(banco_com_projeto):
@@ -230,3 +102,80 @@ def test_aba_checklist_semeia_o_modelo_do_tipo_do_projeto(banco_com_projeto_vazi
     assert not any(
         "do modelo" in botao.label for botao in teste.button if botao.label.startswith("Adicionar")
     )
+
+
+def test_painel_gera_backup_do_banco_em_uso(banco_com_projeto):
+    """O botão do painel grava um backup íntegro ao lado do banco *em uso*.
+
+    Em uso = o banco temporário deste teste, e não o do usuário: se a página
+    lesse o caminho na importação em vez de na chamada, o backup iria parar
+    na pasta de dados real.
+    """
+    from core.project_store import listar_backups, listar_projetos, pasta_backups
+
+    teste = AppTest.from_file(APP, default_timeout=180)
+    teste.run()
+    teste.switch_page("app_pages/painel_industrial.py")
+    teste.run()
+    assert not teste.exception
+    assert listar_backups() == []
+
+    botao = next(item for item in teste.button if item.label == "Gerar backup do banco")
+    botao.click()
+    teste.run()
+    assert not teste.exception, [str(e.value) for e in teste.exception]
+
+    backups = listar_backups()
+    assert len(backups) == 1
+    assert backups[0]["caminho"].parent == pasta_backups() == banco_com_projeto.parent / "backups"
+    copia = listar_projetos(caminho_banco=backups[0]["caminho"])
+    assert [item["codigo"] for item in copia] == ["PRJ-2026-014"]
+    assert any("Backup gravado em" in str(item.value) for item in teste.success)
+
+
+def test_duas_abas_no_mesmo_projeto_a_segunda_gravacao_e_avisada_e_nao_sobrescreve(
+    banco_com_projeto,
+):
+    """Duas sessões abrem o projeto; a que grava por último não apaga a outra.
+
+    A aba B renderiza com o documento que carregou antes da gravação da aba
+    A. Ao salvar, o programa recusa e mostra o aviso — em vez da caixa de
+    exceção do Streamlit, e em vez de sobrescrever em silêncio, que era o
+    comportamento anterior.
+    """
+    from core.project_store import obter_projeto_ativo
+
+    def abrir_projetos() -> AppTest:
+        teste = AppTest.from_file(APP, default_timeout=180)
+        teste.run()
+        teste.switch_page("app_pages/gestao_projetos.py")
+        teste.run()
+        assert not teste.exception
+        return teste
+
+    def salvar_essencial(teste: AppTest, descricao: str) -> None:
+        campo = next(item for item in teste.text_area if item.label.startswith("Descrição"))
+        campo.set_value(descricao)
+        botao = next(item for item in teste.button if item.label == "Salvar essencial")
+        botao.click()
+        teste.run()
+
+    aba_a = abrir_projetos()
+    aba_b = abrir_projetos()
+
+    salvar_essencial(aba_a, "Escrito pela aba A")
+    assert not aba_a.exception, [str(e.value) for e in aba_a.exception]
+    assert obter_projeto_ativo()["descricao"] == "Escrito pela aba A"
+
+    salvar_essencial(aba_b, "Escrito pela aba B por cima da A")
+    assert not aba_b.exception, [str(e.value) for e in aba_b.exception]
+    avisos = " ".join(str(item.value) for item in aba_b.error)
+    assert "gravado por outra sessão" in avisos
+    assert obter_projeto_ativo()["descricao"] == "Escrito pela aba A"
+
+    # Depois de recarregar, a aba B grava normalmente.
+    aba_b = abrir_projetos()
+    salvar_essencial(aba_b, "Escrito pela aba B depois de recarregar")
+    assert not aba_b.exception
+    assert "outra sessão" not in " ".join(str(item.value) for item in aba_b.error)
+    assert obter_projeto_ativo()["descricao"] == "Escrito pela aba B depois de recarregar"

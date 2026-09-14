@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 import streamlit as st
 
 from core.project_store import (
+    CAMPO_GRAVACAO,
+    ProjetoConflitoErro,
     ProjetoPersistenciaErro,
     criar_item,
     criar_projeto,
+    obter_projeto,
     obter_projeto_ativo,
     registrar_calculo_tecnico,
     revisar_listas,
@@ -42,6 +46,70 @@ def contexto_sessao_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
         "rota": "Gestão industrial",
         "persistente": True,
     }
+
+
+_CHAVE_GRAVACOES_VISTAS = "_gravacoes_vistas"
+
+
+def _com_gravacao_vista(projeto: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Troca o contador do documento pelo que esta sessão viu na tela anterior.
+
+    O Streamlit reexecuta a página inteira a cada clique: o documento é
+    recarregado do banco *antes* de o formulário ser aplicado, então o
+    contador fresco nunca acusaria conflito — a tela mostrava o projeto de
+    antes, o usuário editou em cima daquilo, e o salvamento sobrescreveria o
+    que outra aba gravou no meio-tempo. Por isso a página salva contra o
+    contador da renderização anterior (a que o usuário estava olhando), e
+    o desta renderização fica guardado para a próxima.
+
+    Um salvamento só acontece na execução seguinte a uma renderização desta
+    mesma sessão, e toda gravação da própria página é seguida de ``rerun``
+    (ou de :func:`registrar_gravacao_vista`), por isso o contador guardado
+    nunca fica atrás da própria sessão — só de *outra*.
+    """
+    if projeto is None:
+        return None
+    vistas: dict[str, int] = st.session_state.setdefault(_CHAVE_GRAVACOES_VISTAS, {})
+    atual = int(projeto.get(CAMPO_GRAVACAO, 0))
+    projeto[CAMPO_GRAVACAO] = vistas.get(str(projeto["id"]), atual)
+    vistas[str(projeto["id"])] = atual
+    return projeto
+
+
+def obter_projeto_para_edicao(projeto_id: str) -> dict[str, Any] | None:
+    """Documento para uma página que edita e salva — ver :func:`_com_gravacao_vista`."""
+    return _com_gravacao_vista(obter_projeto(projeto_id))
+
+
+def obter_projeto_ativo_para_edicao() -> dict[str, Any] | None:
+    return _com_gravacao_vista(obter_projeto_ativo())
+
+
+def registrar_gravacao_vista(salvo: Mapping[str, Any]) -> None:
+    """Anota o contador devolvido por um salvamento desta sessão.
+
+    Necessário quando a página continua renderizando depois de salvar, sem
+    ``rerun``: o próximo salvamento precisa partir do contador novo.
+    """
+    vistas: dict[str, int] = st.session_state.setdefault(_CHAVE_GRAVACOES_VISTAS, {})
+    vistas[str(salvo["id"])] = int(salvo.get(CAMPO_GRAVACAO, 0))
+
+
+@contextmanager
+def tratar_conflito_de_gravacao() -> Iterator[None]:
+    """Transforma uma gravação recusada por conflito num aviso claro na página.
+
+    Sem isto, ``ProjetoConflitoErro`` vira a caixa vermelha de exceção do
+    Streamlit — tecnicamente correta, mas parece um defeito do programa,
+    quando é a proteção funcionando. A página para ali: o documento que ela
+    tem em memória está defasado, e o próximo rerun recarrega o projeto do
+    banco com o que a outra sessão gravou.
+    """
+    try:
+        yield
+    except ProjetoConflitoErro as erro:
+        st.error(str(erro), icon=":material/sync_problem:")
+        st.stop()
 
 
 def sincronizar_projeto_ativo() -> dict[str, Any] | None:
