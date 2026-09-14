@@ -1646,6 +1646,19 @@ else:
             "Em soldas, informe a perna e o comprimento efetivo total. Em bloco "
             "de cisalhamento, use áreas brutas e líquidas obtidas do desenho."
         )
+        st.markdown(
+            """
+            **Placa de base** (AISC Design Guide 1): informe o perfil da coluna,
+            N × B × t_p, f_y, f_ck e A₂/A₁ do pedestal, os esforços P (+ compressão),
+            M e V na base e os chumbadores (quantidade, lado tracionado, diâmetro,
+            f_u e distância f). O programa classifica o caso — compressão centrada,
+            momento pequeno (Y = N − 2e) ou grande (tração nos chumbadores) e
+            arrancamento — e devolve f_p, Y, a espessura requerida pelo apoio e
+            pela tração, a tração e o cisalhamento por chumbador e a interação
+            J3.7. A ancoragem no concreto (cone, fendilhamento) e a fundação ficam
+            fora e são avisadas.
+            """
+        )
 
     else:
         st.subheader("5. Análise estrutural 2D")

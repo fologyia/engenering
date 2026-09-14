@@ -53,6 +53,7 @@ no_implicit_optional = true
 # Ao anotar um módulo novo, acrescente-o a esta lista.
 files = [
     "core/additional_load_models.py",
+    "core/base_plate.py",
     "core/beam_analysis.py",
     "core/beam_script.py",
     "core/bolt_design.py",

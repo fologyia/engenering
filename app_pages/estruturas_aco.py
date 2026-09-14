@@ -7,6 +7,7 @@ import streamlit as st
 
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
+from core import base_plate as placa_base
 from core import bolt_design as parafusos
 from core import load_combinations as combinacoes
 from core import nbr8800, platform_loads, wind_load
@@ -141,15 +142,19 @@ registro próprio para o memorial.
 """
     )
 
-    st.markdown("##### 4. Ligações — parafuso, chapa/bloco e solda")
+    st.markdown("##### 4. Ligações — parafuso, chapa/bloco, solda e placa de base")
     st.markdown(
         """
-Três verificações independentes, escolhidas no segmented control interno:
+Quatro verificações independentes, escolhidas no segmented control interno:
 ligação parafusada (tração, cisalhamento, esmagamento e interação
-quadrática), chapa com bloco de cisalhamento e seção líquida, e solda de
-filete. Os esforços de entrada também devem vir já majorados das
-combinações de cálculo na ligação — geralmente diferentes dos esforços na
-barra, porque a ligação está num ponto específico (extremidade, emenda).
+quadrática), chapa com bloco de cisalhamento e seção líquida, solda de
+filete e **placa de base com chumbadores** (AISC Design Guide 1: pressão
+de contato no concreto, flexão da placa, momento pequeno ou grande com
+tração nos chumbadores, arrancamento, chumbadores por AISC J3). Os
+esforços de entrada também devem vir já majorados das combinações de
+cálculo na ligação — geralmente diferentes dos esforços na barra, porque a
+ligação está num ponto específico (extremidade, emenda, base). A placa de
+base não verifica a ancoragem no concreto nem a fundação.
 """
     )
 
@@ -1744,7 +1749,7 @@ elif modulo == "4. Ligações":
     st.header("Ligações estruturais")
     tipo_ligacao = st.segmented_control(
         "Verificação",
-        ["Parafusos", "Chapa e bloco", "Solda de filete"],
+        ["Parafusos", "Chapa e bloco", "Solda de filete", "Placa de base"],
         default="Parafusos",
         required=True,
         width="stretch",
@@ -1900,6 +1905,299 @@ elif modulo == "4. Ligações":
             "Interação dos parafusos",
             resultado.interacao_parafuso,
         )
+
+    elif tipo_ligacao == "Placa de base":
+        st.caption(
+            "AISC Design Guide 1 (2ª ed.): pressão de contato f_p,max = φ_c·0,85·f_ck·√(A₂/A₁), "
+            "placa em flexão plástica (m, n, λn'), momento pequeno (Y = N − 2e) ou grande "
+            "(tração nos chumbadores) e chumbadores por AISC J3. P positivo = compressão."
+        )
+        colunas_col = st.columns([3, 1, 1, 1])
+        nomes_perfis_base = list(catalogo_perfis.listar_perfis())
+        # Coluna de plataforma costuma ser W ou I: começa neles, não no primeiro C.
+        indice_padrao = next(
+            (i for i, nome in enumerate(nomes_perfis_base) if nome.startswith(("W ", "I ", "HP "))),
+            0,
+        )
+        nome_perfil_base = colunas_col[0].selectbox(
+            "Perfil da coluna",
+            nomes_perfis_base,
+            index=indice_padrao,
+            key="placa_base_perfil",
+            persist_state="session",
+        )
+        perfil_base = catalogo_perfis.obter_perfil(nome_perfil_base)
+        colunas_col[1].metric("d (mm)", f"{perfil_base.altura_mm:.1f}", border=True)
+        colunas_col[2].metric("b_f (mm)", f"{perfil_base.largura_mm:.1f}", border=True)
+        colunas_col[3].metric("t_f (mm)", f"{perfil_base.espessura_mesa_mm:.2f}", border=True)
+        colunas_pl = st.columns(5)
+        n_placa = colunas_pl[0].number_input(
+            "N — na direção do momento (mm)",
+            min_value=50.0,
+            value=max(350.0, round(perfil_base.altura_mm + 150.0, -1)),
+            step=10.0,
+            key="placa_base_n",
+            persist_state="session",
+        )
+        b_placa = colunas_pl[1].number_input(
+            "B (mm)",
+            min_value=50.0,
+            value=max(250.0, round(perfil_base.largura_mm + 100.0, -1)),
+            step=10.0,
+            key="placa_base_b",
+            persist_state="session",
+        )
+        t_placa = colunas_pl[2].number_input(
+            "t_p (mm)",
+            min_value=4.0,
+            value=19.0,
+            step=1.0,
+            key="placa_base_t",
+            persist_state="session",
+        )
+        fy_placa = colunas_pl[3].number_input(
+            "f_y da placa (MPa)",
+            min_value=100.0,
+            value=250.0,
+            step=5.0,
+            key="placa_base_fy",
+            persist_state="session",
+        )
+        fck = colunas_pl[4].number_input(
+            "f_ck do concreto (MPa)",
+            min_value=10.0,
+            value=25.0,
+            step=5.0,
+            key="placa_base_fck",
+            persist_state="session",
+        )
+        colunas_es = st.columns(4)
+        p_base = colunas_es[0].number_input(
+            "P_Sd (kN, + compressão)",
+            value=100.0,
+            step=5.0,
+            key="placa_base_p",
+            persist_state="session",
+        )
+        m_base = colunas_es[1].number_input(
+            "M_Sd (kN·m)",
+            min_value=0.0,
+            value=20.0,
+            step=1.0,
+            key="placa_base_m",
+            persist_state="session",
+        )
+        v_base = colunas_es[2].number_input(
+            "V_Sd (kN)",
+            min_value=0.0,
+            value=10.0,
+            step=1.0,
+            key="placa_base_v",
+            persist_state="session",
+        )
+        razao_a2 = colunas_es[3].number_input(
+            "A₂/A₁ do pedestal",
+            min_value=1.0,
+            value=1.0,
+            step=0.5,
+            key="placa_base_a2",
+            persist_state="session",
+            help="Área do pedestal sobre a área da placa; √(A₂/A₁) fica limitado a 2.",
+        )
+        colunas_ch = st.columns(5)
+        n_chumb = colunas_ch[0].number_input(
+            "Chumbadores (total)",
+            min_value=1,
+            value=4,
+            step=1,
+            key="placa_base_n_ch",
+            persist_state="session",
+        )
+        n_lado = colunas_ch[1].number_input(
+            "No lado tracionado",
+            min_value=1,
+            value=2,
+            step=1,
+            key="placa_base_n_lado",
+            persist_state="session",
+        )
+        d_chumb = colunas_ch[2].number_input(
+            "Diâmetro (mm)",
+            min_value=6.0,
+            value=19.05,
+            step=0.5,
+            key="placa_base_d_ch",
+            persist_state="session",
+        )
+        fu_chumb = colunas_ch[3].number_input(
+            "f_u do chumbador (MPa)",
+            min_value=100.0,
+            value=400.0,
+            step=10.0,
+            key="placa_base_fu_ch",
+            persist_state="session",
+            help="ASTM F1554 Gr 36 / A36: 400 MPa; Gr 55: 517 MPa; SAE 1045 trefilado: ≈ 600 MPa.",
+        )
+        f_chumb = colunas_ch[4].number_input(
+            "f — centro da placa à linha dos chumbadores (mm)",
+            min_value=10.0,
+            value=max(10.0, n_placa / 2.0 - 50.0),
+            step=5.0,
+            key="placa_base_f",
+            persist_state="session",
+        )
+        try:
+            resultado_base = placa_base.verificar_placa_base(
+                profundidade_coluna_mm=perfil_base.altura_mm,
+                largura_mesa_mm=perfil_base.largura_mm,
+                espessura_mesa_mm=perfil_base.espessura_mesa_mm,
+                comprimento_placa_mm=n_placa,
+                largura_placa_mm=b_placa,
+                espessura_placa_mm=t_placa,
+                fy_placa_MPa=fy_placa,
+                fck_MPa=fck,
+                razao_areas_a2_a1=razao_a2,
+                forca_axial_N=p_base * 1e3,
+                momento_Nmm=m_base * 1e6,
+                cortante_N=v_base * 1e3,
+                numero_chumbadores=int(n_chumb),
+                chumbadores_lado_tracionado=int(n_lado),
+                diametro_chumbador_mm=d_chumb,
+                fu_chumbador_MPa=fu_chumb,
+                distancia_chumbador_mm=f_chumb,
+            )
+        except ValueError as erro:
+            st.error(f"Placa de base: {erro}", icon=":material/error:")
+        else:
+            st.markdown(f"**Caso:** {resultado_base.caso}")
+            colunas_r1 = st.columns(4)
+            colunas_r1[0].metric(
+                "f_p / f_p,max",
+                f"{resultado_base.pressao_atuante_MPa:.2f} / {resultado_base.pressao_maxima_MPa:.2f} MPa",
+                border=True,
+            )
+            colunas_r1[1].metric(
+                "Comprimento de contato Y",
+                f"{resultado_base.comprimento_contato_mm:.1f} mm",
+                border=True,
+                help=(
+                    f"e = {resultado_base.excentricidade_mm:.1f} mm"
+                    + (
+                        f"; e_crit = {resultado_base.excentricidade_critica_mm:.1f} mm"
+                        if resultado_base.excentricidade_critica_mm is not None
+                        else ""
+                    )
+                    if math.isfinite(resultado_base.excentricidade_mm)
+                    else "Sem compressão: binário nos chumbadores."
+                ),
+            )
+            colunas_r1[2].metric(
+                "t_p requerida / adotada",
+                f"{resultado_base.espessura_requerida_mm:.1f} / {resultado_base.espessura_adotada_mm:.1f} mm",
+                border=True,
+                help=(
+                    f"Apoio: {resultado_base.espessura_requerida_apoio_mm:.1f} mm; "
+                    f"tração: {resultado_base.espessura_requerida_tracao_mm:.1f} mm."
+                ),
+            )
+            colunas_r1[3].metric(
+                "Tração total nos chumbadores",
+                f"{resultado_base.tracao_chumbadores_N / 1e3:.1f} kN",
+                border=True,
+            )
+            colunas_r2 = st.columns(4)
+            colunas_r2[0].metric(
+                "Tração por chumbador",
+                f"{resultado_base.tracao_por_chumbador_N / 1e3:.1f} / {resultado_base.resistencia_tracao_chumbador_N / 1e3:.1f} kN",
+                border=True,
+            )
+            colunas_r2[1].metric(
+                "Cisalhamento por chumbador",
+                f"{resultado_base.cisalhamento_por_chumbador_N / 1e3:.1f} / {resultado_base.resistencia_cisalhamento_chumbador_N / 1e3:.1f} kN",
+                border=True,
+            )
+            colunas_r2[2].metric(
+                "Utilização da placa (flexão)",
+                f"{resultado_base.utilizacao_placa * 100:.0f}%",
+                border=True,
+                help="M_Rd cresce com t², logo utilização = (t_req/t_p)².",
+            )
+            colunas_r2[3].metric(
+                "Interação tração–cisalhamento",
+                f"{resultado_base.utilizacao_interacao_chumbador * 100:.0f}%",
+                border=True,
+            )
+            mostrar_utilizacao(
+                f"Placa de base — {resultado_base.modo_governante}",
+                resultado_base.utilizacao_governante,
+            )
+            for aviso in resultado_base.avisos:
+                st.warning(aviso, icon=":material/warning:")
+            with st.expander("Memória de cálculo da placa de base", icon=":material/functions:"):
+                for linha in resultado_base.memoria:
+                    st.markdown(f"- {linha}")
+            registro_placa = construir_registro_tecnico(
+                modulo="Estruturas de aço",
+                modulo_id="estruturas_aco",
+                titulo=f"Placa de base — {nome_perfil_base}",
+                status="Atende" if resultado_base.atende else "Não atende",
+                resumo=(
+                    f"Placa {n_placa:.0f} × {b_placa:.0f} × {t_placa:.0f} mm ({resultado_base.caso}); "
+                    f"utilização governante {resultado_base.utilizacao_governante:.2f} em "
+                    f"{resultado_base.modo_governante.lower()}."
+                ),
+                entradas={
+                    "perfil_coluna": nome_perfil_base,
+                    "N_mm": n_placa,
+                    "B_mm": b_placa,
+                    "t_mm": t_placa,
+                    "fy_placa_MPa": fy_placa,
+                    "fck_MPa": fck,
+                    "razao_A2_A1": razao_a2,
+                    "P_kN": p_base,
+                    "M_kNm": m_base,
+                    "V_kN": v_base,
+                    "chumbadores": int(n_chumb),
+                    "chumbadores_lado_tracionado": int(n_lado),
+                    "diametro_chumbador_mm": d_chumb,
+                    "fu_chumbador_MPa": fu_chumb,
+                    "f_mm": f_chumb,
+                },
+                resultados={
+                    chave: valor
+                    for chave, valor in asdict(resultado_base).items()
+                    if chave not in {"memoria", "avisos"}
+                    and (not isinstance(valor, float) or math.isfinite(valor))
+                },
+                metodo=(
+                    "AISC Design Guide 1 (2ª ed.): f_p,max = φ_c·0,85·f_ck·√(A₂/A₁) ≤ 1,7·f_ck; "
+                    "placa em flexão plástica com cantiléveres m, n e λn'; casos de compressão, "
+                    "momento pequeno (Y = N − 2e) e grande (Y pela equação do 2º grau, T = q_max·Y − P); "
+                    "chumbadores por AISC J3 (F_nt = 0,75·F_u, F_nv = 0,45·F_u, interação J3.7)."
+                ),
+                equacoes=list(resultado_base.memoria),
+                premissas=[
+                    f"φ_c = {placa_base.FATOR_CONTATO_CONCRETO}, φ_b = {placa_base.FATOR_FLEXAO_PLACA}, "
+                    f"φ = {placa_base.FATOR_CHUMBADOR} (AISC LRFD).",
+                    "Esforços P, M e V já combinados (ELU) na base da coluna.",
+                ],
+                alertas=list(resultado_base.avisos),
+                referencias=[
+                    "AISC Design Guide 1 — Base Plate and Anchor Rod Design, 2ª ed.; AISC 360 J3 e J8; ACI 318 cap. 17 para a ancoragem.",
+                ],
+                conclusao=(
+                    "Placa e chumbadores atendem; verificar a ancoragem no concreto e a fundação."
+                    if resultado_base.atende
+                    else f"Não atende em {resultado_base.modo_governante.lower()}: aumentar placa, chumbadores ou f_ck."
+                ),
+            )
+            botao_registrar_calculo(
+                registro_placa,
+                key="registrar_placa_base",
+                rotulo="Registrar placa de base no projeto",
+                tipo="secondary",
+                identificar_peca=False,
+            )
 
     elif tipo_ligacao == "Chapa e bloco":
         material = st.columns(3)

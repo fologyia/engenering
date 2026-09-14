@@ -295,6 +295,11 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
   conformidade de acessos da **NR-12** (guarda-corpo, rodapé, travessas,
   largura, degraus por Blondel, patamares) com critério do cliente;
 - ligações parafusadas, chapa, cisalhamento de bloco e soldas;
+- placa de base e chumbadores pelo **AISC Design Guide 1** (pressão de contato
+  `φ_c·0,85·f_ck·√(A₂/A₁)`, placa em flexão plástica com m, n e λn', momento
+  pequeno e grande com tração nos chumbadores, arrancamento, chumbadores por
+  AISC J3 com interação tração–cisalhamento), conferido contra os exemplos
+  4.1, 4.4 e 4.5 do guia;
 - treliças e pórticos 2D pela rigidez direta; no pórtico, **segunda ordem**
   (P–Δ pela rigidez geométrica iterada), carga nocional de 0,3 % (4.9.7.1.1),
   fator de carga crítica global, classificação da deslocabilidade por Δ₂/Δ₁
