@@ -572,5 +572,47 @@
     "aliases": ["ISO 21940", "ISO21940-11", "ISO 21940 11"],
     "fonte_url": "https://www.iso.org/standard/54074.html",
     "nota_edicao": "Verifique se o rotor pode ser tratado como rígido na faixa de operação."
+  },
+  {
+    "id": "nr-20",
+    "codigo": "NR-20",
+    "titulo": "Segurança e saúde no trabalho com inflamáveis e combustíveis",
+    "segmento": "Segurança de máquinas",
+    "aplicacao": "Requisitos para instalações com extração, produção, armazenamento, transferência, manuseio e manipulação de inflamáveis e combustíveis — classificação da instalação, projeto, prontuário e capacitação.",
+    "quando_consultar": "Em plataformas, tanques, bacias, áreas de transferência e qualquer estrutura em área com inflamáveis: classificação da área, distâncias, aterramento e equipotencialização.",
+    "pontos_chave": ["classificação da instalação", "projeto da instalação", "aterramento e equipotencialização", "prontuário da instalação", "capacitação"],
+    "modulos": ["Assistente de projeto", "Estruturas de aço"],
+    "palavras_chave": ["inflamáveis", "combustíveis", "tanque", "área classificada", "aterramento"],
+    "aliases": ["NR 20", "NR20"],
+    "fonte_url": "https://www.gov.br/trabalho-e-emprego/pt-br/acesso-a-informacao/participacao-social/conselhos-e-orgaos-colegiados/comissao-tripartite-partitaria-permanente/normas-regulamentadora/normas-regulamentadoras-vigentes/norma-regulamentadora-no-20-nr-20",
+    "nota_edicao": "Use o texto consolidado oficial; a classe da instalação define o alcance das exigências."
+  },
+  {
+    "id": "nr-35",
+    "codigo": "NR-35",
+    "titulo": "Trabalho em altura",
+    "segmento": "Segurança de máquinas",
+    "aplicacao": "Requisitos para planejamento, organização e execução de trabalho acima de 2,0 m com risco de queda: análise de risco, sistemas de ancoragem, EPI e capacitação.",
+    "quando_consultar": "Na montagem, inspeção e manutenção de plataformas, passarelas e estruturas elevadas; pontos de ancoragem previstos no projeto.",
+    "pontos_chave": ["análise de risco", "ancoragem", "sistemas de proteção contra quedas", "capacitação", "resgate"],
+    "modulos": ["Assistente de projeto", "Estruturas de aço"],
+    "palavras_chave": ["altura", "queda", "ancoragem", "montagem", "plataforma"],
+    "aliases": ["NR 35", "NR35"],
+    "fonte_url": "https://www.gov.br/trabalho-e-emprego/pt-br/acesso-a-informacao/participacao-social/conselhos-e-orgaos-colegiados/comissao-tripartite-partitaria-permanente/normas-regulamentadora/normas-regulamentadoras-vigentes/norma-regulamentadora-no-35-nr-35",
+    "nota_edicao": "Use o texto consolidado oficial e o procedimento de trabalho em altura do cliente."
+  },
+  {
+    "id": "nbr-14718",
+    "codigo": "ABNT NBR 14718",
+    "titulo": "Esquadrias - Guarda-corpos para edificação - Requisitos, procedimentos e métodos de ensaio",
+    "segmento": "Estruturas de aço e ações",
+    "aplicacao": "Requisitos de segurança e desempenho de guarda-corpos: alturas, vãos, cargas estáticas (uniforme e concentrada) e ensaios.",
+    "quando_consultar": "No dimensionamento de guarda-corpos, montantes, corrimãos e suas fixações em plataformas, passarelas e mezaninos.",
+    "pontos_chave": ["altura do guarda-corpo", "carga horizontal uniforme", "carga concentrada", "vãos entre elementos", "ensaio de resistência"],
+    "modulos": ["Estruturas de aço", "Assistente de cargas"],
+    "palavras_chave": ["guarda-corpo", "corrimão", "montante", "parapeito", "queda"],
+    "aliases": ["NBR 14718", "NBR14718"],
+    "fonte_url": "https://www.abntcatalogo.com.br/",
+    "nota_edicao": "Compatibilize com a NBR 6120 (cargas) e com a NR-12 (altura mínima em áreas industriais)."
   }
 ]

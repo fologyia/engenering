@@ -63,6 +63,7 @@ files = [
     "core/materials.py",
     "core/materials_registry.py",
     "core/nbr8800.py",
+    "core/platform_loads.py",
     "core/project_assistant.py",
     "core/project_checklist.py",
     "core/project_criteria.py",
@@ -77,6 +78,7 @@ files = [
     "core/technical_modules.py",
     "core/technical_records.py",
     "core/unit_converter.py",
+    "core/wind_load.py",
 ]
 # Fora da lista acima ainda faltam anotações; a interface (app_pages) não é
 # verificada de propósito, porque o Streamlit devolve Any em quase tudo e o

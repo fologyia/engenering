@@ -279,11 +279,33 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 ### Estruturas de aço
 
 - catálogo geométrico de perfis e propriedades de seção;
-- barras à tração, compressão, flexão, cisalhamento e interação N–M;
-- flecha de vigas e combinações editáveis ELU/ELS;
+- barras pela **NBR 8800:2008**: tração (5.2), compressão
+  `N_c,Rd = χ·Q·A_g·f_y/γ_a1` com λ₀ e curva única de χ (5.3), flambagem
+  elástica por flexão, torção e flexo-torção (Anexo E), fator Q de flambagem
+  local (Anexo F, elementos AL/AA e tubos), momento resistente por FLT, FLM
+  e FLA com L_p, L_r, M_cr e C_b (Anexo G), cortante (5.4.3), interação N–M
+  (5.5.1.2) e limites de esbeltez λ ≤ 200 / 300 — com memória de cálculo
+  por estado-limite;
+- combinações pela **NBR 8681 / NBR 8800** por categoria de ação (γ_f, γ
+  favorável, ψ₀/ψ₁/ψ₂ das Tabelas 1 e 2), ELU normais com permanentes
+  favoráveis e ELS rara, frequente e quase permanente;
+- ações de plataforma: vento pela **NBR 6123** (S₁ por relevo, S₂ por
+  categoria/classe/altura, S₃ por grupo, `q = 0,613·V_k²`, força e carga por
+  metro com C_f), guarda-corpo e impacto (NBR 6120 / NBR 14718 / ASCE 7) e
+  conformidade de acessos da **NR-12** (guarda-corpo, rodapé, travessas,
+  largura, degraus por Blondel, patamares) com critério do cliente;
 - ligações parafusadas, chapa, cisalhamento de bloco e soldas;
-- análise matricial linear de treliças e pórticos 2D.
-- registro das combinações, verificações de barras e análises 2D no projeto ativo.
+- treliças e pórticos 2D pela rigidez direta; no pórtico, **segunda ordem**
+  (P–Δ pela rigidez geométrica iterada), carga nocional de 0,3 % (4.9.7.1.1),
+  fator de carga crítica global, classificação da deslocabilidade por Δ₂/Δ₁
+  (4.9.4.1), coeficiente B₂ (4.9.4.6), rigidez reduzida a 80 % e
+  deslocamento horizontal contra H/400;
+- registro das combinações, do vento, do guarda-corpo, dos acessos, das
+  verificações de barras e das análises 2D no projeto ativo;
+- modelo de checklist "Plataforma de acesso / passarela" com o escopo mínimo
+  que um verificador cobra (ações completas, modelo global, NBR 8800,
+  torção de U, H/400, secundários, ligações e base, NR-12/NR-20, memorial
+  sem sobras).
 
 ### Catálogo de materiais
 

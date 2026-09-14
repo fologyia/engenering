@@ -9,7 +9,7 @@ from components.project_tools import botao_registrar_calculo, construir_registro
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import bolt_design as parafusos
 from core import load_combinations as combinacoes
-from core import nbr8800
+from core import nbr8800, platform_loads, wind_load
 from core import section_catalog as catalogo_perfis
 from core import steel_connections as ligacoes
 from core import steel_member_design as barras
@@ -103,16 +103,19 @@ interação entre elas), mais a flecha. Preencha:
   trecho da mesa comprimida sem travamento lateral. Se uma laje trava a
   mesa continuamente, Lb pode ser bem menor que L, e isso aumenta bastante
   a resistência à flexão calculada.
-- **Reduções** (Q, Cv, Cb, área líquida): Q = 1,0 assume seção compacta —
-  o programa **não classifica a seção automaticamente**, então se o seu
-  perfil for esbelto (mesa ou alma fina), reduza Q manualmente conforme a
-  norma. Cb = 1,0 é uma hipótese conservadora para o gradiente de momento.
-  Área líquida e Ct só importam em barras tracionadas com furos.
+- **Classificação da seção**: o fator Q da flambagem local (Anexo F) é
+  calculado pelo programa a partir das dimensões do perfil — a tabela de
+  elementos mostra cada mesa e alma, o limite λ_r e o Q_s/Q_a resultante.
+  Cb = 1,0 é a hipótese conservadora para o gradiente de momento; a
+  memória de cálculo mostra L_p, L_r e M_cr da FLT. Área líquida e Ct só
+  importam em barras tracionadas com furos.
 
-O resultado mostra a **utilização** de cada verificação (demanda dividida
-pela resistência): valores até 1,0 atendem; acima de 1,0, a barra falha
-com esses esforços e precisa de um perfil maior ou menor comprimento
-destravado.
+O resultado mostra a **utilização** de cada verificação (solicitação de
+cálculo dividida pela resistência de cálculo, com γ_a1 = 1,10 e
+γ_a2 = 1,35): valores até 1,0 atendem; acima de 1,0, a barra falha com
+esses esforços e precisa de um perfil maior, de travamento lateral ou de
+menor comprimento de flambagem. A esbeltez λ ≤ 200 (compressão) e ≤ 300
+(tração) é conferida junto.
 """
     )
 
@@ -120,15 +123,21 @@ destravado.
     st.markdown(
         """
 Uma tabela editável onde cada linha é uma ação característica (peso
-próprio, sobrecarga, vento…) com N, V, M e os coeficientes γ (ponderador)
-e ψ0/ψ1/ψ2 (fatores de combinação). **Os valores padrão da tabela são só
-um exemplo** — substitua pelos coeficientes da NBR 8681 aplicáveis à sua
-situação de projeto antes de usar o resultado. O programa monta
-automaticamente todas as combinações ELU e ELS e indica qual é a
-governante. É o |N|, |V| e |M| governantes daqui que você leva para o
-módulo 2 — mas repare que o maior N, o maior V e o maior M podem vir de
-combinações **diferentes**; não trate os três como simultâneos sem
-conferir a linha de origem na tabela.
+próprio, sobrecarga, vento…) com N, V, M e a **categoria** da NBR 8800
+(Tabelas 1 e 2 — que são as da NBR 8681): a categoria traz γ_f, o γ
+favorável das permanentes e ψ0/ψ1/ψ2 sozinha; a categoria personalizada
+usa as colunas de coeficientes. **Os valores padrão da tabela são só um
+exemplo.** O programa monta todas as combinações ELU (inclusive a de
+permanentes favoráveis, que governa vento de sucção e tombamento) e ELS
+(rara, frequente, quase permanente) e indica a governante. É o |N|, |V| e
+|M| governantes daqui que você leva para o módulo 2 — mas repare que o
+maior N, o maior V e o maior M podem vir de combinações **diferentes**;
+não trate os três como simultâneos sem conferir a linha de origem.
+
+Abaixo da tabela ficam as **ações de plataforma**: vento pela NBR 6123
+(V₀, S₁, S₂, S₃, q = 0,613·V_k², C_f), guarda-corpo e impacto pela
+NBR 6120 / NBR 14718, e a conformidade de acessos da NR-12 — cada uma com
+registro próprio para o memorial.
 """
     )
 
@@ -156,10 +165,15 @@ quando a peça faz parte de uma estrutura (pórtico, treliça) e não é uma
 viga isolada — os esforços de cada barra que saem daqui alimentam a
 verificação do módulo 2.
 
-**Importante**: é um solver linear de primeira ordem — não considera
-efeito P-Δ, imperfeições geométricas, flambagem global do conjunto nem
-ligações semirrígidas. Serve para achar os esforços internos, não para
-verificar estabilidade global do pórtico.
+**Estabilidade global** (só no pórtico): ative a **segunda ordem** (P–Δ
+pela rigidez geométrica, iterada) e a **carga nocional de 0,3 %** das
+cargas gravitacionais (imperfeições, NBR 8800 4.9.7.1.1). O programa
+devolve o fator de carga crítica global, Δ₁ e Δ₂, a classificação da
+deslocabilidade por Δ₂/Δ₁ (pequena ≤ 1,1; média ≤ 1,4; grande), o
+coeficiente B₂ e o deslocamento horizontal contra H/400 (ou o divisor do
+critério do cliente). Na média deslocabilidade, repita com a rigidez a
+80 %. A treliça continua sendo de primeira ordem, e nenhum dos dois
+considera plasticidade ou ligações semirrígidas.
 """
     )
 
@@ -170,8 +184,11 @@ verificar estabilidade global do pórtico.
   módulo 3 primeiro).
 - Confundir **L** (comprimento da barra) com **Lb** (comprimento
   destravado lateralmente) — são quase sempre diferentes.
-- Deixar **Q = 1,0** para um perfil esbelto sem verificar a classificação
-  da seção pela norma.
+- Usar no módulo 2 esforços de primeira ordem de um pórtico de média ou
+  grande deslocabilidade — rode o módulo 5 com segunda ordem e carga
+  nocional antes.
+- Carregar um perfil U pela alma e esquecer a torção: a viga avisa em
+  Vigas e eixos, e a ligação precisa travá-la.
 - Achar que o maior N, V e M da tabela de combinações acontecem ao mesmo
   tempo — confira a combinação de origem de cada um.
 - Esperar que o módulo 5 alimente o módulo 2 sozinho — os números
@@ -1187,6 +1204,540 @@ elif modulo == "3. Combinações":
         tipo="secondary",
         identificar_peca=False,
     )
+
+    # ------------------------------------------------------------------
+    # Ações que o memorial de plataforma costuma esquecer: vento pela
+    # NBR 6123, guarda-corpo e impacto pela NBR 6120/NBR 14718, e a
+    # geometria de acesso da NR-12. Saem daqui como cargas para o modelo
+    # (kN/m, kN, kN·m) — cada uma vira uma linha da tabela de ações acima.
+    # ------------------------------------------------------------------
+    st.subheader("Ações de plataforma — vento, guarda-corpo, impacto e acessos")
+    aba_vento, aba_guarda, aba_acesso = st.tabs(
+        ["Vento (NBR 6123)", "Guarda-corpo e impacto (NBR 6120 / NBR 14718)", "Acessos (NR-12)"]
+    )
+    with aba_vento:
+        st.caption(
+            "V_k = V₀·S₁·S₂·S₃ e q = 0,613·V_k² (NBR 6123, 4.2 e 5). Os parâmetros b, p, F_r "
+            "e S₃ tabelados são os da NBR 6123:1988; confira V₀ (isopletas) e S₃ na edição "
+            "adotada pelo projeto."
+        )
+        colunas_v = st.columns(4)
+        v0 = colunas_v[0].number_input(
+            "V₀ (m/s)",
+            min_value=10.0,
+            max_value=70.0,
+            value=35.0,
+            step=1.0,
+            key="vento_v0",
+            persist_state="session",
+            help="Velocidade básica do mapa de isopletas (Figura 1 da NBR 6123).",
+        )
+        relevo = colunas_v[1].selectbox(
+            "Relevo (S₁)",
+            ["plano", "vale", "talude"],
+            key="vento_relevo",
+            persist_state="session",
+            format_func=lambda item: {
+                "plano": "Plano ou fracamente acidentado (1,0)",
+                "vale": "Vale profundo protegido (0,9)",
+                "talude": "Topo de talude ou morro (fórmula 5.2)",
+            }[item],
+        )
+        categoria_rug = colunas_v[2].selectbox(
+            "Rugosidade (S₂)",
+            list(wind_load.CATEGORIAS_RUGOSIDADE),
+            index=3,
+            key="vento_categoria",
+            persist_state="session",
+            format_func=lambda item: f"Categoria {item}",
+            help="\n".join(
+                f"{chave}: {texto}" for chave, texto in wind_load.CATEGORIAS_RUGOSIDADE.items()
+            ),
+        )
+        classe_edif = colunas_v[3].selectbox(
+            "Classe (S₂)",
+            list(wind_load.CLASSES_EDIFICACAO),
+            key="vento_classe",
+            persist_state="session",
+            format_func=lambda item: f"Classe {item}",
+            help="\n".join(
+                f"{chave}: {texto}" for chave, texto in wind_load.CLASSES_EDIFICACAO.items()
+            ),
+        )
+        s1_valor = 1.0
+        if relevo == "talude":
+            colunas_t = st.columns(3)
+            inclinacao = colunas_t[0].number_input(
+                "Inclinação média θ (°)",
+                min_value=0.0,
+                max_value=90.0,
+                value=10.0,
+                step=1.0,
+                key="vento_theta",
+                persist_state="session",
+            )
+            z_talude = colunas_t[1].number_input(
+                "Altura z do ponto acima do terreno (m)",
+                min_value=0.0,
+                value=5.0,
+                step=1.0,
+                key="vento_z_talude",
+                persist_state="session",
+            )
+            d_talude = colunas_t[2].number_input(
+                "Altura d do talude/morro (m)",
+                min_value=0.1,
+                value=30.0,
+                step=1.0,
+                key="vento_d_talude",
+                persist_state="session",
+            )
+            s1_valor = wind_load.fator_s1(
+                "talude", inclinacao_graus=inclinacao, z_m=z_talude, d_m=d_talude
+            )
+        else:
+            s1_valor = wind_load.fator_s1(relevo)
+        colunas_w = st.columns(4)
+        altura_vento = colunas_w[0].number_input(
+            "Altura z da estrutura (m)",
+            min_value=0.0,
+            value=6.0,
+            step=0.5,
+            key="vento_altura",
+            persist_state="session",
+            help="Topo da plataforma; a Tabela 2 começa em 5 m.",
+        )
+        grupo_s3 = colunas_w[1].selectbox(
+            "Grupo (S₃)",
+            list(wind_load.GRUPOS_S3),
+            index=2,
+            key="vento_grupo",
+            persist_state="session",
+            format_func=lambda item: f"Grupo {item} — S₃ = {wind_load.GRUPOS_S3[item][0]:.2f}",
+            help="\n".join(f"{chave}: {texto[1]}" for chave, texto in wind_load.GRUPOS_S3.items()),
+        )
+        cf_opcao = colunas_w[2].selectbox(
+            "Coeficiente de arrasto C_f",
+            list(wind_load.COEFICIENTES_ARRASTO_USUAIS),
+            key="vento_cf_opcao",
+            persist_state="session",
+            format_func=lambda item: f"{wind_load.COEFICIENTES_ARRASTO_USUAIS[item]:.1f} — {item}",
+        )
+        cf_valor = colunas_w[3].number_input(
+            "C_f adotado",
+            min_value=0.1,
+            max_value=5.0,
+            value=float(wind_load.COEFICIENTES_ARRASTO_USUAIS[cf_opcao]),
+            step=0.1,
+            key=f"vento_cf_{wind_load.COEFICIENTES_ARRASTO_USUAIS[cf_opcao]:.1f}",
+            help="Edite quando a tabela ou figura da norma der outro valor para a sua geometria.",
+        )
+        colunas_a = st.columns(2)
+        largura_exposta = colunas_a[0].number_input(
+            "Largura exposta da barra d (m) — carga por metro",
+            min_value=0.0,
+            value=0.203,
+            step=0.01,
+            format="%.3f",
+            key="vento_largura",
+            persist_state="session",
+            help='Altura do perfil (U 8" = 0,203 m) ou da faixa exposta; zero para não calcular.',
+        )
+        area_exposta = colunas_a[1].number_input(
+            "Área efetiva exposta A_e (m²) — força total",
+            min_value=0.0,
+            value=0.0,
+            step=0.1,
+            key="vento_area",
+            persist_state="session",
+            help="Área frontal da plataforma com equipamentos e guarda-corpo; zero para não calcular.",
+        )
+        try:
+            resultado_vento = wind_load.calcular_vento(
+                v0,
+                s1=s1_valor,
+                categoria=categoria_rug,
+                classe=classe_edif,
+                altura_m=altura_vento,
+                grupo_s3=int(grupo_s3),
+                coeficiente_arrasto=cf_valor,
+                area_efetiva_m2=area_exposta if area_exposta > 0 else None,
+                largura_exposta_m=largura_exposta if largura_exposta > 0 else None,
+            )
+        except ValueError as erro:
+            st.error(f"Vento: {erro}", icon=":material/error:")
+        else:
+            colunas_r = st.columns(4)
+            colunas_r[0].metric("V_k", f"{resultado_vento.vk_m_s:.2f} m/s", border=True)
+            colunas_r[1].metric("q", f"{resultado_vento.pressao_kN_m2:.3f} kN/m²", border=True)
+            colunas_r[2].metric(
+                "w = C_f·q·d",
+                "—"
+                if resultado_vento.carga_linear_kN_m is None
+                else f"{resultado_vento.carga_linear_kN_m:.4f} kN/m",
+                border=True,
+            )
+            colunas_r[3].metric(
+                "F = C_f·q·A_e",
+                "—" if resultado_vento.forca_kN is None else f"{resultado_vento.forca_kN:.3f} kN",
+                border=True,
+            )
+            with st.expander("Memória de cálculo do vento", icon=":material/functions:"):
+                for linha in resultado_vento.memoria:
+                    st.markdown(f"- {linha}")
+                st.caption(
+                    "Lance w (ou F) como ação de vento nos dois sentidos (W+ e W−) na tabela de "
+                    "ações e no modelo 2D; a categoria 'vento' aplica γ_f = 1,40 e ψ₀ = 0,6."
+                )
+            registro_vento = construir_registro_tecnico(
+                modulo="Estruturas de aço",
+                modulo_id="estruturas_aco",
+                titulo="Ação do vento — NBR 6123",
+                status="Calculado",
+                resumo=(
+                    f"V_k = {resultado_vento.vk_m_s:.2f} m/s e q = {resultado_vento.pressao_kN_m2:.3f} kN/m² "
+                    f"(V₀ = {v0:.0f} m/s, S₁ = {s1_valor:.3f}, S₂ = {resultado_vento.s2:.3f}, "
+                    f"S₃ = {resultado_vento.s3:.2f}); C_f = {cf_valor:.2f}."
+                ),
+                entradas={
+                    "v0_m_s": v0,
+                    "relevo": relevo,
+                    "s1": s1_valor,
+                    "categoria_rugosidade": categoria_rug,
+                    "classe": classe_edif,
+                    "altura_m": altura_vento,
+                    "grupo_s3": int(grupo_s3),
+                    "coeficiente_arrasto": cf_valor,
+                    "largura_exposta_m": largura_exposta,
+                    "area_efetiva_m2": area_exposta,
+                },
+                resultados={
+                    "s2": resultado_vento.s2,
+                    "s3": resultado_vento.s3,
+                    "vk_m_s": resultado_vento.vk_m_s,
+                    "pressao_kN_m2": resultado_vento.pressao_kN_m2,
+                    "carga_linear_kN_m": resultado_vento.carga_linear_kN_m,
+                    "forca_kN": resultado_vento.forca_kN,
+                },
+                metodo="V_k = V₀·S₁·S₂·S₃; q = 0,613·V_k²; F = C_f·q·A_e (NBR 6123, 4.2, 5 e 6).",
+                equacoes=list(resultado_vento.memoria),
+                premissas=[
+                    "Parâmetros b, p, F_r (Tabela 1) e S₃ (Tabela 3) da NBR 6123:1988; V₀ informado pelo projeto.",
+                    "C_f de barra prismática/treliça conforme tabela ou figura da norma indicada.",
+                ],
+                alertas=[
+                    "Confirmar V₀ e S₃ na edição vigente da NBR 6123 e o critério de vento do cliente.",
+                    "Efeitos dinâmicos (Capítulo 9) não avaliados: estruturas esbeltas ou flexíveis exigem verificação própria.",
+                ],
+                referencias=["ABNT NBR 6123 — Forças devidas ao vento em edificações."],
+                conclusao=(
+                    f"Pressão dinâmica q = {resultado_vento.pressao_kN_m2:.3f} kN/m²; "
+                    "lançar a ação de vento nos dois sentidos nas combinações."
+                ),
+            )
+            botao_registrar_calculo(
+                registro_vento,
+                key="registrar_vento",
+                rotulo="Registrar ação do vento no projeto",
+                tipo="secondary",
+                identificar_peca=False,
+            )
+    with aba_guarda:
+        colunas_g = st.columns(4)
+        uso_guarda = colunas_g[0].selectbox(
+            "Carga horizontal no topo",
+            list(platform_loads.CARGAS_GUARDA_CORPO_kN_m),
+            key="guarda_uso",
+            persist_state="session",
+            format_func=lambda item: (
+                f"{platform_loads.CARGAS_GUARDA_CORPO_kN_m[item]:.1f} kN/m — {item}"
+            ),
+        )
+        carga_guarda = colunas_g[1].number_input(
+            "q adotado (kN/m)",
+            min_value=0.0,
+            value=float(platform_loads.CARGAS_GUARDA_CORPO_kN_m[uso_guarda]),
+            step=0.1,
+            key=f"guarda_q_{platform_loads.CARGAS_GUARDA_CORPO_kN_m[uso_guarda]:.1f}",
+        )
+        altura_guarda = colunas_g[2].number_input(
+            "Altura do guarda-corpo h (m)",
+            min_value=0.5,
+            value=1.10,
+            step=0.05,
+            key="guarda_h",
+            persist_state="session",
+        )
+        espacamento_guarda = colunas_g[3].number_input(
+            "Espaçamento entre montantes s (m)",
+            min_value=0.2,
+            value=1.50,
+            step=0.1,
+            key="guarda_s",
+            persist_state="session",
+        )
+        esforcos_montante = platform_loads.esforcos_no_montante(
+            carga_guarda, altura_guarda, espacamento_guarda
+        )
+        colunas_m = st.columns(3)
+        colunas_m[0].metric(
+            "H no montante = q·s", f"{esforcos_montante.forca_horizontal_kN:.3f} kN", border=True
+        )
+        colunas_m[1].metric(
+            "M na base = q·s·h", f"{esforcos_montante.momento_base_kNm:.3f} kN·m", border=True
+        )
+        colunas_m[2].metric(
+            "M da concentrada = P·h",
+            f"{esforcos_montante.momento_concentrado_kNm:.3f} kN·m",
+            border=True,
+            help=f"P = {esforcos_montante.forca_concentrada_kN:.1f} kN (NBR 14718).",
+        )
+        st.caption(
+            "O momento de base vai para a ligação do montante e para a viga de borda — em "
+            "perfil U ele é torção, a ser travada ou verificada. A carga horizontal total "
+            "(q × comprimento do guarda-corpo) entra na tabela de ações como sobrecarga "
+            "de guarda-corpo (γ_f = 1,50) e no modelo 2D como força horizontal no nível do piso."
+        )
+        st.markdown("**Impacto de equipamentos**")
+        colunas_i = st.columns(3)
+        tipo_impacto = colunas_i[0].selectbox(
+            "Tipo de equipamento",
+            list(platform_loads.COEFICIENTES_IMPACTO),
+            key="impacto_tipo",
+            persist_state="session",
+            format_func=lambda item: (
+                f"{platform_loads.COEFICIENTES_IMPACTO[item] * 100:.0f} % — {item}"
+            ),
+        )
+        coef_impacto = colunas_i[1].number_input(
+            "Coeficiente de impacto adotado",
+            min_value=0.0,
+            max_value=2.0,
+            value=float(platform_loads.COEFICIENTES_IMPACTO[tipo_impacto]),
+            step=0.05,
+            key=f"impacto_i_{platform_loads.COEFICIENTES_IMPACTO[tipo_impacto]:.2f}",
+            help="ASCE 7-22, 4.6.2, quando o cliente não fixa valor próprio.",
+        )
+        carga_equipamento = colunas_i[2].number_input(
+            "Carga estática do equipamento (kN)",
+            min_value=0.0,
+            value=10.0,
+            step=0.5,
+            key="impacto_carga",
+            persist_state="session",
+        )
+        st.metric(
+            "Carga com impacto (1 + i)·P",
+            f"{platform_loads.carga_com_impacto(carga_equipamento, coef_impacto):.3f} kN",
+            border=True,
+        )
+        registro_guarda = construir_registro_tecnico(
+            modulo="Estruturas de aço",
+            modulo_id="estruturas_aco",
+            titulo="Guarda-corpo e impacto — ações de plataforma",
+            status="Calculado",
+            resumo=(
+                f"Guarda-corpo com q = {carga_guarda:.2f} kN/m a h = {altura_guarda:.2f} m, montantes a "
+                f"{espacamento_guarda:.2f} m: H = {esforcos_montante.forca_horizontal_kN:.3f} kN e "
+                f"M = {esforcos_montante.momento_governante_kNm:.3f} kN·m por montante; impacto de "
+                f"{coef_impacto * 100:.0f} % sobre {carga_equipamento:.2f} kN."
+            ),
+            entradas={
+                "uso_guarda_corpo": uso_guarda,
+                "carga_horizontal_kN_m": carga_guarda,
+                "altura_m": altura_guarda,
+                "espacamento_m": espacamento_guarda,
+                "tipo_equipamento": tipo_impacto,
+                "coeficiente_impacto": coef_impacto,
+                "carga_equipamento_kN": carga_equipamento,
+            },
+            resultados={
+                **asdict(esforcos_montante),
+                "momento_governante_kNm": esforcos_montante.momento_governante_kNm,
+                "carga_com_impacto_kN": platform_loads.carga_com_impacto(
+                    carga_equipamento, coef_impacto
+                ),
+            },
+            metodo="Montante em balanço: H = q·s, M = q·s·h e M = P·h; carga dinâmica (1 + i)·P.",
+            premissas=[
+                "Carga horizontal do guarda-corpo pela NBR 6120:2019 / NBR 14718; concentrada de 1,0 kN pela NBR 14718.",
+                "Coeficientes de impacto do ASCE 7-22 (4.6.2) na falta de valor do cliente.",
+            ],
+            alertas=[
+                "Confirmar a carga de guarda-corpo e o coeficiente de impacto no critério do cliente."
+            ],
+            referencias=[
+                "ABNT NBR 6120:2019; ABNT NBR 14718; ASCE/SEI 7-22, 4.6.",
+            ],
+            conclusao="Lançar a carga do guarda-corpo e o impacto como ações nas combinações e no modelo.",
+        )
+        botao_registrar_calculo(
+            registro_guarda,
+            key="registrar_guarda_corpo",
+            rotulo="Registrar guarda-corpo e impacto no projeto",
+            tipo="secondary",
+            identificar_peca=False,
+        )
+    with aba_acesso:
+        st.caption(
+            "Mínimos da NR-12 (guarda-corpo, rodapé, travessas, largura, degraus por Blondel e "
+            "patamares); o critério do cliente pode exigir mais — informe-o como mínimo do projeto."
+        )
+        colunas_ac = st.columns(4)
+        altura_gc = colunas_ac[0].number_input(
+            "Altura do guarda-corpo (m)",
+            min_value=0.5,
+            value=1.10,
+            step=0.05,
+            key="acesso_altura_gc",
+            persist_state="session",
+        )
+        minimo_gc = colunas_ac[1].number_input(
+            "Mínimo do projeto (m)",
+            min_value=platform_loads.ALTURA_MINIMA_GUARDA_CORPO_M,
+            value=platform_loads.ALTURA_MINIMA_GUARDA_CORPO_M,
+            step=0.05,
+            key="acesso_minimo_gc",
+            persist_state="session",
+            help="NR-12: 1,10 m. Critérios de cliente costumam pedir 1,20 m ou mais.",
+        )
+        rodape = colunas_ac[2].number_input(
+            "Rodapé (m)",
+            min_value=0.0,
+            value=0.20,
+            step=0.05,
+            key="acesso_rodape",
+            persist_state="session",
+        )
+        vao_travessas = colunas_ac[3].number_input(
+            "Vão livre entre travessas (m)",
+            min_value=0.05,
+            value=0.40,
+            step=0.05,
+            key="acesso_vao",
+            persist_state="session",
+        )
+        colunas_es = st.columns(5)
+        largura_pass = colunas_es[0].number_input(
+            "Largura útil (m)",
+            min_value=0.2,
+            value=0.80,
+            step=0.05,
+            key="acesso_largura",
+            persist_state="session",
+        )
+        espelho = colunas_es[1].number_input(
+            "Espelho h (mm)",
+            min_value=50.0,
+            value=180.0,
+            step=5.0,
+            key="acesso_espelho",
+            persist_state="session",
+        )
+        piso = colunas_es[2].number_input(
+            "Piso b (mm)",
+            min_value=100.0,
+            value=270.0,
+            step=5.0,
+            key="acesso_piso",
+            persist_state="session",
+        )
+        altura_lance = colunas_es[3].number_input(
+            "Altura entre patamares (m)",
+            min_value=0.1,
+            value=2.90,
+            step=0.1,
+            key="acesso_lance",
+            persist_state="session",
+        )
+        largura_escada = colunas_es[4].number_input(
+            "Largura da escada (m)",
+            min_value=0.2,
+            value=0.80,
+            step=0.05,
+            key="acesso_largura_escada",
+            persist_state="session",
+        )
+        itens_conformidade = (
+            platform_loads.verificar_guarda_corpo(
+                altura_gc, rodape, vao_travessas, altura_minima_m=minimo_gc
+            )
+            + platform_loads.verificar_passarela(largura_pass)
+            + platform_loads.verificar_escada(
+                espelho, piso, altura_entre_patamares_m=altura_lance, largura_util_m=largura_escada
+            )
+        )
+        tabela_conformidade = pd.DataFrame([asdict(item) for item in itens_conformidade]).rename(
+            columns={
+                "requisito": "Requisito",
+                "valor": "Valor",
+                "limite": "Limite",
+                "atende": "Atende",
+                "fonte": "Fonte",
+            }
+        )
+        st.dataframe(
+            tabela_conformidade,
+            hide_index=True,
+            column_config={"Atende": st.column_config.CheckboxColumn(disabled=True)},
+        )
+        nao_atende = [item.requisito for item in itens_conformidade if not item.atende]
+        if nao_atende:
+            st.error(
+                "Não atende: " + "; ".join(nao_atende) + ".",
+                icon=":material/error:",
+            )
+        else:
+            st.success(
+                "Geometria de acesso atende aos mínimos informados.", icon=":material/check_circle:"
+            )
+        registro_acesso = construir_registro_tecnico(
+            modulo="Estruturas de aço",
+            modulo_id="estruturas_aco",
+            titulo="Conformidade de acessos — NR-12",
+            status="Não atende" if nao_atende else "Atende",
+            resumo=(
+                f"{len(itens_conformidade)} requisitos de guarda-corpo, passarela e escada conferidos; "
+                + (
+                    "não atende: " + "; ".join(nao_atende) + "."
+                    if nao_atende
+                    else "todos atendidos."
+                )
+            ),
+            entradas={
+                "altura_guarda_corpo_m": altura_gc,
+                "altura_minima_projeto_m": minimo_gc,
+                "rodape_m": rodape,
+                "vao_entre_travessas_m": vao_travessas,
+                "largura_util_m": largura_pass,
+                "espelho_mm": espelho,
+                "piso_mm": piso,
+                "altura_entre_patamares_m": altura_lance,
+                "largura_escada_m": largura_escada,
+            },
+            resultados={"itens": [asdict(item) for item in itens_conformidade]},
+            criterios=[
+                f"{item.requisito}: {item.limite} ({item.fonte})" for item in itens_conformidade
+            ],
+            alertas=[
+                "Conferir o texto vigente da NR-12 e o critério de acessos do cliente; NR-20 e NR-35 quando aplicáveis."
+            ],
+            referencias=[
+                "NR-12 (acessos, guarda-corpos e escadas); ABNT NBR 9077 (fórmula de Blondel)."
+            ],
+            conclusao=(
+                "Geometria de acesso conforme os mínimos informados."
+                if not nao_atende
+                else "Ajustar a geometria dos itens que não atendem."
+            ),
+        )
+        botao_registrar_calculo(
+            registro_acesso,
+            key="registrar_acessos_nr12",
+            rotulo="Registrar conformidade de acessos no projeto",
+            tipo="secondary",
+            identificar_peca=False,
+        )
 
 
 elif modulo == "4. Ligações":

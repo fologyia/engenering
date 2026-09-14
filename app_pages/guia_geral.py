@@ -1549,51 +1549,71 @@ else:
         )
 
     elif parte == "Barras":
-        st.subheader("2. Verificação de barras")
+        st.subheader("2. Verificação de barras (NBR 8800)")
         st.markdown(
             """
-            Selecione o perfil e informe esforços já combinados. Para compressão,
-            obtenha L e K das condições de apoio; para flexão, informe o comprimento
-            destravado Lb. Q, Cv e Cb dependem da seção e do carregamento.
+            Selecione o perfil e informe os esforços **de cálculo** (já combinados):
+            N_Sd, M_x,Sd, M_y,Sd e V_Sd. O programa faz o caminho da NBR 8800:
+            N_c,Rd = χ·Q·A_g·f_y/γ_a1 (5.3, com λ₀ e a curva única de χ, Q pelo
+            Anexo F), M_Rd pelos estados-limites FLT, FLM e FLA (Anexo G), V_Rd
+            (5.4.3), interação N–M (5.5.1.2) e esbeltez λ ≤ 200. Para compressão,
+            obtenha L e K das condições de apoio; para flexão, o comprimento
+            destravado L_b e C_b do diagrama de momentos.
             """
         )
         mostrar_exemplo(
             [
                 ["Perfil", 'I 6" x 22,00'],
-                ["Material", "Fy = 250 MPa, Fu = 400 MPa, E = 200 GPa, G = 77 GPa"],
-                ["Solicitação", "Compressão"],
-                ["Nd / Mdx / Mdy / Vd", "100 kN / 20 kN·m / 0 / 20 kN"],
-                ["L / Kx / Ky / Lb", "3 m / 1,0 / 1,0 / 3 m"],
-                ["Q / Cv / Cb", "1,0 / 1,0 / 1,0"],
-                ["Flecha", "Biapoiada, q = 5 kN/m e limite L/300"],
+                ["Material", "f_y = 250 MPa, f_u = 400 MPa, E = 200 GPa, G = 77 GPa"],
+                ["N_Sd / M_x,Sd / M_y,Sd / V_Sd", "−100 kN / 20 kN·m / 0 / 20 kN"],
+                ["L / K_x / K_y / L_b / C_b", "3 m / 1,0 / 1,0 / 3 m / 1,0"],
             ],
-            "Resultado: resistência à compressão = 146,97 kN, interação N–M = "
-            "1,23 (não atende — a interação combinada supera a unidade) e "
-            "flecha = 2,63 mm para limite de 10 mm.",
+            "Resultado: N_c,Rd = 148,5 kN (χ = 0,234, flambagem em y, λ_y = 172), "
+            "M_x,Rd = 26,7 kN·m governado pela FLT em regime inelástico, "
+            "V_Rd = 181,0 kN e interação N_Sd/N_Rd + 8/9·M_Sd/M_Rd = 1,34 — "
+            "não atende: a barra precisa de travamento lateral ou de perfil maior.",
         )
         st.caption(
-            "Utilização até 1 significa apenas que a demanda não excedeu a "
-            "resistência calculada com os coeficientes informados."
+            "Utilização até 1 significa apenas que a solicitação de cálculo não "
+            "excedeu a resistência de cálculo; os coeficientes γ_a1 = 1,10 e "
+            "γ_a2 = 1,35 são os da norma."
         )
 
     elif parte == "Combinações":
-        st.subheader("3. Combinações de ações")
+        st.subheader("3. Combinações de ações (NBR 8681 / NBR 8800)")
         st.markdown(
             """
             Cada linha representa uma ação característica. Informe N, V e M com
-            sinal, classifique-a como permanente ou variável e preencha γ e ψ
-            conforme a norma e a situação de projeto.
+            sinal e escolha a **categoria** da ação: os coeficientes γ_f e ψ₀, ψ₁,
+            ψ₂ das Tabelas 1 e 2 da NBR 8800 entram sozinhos — inclusive a
+            combinação com as permanentes favoráveis (γ_g = 1,0), que governa
+            vento de sucção e tombamento. A categoria personalizada aceita γ e ψ
+            próprios. Saem as combinações ELU normais e as ELS rara, frequente
+            e quase permanente.
             """
         )
         mostrar_exemplo(
             [
-                ["G permanente", "N = 50 kN, V = 10 kN, M = 20 kN·m, γ = 1,40"],
-                ["Q variável", "N = 30 kN, V = 5 kN, M = 15 kN·m, γ = 1,40, ψ0 = 0,70"],
-                ["W+ variável", "V = 20 kN, M = 40 kN·m, γ = 1,40, ψ0 = 0,60"],
-                ["W− variável", "V = −20 kN, M = −40 kN·m, γ = 1,40, ψ0 = 0,60"],
+                [
+                    "PP — peso próprio metálico",
+                    "N = 50 kN, V = 10 kN, M = 20 kN·m → γ_g = 1,25 / 1,0",
+                ],
+                [
+                    "Piso — elementos industrializados",
+                    "N = 10 kN, V = 2 kN, M = 4 kN·m → γ_g = 1,35 / 1,0",
+                ],
+                [
+                    "SC — sobrecarga de uso",
+                    "N = 30 kN, V = 5 kN, M = 15 kN·m → γ_q = 1,50, ψ₀ = 0,7",
+                ],
+                ["W+ / W− — vento", "V = ±20 kN, M = ±40 kN·m → γ_q = 1,40, ψ₀ = 0,6"],
             ],
-            "A tabela padrão já contém este exemplo. O envelope resulta em "
-            "|N| = 112,0 kN, |V| = 30,1 kN e |M| = 65,1 kN·m.",
+            "A tabela padrão já contém este exemplo. Abaixo dela, as abas de "
+            "**ações de plataforma** calculam o vento pela NBR 6123 "
+            "(V_k = V₀·S₁·S₂·S₃, q = 0,613·V_k², w = C_f·q·d), os esforços do "
+            "guarda-corpo no montante (H = q·s, M = q·s·h), o impacto de "
+            "equipamentos e a conformidade de acessos da NR-12 (guarda-corpo, "
+            "rodapé, travessas, largura, Blondel e patamares).",
         )
         st.warning(
             "Os máximos de N, V e M podem pertencer a combinações diferentes. "
@@ -1652,9 +1672,21 @@ else:
             "Este exemplo já está preenchido. Após analisar, confira primeiro "
             "reações e equilíbrio; depois leia deslocamentos e esforços axiais.",
         )
+        st.markdown(
+            """
+            No **pórtico**, ative a análise de segunda ordem (P–Δ pela rigidez
+            geométrica iterada) e a carga nocional de 0,3 % das cargas
+            gravitacionais (imperfeições, NBR 8800 4.9.7.1.1). O programa devolve
+            o fator de carga crítica global, Δ₁ e Δ₂, a classificação da
+            deslocabilidade por Δ₂/Δ₁ (pequena ≤ 1,1; média ≤ 1,4; grande), o
+            coeficiente B₂ e o deslocamento horizontal contra H/400 (ou outro
+            divisor). Na média deslocabilidade, repita com a rigidez a 80 %.
+            """
+        )
         st.warning(
-            "O solver é linear e de primeira ordem. Não considera P–Δ, "
-            "imperfeições, flambagem, plasticidade ou ligações semirrígidas.",
+            "A treliça é sempre de primeira ordem. O pórtico não considera "
+            "plasticidade nem ligações semirrígidas, e a flambagem de cada "
+            "barra continua sendo verificada no módulo 2 (NBR 8800).",
             icon=":material/warning:",
         )
 

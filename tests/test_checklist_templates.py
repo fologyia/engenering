@@ -43,6 +43,7 @@ def test_catalogo_embutido_e_integro():
     assert {
         "generico",
         "estrutura_metalica",
+        "plataforma_acesso",
         "vaso_tanque",
         "transportador",
         "eixo_maquina",
@@ -72,6 +73,7 @@ def test_modelo_sugerido_por_tipo_com_generico_de_reserva():
     assert modelo_para_tipo("Estrutura metálica").id == "estrutura_metalica"
     assert modelo_para_tipo("estrutura METÁLICA").id == "estrutura_metalica"
     assert modelo_para_tipo("Vaso de pressão / tanque").id == "vaso_tanque"
+    assert modelo_para_tipo("Plataforma de acesso").id == "plataforma_acesso"
     assert modelo_para_tipo("tipo que não existe").id == "generico"
     assert modelo_para_tipo("").id == "generico"
     assert obter_modelo("EIXO_MAQUINA").id == "eixo_maquina"
@@ -207,3 +209,27 @@ def test_tipo_de_projeto_entra_na_criacao():
         == "Estrutura metálica"
     )
     assert novo_projeto_documento("A", tipo_projeto="  ")["tipo_projeto"] == TIPO_PROJETO_PADRAO
+
+
+def test_modelo_de_plataforma_cobre_o_escopo_minimo_defensavel():
+    """Os itens que um verificador cobra num memorial de plataforma de acesso."""
+    modelo = obter_modelo("plataforma_acesso")
+    assert modelo is not None
+    chaves = {item.chave for item in modelo.itens}
+    assert {
+        "criterio_cliente",
+        "cargas",
+        "combinacoes",
+        "modelo_global",
+        "barras",
+        "torcao",
+        "deslocamentos",
+        "secundarios",
+        "ligacoes_base",
+        "acessos_nr12",
+        "nr20",
+        "memorial_limpo",
+    } <= chaves
+    textos = " ".join(item.item for item in modelo.itens)
+    for trecho in ("NBR 6123", "0,3 %", "H/400", "Blondel", "NR-20", "χ·Q·A_g"):
+        assert trecho in textos, trecho

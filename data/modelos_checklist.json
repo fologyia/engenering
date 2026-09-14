@@ -40,6 +40,31 @@
       ]
     },
     {
+      "id": "plataforma_acesso",
+      "nome": "Plataforma de acesso / passarela (NR-12, NR-20, NBR 8800)",
+      "tipo_projeto": "Plataforma de acesso",
+      "descricao": "Plataformas de operação e acesso, passarelas e escadas industriais: ações completas (vento, guarda-corpo, impacto), modelo global com segunda ordem, barras pela NBR 8800, deslocamentos H/400, elementos secundários, ligações e base, e conformidade NR-12/NR-20 com o critério do cliente.",
+      "itens": [
+        {"chave": "desenhos", "item": "Receber desenhos de arranjo e detalhamento com revisão registrada; arranjo coerente com o modelo de cálculo (apoios, ligações e contraventamentos iguais nos dois)", "categoria": "Documentos", "critico": true, "papel": "responsavel"},
+        {"chave": "criterio_cliente", "item": "Critério de projeto do cliente recebido: sobrecarga de piso, carga de guarda-corpo, altura de guarda-corpo, limite de deslocamento (H/400, L/350…) e fatores exigidos", "categoria": "Critérios", "critico": true, "papel": "responsavel"},
+        {"chave": "cargas", "item": "Ações completas e documentadas: peso próprio, piso/grade, guarda-corpo (1,0 kN/m horizontal, NBR 6120/NBR 14718), sobrecarga, equipamentos com impacto, vento pela NBR 6123 (V₀, S₁, S₂, S₃, C_f), temperatura se aplicável", "categoria": "Carregamentos", "critico": true, "papel": "responsavel"},
+        {"chave": "combinacoes", "item": "Combinações ELU e ELS pela NBR 8681/NBR 8800 (γ_f, ψ₀, ψ₁, ψ₂ por categoria), inclusive permanentes favoráveis para vento e tombamento", "categoria": "Carregamentos", "critico": true, "papel": "responsavel"},
+        {"chave": "modelo_global", "item": "Modelo global do pórtico com carga nocional de 0,3 %, classificação da deslocabilidade (Δ₂/Δ₁) e segunda ordem (P–Δ ou B₁/B₂) conforme NBR 8800, 4.9", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "aco", "item": "Confirmar a especificação do aço e a fonte das propriedades (norma ou certificado)", "categoria": "Materiais", "critico": true, "papel": "responsavel"},
+        {"chave": "barras", "item": "Barras pela NBR 8800: N_c,Rd = χ·Q·A_g·f_y/γ_a1 (5.3), M_Rd com FLT/FLM/FLA (Anexo G), V_Rd (5.4.3), interação N–M (5.5.1.2) e esbeltez λ ≤ 200 — sem Euler-Johnson nem fator de segurança global no memorial", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "torcao", "item": "Torção das vigas de perfil U (carga fora do centro de cisalhamento) travada nas ligações ou verificada", "categoria": "Cálculo", "critico": false, "papel": "responsavel"},
+        {"chave": "deslocamentos", "item": "Deslocamento horizontal ≤ H/400 (ou critério do cliente) e flechas ≤ L/350 em combinações de serviço", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "secundarios", "item": "Elementos secundários dimensionados: escadas, guarda-corpos e montantes, grades de piso e suas fixações", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "ligacoes_base", "item": "Ligações parafusadas/soldadas, placa de base, chumbadores e fundação (ou interface declarada) verificados", "categoria": "Cálculo", "critico": true, "papel": "responsavel"},
+        {"chave": "acessos_nr12", "item": "Conformidade NR-12: guarda-corpo ≥ 1,10 m (ou critério do cliente), rodapé ≥ 0,20 m, travessa intermediária, largura útil ≥ 0,60 m, degraus por Blondel (630 ≤ 2h + b ≤ 640 mm), patamar a cada 3,00 m", "categoria": "Segurança", "critico": true, "papel": "responsavel"},
+        {"chave": "nr20", "item": "NR-20 quando houver inflamáveis/combustíveis: classificação da área, distâncias, aterramento e equipotencialização da plataforma; NR-35 para trabalho em altura na montagem", "categoria": "Segurança", "critico": false, "papel": "responsavel"},
+        {"chave": "memorial_limpo", "item": "Memorial só com o que se aplica: sem círculo de Mohr, estado plano genérico, testes de perfis não adotados ou verificações fora da norma de projeto", "categoria": "Emissão", "critico": false, "papel": "responsavel"},
+        {"chave": "normas", "item": "Matriz normativa conferida com edição: NBR 8800, NBR 8681, NBR 6120, NBR 6123, NBR 14718, NR-12, NR-20 e critério do cliente", "categoria": "Normas", "critico": false, "papel": "responsavel"},
+        {"chave": "verificacao", "item": "Verificação independente do memorial concluída", "categoria": "Verificação", "critico": true, "papel": "verificador"},
+        {"chave": "aprovacao", "item": "Aprovação e emissão do memorial", "categoria": "Emissão", "critico": true, "papel": "aprovador"}
+      ]
+    },
+    {
       "id": "vaso_tanque",
       "nome": "Vaso de pressão / tanque",
       "tipo_projeto": "Vaso de pressão / tanque",
