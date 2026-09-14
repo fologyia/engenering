@@ -221,6 +221,122 @@ class TorcaoDePerfilDoCatalogoTests(unittest.TestCase):
         self.assertIn("perfil aberto", secao.descricao)
 
 
+class TorcaoPorCentroDeCisalhamentoTests(unittest.TestCase):
+    """U fletido em x e T fletido em y torcem quando a carga passa pelo centroide.
+
+    O modelo é plano e não calcula essa torção; o que ele deve fazer é medir a
+    excentricidade do centro de cisalhamento e avisar com T ≈ V·e — a ordem de
+    grandeza que o projetista precisa para travar a torção ou somá-la ao modelo.
+    """
+
+    def _viga(self, secao, **extras):
+        material = vb.MaterialViga("Aço", 200_000.0, 77_000.0, 250.0)
+        parametros = {
+            "comprimento_mm": 4_000.0,
+            "secao": secao,
+            "material": material,
+            "apoios": (vb.Apoio(0.0, "pino"), vb.Apoio(4_000.0, "rolete")),
+            "cargas_distribuidas": (vb.CargaDistribuida(0.0, 4_000.0, -8.0),),
+        }
+        parametros.update(extras)
+        return vb.Viga(**parametros)
+
+    def test_u_em_x_mede_a_excentricidade_do_centro_de_cisalhamento(self):
+        perfil = secoes.perfil_u("U", 200.0, 75.0, 6.0, 10.0)
+        secao = vb.secao_de_perfil_catalogo(perfil, eixo="x")
+        x0, _ = secoes.centro_de_cisalhamento_do_perfil(perfil)
+        self.assertGreater(abs(x0), 0.0)
+        self.assertAlmostEqual(secao.excentricidade_cisalhamento_mm, abs(x0))
+        self.assertIn("Centro de cisalhamento", secao.descricao)
+        # Em y a carga horizontal age no plano de simetria: não torce.
+        em_y = vb.secao_de_perfil_catalogo(perfil, eixo="y")
+        self.assertEqual(em_y.excentricidade_cisalhamento_mm, 0.0)
+
+    def test_t_em_y_torce_e_em_x_nao(self):
+        perfil = secoes.perfil_t("T", 200.0, 150.0, 8.0, 12.0)
+        self.assertEqual(
+            vb.secao_de_perfil_catalogo(perfil, eixo="x").excentricidade_cisalhamento_mm, 0.0
+        )
+        self.assertGreater(
+            vb.secao_de_perfil_catalogo(perfil, eixo="y").excentricidade_cisalhamento_mm, 0.0
+        )
+
+    def test_perfis_bissimetricos_nao_tem_excentricidade(self):
+        for perfil in (
+            secoes.perfil_i_simetrico("I", 300.0, 150.0, 8.0, 12.0),
+            secoes.tubo_retangular("TR", 200.0, 100.0, 6.0),
+            secoes.barra_circular("BR", 40.0),
+        ):
+            with self.subTest(perfil=perfil.nome):
+                secao = vb.secao_de_perfil_catalogo(perfil)
+                self.assertEqual(secao.excentricidade_cisalhamento_mm, 0.0)
+
+    def test_aviso_traz_t_igual_a_v_vezes_e(self):
+        perfil = secoes.perfil_u("U", 200.0, 75.0, 6.0, 10.0)
+        secao = vb.secao_de_perfil_catalogo(perfil, eixo="x")
+        resultado = vb.analisar_viga(self._viga(secao))
+        avisos = [a for a in resultado.avisos if "centro de cisalhamento" in a]
+        self.assertEqual(len(avisos), 1)
+        cortante = abs(resultado.extremos["cortante"].valor)
+        self.assertAlmostEqual(cortante, 8.0 * 4_000.0 / 2.0, delta=1e-6 * cortante)
+        torque = cortante * secao.excentricidade_cisalhamento_mm
+        self.assertIn(f"{torque / 1e6:.3g} kN·m", avisos[0])
+        self.assertIn(f"{torque / secao.modulo_torcao_mm3:.3g} MPa", avisos[0])
+        self.assertIn("comando `torque`", avisos[0])
+
+    def test_sem_carga_transversal_nao_avisa(self):
+        perfil = secoes.perfil_u("U", 200.0, 75.0, 6.0, 10.0)
+        secao = vb.secao_de_perfil_catalogo(perfil, eixo="x")
+        viga = self._viga(
+            secao,
+            cargas_distribuidas=(),
+            apoios=(vb.Apoio(0.0, "engaste"),),
+            cargas_axiais=(vb.CargaAxial(4_000.0, -10_000.0),),
+        )
+        resultado = vb.analisar_viga(viga)
+        self.assertFalse(any("centro de cisalhamento" in a for a in resultado.avisos))
+        # Perfil I com a mesma carga transversal: também não avisa.
+        i = vb.secao_de_perfil_catalogo(secoes.perfil_i_simetrico("I", 300.0, 150.0, 8.0, 12.0))
+        resultado_i = vb.analisar_viga(self._viga(i))
+        self.assertFalse(any("centro de cisalhamento" in a for a in resultado_i.avisos))
+
+    def test_excentricidade_negativa_e_recusada(self):
+        with self.assertRaises(ValueError):
+            vb.SecaoViga(
+                nome="X",
+                area_mm2=1_000.0,
+                inercia_mm4=1.0e6,
+                c_superior_mm=50.0,
+                c_inferior_mm=50.0,
+                momento_estatico_mm3=1.0e4,
+                espessura_cisalhamento_mm=5.0,
+                constante_torcao_mm4=1.0e4,
+                modulo_torcao_mm3=1.0e3,
+                excentricidade_cisalhamento_mm=-1.0,
+            )
+
+
+class CatalogoU8Tests(unittest.TestCase):
+    """As bitolas U 8" (a viga da plataforma-tipo) entram com A/Ix/Iy conferidos."""
+
+    def test_u_8_esta_no_catalogo_com_propriedades_coerentes(self):
+        from core import section_catalog as catalogo
+
+        for nome, area, ix, iy, ry in (
+            ('U 8" x 17,10', 2_180.0, 1.356e7, 5.49e5, 15.9),
+            ('U 8" x 20,50', 2_610.0, 1.503e7, 6.36e5, 15.6),
+        ):
+            with self.subTest(nome=nome):
+                perfil = catalogo.obter_perfil(nome)
+                self.assertAlmostEqual(perfil.area_mm2, area)
+                self.assertAlmostEqual(perfil.ix_mm4, ix)
+                self.assertAlmostEqual(perfil.iy_mm4, iy)
+                # ry sai de Iy/A (o impresso na fonte, 14,2 mm, era erro de tabela).
+                self.assertAlmostEqual(math.sqrt(perfil.iy_mm4 / perfil.area_mm2), ry, delta=0.1)
+                self.assertGreater(perfil.zx_mm3, perfil.ix_mm4 / (perfil.altura_mm / 2))
+                self.assertGreater(secoes.constante_de_empenamento_estimada(perfil), 0.0)
+
+
 class CisalhamentoEmYTests(unittest.TestCase):
     """Na flexão em torno de y o cortante é resistido pelas mesas, não pela alma."""
 

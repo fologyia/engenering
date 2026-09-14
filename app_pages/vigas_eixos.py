@@ -1415,6 +1415,7 @@ with st.container(border=True):
                 "area_cisalhamento_mm2": secao.area_cisalhamento_mm2,
                 "momento_estatico_mm3": secao.momento_estatico_mm3,
                 "espessura_cisalhamento_mm": secao.espessura_cisalhamento_mm,
+                "excentricidade_cisalhamento_mm": secao.excentricidade_cisalhamento_mm,
             },
             "material": {
                 "nome": material.nome,

@@ -674,6 +674,9 @@ def _secao_manual(nom: dict[str, str], n: int, texto: str) -> vb.SecaoViga:
     av = pegar(("av", "area_cisalhamento"), "Av (mm²)", obrigatorio=False) or 0.0
     # Inércia em torno do outro eixo: só serve para a carga crítica fora do plano.
     iy = pegar(("iy", "i_transversal", "inercia_transversal"), "Iy (mm⁴)", obrigatorio=False) or 0.0
+    # Distância do centro de cisalhamento ao centroide, transversal à carga:
+    # só serve para o aviso de torção T ≈ V·e (U em x, T em y).
+    e_cc = pegar(("e_cc", "excentricidade_cisalhamento"), "e_cc (mm)", obrigatorio=False) or 0.0
     # Q sem t não é um caminho de cisalhamento: antes o programa assumia
     # t = 1 mm em silêncio, e τ = V·Q/(I·1) saía absurdo. (t sem Q é normal:
     # os perfis de catálogo trazem a espessura da alma e usam Av.)
@@ -702,6 +705,7 @@ def _secao_manual(nom: dict[str, str], n: int, texto: str) -> vb.SecaoViga:
             modulo_torcao_mm3=wt,
             area_cisalhamento_mm2=av,
             inercia_transversal_mm4=iy,
+            excentricidade_cisalhamento_mm=e_cc,
             descricao=descricao,
         )
     except ValueError as erro:
@@ -1198,6 +1202,11 @@ def gerar_script(viga: vb.Viga) -> str:
         f"J={num(secao.constante_torcao_mm4)} Wt={num(secao.modulo_torcao_mm3)} "
         f"Av={num(secao.area_cisalhamento_mm2)} "
         + (f"Iy={num(secao.inercia_transversal_mm4)} " if secao.inercia_transversal_mm4 > 0 else "")
+        + (
+            f"e_cc={num(secao.excentricidade_cisalhamento_mm)} "
+            if secao.excentricidade_cisalhamento_mm > 0
+            else ""
+        )
         + f"nome={texto_entre_aspas(secao.nome)}"
         + (f" descricao={texto_entre_aspas(secao.descricao)}" if secao.descricao else "")
     )
@@ -1391,7 +1400,7 @@ AJUDA_SINTAXE = """\
 | `secao tubo_retangular b h t` | Tubo retangular, em mm | `secao tubo_retangular 100 200 6` |
 | `secao perfil_i h bf tw tf` | Perfil I soldado, em mm | `secao perfil_i 300 150 8 12` |
 | `secao perfil <nome>` | Perfil do catálogo do programa | `secao perfil W 200 x 46,1 (H)` |
-| `secao manual A= I= c= Q= t= J= Wt= Av= Iy= nome=` | Propriedades diretas (Q **e** t juntos, ou só Av; Iy para a carga crítica fora do plano) | `secao manual A=5000 I=2.5e7 c=100 Av=3000 Iy=4e6 nome="Perfil da lista"` |
+| `secao manual A= I= c= Q= t= J= Wt= Av= Iy= e_cc= nome=` | Propriedades diretas (Q **e** t juntos, ou só Av; Iy para a carga crítica fora do plano; e_cc = distância do centro de cisalhamento ao centroide, para o aviso de torção) | `secao manual A=5000 I=2.5e7 c=100 Av=3000 Iy=4e6 nome="Perfil da lista"` |
 | `apoio x <tipo>` | pino, rolete, engaste, deslizante, trava_axial | `apoio 0 pino` |
 | `apoio x mola kv= kr=` | Apoio elástico: kv em N/mm, kr em N·mm/rad | `apoio 3 mola kv=500` |
 | `rotula x` | Articulação interna (M = 0) | `rotula 4.5` |

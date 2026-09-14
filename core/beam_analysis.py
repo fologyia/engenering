@@ -43,6 +43,7 @@ import numpy as np
 
 from core.load_to_stress import EstadoPlanoCalculado
 from core.section_stress import EsforcosSecao, tensoes_combinadas
+from core.steel_sections import centro_de_cisalhamento_do_perfil
 
 # ---------------------------------------------------------------------------
 # Tolerâncias e constantes
@@ -160,6 +161,12 @@ class SecaoViga:
     # carga crítica **fora do plano**: uma barra comprimida flamba em torno
     # do eixo de menor inércia, que raramente é o eixo em que ela é fletida.
     inercia_transversal_mm4: float = 0.0
+    # Distância entre o centro de cisalhamento e o centroide, medida na
+    # direção perpendicular às cargas transversais. Zero quando a carga passa
+    # pelo centro de cisalhamento (seções bissimétricas e monossimétricas
+    # carregadas no plano de simetria). Não entra nos esforços — o modelo é
+    # plano — mas é o que denuncia que um U carregado na alma torce, T ≈ V·e.
+    excentricidade_cisalhamento_mm: float = 0.0
 
     def __post_init__(self) -> None:
         _positivo("area_mm2", self.area_mm2)
@@ -172,6 +179,7 @@ class SecaoViga:
         _nao_negativo("modulo_torcao_mm3", self.modulo_torcao_mm3)
         _nao_negativo("area_cisalhamento_mm2", self.area_cisalhamento_mm2)
         _nao_negativo("inercia_transversal_mm4", self.inercia_transversal_mm4)
+        _nao_negativo("excentricidade_cisalhamento_mm", self.excentricidade_cisalhamento_mm)
         if not self.tem_cisalhamento:
             raise ValueError(
                 "A seção precisa de Q e t (para V·Q/(I·t)) ou de uma área de "
@@ -544,6 +552,27 @@ def _distancias_monossimetricas(perfil: Any, eixo: str) -> tuple[float, float, s
     return None
 
 
+def _excentricidade_do_centro_de_cisalhamento(perfil: Any, eixo: str) -> tuple[float, str]:
+    """Distância do centro de cisalhamento ao centroide, transversal às cargas.
+
+    U/C fletido em x: o centro de cisalhamento fica fora da alma, e a carga
+    vertical no centroide (ou na alma) torce o perfil. T fletido em y: o
+    centro de cisalhamento está na mesa, e a carga horizontal no centroide
+    torce. Nas demais famílias, ou com a carga no plano de simetria, é zero.
+    """
+    try:
+        x0, y0 = centro_de_cisalhamento_do_perfil(perfil)
+    except (AttributeError, TypeError, ValueError):
+        return 0.0, ""
+    excentricidade = abs(float(x0)) if eixo == "x" else abs(float(y0))
+    if not math.isfinite(excentricidade) or excentricidade <= 0:
+        return 0.0, ""
+    return excentricidade, (
+        f"Centro de cisalhamento a e = {excentricidade:.1f} mm do centroide: carga "
+        "transversal aplicada no centroide ou na alma gera torção T ≈ V·e."
+    )
+
+
 def secao_de_perfil_catalogo(perfil: Any, *, eixo: str = "x") -> SecaoViga:
     """Converte um :class:`core.steel_sections.PerfilAco` em :class:`SecaoViga`.
 
@@ -580,6 +609,9 @@ def secao_de_perfil_catalogo(perfil: Any, *, eixo: str = "x") -> SecaoViga:
     modulo_torcao, nota_torcao = _modulo_de_torcao_do_perfil(perfil)
     if nota_torcao:
         nota = (nota + " " if nota else "") + nota_torcao
+    excentricidade, nota_excentricidade = _excentricidade_do_centro_de_cisalhamento(perfil, eixo)
+    if nota_excentricidade:
+        nota = (nota + " " if nota else "") + nota_excentricidade
     return SecaoViga(
         nome=str(perfil.nome),
         area_mm2=float(perfil.area_mm2),
@@ -592,6 +624,7 @@ def secao_de_perfil_catalogo(perfil: Any, *, eixo: str = "x") -> SecaoViga:
         modulo_torcao_mm3=modulo_torcao,
         area_cisalhamento_mm2=area_cisalhamento,
         inercia_transversal_mm4=float(perfil.iy_mm4 if eixo == "x" else perfil.ix_mm4),
+        excentricidade_cisalhamento_mm=excentricidade,
         descricao=(
             f"{perfil.nome} — {perfil.descricao} (flexão em torno de {eixo})."
             + (f" {nota}" if nota else "")
@@ -1775,6 +1808,31 @@ def analisar_viga(viga: Viga, *, pontos_por_elemento: int = 61) -> ResultadoViga
 
     extremos = _calcular_extremos(pontos)
     grau = _grau_hiperestaticidade(apoios_por_no.values(), len(nos_rotula))
+
+    # Seção monossimétrica carregada fora do centro de cisalhamento (U/C em
+    # x, T em y): o modelo plano não vê a torção, mas ela existe e vale
+    # ≈ V·e nos apoios que travam o giro. Reportar a ordem de grandeza é o
+    # que separa "não calculei" de "não existe".
+    torque_excentrico = abs(extremos["cortante"].valor) * secao.excentricidade_cisalhamento_mm
+    if torque_excentrico > 0:
+        texto = (
+            f"Seção monossimétrica ({secao.nome}): o centro de cisalhamento fica a "
+            f"e = {secao.excentricidade_cisalhamento_mm:.1f} mm do centroide e o modelo "
+            "plano aplica as cargas transversais no centroide. A barra torce com "
+            f"T ≈ V·e ≈ {abs(extremos['cortante'].valor) / 1e3:.3g} kN × "
+            f"{secao.excentricidade_cisalhamento_mm:.1f} mm ≈ {torque_excentrico / 1e6:.3g} kN·m "
+            "(torção travada nos apoios)"
+        )
+        if secao.modulo_torcao_mm3 > 0:
+            texto += (
+                f"; τ_T ≈ T/Wt ≈ {torque_excentrico / secao.modulo_torcao_mm3:.3g} MPa por "
+                "Saint-Venant, e em perfis abertos a parcela de empenamento pode superar essa"
+            )
+        texto += (
+            ". Trave a torção nos apoios e nas ligações, aplique a carga pelo centro de "
+            "cisalhamento ou some esse torque ao modelo (comando `torque`)."
+        )
+        avisos.append(texto)
 
     fator_seguranca = None
     if material.escoamento_MPa:

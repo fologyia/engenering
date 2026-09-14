@@ -178,12 +178,44 @@ DADOS_U = [
         9.24,
         1.34,
     ),
-    # U 8" (17,10 e 20,50 kg/m) fica de fora: o ry impresso na tabela de
-    # origem (1,42 nos dois pesos) não bate com sqrt(Iy/Área) em nenhum dos
-    # dois — 1,58 e 1,55 respectivamente — de forma consistente demais para
-    # ser coincidência de leitura. Provável erro de impressão na fonte;
-    # melhor excluir a bitola do que arriscar um ry errado numa verificação
-    # de flambagem.
+    # U 8" (17,10 e 20,50 kg/m): o ry impresso na tabela de origem (1,42 nos
+    # dois pesos) não bate com sqrt(Iy/Área) — 1,59 e 1,56. É erro de
+    # impressão da fonte, não da área ou da inércia: a bitola é a C8x11.5 /
+    # C8x13.75 do AISC (mesmas dimensões), cujo manual traz A = 3,37 / 4,04 in²,
+    # Ix = 32,5 / 36,1 in⁴ e Iy = 1,31 / 1,52 in⁴ — exatamente os 21,8 / 26,1 cm²,
+    # 1356 / 1503 cm⁴ e 54,9 / 63,6 cm⁴ da Gerdau — e ry = 0,623 / 0,613 in
+    # (1,58 / 1,56 cm). O programa deriva ry de Iy/A em tempo de execução, então
+    # entra aqui o ry coerente com a inércia, e não o impresso.
+    (
+        'U 8" x 17,10',
+        17.10,
+        203.20,
+        5.59,
+        57.40,
+        9.90,
+        21.80,
+        1356.00,
+        133.40,
+        7.89,
+        54.90,
+        12.80,
+        1.59,
+    ),
+    (
+        'U 8" x 20,50',
+        20.50,
+        203.20,
+        7.70,
+        59.50,
+        9.90,
+        26.10,
+        1503.00,
+        148.00,
+        7.59,
+        63.60,
+        13.90,
+        1.56,
+    ),
     (
         'U 10" x 22,77',
         22.77,

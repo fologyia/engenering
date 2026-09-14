@@ -455,6 +455,28 @@ com aviso quando ele fica abaixo de 10 e a página, o registro e o memorial
 comprimento de flambagem diferente fora do plano e flambagem lateral com
 torção continuam sendo assunto de Flambagem de colunas e Estruturas de aço.
 
+### Torção por excentricidade do centro de cisalhamento
+
+O modelo é plano e aplica as cargas transversais no centroide. Num perfil
+**U/C fletido em x** o centro de cisalhamento fica fora da alma, e num **T
+fletido em y** ele está na mesa: a carga que passa pelo centroide (ou pela
+alma) **torce** a barra, e o modelo plano não vê essa torção. A
+`SecaoViga` carrega então `excentricidade_cisalhamento_mm` (`e_cc=` na
+seção manual; preenchida automaticamente para os perfis do catálogo com
+as fórmulas de parede fina de `steel_sections.centro_de_cisalhamento_do_
+perfil`), e o resultado avisa com a ordem de grandeza: `T ≈ V·e` — que é
+exatamente o torque nos apoios quando os dois travam o giro, tanto para
+carga uniforme (`q·e·L/2`) quanto para carga concentrada no meio
+(`P·e/2`) — e `τ_T ≈ T/Wt` de Saint-Venant, lembrando que em perfil aberto
+a parcela de empenamento pode superar essa. As saídas são: travar a torção
+nos apoios e ligações, aplicar a carga pelo centro de cisalhamento ou somar
+o torque ao modelo com o comando `torque`. Perfis bissimétricos e as
+monossimétricas carregadas no plano de simetria (U em y, T em x) têm
+excentricidade zero e não recebem aviso. As bitolas U 8" × 17,10 e 20,50
+entraram no catálogo com A, Ix e Iy conferidos contra a C8x11.5/C8x13.75
+do AISC (o `ry` impresso na tabela de origem era erro de impressão; o
+programa deriva `ry` de `Iy/A`).
+
 ## Linguagem de texto
 
 O interpretador de `core/beam_script.py` lê uma instrução por linha. Tudo
@@ -474,7 +496,9 @@ documentos e o BOM de um arquivo salvo pelo Bloco de Notas são aceitos.
 
 `secao manual` exige `Q` **e** `t` juntos (ou só `Av`): antes, `Q` sem `t`
 entrava com `t = 1 mm` em silêncio e `τ = V·Q/(I·1)` saía absurdo. `Iy=`
-informa a inércia transversal, usada só na carga crítica fora do plano.
+informa a inércia transversal, usada só na carga crítica fora do plano;
+`e_cc=` informa a distância do centro de cisalhamento ao centroide, usada
+só no aviso de torção `T ≈ V·e`.
 
 `N x valor e=<mm>` aplica a axial fora do centroide: o programa acrescenta
 o momento `M = −e·Fx` no mesmo ponto e no mesmo caso de carga (`M_z = x·Fy −
