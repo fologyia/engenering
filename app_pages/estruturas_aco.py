@@ -1510,11 +1510,13 @@ elif modulo == "4. Ligações":
 
 
 else:
-    st.header("Análise elástica linear 2D")
-    st.warning(
-        "O solver é de primeira ordem, com pequenas deformações. Não inclui "
-        "P–Δ, imperfeições, ligações semirrígidas, flambagem ou não linearidade.",
-        icon=":material/warning:",
+    st.header("Análise elástica 2D — pórtico com segunda ordem")
+    st.caption(
+        "Treliça em primeira ordem; pórtico plano em primeira ou **segunda ordem** "
+        "(rigidez geométrica iterada), com carga nocional de 0,3 % para as "
+        "imperfeições (NBR 8800, 4.9.7.1.1), fator de carga crítica global, "
+        "classificação da deslocabilidade por Δ₂/Δ₁ (4.9.4.1), coeficiente B₂ "
+        "(4.9.4.6) e verificação do deslocamento horizontal H/… (Anexo C)."
     )
     modelo = st.segmented_control(
         "Modelo estrutural",
@@ -1592,6 +1594,72 @@ else:
             )
         },
     )
+    opcoes_2a_ordem = {
+        "segunda_ordem": False,
+        "carga_nocional": 0.0,
+        "sentido_nocional": 1.0,
+        "reducao_rigidez": 1.0,
+        "altura_referencia_mm": None,
+        "divisor_h": 400.0,
+    }
+    if modelo == "Pórtico 2D":
+        with st.container(border=True):
+            st.subheader("Estabilidade e imperfeições (NBR 8800, 4.9)")
+            colunas_opcoes = st.columns(4)
+            opcoes_2a_ordem["segunda_ordem"] = colunas_opcoes[0].toggle(
+                "Análise de segunda ordem (P–Δ)",
+                value=True,
+                key="estrutura_2d_segunda_ordem",
+                persist_state="session",
+                help="Rigidez geométrica a partir do esforço normal de cada barra, iterada até convergir.",
+            )
+            usar_nocional = colunas_opcoes[1].toggle(
+                "Carga nocional de 0,3 %",
+                value=True,
+                key="estrutura_2d_nocional",
+                persist_state="session",
+                help="Imperfeições geométricas iniciais: 0,3 % da carga gravitacional de cada nó aplicada na horizontal (4.9.7.1.1).",
+            )
+            sentido = colunas_opcoes[2].selectbox(
+                "Sentido da nocional",
+                ["+x", "−x"],
+                key="estrutura_2d_sentido_nocional",
+                persist_state="session",
+            )
+            reducao_opcao = colunas_opcoes[3].selectbox(
+                "Rigidez na análise",
+                ["100 % (pequena deslocabilidade)", "80 % (média deslocabilidade, 4.9.7.1.2)"],
+                key="estrutura_2d_reducao",
+                persist_state="session",
+            )
+            colunas_h = st.columns(2)
+            altura_m = colunas_h[0].number_input(
+                "Altura de referência H (m) — 0 = altura total dos nós",
+                min_value=0.0,
+                value=0.0,
+                step=0.5,
+                key="estrutura_2d_altura_m",
+                persist_state="session",
+            )
+            opcoes_2a_ordem["divisor_h"] = colunas_h[1].number_input(
+                "Limite de deslocamento horizontal H / …",
+                min_value=50.0,
+                value=400.0,
+                step=50.0,
+                key="estrutura_2d_divisor_h",
+                persist_state="session",
+                help="Anexo C da NBR 8800; critérios de cliente costumam pedir H/400 em plataformas.",
+            )
+            opcoes_2a_ordem["carga_nocional"] = (
+                estrutural.CARGA_NOCIONAL_PADRAO if usar_nocional else 0.0
+            )
+            opcoes_2a_ordem["sentido_nocional"] = 1.0 if sentido == "+x" else -1.0
+            opcoes_2a_ordem["reducao_rigidez"] = (
+                estrutural.REDUCAO_RIGIDEZ_MEDIA_DESLOCABILIDADE
+                if reducao_opcao.startswith("80")
+                else 1.0
+            )
+            opcoes_2a_ordem["altura_referencia_mm"] = altura_m * 1e3 if altura_m > 0 else None
     analisar = st.button(
         "Analisar estrutura",
         type="primary",
@@ -1655,7 +1723,15 @@ else:
                             carga_distribuida_local_y_N_mm=float(linha["qy local (kN/m)"]),
                         )
                     )
-                resultado = estrutural.analisar_portico(nos, elementos)
+                resultado = estrutural.analisar_portico(
+                    nos,
+                    elementos,
+                    segunda_ordem=opcoes_2a_ordem["segunda_ordem"],
+                    carga_nocional=opcoes_2a_ordem["carga_nocional"],
+                    sentido_nocional=opcoes_2a_ordem["sentido_nocional"],
+                    reducao_rigidez=opcoes_2a_ordem["reducao_rigidez"],
+                    altura_referencia_mm=opcoes_2a_ordem["altura_referencia_mm"],
+                )
         except (ValueError, TypeError, KeyError) as erro:
             st.error(f"Modelo inválido: {erro}", icon=":material/error:")
         else:
@@ -1668,6 +1744,7 @@ else:
                 "nos": nos,
                 "elementos": elementos,
                 "resultado": resultado,
+                "opcoes": dict(opcoes_2a_ordem),
             }
 
     resultado_estrutura_2d = st.session_state.get("estrutura_2d_resultado")
@@ -1676,12 +1753,98 @@ else:
         elementos = resultado_estrutura_2d["elementos"]
         resultado = resultado_estrutura_2d["resultado"]
 
+        opcoes_usadas = resultado_estrutura_2d.get("opcoes", {})
         st.subheader("Resultados")
+        for aviso in resultado.avisos:
+            st.warning(aviso, icon=":material/warning:")
         st.metric(
             "Maior deslocamento translacional",
             f"{resultado.deslocamento_maximo_mm:.3f} mm",
             border=True,
         )
+        verificacao_h = None
+        if modelo == "Pórtico 2D":
+            with st.container(border=True):
+                st.markdown("**Estabilidade global e deslocabilidade**")
+                colunas_est = st.columns(4)
+                colunas_est[0].metric(
+                    "Fator de carga crítica global",
+                    "—"
+                    if resultado.fator_carga_critica is None
+                    else f"{resultado.fator_carga_critica:.2f}",
+                    border=True,
+                    help="Multiplicador de todas as cargas que leva o pórtico à flambagem elástica (K_e·φ = λ·(−K_g)·φ).",
+                )
+                colunas_est[1].metric(
+                    "Δ₁ (1ª ordem)",
+                    f"{resultado.deslocamento_horizontal_1a_ordem_mm:.3f} mm",
+                    border=True,
+                )
+                colunas_est[2].metric(
+                    "Δ₂ (2ª ordem)",
+                    "—"
+                    if resultado.deslocamento_horizontal_2a_ordem_mm is None
+                    else f"{resultado.deslocamento_horizontal_2a_ordem_mm:.3f} mm",
+                    border=True,
+                    help=f"{resultado.iteracoes} iteração(ões) da rigidez geométrica."
+                    if resultado.segunda_ordem
+                    else "Ative a análise de segunda ordem.",
+                )
+                colunas_est[3].metric(
+                    "Δ₂/Δ₁ → classificação",
+                    "—"
+                    if resultado.razao_delta2_delta1 is None
+                    else f"{resultado.razao_delta2_delta1:.3f}",
+                    border=True,
+                    help=resultado.classificacao_deslocabilidade or "Sem compressão nas barras.",
+                )
+                if resultado.classificacao_deslocabilidade:
+                    st.caption(
+                        f"Classificação (4.9.4.1): **{resultado.classificacao_deslocabilidade}**"
+                        + (
+                            f" · B₂ = {resultado.coeficiente_b2:.3f} (4.9.4.6, R_s = {estrutural.RS_PORTICO})"
+                            if resultado.coeficiente_b2 is not None
+                            and math.isfinite(resultado.coeficiente_b2)
+                            else ""
+                        )
+                        + f" · carga nocional aplicada: {resultado.carga_nocional_total_N / 1e3:.3f} kN "
+                        f"sobre {resultado.carga_gravitacional_total_N / 1e3:.2f} kN gravitacionais"
+                        + f" · rigidez {resultado.reducao_rigidez * 100:.0f} %."
+                    )
+                try:
+                    verificacao_h = estrutural.verificar_deslocamento_horizontal(
+                        resultado, divisor=float(opcoes_usadas.get("divisor_h", 400.0))
+                    )
+                except ValueError as erro:
+                    st.caption(f"Deslocamento horizontal não verificado: {erro}")
+                if verificacao_h is not None:
+                    colunas_h_res = st.columns(3)
+                    colunas_h_res[0].metric(
+                        f"Deslocamento horizontal ({verificacao_h['ordem']})",
+                        f"{verificacao_h['deslocamento_mm']:.3f} mm",
+                        border=True,
+                    )
+                    colunas_h_res[1].metric(
+                        f"Limite {verificacao_h['criterio']}",
+                        f"{verificacao_h['limite_mm']:.3f} mm",
+                        border=True,
+                        help=f"H = {verificacao_h['altura_mm'] / 1e3:.3f} m",
+                    )
+                    colunas_h_res[2].metric(
+                        "Utilização", f"{verificacao_h['utilizacao'] * 100:.0f}%", border=True
+                    )
+                    if verificacao_h["atende"]:
+                        st.success(
+                            f"Deslocamento horizontal atende a {verificacao_h['criterio']} — "
+                            "use a combinação de serviço (ELS) para este critério.",
+                            icon=":material/check_circle:",
+                        )
+                    else:
+                        st.error(
+                            f"Deslocamento horizontal excede {verificacao_h['criterio']}: enrijeça "
+                            "as colunas, contravente ou reduza a altura destravada.",
+                            icon=":material/error:",
+                        )
         deslocamentos = pd.DataFrame(resultado.deslocamentos_nodais)
         reacoes = pd.DataFrame(resultado.reacoes_nodais)
         esforcos = pd.DataFrame(resultado.esforcos_elementos)
@@ -1785,43 +1948,111 @@ else:
 
         fronteira_modelo(
             [
-                "Efeitos de segunda ordem (P–Δ, P–δ) e imperfeições geométricas iniciais.",
-                "Flambagem global ou local dos elementos.",
+                "Segunda ordem só no pórtico e só quando ativada; a treliça é sempre de primeira ordem.",
+                "A carga nocional representa a imperfeição global; a imperfeição local da barra entra no χ do módulo 2, não aqui.",
+                "Flambagem local e lateral com torção de cada barra: levar os esforços ao módulo 2 (NBR 8800).",
                 "Ligações semirrígidas — os apoios e nós são idealizados como rígidos ou rotulados.",
-                "Combinações de ações e dimensionamento de cada barra (fazer em separado).",
+                "Combinações de ações: rode o modelo uma vez por combinação (ELU para esforços, ELS para H/…).",
             ]
         )
 
         registro_modelo_2d = construir_registro_tecnico(
             modulo="Estruturas de aço",
             modulo_id="estruturas_aco",
-            titulo=f"Análise linear — {modelo}",
-            status="Calculado",
-            resumo="Análise elástica linear de treliça ou pórtico plano com deslocamentos, reações e esforços internos.",
+            titulo=(
+                f"Análise {'de segunda ordem' if resultado.segunda_ordem else 'linear'} — {modelo}"
+            ),
+            status=(
+                "Calculado"
+                if verificacao_h is None
+                else ("Atende" if verificacao_h["atende"] else "Não atende")
+            ),
+            resumo=(
+                "Análise elástica de treliça ou pórtico plano com deslocamentos, reações e esforços internos."
+                + (
+                    " Pórtico com rigidez geométrica (P–Δ), carga nocional de imperfeição, "
+                    "fator de carga crítica global e classificação da deslocabilidade."
+                    if modelo == "Pórtico 2D"
+                    else ""
+                )
+            ),
             entradas={
                 "modelo": modelo,
                 "numero_nos": len(nos),
                 "numero_elementos": len(elementos),
                 "nos": [asdict(item) for item in nos],
                 "elementos": [asdict(item) for item in elementos],
+                "segunda_ordem": resultado.segunda_ordem,
+                "carga_nocional_fracao": opcoes_usadas.get("carga_nocional", 0.0),
+                "sentido_nocional": opcoes_usadas.get("sentido_nocional", 1.0),
+                "reducao_rigidez": resultado.reducao_rigidez,
+                "altura_referencia_mm": resultado.altura_referencia_mm,
+                "divisor_deslocamento_horizontal": opcoes_usadas.get("divisor_h"),
             },
             resultados={
                 "deslocamento_maximo_mm": resultado.deslocamento_maximo_mm,
                 "deslocamentos_nodais": resultado.deslocamentos_nodais,
                 "reacoes_nodais": resultado.reacoes_nodais,
                 "esforcos_elementos": resultado.esforcos_elementos,
+                "fator_carga_critica": resultado.fator_carga_critica,
+                "deslocamento_horizontal_1a_ordem_mm": resultado.deslocamento_horizontal_1a_ordem_mm,
+                "deslocamento_horizontal_2a_ordem_mm": resultado.deslocamento_horizontal_2a_ordem_mm,
+                "razao_delta2_delta1": resultado.razao_delta2_delta1,
+                "classificacao_deslocabilidade": resultado.classificacao_deslocabilidade,
+                "coeficiente_b2": (
+                    None
+                    if resultado.coeficiente_b2 is None
+                    or not math.isfinite(resultado.coeficiente_b2)
+                    else resultado.coeficiente_b2
+                ),
+                "carga_nocional_total_kN": resultado.carga_nocional_total_N / 1e3,
+                "carga_gravitacional_total_kN": resultado.carga_gravitacional_total_N / 1e3,
+                "carga_horizontal_total_kN": resultado.carga_horizontal_total_N / 1e3,
+                "iteracoes_segunda_ordem": resultado.iteracoes,
+                "deslocamento_horizontal_verificacao": verificacao_h,
             },
+            metodo=(
+                "Rigidez direta com elementos de pórtico (Euler-Bernoulli)."
+                + (
+                    " Segunda ordem pela rigidez geométrica consistente iterada até a convergência "
+                    "do esforço normal; carga nocional de 0,3 % das cargas gravitacionais nos nós "
+                    "(NBR 8800, 4.9.7.1.1); classificação pela razão Δ₂/Δ₁ (4.9.4.1) e B₂ (4.9.4.6); "
+                    "deslocamento horizontal contra H/… (Anexo C)."
+                    if modelo == "Pórtico 2D"
+                    else ""
+                )
+            ),
             premissas=[
-                "Análise linear elástica, pequenas deformações e ligações idealizadas.",
-                "Propriedades geométricas e módulos são os valores informados no modelo.",
+                "Análise elástica, pequenas deformações e ligações idealizadas (rígidas ou rotuladas).",
+                "Propriedades geométricas e módulos são os valores informados no modelo; rigidez "
+                f"multiplicada por {resultado.reducao_rigidez:g}.",
+                "As cargas do modelo são as da combinação analisada; cada combinação exige uma análise.",
             ],
-            alertas=[
-                "Estabilidade, imperfeições, segunda ordem, ligações e combinações não são verificadas automaticamente por este modelo."
-            ],
+            alertas=list(resultado.avisos)
+            + (
+                []
+                if verificacao_h is None or verificacao_h["atende"]
+                else [f"Deslocamento horizontal excede {verificacao_h['criterio']}."]
+            ),
             referencias=[
-                "Vincular o modelo aos desenhos, combinações de ações e critérios de deslocamento do projeto."
+                "ABNT NBR 8800:2008 — 4.9 (análise estrutural, classificação quanto à deslocabilidade, imperfeições) e Anexo C (deslocamentos).",
+                "Vincular o modelo aos desenhos, combinações de ações e critérios de deslocamento do projeto.",
             ],
-            conclusao="Modelo resolvido sem singularidade; validar idealização, deslocamentos admissíveis e dimensionar cada elemento.",
+            conclusao=(
+                "Modelo resolvido sem singularidade"
+                + (
+                    f"; {resultado.classificacao_deslocabilidade}"
+                    if resultado.classificacao_deslocabilidade
+                    else ""
+                )
+                + (
+                    f"; deslocamento horizontal {verificacao_h['deslocamento_mm']:.2f} mm contra "
+                    f"{verificacao_h['limite_mm']:.2f} mm ({verificacao_h['criterio']})"
+                    if verificacao_h is not None
+                    else ""
+                )
+                + "; levar os esforços de cada barra ao módulo 2."
+            ),
         )
         botao_registrar_calculo(
             registro_modelo_2d,
