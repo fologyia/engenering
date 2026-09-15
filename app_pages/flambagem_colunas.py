@@ -1063,25 +1063,25 @@ with st.container(border=True):
                 (comprimento_destravado_mm or comprimento_eixo_mm) if eixo == "x" else None
             ),
             "cb": cb if eixo == "x" else None,
-            "mao_francesa": (
-                None
-                if esforcos_mf is None
-                else {
-                    "forca_kN": forca_mf_kN,
-                    "gamma_f": gamma_mf,
-                    "forca_calculo_kN": esforcos_mf.forca_N / 1e3,
-                    "angulo_graus": esforcos_mf.angulo_graus,
-                    "altura_no_mm": esforcos_mf.altura_no_mm,
-                    "vinculo": esforcos_mf.vinculo,
-                    "eixo": eixo_mf,
-                    "excentricidade_mm": esforcos_mf.excentricidade_mm,
-                    "componente_horizontal_kN": esforcos_mf.componente_horizontal_N / 1e3,
-                    "componente_vertical_kN": esforcos_mf.componente_vertical_N / 1e3,
-                    "momento_kNm": esforcos_mf.momento_Nmm / 1e6,
-                    "momento_neste_eixo_kNm": momento_mf_no_eixo_kNm,
-                    "expressao": esforcos_mf.expressao,
-                    "v_somado_a_nsd": somar_v_mf,
+            **(
+                {
+                    "mao_francesa_forca_kN": forca_mf_kN,
+                    "mao_francesa_gamma_f": gamma_mf,
+                    "mao_francesa_forca_calculo_kN": esforcos_mf.forca_N / 1e3,
+                    "mao_francesa_angulo_graus": esforcos_mf.angulo_graus,
+                    "mao_francesa_altura_no_mm": esforcos_mf.altura_no_mm,
+                    "mao_francesa_vinculo": esforcos_mf.vinculo,
+                    "mao_francesa_eixo": eixo_mf,
+                    "mao_francesa_excentricidade_mm": esforcos_mf.excentricidade_mm,
+                    "mao_francesa_H_kN": esforcos_mf.componente_horizontal_N / 1e3,
+                    "mao_francesa_V_kN": esforcos_mf.componente_vertical_N / 1e3,
+                    "mao_francesa_momento_kNm": esforcos_mf.momento_Nmm / 1e6,
+                    "mao_francesa_momento_neste_eixo_kNm": momento_mf_no_eixo_kNm,
+                    "mao_francesa_expressao": esforcos_mf.expressao,
+                    "mao_francesa_V_somado_a_NSd": somar_v_mf,
                 }
+                if esforcos_mf is not None
+                else {"mao_francesa": "não incluída"}
             ),
         },
         resultados={
@@ -1105,21 +1105,19 @@ with st.container(border=True):
             "utilizacao_axial": (
                 None if math.isinf(resultado.utilizacao_axial) else resultado.utilizacao_axial
             ),
-            "momento": {
-                "momento_primeira_ordem_kNm": momento.momento_primeira_ordem_Nmm / 1e6,
-                "b1": None if math.isinf(momento.b1) else momento.b1,
-                "momento_solicitante_kNm": (
-                    None
-                    if math.isinf(momento.momento_solicitante_Nmm)
-                    else momento.momento_solicitante_Nmm / 1e6
-                ),
-                "momento_resistente_kNm": (
-                    None
-                    if momento.momento_resistente_Nmm is None
-                    else momento.momento_resistente_Nmm / 1e6
-                ),
-                "modo_flexao": momento.flexao.modo_governante if momento.flexao else None,
-            },
+            "momento_primeira_ordem_kNm": momento.momento_primeira_ordem_Nmm / 1e6,
+            "b1": None if math.isinf(momento.b1) else momento.b1,
+            "momento_solicitante_kNm": (
+                None
+                if math.isinf(momento.momento_solicitante_Nmm)
+                else momento.momento_solicitante_Nmm / 1e6
+            ),
+            "momento_resistente_kNm": (
+                None
+                if momento.momento_resistente_Nmm is None
+                else momento.momento_resistente_Nmm / 1e6
+            ),
+            "modo_flexao": momento.flexao.modo_governante if momento.flexao else None,
             "indice_interacao": (
                 None
                 if resultado.interacao is None or math.isinf(resultado.interacao.indice)
@@ -1188,6 +1186,50 @@ with st.container(border=True):
                 )
             ]
             if esforcos_mf is not None
+            else []
+        ),
+        equacoes=[
+            f"N_Sd = γ_g·N_g + γ_q·N_q = {gamma_g:.2f}·{permanente_kN:.2f} + {gamma_q:.2f}·{variavel_kN:.2f} = {forca_sd_kN:.2f} kN"
+            if gamma_g is not None
+            else f"N_Sd = {forca_sd_kN:.2f} kN (de cálculo)",
+            f"λ{eixo} = K{eixo}·L{eixo}/r{eixo} = {k_eixo:.2f}·{comprimento_eixo_mm:.0f}/{resultado.raio_giracao_mm:.1f} = {resultado.esbeltez:.1f} ≤ 200",
+            f"N_e{eixo} = π²·E·I{eixo}/(K{eixo}·L{eixo})² = {resultado.ne_flexao_N / 1e3:.1f} kN"
+            + (
+                f";  N_ez = [π²·E·Cw/(Kz·Lz)² + G·J]/r0² = {resultado.ne_z_N / 1e3:.1f} kN"
+                if resultado.ne_z_N is not None
+                else ""
+            )
+            + f";  N_e adotado = {resultado.ne_N / 1e3:.1f} kN (modo {resultado.modo_flambagem})",
+            f"Q = Q_s·Q_a = {resultado.fator_q:.3f} (Anexo F)",
+            f"λ_0 = √(Q·A_g·f_y/N_e) = √({resultado.fator_q:.3f}·{geometria.area_mm2:.0f}·{escoamento_MPa:.0f}/{resultado.ne_N:.0f}) = {resultado.lambda_0:.3f}",
+            (
+                f"χ = 0,658^(λ_0²) = {resultado.chi:.3f}"
+                if resultado.lambda_0 <= 1.5
+                else f"χ = 0,877/λ_0² = {resultado.chi:.3f}"
+            ),
+            f"N_c,Rd = χ·Q·A_g·f_y/γ_a1 = {resultado.chi:.3f}·{resultado.fator_q:.3f}·{geometria.area_mm2:.0f}·{escoamento_MPa:.0f}/{flambagem.GAMMA_A1:.2f} = {resultado.resistencia_N / 1e3:.2f} kN",
+            f"N_Sd/N_c,Rd = {resultado.forca_solicitante_N / 1e3:.2f}/{resultado.resistencia_N / 1e3:.2f} = {_fmt(resultado.utilizacao_axial)}",
+        ]
+        + (
+            [
+                f"Mão-francesa: H = F_Sd·sen θ = {esforcos_mf.forca_N / 1e3:.2f}·sen {esforcos_mf.angulo_graus:.0f}° = {esforcos_mf.componente_horizontal_N / 1e3:.2f} kN;  "
+                f"V = F_Sd·cos θ = {esforcos_mf.componente_vertical_N / 1e3:.2f} kN;  {esforcos_mf.expressao} = {esforcos_mf.momento_Nmm / 1e6:.3f} kN·m"
+            ]
+            if esforcos_mf is not None
+            else []
+        )
+        + (
+            [
+                f"B_1 = C_m/(1 − N_Sd/N_e{eixo}) = {cm:.2f}/(1 − {resultado.forca_solicitante_N / 1e3:.2f}/{resultado.ne_flexao_N / 1e3:.1f}) = {_fmt(momento.b1)}",
+                f"M_{eixo},Sd = B_1·M_1 = {_fmt(momento.b1)}·{momento.momento_primeira_ordem_Nmm / 1e6:.3f} = {_fmt(None if math.isinf(momento.momento_solicitante_Nmm) else momento.momento_solicitante_Nmm / 1e6)} kN·m;  "
+                f"M_{eixo},Rd = {_fmt(None if momento.momento_resistente_Nmm is None else momento.momento_resistente_Nmm / 1e6)} kN·m",
+            ]
+            + (
+                [f"{resultado.interacao.expressao}  →  {_fmt(resultado.interacao.indice)}"]
+                if resultado.interacao is not None
+                else []
+            )
+            if momento.momento_primeira_ordem_Nmm > 0
             else []
         ),
         alertas=([] if status_registro == "Atende" else [conclusao_registro])
