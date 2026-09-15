@@ -490,6 +490,152 @@ with st.container(border=True):
         persist_state="session",
     )
 
+with st.container(border=True):
+    st.subheader("5. Mão-francesa (força inclinada chegando na coluna)")
+    st.caption(
+        "A mão-francesa descarrega na coluna uma força inclinada: a componente "
+        "horizontal H flete a coluna (M = H × braço) e a vertical V comprime. "
+        "O momento calculado aqui é somado a M_Sd e entra na interação N + M — "
+        "sem isto o campo fica em zero e a flexão da mão-francesa é ignorada."
+    )
+    incluir_mao_francesa = st.toggle(
+        "Incluir a mão-francesa nesta verificação",
+        value=False,
+        key="flambagem_mf_incluir",
+        persist_state="session",
+    )
+    esforcos_mf = None
+    somar_v_mf = False
+    forca_mf_kN = angulo_mf = altura_mf_mm = None
+    vinculo_mf = eixo_mf = None
+    gamma_mf = excentricidade_mf_mm = None
+    if incluir_mao_francesa:
+        colunas_mf = st.columns(4)
+        forca_mf_kN = colunas_mf[0].number_input(
+            "Força na mão-francesa F (kN)",
+            min_value=0.0,
+            value=20.0,
+            step=1.0,
+            key="flambagem_mf_forca_kN",
+            persist_state="session",
+            help="Força axial na barra da mão-francesa (compressão ou tração), vinda da reação da viga ou do console que ela suporta.",
+        )
+        opcoes_gamma_mf = {"Já é de cálculo (γ = 1,00)": 1.0, **flambagem.COEFICIENTES_VARIAVEL}
+        rotulo_gamma_mf = colunas_mf[1].selectbox(
+            "Majoração de F",
+            list(opcoes_gamma_mf),
+            index=2,
+            key="flambagem_mf_gamma",
+            persist_state="session",
+            help="Se F veio das combinações já majorada, escolha γ = 1,00.",
+        )
+        gamma_mf = opcoes_gamma_mf[rotulo_gamma_mf]
+        angulo_mf = colunas_mf[2].number_input(
+            "Ângulo θ com a coluna (°)",
+            min_value=1.0,
+            max_value=89.0,
+            value=45.0,
+            step=5.0,
+            key="flambagem_mf_angulo",
+            persist_state="session",
+            help="Ângulo entre a barra da mão-francesa e o eixo da coluna: 45° é o usual. H = F·sen θ e V = F·cos θ.",
+        )
+        altura_mf_mm = colunas_mf[3].number_input(
+            "Altura do nó a (mm, medida da base)",
+            min_value=1.0,
+            max_value=float(comprimento_mm),
+            value=float(min(comprimento_mm, 800.0)),
+            step=50.0,
+            key="flambagem_mf_altura_mm",
+            persist_state="session",
+            help="Distância da base da coluna ao ponto onde a mão-francesa é ligada — o braço da componente horizontal.",
+        )
+        colunas_mf2 = st.columns([2, 1, 1, 1])
+        vinculo_mf = colunas_mf2[0].selectbox(
+            "Vínculo da coluna no plano da mão-francesa",
+            list(flambagem.VINCULOS_MAO_FRANCESA),
+            key="flambagem_mf_vinculo",
+            persist_state="session",
+            help="Define como H vira momento: engaste na base (M = H·a), pino-pino (M = H·a·(L−a)/L) ou engaste com topo apoiado.",
+        )
+        eixo_mf = colunas_mf2[1].selectbox(
+            "Eixo de flexão",
+            ["x", "y"],
+            key="flambagem_mf_eixo",
+            persist_state="session",
+            help="Mão-francesa no plano da alma flete o eixo forte x-x.",
+        )
+        excentricidade_mf_mm = colunas_mf2[2].number_input(
+            "e da ligação (mm)",
+            min_value=0.0,
+            value=float(round(geometria.distancia_fibra(eixo_mf), 1)),
+            step=1.0,
+            key=f"flambagem_mf_e_{eixo_mf}",
+            persist_state="session",
+            help="Distância do eixo da coluna à face onde a mão-francesa chega (meia altura do perfil, por padrão): V·e é somado ao momento. Zero se a força passa pelo eixo.",
+        )
+        somar_v_mf = colunas_mf2[3].checkbox(
+            "Somar V a N_Sd",
+            value=False,
+            key="flambagem_mf_somar_v",
+            persist_state="session",
+            help="Marque só se N_Sd acima ainda não inclui a reação vertical que a mão-francesa traz para a coluna.",
+        )
+        try:
+            esforcos_mf = flambagem.esforcos_mao_francesa(
+                forca_mf_kN * 1e3 * gamma_mf,
+                angulo_mf,
+                altura_mf_mm,
+                comprimento_mm,
+                vinculo_mf,
+                excentricidade_mf_mm,
+            )
+        except ValueError as erro:
+            st.error(str(erro), icon=":material/error:")
+            st.stop()
+        with st.container(horizontal=True):
+            st.metric(
+                "F_Sd",
+                f"{esforcos_mf.forca_N / 1e3:.2f} kN",
+                border=True,
+                help=f"F × γ = {forca_mf_kN:.2f} × {gamma_mf:.2f}",
+            )
+            st.metric(
+                "H = F·sen θ", f"{esforcos_mf.componente_horizontal_N / 1e3:.2f} kN", border=True
+            )
+            st.metric(
+                "V = F·cos θ", f"{esforcos_mf.componente_vertical_N / 1e3:.2f} kN", border=True
+            )
+            st.metric(
+                f"M_{eixo_mf},Sd da mão-francesa",
+                f"{esforcos_mf.momento_Nmm / 1e6:.3f} kN·m",
+                border=True,
+                help=esforcos_mf.expressao,
+            )
+        st.caption(
+            f"{esforcos_mf.expressao}: H = {esforcos_mf.componente_horizontal_N / 1e3:.2f} kN, "
+            f"a = {esforcos_mf.altura_no_mm:.0f} mm, L = {comprimento_mm:.0f} mm → "
+            f"M_H = {esforcos_mf.momento_horizontal_Nmm / 1e6:.3f} kN·m"
+            + (
+                f"; V·e = {esforcos_mf.componente_vertical_N / 1e3:.2f} × {esforcos_mf.excentricidade_mm:.1f} mm "
+                f"= {esforcos_mf.momento_excentricidade_Nmm / 1e6:.3f} kN·m"
+                if esforcos_mf.momento_excentricidade_Nmm > 0
+                else ""
+            )
+            + f". Este momento é somado a M_{eixo_mf},Sd informado acima."
+        )
+
+momento_x_total_kNm = momento_x_kNm
+momento_y_total_kNm = momento_y_kNm
+forca_sd_total_kN = forca_sd_kN
+if esforcos_mf is not None:
+    if eixo_mf == "x":
+        momento_x_total_kNm += esforcos_mf.momento_Nmm / 1e6
+    else:
+        momento_y_total_kNm += esforcos_mf.momento_Nmm / 1e6
+    if somar_v_mf:
+        forca_sd_total_kN += esforcos_mf.componente_vertical_N / 1e3
+
 try:
     resultado = flambagem.verificar_flambagem(
         geometria=geometria,
@@ -500,9 +646,9 @@ try:
         modulo_elasticidade_MPa=modulo_elasticidade_MPa,
         modulo_cisalhamento_MPa=modulo_cisalhamento_MPa,
         escoamento_MPa=escoamento_MPa,
-        forca_solicitante_N=forca_sd_kN * 1e3,
-        momento_x_Nmm=momento_x_kNm * 1e6,
-        momento_y_Nmm=momento_y_kNm * 1e6,
+        forca_solicitante_N=forca_sd_total_kN * 1e3,
+        momento_x_Nmm=momento_x_total_kNm * 1e6,
+        momento_y_Nmm=momento_y_total_kNm * 1e6,
         excentricidade_mm=excentricidade_mm,
         eixo_excentricidade=eixo_excentricidade,
         cm=cm,
@@ -520,6 +666,109 @@ st.header("Resultados")
 
 for aviso in resultado.avisos:
     st.warning(aviso, icon=":material/warning:")
+
+
+def _fmt(valor: float | None, casas: int = 3, sufixo: str = "") -> str:
+    if valor is None:
+        return "—"
+    if math.isinf(valor):
+        return "∞"
+    return f"{valor:.{casas}f}{sufixo}"
+
+
+def _mostrar_eixo(eixo: flambagem.VerificacaoEixo) -> None:
+    rotulo = f"Eixo {eixo.eixo}-{eixo.eixo}"
+    if eixo.governa:
+        st.markdown(f"#### {rotulo} · :red[governa a flambagem]")
+    else:
+        st.markdown(f"#### {rotulo}")
+    st.metric(
+        f"K{eixo.eixo}·L / r{eixo.eixo}",
+        f"{eixo.fator_k:.2f} × {eixo.comprimento_efetivo_mm / eixo.fator_k:.0f} / {eixo.raio_giracao_mm:.1f}",
+        border=True,
+    )
+    with st.container(horizontal=True):
+        st.metric(f"λ{eixo.eixo}", f"{eixo.esbeltez:.1f}", border=True)
+        st.metric(f"N_e{eixo.eixo}", f"{eixo.ne_N / 1e3:.1f} kN", border=True)
+    with st.container(horizontal=True):
+        st.metric("λ_0", _fmt(eixo.lambda_0), border=True)
+        st.metric("χ", _fmt(eixo.chi), border=True)
+    st.metric(
+        "N_c,Rd do eixo",
+        f"{eixo.resistencia_N / 1e3:.2f} kN",
+        border=True,
+        help="χ·Q·A_g·f_y/γ_a1 com o N_e deste eixo, como se só a flexão nele governasse.",
+    )
+    st.metric("N_Sd / N_c,Rd", _fmt(eixo.utilizacao_axial), border=True)
+    momento = eixo.momento
+    if momento.momento_primeira_ordem_Nmm > 0:
+        with st.container(horizontal=True):
+            st.metric(
+                f"M_{eixo.eixo},Sd (1ª ordem)",
+                f"{momento.momento_primeira_ordem_Nmm / 1e6:.3f} kN·m",
+                border=True,
+            )
+            st.metric("B_1", _fmt(momento.b1), border=True)
+        with st.container(horizontal=True):
+            st.metric(
+                f"M_{eixo.eixo},Sd amplificado",
+                "∞"
+                if math.isinf(momento.momento_solicitante_Nmm)
+                else f"{momento.momento_solicitante_Nmm / 1e6:.3f} kN·m",
+                border=True,
+            )
+            st.metric(
+                f"M_{eixo.eixo},Rd",
+                _fmt(
+                    None
+                    if momento.momento_resistente_Nmm is None
+                    else momento.momento_resistente_Nmm / 1e6,
+                    3,
+                    " kN·m",
+                ),
+                border=True,
+                help=(
+                    momento.flexao.modo_governante
+                    if momento.flexao is not None
+                    else "W·f_y/γ_a1 (escoamento da fibra extrema)"
+                ),
+            )
+        st.metric(
+            "Interação N + M do eixo",
+            _fmt(eixo.indice_interacao),
+            border=True,
+            help="N_Sd/N_c,Rd(eixo) + 8/9·M/M_Rd (ou N_Sd/(2N_c,Rd) + M/M_Rd se N_Sd/N_c,Rd < 0,2), só com o momento deste eixo.",
+        )
+    else:
+        st.caption("Sem momento neste eixo.")
+    utilizacao_eixo = "∞" if math.isinf(eixo.utilizacao) else f"{eixo.utilizacao * 100:.0f}%"
+    if eixo.utilizacao > 1.0:
+        st.error(f"Utilização do eixo: {utilizacao_eixo}", icon=":material/error:")
+    elif eixo.utilizacao > 0.9:
+        st.warning(f"Utilização do eixo: {utilizacao_eixo}", icon=":material/warning:")
+    else:
+        st.success(f"Utilização do eixo: {utilizacao_eixo}", icon=":material/check_circle:")
+
+
+with st.container(border=True):
+    st.subheader("Verificação por eixo — x-x e y-y")
+    st.caption(
+        "Leitura de auxílio, eixo a eixo: esbeltez, N_e, χ e N_c,Rd como se só a flexão "
+        "naquele eixo governasse, com o momento do próprio eixo. A verificação normativa "
+        "(abaixo) usa o menor N_e entre x, y, torção e flexo-torção e combina os dois momentos."
+    )
+    coluna_x, coluna_y = st.columns(2, border=True)
+    with coluna_x:
+        _mostrar_eixo(resultado.eixo_x)
+    with coluna_y:
+        _mostrar_eixo(resultado.eixo_y)
+    if resultado.modo_flambagem not in {"x", "y"}:
+        st.warning(
+            f"Nenhum dos dois eixos governa sozinho: o modo elástico governante é "
+            f"**{resultado.modo_flambagem}** (N_e = {resultado.ne_N / 1e3:.1f} kN), "
+            "então a resistência normativa é menor que a de qualquer eixo isolado.",
+            icon=":material/warning:",
+        )
 
 with st.container(border=True):
     st.subheader("Esbeltez e flambagem elástica (Anexo E)")
@@ -852,13 +1101,34 @@ with st.container(border=True):
             "gamma_q": gamma_q,
             "gamma_a1": flambagem.GAMMA_A1,
             "forca_solicitante_kN": resultado.forca_solicitante_N / 1e3,
-            "momento_x_kNm": momento_x_kNm,
-            "momento_y_kNm": momento_y_kNm,
+            "momento_x_kNm": momento_x_total_kNm,
+            "momento_y_kNm": momento_y_total_kNm,
+            "momento_x_informado_kNm": momento_x_kNm,
+            "momento_y_informado_kNm": momento_y_kNm,
             "excentricidade_mm": excentricidade_mm,
             "eixo_excentricidade": eixo_excentricidade,
             "cm": cm,
             "comprimento_destravado_mm": comprimento_destravado_mm or comprimento_mm,
             "cb": cb,
+            "mao_francesa": (
+                None
+                if esforcos_mf is None
+                else {
+                    "forca_kN": forca_mf_kN,
+                    "gamma_f": gamma_mf,
+                    "forca_calculo_kN": esforcos_mf.forca_N / 1e3,
+                    "angulo_graus": esforcos_mf.angulo_graus,
+                    "altura_no_mm": esforcos_mf.altura_no_mm,
+                    "vinculo": esforcos_mf.vinculo,
+                    "eixo": eixo_mf,
+                    "excentricidade_mm": esforcos_mf.excentricidade_mm,
+                    "componente_horizontal_kN": esforcos_mf.componente_horizontal_N / 1e3,
+                    "componente_vertical_kN": esforcos_mf.componente_vertical_N / 1e3,
+                    "momento_kNm": esforcos_mf.momento_Nmm / 1e6,
+                    "expressao": esforcos_mf.expressao,
+                    "v_somado_a_nsd": somar_v_mf,
+                }
+            ),
         },
         resultados={
             "esbeltez_x": resultado.esbeltez_x,
@@ -883,6 +1153,24 @@ with st.container(border=True):
             ),
             "momento_x": _momento_registro(resultado.momento_x),
             "momento_y": _momento_registro(resultado.momento_y),
+            "por_eixo": {
+                eixo.eixo: {
+                    "esbeltez": eixo.esbeltez,
+                    "ne_kN": eixo.ne_N / 1e3,
+                    "lambda_0": eixo.lambda_0,
+                    "chi": eixo.chi,
+                    "resistencia_kN": eixo.resistencia_N / 1e3,
+                    "utilizacao_axial": eixo.utilizacao_axial,
+                    "indice_interacao": (
+                        None
+                        if eixo.indice_interacao is None or math.isinf(eixo.indice_interacao)
+                        else eixo.indice_interacao
+                    ),
+                    "utilizacao": None if math.isinf(eixo.utilizacao) else eixo.utilizacao,
+                    "governa": eixo.governa,
+                }
+                for eixo in (resultado.eixo_x, resultado.eixo_y)
+            },
             "indice_interacao": (
                 None
                 if resultado.interacao is None or math.isinf(resultado.interacao.indice)
@@ -913,6 +1201,14 @@ with st.container(border=True):
             "Momentos de cálculo (excentricidade e aplicados) amplificados por "
             "B_1 = C_m/(1 − N_Sd/N_e) (Anexo D) e verificados pela interação 5.5.1.2 "
             "com M_Rd do Anexo G."
+            + (
+                f" Mão-francesa: F_Sd = {esforcos_mf.forca_N / 1e3:.2f} kN a {esforcos_mf.angulo_graus:.0f}° "
+                f"decomposta em H = {esforcos_mf.componente_horizontal_N / 1e3:.2f} kN e "
+                f"V = {esforcos_mf.componente_vertical_N / 1e3:.2f} kN; {esforcos_mf.expressao} "
+                f"= {esforcos_mf.momento_Nmm / 1e6:.3f} kN·m somado a M_{eixo_mf},Sd."
+                if esforcos_mf is not None
+                else ""
+            )
         ),
         premissas=[
             (
@@ -927,7 +1223,20 @@ with st.container(border=True):
                 else "K é o valor teórico da Tabela E.1 para a condição de apoio idealizada."
             ),
             "Barra prismática, isolada, com efeitos de 2ª ordem locais (B_1); B_2 e deslocabilidade do pórtico ficam na análise global.",
-        ],
+        ]
+        + (
+            [
+                f"Mão-francesa ligada a {esforcos_mf.altura_no_mm:.0f} mm da base, coluna "
+                f"{esforcos_mf.vinculo.lower()} no plano da mão-francesa; V·e somado integralmente ao momento (conservador)"
+                + (
+                    "; componente vertical V somada a N_Sd."
+                    if somar_v_mf
+                    else "; N_Sd já inclui a reação vertical da mão-francesa."
+                )
+            ]
+            if esforcos_mf is not None
+            else []
+        ),
         alertas=([] if status_registro == "Atende" else [conclusao_registro])
         + list(resultado.avisos),
         referencias=[

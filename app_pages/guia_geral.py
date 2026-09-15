@@ -1120,6 +1120,11 @@ elif modulo == "Flambagem de colunas":
                 "Coeficiente de equivalência de momentos (1,0 conservador), comprimento destravado e fator de modificação para a FLT",
                 "Travamentos da mesa comprimida",
             ],
+            [
+                "Mão-francesa: F, θ, a, vínculo",
+                "Força na barra inclinada (kN), ângulo com a coluna (45° usual), altura do nó medida da base e vínculo da coluna nesse plano — o programa decompõe em H e V e soma o momento a M_Sd",
+                "Reação da viga/console que a mão-francesa apoia",
+            ],
         ]
     )
     st.subheader("Passo a passo")
@@ -1132,9 +1137,14 @@ elif modulo == "Flambagem de colunas":
            (γ_g·N_g + γ_q·N_q) ou informar N_Sd já de cálculo.
         4. Se a força não passa pelo centroide ou há momento no nó, informe a
            excentricidade e/ou M_Sd: eles entram amplificados por B_1 na interação.
-        5. Leia N_ex, N_ey, N_ez (Anexo E), Q (Anexo F), λ_0 e χ (5.3.3) e a
-           resistência N_c,Rd = χ·Q·A_g·f_y/γ_a1.
-        6. Leia a utilização governante: compressão, flexão ou interação N + M
+           Com mão-francesa, ligue o bloco 5: F, θ, a e o vínculo geram o momento
+           sozinhos (M = H·a no engaste, H·a·(L−a)/L na biapoiada) e ele é somado a M_Sd.
+        5. Leia primeiro a **verificação por eixo** (x-x e y-y lado a lado): λ, N_e,
+           χ e N_c,Rd de cada eixo, o eixo marcado como governante e a interação com
+           o momento do próprio eixo.
+        6. Leia N_ez (Anexo E), Q (Anexo F), λ_0 e χ (5.3.3) do modo governante e a
+           resistência normativa N_c,Rd = χ·Q·A_g·f_y/γ_a1.
+        7. Leia a utilização governante: compressão, flexão ou interação N + M
            (5.5.1.2). KL/r acima de 200 reprova por si só (5.3.4.1).
         """
     )
@@ -1175,6 +1185,13 @@ elif modulo == "Flambagem de colunas":
               obrigatória quando a força chega fora do eixo.
             - **Utilização > 100 %:** algum estado-limite (compressão, flexão,
               interação ou KL/r > 200) não atende.
+            - **Por eixo × normativa:** a leitura por eixo usa o N_e daquele eixo
+              e só o momento dele; a normativa usa o menor N_e (inclusive torção)
+              com os dois momentos — por isso pode ser mais severa que qualquer eixo
+              isolado, e é ela que decide.
+            - **Mão-francesa:** H = F·sen θ flete a coluna com braço a; V = F·cos θ
+              comprime. Marque "Somar V a N_Sd" só se a reação vertical ainda não
+              estiver dentro de N_Sd.
             """
         )
     st.warning(

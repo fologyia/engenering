@@ -281,6 +281,13 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 - **flexocompressão** (5.5.1.2): excentricidade da força e/ou momentos de
   cálculo, amplificados por `B_1 = C_m/(1 − N_Sd/N_e)` (Anexo D), contra
   `M_Rd` do Anexo G na equação de interação;
+- **mão-francesa**: a força inclinada é decomposta em `H = F·sen θ` e
+  `V = F·cos θ`; o momento `M = H·a` (engaste na base), `H·a·(L−a)/L`
+  (biapoiada) ou o do engaste com topo apoiado, mais `V·e` da ligação, é
+  somado a `M_Sd` automaticamente — o campo não fica em zero;
+- **leitura por eixo x-x e y-y**: esbeltez, `N_e`, `λ₀`, `χ`, `N_c,Rd` e a
+  interação de cada eixo lado a lado, com o eixo que governa marcado, além
+  da verificação normativa pelo menor `N_e`;
 - reprovação automática com `KL/r > 200` (5.3.4.1), avisos de K fora da faixa
   física e unidades implausíveis, registro no projeto com o modo governante e
   curva χ·Q·f_y/γ_a1 × λ no memorial.

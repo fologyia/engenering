@@ -326,5 +326,115 @@ class FlexocompressaoTests(unittest.TestCase):
             _verificar(self.geometria, 1_000.0, excentricidade_mm=1.0, eixo_excentricidade="z")
 
 
+class MaoFrancesaTests(unittest.TestCase):
+    BALANCO, BIAPOIADA, PROPPED = flambagem.VINCULOS_MAO_FRANCESA
+
+    def test_decompoe_a_forca_no_angulo(self):
+        mf = flambagem.esforcos_mao_francesa(20_000.0, 30.0, 800.0, 3_000.0, self.BALANCO)
+        self.assertAlmostEqual(mf.componente_horizontal_N, 20_000.0 * math.sin(math.radians(30.0)))
+        self.assertAlmostEqual(mf.componente_vertical_N, 20_000.0 * math.cos(math.radians(30.0)))
+
+    def test_balanco_da_h_vezes_a(self):
+        mf = flambagem.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, self.BALANCO)
+        self.assertAlmostEqual(mf.momento_Nmm, mf.componente_horizontal_N * 800.0)
+        self.assertEqual(mf.momento_excentricidade_Nmm, 0.0)
+        self.assertIn("H·a", mf.expressao)
+
+    def test_biapoiada_da_h_a_b_sobre_l(self):
+        mf = flambagem.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, self.BIAPOIADA)
+        h = mf.componente_horizontal_N
+        self.assertAlmostEqual(mf.momento_Nmm, h * 800.0 * 2_200.0 / 3_000.0)
+
+    def test_engastada_apoiada_fica_entre_os_dois_casos(self):
+        balanco = flambagem.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, self.BALANCO)
+        biapoiada = flambagem.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, self.BIAPOIADA)
+        propped = flambagem.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, self.PROPPED)
+        self.assertLess(propped.momento_Nmm, balanco.momento_Nmm)
+        # Fórmulas do engaste com apoio: M_A = H·a·b·(L+b)/(2L²) e M_C = H·a²·b·(3L−a)/(2L³).
+        h, a, l = propped.componente_horizontal_N, 800.0, 3_000.0
+        b = l - a
+        m_a = h * a * b * (l + b) / (2 * l**2)
+        m_c = h * a**2 * b * (3 * l - a) / (2 * l**3)
+        self.assertAlmostEqual(propped.momento_Nmm, max(m_a, m_c))
+        self.assertGreater(m_a, m_c)
+        self.assertGreater(biapoiada.momento_Nmm, 0.0)
+
+    def test_excentricidade_soma_v_vezes_e(self):
+        mf = flambagem.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, self.BALANCO, 50.0)
+        self.assertAlmostEqual(mf.momento_excentricidade_Nmm, mf.componente_vertical_N * 50.0)
+        self.assertAlmostEqual(
+            mf.momento_Nmm, mf.momento_horizontal_Nmm + mf.momento_excentricidade_Nmm
+        )
+        self.assertIn("V·e", mf.expressao)
+
+    def test_rejeita_angulo_altura_e_vinculo_invalidos(self):
+        with self.assertRaises(ValueError):
+            flambagem.esforcos_mao_francesa(1.0, 0.0, 800.0, 3_000.0)
+        with self.assertRaises(ValueError):
+            flambagem.esforcos_mao_francesa(1.0, 90.0, 800.0, 3_000.0)
+        with self.assertRaises(ValueError):
+            flambagem.esforcos_mao_francesa(1.0, 45.0, 3_500.0, 3_000.0)
+        with self.assertRaises(ValueError):
+            flambagem.esforcos_mao_francesa(1.0, 45.0, 800.0, 3_000.0, "apoio qualquer")
+
+    def test_momento_da_mao_francesa_entra_na_interacao(self):
+        geo = flambagem.geometria_retangular(50.0, 100.0)
+        mf = flambagem.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 2_000.0, self.BALANCO)
+        sem = _verificar(geo, 2_000.0, forca_solicitante_N=40_000.0)
+        com = _verificar(geo, 2_000.0, forca_solicitante_N=40_000.0, momento_x_Nmm=mf.momento_Nmm)
+        self.assertIsNone(sem.interacao)
+        self.assertIsNotNone(com.interacao)
+        self.assertGreater(com.utilizacao, sem.utilizacao)
+        self.assertAlmostEqual(com.momento_x.momento_primeira_ordem_Nmm, mf.momento_Nmm)
+
+
+class VerificacaoPorEixoTests(unittest.TestCase):
+    def test_cada_eixo_usa_o_proprio_ne(self):
+        geo = flambagem.geometria_retangular(30.0, 80.0)
+        resultado = _verificar(geo, 1_000.0, forca_solicitante_N=20_000.0)
+        x, y = resultado.eixo_x, resultado.eixo_y
+        self.assertAlmostEqual(x.ne_N, resultado.ne_x_N)
+        self.assertAlmostEqual(y.ne_N, resultado.ne_y_N)
+        self.assertAlmostEqual(x.lambda_0, math.sqrt(geo.area_mm2 * 250.0 / resultado.ne_x_N))
+        self.assertAlmostEqual(x.chi, nbr8800.fator_chi(x.lambda_0))
+        self.assertAlmostEqual(x.resistencia_N, x.chi * geo.area_mm2 * 250.0 / nbr8800.GAMMA_A1)
+        self.assertGreater(x.resistencia_N, y.resistencia_N)
+        self.assertTrue(y.governa)
+        self.assertFalse(x.governa)
+        # O eixo que governa reproduz a verificação normativa.
+        self.assertAlmostEqual(y.resistencia_N, resultado.resistencia_N)
+        self.assertAlmostEqual(y.chi, resultado.chi)
+
+    def test_interacao_por_eixo_usa_so_o_momento_do_eixo(self):
+        geo = flambagem.geometria_retangular(30.0, 80.0)
+        resultado = _verificar(geo, 1_000.0, forca_solicitante_N=20_000.0, momento_x_Nmm=5.0e5)
+        x, y = resultado.eixo_x, resultado.eixo_y
+        self.assertIsNotNone(x.indice_interacao)
+        self.assertIsNone(y.indice_interacao)
+        razao_n = 20_000.0 / x.resistencia_N
+        razao_m = x.momento.momento_solicitante_Nmm / x.momento.momento_resistente_Nmm
+        esperado = razao_n + 8.0 / 9.0 * razao_m if razao_n >= 0.2 else razao_n / 2.0 + razao_m
+        self.assertAlmostEqual(x.indice_interacao, esperado)
+        self.assertAlmostEqual(x.utilizacao, max(x.utilizacao_axial, x.indice_interacao))
+        # A verificação normativa (N_c,Rd do modo governante y com o momento em x) é mais severa.
+        self.assertGreater(resultado.utilizacao, x.utilizacao)
+
+    def test_secao_de_simetria_dupla_com_k_iguais_tem_eixos_iguais(self):
+        resultado = _verificar(flambagem.geometria_circular_macica(50.0), 2_000.0)
+        self.assertAlmostEqual(resultado.eixo_x.resistencia_N, resultado.eixo_y.resistencia_N)
+        self.assertAlmostEqual(resultado.eixo_x.esbeltez, resultado.eixo_y.esbeltez)
+
+    def test_perfil_u_nenhum_eixo_governa_sozinho(self):
+        perfil = secoes.perfil_u("U", 100, 50, 5, 8)
+        resultado = _verificar(flambagem.geometria_perfil_catalogo(perfil), 800.0)
+        self.assertNotIn(resultado.modo_flambagem, {"x", "y"})
+        self.assertFalse(resultado.eixo_x.governa)
+        self.assertFalse(resultado.eixo_y.governa)
+        self.assertLess(
+            resultado.resistencia_N,
+            min(resultado.eixo_x.resistencia_N, resultado.eixo_y.resistencia_N),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

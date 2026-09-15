@@ -130,6 +130,104 @@ def forca_de_calculo(
 
 
 # ---------------------------------------------------------------------------
+# Mão-francesa: força inclinada chegando na coluna
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EsforcosMaoFrancesa:
+    """Componentes e momento que a mão-francesa descarrega na coluna.
+
+    ``forca_N`` é a força de cálculo na barra da mão-francesa; ``theta`` é o
+    ângulo entre a barra e o eixo da coluna. A componente horizontal ``H``
+    flete a coluna com braço ``a`` (altura do nó em relação à base); a
+    vertical ``V`` soma à compressão e, se chega fora do eixo, gera ``V·e``.
+    """
+
+    forca_N: float
+    angulo_graus: float
+    componente_vertical_N: float
+    componente_horizontal_N: float
+    altura_no_mm: float
+    comprimento_mm: float
+    vinculo: str
+    excentricidade_mm: float
+    momento_horizontal_Nmm: float
+    momento_excentricidade_Nmm: float
+    momento_Nmm: float
+    expressao: str
+
+
+# Momento máximo na coluna por uma força horizontal H aplicada a ``a`` da
+# base, para os vínculos usuais da coluna no plano da mão-francesa.
+VINCULOS_MAO_FRANCESA: tuple[str, ...] = (
+    "Engastada na base, topo livre (balanço)",
+    "Biapoiada (pino na base, topo travado)",
+    "Engastada na base, topo apoiado",
+)
+
+
+def _momento_forca_horizontal(h: float, a: float, l: float, vinculo: str) -> tuple[float, str]:
+    if vinculo == VINCULOS_MAO_FRANCESA[0]:
+        return h * a, "M = H·a (engaste na base)"
+    if vinculo == VINCULOS_MAO_FRANCESA[1]:
+        return h * a * (l - a) / l, "M = H·a·(L − a)/L (sob o nó)"
+    if vinculo == VINCULOS_MAO_FRANCESA[2]:
+        b = l - a
+        m_base = h * a * b * (l + b) / (2.0 * l**2)
+        m_no = h * a**2 * b * (3.0 * l - a) / (2.0 * l**3)
+        if m_base >= m_no:
+            return m_base, "M = H·a·b·(L + b)/(2L²) (engaste na base)"
+        return m_no, "M = H·a²·b·(3L − a)/(2L³) (sob o nó)"
+    raise ValueError(f"Vínculo desconhecido: {vinculo!r}. Use um de {VINCULOS_MAO_FRANCESA}.")
+
+
+def esforcos_mao_francesa(
+    forca_N: float,
+    angulo_graus: float,
+    altura_no_mm: float,
+    comprimento_mm: float,
+    vinculo: str = VINCULOS_MAO_FRANCESA[0],
+    excentricidade_mm: float = 0.0,
+) -> EsforcosMaoFrancesa:
+    """Decompõe a força da mão-francesa e obtém o momento que ela impõe à coluna.
+
+    ``V = F·cos θ`` e ``H = F·sin θ`` (θ entre a barra e a coluna; 45° é o
+    usual). O momento da componente horizontal depende do vínculo da coluna
+    (:data:`VINCULOS_MAO_FRANCESA`); o da excentricidade, ``V·e``, é somado
+    integralmente — conservador, já que só no engaste de base ele chega
+    inteiro à seção crítica.
+    """
+    f = _nao_negativo("forca_N", forca_N)
+    theta = float(angulo_graus)
+    if not math.isfinite(theta) or not 0.0 < theta < 90.0:
+        raise ValueError("angulo_graus deve ficar entre 0 e 90 (exclusive).")
+    a = _positivo("altura_no_mm", altura_no_mm)
+    l = _positivo("comprimento_mm", comprimento_mm)
+    if a > l:
+        raise ValueError("altura_no_mm não pode passar do comprimento da coluna.")
+    e = _nao_negativo("excentricidade_mm", excentricidade_mm)
+    rad = math.radians(theta)
+    v, h = f * math.cos(rad), f * math.sin(rad)
+    m_h, expressao = _momento_forca_horizontal(h, a, l, vinculo)
+    m_e = v * e
+    return EsforcosMaoFrancesa(
+        forca_N=f,
+        angulo_graus=theta,
+        componente_vertical_N=v,
+        componente_horizontal_N=h,
+        altura_no_mm=a,
+        comprimento_mm=l,
+        vinculo=vinculo,
+        excentricidade_mm=e,
+        momento_horizontal_Nmm=m_h,
+        momento_excentricidade_Nmm=m_e,
+        momento_Nmm=m_h + m_e,
+        expressao=expressao + (" + V·e" if m_e > 0 else ""),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Geometrias
 # ---------------------------------------------------------------------------
 
@@ -247,6 +345,32 @@ class MomentoFletor:
 
 
 @dataclass(frozen=True)
+class VerificacaoEixo:
+    """Leitura da coluna **num eixo só**, como se apenas a flexão nele governasse.
+
+    Serve de auxílio: mostra quanto cada eixo resiste (``χ`` e ``N_c,Rd`` com o
+    ``N_e`` daquele eixo) e a interação com o momento do próprio eixo. A
+    verificação normativa continua sendo a do modo governante — o menor
+    ``N_e`` entre x, y, torção e flexo-torção — combinada com os dois momentos.
+    """
+
+    eixo: str
+    fator_k: float
+    comprimento_efetivo_mm: float
+    raio_giracao_mm: float
+    esbeltez: float
+    ne_N: float
+    lambda_0: float
+    chi: float
+    resistencia_N: float
+    utilizacao_axial: float
+    momento: MomentoFletor
+    indice_interacao: float | None
+    utilizacao: float
+    governa: bool
+
+
+@dataclass(frozen=True)
 class ResultadoFlambagem:
     comprimento_efetivo_x_mm: float
     comprimento_efetivo_y_mm: float
@@ -276,6 +400,9 @@ class ResultadoFlambagem:
     momento_x: MomentoFletor
     momento_y: MomentoFletor
     interacao: ResultadoInteracaoNBR | None
+    # Leitura por eixo (auxílio)
+    eixo_x: VerificacaoEixo
+    eixo_y: VerificacaoEixo
     # Conclusão
     utilizacao: float
     modo_governante: str
@@ -540,6 +667,45 @@ def verificar_flambagem(
     governante = max(candidatos, key=lambda chave: candidatos[chave])
     utilizacao = candidatos[governante]
 
+    # -- leitura por eixo ------------------------------------------------------
+    eixos: dict[str, VerificacaoEixo] = {}
+    for eixo, k, l_eixo, r_eixo, esbeltez_eixo, ne_eixo in (
+        ("x", kx, lx, rx, esbeltez_x, nex),
+        ("y", ky, ly, ry, esbeltez_y, ney),
+    ):
+        lambda_0_eixo = math.sqrt(q * area * fy / ne_eixo)
+        chi_eixo = nbr8800.fator_chi(lambda_0_eixo)
+        resistencia_eixo = chi_eixo * q * area * fy / GAMMA_A1
+        axial_eixo = n_sd / resistencia_eixo
+        momento = momentos[eixo]
+        indice: float | None = None
+        if momento.momento_resistente_Nmm and momento.momento_primeira_ordem_Nmm > 0:
+            if math.isinf(momento.momento_solicitante_Nmm):
+                indice = math.inf
+            else:
+                razao_m = momento.momento_solicitante_Nmm / momento.momento_resistente_Nmm
+                indice = (
+                    axial_eixo + 8.0 / 9.0 * razao_m
+                    if axial_eixo >= 0.2
+                    else axial_eixo / 2.0 + razao_m
+                )
+        eixos[eixo] = VerificacaoEixo(
+            eixo=eixo,
+            fator_k=k,
+            comprimento_efetivo_mm=l_eixo,
+            raio_giracao_mm=r_eixo,
+            esbeltez=esbeltez_eixo,
+            ne_N=ne_eixo,
+            lambda_0=lambda_0_eixo,
+            chi=chi_eixo,
+            resistencia_N=resistencia_eixo,
+            utilizacao_axial=axial_eixo,
+            momento=momento,
+            indice_interacao=indice,
+            utilizacao=max(axial_eixo, indice if indice is not None else 0.0),
+            governa=(modo == eixo),
+        )
+
     return ResultadoFlambagem(
         comprimento_efetivo_x_mm=lx,
         comprimento_efetivo_y_mm=ly,
@@ -565,6 +731,8 @@ def verificar_flambagem(
         momento_x=momentos["x"],
         momento_y=momentos["y"],
         interacao=interacao,
+        eixo_x=eixos["x"],
+        eixo_y=eixos["y"],
         utilizacao=utilizacao,
         modo_governante=governante,
         atende=utilizacao <= 1.0,
