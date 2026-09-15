@@ -1,22 +1,31 @@
-"""Flambagem geral de colunas: esbeltez, Euler, transição de Johnson e secante.
+"""Flambagem de colunas pela ABNT NBR 8800:2008 (método dos estados-limites).
 
-Este módulo é deliberadamente independente de qualquer norma de aço: cobre
-o modelo clássico de Euler/Johnson válido para qualquer material e seção
-(retangular, circular, tubular, perfil de catálogo ou área/raio de giração
-informados diretamente). Para o dimensionamento normativo de perfis de aço
-(NBR 8800/AISC, com o fator de redução χ), veja
-:mod:`core.steel_member_design`.
+Este módulo verifica uma barra comprimida — ou flexocomprimida — com as
+equações **da norma**, e não com o modelo elementar de Euler/Johnson e um
+fator de segurança global:
 
-O que o modelo faz e o que ele só **avisa**:
+* **ações majoradas** (4.7 / Tabela 1): ``N_Sd = γ_g·N_g + γ_q·N_q``, ou
+  ``N_Sd`` informado já de cálculo; a resistência é minorada por
+  ``γ_a1 = 1,10`` (Tabela 3);
+* **curva de flambagem** (5.3.3): ``λ_0 = √(Q·A_g·f_y/N_e)`` e
+  ``χ = 0,658^(λ_0²)`` (``λ_0 ≤ 1,5``) ou ``0,877/λ_0²``, que já embute as
+  imperfeições geométricas e as tensões residuais — a carga crítica de
+  Euler entra só como ``N_e`` de referência;
+* **flambagem local** (Anexo F): ``Q = Q_s·Q_a`` das esbeltezes das paredes;
+* **flambagem por torção e flexo-torção** (Anexo E): ``N_ez`` e o modo
+  acoplado das seções monossimétricas, além de ``N_ex`` e ``N_ey``;
+* **flexocompressão** (5.5.1.2): momentos de excentricidade e/ou aplicados,
+  amplificados por ``B_1 = C_m/(1 − N_Sd/N_e) ≥ 1`` (Anexo D), na equação
+  de interação ``N_Sd/N_Rd + 8/9·(M_x,Sd/M_x,Rd + M_y,Sd/M_y,Rd) ≤ 1``
+  (ou ``N_Sd/(2N_Rd) + …`` quando ``N_Sd/N_Rd < 0,2``).
 
-* carga crítica de Euler (coluna longa) e parábola de Johnson (curta e
-  intermediária), no eixo de maior esbeltez;
-* opcionalmente, a **fórmula da secante** para carga excêntrica — a tensão
-  máxima na fibra extrema com a amplificação de segunda ordem, e a carga
-  que leva essa fibra ao escoamento;
-* avisos para o que fica fora do cálculo mas pode governar: esbeltez de
-  parede (flambagem local), esbeltez global acima do limite usual de
-  norma, K fora da faixa física e unidades implausíveis de E e Sy.
+As seções geométricas (retangular, circular, tubo) viram um
+:class:`~core.steel_sections.PerfilAco` idealizado e seguem o mesmo caminho
+dos perfis de catálogo em :mod:`core.nbr8800`. A opção de área e raio de
+giração diretos não tem paredes nem constantes de torção: recebe ``Q = 1`` e
+só flambagem por flexão, com aviso.
+
+Unidades: N, mm, MPa e N·mm.
 """
 
 from __future__ import annotations
@@ -24,81 +33,43 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from core.steel_sections import PerfilAco
+from core import nbr8800
+from core.nbr8800 import ElementoDePlaca, ResultadoFlexaoNBR, ResultadoInteracaoNBR
+from core.steel_sections import (
+    PerfilAco,
+    barra_circular,
+    barra_retangular,
+    tubo_circular,
+)
+
+GAMMA_A1 = nbr8800.GAMMA_A1
+ESBELTEZ_MAXIMA = nbr8800.ESBELTEZ_MAXIMA_COMPRESSAO  # 5.3.4.1
+
+# Coeficientes de ponderação das ações (Tabela 1, combinações normais):
+# permanente de pequena variabilidade (estrutura metálica) 1,25; permanente
+# de grande variabilidade ou variável em geral 1,40; equipamentos e
+# sobrecargas 1,50. O padrão 1,40/1,40 é o par usual de pré-projeto.
+GAMMA_G_PADRAO = 1.40
+GAMMA_Q_PADRAO = 1.40
+COEFICIENTES_PERMANENTE: dict[str, float] = {
+    "Peso próprio de estrutura metálica (γ_g = 1,25)": 1.25,
+    "Peso próprio de estrutura pré-moldada (γ_g = 1,30)": 1.30,
+    "Elementos industrializados com adições in loco (γ_g = 1,40)": 1.40,
+    "Elementos construtivos em geral e equipamentos (γ_g = 1,50)": 1.50,
+}
+COEFICIENTES_VARIAVEL: dict[str, float] = {
+    "Vento (γ_q = 1,40)": 1.40,
+    "Ações variáveis em geral / sobrecarga (γ_q = 1,50)": 1.50,
+    "Ações truncadas / recalques (γ_q = 1,20)": 1.20,
+}
+
+# Coeficiente de Poisson do aço (NBR 8800 4.5.2.9: E = 200 000 MPa,
+# G = 77 000 MPa → ν = 0,3).
+POISSON_ACO = 0.3
 
 
-@dataclass(frozen=True)
-class ElementoLocal:
-    """Uma parede de parede fina cuja esbeltez ``b/t`` pode governar.
-
-    O limite é ``coeficiente·√(E/Sy)`` (chapas: mesa, alma, parede de tubo
-    retangular) ou ``coeficiente·E/Sy`` (tubo circular, ``D/t``), os
-    coeficientes usuais de norma para elemento comprimido não esbelto.
-    """
-
-    nome: str
-    razao: float
-    coeficiente: float
-    quadratico: bool = False
-
-    def limite(self, modulo_elasticidade_MPa: float, escoamento_MPa: float) -> float:
-        base = modulo_elasticidade_MPa / escoamento_MPa
-        return self.coeficiente * (base if self.quadratico else math.sqrt(base))
-
-
-@dataclass(frozen=True)
-class GeometriaColuna:
-    """Área, raios de giração e, quando conhecidas, as distâncias às fibras.
-
-    ``distancia_fibra_x_mm`` é a distância do centroide à fibra mais afastada
-    na flexão em torno de **x** (meia altura numa seção simétrica), usada só
-    pela fórmula da secante; zero significa desconhecida. ``elementos_locais``
-    lista as paredes cuja esbeltez ``b/t`` o cálculo confere para avisar de
-    flambagem local.
-    """
-
-    area_mm2: float
-    raio_giracao_x_mm: float
-    raio_giracao_y_mm: float
-    descricao: str = ""
-    distancia_fibra_x_mm: float = 0.0
-    distancia_fibra_y_mm: float = 0.0
-    elementos_locais: tuple[ElementoLocal, ...] = ()
-
-    def distancia_fibra(self, eixo: str) -> float:
-        return self.distancia_fibra_x_mm if eixo == "x" else self.distancia_fibra_y_mm
-
-
-@dataclass(frozen=True)
-class ResultadoFlambagem:
-    comprimento_efetivo_x_mm: float
-    comprimento_efetivo_y_mm: float
-    esbeltez_x: float
-    esbeltez_y: float
-    esbeltez_governante: float
-    eixo_governante: str
-    esbeltez_transicao: float
-    regime: str
-    carga_critica_euler_N: float
-    tensao_critica_MPa: float
-    carga_critica_N: float
-    carga_admissivel_N: float
-    fator_seguranca: float
-    utilizacao: float
-    avisos: tuple[str, ...] = ()
-    # Fórmula da secante (só com excentricidade > 0): eixo de flexão da
-    # excentricidade, tensão máxima na fibra extrema sob a carga atuante,
-    # carga que leva essa fibra ao escoamento e o fator P_y / P.
-    eixo_excentricidade: str = ""
-    excentricidade_mm: float = 0.0
-    tensao_maxima_secante_MPa: float | None = None
-    carga_escoamento_secante_N: float | None = None
-    fator_seguranca_secante: float | None = None
-
-
-# Fator de comprimento efetivo K por condição de apoio idealizada (valores
-# teóricos). Condições reais quase sempre ficam entre estes casos — o
-# engenheiro deve escolher o mais próximo e favorável à segurança.
+# Fator de comprimento de flambagem K por condição de apoio idealizada
+# (Tabela E.1 da NBR 8800, valores teóricos).
 CONDICOES_APOIO: dict[str, float] = {
     "Biapoiada (pino-pino)": 1.0,
     "Engastada-livre (em balanço)": 2.0,
@@ -108,8 +79,8 @@ CONDICOES_APOIO: dict[str, float] = {
     "Engastada-pino com translação (deslocável)": 2.0,
 }
 
-# Valores recomendados para projeto (AISC, Tabela C-A-7.1; NBR 8800 usa os
-# mesmos): ligações reais nunca são o engaste perfeito, então K sobe.
+# Valores recomendados para projeto (Tabela E.1): ligações reais nunca são o
+# engaste perfeito, então K sobe.
 CONDICOES_APOIO_RECOMENDADAS: dict[str, float] = {
     "Biapoiada (pino-pino)": 1.0,
     "Engastada-livre (em balanço)": 2.1,
@@ -118,11 +89,6 @@ CONDICOES_APOIO_RECOMENDADAS: dict[str, float] = {
     "Biengastada com translação (deslocável)": 1.2,
     "Engastada-pino com translação (deslocável)": 2.0,
 }
-
-# Esbeltez global acima da qual as normas de aço deixam de admitir a peça
-# comprimida (NBR 8800 e AISC: 200). Não é limite físico do modelo — Euler
-# continua valendo —, mas uma coluna nessa faixa é frágil a imperfeições.
-ESBELTEZ_MAXIMA_USUAL = 200.0
 
 # Faixa física de K: 0,5 é o mínimo teórico (biengastada) e acima de 3 só
 # em pórtico muito deslocável; fora disso quase sempre é erro de digitação.
@@ -144,40 +110,77 @@ def _nao_negativo(nome: str, valor: float) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Ações de cálculo
+# ---------------------------------------------------------------------------
+
+
+def forca_de_calculo(
+    permanente_N: float,
+    variavel_N: float = 0.0,
+    *,
+    gamma_g: float = GAMMA_G_PADRAO,
+    gamma_q: float = GAMMA_Q_PADRAO,
+) -> float:
+    """``N_Sd = γ_g·N_g + γ_q·N_q`` (combinação normal, 4.7.7)."""
+    ng = _nao_negativo("permanente_N", permanente_N)
+    nq = _nao_negativo("variavel_N", variavel_N)
+    gg = _positivo("gamma_g", gamma_g)
+    gq = _positivo("gamma_q", gamma_q)
+    return gg * ng + gq * nq
+
+
+# ---------------------------------------------------------------------------
 # Geometrias
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GeometriaColuna:
+    """Seção da coluna: um perfil idealizado ou de catálogo, ou só A e r.
+
+    ``perfil`` é o que permite calcular ``Q`` (paredes) e ``N_ez`` (J, Cw);
+    sem ele a verificação fica restrita à flambagem por flexão com
+    ``Q = 1``. ``distancia_fibra_*_mm`` é a distância do centroide à fibra
+    mais afastada, usada para ``W = I/c`` na resistência à flexão da
+    geometria direta; zero significa desconhecida.
+    """
+
+    area_mm2: float
+    raio_giracao_x_mm: float
+    raio_giracao_y_mm: float
+    descricao: str = ""
+    distancia_fibra_x_mm: float = 0.0
+    distancia_fibra_y_mm: float = 0.0
+    perfil: PerfilAco | None = None
+
+    def distancia_fibra(self, eixo: str) -> float:
+        return self.distancia_fibra_x_mm if eixo == "x" else self.distancia_fibra_y_mm
+
+
+def _de_perfil(perfil: PerfilAco, descricao: str) -> GeometriaColuna:
+    return GeometriaColuna(
+        area_mm2=perfil.area_mm2,
+        raio_giracao_x_mm=perfil.rx_mm,
+        raio_giracao_y_mm=perfil.ry_mm,
+        descricao=descricao,
+        distancia_fibra_x_mm=max(perfil.distancias_fibras_x_mm),
+        distancia_fibra_y_mm=max(perfil.distancias_fibras_y_mm),
+        perfil=perfil,
+    )
 
 
 def geometria_retangular(largura_mm: float, altura_mm: float) -> GeometriaColuna:
     """Seção retangular maciça. ``largura`` (b, em x) e ``altura`` (h, em y)."""
     b = _positivo("largura_mm", largura_mm)
     h = _positivo("altura_mm", altura_mm)
-    area = b * h
-    ix = b * h**3 / 12.0
-    iy = h * b**3 / 12.0
-    return GeometriaColuna(
-        area_mm2=area,
-        raio_giracao_x_mm=math.sqrt(ix / area),
-        raio_giracao_y_mm=math.sqrt(iy / area),
-        descricao=f"Retangular {b:g} × {h:g} mm",
-        distancia_fibra_x_mm=h / 2.0,
-        distancia_fibra_y_mm=b / 2.0,
+    return _de_perfil(
+        barra_retangular(f"Retangular {b:g}×{h:g}", h, b), f"Retangular {b:g} × {h:g} mm"
     )
 
 
 def geometria_circular_macica(diametro_mm: float) -> GeometriaColuna:
     d = _positivo("diametro_mm", diametro_mm)
-    area = math.pi * d**2 / 4.0
-    inercia = math.pi * d**4 / 64.0
-    raio = math.sqrt(inercia / area)
-    return GeometriaColuna(
-        area,
-        raio,
-        raio,
-        f"Circular maciça, d = {d:g} mm",
-        distancia_fibra_x_mm=d / 2.0,
-        distancia_fibra_y_mm=d / 2.0,
-    )
+    return _de_perfil(barra_circular(f"Circular {d:g}", d), f"Circular maciça, d = {d:g} mm")
 
 
 def geometria_circular_vazada(
@@ -187,83 +190,15 @@ def geometria_circular_vazada(
     di = _nao_negativo("diametro_interno_mm", diametro_interno_mm)
     if di >= de:
         raise ValueError("O diâmetro interno deve ser menor que o externo.")
-    area = math.pi / 4.0 * (de**2 - di**2)
-    inercia = math.pi / 64.0 * (de**4 - di**4)
-    raio = math.sqrt(inercia / area)
-    espessura = (de - di) / 2.0
-    return GeometriaColuna(
-        area,
-        raio,
-        raio,
-        f"Tubular d={de:g}/{di:g} mm",
-        distancia_fibra_x_mm=de / 2.0,
-        distancia_fibra_y_mm=de / 2.0,
-        # Tubo circular comprimido: D/t ≤ 0,11·E/Sy para a parede não flambar
-        # antes da coluna (limite de elemento não esbelto das normas de aço).
-        elementos_locais=(
-            ElementoLocal("parede do tubo (D/t)", de / espessura, 0.11, quadratico=True),
-        ),
+    if di == 0:
+        return _de_perfil(barra_circular(f"Circular {de:g}", de), f"Circular maciça, d = {de:g} mm")
+    return _de_perfil(
+        tubo_circular(f"Tubo {de:g}/{di:g}", de, (de - di) / 2.0), f"Tubular d={de:g}/{di:g} mm"
     )
-
-
-def _familia(perfil: PerfilAco) -> str:
-    familia = str(getattr(perfil, "familia", "") or "").strip().casefold()
-    return familia.split()[0] if familia else ""
-
-
-def _elementos_locais_do_perfil(perfil: PerfilAco) -> tuple[ElementoLocal, ...]:
-    """Paredes do perfil e os coeficientes de esbeltez limite (AISC B4.1a).
-
-    Mesa de I/W/HP/T (``b/2t``) e mesa de U/C (``b/t``): 0,56; alma de I/W/
-    U/C (``h/tw``): 1,49; talão do T (``d/tw``): 0,75; parede de tubo
-    retangular (``b/t``): 1,40; tubo circular (``D/t``): 0,11·E/Sy. Perfis
-    maciços não têm parede a flambar.
-    """
-    familia = _familia(perfil)
-    h = float(perfil.altura_mm)
-    b = float(perfil.largura_mm)
-    tw = float(perfil.espessura_alma_mm)
-    tf = float(perfil.espessura_mesa_mm)
-    completa = str(getattr(perfil, "familia", "") or "").casefold()
-    if tw <= 0 or tf <= 0:
-        return ()
-    if "tubo" in completa and ("circ" in completa or "redond" in completa):
-        return (ElementoLocal("parede do tubo (D/t)", h / tw, 0.11, quadratico=True),)
-    if "tubo" in completa:
-        t = min(tw, tf)
-        return (ElementoLocal("parede maior do tubo (b/t)", (max(h, b) - 2.0 * t) / t, 1.40),)
-    if "barra" in completa:
-        return ()
-    if familia in {"i", "w", "hp", "hea", "heb", "hem", "ipe", "ipn"}:
-        return (
-            ElementoLocal("mesa (b/2t)", (b / 2.0) / tf, 0.56),
-            ElementoLocal("alma (h/tw)", (h - 2.0 * tf) / tw, 1.49),
-        )
-    if familia in {"u", "c", "upn"}:
-        return (
-            ElementoLocal("mesa (b/t)", b / tf, 0.56),
-            ElementoLocal("alma (h/tw)", (h - 2.0 * tf) / tw, 1.49),
-        )
-    if familia == "t":
-        return (
-            ElementoLocal("mesa (b/2t)", (b / 2.0) / tf, 0.56),
-            ElementoLocal("talão (d/tw)", h / tw, 0.75),
-        )
-    return ()
 
 
 def geometria_perfil_catalogo(perfil: PerfilAco) -> GeometriaColuna:
-    distancias_x = getattr(perfil, "distancias_fibras_x_mm", (perfil.altura_mm / 2.0,) * 2)
-    distancias_y = getattr(perfil, "distancias_fibras_y_mm", (perfil.largura_mm / 2.0,) * 2)
-    return GeometriaColuna(
-        area_mm2=perfil.area_mm2,
-        raio_giracao_x_mm=perfil.rx_mm,
-        raio_giracao_y_mm=perfil.ry_mm,
-        descricao=f"Perfil {perfil.nome}",
-        distancia_fibra_x_mm=max(distancias_x),
-        distancia_fibra_y_mm=max(distancias_y),
-        elementos_locais=_elementos_locais_do_perfil(perfil),
-    )
+    return _de_perfil(perfil, f"Perfil {perfil.nome}")
 
 
 def geometria_direta(
@@ -279,7 +214,7 @@ def geometria_direta(
 
     Se a seção for assimétrica (r diferente em cada eixo), informe
     ``raio_giracao_y_mm``; caso contrário os dois eixos usam o mesmo raio.
-    As distâncias às fibras só são necessárias para a fórmula da secante.
+    As distâncias às fibras só são necessárias para a flexocompressão.
     """
     area = _positivo("area_mm2", area_mm2)
     rx = _positivo("raio_giracao_mm", raio_giracao_mm)
@@ -295,87 +230,62 @@ def geometria_direta(
 
 
 # ---------------------------------------------------------------------------
-# Fórmula da secante
+# Resultado
 # ---------------------------------------------------------------------------
 
 
-def tensao_maxima_secante(
-    carga_N: float,
-    *,
-    area_mm2: float,
-    raio_giracao_mm: float,
-    distancia_fibra_mm: float,
-    comprimento_efetivo_mm: float,
-    excentricidade_mm: float,
-    modulo_elasticidade_MPa: float,
-) -> float:
-    """``σ_máx = (P/A)·[1 + (e·c/r²)·sec((L_e/2r)·√(P/(E·A)))]``.
+@dataclass(frozen=True)
+class MomentoFletor:
+    """Um eixo da flexocompressão: solicitante amplificado e resistente."""
 
-    É a tensão de compressão na fibra extrema de uma coluna com carga
-    excêntrica, já com a amplificação de segunda ordem (a flecha aumenta o
-    braço da carga). Tende ao infinito quando ``P`` se aproxima da carga de
-    Euler — por isso a carga de escoamento pela secante é sempre menor que
-    a crítica, e a diferença é justamente o efeito da imperfeição.
-    """
-    carga = _nao_negativo("carga_N", carga_N)
-    area = _positivo("area_mm2", area_mm2)
-    raio = _positivo("raio_giracao_mm", raio_giracao_mm)
-    c = _nao_negativo("distancia_fibra_mm", distancia_fibra_mm)
-    le = _positivo("comprimento_efetivo_mm", comprimento_efetivo_mm)
-    e = _nao_negativo("excentricidade_mm", excentricidade_mm)
-    modulo = _positivo("modulo_elasticidade_MPa", modulo_elasticidade_MPa)
-    if carga == 0.0:
-        return 0.0
-    argumento = (le / (2.0 * raio)) * math.sqrt(carga / (modulo * area))
-    if argumento >= math.pi / 2.0:
-        return math.inf
-    return (carga / area) * (1.0 + (e * c / raio**2) / math.cos(argumento))
+    eixo: str
+    momento_primeira_ordem_Nmm: float
+    b1: float
+    momento_solicitante_Nmm: float
+    momento_resistente_Nmm: float | None
+    flexao: ResultadoFlexaoNBR | None = None
 
 
-def carga_de_escoamento_secante(
-    escoamento_MPa: float,
-    *,
-    area_mm2: float,
-    raio_giracao_mm: float,
-    distancia_fibra_mm: float,
-    comprimento_efetivo_mm: float,
-    excentricidade_mm: float,
-    modulo_elasticidade_MPa: float,
-) -> float:
-    """Carga ``P_y`` que leva a fibra extrema ao escoamento pela secante.
+@dataclass(frozen=True)
+class ResultadoFlambagem:
+    comprimento_efetivo_x_mm: float
+    comprimento_efetivo_y_mm: float
+    comprimento_efetivo_z_mm: float
+    esbeltez_x: float
+    esbeltez_y: float
+    esbeltez_governante: float
+    eixo_governante: str
+    # Anexo E
+    ne_x_N: float
+    ne_y_N: float
+    ne_z_N: float | None
+    ne_acoplada_N: float | None
+    ne_N: float
+    modo_flambagem: str
+    # Anexo F
+    fator_q: float
+    elementos: tuple[ElementoDePlaca, ...]
+    # 5.3.3
+    lambda_0: float
+    chi: float
+    forca_escoamento_N: float  # Q·A_g·f_y
+    resistencia_N: float  # N_c,Rd
+    forca_solicitante_N: float  # N_Sd
+    utilizacao_axial: float
+    # 5.5.1.2
+    momento_x: MomentoFletor
+    momento_y: MomentoFletor
+    interacao: ResultadoInteracaoNBR | None
+    # Conclusão
+    utilizacao: float
+    modo_governante: str
+    atende: bool
+    avisos: tuple[str, ...] = ()
 
-    ``σ_máx(P)`` cresce monotonicamente com ``P`` e diverge na carga de
-    Euler do eixo, então a raiz está sempre em ``(0, P_cr)`` e a bisseção a
-    encontra sem chute inicial.
-    """
-    sy = _positivo("escoamento_MPa", escoamento_MPa)
-    area = _positivo("area_mm2", area_mm2)
-    raio = _positivo("raio_giracao_mm", raio_giracao_mm)
-    le = _positivo("comprimento_efetivo_mm", comprimento_efetivo_mm)
-    modulo = _positivo("modulo_elasticidade_MPa", modulo_elasticidade_MPa)
-    parametros = dict(
-        area_mm2=area,
-        raio_giracao_mm=raio,
-        distancia_fibra_mm=distancia_fibra_mm,
-        comprimento_efetivo_mm=le,
-        excentricidade_mm=excentricidade_mm,
-        modulo_elasticidade_MPa=modulo,
-    )
-    carga_euler = math.pi**2 * modulo * area / (le / raio) ** 2
-    baixo, alto = 0.0, min(carga_euler, sy * area * (1.0 + 1e-9))
-    # Sem excentricidade a secante vira σ = P/A: a raiz é o esmagamento ou
-    # Euler, o que vier primeiro.
-    if tensao_maxima_secante(alto * (1.0 - 1e-12), **parametros) <= sy:
-        return alto
-    for _ in range(200):
-        meio = 0.5 * (baixo + alto)
-        if tensao_maxima_secante(meio, **parametros) > sy:
-            alto = meio
-        else:
-            baixo = meio
-        if alto - baixo <= 1e-12 * alto:
-            break
-    return 0.5 * (baixo + alto)
+    @property
+    def carga_critica_euler_N(self) -> float:
+        """``N_e`` do modo governante — a carga de Euler é só referência."""
+        return self.ne_N
 
 
 # ---------------------------------------------------------------------------
@@ -403,11 +313,37 @@ def _avisos_de_entrada(
         )
     if escoamento_MPa > 0.05 * modulo_elasticidade_MPa:
         avisos.append(
-            f"Sy/E = {escoamento_MPa / modulo_elasticidade_MPa:.3g} corresponde a "
+            f"f_y/E = {escoamento_MPa / modulo_elasticidade_MPa:.3g} corresponde a "
             "deformação de escoamento acima de 5 %, que nenhum material estrutural "
-            "tem. Confira as unidades: Sy e E em MPa."
+            "tem. Confira as unidades: f_y e E em MPa."
         )
     return avisos
+
+
+def fator_amplificacao_b1(forca_solicitante_N: float, ne_N: float, cm: float = 1.0) -> float:
+    """``B_1 = C_m/(1 − N_Sd/N_e) ≥ 1,0`` (Anexo D, D.2.2); infinito se ``N_Sd ≥ N_e``."""
+    n = _nao_negativo("forca_solicitante_N", forca_solicitante_N)
+    ne = _positivo("ne_N", ne_N)
+    cm = _positivo("cm", cm)
+    if n >= ne:
+        return math.inf
+    return max(1.0, cm / (1.0 - n / ne))
+
+
+def _momento_resistente_direto(
+    geometria: GeometriaColuna, eixo: str, fy: float
+) -> tuple[float | None, str | None]:
+    """Geometria sem perfil: ``M_Rd = W·f_y/γ_a1`` com ``W = A·r²/c`` (escoamento)."""
+    c = geometria.distancia_fibra(eixo)
+    if c <= 0:
+        return None, (
+            f"Sem a distância do centroide à fibra extrema no eixo {eixo} "
+            f"(distancia_fibra_{eixo}_mm) não há como obter M_{eixo},Rd; a "
+            "flexocompressão nesse eixo não foi verificada."
+        )
+    r = geometria.raio_giracao_x_mm if eixo == "x" else geometria.raio_giracao_y_mm
+    w = geometria.area_mm2 * r**2 / c
+    return w * fy / GAMMA_A1, None
 
 
 def verificar_flambagem(
@@ -419,22 +355,27 @@ def verificar_flambagem(
     modulo_elasticidade_MPa: float,
     escoamento_MPa: float,
     forca_solicitante_N: float,
-    fator_seguranca_desejado: float = 2.0,
+    kz: float | None = None,
+    modulo_cisalhamento_MPa: float | None = None,
+    momento_x_Nmm: float = 0.0,
+    momento_y_Nmm: float = 0.0,
     excentricidade_mm: float = 0.0,
     eixo_excentricidade: str = "governante",
+    cm: float = 1.0,
+    comprimento_destravado_mm: float | None = None,
+    cb: float = 1.0,
+    soldado: bool = False,
 ) -> ResultadoFlambagem:
-    """Verifica flambagem por Euler, com transição de Johnson para colunas curtas.
+    """Verifica a coluna pela NBR 8800: ``N_c,Rd = χ·Q·A_g·f_y/γ_a1`` e interação N + M.
 
-    O modelo assume compressão centrada, coluna prismática e material
-    elástico linear até a transição. Com ``excentricidade_mm > 0`` a
-    fórmula da secante entra como verificação adicional: tensão máxima na
-    fibra extrema sob a carga atuante e carga que leva essa fibra ao
-    escoamento. ``eixo_excentricidade`` é o eixo de flexão que a
-    excentricidade provoca (``"x"``, ``"y"`` ou ``"governante"``).
-
-    Imperfeições, flambagem local e torcional não entram no número — mas o
-    resultado **avisa** quando a esbeltez de parede, a esbeltez global ou o
-    K indicam que elas podem governar.
+    ``forca_solicitante_N`` é ``N_Sd`` **já majorado** (use
+    :func:`forca_de_calculo`). Os momentos ``momento_*_Nmm`` são de primeira
+    ordem e de cálculo; a excentricidade ``e`` acrescenta ``N_Sd·e`` no eixo
+    escolhido (``"x"``, ``"y"`` ou ``"governante"``, o de maior esbeltez).
+    Ambos são amplificados por ``B_1`` com ``C_m`` (1,0 é conservador).
+    ``kz`` é o fator do comprimento de flambagem por torção (sem ele vale o
+    maior dos de flexão) e ``comprimento_destravado_mm``/``cb`` entram só na
+    FLT do momento resistente em x.
     """
     area = _positivo("area_mm2", geometria.area_mm2)
     rx = _positivo("raio_giracao_x_mm", geometria.raio_giracao_x_mm)
@@ -443,117 +384,189 @@ def verificar_flambagem(
     kx = _positivo("kx", kx)
     ky = _positivo("ky", ky)
     e = _positivo("modulo_elasticidade_MPa", modulo_elasticidade_MPa)
-    sy = _positivo("escoamento_MPa", escoamento_MPa)
-    solicitante = _nao_negativo("forca_solicitante_N", forca_solicitante_N)
-    fs_desejado = _positivo("fator_seguranca_desejado", fator_seguranca_desejado)
+    fy = _positivo("escoamento_MPa", escoamento_MPa)
+    g = (
+        _positivo("modulo_cisalhamento_MPa", modulo_cisalhamento_MPa)
+        if modulo_cisalhamento_MPa
+        else e / (2.0 * (1.0 + POISSON_ACO))
+    )
+    n_sd = _nao_negativo("forca_solicitante_N", forca_solicitante_N)
+    mx1 = _nao_negativo("momento_x_Nmm", momento_x_Nmm)
+    my1 = _nao_negativo("momento_y_Nmm", momento_y_Nmm)
     excentricidade = _nao_negativo("excentricidade_mm", excentricidade_mm)
+    cm = _positivo("cm", cm)
     eixo_excentricidade = str(eixo_excentricidade).strip().lower() or "governante"
     if eixo_excentricidade not in {"x", "y", "governante"}:
         raise ValueError("eixo_excentricidade deve ser 'x', 'y' ou 'governante'.")
 
-    lx = kx * l
-    ly = ky * l
-    esbeltez_x = lx / rx
-    esbeltez_y = ly / ry
+    lx, ly = kx * l, ky * l
+    lz = _positivo("kz", kz) * l if kz else max(lx, ly)
+    esbeltez_x, esbeltez_y = lx / rx, ly / ry
     if esbeltez_x >= esbeltez_y:
         esbeltez_governante, eixo_governante = esbeltez_x, "x"
     else:
         esbeltez_governante, eixo_governante = esbeltez_y, "y"
 
-    esbeltez_transicao = math.sqrt(2.0 * math.pi**2 * e / sy)
-    tensao_euler = math.pi**2 * e / esbeltez_governante**2
-    if esbeltez_governante >= esbeltez_transicao:
-        regime = "Euler (coluna longa)"
-        tensao_critica = tensao_euler
+    avisos = _avisos_de_entrada(kx, ky, e, fy)
+    perfil = geometria.perfil
+    if perfil is not None:
+        compressao = nbr8800.verificar_compressao(
+            perfil, fy, e, g, l, kx, ky, n_sd, kz=kz, soldado=soldado
+        )
+        nex, ney, nez, acoplada = (
+            compressao.ne_x_N,
+            compressao.ne_y_N,
+            compressao.ne_z_N,
+            compressao.ne_acoplada_N,
+        )
+        ne, modo = compressao.ne_N, compressao.modo_flambagem
+        q, elementos = compressao.fator_q, compressao.elementos
+        lambda_0, chi, resistencia = compressao.lambda_0, compressao.chi, compressao.resistencia_N
+        avisos.extend(aviso for aviso in compressao.avisos if "5.3.4.1" not in aviso)
     else:
-        regime = "Johnson (coluna curta/intermediária)"
-        tensao_critica = sy - (sy**2 / (4.0 * math.pi**2 * e)) * esbeltez_governante**2
-
-    carga_critica_euler = tensao_euler * area
-    carga_critica = tensao_critica * area
-    carga_admissivel = carga_critica / fs_desejado
-    fator_seguranca = math.inf if solicitante <= 0 else carga_critica / solicitante
-    utilizacao = 0.0 if carga_admissivel <= 0 else solicitante / carga_admissivel
-
-    avisos = _avisos_de_entrada(kx, ky, e, sy)
-    if esbeltez_governante > ESBELTEZ_MAXIMA_USUAL:
+        # Só A e r: flambagem por flexão nos dois eixos, sem paredes nem torção.
+        nex = math.pi**2 * e * area * rx**2 / lx**2
+        ney = math.pi**2 * e * area * ry**2 / ly**2
+        nez = acoplada = None
+        ne, modo = (nex, "x") if nex <= ney else (ney, "y")
+        q, elementos = 1.0, ()
+        lambda_0 = math.sqrt(q * area * fy / ne)
+        chi = nbr8800.fator_chi(lambda_0)
+        resistencia = chi * q * area * fy / GAMMA_A1
         avisos.append(
-            f"Esbeltez governante λ = {esbeltez_governante:.0f} acima de "
-            f"{ESBELTEZ_MAXIMA_USUAL:.0f}, o limite usual de norma para peças "
-            "comprimidas: a carga crítica de Euler continua válida, mas uma coluna "
-            "assim é muito sensível a imperfeições, excentricidade e vibração."
+            "Geometria informada só por A e r: o fator Q de flambagem local foi "
+            "adotado igual a 1,0 e a flambagem por torção/flexo-torção (N_ez, Anexo E) "
+            "não foi verificada. Para perfis abertos ou de parede fina use uma seção "
+            "geométrica ou o perfil de catálogo."
         )
-    for elemento in geometria.elementos_locais:
-        limite = elemento.limite(e, sy)
-        if elemento.razao > limite:
-            avisos.append(
-                f"Flambagem local pode governar: {elemento.nome} = {elemento.razao:.1f} "
-                f"acima do limite de elemento não esbelto ({limite:.1f}"
-                + (", 0,11·E/Sy" if elemento.quadratico else f", {elemento.coeficiente:g}·√(E/Sy)")
-                + "). Este módulo não considera a flambagem da parede — a capacidade "
-                "real é menor que a calculada; use Estruturas de aço ou uma seção mais compacta."
+
+    if esbeltez_governante > ESBELTEZ_MAXIMA:
+        avisos.append(
+            f"KL/r = {esbeltez_governante:.0f} supera o limite de {ESBELTEZ_MAXIMA:.0f} "
+            "para barras comprimidas (5.3.4.1): a barra não atende independentemente "
+            "da resistência calculada."
+        )
+    if q < 1.0:
+        avisos.append(
+            f"Flambagem local reduz a capacidade: Q = {q:.3f} (Anexo F) — "
+            + "; ".join(
+                f"{item.nome} b/t = {item.razao:.1f} > λ_r = {item.limite_r:.1f}"
+                for item in elementos
+                if item.razao > item.limite_r
+            )
+            + "."
+        )
+    if modo not in {"x", "y"}:
+        avisos.append(
+            f"O modo de flambagem elástica governante é {modo} (N_e = {ne / 1e3:.1f} kN, "
+            "Anexo E), não a flexão pura: a verificação por Euler nos eixos x e y "
+            "superestimaria a resistência."
+        )
+
+    forca_escoamento = q * area * fy
+    utilizacao_axial = math.inf if resistencia <= 0 else n_sd / resistencia
+
+    # -- flexocompressão (5.5.1.2) -------------------------------------------
+    eixo_e = eixo_governante if eixo_excentricidade == "governante" else eixo_excentricidade
+    if excentricidade > 0:
+        if eixo_e == "x":
+            mx1 += n_sd * excentricidade
+        else:
+            my1 += n_sd * excentricidade
+
+    momentos: dict[str, MomentoFletor] = {}
+    for eixo, m1, ne_eixo in (("x", mx1, nex), ("y", my1, ney)):
+        b1 = fator_amplificacao_b1(n_sd, ne_eixo, cm) if m1 > 0 else 1.0
+        m_sd = m1 * b1 if m1 > 0 else 0.0
+        flexao: ResultadoFlexaoNBR | None = None
+        m_rd: float | None = None
+        if m1 > 0:
+            if perfil is not None:
+                flexao = nbr8800.verificar_flexao(
+                    perfil,
+                    fy,
+                    e,
+                    g,
+                    0.0 if math.isinf(m_sd) else m_sd,
+                    eixo=eixo,
+                    comprimento_destravado_mm=(comprimento_destravado_mm if eixo == "x" else None),
+                    cb=cb,
+                    soldado=soldado,
+                )
+                m_rd = flexao.resistencia_Nmm
+                avisos.extend(flexao.avisos)
+            else:
+                m_rd, aviso = _momento_resistente_direto(geometria, eixo, fy)
+                if aviso:
+                    avisos.append(aviso)
+            if math.isinf(b1):
+                avisos.append(
+                    f"N_Sd = {n_sd / 1e3:.1f} kN alcança N_e{eixo} = {ne_eixo / 1e3:.1f} kN: "
+                    f"a amplificação B_1 do momento em {eixo} diverge (Anexo D) — a coluna "
+                    "não tem rigidez para a carga."
+                )
+        momentos[eixo] = MomentoFletor(eixo, m1, b1, m_sd, m_rd, flexao)
+
+    interacao: ResultadoInteracaoNBR | None = None
+    if (mx1 > 0 and momentos["x"].momento_resistente_Nmm) or (
+        my1 > 0 and momentos["y"].momento_resistente_Nmm
+    ):
+        mx_sd = momentos["x"].momento_solicitante_Nmm
+        my_sd = momentos["y"].momento_solicitante_Nmm
+        if math.isinf(mx_sd) or math.isinf(my_sd):
+            interacao = ResultadoInteracaoNBR(
+                utilizacao_axial, math.inf, math.inf, math.inf, "B_1 → ∞ (N_Sd ≥ N_e)", False
+            )
+        else:
+            interacao = nbr8800.verificar_interacao(
+                n_sd,
+                resistencia,
+                mx_sd if momentos["x"].momento_resistente_Nmm else 0.0,
+                momentos["x"].momento_resistente_Nmm or 1.0,
+                my_sd if momentos["y"].momento_resistente_Nmm else 0.0,
+                momentos["y"].momento_resistente_Nmm,
             )
 
-    # -- fórmula da secante ---------------------------------------------------
-    eixo_secante = eixo_governante if eixo_excentricidade == "governante" else eixo_excentricidade
-    tensao_secante: float | None = None
-    carga_escoamento: float | None = None
-    fator_secante: float | None = None
-    if excentricidade > 0:
-        raio = rx if eixo_secante == "x" else ry
-        comprimento_efetivo = lx if eixo_secante == "x" else ly
-        distancia_fibra = geometria.distancia_fibra(eixo_secante)
-        if distancia_fibra <= 0:
-            raise ValueError(
-                "A fórmula da secante precisa da distância do centroide à fibra "
-                f"extrema no eixo {eixo_secante} (distancia_fibra_{eixo_secante}_mm), "
-                "que esta geometria não informa."
+    candidatos = {"Compressão N_c,Rd (5.3)": utilizacao_axial}
+    for eixo, momento in momentos.items():
+        if momento.momento_resistente_Nmm and momento.momento_solicitante_Nmm > 0:
+            candidatos[f"Flexão em {eixo} (5.4.2)"] = (
+                momento.momento_solicitante_Nmm / momento.momento_resistente_Nmm
             )
-        parametros = dict(
-            area_mm2=area,
-            raio_giracao_mm=raio,
-            distancia_fibra_mm=distancia_fibra,
-            comprimento_efetivo_mm=comprimento_efetivo,
-            excentricidade_mm=excentricidade,
-            modulo_elasticidade_MPa=e,
-        )
-        tensao_secante = tensao_maxima_secante(solicitante, **parametros)
-        carga_escoamento = carga_de_escoamento_secante(sy, **parametros)
-        fator_secante = math.inf if solicitante <= 0 else carga_escoamento / solicitante
-        if math.isinf(tensao_secante):
-            avisos.append(
-                f"Com excentricidade e = {excentricidade:g} mm no eixo {eixo_secante}, a "
-                "carga atuante já atinge a carga de Euler desse eixo: a flecha cresce "
-                "sem limite (fórmula da secante)."
-            )
-        elif fator_secante < fs_desejado:
-            avisos.append(
-                f"Com excentricidade e = {excentricidade:g} mm no eixo {eixo_secante}, a "
-                f"fibra extrema atinge Sy com P = {carga_escoamento / 1_000.0:.2f} kN "
-                f"(fator {fator_secante:.2f} contra o desejado {fs_desejado:g}); a tensão "
-                f"máxima sob a carga atuante é {tensao_secante:.1f} MPa. A excentricidade "
-                "governa sobre Euler/Johnson."
-            )
+    if interacao is not None:
+        candidatos["Interação N + M (5.5.1.2)"] = interacao.indice
+    if esbeltez_governante > ESBELTEZ_MAXIMA:
+        candidatos["Esbeltez KL/r > 200 (5.3.4.1)"] = math.inf
+    governante = max(candidatos, key=lambda chave: candidatos[chave])
+    utilizacao = candidatos[governante]
 
     return ResultadoFlambagem(
         comprimento_efetivo_x_mm=lx,
         comprimento_efetivo_y_mm=ly,
+        comprimento_efetivo_z_mm=lz,
         esbeltez_x=esbeltez_x,
         esbeltez_y=esbeltez_y,
         esbeltez_governante=esbeltez_governante,
         eixo_governante=eixo_governante,
-        esbeltez_transicao=esbeltez_transicao,
-        regime=regime,
-        carga_critica_euler_N=carga_critica_euler,
-        tensao_critica_MPa=tensao_critica,
-        carga_critica_N=carga_critica,
-        carga_admissivel_N=carga_admissivel,
-        fator_seguranca=fator_seguranca,
+        ne_x_N=nex,
+        ne_y_N=ney,
+        ne_z_N=nez,
+        ne_acoplada_N=acoplada,
+        ne_N=ne,
+        modo_flambagem=modo,
+        fator_q=q,
+        elementos=tuple(elementos),
+        lambda_0=lambda_0,
+        chi=chi,
+        forca_escoamento_N=forca_escoamento,
+        resistencia_N=resistencia,
+        forca_solicitante_N=n_sd,
+        utilizacao_axial=utilizacao_axial,
+        momento_x=momentos["x"],
+        momento_y=momentos["y"],
+        interacao=interacao,
         utilizacao=utilizacao,
-        avisos=tuple(avisos),
-        eixo_excentricidade=eixo_secante if excentricidade > 0 else "",
-        excentricidade_mm=excentricidade,
-        tensao_maxima_secante_MPa=tensao_secante,
-        carga_escoamento_secante_N=carga_escoamento,
-        fator_seguranca_secante=fator_secante,
+        modo_governante=governante,
+        atende=utilizacao <= 1.0,
+        avisos=tuple(dict.fromkeys(avisos)),
     )

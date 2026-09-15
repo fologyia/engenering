@@ -246,11 +246,15 @@ def _largura_efetiva(b: float, t: float, sigma: float, e: float, ca: float) -> f
     return min(b, max(0.0, b_ef))
 
 
-def _chi_de(lambda_0: float) -> float:
-    """Curva única de flambagem (5.3.3.1)."""
+def fator_chi(lambda_0: float) -> float:
+    """Curva única de flambagem (5.3.3.1): ``0,658^(λ_0²)`` até 1,5; ``0,877/λ_0²`` acima."""
+    lambda_0 = _nao_negativo("lambda_0", lambda_0)
     if lambda_0 <= 1.5:
         return 0.658 ** (lambda_0**2)
     return 0.877 / lambda_0**2
+
+
+_chi_de = fator_chi
 
 
 def fator_q(

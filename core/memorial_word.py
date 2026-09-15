@@ -27,7 +27,6 @@ BORDER = "C9D4DE"
 HEADER_FILL = "F2F4F7"
 BLUE_FILL = "E8EEF5"
 NOTE_FILL = "F4F6F9"
-WHITE = "FFFFFF"
 RISK = "9B1C1C"
 CAUTION = "7A5A00"
 POSITIVE = "1F3A5F"
@@ -303,6 +302,7 @@ def _write_cell(
     color: str = "26323D",
     size: float = 8.5,
     align=WD_ALIGN_PARAGRAPH.LEFT,
+    vazio: str = "-",
 ) -> None:
     cell.text = ""
     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
@@ -311,7 +311,7 @@ def _write_cell(
     paragraph.paragraph_format.space_before = Pt(0)
     paragraph.paragraph_format.space_after = Pt(0)
     paragraph.paragraph_format.line_spacing = 1.05
-    run = paragraph.add_run(_texto(value, "-"))
+    run = paragraph.add_run(_texto(value, vazio))
     _set_run_font(run, size=size, color=color, bold=bold)
 
 
@@ -324,6 +324,7 @@ def _add_data_table(
     font_size: float = 8.5,
     header_fill: str = HEADER_FILL,
     zebra: bool = True,
+    vazio: str = "-",
 ) -> Any:
     table = document.add_table(rows=1, cols=len(headers))
     _apply_table_geometry(table, widths_dxa)
@@ -341,7 +342,7 @@ def _add_data_table(
         for col_idx, value in enumerate(values):
             if zebra and row_idx % 2 == 1:
                 _shade_cell(row.cells[col_idx], "FAFBFC")
-            _write_cell(row.cells[col_idx], value, size=font_size)
+            _write_cell(row.cells[col_idx], value, size=font_size, vazio=vazio)
     _apply_table_geometry(table, widths_dxa)
     document.add_paragraph().paragraph_format.space_after = Pt(0)
     return table
@@ -542,16 +543,18 @@ def _set_header_footer(document: Document, metadata: Mapping[str, Any]) -> None:
     _append_field(page_paragraph, "NUMPAGES")
 
 
+#: Campo de identificação que o gerador não conhece: fica marcado para o
+#: responsável completar no Word, e não escondido atrás de um "-".
+A_PREENCHER = "[a preencher]"
+
+
 def _add_masthead(
     document: Document,
     metadata: Mapping[str, Any],
-    status_text: str,
-    status_color: str,
-    status_detail: str,
     resumo: Sequence[Mapping[str, Any]],
 ) -> None:
     kicker = document.add_paragraph(style="Memorial Kicker")
-    kicker.add_run("RELATÓRIO TÉCNICO PADRONIZADO")
+    kicker.add_run("MEMORIAL DE CÁLCULO")
     document.add_paragraph(_texto(metadata.get("titulo"), "Memorial de cálculo"), style="Title")
     document.add_paragraph(
         _texto(metadata.get("subtitulo"), "Memória de cálculo e verificação de engenharia"),
@@ -561,23 +564,15 @@ def _add_masthead(
     metadata_rows = [
         ["Projeto", metadata.get("projeto"), "Cliente", metadata.get("cliente")],
         ["Documento", metadata.get("codigo"), "Revisão", metadata.get("revisao")],
+        ["Situação", metadata.get("situacao"), "Emissão", metadata.get("emissao")],
         [
             "Elaborado por",
             metadata.get("responsavel"),
             "Verificado por",
             metadata.get("verificador"),
         ],
-        ["Situação", metadata.get("situacao"), "Emissão", metadata.get("emissao")],
+        ["Aprovado por", metadata.get("aprovador"), "Data de aprovação", "____/____/________"],
     ]
-    if metadata.get("snapshot_hash"):
-        metadata_rows.append(
-            [
-                "Snapshot",
-                str(metadata.get("snapshot_hash"))[:16] + "…",
-                "Aprovado por",
-                metadata.get("aprovador"),
-            ]
-        )
     table = document.add_table(rows=0, cols=4)
     for values in metadata_rows:
         row = table.add_row()
@@ -591,22 +586,10 @@ def _add_masthead(
                 bold=label,
                 color=NAVY if label else "26323D",
                 size=8.5,
+                vazio="-" if label else A_PREENCHER,
             )
     _apply_table_geometry(table, [1300, 3380, 1100, 3580])
     _set_table_borders(table)
-    document.add_paragraph().paragraph_format.space_after = Pt(0)
-
-    status_table = document.add_table(rows=1, cols=1)
-    cell = status_table.cell(0, 0)
-    _shade_cell(cell, status_color)
-    cell.text = ""
-    paragraph = cell.paragraphs[0]
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    paragraph.paragraph_format.space_after = Pt(0)
-    status_run = paragraph.add_run(f"{status_text} - {status_detail}")
-    _set_run_font(status_run, size=9.5, color=WHITE, bold=True)
-    _apply_table_geometry(status_table, [CONTENT_WIDTH_DXA])
-    _set_table_borders(status_table, color=status_color, size=6)
     document.add_paragraph().paragraph_format.space_after = Pt(0)
 
     cards = list(resumo)[:4]
@@ -631,7 +614,7 @@ def _add_masthead(
 def _add_executive_summary(
     document: Document,
     resumo_executivo: Mapping[str, Any],
-    status: tuple[str, str, str],
+    status: tuple[str, str, str] | None,
 ) -> None:
     document.add_heading("1. Resumo executivo", level=1)
     document.add_paragraph(
@@ -639,12 +622,16 @@ def _add_executive_summary(
         "As premissas, equações, substituições e verificações completas começam na seção 3."
     )
 
-    lead = document.add_paragraph(style="Memorial Note")
-    _paragraph_box(lead, BLUE_FILL, border=BLUE)
-    label = lead.add_run("Resultado geral. ")
-    _set_run_font(label, size=10, color=NAVY, bold=True)
-    value = lead.add_run(f"{status[0]}. {status[2]}")
-    _set_run_font(value, size=10, color="26323D")
+    # O veredito só existe quando o documento é de um único cálculo com
+    # critério (a fadiga, por exemplo); o memorial do projeto deixa a
+    # conclusão para o responsável.
+    if status is not None:
+        lead = document.add_paragraph(style="Memorial Note")
+        _paragraph_box(lead, BLUE_FILL, border=BLUE)
+        label = lead.add_run("Resultado geral. ")
+        _set_run_font(label, size=10, color=NAVY, bold=True)
+        value = lead.add_run(f"{status[0]}. {status[2]}")
+        _set_run_font(value, size=10, color="26323D")
 
     rows = []
     for item in resumo_executivo.get("linhas", []):
@@ -661,7 +648,7 @@ def _add_executive_summary(
         font_size=8.4,
     )
     document.add_paragraph(
-        "Decisão de uso: consulte a conclusão, as pendências e o checklist antes de aprovar "
+        "Decisão de uso: consulte a memória de cálculo e a conclusão antes de aprovar "
         "ou liberar o componente."
     )
 
@@ -669,18 +656,23 @@ def _add_executive_summary(
 def _add_revision_control(document: Document, metadata: Mapping[str, Any]) -> None:
     document.add_heading("2. Controle do documento", level=1)
     intro = document.add_paragraph(
-        "Este bloco deve ser mantido em todas as disciplinas para garantir rastreabilidade, "
-        "revisão técnica e emissão controlada do memorial."
+        "Registre aqui cada revisão emitida: o que mudou, quem elaborou e quem verificou."
     )
     intro.paragraph_format.keep_with_next = True
+    situacao = _texto(metadata.get("situacao"), "")
+    descricao = "Emissão do memorial de cálculo" + (f" — {situacao}" if situacao else "")
     rows = [
         [
             metadata.get("revisao"),
             metadata.get("emissao"),
-            "Emissão automática do memorial de cálculo",
+            descricao,
             metadata.get("responsavel"),
             metadata.get("verificador"),
-        ]
+        ],
+        # Linhas em branco para as próximas revisões: o molde já sai com
+        # lugar para elas, em vez de obrigar a inserir linha na tabela.
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
     ]
     _add_data_table(
         document,
@@ -688,6 +680,7 @@ def _add_revision_control(document: Document, metadata: Mapping[str, Any]) -> No
         rows,
         [800, 1300, 3460, 1900, 1900],
         font_size=8.3,
+        vazio="",
     )
 
 
@@ -746,6 +739,10 @@ def _render_section(document: Document, section: Mapping[str, Any], bullet_id: i
             header_fill=table_spec.get("preenchimento", HEADER_FILL),
             zebra=bool(table_spec.get("zebra", True)),
         )
+    # Parágrafos que precisam vir depois das tabelas e figuras — a conclusão
+    # de um cálculo lê-se depois dos números, não antes.
+    for paragraph_text in section.get("paragrafos_finais", []):
+        document.add_paragraph(_texto(paragraph_text))
 
 
 def gerar_memorial_word_padrao(
@@ -753,12 +750,16 @@ def gerar_memorial_word_padrao(
     metadata: Mapping[str, Any],
     resumo: Sequence[Mapping[str, Any]],
     resumo_executivo: Mapping[str, Any],
-    status: tuple[str, str, str],
     secoes: Sequence[Mapping[str, Any]],
-    quadro_dados: Sequence[Mapping[str, Any]],
-    partes_complementares: Sequence[Sequence[Any]],
+    status: tuple[str, str, str] | None = None,
 ) -> bytes:
-    """Gera um DOCX padronizado; outros módulos podem reutilizar este esquema."""
+    """Gera um DOCX padronizado; outros módulos podem reutilizar este esquema.
+
+    O documento é: capa com identificação e cartões, resumo executivo,
+    controle de revisões, as ``secoes`` numeradas a partir de 3 e a tabela de
+    aprovações — cujo número vem de ``metadata["numero_aprovacoes"]`` ou,
+    sem ele, da contagem de seções de primeiro nível.
+    """
     document = Document()
     section = document.sections[0]
     section.page_width = Inches(8.5)
@@ -785,32 +786,20 @@ def gerar_memorial_word_padrao(
     props.keywords = "memorial de cálculo; engenharia mecânica; verificação; revisão"
     props.comments = "Documento gerado pelo Mecânica Toolkit em estrutura editável e padronizada."
 
-    _add_masthead(document, metadata, status[0], status[1], status[2], resumo)
+    _add_masthead(document, metadata, resumo)
     _add_executive_summary(document, resumo_executivo, status)
     _add_revision_control(document, metadata)
     for section_spec in secoes:
         _render_section(document, section_spec, bullet_id)
 
-    numero_integracao = _texto(metadata.get("numero_integracao"), "11")
-    numero_aprovacoes = _texto(metadata.get("numero_aprovacoes"), "12")
-    document.add_heading(f"{numero_integracao}. Integração com outras partes do projeto", level=1)
-    document.add_paragraph(
-        "Use este registro para incorporar outras verificações ao mesmo memorial. "
-        "Cada disciplina deve conservar código, revisão, responsável e conclusão próprios."
+    numero_aprovacoes = metadata.get("numero_aprovacoes") or (
+        3 + sum(int(item.get("nivel", 1)) == 1 for item in secoes)
     )
-    _add_data_table(
-        document,
-        ["Parte / módulo", "Documento", "Rev.", "Situação", "Responsável", "Observações"],
-        partes_complementares,
-        [1700, 1700, 700, 1400, 1600, 2260],
-        font_size=8.0,
-    )
-
     document.add_heading(f"{numero_aprovacoes}. Aprovações", level=1)
     approvals = [
-        ["Elaboração", metadata.get("responsavel"), "", "Data: ____/____/________"],
-        ["Verificação", metadata.get("verificador"), "", "Data: ____/____/________"],
-        ["Aprovação", metadata.get("aprovador"), "", "Data: ____/____/________"],
+        ["Elaboração", _texto(metadata.get("responsavel"), A_PREENCHER), "", "____/____/________"],
+        ["Verificação", _texto(metadata.get("verificador"), A_PREENCHER), "", "____/____/________"],
+        ["Aprovação", _texto(metadata.get("aprovador"), A_PREENCHER), "", "____/____/________"],
     ]
     _add_data_table(
         document,
@@ -819,48 +808,8 @@ def gerar_memorial_word_padrao(
         [1500, 2300, 3260, 2300],
         font_size=8.5,
         zebra=False,
+        vazio="",
     )
-
-    document.add_page_break()
-    document.add_heading("Apêndice A - Quadro completo de entradas e resultados", level=1)
-    document.add_paragraph(
-        "Registro consolidado dos valores efetivamente usados. Campos manuais devem ser "
-        "rastreáveis ao desenho, certificado, ensaio, norma ou hipótese de projeto."
-    )
-    appendix_rows = [
-        [
-            linha.get("Grupo", ""),
-            linha.get("Grandeza", ""),
-            linha.get("Símbolo", ""),
-            linha.get("Valor", ""),
-            linha.get("Unidade", ""),
-            linha.get("Observação", ""),
-        ]
-        for linha in quadro_dados
-    ]
-    _add_data_table(
-        document,
-        ["Grupo", "Grandeza", "Símbolo", "Valor", "Unid.", "Observação"],
-        appendix_rows,
-        [1000, 2500, 900, 1300, 900, 2760],
-        font_size=7.3,
-    )
-
-    document.add_heading("Apêndice B - Estrutura mínima para novas partes", level=1)
-    document.add_paragraph(
-        "Ao acrescentar outra disciplina, mantenha a sequência abaixo para preservar o padrão:"
-    )
-    appendix_number_id = _create_numbering(document, numbered=True)
-    for item in (
-        "Objetivo e escopo da parte adicionada.",
-        "Referências, normas e propriedades adotadas.",
-        "Premissas, unidades, combinações e limitações.",
-        "Dados de entrada com origem rastreável.",
-        "Equações, substituições numéricas e resultados intermediários.",
-        "Critérios de aceitação, conclusão e recomendações.",
-        "Responsável, verificador, código e revisão da parte.",
-    ):
-        _add_list_item(document, item, appendix_number_id)
 
     memoria = BytesIO()
     document.save(memoria)
@@ -1097,46 +1046,7 @@ def gerar_memorial_fadiga_word(
     if observacao_projeto:
         scope_paragraphs.append(f"Observação do projeto: {observacao_projeto}")
 
-    referencia_informada = bool(str(dados.get("referencia_projeto") or "").strip())
     vida_informada = vida_requerida > 0
-    pendencias_rows = [
-        [
-            "Norma, especificação ou desenho",
-            referencia_projeto,
-            "Definida" if referencia_informada else "Pendente",
-            "Confirmar a base contratual antes da emissão final.",
-        ],
-        [
-            "Material e propriedades",
-            f"{_texto(dados.get('material'))}; Sut = {_numero(sut, 1)} MPa; Sy = {_numero(sy, 1)} MPa",
-            "Verificar",
-            "Rastrear os valores ao certificado, norma ou ensaio.",
-        ],
-        [
-            "Geometria e ponto crítico",
-            f"{componente}; d equivalente = {_numero(dados.get('diametro_mm'), 2)} mm",
-            "Verificar",
-            "Conferir desenho, seção resistente e posição das tensões.",
-        ],
-        [
-            "Entalhe",
-            f"{_texto(dados.get('modo_entalhe'))}; fator = {_numero(dados.get('fator_entalhe'), 3)}",
-            "Verificar",
-            "Confirmar Kt, q ou Kf para o raio e acabamento reais.",
-        ],
-        [
-            "Vida mínima requerida",
-            _inteiro(vida_requerida) + " ciclos" if vida_informada else "Não informada",
-            "Definida" if vida_informada else "Pendente",
-            "Comparar com o requisito funcional e a política de inspeção.",
-        ],
-        [
-            "Ambiente e histórico de carga",
-            "Corrosão, temperatura variável e dano acumulado não incluídos automaticamente",
-            "Avaliar aplicabilidade",
-            "Adicionar fatores, espectro ou regra de dano quando necessários.",
-        ],
-    ]
 
     sections = [
         {
@@ -1282,128 +1192,13 @@ def gerar_memorial_fadiga_word(
                 "Submeter o memorial à verificação independente antes da emissão final.",
             ],
         },
-        {
-            "titulo": "10. Hipóteses, pendências e ações",
-            "paragrafos": [
-                "Este registro separa resultados calculados de confirmações documentais ou avaliações adicionais necessárias à liberação."
-            ],
-            "tabelas": [
-                {
-                    "legenda": "Tabela 3 - Registro de pendências e ações de verificação.",
-                    "cabecalhos": ["Item", "Base adotada", "Situação", "Ação antes da emissão"],
-                    "linhas": pendencias_rows,
-                    "larguras": [2000, 2800, 1500, 3060],
-                    "fonte": 7.7,
-                }
-            ],
-        },
-        {
-            "titulo": "10.1 Checklist de verificação antes da emissão",
-            "nivel": 2,
-            "bullets": [
-                "Entradas, unidades e conversões conferidas por pessoa diferente do elaborador.",
-                "Material, tratamento, temperatura e propriedades rastreados à fonte aplicável.",
-                "Carregamentos, combinações e ponto crítico compatíveis com o modelo estrutural.",
-                "Concentrações de tensão e acabamento compatíveis com a geometria fabricada.",
-                "Metas de fator de segurança e vida aprovadas pelo responsável do projeto.",
-                "Pendências da Tabela 3 encerradas ou formalmente aceitas.",
-                "Código, revisão, responsáveis e situação do documento atualizados.",
-            ],
-        },
     ]
 
-    quadro_completo = list(linhas_resumo) + [
-        {
-            "Grupo": "Critérios",
-            "Grandeza": "Fator de segurança mínimo",
-            "Símbolo": "nmin",
-            "Valor": _numero(meta_fs, 2),
-            "Unidade": "-",
-            "Observação": "Meta informada para a aceitação do projeto",
-        },
-        {
-            "Grupo": "Critérios",
-            "Grandeza": "Vida mínima requerida",
-            "Símbolo": "Nreq",
-            "Valor": _inteiro(vida_requerida) if vida_informada else "Não informada",
-            "Unidade": "ciclos" if vida_informada else "-",
-            "Observação": "Requisito funcional ou contratual",
-        },
-        {
-            "Grupo": "Rastreabilidade",
-            "Grandeza": "Componente ou ponto crítico",
-            "Símbolo": "-",
-            "Valor": componente,
-            "Unidade": "-",
-            "Observação": "Escopo físico da análise",
-        },
-        {
-            "Grupo": "Rastreabilidade",
-            "Grandeza": "Norma, especificação ou desenho",
-            "Símbolo": "-",
-            "Valor": referencia_projeto,
-            "Unidade": "-",
-            "Observação": "Base de aprovação do projeto",
-        },
-    ]
-
-    complement_parts = [
-        [
-            "Análise de fadiga",
-            metadata["codigo"],
-            metadata["revisao"],
-            "Incluída",
-            metadata["responsavel"],
-            status[0],
-        ],
-        [
-            "Análise estática",
-            "A preencher",
-            "-",
-            "Não incluída",
-            "A preencher",
-            "Anexar resultados e conclusão",
-        ],
-        [
-            "Círculo de Mohr",
-            "A preencher",
-            "-",
-            "Não incluído",
-            "A preencher",
-            "Anexar estado e transformações",
-        ],
-        [
-            "Assistente de cargas",
-            "A preencher",
-            "-",
-            "Não incluído",
-            "A preencher",
-            "Rastrear cargas até as tensões",
-        ],
-        [
-            "Projeto de parafusos",
-            "A preencher",
-            "-",
-            "Não incluído",
-            "A preencher",
-            "Anexar junta e verificações",
-        ],
-        [
-            "Estruturas de aço",
-            "A preencher",
-            "-",
-            "Não incluída",
-            "A preencher",
-            "Anexar barras, ligações e combinações",
-        ],
-    ]
-
+    metadata["numero_aprovacoes"] = 10
     return gerar_memorial_word_padrao(
         metadata=metadata,
         resumo=resumo,
         resumo_executivo=resumo_executivo,
-        status=status,
         secoes=sections,
-        quadro_dados=quadro_completo,
-        partes_complementares=complement_parts,
+        status=status,
     )

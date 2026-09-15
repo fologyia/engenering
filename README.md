@@ -126,16 +126,29 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 
 ### Central de relatórios
 
-- perfis de resumo executivo, memorial industrial completo e dossiê de validação;
-- seleção independente das seções e dos registros técnicos anexados;
+- **memorial de cálculo como molde**: os cálculos registrados entram completos
+  (entradas, equações, resultados, figuras, premissas e conclusão) e todo campo
+  que o programa não conhece sai como `[a preencher]`, localizável com Ctrl+F
+  no Word; a conclusão geral e as recomendações ficam para o responsável;
+- estrutura enxuta: identificação, resumo executivo, controle de revisões (com
+  linhas em branco para as próximas), objetivo e escopo, base de projeto,
+  escopo físico, materiais, quadro-resumo dos cálculos, memória de cálculo
+  agrupada por peça, vigas e sensibilidade (só quando há registro do tipo),
+  conclusão e aprovações — sem validação, checklist, matriz normativa, casos
+  e combinações de carga, faixa de situação ou apêndices;
+- registros de Círculo de Mohr e de casos de carga não entram no memorial;
+  registros superados ficam fora da seleção padrão;
+- listas de resultados (reações de apoio, envoltória, esbeltez de paredes,
+  ranking de sensibilidade) viram tabelas próprias;
+- perfis de memorial completo, memorial de cálculos e resumo executivo, com
+  seleção independente das seções e dos registros anexados;
 - controle de código, revisão, situação, elaboração, verificação e aprovação;
-- Word editável e PDF estável gerados a partir do mesmo modelo de dados;
+- Word editável e PDF gerados a partir do mesmo modelo de dados; o PDF usa uma
+  fonte TrueType do sistema (Segoe UI, Arial, Calibri ou DejaVu), então σ, τ,
+  √ e ≥ saem como o módulo os escreveu;
 - provedores de seção independentes, permitindo que novos módulos acrescentem capítulos sem acoplamento ao renderizador;
-- resumo básico no início, seguido de base, escopo, normas, memória técnica, validação e checklist;
-- a base de projeto traz os critérios técnicos estruturados e a lista de documentos de entrada;
-- registros superados ficam fora da seleção padrão; cada emissão entra num histórico
-  próprio (documento, revisão, perfil, snapshot) e na linha do tempo do projeto;
-- quadros de integração, aprovações e apêndice consolidado de entradas e resultados.
+- cada emissão entra num histórico próprio (documento, revisão, perfil,
+  snapshot) e na linha do tempo do projeto.
 
 ## Recursos
 
@@ -178,8 +191,8 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 - modelos de Norton e Shigley;
 - concentração e sensibilidade ao entalhe;
 - Goodman modificado, Soderberg, curva S–N e estimativa de vida;
-- memorial consolidado em Word editável, com resumo executivo básico, critérios de projeto, memória completa, pendências, checklist, revisão, aprovações e integração de outras partes;
-- exportação complementar em PDF para impressão.
+- memorial em Word editável, com resumo executivo, referências, premissas, dados de entrada, memória de cálculo completa, resultados, conclusão, controle de revisões e aprovações;
+- exportação complementar em PDF para impressão, sem faixa de situação.
 - registro padronizado da avaliação no projeto industrial ativo.
 
 ### Vigas e eixos
@@ -242,7 +255,7 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 - fatores explícitos vinculados a cada caso, sem atribuição automática de caráter normativo;
 - envelope algébrico com combinação governante por componente;
 - preservação do vetor completo para evitar misturar máximos não simultâneos;
-- registro técnico versionado e capítulo automático no memorial unificado.
+- registro técnico versionado, rastreado pela validação (o memorial não reproduz casos e combinações).
 
 ### Círculo de Mohr e transformação de tensões
 
@@ -254,19 +267,23 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 
 ### Flambagem de colunas
 
-- esbeltez nos dois eixos, carga crítica de Euler e transição parabólica de
-  Johnson, para qualquer material e seção (retangular, circular, tubo, perfil
-  do catálogo ou A e r diretos);
-- K teórico ou **recomendado para projeto** (AISC/NBR 8800) por condição de
-  apoio, incluindo os casos deslocáveis;
-- **carga excêntrica pela fórmula da secante**: tensão máxima na fibra extrema
-  com amplificação de segunda ordem e carga que leva a fibra ao escoamento —
-  conferida contra o módulo de vigas em 2ª ordem;
-- avisos para o que o modelo não calcula mas pode governar: esbeltez de parede
-  acima do limite de elemento não esbelto (flambagem local), esbeltez global
-  acima de 200, K fora da faixa física e unidades implausíveis de E e Sy;
-- registro no projeto com o pior entre Euler/Johnson e a secante, e curva
-  σcr × λ no memorial.
+- verificação pela **NBR 8800:2008** (método dos estados-limites) para
+  qualquer seção (retangular, circular, tubo, perfil do catálogo ou A e r
+  diretos): `N_c,Rd = χ·Q·A_g·f_y/γ_a1` com `λ₀ = √(Q·A_g·f_y/N_e)` e a curva
+  única de χ (5.3.3), que já embute imperfeições e tensões residuais;
+- ações majoradas na própria página (`N_Sd = γ_g·N_g + γ_q·N_q`, Tabela 1) ou
+  `N_Sd` já de cálculo; resistência minorada por `γ_a1 = 1,10`;
+- forças de flambagem elástica do Anexo E — flexão em x e y, torção (`N_ez`)
+  e o modo flexo-torcional das seções monossimétricas — e fator `Q = Q_s·Q_a`
+  de flambagem local do Anexo F, com a tabela de esbeltez das paredes;
+- K teórico ou **recomendado para projeto** (Tabela E.1) por condição de
+  apoio, `Kx ≠ Ky` e `Kz` para torção;
+- **flexocompressão** (5.5.1.2): excentricidade da força e/ou momentos de
+  cálculo, amplificados por `B_1 = C_m/(1 − N_Sd/N_e)` (Anexo D), contra
+  `M_Rd` do Anexo G na equação de interação;
+- reprovação automática com `KL/r > 200` (5.3.4.1), avisos de K fora da faixa
+  física e unidades implausíveis, registro no projeto com o modo governante e
+  curva χ·Q·f_y/γ_a1 × λ no memorial.
 
 ### Projeto de juntas parafusadas
 

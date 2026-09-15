@@ -143,7 +143,7 @@ if modulo == "Comece aqui":
             [
                 "Peça esbelta sob compressão (coluna, escora, tirante invertido)",
                 "Flambagem de colunas",
-                "Obter esbeltez e a carga crítica de Euler/Johnson",
+                "Verificar N_c,Rd = χ·Q·A_g·f_y/γ_a1 e a interação N + M pela NBR 8800",
             ],
             [
                 "Carga ou tensão máxima e mínima de um ciclo",
@@ -461,7 +461,7 @@ elif modulo == "Casos de carga":
         5. Repita para operação, resistência, serviço, teste e condições excepcionais aplicáveis.
         6. No envelope, confira o mínimo, o máximo e a combinação governante de cada componente.
         7. Abra o vetor completo governante antes de transferir esforços para outra análise.
-        8. Registre o envelope no projeto para que o contrato, a validação e o memorial o rastreiem.
+        8. Registre o envelope no projeto para que o contrato e a validação o rastreiem (o memorial não reproduz casos e combinações).
         """
     )
     mostrar_exemplo(
@@ -541,33 +541,33 @@ elif modulo == "Central de validação":
 
 
 elif modulo == "Central de relatórios":
-    st.header("Central modular de relatórios")
+    st.header("Central de relatórios: o memorial de cálculo")
     st.write(
-        "A central gera Word e PDF a partir da mesma revisão do projeto. Você escolhe o perfil, "
-        "as seções, a ordem dos capítulos e os registros técnicos que entram na emissão."
+        "A central gera Word e PDF a partir da mesma revisão do projeto. Os cálculos "
+        "registrados entram completos — entradas, equações, resultados, figuras, premissas "
+        "e conclusão — e o que o programa não sabe fica marcado com “[a preencher]”, para "
+        "completar no Word. Você escolhe o perfil, as seções, a ordem dos capítulos e os "
+        "registros que entram na emissão."
     )
     st.dataframe(
         pd.DataFrame(
             [
                 [
-                    "Resumo executivo",
-                    "Decisão rápida e situação geral",
-                    "Escopo, itens, normas, validação e conclusão",
-                ],
-                [
                     "Memorial industrial completo",
                     "Revisão técnica e arquivo do projeto",
-                    "Todas as seções, cargas, registros e apêndices",
-                ],
-                [
-                    "Dossiê de validação",
-                    "Tratamento de lacunas e liberação",
-                    "Base, normas, cálculos, achados e checklist",
+                    "Escopo, base, peças, materiais, quadro-resumo, memória de cálculo, "
+                    "sensibilidade e conclusão",
                 ],
                 [
                     "Memorial de cálculos",
                     "Verificação detalhada",
-                    "Plano, materiais, capítulos, sensibilidade e conclusão",
+                    "Escopo, base, quadro-resumo, memória de cálculo, vigas, sensibilidade "
+                    "e conclusão",
+                ],
+                [
+                    "Resumo executivo",
+                    "Leitura rápida",
+                    "Escopo, peças, materiais, quadro-resumo dos cálculos e conclusão",
                 ],
             ],
             columns=["Perfil", "Uso", "Conteúdo sugerido"],
@@ -579,10 +579,10 @@ elif modulo == "Central de relatórios":
         """
         1. Abra a revisão correta do projeto permanente.
         2. Escolha o perfil e ajuste as seções.
-        3. Marque os registros aplicáveis, defina a ordem e trate as lacunas de integridade.
+        3. Marque os cálculos aplicáveis e defina a ordem dos capítulos.
         4. Preencha código, revisão, situação, elaborador, verificador e aprovador.
-        5. Confira o sumário, a integridade, a prontidão e o hash do snapshot.
-        6. Gere os dois formatos. Use o Word na revisão e o PDF na distribuição controlada.
+        5. Confira o sumário planejado e gere os dois formatos.
+        6. Complete no Word o que saiu como “[a preencher]” (Ctrl+F encontra tudo), revise e assine.
         7. Se algum dado mudar, crie a revisão adequada e gere os arquivos novamente.
         """
     )
@@ -592,14 +592,14 @@ elif modulo == "Central de relatórios":
             ["Documento", "MC-CV204-001"],
             ["Revisão", "02"],
             ["Situação", "Para verificação"],
-            ["Registros", "Casos de carga; combinações; análise 2D; verificação das barras"],
-            ["Formatos", "DOCX para comentários + PDF para protocolo"],
+            ["Cálculos", "Análise estática; flambagem da coluna; verificação das barras"],
+            ["Formatos", "DOCX para completar e comentar + PDF para protocolo"],
         ],
-        "O relatório preserva a conclusão de cada registro e lista os achados da Central de Validação.",
+        "O memorial preserva a conclusão de cada cálculo e deixa a conclusão geral para o responsável.",
     )
     st.warning(
         "Gerar o documento não aprova o projeto. Antes da emissão, confira fontes, cálculos, "
-        "edições normativas, pendências e assinaturas.",
+        "edições normativas e assinaturas.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/central_relatorios.py", "Abrir central de relatórios")
@@ -1075,34 +1075,50 @@ elif modulo == "Vigas e eixos":
 elif modulo == "Flambagem de colunas":
     st.header("Flambagem de colunas")
     st.markdown(
-        "Use para uma **peça esbelta sob compressão** (coluna, escora, haste "
-        "de cilindro, montante comprimido) — a tensão σ = F/A sozinha não "
-        "avisa quando a peça vai flambar antes de escoar."
+        "Use para uma **peça esbelta sob compressão** (coluna, escora, montante "
+        "comprimido, coluna que recebe uma mão-francesa) — a tensão σ = F/A "
+        "sozinha não avisa quando a peça vai flambar antes de escoar. A "
+        "verificação segue a **NBR 8800:2008** (estados-limites): ações "
+        "majoradas, resistência minorada e curva de flambagem χ."
     )
     mostrar_tabela_campos(
         [
             [
                 "Seção",
-                "Geometria da peça (retangular, circular, tubo, perfil ou A/r direto)",
+                "Geometria da peça (retangular, circular, tubo, perfil ou A/r direto). Só com perfil/geometria a norma calcula Q e N_ez",
                 "Desenho ou catálogo do perfil",
             ],
             ["L", "Comprimento real da coluna, em mm", "Desenho ou montagem"],
             [
                 "Condição de apoio",
-                "K do caso mais próximo do apoio real — teórico ou recomendado de norma (AISC/NBR), que é maior nos casos com engaste",
+                "K da Tabela E.1 mais próximo do apoio real — teórico ou recomendado para projeto, que é maior nos casos com engaste",
                 "Croqui de fixação nas extremidades",
             ],
-            ["E", "Módulo de elasticidade do material, em MPa", "Certificado ou catálogo"],
-            ["Sy", "Limite de escoamento, em MPa", "Certificado ou base do material"],
             [
-                "P",
-                "Força de compressão atuante, em kN (só magnitude)",
-                "Assistente de cargas ou análise do equipamento",
+                "Kx, Ky, Kz",
+                "Fatores por eixo quando o contraventamento é diferente; Kz é o da torção",
+                "Travamentos laterais",
             ],
             [
-                "e (opcional)",
-                "Excentricidade da carga em relação ao centroide, em mm; L/1000 a L/500 representa a imperfeição de uma coluna real",
-                "Detalhe da ligação ou tolerância de montagem",
+                "E, G",
+                "Módulos de elasticidade e de cisalhamento, em MPa (aço: 200 000 e 77 000)",
+                "NBR 8800 4.5.2.9",
+            ],
+            ["f_y", "Resistência ao escoamento, em MPa", "Certificado ou base do material"],
+            [
+                "N_g, N_q ou N_Sd",
+                "Cargas características permanente e variável (majoradas por γ_g e γ_q da Tabela 1) ou N_Sd já de cálculo, em kN",
+                "Casos de carga / Assistente de cargas",
+            ],
+            [
+                "e, M_x,Sd, M_y,Sd",
+                "Excentricidade da força (mm) e/ou momentos de cálculo de 1ª ordem (kN·m) — força inclinada de mão-francesa gera os dois",
+                "Detalhe da ligação e análise do nó",
+            ],
+            [
+                "C_m, L_b, C_b",
+                "Coeficiente de equivalência de momentos (1,0 conservador), comprimento destravado e fator de modificação para a FLT",
+                "Travamentos da mesa comprimida",
             ],
         ]
     )
@@ -1112,13 +1128,14 @@ elif modulo == "Flambagem de colunas":
         1. Escolha o tipo de seção e informe suas dimensões (ou perfil de catálogo).
         2. Informe o comprimento real e a condição de apoio mais próxima da real —
            deixe o K recomendado de norma ligado, salvo se a ligação for de fato ideal.
-        3. Informe E, Sy e a força de compressão atuante; se a carga não passa pelo
-           centroide, informe a excentricidade.
-        4. Compare a esbeltez governante com a esbeltez de transição.
-        5. Leia o regime (Euler ou Johnson), a carga admissível e, com excentricidade,
-           a carga de escoamento pela secante — vale o pior dos dois.
-        6. Leia os avisos: parede esbelta (flambagem local), λ acima de 200 ou K
-           fora da faixa mudam a conclusão mesmo com a conta "atendendo".
+        3. Informe E, G e f_y; escolha entre majorar aqui as cargas características
+           (γ_g·N_g + γ_q·N_q) ou informar N_Sd já de cálculo.
+        4. Se a força não passa pelo centroide ou há momento no nó, informe a
+           excentricidade e/ou M_Sd: eles entram amplificados por B_1 na interação.
+        5. Leia N_ex, N_ey, N_ez (Anexo E), Q (Anexo F), λ_0 e χ (5.3.3) e a
+           resistência N_c,Rd = χ·Q·A_g·f_y/γ_a1.
+        6. Leia a utilização governante: compressão, flexão ou interação N + M
+           (5.5.1.2). KL/r acima de 200 reprova por si só (5.3.4.1).
         """
     )
     mostrar_exemplo(
@@ -1126,43 +1143,44 @@ elif modulo == "Flambagem de colunas":
             ["Seção", "Circular maciça, d = 50 mm"],
             ["L", "2000 mm"],
             ["Condição de apoio", "Biapoiada (pino-pino), K = 1,0"],
-            ["E", "200000 MPa"],
-            ["Sy", "250 MPa"],
-            ["P", "50 kN"],
+            ["E / f_y", "200000 MPa / 250 MPa"],
+            ["N_g / N_q", "30 kN (γ_g = 1,40) / 20 kN (γ_q = 1,40) → N_Sd = 70 kN"],
         ],
-        "Resultado esperado: λ ≈ 160 (maior que λ de transição ≈ 125,7, "
-        "portanto regime de Euler); Pcr ≈ 151,4 kN; com fator de segurança "
-        "2,0 a carga admissível é ≈ 75,7 kN — utilização de 66% para os 50 kN "
-        "aplicados.",
+        "Resultado esperado: λ = 160; N_e = 151,4 kN (Euler, só referência); "
+        "λ_0 = 1,80 > 1,5, portanto χ = 0,877/λ_0² = 0,270; Q = 1,0 (seção maciça); "
+        "N_c,Rd = 0,270 × 1963 × 250 / 1,10 ≈ 120,7 kN — utilização de 58 % para "
+        "N_Sd = 70 kN. Repare que a norma dá 80 % da carga de Euler mesmo na "
+        "coluna longa: é o efeito das imperfeições e tensões residuais.",
     )
     with st.container(border=True):
         st.subheader("Como interpretar")
         st.markdown(
             """
-            - **λ ≥ λ de transição:** regime de **Euler** — coluna longa,
-              carga crítica cai com o quadrado do comprimento destravado.
-            - **λ < λ de transição:** regime de **Johnson** — coluna curta ou
-              intermediária, Euler sozinho superestimaria a resistência.
-            - **Eixo governante:** o de maior esbeltez — geralmente o eixo
-              mais "fraco" (menor raio de giração) ou com maior K·L.
-            - **Utilização > 100%:** a carga admissível (crítica ÷ fator de
-              segurança escolhido) foi excedida.
-            - Dobrar o comprimento destravado L divide a carga crítica de
-              Euler por 4 — é a variável mais sensível deste cálculo.
-            - **Secante (com excentricidade):** a carga de escoamento P_y fica
-              sempre abaixo da crítica de Euler, mesmo com e pequeno — é o que
-              uma coluna real faz. Se P_y ÷ P for menor que o fator desejado,
-              a excentricidade governa.
-            - **Aviso de flambagem local:** a parede (mesa, alma, tubo) é mais
-              esbelta que o limite de norma; a capacidade real é menor que a
-              calculada e a verificação normativa fica em Estruturas de aço.
+            - **N_e (Anexo E):** a menor força de flambagem elástica entre flexão
+              em x, flexão em y, torção (N_ez) e o modo acoplado das seções
+              monossimétricas (U, T). Perfis abertos podem torcer antes de fletir.
+            - **Q (Anexo F):** menor que 1,0 quando alguma parede (mesa, alma,
+              tubo) é mais esbelta que λ_r — a flambagem local reduz a área que
+              trabalha.
+            - **λ_0 e χ (5.3.3):** λ_0 = √(Q·A_g·f_y/N_e); χ = 0,658^(λ_0²) até 1,5
+              e 0,877/λ_0² acima. χ substitui o fator de segurança global do modelo
+              elementar e já inclui imperfeições e tensões residuais.
+            - **Eixo governante:** o de maior esbeltez — geralmente o eixo mais
+              "fraco" (menor raio de giração) ou com maior K·L.
+            - **B_1 (Anexo D):** amplifica o momento de 1ª ordem pela compressão,
+              B_1 = C_m/(1 − N_Sd/N_e). Se N_Sd chega a N_e, B_1 diverge: a coluna
+              não tem rigidez para a carga.
+            - **Interação (5.5.1.2):** N_Sd/N_Rd + 8/9·(M_x,Sd/M_x,Rd + M_y,Sd/M_y,Rd)
+              ≤ 1,0 (ou N_Sd/(2N_Rd) + … quando N_Sd/N_Rd < 0,2). É a verificação
+              obrigatória quando a força chega fora do eixo.
+            - **Utilização > 100 %:** algum estado-limite (compressão, flexão,
+              interação ou KL/r > 200) não atende.
             """
         )
     st.warning(
-        "Este é o modelo elementar de Euler/Johnson com a secante como opção: "
-        "coluna prismática, elástica, sem flambagem local ou torcional "
-        "(o programa só avisa quando elas podem governar). Para perfis de aço "
-        "conforme norma (NBR 8800/AISC), use Estruturas de aço.",
+        "Verificação de barra isolada: os efeitos globais de 2ª ordem (B_2, "
+        "deslocabilidade), as cargas nocionais e as ligações pertencem à análise "
+        "da estrutura — módulo Estruturas de aço (pórtico 2D, placa de base).",
         icon=":material/warning:",
     )
     link_modulo("app_pages/flambagem_colunas.py", "Abrir Flambagem de colunas")

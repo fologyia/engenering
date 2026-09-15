@@ -9,26 +9,16 @@ from html import escape
 from io import BytesIO
 from typing import Any
 
+from core.pdf_fonts import FontePdf, fonte_pdf, texto_para_fonte
 
-def _texto(valor: Any) -> str:
-    """Converte valores para texto seguro nos parágrafos do ReportLab."""
-    substituicoes = {
-        "—": "-",
-        "–": "-",
-        "×": "x",
-        "·": "*",
-        "≤": "<=",
-        "≥": ">=",
-        "∞": "infinito",
-        "σ": "sigma",
-        "τ": "tau",
-        "⁸": "8",
-        "³": "3",
-    }
-    resultado = str(valor)
-    for origem, destino in substituicoes.items():
-        resultado = resultado.replace(origem, destino)
-    return escape(resultado)
+
+def _texto(valor: Any, *, fonte: FontePdf | None = None) -> str:
+    """Converte valores para texto seguro nos parágrafos do ReportLab.
+
+    Com uma fonte TrueType Unicode o texto sai como está; com a Helvetica
+    embutida, símbolos que ela não tem viram a grafia ASCII equivalente.
+    """
+    return escape(texto_para_fonte(str(valor), fonte or fonte_pdf()))
 
 
 def _numero(valor: float | None, casas: int = 3) -> str:
@@ -37,23 +27,6 @@ def _numero(valor: float | None, casas: int = 3) -> str:
     if math.isinf(valor):
         return "Infinito"
     return f"{valor:.{casas}f}".replace(".", ",")
-
-
-def _status_projeto(dados: Mapping[str, Any]) -> tuple[str, str]:
-    fatores = [
-        dados.get("n_goodman"),
-        dados.get("n_soderberg"),
-        dados.get("n_escoamento"),
-    ]
-    validos = [float(valor) for valor in fatores if valor is not None]
-    if not validos:
-        return "RESULTADO INCONCLUSIVO", "#805B10"
-    menor = min(validos)
-    if menor < 1.0:
-        return "NÃO ATENDE - há fator de segurança menor que 1,0", "#A52A2A"
-    if menor < 1.5:
-        return "ATENÇÃO - menor fator de segurança entre 1,0 e 1,5", "#805B10"
-    return "ATENDE - fatores de segurança calculados >= 1,5", "#1D6B45"
 
 
 def gerar_memorial_fadiga_pdf(
@@ -83,6 +56,7 @@ def gerar_memorial_fadiga_pdf(
             "Instale as dependências de requirements.txt."
         ) from erro
 
+    fonte = fonte_pdf()
     azul = colors.HexColor("#16324F")
     azul_claro = colors.HexColor("#EAF2F8")
     cinza = colors.HexColor("#5F6B76")
@@ -107,7 +81,7 @@ def gerar_memorial_fadiga_pdf(
     titulo = ParagraphStyle(
         "TituloMemorial",
         parent=estilos_base["Title"],
-        fontName="Helvetica-Bold",
+        fontName=fonte.negrito,
         fontSize=19,
         leading=23,
         textColor=azul,
@@ -117,7 +91,7 @@ def gerar_memorial_fadiga_pdf(
     subtitulo = ParagraphStyle(
         "SubtituloMemorial",
         parent=estilos_base["Normal"],
-        fontName="Helvetica",
+        fontName=fonte.regular,
         fontSize=9,
         leading=12,
         textColor=cinza,
@@ -126,7 +100,7 @@ def gerar_memorial_fadiga_pdf(
     secao = ParagraphStyle(
         "SecaoMemorial",
         parent=estilos_base["Heading2"],
-        fontName="Helvetica-Bold",
+        fontName=fonte.negrito,
         fontSize=12,
         leading=15,
         textColor=azul,
@@ -136,7 +110,7 @@ def gerar_memorial_fadiga_pdf(
     corpo = ParagraphStyle(
         "CorpoMemorial",
         parent=estilos_base["BodyText"],
-        fontName="Helvetica",
+        fontName=fonte.regular,
         fontSize=8.5,
         leading=12,
         textColor=colors.HexColor("#26323D"),
@@ -145,7 +119,7 @@ def gerar_memorial_fadiga_pdf(
     formula = ParagraphStyle(
         "FormulaMemorial",
         parent=corpo,
-        fontName="Courier",
+        fontName=fonte.regular,
         fontSize=8,
         leading=11,
         leftIndent=4 * mm,
@@ -167,20 +141,15 @@ def gerar_memorial_fadiga_pdf(
         "CentralMemorial",
         parent=corpo,
         alignment=TA_CENTER,
-        fontName="Helvetica-Bold",
+        fontName=fonte.negrito,
         fontSize=9,
         leading=11,
         spaceAfter=0,
     )
-    status_texto = ParagraphStyle(
-        "StatusMemorial",
-        parent=central,
-        textColor=branco,
-    )
     pequeno_cabecalho = ParagraphStyle(
         "PequenoCabecalhoMemorial",
         parent=pequeno,
-        fontName="Helvetica-Bold",
+        fontName=fonte.negrito,
         textColor=branco,
     )
 
@@ -223,25 +192,6 @@ def gerar_memorial_fadiga_pdf(
         )
     )
     historia.append(tabela_identificacao)
-    historia.append(Spacer(1, 4 * mm))
-
-    texto_status, cor_status = _status_projeto(dados)
-    status = Table(
-        [[Paragraph(_texto(texto_status), status_texto)]],
-        colWidths=[174 * mm],
-    )
-    status.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(cor_status)),
-                ("TEXTCOLOR", (0, 0), (-1, -1), branco),
-                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor(cor_status)),
-                ("TOPPADDING", (0, 0), (-1, -1), 7),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ]
-        )
-    )
-    historia.append(status)
     historia.append(Spacer(1, 4 * mm))
 
     cards = [
@@ -443,7 +393,7 @@ def gerar_memorial_fadiga_pdf(
         canvas.setStrokeColor(borda)
         canvas.setLineWidth(0.4)
         canvas.line(16 * mm, 13 * mm, 194 * mm, 13 * mm)
-        canvas.setFont("Helvetica", 7)
+        canvas.setFont(fonte.regular, 7)
         canvas.setFillColor(cinza)
         canvas.drawString(16 * mm, 8.5 * mm, "Mecânica Toolkit - memorial de fadiga")
         canvas.drawRightString(

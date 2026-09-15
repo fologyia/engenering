@@ -16,6 +16,7 @@ from components.project_tools import (
 )
 from components.ui import cabecalho_pagina
 from core.project_report import (
+    MODULOS_FORA_DO_MEMORIAL,
     SECOES_RELATORIO,
     avaliar_integridade_registro,
     gerar_relatorio_industrial_pdf,
@@ -23,45 +24,35 @@ from core.project_report import (
     montar_modelo_relatorio,
 )
 from core.project_store import EVENTO_EMISSAO, salvar_projeto
-from core.project_validation import validar_projeto
 from core.technical_records import registro_superado, rotulo_componente
 
 PERFIS = {
     "Memorial industrial completo": list(SECOES_RELATORIO),
-    "Resumo executivo": [
-        "escopo",
-        "carregamentos",
-        "componentes",
-        "materiais",
-        "normas",
-        "sensibilidade",
-        "validacao",
-        "conclusao",
-    ],
-    "Dossiê de validação": [
-        "base",
-        "carregamentos",
-        "materiais",
-        "normas",
-        "plano_calculo",
-        "registros",
-        "sensibilidade",
-        "validacao",
-        "checklist",
-        "conclusao",
-    ],
     "Memorial de cálculos": [
         "escopo",
         "base",
-        "carregamentos",
-        "materiais",
-        "normas",
         "plano_calculo",
         "registros",
+        "vigas_eixos",
         "sensibilidade",
         "conclusao",
     ],
+    "Resumo executivo": [
+        "escopo",
+        "componentes",
+        "materiais",
+        "plano_calculo",
+        "conclusao",
+    ],
 }
+PERFIL_PADRAO = "Memorial industrial completo"
+SUBTITULO_PADRAO = "Base de projeto e memória de cálculo"
+
+
+def _entra_no_memorial(registro: dict) -> bool:
+    """Registros de Círculo de Mohr e de casos de carga ficam fora do memorial."""
+    return str(registro.get("modulo_id") or "").strip().casefold() not in MODULOS_FORA_DO_MEMORIAL
+
 
 st.set_page_config(
     page_title="Central de relatórios",
@@ -76,7 +67,7 @@ cabecalho_pagina(
     icone=":material/description:",
     cor="blue",
     ajuda_modulo="Central de relatórios",
-    acoes=(("app_pages/central_validacao.py", "Validação", ":material/fact_check:"),),
+    acoes=(("app_pages/gestao_projetos.py", "Projeto", ":material/folder_managed:"),),
 )
 
 sincronizar_projeto_ativo()
@@ -135,37 +126,10 @@ def _registrar_emissao(
 
 st.subheader(f"{projeto['codigo']} · {projeto['nome']}")
 st.caption(
-    "O Word é indicado para revisão, comentários e assinatura. O PDF preserva o layout para distribuição. "
+    "O Word é o molde para completar e assinar: os cálculos já entram prontos e os campos "
+    "em aberto ficam marcados com “[a preencher]”. O PDF preserva o layout para distribuição. "
     "Ambos são gerados a partir do mesmo conjunto de dados."
 )
-
-# Situação do projeto antes de qualquer configuração: emitir um memorial com
-# bloqueio aberto é a coisa que mais custa caro aqui, e a página só avisava
-# disso depois de rolar até a prévia.
-_validacao_projeto = validar_projeto(projeto)
-_bloqueios = [
-    achado for achado in _validacao_projeto["achados"] if achado["severidade"] == "Bloqueio"
-]
-with st.container(border=True):
-    _a, _b, _c = st.columns(3)
-    _a.metric("Índice documental", f"{_validacao_projeto['indice_documental']}%", border=True)
-    _b.metric("Bloqueios abertos", len(_bloqueios), border=True)
-    _c.metric("Registros no projeto", len(projeto.get("registros_tecnicos", [])), border=True)
-    if _bloqueios:
-        st.warning(
-            "O memorial pode ser emitido assim mesmo, e os bloqueios aparecem "
-            "sinalizados nele — mas convém resolvê-los antes: "
-            + "; ".join(achado["titulo"] for achado in _bloqueios[:4])
-            + ("…" if len(_bloqueios) > 4 else "."),
-            icon=":material/gavel:",
-        )
-        st.page_link(
-            "app_pages/gestao_projetos.py",
-            label="Resolver em Gestão de projetos",
-            icon=":material/arrow_forward:",
-        )
-    else:
-        st.success("Sem bloqueios abertos no projeto.", icon=":material/check_circle:")
 
 # ---------------------------------------------------------------------------
 # Emissão direta
@@ -178,14 +142,20 @@ with st.container(border=True):
 
 _config_projeto = projeto.get("configuracao_relatorio", {})
 _ident_projeto = _config_projeto.get("identificacao", {})
-_perfil_rapido = _config_projeto.get("perfil", "Memorial industrial completo")
+_perfil_rapido = _config_projeto.get("perfil", PERFIL_PADRAO)
 if _perfil_rapido not in PERFIS:
-    _perfil_rapido = "Memorial industrial completo"
-_secoes_rapidas = _config_projeto.get("secoes") or PERFIS[_perfil_rapido]
+    _perfil_rapido = PERFIL_PADRAO
+# Seções gravadas por versões antigas do programa (validação, checklist,
+# normas, cargas) já não existem; o que sobrar vazio cai no perfil.
+_secoes_rapidas = [
+    chave for chave in _config_projeto.get("secoes") or [] if chave in SECOES_RELATORIO
+] or PERFIS[_perfil_rapido]
 # Registros superados não entram por padrão: o cálculo que os substituiu é
 # o que responde pela peça. Quem quiser anexá-los marca na composição abaixo.
 _ids_vigentes = [
-    item["id"] for item in projeto.get("registros_tecnicos", []) if not registro_superado(item)
+    item["id"]
+    for item in projeto.get("registros_tecnicos", [])
+    if not registro_superado(item) and _entra_no_memorial(item)
 ]
 _registros_rapidos = [
     valor
@@ -193,9 +163,8 @@ _registros_rapidos = [
     if valor in _ids_vigentes
 ]
 _metadata_rapida = {
-    "titulo": _ident_projeto.get("titulo") or "Memorial técnico do projeto industrial",
-    "subtitulo": _ident_projeto.get("subtitulo")
-    or "Base de projeto, registros técnicos e central de validação",
+    "titulo": _ident_projeto.get("titulo") or "Memorial de cálculo do projeto industrial",
+    "subtitulo": _ident_projeto.get("subtitulo") or SUBTITULO_PADRAO,
     "codigo": _ident_projeto.get("codigo") or projeto["codigo"],
     "revisao": f"{int(projeto.get('revisao', 0)):02d}",
     "responsavel": projeto.get("responsavel", ""),
@@ -300,11 +269,9 @@ st.caption(
     "Só é preciso mexer aqui quando o memorial desta emissão for diferente do padrão do projeto."
 )
 
-perfil_padrao = projeto.get("configuracao_relatorio", {}).get(
-    "perfil", "Memorial industrial completo"
-)
+perfil_padrao = projeto.get("configuracao_relatorio", {}).get("perfil", PERFIL_PADRAO)
 if perfil_padrao not in PERFIS:
-    perfil_padrao = "Memorial industrial completo"
+    perfil_padrao = PERFIL_PADRAO
 perfil = (
     st.segmented_control(
         "Perfil documental",
@@ -329,7 +296,8 @@ selecoes = st.multiselect(
     key=chave_secoes,
 )
 
-registros = projeto.get("registros_tecnicos", [])
+registros = [item for item in projeto.get("registros_tecnicos", []) if _entra_no_memorial(item)]
+_fora_do_memorial = len(projeto.get("registros_tecnicos", [])) - len(registros)
 config_salva = projeto.get("configuracao_relatorio", {})
 ordem_salva = {
     str(valor): indice for indice, valor in enumerate(config_salva.get("ordem_registros", []))
@@ -358,11 +326,15 @@ for indice, item in enumerate(registros, start=1):
             "Registro": item.get("titulo", "Registro"),
             "Situação": item.get("status", "Pendente"),
             "Integridade (%)": integridade["percentual"],
-            "Contrato": f"{integridade['contrato']} · assinatura {integridade['assinatura'].lower()}",
             "Lacunas": ", ".join(integridade["faltantes"]),
         }
     )
 st.markdown("##### Composição e ordem dos capítulos")
+if _fora_do_memorial:
+    st.caption(
+        f":material/info: {_fora_do_memorial} registro(s) de Círculo de Mohr ou de casos de "
+        "carga não entram no memorial e não aparecem aqui."
+    )
 if linhas_composicao:
     composicao = st.data_editor(
         pd.DataFrame(linhas_composicao),
@@ -375,7 +347,6 @@ if linhas_composicao:
             "Registro",
             "Situação",
             "Integridade (%)",
-            "Contrato",
             "Lacunas",
         ],
         column_config={
@@ -392,8 +363,10 @@ if linhas_composicao:
             "Integridade (%)": st.column_config.ProgressColumn(
                 min_value=0, max_value=100, format="%d%%"
             ),
-            "Contrato": st.column_config.TextColumn(width="medium"),
-            "Lacunas": st.column_config.TextColumn(width="large"),
+            "Lacunas": st.column_config.TextColumn(
+                width="large",
+                help="Partes do registro que sairão como “[a preencher]” no memorial.",
+            ),
         },
         key=f"composicao_relatorio_{projeto['id']}",
     )
@@ -405,7 +378,8 @@ else:
     ids_registros = []
 if not registros:
     st.info(
-        "O projeto ainda não possui registros técnicos. O relatório pode ser emitido como base documental, com essa pendência sinalizada."
+        "O projeto ainda não possui cálculos registrados. O memorial pode ser emitido como "
+        "molde, com a memória de cálculo vazia."
     )
 
 # O que foi usado na última emissão vira o padrão da próxima: redigitar
@@ -421,12 +395,11 @@ with st.expander("Identificação e controle do documento", expanded=True):
     c1, c2 = st.columns([2, 1])
     titulo = c1.text_input(
         "Título",
-        value=_identificacao_salva.get("titulo") or "Memorial técnico do projeto industrial",
+        value=_identificacao_salva.get("titulo") or "Memorial de cálculo do projeto industrial",
     )
     subtitulo = c1.text_input(
         "Subtítulo",
-        value=_identificacao_salva.get("subtitulo")
-        or "Base de projeto, registros técnicos e central de validação",
+        value=_identificacao_salva.get("subtitulo") or SUBTITULO_PADRAO,
     )
     codigo_documento = c2.text_input(
         "Código do documento",
@@ -477,20 +450,23 @@ m3.metric(
     "Integridade média",
     f"{round(sum(avaliar_integridade_registro(item)['percentual'] for item in modelo['registros']) / max(len(modelo['registros']), 1))}%",
 )
-m4.metric("Prontidão", modelo["validacao"]["prontidao"])
-st.caption(f"Snapshot desta composição: `{modelo['snapshot_hash']}`")
+_sintese = modelo["sintese"]
+m4.metric("Figuras", sum(len(secao.get("imagens", [])) for secao in modelo["secoes"]))
+st.caption(
+    f"Situação declarada pelos módulos: {_sintese['texto']}. "
+    f"Snapshot desta composição: `{modelo['snapshot_hash']}`"
+)
 incompletos = [
     item for item in modelo["registros"] if avaliar_integridade_registro(item)["percentual"] < 100
 ]
 if incompletos:
-    st.warning(
-        f"{len(incompletos)} registro(s) selecionado(s) possuem lacunas estruturais. Consulte a coluna 'Lacunas' antes da emissão."
+    st.info(
+        f"{len(incompletos)} registro(s) selecionado(s) têm partes vazias (coluna 'Lacunas'); "
+        "elas saem no memorial como “[a preencher]”, para completar no Word."
     )
 with st.expander("Sumário planejado"):
     st.markdown("\n".join(f"- {secao['titulo']}" for secao in modelo["secoes"]))
-    st.markdown(f"- {modelo['numero_integracao']}. Integração com outras partes do projeto")
     st.markdown(f"- {modelo['numero_aprovacoes']}. Aprovações")
-    st.markdown("- Apêndice A — quadro consolidado")
 
 if not selecoes:
     st.warning("Selecione ao menos uma seção antes de gerar o documento.")
@@ -614,8 +590,8 @@ with st.expander(f"Histórico de emissões ({len(_emissoes)})", expanded=False):
         )
     else:
         st.caption("Nenhum memorial foi gerado ainda para este projeto.")
-st.warning(
-    "A geração do relatório organiza os dados e achados disponíveis. Ela não substitui a conferência dos "
-    "cálculos, das normas aplicáveis, dos documentos de entrada nem a aprovação do responsável técnico.",
-    icon=":material/gavel:",
+st.caption(
+    "O memorial reúne os cálculos registrados e os dados do projeto. Ele não substitui a "
+    "conferência dos cálculos, das normas aplicáveis e dos documentos de entrada, nem a "
+    "aprovação do responsável técnico."
 )

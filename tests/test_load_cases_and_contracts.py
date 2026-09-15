@@ -111,19 +111,17 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
     assert resolver_modulo("Linha elástica").id == "vigas_eixos"
 
 
-def test_relatorio_e_validacao_consumem_extensao_de_carregamentos():
+def test_validacao_consome_as_cargas_e_o_memorial_as_omite():
     projeto = _projeto_documentado()
     projeto["casos_carga"] = _casos()
     projeto["combinacoes_carga"] = [
         criar_combinacao_carga(nome="Operação", fatores={"LC-1": 1.0, "LC-2": 1.0})
     ]
+    # Casos e combinações são cadastro do projeto, cobrados pela validação;
+    # o memorial de cálculo não os reproduz.
     modelo = montar_modelo_relatorio(projeto)
-    assert any("Casos, combinações e envelopes" in secao["titulo"] for secao in modelo["secoes"])
-    assert any(
-        "Casos de carga permanentes" in tabela.get("legenda", "")
-        for secao in modelo["secoes"]
-        for tabela in secao.get("tabelas", [])
-    )
+    assert not any("Casos, combinações" in secao["titulo"] for secao in modelo["secoes"])
+    assert "LC-1" not in str(modelo["secoes"])
     validacao = validar_projeto(projeto)
     assert not any(
         item["categoria"] == "Carregamentos" and item["severidade"] == "Bloqueio"

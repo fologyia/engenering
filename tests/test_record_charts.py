@@ -1,6 +1,5 @@
 """Gráficos redesenhados para os capítulos dos registros no memorial."""
 
-import math
 from io import BytesIO
 
 from docx import Document
@@ -39,19 +38,22 @@ def test_mohr_2d_e_3d_geram_png():
 
 
 def test_flambagem_gera_png_e_ignora_registro_incompleto():
-    transicao = math.sqrt(2 * math.pi**2 * 200000.0 / 250.0)
     completo = imagens_flambagem(
         {
             "modulo_elasticidade_MPa": 200000.0,
             "escoamento_MPa": 250.0,
             "area_mm2": 1963.5,
-            "forca_solicitante_kN": 50.0,
+            "forca_solicitante_kN": 70.0,
+            "gamma_a1": 1.10,
         },
         {
             "esbeltez_governante": 160.0,
-            "esbeltez_transicao": transicao,
-            "carga_critica_kN": 151.4,
-            "fator_seguranca": 3.03,
+            "chi": 0.270,
+            "lambda_0": 1.80,
+            "fator_q": 1.0,
+            "resistencia_kN": 120.7,
+            "utilizacao": 0.58,
+            "modo_governante": "Compressão N_c,Rd (5.3)",
         },
     )
     assert len(completo) == 1
@@ -59,28 +61,25 @@ def test_flambagem_gera_png_e_ignora_registro_incompleto():
     assert imagens_flambagem({"modulo_elasticidade_MPa": 200000.0}, {}) == []
 
 
-def test_flambagem_marca_a_carga_de_escoamento_pela_secante():
-    transicao = math.sqrt(2 * math.pi**2 * 200000.0 / 250.0)
+def test_flambagem_anota_a_interacao_e_o_q_reduzido():
     entradas = {
         "modulo_elasticidade_MPa": 200000.0,
         "escoamento_MPa": 250.0,
         "area_mm2": 1963.5,
         "forca_solicitante_kN": 50.0,
-        "excentricidade_mm": 5.0,
     }
     resultados = {
         "esbeltez_governante": 160.0,
-        "esbeltez_transicao": transicao,
-        "carga_critica_kN": 151.4,
-        "fator_seguranca": 3.03,
-        "carga_escoamento_secante_kN": 109.9,
+        "chi": 0.270,
+        "fator_q": 0.8,
+        "resistencia_kN": 96.5,
+        "indice_interacao": 0.49,
     }
     imagens = imagens_flambagem(entradas, resultados)
     assert len(imagens) == 1
     _png_valido(imagens[0].png)
-    # Sem excentricidade registrada o marcador simplesmente não entra —
-    # o gráfico continua saindo.
-    sem = imagens_flambagem({**entradas, "excentricidade_mm": 0.0}, resultados)
+    # Sem N_Sd registrado a linha da solicitante simplesmente não entra.
+    sem = imagens_flambagem({**entradas, "forca_solicitante_kN": None}, resultados)
     assert len(sem) == 1
 
 
@@ -115,17 +114,31 @@ def test_imagens_do_registro_despacha_por_modulo():
 
 
 def test_memorial_embute_grafico_no_capitulo_do_registro():
+    # A flambagem tem desenhista e entra no memorial (o Círculo de Mohr
+    # também desenha, mas fica fora do memorial por decisão de projeto).
     projeto = _projeto_documentado()
     projeto["registros_tecnicos"] = [
         normalizar_registro_tecnico(
             criar_registro_tecnico(
-                modulo="Círculo de Mohr",
-                modulo_id="circulo_mohr",
-                titulo="Ponto A",
-                status="Calculado",
+                modulo="Flambagem de colunas",
+                modulo_id="flambagem_colunas",
+                titulo="Coluna P1",
+                status="Atende",
                 resumo="",
-                entradas={"sigma_x_MPa": 50, "sigma_y_MPa": 10, "tau_xy_MPa": 20},
-                resultados={"von_mises_MPa": 55.7},
+                entradas={
+                    "modulo_elasticidade_MPa": 200_000.0,
+                    "escoamento_MPa": 250.0,
+                    "area_mm2": 1963.5,
+                    "forca_solicitante_kN": 60.0,
+                },
+                resultados={
+                    "esbeltez_governante": 120.0,
+                    "chi": 0.45,
+                    "fator_q": 1.0,
+                    "resistencia_kN": 200.0,
+                    "utilizacao": 0.30,
+                    "modo_governante": "Compressão N_c,Rd (5.3)",
+                },
             )
         )
     ]

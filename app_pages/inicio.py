@@ -134,7 +134,7 @@ modulos = [
         "Central de relatórios",
         ":material/description:",
         "Word e PDF modulares",
-        "Monta um memorial unificado com capítulos ordenados, materiais, sensibilidade e snapshot reproduzível.",
+        "Monta o memorial de cálculo como molde: cálculos completos, agrupados por peça, e campos em aberto marcados para preencher.",
         "app_pages/central_relatorios.py",
         "green",
     ),

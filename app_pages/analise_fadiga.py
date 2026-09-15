@@ -1868,7 +1868,7 @@ with st.container(border=True):
                     step=100_000.0,
                     format="%.0f",
                     key="fadiga_vida_requerida_memorial",
-                    help="Use 0 quando o requisito ainda não estiver definido; o relatório marcará a pendência.",
+                    help="Use 0 quando o requisito ainda não estiver definido; o memorial registra que a vida mínima não foi informada.",
                     persist_state="session",
                 )
         observacoes_memorial = st.text_area(
@@ -1958,8 +1958,8 @@ with st.container(border=True):
             width="stretch",
             on_click="ignore",
             help=(
-                "Gera um DOCX com resumo executivo, critérios, memória completa, "
-                "pendências, checklist, aprovações e integração de outras partes."
+                "Gera um DOCX com resumo executivo, referências, premissas, dados de "
+                "entrada, memória de cálculo completa, resultados, conclusão e aprovações."
             ),
         )
     with pdf_col:

@@ -1,4 +1,11 @@
-"""Relatórios modulares do projeto industrial permanente."""
+"""Memorial de cálculo do projeto industrial permanente, em Word e PDF.
+
+O documento é um molde: os cálculos registrados pelos módulos entram
+completos (entradas, equações, resultados, figuras, premissas e conclusão),
+o restante fica marcado com :data:`A_PREENCHER` para o responsável completar
+no Word. Nada aqui julga o projeto — validação, checklist e bloqueios são
+assunto das páginas de gestão, não do memorial.
+"""
 
 from __future__ import annotations
 
@@ -12,28 +19,36 @@ from io import BytesIO
 from typing import Any
 
 from core.materials_registry import avaliar_material, resumir_fonte
-from core.memorial_word import CAUTION, POSITIVE, RISK, gerar_memorial_word_padrao
+from core.memorial_word import gerar_memorial_word_padrao
+from core.pdf_fonts import fonte_pdf, texto_para_fonte
 from core.project_criteria import normalizar_criterios_projeto, resumo_criterios_projeto
-from core.project_validation import validar_projeto
 from core.record_charts import imagens_do_registro
 from core.report_plugins import listar_provedores, titulos_secoes_extensao
 from core.technical_records import (
+    SEPARADOR_PECA,
     agrupar_registros_por_componente,
     avaliar_contrato_registro,
     rotulo_componente,
 )
 
+#: Marca de campo a completar à mão. É o que faz o memorial servir de molde:
+#: no Word, um Ctrl+F por este texto percorre tudo o que ainda falta.
+A_PREENCHER = "[a preencher]"
+
+#: Módulos cujos registros ficam fora do memorial mesmo existindo no projeto:
+#: casos e combinações de carga são cadastro, não verificação, e o Círculo
+#: de Mohr é etapa intermediária — a verificação que interessa é a análise
+#: que consome o estado de tensões.
+MODULOS_FORA_DO_MEMORIAL = frozenset({"casos_carga", "circulo_mohr"})
+
 _SECOES_BASE = (
     ("escopo", "Objetivo e escopo"),
     ("base", "Base de projeto"),
     ("componentes", "Equipamentos e escopo físico"),
-    ("materiais", "Materiais e propriedades rastreadas"),
-    ("normas", "Matriz normativa"),
-    ("plano_calculo", "Plano e integridade dos cálculos"),
-    ("registros", "Registros técnicos"),
+    ("materiais", "Materiais"),
+    ("plano_calculo", "Quadro-resumo dos cálculos"),
+    ("registros", "Memória de cálculo"),
     ("sensibilidade", "Sensibilidade, incertezas e robustez"),
-    ("validacao", "Central de validação"),
-    ("checklist", "Pendências e checklist"),
     ("conclusao", "Conclusão e recomendações"),
 )
 
@@ -61,6 +76,24 @@ def _texto(valor: Any, padrao: str = "Não informado") -> str:
     return texto or padrao
 
 
+def _campo(valor: Any) -> str:
+    """Campo de projeto: quando vazio, vira marca para preencher no Word."""
+    return _texto(valor, A_PREENCHER)
+
+
+def _formatar_numero(valor: float) -> str:
+    """Cinco algarismos significativos, em notação pt-BR.
+
+    ``.5g`` escreve 200000 como ``2e+05`` — um módulo de elasticidade
+    ilegível num memorial. Números grandes voltam à forma inteira com
+    separador de milhar; só os muito pequenos ficam em notação científica.
+    """
+    texto = f"{valor:.5g}"
+    if "e" in texto and abs(valor) >= 1:
+        return f"{valor:,.0f}".replace(",", ".")
+    return texto.replace(".", ",")
+
+
 def _valor(valor: Any) -> str:
     if valor is None:
         return "Não informado"
@@ -69,7 +102,7 @@ def _valor(valor: Any) -> str:
     if isinstance(valor, float):
         if not math.isfinite(valor):
             return "Não finito"
-        return f"{valor:.5g}".replace(".", ",")
+        return _formatar_numero(valor)
     if isinstance(valor, (list, tuple, set)):
         texto = "; ".join(_valor(item) for item in valor) or "Não informado"
         return (
@@ -120,7 +153,9 @@ def _rotulo_e_unidade(chave: Any) -> tuple[str, str]:
             base = texto[: -len(sufixo)]
             unidade = candidato
             break
-    rotulo = base.replace("_", " ").strip().capitalize() or texto
+    base = base.replace("_", " ").strip()
+    # Só a inicial sobe: ``str.capitalize`` rebaixaria "Fy (kN)" a "Fy (kn)".
+    rotulo = (base[:1].upper() + base[1:]) if base else texto
     return rotulo, unidade
 
 
@@ -129,41 +164,128 @@ def _campo_legivel(chave: Any) -> str:
     return f"{rotulo} [{unidade}]" if unidade != "-" else rotulo
 
 
-def _status_relatorio(validacao: Mapping[str, Any]) -> tuple[str, str, str]:
-    contagens = validacao.get("contagens", {})
-    bloqueios = int(contagens.get("Bloqueio", 0))
-    pendencias = int(contagens.get("Pendência", 0))
-    atencoes = int(contagens.get("Atenção", 0))
-    if bloqueios:
-        return (
-            "NÃO PRONTO PARA EMISSÃO",
-            RISK,
-            f"Há {bloqueios} bloqueio(s) que exigem tratamento e disposição técnica.",
-        )
-    if pendencias:
-        return (
-            "EM CONSOLIDAÇÃO",
-            CAUTION,
-            f"Há {pendencias} pendência(s) documental(is) ou técnica(s) em aberto.",
-        )
-    if atencoes:
-        return (
-            "PRONTO COM RESSALVAS",
-            CAUTION,
-            f"Não há bloqueios, mas permanecem {atencoes} ponto(s) de atenção.",
-        )
+def _chave_interna(chave: Any) -> bool:
+    """Chaves de vínculo (UUIDs) que não dizem nada impressas."""
+    texto = _texto(chave, "")
+    return texto.endswith(("_id", "_ids")) or texto == "registro_origem"
+
+
+def _lista_de_mapas(valor: Any) -> bool:
     return (
-        "PRONTO PARA REVISÃO",
-        POSITIVE,
-        "A matriz automática não encontrou bloqueios; a revisão de engenharia continua obrigatória.",
+        isinstance(valor, Sequence)
+        and not isinstance(valor, (str, bytes))
+        and len(valor) > 0
+        and all(isinstance(item, Mapping) for item in valor)
     )
+
+
+def _tabela_de_lista(chave: Any, itens: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Uma lista de dicionários (reações, envoltória, ranking) vira tabela.
+
+    Impressa como texto corrido — "x (m): 0; Apoio: pino; Fy (kN): 45; …" —
+    a reação de apoio era ilegível. Aqui cada dicionário é uma linha e as
+    chaves, na ordem em que aparecem, são as colunas.
+    """
+    colunas: list[str] = []
+    for item in itens:
+        for nome in item:
+            if nome not in colunas:
+                colunas.append(str(nome))
+    legenda = f"{_campo_legivel(chave)}."
+    if not colunas or len(colunas) > 8:
+        return {
+            "legenda": legenda,
+            "cabecalhos": ["Item", "Valor"],
+            "linhas": [[str(indice), _valor(item)] for indice, item in enumerate(itens, start=1)],
+            "larguras": [900, 8460],
+            "fonte": 7.2,
+        }
+    largura = 9360 // len(colunas)
+    larguras = [largura] * len(colunas)
+    larguras[-1] += 9360 - largura * len(colunas)
+    return {
+        "legenda": legenda,
+        "cabecalhos": [_campo_legivel(nome) for nome in colunas],
+        "linhas": [[_valor(item.get(nome)) for nome in colunas] for item in itens],
+        "larguras": larguras,
+        "fonte": 7.2,
+    }
+
+
+def _tabelas_de_dados(
+    dados: Mapping[str, Any], *, legenda: str, rotulo_campo: str, vazio: str
+) -> list[dict[str, Any]]:
+    """Tabela campo/valor dos escalares, mais uma tabela por lista de mapas."""
+    linhas: list[list[str]] = []
+    subtabelas: list[dict[str, Any]] = []
+    for chave, valor in dados.items():
+        if _chave_interna(chave):
+            continue
+        if _lista_de_mapas(valor):
+            subtabelas.append(_tabela_de_lista(chave, valor))
+            continue
+        linhas.append([_campo_legivel(chave), _valor(valor)])
+    principal = {
+        "legenda": legenda,
+        "cabecalhos": [rotulo_campo, "Valor"],
+        "linhas": linhas or [["-", vazio]],
+        "larguras": [3000, 6360],
+        "fonte": 7.8,
+    }
+    return [principal, *subtabelas]
+
+
+_SITUACOES = {
+    "atende": "atendem",
+    "atenção": "atencao",
+    "atencao": "atencao",
+    "não atende": "nao_atendem",
+    "nao atende": "nao_atendem",
+}
+
+
+def sintetizar_calculos(registros: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Conta os cálculos pela situação que o módulo declarou ao registrá-los.
+
+    "Atende", "Atenção" e "Não atende" são as situações que os módulos
+    gravam; "Calculado" e afins não comparam com critério nenhum e entram
+    como "sem verificação de critério". É a única leitura de conjunto que o
+    memorial faz — e ela vem dos cálculos, não do programa.
+    """
+    contagem = {"total": len(registros), "atendem": 0, "atencao": 0, "nao_atendem": 0, "outros": 0}
+    for registro in registros:
+        situacao = _texto(registro.get("status"), "").casefold()
+        contagem[_SITUACOES.get(situacao, "outros")] += 1
+    partes = []
+    if contagem["atendem"]:
+        n = contagem["atendem"]
+        partes.append(f"{n} {'atende' if n == 1 else 'atendem'}")
+    if contagem["atencao"]:
+        partes.append(f"{contagem['atencao']} com atenção")
+    if contagem["nao_atendem"]:
+        n = contagem["nao_atendem"]
+        partes.append(f"{n} não {'atende' if n == 1 else 'atendem'}")
+    if contagem["outros"]:
+        partes.append(f"{contagem['outros']} sem verificação de critério")
+    total = contagem["total"]
+    if total == 0:
+        texto = "Nenhum cálculo anexado"
+    else:
+        texto = f"{total} {'cálculo' if total == 1 else 'cálculos'}"
+        if partes:
+            texto += " — " + " · ".join(partes)
+    contagem["texto"] = texto
+    return contagem
 
 
 def _filtrar_registros(
     projeto: Mapping[str, Any], registros_ids: Sequence[str] | None
 ) -> list[Mapping[str, Any]]:
     registros = [
-        item for item in projeto.get("registros_tecnicos", []) if isinstance(item, Mapping)
+        item
+        for item in projeto.get("registros_tecnicos", [])
+        if isinstance(item, Mapping)
+        and str(item.get("modulo_id") or "").strip().casefold() not in MODULOS_FORA_DO_MEMORIAL
     ]
     if registros_ids is None:
         return registros
@@ -226,6 +348,16 @@ def _peca_registro(
     return ", ".join(rotulo_componente(item) for item in vinculados) or "-"
 
 
+def _titulo_sem_peca(registro: Mapping[str, Any]) -> str:
+    """Título do cálculo sem o prefixo da peça, para quadros que já a mostram."""
+    titulo = _texto(registro.get("titulo"), "Registro técnico")
+    peca = _texto(registro.get("peca"), "")
+    prefixo = f"{peca}{SEPARADOR_PECA}"
+    if peca and titulo.startswith(prefixo) and len(titulo) > len(prefixo):
+        return titulo[len(prefixo) :]
+    return titulo
+
+
 def _hash_snapshot(
     projeto: Mapping[str, Any],
     registros: Sequence[Mapping[str, Any]],
@@ -239,11 +371,7 @@ def _hash_snapshot(
         "metadata": dict(metadata),
         "componentes": projeto.get("componentes", []),
         "materiais_projeto": projeto.get("materiais_projeto", []),
-        "casos_carga": projeto.get("casos_carga", []),
-        "combinacoes_carga": projeto.get("combinacoes_carga", []),
-        "normas": projeto.get("normas", []),
         "registros": list(registros),
-        "checklist": projeto.get("checklist", []),
     }
     serializado = json.dumps(
         pacote, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
@@ -257,9 +385,8 @@ def _metadados(
     extras = dict(metadata_extra or {})
     emissao = extras.get("emissao") or datetime.now().astimezone().strftime("%d/%m/%Y")
     return {
-        "titulo": extras.get("titulo") or "Memorial técnico do projeto industrial",
-        "subtitulo": extras.get("subtitulo")
-        or "Base de projeto, registros técnicos e central de validação",
+        "titulo": extras.get("titulo") or "Memorial de cálculo do projeto industrial",
+        "subtitulo": extras.get("subtitulo") or "Base de projeto e memória de cálculo",
         "projeto": projeto.get("nome"),
         "cliente": projeto.get("cliente"),
         "codigo": extras.get("codigo") or projeto.get("codigo"),
@@ -282,8 +409,6 @@ def montar_modelo_relatorio(
     """Monta um modelo neutro, usado igualmente por Word e PDF."""
 
     ativas = set(secoes_incluidas or SECOES_RELATORIO)
-    validacao = validar_projeto(projeto)
-    status = _status_relatorio(validacao)
     metadata = _metadados(projeto, metadata_extra)
     registros = _filtrar_registros(projeto, registros_ids)
     componentes = [item for item in projeto.get("componentes", []) if isinstance(item, Mapping)]
@@ -291,12 +416,6 @@ def montar_modelo_relatorio(
         str(item.get("id")): item for item in componentes if str(item.get("id") or "").strip()
     }
     materiais = [item for item in projeto.get("materiais_projeto", []) if isinstance(item, Mapping)]
-    normas = [item for item in projeto.get("normas", []) if isinstance(item, Mapping)]
-    checklist = [item for item in projeto.get("checklist", []) if isinstance(item, Mapping)]
-    casos_carga = [item for item in projeto.get("casos_carga", []) if isinstance(item, Mapping)]
-    combinacoes_carga = [
-        item for item in projeto.get("combinacoes_carga", []) if isinstance(item, Mapping)
-    ]
     base = (
         projeto.get("base_projeto", {}) if isinstance(projeto.get("base_projeto"), Mapping) else {}
     )
@@ -310,61 +429,54 @@ def montar_modelo_relatorio(
     ]
     hash_snapshot = _hash_snapshot(projeto, registros, sorted(ativas), metadata)
     metadata["snapshot_hash"] = hash_snapshot
+    sintese = sintetizar_calculos(registros)
 
     resumo = [
-        {"rotulo": "Situação", "valor": validacao["prontidao"]},
-        {"rotulo": "Registros", "valor": str(len(registros))},
-        {"rotulo": "Materiais rastreados", "valor": str(len(materiais))},
-        {"rotulo": "Índice documental", "valor": f"{validacao['indice_documental']}%"},
+        {"rotulo": "Cálculos anexados", "valor": str(len(registros))},
+        {"rotulo": "Peças no escopo", "valor": str(len(componentes))},
         {"rotulo": "Revisão", "valor": metadata["revisao"]},
+        {"rotulo": "Emissão", "valor": metadata["emissao"]},
     ]
-    resumo_executivo = {
-        "linhas": [
-            ["Projeto", _texto(projeto.get("nome")), f"Código {_texto(projeto.get('codigo'))}."],
-            [
-                "Unidade / área",
-                f"{_texto(projeto.get('unidade_industrial'))} / {_texto(projeto.get('area'))}",
-                f"TAG: {_texto(projeto.get('tag_equipamento'))}.",
-            ],
-            [
-                "Escopo físico",
-                f"{len(componentes)} item(ns)",
-                "Equipamentos, estruturas, linhas ou pontos cadastrados.",
-            ],
-            [
-                "Carregamentos",
-                f"{len(casos_carga)} caso(s) / {len(combinacoes_carga)} combinação(ões)",
-                "Cenários e fatores permanentes vinculados ao projeto.",
-            ],
-            [
-                "Materiais",
-                f"{len(materiais)} cadastro(s) de projeto",
-                f"{sum(avaliar_material(item)['nivel'] in {'Confirmado', 'Rastreável'} for item in materiais)} com confiança confirmada ou rastreável.",
-            ],
-            [
-                "Base normativa",
-                f"{len(normas)} referência(s)",
-                f"{sum(bool(item.get('conferida')) for item in normas)} conferida(s) no documento-fonte.",
-            ],
+    rastreaveis = sum(
+        avaliar_material(item)["nivel"] in {"Confirmado", "Rastreável"} for item in materiais
+    )
+    linhas_resumo = [
+        ["Projeto", _campo(projeto.get("nome")), f"Código {_campo(projeto.get('codigo'))}."],
+        [
+            "Unidade / área",
+            f"{_campo(projeto.get('unidade_industrial'))} / {_campo(projeto.get('area'))}",
+            f"TAG: {_campo(projeto.get('tag_equipamento'))}.",
+        ],
+        [
+            "Escopo físico",
+            f"{len(componentes)} item(ns)",
+            "Equipamentos, estruturas, linhas ou pontos cadastrados.",
+        ],
+        [
+            "Materiais",
+            f"{len(materiais)} cadastro(s) de projeto",
+            f"{rastreaveis} com origem confirmada ou rastreável.",
+        ],
+        [
+            "Cálculos anexados",
+            sintese["texto"],
+            "Situação declarada por cada módulo ao registrar o cálculo.",
+        ],
+    ]
+    if registros_sensibilidade:
+        linhas_resumo.append(
             [
                 "Robustez",
                 f"{len(registros_sensibilidade)} análise(s)",
                 "Sensibilidade e incerteza separadas do resultado determinístico.",
-            ],
-            [
-                "Validação",
-                validacao["prontidao"],
-                f"{validacao['total_achados']} achado(s); índice documental {validacao['indice_documental']}%.",
-            ],
-        ]
-    }
+            ]
+        )
 
     secoes: list[dict[str, Any]] = []
     numero = 3
 
     contexto_extensoes = {
         "registros": registros,
-        "validacao": validacao,
         "metadata": metadata,
         "secoes_ativas": sorted(ativas),
     }
@@ -383,15 +495,18 @@ def montar_modelo_relatorio(
             if provedor.id not in ativas:
                 continue
             conteudo = provedor.construir(projeto, contexto_extensoes)
+            if not conteudo:
+                # O provedor não tem o que dizer neste projeto (nenhuma viga
+                # registrada, por exemplo): uma seção só de tabelas vazias
+                # engordaria o memorial sem informar nada.
+                continue
             conteudo["titulo"] = f"{numero}. {SECOES_RELATORIO[provedor.id]}"
             secoes.append(conteudo)
             numero += 1
 
     def adicionar(chave: str, conteudo: dict[str, Any], *, incluir_extensoes: bool = True) -> None:
         nonlocal numero
-        if chave not in ativas:
-            pass
-        else:
+        if chave in ativas:
             conteudo["titulo"] = f"{numero}. {SECOES_RELATORIO[chave]}"
             secoes.append(conteudo)
             numero += 1
@@ -402,9 +517,10 @@ def montar_modelo_relatorio(
         "escopo",
         {
             "paragrafos": [
-                _texto(projeto.get("objetivo"), "Objetivo ainda não documentado."),
-                _texto(projeto.get("descricao"), "Descrição do projeto ainda não documentada."),
-                f"Processo ou serviço: {_texto(projeto.get('processo'))}. Regime de operação: {_texto(projeto.get('regime_operacao'))}.",
+                f"Objetivo: {_campo(projeto.get('objetivo'))}",
+                f"Descrição: {_campo(projeto.get('descricao'))}",
+                f"Processo ou serviço: {_campo(projeto.get('processo'))}. "
+                f"Regime de operação: {_campo(projeto.get('regime_operacao'))}.",
             ],
             "nota": "O memorial é válido somente para o escopo, os dados e as revisões identificados neste documento.",
         },
@@ -414,40 +530,28 @@ def montar_modelo_relatorio(
     # foram cobrados e sobre quais documentos o escopo foi montado.
     criterios_estruturados = projeto.get("criterios_projeto")
     linhas_base = [
-        ["Desenhos e documentos", _texto(base.get("referencias_desenho"))],
-        ["Base dos carregamentos", _texto(base.get("base_carregamentos"))],
-        ["Condições de operação", _texto(base.get("condicoes_operacao"))],
-        ["Critérios de aceitação", _texto(base.get("criterio_aceitacao"))],
-        ["Vida requerida", _texto(base.get("vida_requerida"))],
-        ["Limitações e exclusões", _texto(base.get("limitacoes"))],
+        ["Desenhos e documentos", _campo(base.get("referencias_desenho"))],
+        ["Base dos carregamentos", _campo(base.get("base_carregamentos"))],
+        ["Condições de operação", _campo(base.get("condicoes_operacao"))],
+        ["Critérios de aceitação", _campo(base.get("criterio_aceitacao"))],
+        ["Vida requerida", _campo(base.get("vida_requerida"))],
+        ["Limitações e exclusões", _campo(base.get("limitacoes"))],
     ]
     if isinstance(criterios_estruturados, Mapping):
         criterios_norm = normalizar_criterios_projeto(criterios_estruturados)
         normativo = criterios_norm["normativo"]
-        combinacoes_criterio = criterios_norm["combinacoes"]
         linhas_base.append(
             ["Critérios técnicos do projeto", resumo_criterios_projeto(criterios_norm)]
         )
         linhas_base.append(
             [
                 "Norma principal e aceitação",
-                f"{_texto(normativo.get('norma_principal'))} {_texto(normativo.get('edicao'), '')}".strip()
-                + f" — {_texto(normativo.get('criterio_aceitacao'))}",
-            ]
-        )
-        linhas_base.append(
-            [
-                "Combinações de ações",
-                f"{_texto(combinacoes_criterio.get('metodo'))}; referência: {_texto(combinacoes_criterio.get('referencia'))}",
+                f"{_campo(normativo.get('norma_principal'))} {_texto(normativo.get('edicao'), '')}".strip()
+                + f" — {_campo(normativo.get('criterio_aceitacao'))}",
             ]
         )
     else:
-        linhas_base.append(
-            [
-                "Critérios técnicos do projeto",
-                "Não definidos no projeto; a validação usou o padrão do programa (n ≥ 1,5; utilização ≤ 1,0).",
-            ]
-        )
+        linhas_base.append(["Critérios técnicos do projeto", A_PREENCHER])
     tabelas_base = [
         {
             "legenda": "Base de projeto e critérios adotados.",
@@ -465,12 +569,12 @@ def montar_modelo_relatorio(
                 "cabecalhos": ["Código", "Título", "Tipo", "Revisão", "Emitente", "Situação"],
                 "linhas": [
                     [
-                        _texto(item.get("codigo")),
-                        _texto(item.get("titulo")),
-                        _texto(item.get("tipo")),
-                        _texto(item.get("revisao")),
-                        _texto(item.get("emitente")),
-                        _texto(item.get("situacao")),
+                        _campo(item.get("codigo")),
+                        _campo(item.get("titulo")),
+                        _campo(item.get("tipo")),
+                        _campo(item.get("revisao")),
+                        _campo(item.get("emitente")),
+                        _campo(item.get("situacao")),
                     ]
                     for item in documentos_entrada
                 ],
@@ -496,11 +600,11 @@ def montar_modelo_relatorio(
                     ],
                     "linhas": [
                         [
-                            _texto(item.get("tag")),
-                            f"{_texto(item.get('descricao'))}\n{_texto(item.get('servico'), '')}",
-                            f"{_texto(item.get('material'))}\n{_texto(item.get('fonte_material'), '')}",
-                            _texto(item.get("desenho")),
-                            _texto(item.get("criticidade")),
+                            _campo(item.get("tag")),
+                            f"{_campo(item.get('descricao'))}\n{_texto(item.get('servico'), '')}",
+                            f"{_campo(item.get('material'))}\n{_texto(item.get('fonte_material'), '')}",
+                            _campo(item.get("desenho")),
+                            _campo(item.get("criticidade")),
                         ]
                         for item in componentes
                     ]
@@ -515,8 +619,9 @@ def montar_modelo_relatorio(
         "materiais",
         {
             "paragrafos": [
-                "Propriedades de catálogo permanecem orientativas. Esta seção lista apenas os materiais cadastrados no projeto, com sua proveniência e avaliação documental.",
-                "O índice de rastreabilidade mede evidência disponível; não substitui especificação, certificado, ensaio ou aprovação técnica.",
+                "Materiais cadastrados no projeto, com origem e avaliação documental. "
+                "Propriedades de catálogo são orientativas e não substituem especificação, "
+                "certificado ou ensaio."
             ],
             "tabelas": [
                 {
@@ -529,7 +634,7 @@ def montar_modelo_relatorio(
                     ],
                     "linhas": [
                         [
-                            f"{_texto(item.get('nome'))}\n{_texto(item.get('condicao'), '')} · {_texto(item.get('forma_produto'), '')}",
+                            f"{_campo(item.get('nome'))}\n{_texto(item.get('condicao'), '')} · {_texto(item.get('forma_produto'), '')}",
                             "; ".join(
                                 f"{_rotulo_e_unidade(chave)[0]}={_valor(valor)} {_rotulo_e_unidade(chave)[1]}".strip()
                                 for chave, valor in (
@@ -542,55 +647,13 @@ def montar_modelo_relatorio(
                             or "Sem propriedades registradas",
                             resumir_fonte(item),
                             f"{avaliar_material(item)['nivel']}\n{avaliar_material(item)['indice_rastreabilidade']}%",
-                            _texto(item.get("aplicabilidade")),
+                            _campo(item.get("aplicabilidade")),
                         ]
                         for item in materiais
                     ]
-                    or [
-                        [
-                            "Nenhum material de projeto",
-                            "-",
-                            "-",
-                            "Referência",
-                            "Cadastrar e vincular antes da emissão",
-                        ]
-                    ],
+                    or [["Nenhum material de projeto", "-", "-", "-", A_PREENCHER]],
                     "larguras": [2100, 1900, 2100, 1200, 2060],
                     "fonte": 7.0,
-                }
-            ],
-        },
-    )
-    adicionar(
-        "normas",
-        {
-            "paragrafos": [
-                "A marca de conferência significa apenas que a edição e o escopo foram verificados no documento-fonte cadastrado."
-            ],
-            "tabelas": [
-                {
-                    "cabecalhos": [
-                        "Código",
-                        "Edição",
-                        "Escopo no projeto",
-                        "Obrigatória",
-                        "Conferida",
-                        "Fonte",
-                    ],
-                    "linhas": [
-                        [
-                            _texto(item.get("codigo")),
-                            _texto(item.get("edicao")),
-                            _texto(item.get("escopo")),
-                            _valor(item.get("obrigatoria", False)),
-                            _valor(item.get("conferida", False)),
-                            _texto(item.get("fonte")),
-                        ]
-                        for item in normas
-                    ]
-                    or [["-", "-", "Nenhuma referência cadastrada", "-", "-", "-"]],
-                    "larguras": [1400, 900, 2800, 1100, 1100, 2060],
-                    "fonte": 7.3,
                 }
             ],
         },
@@ -600,45 +663,24 @@ def montar_modelo_relatorio(
         "plano_calculo",
         {
             "paragrafos": [
-                "O plano abaixo define a ordem dos capítulos selecionados e evidencia campos ausentes antes da emissão. A sequência é preservada no Word e no PDF."
+                "Cálculos anexados a esta emissão, na ordem em que aparecem na memória de cálculo."
             ],
             "tabelas": [
                 {
-                    "cabecalhos": [
-                        "Ordem",
-                        "Peça",
-                        "Módulo / registro",
-                        "Situação",
-                        "Integridade",
-                        "Lacunas",
-                    ],
+                    "cabecalhos": ["Ordem", "Peça", "Cálculo", "Módulo", "Situação"],
                     "linhas": [
                         [
                             str(indice),
                             _peca_registro(item, componentes_por_id),
-                            (
-                                f"{_texto(item.get('modulo'))}\n{_texto(item.get('titulo'))}\n"
-                                f"{_texto(item.get('modulo_id'), 'legado')} v{_texto(item.get('modulo_versao'), '-')}"
-                            ),
+                            _titulo_sem_peca(item),
+                            _texto(item.get("modulo")),
                             _texto(item.get("status")),
-                            f"{avaliar_integridade_registro(item)['nivel']} ({avaliar_integridade_registro(item)['percentual']}%)",
-                            ", ".join(avaliar_integridade_registro(item)["faltantes"])
-                            or "Nenhuma lacuna estrutural",
                         ]
                         for indice, item in enumerate(registros, start=1)
                     ]
-                    or [
-                        [
-                            "-",
-                            "-",
-                            "Nenhum registro selecionado",
-                            "Pendente",
-                            "Incompleto",
-                            "Anexar cálculos",
-                        ]
-                    ],
-                    "larguras": [600, 1500, 2500, 1200, 1600, 1960],
-                    "fonte": 7.2,
+                    or [["-", "-", "Nenhum cálculo anexado", "-", "-"]],
+                    "larguras": [700, 2000, 3460, 1900, 1300],
+                    "fonte": 7.4,
                 }
             ],
         },
@@ -655,9 +697,10 @@ def montar_modelo_relatorio(
             {
                 "titulo": titulo_secao,
                 "paragrafos": [
-                    "Cada registro abaixo preserva entradas, resultados, premissas, alertas e conclusão do módulo que o originou."
+                    "Cada cálculo abaixo reproduz as entradas, as equações, os resultados, "
+                    "as premissas e a conclusão registradas pelo módulo que o produziu."
                     + (
-                        " Os registros estão agrupados pela peça do escopo físico que verificam; os que não têm vínculo ficam ao final."
+                        " Os cálculos estão agrupados pela peça do escopo físico que verificam; os sem vínculo ficam ao final."
                         if agrupar
                         else ""
                     )
@@ -678,54 +721,38 @@ def montar_modelo_relatorio(
                 if isinstance(registro.get("resultados"), Mapping)
                 else {}
             )
-            contrato = avaliar_contrato_registro(registro)
             peca = _peca_registro(registro, componentes_por_id)
             imagens, aviso_imagens = imagens_do_registro(registro, projeto)
+            paragrafos = [
+                f"Módulo: {_texto(registro.get('modulo'))}. Peça: {peca}. Situação: {_texto(registro.get('status'))}.",
+                f"Resumo: {_campo(registro.get('resumo'))}",
+                f"Método: {_campo(registro.get('metodo'))}",
+            ]
+            if aviso_imagens:
+                paragrafos.append(aviso_imagens)
             return {
                 "titulo": f"{numeracao} {_texto(registro.get('titulo'), 'Registro técnico')}",
                 "nivel": nivel,
-                "paragrafos": [
-                    f"Módulo: {_texto(registro.get('modulo'))}. Peça: {peca}. Situação: {_texto(registro.get('status'))}.",
-                    _texto(registro.get("resumo"), "Resumo não informado."),
-                    f"Método: {_texto(registro.get('metodo'), 'Não detalhado no registro de origem.')} Integridade: {avaliar_integridade_registro(registro)['percentual']}%.",
-                    (
-                        f"Contrato: {_texto(registro.get('schema_registro'), 'registro legado')}; "
-                        f"módulo {_texto(registro.get('modulo_id'), 'não identificado')} v{_texto(registro.get('modulo_versao'), '-')}; "
-                        f"assinatura {'válida' if contrato['assinatura_valida'] else 'não disponível ou divergente'}."
-                    ),
-                    f"Conclusão: {_texto(registro.get('conclusao'))}",
-                ]
-                + ([aviso_imagens] if aviso_imagens else []),
-                "imagens": imagens,
+                "paragrafos": paragrafos,
                 "bullets": [f"Premissa: {_valor(item)}" for item in registro.get("premissas", [])]
                 + [f"Critério: {_valor(item)}" for item in registro.get("criterios", [])]
                 + [f"Alerta: {_valor(item)}" for item in registro.get("alertas", [])]
                 + [f"Referência: {_valor(item)}" for item in registro.get("referencias", [])],
                 "formulas": [_valor(item) for item in registro.get("equacoes", [])],
-                "tabelas": [
-                    {
-                        "legenda": "Entradas registradas.",
-                        "cabecalhos": ["Campo", "Valor"],
-                        "linhas": [
-                            [_campo_legivel(chave), _valor(valor)]
-                            for chave, valor in entradas.items()
-                        ]
-                        or [["-", "Não registradas"]],
-                        "larguras": [3000, 6360],
-                        "fonte": 7.8,
-                    },
-                    {
-                        "legenda": "Resultados registrados.",
-                        "cabecalhos": ["Grandeza / critério", "Valor"],
-                        "linhas": [
-                            [_campo_legivel(chave), _valor(valor)]
-                            for chave, valor in resultados.items()
-                        ]
-                        or [["-", "Não registrados"]],
-                        "larguras": [3000, 6360],
-                        "fonte": 7.8,
-                    },
-                ],
+                "imagens": imagens,
+                "tabelas": _tabelas_de_dados(
+                    entradas,
+                    legenda="Entradas registradas.",
+                    rotulo_campo="Campo",
+                    vazio="Não registradas",
+                )
+                + _tabelas_de_dados(
+                    resultados,
+                    legenda="Resultados registrados.",
+                    rotulo_campo="Grandeza / critério",
+                    vazio="Não registrados",
+                ),
+                "paragrafos_finais": [f"Conclusão: {_campo(registro.get('conclusao'))}"],
             }
 
         # Sem agrupamento os registros ficam em ``N.i``; com ele, cada peça vira
@@ -735,13 +762,13 @@ def montar_modelo_relatorio(
                 componente = grupo["componente"]
                 descricao_grupo = (
                     [
-                        f"Serviço: {_texto(componente.get('servico'))}. Material: {_texto(componente.get('material'))}. "
-                        f"Desenho: {_texto(componente.get('desenho'))}. Criticidade: {_texto(componente.get('criticidade'))}.",
-                        f"{len(grupo['registros'])} registro(s) técnico(s) vinculado(s) a esta peça.",
+                        f"Serviço: {_campo(componente.get('servico'))}. Material: {_campo(componente.get('material'))}. "
+                        f"Desenho: {_campo(componente.get('desenho'))}. Criticidade: {_campo(componente.get('criticidade'))}.",
+                        f"{len(grupo['registros'])} cálculo(s) vinculado(s) a esta peça.",
                     ]
                     if componente is not None
                     else [
-                        "Registros salvos sem vínculo com um item do escopo físico. Para que apareçam sob a peça "
+                        "Cálculos salvos sem vínculo com um item do escopo físico. Para que apareçam sob a peça "
                         "correspondente, informe a identificação da peça ao registrar o cálculo."
                     ]
                 )
@@ -760,11 +787,11 @@ def montar_modelo_relatorio(
             for indice, registro in enumerate(registros_capitulos, start=1):
                 secoes.append(capitulo_registro(f"{numero}.{indice}", 2, registro))
         if not registros_capitulos:
-            secoes[-1]["nota"] = "Nenhum registro técnico foi selecionado para esta emissão."
+            secoes[-1]["nota"] = "Nenhum cálculo foi anexado a esta emissão."
         numero += 1
     anexar_extensoes("registros")
 
-    if "sensibilidade" in ativas:
+    if "sensibilidade" in ativas and registros_sensibilidade:
         titulo_secao = f"{numero}. {SECOES_RELATORIO['sensibilidade']}"
         secoes.append(
             {
@@ -788,11 +815,10 @@ def montar_modelo_relatorio(
                     "titulo": f"{numero}.{indice} {_texto(registro.get('titulo'), 'Análise de sensibilidade')}",
                     "nivel": 2,
                     "paragrafos": [
-                        _texto(registro.get("resumo"), "Resumo não informado."),
+                        f"Resumo: {_campo(registro.get('resumo'))}",
                         f"Resultado nominal: {_valor(resultados_sens.get('saida_nominal'))} {_texto(resultados_sens.get('unidade_saida'), '')}. "
                         f"Faixa P05–P95: {_valor(resultados_sens.get('p05'))} a {_valor(resultados_sens.get('p95'))}. "
                         f"Probabilidade de não atendimento: {_valor(criterio_prob) if criterio_prob is not None else 'não avaliada'}{('%' if criterio_prob is not None else '')}.",
-                        f"Conclusão: {_texto(registro.get('conclusao'))}",
                     ],
                     "tabelas": [
                         {
@@ -830,197 +856,43 @@ def montar_modelo_relatorio(
                             "fonte": 8.0,
                         },
                     ],
+                    "paragrafos_finais": [f"Conclusão: {_campo(registro.get('conclusao'))}"],
                     "nota": _texto(
                         registro.get("metodo"),
                         "Verifique faixas, distribuições, correlações e semente usadas.",
                     ),
                 }
             )
-        if not registros_sensibilidade:
-            secoes[-1]["nota"] = (
-                "Nenhuma análise de sensibilidade foi selecionada para esta emissão."
-            )
         numero += 1
 
-    achados = validacao["achados"]
-    adicionar(
-        "validacao",
-        {
-            "paragrafos": [
-                f"Prontidão: {validacao['prontidao']}. Índice documental: {validacao['indice_documental']}%.",
-                validacao["aviso"],
-            ],
-            "tabelas": [
-                {
-                    "cabecalhos": [
-                        "ID",
-                        "Severidade",
-                        "Categoria / módulo",
-                        "Achado",
-                        "Ação recomendada",
-                    ],
-                    "linhas": [
-                        [
-                            item["id"],
-                            item["severidade"],
-                            f"{item['categoria']}\n{item['modulo']}",
-                            f"{item['titulo']}\n{item['detalhe']}",
-                            item["recomendacao"],
-                        ]
-                        for item in achados
-                    ]
-                    or [
-                        [
-                            "-",
-                            "Informação",
-                            "Validação",
-                            "Nenhum achado automático",
-                            "Manter revisão independente",
-                        ]
-                    ],
-                    "larguras": [700, 1100, 1700, 2860, 3000],
-                    "fonte": 6.9,
-                }
-            ],
-        },
-    )
-    adicionar(
-        "checklist",
-        {
-            "tabelas": [
-                {
-                    "cabecalhos": [
-                        "Item",
-                        "Categoria",
-                        "Responsável",
-                        "Prazo",
-                        "Estado",
-                        "Crítico",
-                        "Evidência",
-                    ],
-                    "linhas": [
-                        [
-                            _texto(item.get("item")),
-                            _texto(item.get("categoria")),
-                            _texto(item.get("responsavel")),
-                            _texto(item.get("prazo")),
-                            _texto(item.get("estado")),
-                            _valor(item.get("critico", False)),
-                            _texto(item.get("evidencia")),
-                        ]
-                        for item in checklist
-                    ]
-                    or [["Nenhum item cadastrado", "-", "-", "-", "-", "-", "-"]],
-                    "larguras": [2300, 1100, 1300, 900, 1000, 800, 1960],
-                    "fonte": 6.9,
-                }
-            ]
-        },
-    )
     adicionar(
         "conclusao",
         {
-            "paragrafos": [
-                f"Situação automática: {status[0]}. {status[2]}",
-                "A liberação depende da revisão de engenharia, da confirmação das fontes normativas e do encerramento formal dos bloqueios aplicáveis.",
-                f"Identificador reproduzível desta composição: SHA-256 {hash_snapshot[:16]}… O hash muda quando seleção, ordem, dados ou metadados mudam.",
-            ],
+            "paragrafos": [f"Síntese dos cálculos anexados: {sintese['texto']}."],
             "bullets": [
-                "Confirmar que os carregamentos representam partida, parada, operação, manutenção e condições anormais aplicáveis.",
-                "Rastrear materiais, espessuras, geometria e condições de contorno aos documentos controlados.",
-                "Encerrar ou aceitar formalmente cada pendência, mantendo responsável e evidência.",
-                "Emitir nova revisão sempre que entradas, critérios ou resultados forem alterados.",
+                f"{_texto(registro.get('titulo'), 'Registro técnico')} "
+                f"({_texto(registro.get('status'))}): {_campo(registro.get('conclusao'))}"
+                for registro in registros
+            ],
+            "paragrafos_finais": [
+                f"Conclusão geral: {A_PREENCHER}",
+                f"Recomendações: {A_PREENCHER}",
             ],
         },
     )
 
-    quadro_dados: list[dict[str, str]] = []
-    for registro in registros:
-        for grupo, chave in (("Entradas", "entradas"), ("Resultados", "resultados")):
-            dados = registro.get(chave, {}) if isinstance(registro.get(chave), Mapping) else {}
-            for grandeza, valor in dados.items():
-                if grandeza in {"ranking_sensibilidade", "correlacoes_spearman"}:
-                    # Estes dados já aparecem em tabelas próprias, mais legíveis.
-                    continue
-                if grandeza == "incertezas" and isinstance(valor, Mapping):
-                    for variavel, configuracao in valor.items():
-                        rotulo, unidade = _rotulo_e_unidade(variavel)
-                        quadro_dados.append(
-                            {
-                                "Grupo": f"{_texto(registro.get('modulo'))} - Incertezas",
-                                "Grandeza": rotulo,
-                                "Símbolo": "-",
-                                "Valor": (
-                                    f"{_valor(configuracao.get('incerteza_percentual'))}% · {_texto(configuracao.get('distribuicao'))}"
-                                    if isinstance(configuracao, Mapping)
-                                    else _valor(configuracao)
-                                ),
-                                "Unidade": unidade,
-                                "Observação": "Faixa/distribuição declarada; conferir o registro permanente",
-                            }
-                        )
-                    continue
-                rotulo, unidade = _rotulo_e_unidade(grandeza)
-                quadro_dados.append(
-                    {
-                        "Grupo": f"{_texto(registro.get('modulo'))} - {grupo}",
-                        "Grandeza": rotulo,
-                        "Símbolo": "-",
-                        "Valor": _valor(valor),
-                        "Unidade": unidade,
-                        "Observação": _texto(registro.get("titulo")),
-                    }
-                )
-    if not quadro_dados:
-        quadro_dados.append(
-            {
-                "Grupo": "Projeto",
-                "Grandeza": "Registros técnicos",
-                "Símbolo": "-",
-                "Valor": "Nenhum selecionado",
-                "Unidade": "-",
-                "Observação": "Completar antes da emissão final",
-            }
-        )
-
-    partes = [
-        [
-            _texto(registro.get("modulo")),
-            _texto(registro.get("documento"), metadata["codigo"]),
-            _texto(registro.get("revisao"), metadata["revisao"]),
-            _texto(registro.get("status")),
-            _texto(registro.get("responsavel"), metadata["responsavel"]),
-            _texto(registro.get("conclusao")),
-        ]
-        for registro in registros
-    ] or [
-        [
-            "Projeto industrial",
-            metadata["codigo"],
-            metadata["revisao"],
-            validacao["prontidao"],
-            metadata["responsavel"],
-            "Nenhum registro técnico selecionado",
-        ]
-    ]
-
-    metadata["numero_integracao"] = numero
-    metadata["numero_aprovacoes"] = numero + 1
+    metadata["numero_aprovacoes"] = numero
 
     return {
         "metadata": metadata,
         "resumo": resumo,
-        "resumo_executivo": resumo_executivo,
-        "status": status,
+        "resumo_executivo": {"linhas": linhas_resumo},
         "secoes": secoes,
-        "quadro_dados": quadro_dados,
-        "partes_complementares": partes,
-        "validacao": validacao,
+        "sintese": sintese,
         "registros": registros,
         "secoes_incluidas": list(ativas),
         "snapshot_hash": hash_snapshot,
-        "numero_integracao": numero,
-        "numero_aprovacoes": numero + 1,
+        "numero_aprovacoes": numero,
     }
 
 
@@ -1041,10 +913,7 @@ def gerar_relatorio_industrial_word(
         metadata=modelo["metadata"],
         resumo=modelo["resumo"],
         resumo_executivo=modelo["resumo_executivo"],
-        status=modelo["status"],
         secoes=modelo["secoes"],
-        quadro_dados=modelo["quadro_dados"],
-        partes_complementares=modelo["partes_complementares"],
     )
 
 
@@ -1065,7 +934,6 @@ def gerar_relatorio_industrial_pdf(
         from reportlab.platypus import (
             Image,
             LongTable,
-            PageBreak,
             Paragraph,
             SimpleDocTemplate,
             Spacer,
@@ -1082,12 +950,14 @@ def gerar_relatorio_industrial_pdf(
         metadata_extra=metadata_extra,
     )
     metadata = modelo["metadata"]
+    fonte = fonte_pdf()
     azul = colors.HexColor("#16324F")
     azul_medio = colors.HexColor("#24577A")
     azul_claro = colors.HexColor("#EAF2F8")
     cinza = colors.HexColor("#5F6B76")
     cinza_claro = colors.HexColor("#F4F6F8")
     borda = colors.HexColor("#C9D4DE")
+    texto_corpo = colors.HexColor("#26323D")
 
     memoria = BytesIO()
     documento = SimpleDocTemplate(
@@ -1098,15 +968,15 @@ def gerar_relatorio_industrial_pdf(
         topMargin=18 * mm,
         bottomMargin=17 * mm,
         title=str(metadata["titulo"]),
-        author=str(metadata["responsavel"]),
-        subject="Memorial técnico de projeto industrial",
+        author=_texto(metadata["responsavel"], "Mecânica Toolkit"),
+        subject="Memorial de cálculo de projeto industrial",
     )
     base = getSampleStyleSheet()
     estilos = {
         "titulo": ParagraphStyle(
             "IndustrialTitulo",
             parent=base["Title"],
-            fontName="Helvetica-Bold",
+            fontName=fonte.negrito,
             fontSize=18,
             leading=22,
             textColor=azul,
@@ -1116,6 +986,7 @@ def gerar_relatorio_industrial_pdf(
         "subtitulo": ParagraphStyle(
             "IndustrialSubtitulo",
             parent=base["Normal"],
+            fontName=fonte.regular,
             fontSize=8.7,
             leading=11.5,
             textColor=cinza,
@@ -1124,7 +995,7 @@ def gerar_relatorio_industrial_pdf(
         "h1": ParagraphStyle(
             "IndustrialH1",
             parent=base["Heading1"],
-            fontName="Helvetica-Bold",
+            fontName=fonte.negrito,
             fontSize=12,
             leading=15,
             textColor=azul,
@@ -1135,7 +1006,7 @@ def gerar_relatorio_industrial_pdf(
         "h2": ParagraphStyle(
             "IndustrialH2",
             parent=base["Heading2"],
-            fontName="Helvetica-Bold",
+            fontName=fonte.negrito,
             fontSize=10,
             leading=13,
             textColor=azul_medio,
@@ -1146,7 +1017,7 @@ def gerar_relatorio_industrial_pdf(
         "h3": ParagraphStyle(
             "IndustrialH3",
             parent=base["Heading3"],
-            fontName="Helvetica-Bold",
+            fontName=fonte.negrito,
             fontSize=9,
             leading=12,
             textColor=azul_medio,
@@ -1157,79 +1028,47 @@ def gerar_relatorio_industrial_pdf(
         "corpo": ParagraphStyle(
             "IndustrialCorpo",
             parent=base["BodyText"],
+            fontName=fonte.regular,
             fontSize=8.2,
             leading=11.2,
-            textColor=colors.HexColor("#26323D"),
+            textColor=texto_corpo,
             spaceAfter=1.8 * mm,
         ),
         "corpo_keep": ParagraphStyle(
             "IndustrialCorpoKeep",
             parent=base["BodyText"],
+            fontName=fonte.regular,
             fontSize=8.2,
             leading=11.2,
-            textColor=colors.HexColor("#26323D"),
+            textColor=texto_corpo,
             spaceAfter=1.8 * mm,
             keepWithNext=True,
         ),
         "pequeno": ParagraphStyle(
             "IndustrialPequeno",
             parent=base["BodyText"],
+            fontName=fonte.regular,
             fontSize=6.6,
             leading=8.2,
-            textColor=colors.HexColor("#26323D"),
+            textColor=texto_corpo,
         ),
         "cabecalho": ParagraphStyle(
             "IndustrialCabecalho",
             parent=base["BodyText"],
-            fontName="Helvetica-Bold",
+            fontName=fonte.negrito,
             fontSize=6.8,
             leading=8,
-            textColor=colors.white,
-            alignment=TA_CENTER,
-        ),
-        "status": ParagraphStyle(
-            "IndustrialStatus",
-            parent=base["BodyText"],
-            fontName="Helvetica-Bold",
-            fontSize=9,
-            leading=11,
             textColor=colors.white,
             alignment=TA_CENTER,
         ),
     }
 
     def texto_pdf(valor: Any) -> str:
-        texto = _texto(valor)
-        substituicoes = {
-            "σvm": "sigma_vm",
-            "σx": "sigma_x",
-            "σy": "sigma_y",
-            "σa": "sigma_a",
-            "σm": "sigma_m",
-            "τxy": "tau_xy",
-            "ΔL": "Delta_L",
-            "ΔT": "Delta_T",
-            "≥": ">=",
-            "≤": "<=",
-            "σ": "sigma",
-            "τ": "tau",
-            "Δ": "Delta",
-            "Σ": "SUM",
-            "γ": "gamma",
-            "α": "alpha",
-            "ν": "nu",
-            "√": "sqrt",
-            "→": "->",
-            "∞": "infinito",
-            "²": "^2",
-            "³": "^3",
-            "⁴": "^4",
-            "–": "-",
-            "—": "-",
-        }
-        for original, substituto in substituicoes.items():
-            texto = texto.replace(original, substituto)
-        return texto
+        # Vazio fica vazio: os textos padrão ("Não informado", "[a preencher]")
+        # já foram decididos ao montar o modelo, e uma célula de assinatura
+        # em branco tem de sair em branco.
+        texto = "" if valor is None else str(valor)
+        return texto_para_fonte(texto, fonte)
 
     def par(valor: Any, estilo: str = "corpo") -> Any:
         return Paragraph(escape(texto_pdf(valor)).replace("\n", "<br/>"), estilos[estilo])
@@ -1259,6 +1098,22 @@ def gerar_relatorio_industrial_pdf(
         )
         return tab
 
+    def caixa(conteudo: Any, *, fundo: Any = azul_claro) -> Any:
+        box = Table([[conteudo]], colWidths=[180 * mm])
+        box.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), fundo),
+                    ("BOX", (0, 0), (-1, -1), 0.5, borda),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        return box
+
     historia: list[Any] = [
         par(metadata["titulo"], "titulo"),
         par(metadata["subtitulo"], "subtitulo"),
@@ -1266,42 +1121,27 @@ def gerar_relatorio_industrial_pdf(
     identificacao = [
         [
             "Projeto",
-            _texto(metadata.get("projeto")),
+            _campo(metadata.get("projeto")),
             "Código / revisão",
-            f"{_texto(metadata.get('codigo'))} / {metadata.get('revisao')}",
+            f"{_campo(metadata.get('codigo'))} / {_texto(metadata.get('revisao'), '00')}",
         ],
-        ["Cliente", _texto(metadata.get("cliente")), "Situação", _texto(metadata.get("situacao"))],
+        ["Cliente", _campo(metadata.get("cliente")), "Situação", _campo(metadata.get("situacao"))],
         [
-            "Responsável",
-            _texto(metadata.get("responsavel")),
+            "Elaborado por",
+            _campo(metadata.get("responsavel")),
             "Emissão",
             _texto(metadata.get("emissao")),
         ],
         [
-            "Snapshot",
-            f"{_texto(metadata.get('snapshot_hash'))[:16]}…",
-            "Aprovador",
-            _texto(metadata.get("aprovador")),
+            "Verificado por",
+            _campo(metadata.get("verificador")),
+            "Aprovado por",
+            _campo(metadata.get("aprovador")),
         ],
     ]
     historia.append(tabela(["Campo", "Valor", "Campo", "Valor"], identificacao, [25, 65, 28, 62]))
-    historia.append(Spacer(1, 4 * mm))
-    status_texto, status_cor, status_detalhe = modelo["status"]
-    status_tab = Table([[par(status_texto, "status")], [par(status_detalhe)]], colWidths=[180 * mm])
-    status_tab.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(f"#{status_cor}")),
-                ("BACKGROUND", (0, 1), (-1, 1), azul_claro),
-                ("BOX", (0, 0), (-1, -1), 0.6, borda),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ]
-        )
-    )
-    historia.extend([status_tab, Spacer(1, 3 * mm), par("1. Resumo executivo", "h1")])
+    historia.append(Spacer(1, 3 * mm))
+    historia.append(par("1. Resumo executivo", "h1"))
     resumo_linhas = [[item[0], item[1], item[2]] for item in modelo["resumo_executivo"]["linhas"]]
     historia.append(tabela(["Item", "Valor", "Leitura rápida"], resumo_linhas, [42, 63, 75]))
     historia.extend(
@@ -1313,10 +1153,14 @@ def gerar_relatorio_industrial_pdf(
                     [
                         metadata["revisao"],
                         metadata["emissao"],
-                        metadata["situacao"],
-                        metadata["responsavel"],
-                        metadata["verificador"],
-                    ]
+                        _campo(metadata["situacao"]),
+                        _campo(metadata["responsavel"]),
+                        _campo(metadata["verificador"]),
+                    ],
+                    # Linhas em branco para as próximas revisões: o molde já
+                    # sai com lugar para elas.
+                    ["", "", "", "", ""],
+                    ["", "", "", "", ""],
                 ],
                 [14, 25, 46, 48, 47],
             ),
@@ -1334,39 +1178,13 @@ def gerar_relatorio_industrial_pdf(
             )
             historia.append(par(texto, "corpo_keep" if manter_com_tabela else "corpo"))
         if secao.get("nota"):
-            nota = Table([[par(f"Nota: {secao['nota']}")]], colWidths=[180 * mm])
-            nota.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, -1), azul_claro),
-                        ("BOX", (0, 0), (-1, -1), 0.5, borda),
-                        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-                        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-                        ("TOPPADDING", (0, 0), (-1, -1), 4),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                    ]
-                )
-            )
-            historia.append(nota)
+            historia.append(caixa(par(f"Nota: {secao['nota']}")))
         for item in secao.get("bullets", []):
             historia.append(
                 Paragraph(f"<b>-</b>&nbsp; {escape(texto_pdf(item))}", estilos["corpo"])
             )
         for formula in secao.get("formulas", []):
-            formula_box = Table([[par(f"Equação: {_valor(formula)}")]], colWidths=[180 * mm])
-            formula_box.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, -1), azul_claro),
-                        ("BOX", (0, 0), (-1, -1), 0.45, borda),
-                        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                        ("TOPPADDING", (0, 0), (-1, -1), 4),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                    ]
-                )
-            )
-            historia.append(formula_box)
+            historia.append(caixa(par(f"Equação: {_valor(formula)}")))
             historia.append(Spacer(1, 1.5 * mm))
         for imagem in secao.get("imagens", []):
             conteudo = imagem.get("png")
@@ -1396,47 +1214,20 @@ def gerar_relatorio_industrial_pdf(
                 tabela(especificacao["cabecalhos"], especificacao["linhas"], larguras_mm)
             )
             historia.append(Spacer(1, 2 * mm))
+        for texto in secao.get("paragrafos_finais", []):
+            historia.append(par(texto))
 
     historia.extend(
         [
-            par(f"{modelo['numero_integracao']}. Integração com outras partes do projeto", "h1"),
-            par(
-                "Cada disciplina conserva código, revisão, responsável, situação e conclusão próprios.",
-                "corpo_keep",
-            ),
-            tabela(
-                ["Parte / módulo", "Documento", "Rev.", "Situação", "Responsável", "Observações"],
-                modelo["partes_complementares"],
-                [31, 31, 13, 26, 31, 48],
-            ),
             par(f"{modelo['numero_aprovacoes']}. Aprovações", "h1"),
             tabela(
-                ["Função", "Nome", "Assinatura / data"],
+                ["Função", "Nome", "Assinatura", "Data"],
                 [
-                    ["Elaboração", metadata["responsavel"], ""],
-                    ["Verificação", metadata["verificador"], ""],
-                    ["Aprovação", metadata["aprovador"], ""],
+                    ["Elaboração", _campo(metadata["responsavel"]), "", "____/____/________"],
+                    ["Verificação", _campo(metadata["verificador"]), "", "____/____/________"],
+                    ["Aprovação", _campo(metadata["aprovador"]), "", "____/____/________"],
                 ],
-                [42, 65, 73],
-            ),
-            PageBreak(),
-            par("Apêndice A - Quadro consolidado de entradas e resultados", "h1"),
-            par(
-                "Os valores abaixo são reproduzidos dos registros selecionados. A unidade e a origem devem ser conferidas no módulo de cálculo."
-            ),
-            tabela(
-                ["Grupo", "Grandeza", "Valor", "Unidade", "Observação"],
-                [
-                    [
-                        linha["Grupo"],
-                        linha["Grandeza"],
-                        linha["Valor"],
-                        linha["Unidade"],
-                        linha["Observação"],
-                    ]
-                    for linha in modelo["quadro_dados"]
-                ],
-                [42, 46, 32, 22, 38],
+                [35, 60, 55, 30],
             ),
         ]
     )
@@ -1445,21 +1236,20 @@ def gerar_relatorio_industrial_pdf(
         canvas.saveState()
         canvas.setStrokeColor(borda)
         canvas.setFillColor(azul)
-        canvas.setFont("Helvetica-Bold", 6.8)
-        canvas.drawString(15 * mm, 289 * mm, "MECÂNICA TOOLKIT | MEMORIAL TÉCNICO")
+        canvas.setFont(fonte.negrito, 6.8)
+        canvas.drawString(15 * mm, 289 * mm, "MECÂNICA TOOLKIT | MEMORIAL DE CÁLCULO")
         canvas.setFillColor(cinza)
-        canvas.setFont("Helvetica", 6.8)
-        canvas.drawRightString(
-            195 * mm, 289 * mm, f"{_texto(metadata['codigo'])} · Rev. {_texto(metadata['revisao'])}"
+        canvas.setFont(fonte.regular, 6.8)
+        identificacao_curta = (
+            f"{_campo(metadata['codigo'])} · Rev. {_texto(metadata['revisao'], '00')}"
         )
+        canvas.drawRightString(195 * mm, 289 * mm, identificacao_curta)
         canvas.setStrokeColor(borda)
         canvas.line(15 * mm, 285 * mm, 195 * mm, 285 * mm)
         canvas.line(15 * mm, 12 * mm, 195 * mm, 12 * mm)
         canvas.setFillColor(cinza)
-        canvas.setFont("Helvetica", 6.8)
-        canvas.drawString(
-            15 * mm, 8 * mm, f"{_texto(metadata['codigo'])} · Rev. {_texto(metadata['revisao'])}"
-        )
+        canvas.setFont(fonte.regular, 6.8)
+        canvas.drawString(15 * mm, 8 * mm, identificacao_curta)
         canvas.drawRightString(195 * mm, 8 * mm, f"Página {doc.page}")
         canvas.restoreState()
 

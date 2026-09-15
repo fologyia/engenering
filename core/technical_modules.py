@@ -99,13 +99,13 @@ def _registrar_padrao() -> None:
         ModuloTecnico(
             id="flambagem_colunas",
             titulo="Flambagem de colunas",
-            versao="1.0",
+            versao="2.0",
             pagina="app_pages/flambagem_colunas.py",
             grupo_navegacao="Análises técnicas",
             ordem=15,
             icone=":material/architecture:",
-            descricao="Esbeltez, carga crítica de Euler e transição de Johnson para peças comprimidas.",
-            aliases=("Flambagem", "Euler", "Índice de esbeltez"),
+            descricao="Barra comprimida ou flexocomprimida pela NBR 8800: χ, Q, N_ez, B_1 e interação N + M.",
+            aliases=("Flambagem", "Euler", "Índice de esbeltez", "NBR 8800", "Coluna"),
         ),
         ModuloTecnico(
             id="vigas_eixos",

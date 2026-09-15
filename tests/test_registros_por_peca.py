@@ -157,7 +157,7 @@ def test_memorial_agrupa_registros_por_peca():
     numero_registros = next(
         item["titulo"]
         for item in secoes
-        if item.get("nivel", 1) == 1 and "Registros" in item["titulo"]
+        if item.get("nivel", 1) == 1 and "Memória de cálculo" in item["titulo"]
     ).split(".")[0]
     pecas = [item["titulo"] for item in secoes if item.get("nivel") == 2]
     assert pecas == [
@@ -193,7 +193,7 @@ def test_memorial_agrupa_registros_por_peca():
         f"{numero_registros}.4.1",
     ]
 
-    plano = next(item for item in secoes if "Plano" in item["titulo"])
+    plano = next(item for item in secoes if "Quadro-resumo" in item["titulo"])
     tabela = plano["tabelas"][0]
     assert tabela["cabecalhos"][1] == "Peça"
     assert [linha[1] for linha in tabela["linhas"]] == [
@@ -204,7 +204,7 @@ def test_memorial_agrupa_registros_por_peca():
         "-",
     ]
     assert sum(tabela["larguras"]) == 9360
-    assert "Registros técnicos" in " ".join(titulos)
+    assert "Memória de cálculo" in " ".join(titulos)
 
 
 def test_memorial_sem_componentes_mantem_lista_plana():

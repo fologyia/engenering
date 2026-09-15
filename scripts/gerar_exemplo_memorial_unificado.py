@@ -297,7 +297,7 @@ def main() -> None:
     pasta_pdf.mkdir(parents=True, exist_ok=True)
     metadata = {
         "titulo": "Memorial unificado de cálculo industrial",
-        "subtitulo": "Escopo, materiais, cálculos, sensibilidade, validação e aprovações",
+        "subtitulo": "Escopo, materiais, memória de cálculo, sensibilidade e aprovações",
         "codigo": "MC-SK101-001",
         "revisao": "00",
         "responsavel": projeto["responsavel"],

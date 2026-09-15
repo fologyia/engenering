@@ -90,11 +90,14 @@ class MemorialWordTests(unittest.TestCase):
         self.assertIn("Memorial de cálculo - análise de fadiga", text)
         self.assertIn("1. Resumo executivo", text)
         self.assertIn("7.2 Correção de temperatura", text)
-        self.assertIn("10. Hipóteses, pendências e ações", text)
-        self.assertIn("10.1 Checklist de verificação", text)
+        self.assertIn("9. Conclusão e recomendações", text)
+        self.assertIn("10. Aprovações", text)
         self.assertIn("500,00 °F", text)
-        self.assertIn("Apêndice B - Estrutura mínima", text)
-        self.assertGreaterEqual(len(document.tables), 11)
+        # O memorial é a memória de cálculo: sem pendências, checklist,
+        # integração de outras partes, apêndices nem faixa de situação.
+        for ausente in ("pendências e ações", "Checklist", "Apêndice", "Integração com outras"):
+            self.assertNotIn(ausente, text)
+        self.assertGreaterEqual(len(document.tables), 7)
 
         header_text = " ".join(
             paragraph.text
@@ -136,7 +139,7 @@ class MemorialWordTests(unittest.TestCase):
             numbering_root = ET.fromstring(numbering_xml)
 
         tables = root.findall(".//w:tbl", ns)
-        self.assertGreaterEqual(len(tables), 11)
+        self.assertGreaterEqual(len(tables), 7)
         for table in tables:
             width_node = table.find("w:tblPr/w:tblW", ns)
             indent_node = table.find("w:tblPr/w:tblInd", ns)
@@ -191,7 +194,7 @@ class MemorialWordTests(unittest.TestCase):
 
         self.assertEqual(list_format_for("Carregamento proporcional"), "bullet")
         self.assertEqual(
-            list_format_for("Objetivo e escopo da parte adicionada"),
+            list_format_for("Validar material, unidades, geometria"),
             "decimal",
         )
 

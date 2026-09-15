@@ -453,115 +453,103 @@ def imagens_mohr(
 def imagens_flambagem(
     entradas: Mapping[str, Any], resultados: Mapping[str, Any]
 ) -> list[ImagemDiagrama]:
-    """Curva σcr × λ (Euler + Johnson) com a coluna registrada marcada."""
+    """Curva de flambagem da NBR 8800 (χ·Q·f_y/γ_a1 × KL/r) com a coluna registrada."""
     modulo_e = _numero(entradas.get("modulo_elasticidade_MPa"))
     escoamento = _numero(entradas.get("escoamento_MPa"))
     area = _numero(entradas.get("area_mm2"))
     esbeltez = _numero(resultados.get("esbeltez_governante"))
-    transicao = _numero(resultados.get("esbeltez_transicao"))
-    if not all(valor and valor > 0 for valor in (modulo_e, escoamento, area, esbeltez, transicao)):
+    chi = _numero(resultados.get("chi"))
+    if not all(valor and valor > 0 for valor in (modulo_e, escoamento, area, esbeltez, chi)):
         return []
-    assert modulo_e and escoamento and area and esbeltez and transicao
+    assert modulo_e and escoamento and area and esbeltez and chi
+    fator_q = _numero(resultados.get("fator_q")) or 1.0
+    gamma_a1 = _numero(entradas.get("gamma_a1")) or 1.10
 
-    lambda_max = max(esbeltez * 1.25, transicao * 1.6, 60.0)
-    passos = 200
-    johnson = [
-        (lam, escoamento - (escoamento * lam / (2 * math.pi)) ** 2 / modulo_e)
-        for lam in (transicao * indice / passos for indice in range(passos + 1))
+    from core.nbr8800 import fator_chi
+
+    def tensao_resistente(lam: float) -> float:
+        # λ_0 da flambagem por flexão: √(Q·A·f_y/N_e) = (λ/π)·√(Q·f_y/E).
+        lambda_0 = (lam / math.pi) * math.sqrt(fator_q * escoamento / modulo_e)
+        return fator_chi(lambda_0) * fator_q * escoamento / gamma_a1
+
+    lambda_max = max(esbeltez * 1.25, 200.0 * 1.1)
+    passos = 240
+    curva_norma = [
+        (lam, tensao_resistente(lam))
+        for lam in (lambda_max * i / passos for i in range(1, passos + 1))
     ]
+    curva_norma.insert(0, (0.0, fator_q * escoamento / gamma_a1))
     euler = [
-        (lam, math.pi**2 * modulo_e / lam**2)
-        for lam in (
-            transicao + (lambda_max - transicao) * indice / passos for indice in range(passos + 1)
-        )
+        (lam, min(math.pi**2 * modulo_e / lam**2, escoamento * 1.3))
+        for lam in (lambda_max * i / passos for i in range(1, passos + 1))
     ]
-    euler_estendida = [
-        (lam, math.pi**2 * modulo_e / lam**2)
-        for lam in (
-            max(transicao * 0.45, 1.0) + (transicao - max(transicao * 0.45, 1.0)) * indice / 60
-            for indice in range(61)
-        )
-    ]
-    euler_estendida = [(lam, sigma) for lam, sigma in euler_estendida if sigma <= escoamento * 1.6]
+    lambda_1_5 = 1.5 * math.pi * math.sqrt(modulo_e / (fator_q * escoamento))
 
-    carga_critica = _numero(resultados.get("carga_critica_kN"))
+    resistencia = _numero(resultados.get("resistencia_kN"))
     forca = _numero(entradas.get("forca_solicitante_kN"))
-    sigma_cr = (carga_critica * 1_000.0 / area) if carga_critica else None
-    sigma_atuante = (forca * 1_000.0 / area) if forca else None
+    sigma_rd = (resistencia * 1_000.0 / area) if resistencia else tensao_resistente(esbeltez)
+    sigma_sd = (forca * 1_000.0 / area) if forca else None
 
     curvas = [
-        Curva(johnson, cor=COR_SECUNDARIA, rotulo="Johnson (coluna curta/intermediária)"),
-        Curva(euler, cor=COR_PRINCIPAL, rotulo="Euler (coluna longa)"),
-        Curva(euler_estendida, cor=COR_PRINCIPAL, espessura=1, tracejada=True),
+        Curva(
+            euler, cor=COR_NEUTRA, espessura=1, tracejada=True, rotulo="Euler N_e/A (referência)"
+        ),
+        Curva(curva_norma, cor=COR_PRINCIPAL, rotulo="NBR 8800: χ·Q·f_y/γ_a1"),
         Curva(
             [(0.0, escoamento), (lambda_max, escoamento)],
             cor=COR_NEUTRA,
             espessura=1,
             tracejada=True,
-            rotulo=f"Sy = {escoamento:.0f} MPa",
+            rotulo=f"f_y = {escoamento:.0f} MPa",
         ),
         Curva(
-            [(transicao, 0.0), (transicao, escoamento * 1.05)],
-            cor=COR_NEUTRA,
+            [(200.0, 0.0), (200.0, escoamento * 1.05)],
+            cor=COR_DESTAQUE,
             espessura=1,
             tracejada=True,
+            rotulo="KL/r = 200 (5.3.4.1)",
         ),
     ]
     marcadores = [
         Marcador(
-            transicao, escoamento / 2, f"λt = {transicao:.1f}", cor=COR_NEUTRA, deslocamento=(6, -8)
-        )
+            lambda_1_5,
+            tensao_resistente(lambda_1_5),
+            "λ₀ = 1,5",
+            cor=COR_SECUNDARIA,
+            deslocamento=(6, -10),
+        ),
+        Marcador(
+            esbeltez,
+            sigma_rd,
+            f"N_c,Rd/A = {sigma_rd:.1f} MPa (λ = {esbeltez:.1f}, χ = {chi:.3f})",
+            cor=COR_DESTAQUE,
+        ),
     ]
-    if sigma_cr is not None:
-        marcadores.append(
-            Marcador(
-                esbeltez,
-                sigma_cr,
-                f"σcr = {sigma_cr:.1f} MPa (λ = {esbeltez:.1f})",
-                cor=COR_DESTAQUE,
-            )
-        )
-    if sigma_atuante is not None:
+    if sigma_sd is not None:
         curvas.append(
             Curva(
-                [(0.0, sigma_atuante), (lambda_max, sigma_atuante)],
+                [(0.0, sigma_sd), (lambda_max, sigma_sd)],
                 cor=COR_TORQUE_SEGURA,
                 espessura=1,
-                rotulo=f"σ atuante = P/A = {sigma_atuante:.1f} MPa",
+                rotulo=f"N_Sd/A = {sigma_sd:.1f} MPa",
             )
         )
         marcadores.append(
-            Marcador(esbeltez, sigma_atuante, "coluna", cor=COR_TORQUE_SEGURA, deslocamento=(8, 4))
+            Marcador(esbeltez, sigma_sd, "coluna", cor=COR_TORQUE_SEGURA, deslocamento=(8, 4))
         )
-    notas = []
-    fator = _numero(resultados.get("fator_seguranca"))
-    if fator is not None:
+    notas = [f"Q = {fator_q:.3f}; χ = {chi:.3f}; γ_a1 = {gamma_a1:.2f}."]
+    utilizacao = _numero(resultados.get("utilizacao"))
+    if utilizacao is not None:
         notas.append(
-            f"Regime: {resultados.get('regime', '-')}; fator de segurança real = {fator:.2f}."
+            f"Utilização = {utilizacao * 100:.0f}% ({resultados.get('modo_governante', '-')})."
         )
-    # Com excentricidade registrada, a carga de escoamento pela secante fica
-    # abaixo da curva de Euler/Johnson: é o ponto que a coluna real alcança.
-    carga_secante = _numero(resultados.get("carga_escoamento_secante_kN"))
-    excentricidade = _numero(entradas.get("excentricidade_mm"))
-    if carga_secante and excentricidade:
-        sigma_secante = carga_secante * 1_000.0 / area
-        marcadores.append(
-            Marcador(
-                esbeltez,
-                sigma_secante,
-                f"secante: P_y/A = {sigma_secante:.1f} MPa (e = {excentricidade:g} mm)",
-                cor=COR_SECUNDARIA,
-                deslocamento=(8, 12),
-            )
-        )
-        notas.append(
-            f"Com excentricidade de {excentricidade:g} mm, a fibra extrema escoa com "
-            f"P_y = {carga_secante:.2f} kN (fórmula da secante)."
-        )
+    indice = _numero(resultados.get("indice_interacao"))
+    if indice is not None:
+        notas.append(f"Interação N + M (5.5.1.2) = {indice:.3f}.")
     grafico = GraficoXY(
-        titulo="Tensão crítica de flambagem × índice de esbeltez",
+        titulo="Curva de flambagem NBR 8800 × índice de esbeltez",
         eixo_x="Índice de esbeltez λ = KL/r",
-        eixo_y="Tensão crítica σcr (MPa)",
+        eixo_y="Tensão resistente N_c,Rd/A (MPa)",
         curvas=curvas,
         marcadores=marcadores,
         dominio_x=(0.0, lambda_max),
@@ -571,7 +559,7 @@ def imagens_flambagem(
     return [
         renderizar_xy(
             grafico,
-            legenda="Curva de Euler/Johnson do material registrado, com a esbeltez governante da coluna e a tensão atuante.",
+            legenda="Curva única de flambagem da NBR 8800 (χ·Q·f_y/γ_a1) do material registrado, com a esbeltez governante da coluna, a tensão resistente e a solicitante de cálculo.",
         )
     ]
 

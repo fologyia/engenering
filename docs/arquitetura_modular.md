@@ -46,8 +46,12 @@ declara ID, título, posição e uma função que devolve parágrafos, tabelas,
 fórmulas, bullets ou nota. O modelo unificado numera a seção e os renderizadores
 Word/PDF a apresentam sem conhecer o módulo de origem.
 
-O provedor `carregamentos` é a implementação de referência: ele acrescenta
-casos, combinações e envelope ao memorial.
+O provedor `vigas_eixos` é a implementação de referência: ele acrescenta ao
+memorial as tabelas de esforços, verificações e reações das barras registradas
+e devolve um dicionário vazio quando o projeto não tem viga — o orquestrador
+omite a seção em vez de imprimir tabelas vazias. Os registros dos módulos em
+`MODULOS_FORA_DO_MEMORIAL` (casos de carga e Círculo de Mohr) não entram no
+memorial.
 
 ## Regras de validação
 

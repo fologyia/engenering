@@ -145,11 +145,13 @@ class SecaoDeVigasTests(unittest.TestCase):
                 return secao
         self.fail("seção de vigas ausente do memorial")
 
-    def test_projeto_sem_vigas_gera_secao_vazia_sem_quebrar(self):
-        secao = self.secao(projeto_minimo())
-        self.assertIn("0 análise(s)", " ".join(secao["paragrafos"]))
-        for tabela in secao["tabelas"]:
-            self.assertTrue(tabela["linhas"])
+    def test_projeto_sem_vigas_nao_tem_secao(self):
+        # Quatro tabelas só com "-" não informam nada: sem viga registrada,
+        # o provedor devolve vazio e o orquestrador omite a seção.
+        modelo = montar_modelo_relatorio(projeto_minimo())
+        self.assertFalse(
+            any("Vigas e eixos" in secao.get("titulo", "") for secao in modelo["secoes"])
+        )
 
     def test_barra_comprimida_ganha_tabela_de_estabilidade(self):
         # Perfil I fletido em x e comprimido: a carga crítica fora do plano
@@ -269,7 +271,7 @@ class DiagramasNoMemorialTests(unittest.TestCase):
         modelo = montar_modelo_relatorio(projeto)
         secoes = modelo["secoes"]
         inicio = next(
-            indice for indice, s in enumerate(secoes) if "Registros técnicos" in s.get("titulo", "")
+            indice for indice, s in enumerate(secoes) if "Memória de cálculo" in s.get("titulo", "")
         )
         return next(s for s in secoes[inicio + 1 :] if "imagens" in s)
 
