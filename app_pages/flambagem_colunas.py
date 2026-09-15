@@ -198,19 +198,56 @@ with st.container(border=True):
 
     st.caption(f":material/info: {geometria.descricao}")
 
+
 with st.container(border=True):
-    st.subheader("2. Comprimento e condições de apoio")
+    st.subheader("2. Eixo analisado, comprimento destravado e apoio")
     comprimento_mm = st.number_input(
         "Comprimento real da coluna L (mm)",
         min_value=0.001,
         step=100.0,
         key="flambagem_comprimento_mm",
         persist_state="session",
+        help="Altura total da coluna. Serve de padrão para o comprimento destravado de cada eixo e de braço para a mão-francesa.",
     )
-    apoio = st.selectbox(
-        "Condição de apoio idealizada (Tabela E.1)",
+    eixo = st.segmented_control(
+        "Eixo analisado nesta verificação",
+        ["x", "y"],
+        format_func=lambda valor: (
+            f"Eixo {valor}-{valor}" + (" (frontal, forte)" if valor == "x" else " (lateral, fraco)")
+        ),
+        default="x",
+        required=True,
+        width="stretch",
+        key="flambagem_eixo_analisado",
+        persist_state="session",
+        help=(
+            "Cada eixo é uma verificação própria, com o comprimento destravado e o K "
+            "daquele plano — por exemplo, x-x do piso ao nó da mão-francesa e y-y com o "
+            "contraventamento lateral. Registre uma verificação para cada eixo; o "
+            "pior dos dois governa a coluna."
+        ),
+    )
+    outro_eixo = "y" if eixo == "x" else "x"
+    rotulo_eixo = f"{eixo}-{eixo}"
+    if st.session_state.get(f"flambagem_L_{eixo}") is None:
+        st.session_state[f"flambagem_L_{eixo}"] = float(comprimento_mm)
+    colunas_eixo = st.columns([2, 3])
+    comprimento_eixo_mm = colunas_eixo[0].number_input(
+        f"Comprimento destravado L{eixo} (mm)",
+        min_value=0.001,
+        step=100.0,
+        key=f"flambagem_L_{eixo}",
+        persist_state="session",
+        help=(
+            f"Distância entre os pontos que impedem a flexão em torno de {rotulo_eixo}. "
+            "No plano da mão-francesa costuma ser do piso ao nó; no plano do "
+            "contraventamento, entre os travamentos laterais."
+        ),
+    )
+    apoio = colunas_eixo[1].selectbox(
+        f"Condição de apoio no plano de {rotulo_eixo} (Tabela E.1)",
         list(flambagem.CONDICOES_APOIO),
-        key="flambagem_condicao_apoio",
+        key=f"flambagem_condicao_apoio_{eixo}",
         persist_state="session",
     )
     k_teorico = flambagem.CONDICOES_APOIO[apoio]
@@ -218,7 +255,7 @@ with st.container(border=True):
     usar_recomendado = st.toggle(
         f"Usar o K recomendado para projeto ({k_recomendado:.2f}) em vez do teórico ({k_teorico:.2f})",
         value=True,
-        key="flambagem_k_recomendado",
+        key=f"flambagem_k_recomendado_{eixo}",
         persist_state="session",
         help=(
             "Ligações reais nunca são um engaste ou um pino perfeitos. A Tabela E.1 "
@@ -227,52 +264,55 @@ with st.container(border=True):
         ),
     )
     k_padrao = k_recomendado if usar_recomendado else k_teorico
-    st.caption(
-        f"Fator de comprimento de flambagem adotado K = {k_padrao:.2f} "
-        f"({'recomendado para projeto' if usar_recomendado else 'teórico'})."
-    )
-    contraventamento_assimetrico = st.checkbox(
-        "Contraventamento diferente em cada eixo (Kx ≠ Ky) ou torção travada (Kz)",
+    colunas_k = st.columns([1, 1, 2])
+    k_manual = colunas_k[0].checkbox(
+        f"Informar K{eixo} manualmente",
         value=False,
-        help=(
-            "Use quando a coluna é travada lateralmente em um eixo (reduzindo "
-            "o comprimento destravado) e livre no outro, ou quando a rotação "
-            "em torno do eixo longitudinal tem travamento próprio."
-        ),
-        key="flambagem_kx_ky_diferentes",
+        key=f"flambagem_k_manual_{eixo}",
         persist_state="session",
     )
-    kz = None
-    if contraventamento_assimetrico:
-        colunas_k = st.columns(3)
-        kx = colunas_k[0].number_input(
-            "Kx (eixo x)",
+    if k_manual:
+        k_eixo = colunas_k[1].number_input(
+            f"K{eixo}",
             min_value=0.01,
             value=k_padrao,
             step=0.05,
-            key="flambagem_kx",
+            key=f"flambagem_k_valor_{eixo}",
             persist_state="session",
-        )
-        ky = colunas_k[1].number_input(
-            "Ky (eixo y)",
-            min_value=0.01,
-            value=k_padrao,
-            step=0.05,
-            key="flambagem_ky",
-            persist_state="session",
-        )
-        kz = colunas_k[2].number_input(
-            "Kz (torção)",
-            min_value=0.01,
-            value=max(kx, ky),
-            step=0.05,
-            key="flambagem_kz",
-            persist_state="session",
-            help="Comprimento de flambagem por torção K_z·L (Anexo E). Sem travamento próprio, vale o maior de Kx·L e Ky·L.",
         )
     else:
-        kx = ky = k_padrao
-
+        k_eixo = k_padrao
+    torcao_travada = colunas_k[2].checkbox(
+        "Torção com travamento próprio (informar Kz)",
+        value=False,
+        key=f"flambagem_kz_manual_{eixo}",
+        persist_state="session",
+        help=f"Comprimento de flambagem por torção K_z·L{eixo} (Anexo E). Sem travamento próprio, vale o mesmo K{eixo}·L{eixo}.",
+    )
+    kz = None
+    if torcao_travada:
+        kz = st.number_input(
+            "Kz (torção)",
+            min_value=0.01,
+            value=k_eixo,
+            step=0.05,
+            key=f"flambagem_kz_valor_{eixo}",
+            persist_state="session",
+        )
+    st.caption(
+        f"Eixo {rotulo_eixo}: K{eixo}·L{eixo} = {k_eixo:.2f} × {comprimento_eixo_mm:.0f} = "
+        f"**{k_eixo * comprimento_eixo_mm:.0f} mm** "
+        f"({'K recomendado para projeto' if usar_recomendado and not k_manual else 'K teórico' if not k_manual else 'K informado'})."
+    )
+    resumo_outro = st.session_state.get(f"flambagem_resumo_{outro_eixo}")
+    if resumo_outro:
+        st.info(
+            f"Eixo {outro_eixo}-{outro_eixo} (última análise nesta sessão): "
+            f"L{outro_eixo} = {resumo_outro['comprimento_mm']:.0f} mm, K{outro_eixo} = {resumo_outro['k']:.2f}, "
+            f"λ = {resumo_outro['esbeltez']:.1f}, N_c,Rd = {resumo_outro['resistencia_kN']:.2f} kN, "
+            f"utilização = {resumo_outro['utilizacao']}. Lembre de registrar os dois eixos.",
+            icon=":material/swap_horiz:",
+        )
 with st.container(border=True):
     st.subheader("3. Material")
 
@@ -422,26 +462,31 @@ with st.container(border=True):
             help="Já majorada pelos γ_f das combinações (NBR 8681 / NBR 8800 4.7).",
         )
 
-    st.markdown("**Flexocompressão** (5.5.1.2) — excentricidade e/ou momentos de cálculo")
-    colunas_exc = st.columns([2, 1, 1])
+    st.markdown(
+        f"**Flexocompressão no eixo {rotulo_eixo}** (5.5.1.2) — excentricidade e/ou momento de cálculo"
+    )
+    colunas_exc = st.columns([2, 2, 1])
     excentricidade_mm = colunas_exc[0].number_input(
-        "Excentricidade e da força (mm)",
+        f"Excentricidade e da força no eixo {rotulo_eixo} (mm)",
         min_value=0.0,
         value=0.0,
         step=1.0,
-        key="flambagem_excentricidade_mm",
+        key=f"flambagem_excentricidade_{eixo}",
         persist_state="session",
         help=(
-            "Distância entre a linha de ação da força e o centroide (ex.: força de "
-            "mão-francesa chegando fora do eixo). Gera M_Sd = N_Sd·e, amplificado "
-            "por B_1 (Anexo D) e levado à equação de interação."
+            "Distância entre a linha de ação da força e o centroide, medida no plano "
+            f"que flete {rotulo_eixo}. Gera M_Sd = N_Sd·e, amplificado por B_1 (Anexo D) "
+            "e levado à equação de interação."
         ),
     )
-    eixo_excentricidade = colunas_exc[1].selectbox(
-        "Eixo de flexão de e",
-        ["governante", "x", "y"],
-        key="flambagem_eixo_excentricidade",
+    momento_kNm = colunas_exc[1].number_input(
+        f"M_{eixo},Sd (kN·m)",
+        min_value=0.0,
+        value=0.0,
+        step=1.0,
+        key=f"flambagem_momento_{eixo}",
         persist_state="session",
+        help=f"Momento de cálculo de 1ª ordem em torno de {rotulo_eixo}, além do que a mão-francesa gera abaixo.",
     )
     cm = colunas_exc[2].number_input(
         "C_m",
@@ -449,54 +494,40 @@ with st.container(border=True):
         max_value=1.0,
         value=1.0,
         step=0.05,
-        key="flambagem_cm",
+        key=f"flambagem_cm_{eixo}",
         persist_state="session",
         help="Coeficiente de equivalência de momentos (D.2.2): 1,0 é conservador; 0,6 − 0,4·M1/M2 sem cargas transversais.",
     )
-    colunas_m = st.columns(4)
-    momento_x_kNm = colunas_m[0].number_input(
-        "M_x,Sd (kN·m)",
-        min_value=0.0,
-        value=0.0,
-        step=1.0,
-        key="flambagem_mx_kNm",
-        persist_state="session",
-        help="Momento de cálculo de 1ª ordem em torno de x (por exemplo, da força cortante da mão-francesa × braço).",
-    )
-    momento_y_kNm = colunas_m[1].number_input(
-        "M_y,Sd (kN·m)",
-        min_value=0.0,
-        value=0.0,
-        step=1.0,
-        key="flambagem_my_kNm",
-        persist_state="session",
-    )
-    comprimento_destravado_mm = colunas_m[2].number_input(
-        "L_b para FLT (mm, 0 = igual a L)",
-        min_value=0.0,
-        value=0.0,
-        step=100.0,
-        key="flambagem_lb_mm",
-        persist_state="session",
-        help="Comprimento destravado lateralmente da mesa comprimida, só para M_x,Rd de perfis abertos.",
-    )
-    cb = colunas_m[3].number_input(
-        "C_b",
-        min_value=1.0,
-        max_value=3.0,
-        value=1.0,
-        step=0.05,
-        key="flambagem_cb",
-        persist_state="session",
-    )
+    comprimento_destravado_mm = 0.0
+    cb = 1.0
+    if eixo == "x":
+        colunas_flt = st.columns(2)
+        comprimento_destravado_mm = colunas_flt[0].number_input(
+            "L_b para FLT (mm, 0 = igual a Lx)",
+            min_value=0.0,
+            value=0.0,
+            step=100.0,
+            key="flambagem_lb_mm",
+            persist_state="session",
+            help="Comprimento destravado lateralmente da mesa comprimida, só para M_x,Rd de perfis abertos.",
+        )
+        cb = colunas_flt[1].number_input(
+            "C_b",
+            min_value=1.0,
+            max_value=3.0,
+            value=1.0,
+            step=0.05,
+            key="flambagem_cb",
+            persist_state="session",
+        )
 
 with st.container(border=True):
     st.subheader("5. Mão-francesa (força inclinada chegando na coluna)")
     st.caption(
         "A mão-francesa descarrega na coluna uma força inclinada: a componente "
         "horizontal H flete a coluna (M = H × braço) e a vertical V comprime. "
-        "O momento calculado aqui é somado a M_Sd e entra na interação N + M — "
-        "sem isto o campo fica em zero e a flexão da mão-francesa é ignorada."
+        "O momento calculado aqui é somado a M_Sd do eixo que ela flete e entra na "
+        "interação N + M — sem isto o campo fica em zero e a flexão da mão-francesa é ignorada."
     )
     incluir_mao_francesa = st.toggle(
         "Incluir a mão-francesa nesta verificação",
@@ -559,7 +590,7 @@ with st.container(border=True):
             help="Define como H vira momento: engaste na base (M = H·a), pino-pino (M = H·a·(L−a)/L) ou engaste com topo apoiado.",
         )
         eixo_mf = colunas_mf2[1].selectbox(
-            "Eixo de flexão",
+            "Eixo que ela flete",
             ["x", "y"],
             key="flambagem_mf_eixo",
             persist_state="session",
@@ -622,38 +653,44 @@ with st.container(border=True):
                 if esforcos_mf.momento_excentricidade_Nmm > 0
                 else ""
             )
-            + f". Este momento é somado a M_{eixo_mf},Sd informado acima."
+            + "."
         )
+        if eixo_mf == eixo:
+            st.caption(f"Este momento é somado a M_{eixo},Sd na verificação do eixo {rotulo_eixo}.")
+        else:
+            st.info(
+                f"A mão-francesa flete o eixo {eixo_mf}-{eixo_mf}; nesta verificação do eixo "
+                f"{rotulo_eixo} o momento dela não entra"
+                + (" — só a componente V somada a N_Sd." if somar_v_mf else "."),
+                icon=":material/info:",
+            )
 
-momento_x_total_kNm = momento_x_kNm
-momento_y_total_kNm = momento_y_kNm
+momento_total_kNm = momento_kNm
 forca_sd_total_kN = forca_sd_kN
+momento_mf_no_eixo_kNm = 0.0
 if esforcos_mf is not None:
-    if eixo_mf == "x":
-        momento_x_total_kNm += esforcos_mf.momento_Nmm / 1e6
-    else:
-        momento_y_total_kNm += esforcos_mf.momento_Nmm / 1e6
+    if eixo_mf == eixo:
+        momento_mf_no_eixo_kNm = esforcos_mf.momento_Nmm / 1e6
+        momento_total_kNm += momento_mf_no_eixo_kNm
     if somar_v_mf:
         forca_sd_total_kN += esforcos_mf.componente_vertical_N / 1e3
 
 try:
-    resultado = flambagem.verificar_flambagem(
+    resultado = flambagem.verificar_flambagem_eixo(
+        eixo=eixo,
         geometria=geometria,
-        comprimento_mm=comprimento_mm,
-        kx=kx,
-        ky=ky,
+        comprimento_mm=comprimento_eixo_mm,
+        k=k_eixo,
         kz=kz,
         modulo_elasticidade_MPa=modulo_elasticidade_MPa,
         modulo_cisalhamento_MPa=modulo_cisalhamento_MPa,
         escoamento_MPa=escoamento_MPa,
         forca_solicitante_N=forca_sd_total_kN * 1e3,
-        momento_x_Nmm=momento_x_total_kNm * 1e6,
-        momento_y_Nmm=momento_y_total_kNm * 1e6,
+        momento_Nmm=momento_total_kNm * 1e6,
         excentricidade_mm=excentricidade_mm,
-        eixo_excentricidade=eixo_excentricidade,
         cm=cm,
         comprimento_destravado_mm=(
-            comprimento_destravado_mm if comprimento_destravado_mm > 0 else comprimento_mm
+            comprimento_destravado_mm if comprimento_destravado_mm > 0 else comprimento_eixo_mm
         ),
         cb=cb,
         soldado=soldado,
@@ -662,7 +699,16 @@ except ValueError as erro:
     st.error(f"Não foi possível calcular: {erro}", icon=":material/error:")
     st.stop()
 
-st.header("Resultados")
+utilizacao_texto = "∞" if math.isinf(resultado.utilizacao) else f"{resultado.utilizacao * 100:.0f}%"
+st.session_state[f"flambagem_resumo_{eixo}"] = {
+    "comprimento_mm": comprimento_eixo_mm,
+    "k": k_eixo,
+    "esbeltez": resultado.esbeltez,
+    "resistencia_kN": resultado.resistencia_N / 1e3,
+    "utilizacao": utilizacao_texto,
+}
+
+st.header(f"Resultados — eixo {rotulo_eixo}")
 
 for aviso in resultado.avisos:
     st.warning(aviso, icon=":material/warning:")
@@ -676,119 +722,38 @@ def _fmt(valor: float | None, casas: int = 3, sufixo: str = "") -> str:
     return f"{valor:.{casas}f}{sufixo}"
 
 
-def _mostrar_eixo(eixo: flambagem.VerificacaoEixo) -> None:
-    rotulo = f"Eixo {eixo.eixo}-{eixo.eixo}"
-    if eixo.governa:
-        st.markdown(f"#### {rotulo} · :red[governa a flambagem]")
-    else:
-        st.markdown(f"#### {rotulo}")
-    st.metric(
-        f"K{eixo.eixo}·L / r{eixo.eixo}",
-        f"{eixo.fator_k:.2f} × {eixo.comprimento_efetivo_mm / eixo.fator_k:.0f} / {eixo.raio_giracao_mm:.1f}",
-        border=True,
-    )
+with st.container(border=True):
+    st.subheader(f"Esbeltez e flambagem elástica no eixo {rotulo_eixo} (Anexo E)")
     with st.container(horizontal=True):
-        st.metric(f"λ{eixo.eixo}", f"{eixo.esbeltez:.1f}", border=True)
-        st.metric(f"N_e{eixo.eixo}", f"{eixo.ne_N / 1e3:.1f} kN", border=True)
-    with st.container(horizontal=True):
-        st.metric("λ_0", _fmt(eixo.lambda_0), border=True)
-        st.metric("χ", _fmt(eixo.chi), border=True)
-    st.metric(
-        "N_c,Rd do eixo",
-        f"{eixo.resistencia_N / 1e3:.2f} kN",
-        border=True,
-        help="χ·Q·A_g·f_y/γ_a1 com o N_e deste eixo, como se só a flexão nele governasse.",
-    )
-    st.metric("N_Sd / N_c,Rd", _fmt(eixo.utilizacao_axial), border=True)
-    momento = eixo.momento
-    if momento.momento_primeira_ordem_Nmm > 0:
-        with st.container(horizontal=True):
-            st.metric(
-                f"M_{eixo.eixo},Sd (1ª ordem)",
-                f"{momento.momento_primeira_ordem_Nmm / 1e6:.3f} kN·m",
-                border=True,
-            )
-            st.metric("B_1", _fmt(momento.b1), border=True)
-        with st.container(horizontal=True):
-            st.metric(
-                f"M_{eixo.eixo},Sd amplificado",
-                "∞"
-                if math.isinf(momento.momento_solicitante_Nmm)
-                else f"{momento.momento_solicitante_Nmm / 1e6:.3f} kN·m",
-                border=True,
-            )
-            st.metric(
-                f"M_{eixo.eixo},Rd",
-                _fmt(
-                    None
-                    if momento.momento_resistente_Nmm is None
-                    else momento.momento_resistente_Nmm / 1e6,
-                    3,
-                    " kN·m",
-                ),
-                border=True,
-                help=(
-                    momento.flexao.modo_governante
-                    if momento.flexao is not None
-                    else "W·f_y/γ_a1 (escoamento da fibra extrema)"
-                ),
-            )
         st.metric(
-            "Interação N + M do eixo",
-            _fmt(eixo.indice_interacao),
+            f"K{eixo}·L{eixo}",
+            f"{resultado.comprimento_efetivo_mm:.0f} mm",
             border=True,
-            help="N_Sd/N_c,Rd(eixo) + 8/9·M/M_Rd (ou N_Sd/(2N_c,Rd) + M/M_Rd se N_Sd/N_c,Rd < 0,2), só com o momento deste eixo.",
+            help=f"{resultado.fator_k:.2f} × {resultado.comprimento_mm:.0f} mm",
         )
-    else:
-        st.caption("Sem momento neste eixo.")
-    utilizacao_eixo = "∞" if math.isinf(eixo.utilizacao) else f"{eixo.utilizacao * 100:.0f}%"
-    if eixo.utilizacao > 1.0:
-        st.error(f"Utilização do eixo: {utilizacao_eixo}", icon=":material/error:")
-    elif eixo.utilizacao > 0.9:
-        st.warning(f"Utilização do eixo: {utilizacao_eixo}", icon=":material/warning:")
-    else:
-        st.success(f"Utilização do eixo: {utilizacao_eixo}", icon=":material/check_circle:")
-
-
-with st.container(border=True):
-    st.subheader("Verificação por eixo — x-x e y-y")
-    st.caption(
-        "Leitura de auxílio, eixo a eixo: esbeltez, N_e, χ e N_c,Rd como se só a flexão "
-        "naquele eixo governasse, com o momento do próprio eixo. A verificação normativa "
-        "(abaixo) usa o menor N_e entre x, y, torção e flexo-torção e combina os dois momentos."
-    )
-    coluna_x, coluna_y = st.columns(2, border=True)
-    with coluna_x:
-        _mostrar_eixo(resultado.eixo_x)
-    with coluna_y:
-        _mostrar_eixo(resultado.eixo_y)
-    if resultado.modo_flambagem not in {"x", "y"}:
-        st.warning(
-            f"Nenhum dos dois eixos governa sozinho: o modo elástico governante é "
-            f"**{resultado.modo_flambagem}** (N_e = {resultado.ne_N / 1e3:.1f} kN), "
-            "então a resistência normativa é menor que a de qualquer eixo isolado.",
-            icon=":material/warning:",
-        )
-
-with st.container(border=True):
-    st.subheader("Esbeltez e flambagem elástica (Anexo E)")
-    with st.container(horizontal=True):
-        st.metric("λx = KxL/rx", f"{resultado.esbeltez_x:.1f}", border=True)
-        st.metric("λy = KyL/ry", f"{resultado.esbeltez_y:.1f}", border=True)
+        st.metric(f"r{eixo}", f"{resultado.raio_giracao_mm:.1f} mm", border=True)
         st.metric(
-            f"λ governante (eixo {resultado.eixo_governante})",
-            f"{resultado.esbeltez_governante:.1f}",
+            f"λ{eixo} = K{eixo}L{eixo}/r{eixo}",
+            f"{resultado.esbeltez:.1f}",
             border=True,
             help=f"Limite 5.3.4.1: KL/r ≤ {flambagem.ESBELTEZ_MAXIMA:.0f}.",
         )
     with st.container(horizontal=True):
-        st.metric("N_ex", f"{resultado.ne_x_N / 1e3:.1f} kN", border=True)
-        st.metric("N_ey", f"{resultado.ne_y_N / 1e3:.1f} kN", border=True)
+        st.metric(
+            f"N_e{eixo} (flexão)",
+            f"{resultado.ne_flexao_N / 1e3:.1f} kN",
+            border=True,
+            help=f"π²·E·I{eixo}/(K{eixo}L{eixo})²",
+        )
         st.metric(
             "N_ez (torção)",
             "—" if resultado.ne_z_N is None else f"{resultado.ne_z_N / 1e3:.1f} kN",
             border=True,
-            help="Seções maciças e tubos circulares: torção não governa (J alto, Cw ≈ 0).",
+            help=(
+                "Seções maciças e tubos circulares: torção não governa (J alto, Cw ≈ 0)."
+                if resultado.ne_z_N is None
+                else f"Com K_z·L = {resultado.comprimento_efetivo_z_mm:.0f} mm."
+            ),
         )
         if resultado.ne_acoplada_N is not None:
             st.metric(
@@ -798,13 +763,12 @@ with st.container(border=True):
                 help="Modo acoplado das seções monossimétricas (E.1.2).",
             )
         st.metric(
-            f"N_e governante (modo {resultado.modo_flambagem})",
+            f"N_e adotado (modo {resultado.modo_flambagem})",
             f"{resultado.ne_N / 1e3:.1f} kN",
             border=True,
         )
     st.latex(
-        r"N_{ex}=\frac{\pi^2 E I_x}{(K_xL_x)^2},\quad "
-        r"N_{ey}=\frac{\pi^2 E I_y}{(K_yL_y)^2},\quad "
+        rf"N_{{e{eixo}}}=\frac{{\pi^2 E I_{eixo}}}{{(K_{eixo}L_{eixo})^2}},\qquad "
         r"N_{ez}=\frac{1}{r_0^2}\left[\frac{\pi^2 E C_w}{(K_zL_z)^2}+GJ\right]"
     )
 
@@ -817,23 +781,14 @@ with st.container(border=True):
             border=True,
             help="1,0 quando nenhuma parede passa de λ_r.",
         )
-        st.metric(
-            "λ_0",
-            f"{resultado.lambda_0:.3f}",
-            border=True,
-            help="λ_0 = √(Q·A_g·f_y / N_e)",
-        )
+        st.metric("λ_0", f"{resultado.lambda_0:.3f}", border=True, help="λ_0 = √(Q·A_g·f_y / N_e)")
         st.metric(
             "χ",
             f"{resultado.chi:.3f}",
             border=True,
             help="0,658^(λ_0²) para λ_0 ≤ 1,5; 0,877/λ_0² acima.",
         )
-        st.metric(
-            "Q·A_g·f_y",
-            f"{resultado.forca_escoamento_N / 1e3:.1f} kN",
-            border=True,
-        )
+        st.metric("Q·A_g·f_y", f"{resultado.forca_escoamento_N / 1e3:.1f} kN", border=True)
     if resultado.elementos:
         st.dataframe(
             pd.DataFrame(
@@ -864,7 +819,7 @@ with st.container(border=True):
     )
 
 with st.container(border=True):
-    st.subheader("Resistência de cálculo à compressão (5.3.2)")
+    st.subheader(f"Resistência de cálculo à compressão no eixo {rotulo_eixo} (5.3.2)")
     with st.container(horizontal=True):
         st.metric(
             "N_c,Rd = χ·Q·A_g·f_y/γ_a1",
@@ -873,100 +828,107 @@ with st.container(border=True):
             help=f"γ_a1 = {flambagem.GAMMA_A1:.2f} (Tabela 3).",
         )
         st.metric("N_Sd", f"{resultado.forca_solicitante_N / 1e3:.2f} kN", border=True)
-        st.metric(
-            "N_Sd / N_c,Rd",
-            "∞" if math.isinf(resultado.utilizacao_axial) else f"{resultado.utilizacao_axial:.3f}",
-            border=True,
-        )
+        st.metric("N_Sd / N_c,Rd", _fmt(resultado.utilizacao_axial), border=True)
     st.latex(
         r"N_{c,Rd}=\frac{\chi\,Q\,A_g\,f_y}{\gamma_{a1}},\qquad \frac{N_{Sd}}{N_{c,Rd}}\le1{,}0"
     )
 
-momentos_ativos = [
-    m for m in (resultado.momento_x, resultado.momento_y) if m.momento_primeira_ordem_Nmm > 0
-]
-if momentos_ativos:
+momento = resultado.momento
+if momento.momento_primeira_ordem_Nmm > 0:
     with st.container(border=True):
-        st.subheader("Flexocompressão (5.5.1.2, amplificação B_1 do Anexo D)")
-        for momento in momentos_ativos:
-            with st.container(horizontal=True):
-                st.metric(
-                    f"M_{momento.eixo},Sd 1ª ordem",
-                    f"{momento.momento_primeira_ordem_Nmm / 1e6:.3f} kN·m",
-                    border=True,
-                )
-                st.metric(
-                    f"B_1 ({momento.eixo})",
-                    "∞" if math.isinf(momento.b1) else f"{momento.b1:.3f}",
-                    border=True,
-                    help="B_1 = C_m/(1 − N_Sd/N_e) ≥ 1",
-                )
-                st.metric(
-                    f"M_{momento.eixo},Sd amplificado",
-                    "∞"
-                    if math.isinf(momento.momento_solicitante_Nmm)
-                    else f"{momento.momento_solicitante_Nmm / 1e6:.3f} kN·m",
-                    border=True,
-                )
-                st.metric(
-                    f"M_{momento.eixo},Rd",
-                    "—"
-                    if momento.momento_resistente_Nmm is None
-                    else f"{momento.momento_resistente_Nmm / 1e6:.3f} kN·m",
-                    border=True,
-                    help=(
-                        momento.flexao.modo_governante
-                        if momento.flexao is not None
-                        else "W·f_y/γ_a1 (escoamento da fibra extrema)"
-                    ),
-                )
+        st.subheader(
+            f"Flexocompressão no eixo {rotulo_eixo} (5.5.1.2, amplificação B_1 do Anexo D)"
+        )
+        with st.container(horizontal=True):
+            st.metric(
+                f"M_{eixo},Sd 1ª ordem",
+                f"{momento.momento_primeira_ordem_Nmm / 1e6:.3f} kN·m",
+                border=True,
+                help=(
+                    f"M informado {momento_kNm:.3f} + mão-francesa {momento_mf_no_eixo_kNm:.3f}"
+                    + (
+                        f" + N_Sd·e {resultado.forca_solicitante_N * excentricidade_mm / 1e6:.3f}"
+                        if excentricidade_mm > 0
+                        else ""
+                    )
+                    + " kN·m"
+                ),
+            )
+            st.metric("B_1", _fmt(momento.b1), border=True, help="B_1 = C_m/(1 − N_Sd/N_e) ≥ 1")
+            st.metric(
+                f"M_{eixo},Sd amplificado",
+                "∞"
+                if math.isinf(momento.momento_solicitante_Nmm)
+                else f"{momento.momento_solicitante_Nmm / 1e6:.3f} kN·m",
+                border=True,
+            )
+            st.metric(
+                f"M_{eixo},Rd",
+                "—"
+                if momento.momento_resistente_Nmm is None
+                else f"{momento.momento_resistente_Nmm / 1e6:.3f} kN·m",
+                border=True,
+                help=(
+                    momento.flexao.modo_governante
+                    if momento.flexao is not None
+                    else "W·f_y/γ_a1 (escoamento da fibra extrema)"
+                ),
+            )
         if resultado.interacao is not None:
             st.metric(
                 "Índice de interação",
-                "∞"
-                if math.isinf(resultado.interacao.indice)
-                else f"{resultado.interacao.indice:.3f}",
+                _fmt(resultado.interacao.indice),
                 border=True,
                 help=resultado.interacao.expressao,
             )
             st.latex(
-                r"\frac{N_{Sd}}{N_{Rd}}\ge0{,}2:\ \frac{N_{Sd}}{N_{Rd}}+\frac{8}{9}\left("
-                r"\frac{M_{x,Sd}}{M_{x,Rd}}+\frac{M_{y,Sd}}{M_{y,Rd}}\right)\le1{,}0\qquad "
-                r"\frac{N_{Sd}}{N_{Rd}}<0{,}2:\ \frac{N_{Sd}}{2N_{Rd}}+\frac{M_{x,Sd}}{M_{x,Rd}}"
-                r"+\frac{M_{y,Sd}}{M_{y,Rd}}\le1{,}0"
+                rf"\frac{{N_{{Sd}}}}{{N_{{Rd}}}}\ge0{{,}}2:\ \frac{{N_{{Sd}}}}{{N_{{Rd}}}}+\frac{{8}}{{9}}\,"
+                rf"\frac{{M_{{{eixo},Sd}}}}{{M_{{{eixo},Rd}}}}\le1{{,}}0\qquad "
+                rf"\frac{{N_{{Sd}}}}{{N_{{Rd}}}}<0{{,}}2:\ \frac{{N_{{Sd}}}}{{2N_{{Rd}}}}+"
+                rf"\frac{{M_{{{eixo},Sd}}}}{{M_{{{eixo},Rd}}}}\le1{{,}}0"
             )
 
 tabela_resumo_flambagem = pd.DataFrame(
     {
         "Grandeza": [
-            "λx",
-            "λy",
-            "λ governante",
-            "N_ex (kN)",
-            "N_ey (kN)",
+            "Eixo",
+            f"L{eixo} (mm)",
+            f"K{eixo}",
+            f"λ{eixo}",
+            f"N_e{eixo} flexão (kN)",
             "N_ez (kN)",
-            "N_e governante (kN)",
+            "N_e adotado (kN)",
+            "Modo",
             "Q",
             "λ_0",
             "χ",
             "N_c,Rd (kN)",
             "N_Sd (kN)",
+            f"M_{eixo},Sd amplificado (kN·m)",
+            f"M_{eixo},Rd (kN·m)",
             "Índice de interação",
             "Utilização governante",
         ],
         "Valor": [
-            resultado.esbeltez_x,
-            resultado.esbeltez_y,
-            resultado.esbeltez_governante,
-            resultado.ne_x_N / 1e3,
-            resultado.ne_y_N / 1e3,
+            rotulo_eixo,
+            resultado.comprimento_mm,
+            resultado.fator_k,
+            resultado.esbeltez,
+            resultado.ne_flexao_N / 1e3,
             None if resultado.ne_z_N is None else resultado.ne_z_N / 1e3,
             resultado.ne_N / 1e3,
+            resultado.modo_flambagem,
             resultado.fator_q,
             resultado.lambda_0,
             resultado.chi,
             resultado.resistencia_N / 1e3,
             resultado.forca_solicitante_N / 1e3,
+            None
+            if math.isinf(momento.momento_solicitante_Nmm)
+            else momento.momento_solicitante_Nmm / 1e6,
+            None
+            if momento.momento_resistente_Nmm is None
+            else momento.momento_resistente_Nmm / 1e6,
             None
             if resultado.interacao is None or math.isinf(resultado.interacao.indice)
             else resultado.interacao.indice,
@@ -977,34 +939,39 @@ tabela_resumo_flambagem = pd.DataFrame(
 st.download_button(
     "Baixar resultado em CSV",
     data=tabela_resumo_flambagem.to_csv(index=False).encode("utf-8-sig"),
-    file_name="flambagem_colunas_nbr8800.csv",
+    file_name=f"flambagem_colunas_eixo_{eixo}.csv",
     mime="text/csv",
     icon=":material/download:",
     width="stretch",
     key="flambagem_baixar",
 )
 
-utilizacao_texto = "∞" if math.isinf(resultado.utilizacao) else f"{resultado.utilizacao * 100:.0f}%"
 if not resultado.atende:
     st.error(
-        f"Não atende: utilização de {utilizacao_texto} pelo modo **{resultado.modo_governante}**. "
-        "Reforce a seção, reduza o comprimento de flambagem ou revise o apoio.",
+        f"Eixo {rotulo_eixo} não atende: utilização de {utilizacao_texto} pelo modo "
+        f"**{resultado.modo_governante}**. Reforce a seção, reduza o comprimento destravado "
+        "ou revise o apoio.",
         icon=":material/error:",
     )
 elif resultado.utilizacao > 0.9:
     st.warning(
-        f"Atende com utilização de {utilizacao_texto} ({resultado.modo_governante}) "
-        "— margem pequena; confira K, comprimentos destravados e os γ_f das ações.",
+        f"Eixo {rotulo_eixo} atende com utilização de {utilizacao_texto} "
+        f"({resultado.modo_governante}) — margem pequena; confira K, comprimento destravado "
+        "e os γ_f das ações.",
         icon=":material/warning:",
     )
 else:
     st.success(
-        f"Atende: utilização de {utilizacao_texto} pelo modo {resultado.modo_governante}.",
+        f"Eixo {rotulo_eixo} atende: utilização de {utilizacao_texto} pelo modo "
+        f"{resultado.modo_governante}.",
         icon=":material/check_circle:",
     )
 
 fronteira_modelo(
     [
+        f"Esta verificação cobre só o eixo {rotulo_eixo}: registre também o eixo "
+        f"{outro_eixo}-{outro_eixo} com o comprimento destravado e o K daquele plano — o pior "
+        "dos dois governa a coluna.",
         "Efeitos globais de segunda ordem (B_2, deslocabilidade do pórtico) e cargas "
         "nocionais pertencem à análise da estrutura — Estruturas de aço (pórtico 2D).",
         "Cisalhamento na coluna (5.4.3) e ligações nas extremidades não são verificados aqui.",
@@ -1014,7 +981,7 @@ fronteira_modelo(
 )
 
 with st.container(border=True):
-    st.subheader("Registrar no projeto")
+    st.subheader(f"Registrar no projeto — eixo {rotulo_eixo}")
     status_registro = (
         "Não atende"
         if not resultado.atende
@@ -1023,9 +990,10 @@ with st.container(border=True):
         else "Atende"
     )
     conclusao_registro = (
-        f"N_c,Rd = {resultado.resistencia_N / 1e3:.2f} kN (χ = {resultado.chi:.3f}, "
-        f"Q = {resultado.fator_q:.3f}, λ_0 = {resultado.lambda_0:.3f}); "
-        f"N_Sd = {resultado.forca_solicitante_N / 1e3:.2f} kN; "
+        f"Eixo {rotulo_eixo}: L{eixo} = {resultado.comprimento_mm:.0f} mm, K{eixo} = {resultado.fator_k:.2f}, "
+        f"λ{eixo} = {resultado.esbeltez:.1f}; N_c,Rd = {resultado.resistencia_N / 1e3:.2f} kN "
+        f"(χ = {resultado.chi:.3f}, Q = {resultado.fator_q:.3f}, λ_0 = {resultado.lambda_0:.3f}, "
+        f"modo {resultado.modo_flambagem}); N_Sd = {resultado.forca_solicitante_N / 1e3:.2f} kN; "
         f"utilização = {utilizacao_texto} ({resultado.modo_governante})."
         + (
             f" Interação N + M: {resultado.interacao.indice:.3f}."
@@ -1038,59 +1006,45 @@ with st.container(border=True):
     comparador_cenarios(
         escopo="flambagem_colunas",
         resumo_entradas={
+            "Eixo": rotulo_eixo,
             "Seção": tipo_secao,
-            "L (mm)": round(comprimento_mm, 0),
-            "K": round(k_padrao, 2),
+            f"L{eixo} (mm)": round(comprimento_eixo_mm, 0),
+            "K": round(k_eixo, 2),
         },
         metricas={
-            "λ governante": f"{resultado.esbeltez_governante:.1f}",
+            f"λ{eixo}": f"{resultado.esbeltez:.1f}",
             "χ": f"{resultado.chi:.3f}",
             "N_c,Rd (kN)": f"{resultado.resistencia_N / 1e3:.2f}",
             "Utilização": utilizacao_texto,
         },
     )
 
-    def _momento_registro(momento: flambagem.MomentoFletor) -> dict:
-        return {
-            "momento_primeira_ordem_kNm": momento.momento_primeira_ordem_Nmm / 1e6,
-            "b1": None if math.isinf(momento.b1) else momento.b1,
-            "momento_solicitante_kNm": (
-                None
-                if math.isinf(momento.momento_solicitante_Nmm)
-                else momento.momento_solicitante_Nmm / 1e6
-            ),
-            "momento_resistente_kNm": (
-                None
-                if momento.momento_resistente_Nmm is None
-                else momento.momento_resistente_Nmm / 1e6
-            ),
-            "modo_flexao": momento.flexao.modo_governante if momento.flexao else None,
-        }
-
     registro_flambagem = construir_registro_tecnico(
         modulo="Flambagem de colunas",
         modulo_id="flambagem_colunas",
-        titulo=f"Flambagem de coluna — {geometria.descricao}",
+        titulo=f"Flambagem de coluna — eixo {rotulo_eixo} — {geometria.descricao}",
         status=status_registro,
         resumo=(
-            f"Verificação pela NBR 8800:2008: modo de flambagem {resultado.modo_flambagem}, "
-            f"χ = {resultado.chi:.3f}, Q = {resultado.fator_q:.3f}, "
+            f"Verificação pela NBR 8800:2008 no eixo {rotulo_eixo}: modo de flambagem "
+            f"{resultado.modo_flambagem}, χ = {resultado.chi:.3f}, Q = {resultado.fator_q:.3f}, "
             f"utilização {utilizacao_texto} ({resultado.modo_governante})."
         ),
         entradas={
+            "eixo": eixo,
             "secao": geometria.descricao,
             "perfil": geometria.perfil.nome if geometria.perfil else None,
             "soldado": soldado,
             "area_mm2": geometria.area_mm2,
             "raio_giracao_x_mm": geometria.raio_giracao_x_mm,
             "raio_giracao_y_mm": geometria.raio_giracao_y_mm,
+            "raio_giracao_mm": resultado.raio_giracao_mm,
             "distancia_fibra_x_mm": geometria.distancia_fibra_x_mm,
             "distancia_fibra_y_mm": geometria.distancia_fibra_y_mm,
-            "comprimento_mm": comprimento_mm,
+            "comprimento_total_mm": comprimento_mm,
+            "comprimento_mm": comprimento_eixo_mm,
             "condicao_apoio": apoio,
-            "k_recomendado_de_norma": usar_recomendado,
-            "kx": kx,
-            "ky": ky,
+            "k_recomendado_de_norma": usar_recomendado and not k_manual,
+            "k": k_eixo,
             "kz": kz,
             "modulo_elasticidade_MPa": modulo_elasticidade_MPa,
             "modulo_cisalhamento_MPa": modulo_cisalhamento_MPa,
@@ -1101,15 +1055,14 @@ with st.container(border=True):
             "gamma_q": gamma_q,
             "gamma_a1": flambagem.GAMMA_A1,
             "forca_solicitante_kN": resultado.forca_solicitante_N / 1e3,
-            "momento_x_kNm": momento_x_total_kNm,
-            "momento_y_kNm": momento_y_total_kNm,
-            "momento_x_informado_kNm": momento_x_kNm,
-            "momento_y_informado_kNm": momento_y_kNm,
+            "momento_kNm": momento_total_kNm,
+            "momento_informado_kNm": momento_kNm,
             "excentricidade_mm": excentricidade_mm,
-            "eixo_excentricidade": eixo_excentricidade,
             "cm": cm,
-            "comprimento_destravado_mm": comprimento_destravado_mm or comprimento_mm,
-            "cb": cb,
+            "comprimento_destravado_mm": (
+                (comprimento_destravado_mm or comprimento_eixo_mm) if eixo == "x" else None
+            ),
+            "cb": cb if eixo == "x" else None,
             "mao_francesa": (
                 None
                 if esforcos_mf is None
@@ -1125,18 +1078,19 @@ with st.container(border=True):
                     "componente_horizontal_kN": esforcos_mf.componente_horizontal_N / 1e3,
                     "componente_vertical_kN": esforcos_mf.componente_vertical_N / 1e3,
                     "momento_kNm": esforcos_mf.momento_Nmm / 1e6,
+                    "momento_neste_eixo_kNm": momento_mf_no_eixo_kNm,
                     "expressao": esforcos_mf.expressao,
                     "v_somado_a_nsd": somar_v_mf,
                 }
             ),
         },
         resultados={
-            "esbeltez_x": resultado.esbeltez_x,
-            "esbeltez_y": resultado.esbeltez_y,
-            "esbeltez_governante": resultado.esbeltez_governante,
-            "eixo_governante": resultado.eixo_governante,
-            "ne_x_kN": resultado.ne_x_N / 1e3,
-            "ne_y_kN": resultado.ne_y_N / 1e3,
+            "eixo": eixo,
+            "comprimento_efetivo_mm": resultado.comprimento_efetivo_mm,
+            "esbeltez": resultado.esbeltez,
+            "esbeltez_governante": resultado.esbeltez,
+            "eixo_governante": eixo,
+            "ne_flexao_kN": resultado.ne_flexao_N / 1e3,
             "ne_z_kN": None if resultado.ne_z_N is None else resultado.ne_z_N / 1e3,
             "ne_acoplada_kN": (
                 None if resultado.ne_acoplada_N is None else resultado.ne_acoplada_N / 1e3
@@ -1151,25 +1105,20 @@ with st.container(border=True):
             "utilizacao_axial": (
                 None if math.isinf(resultado.utilizacao_axial) else resultado.utilizacao_axial
             ),
-            "momento_x": _momento_registro(resultado.momento_x),
-            "momento_y": _momento_registro(resultado.momento_y),
-            "por_eixo": {
-                eixo.eixo: {
-                    "esbeltez": eixo.esbeltez,
-                    "ne_kN": eixo.ne_N / 1e3,
-                    "lambda_0": eixo.lambda_0,
-                    "chi": eixo.chi,
-                    "resistencia_kN": eixo.resistencia_N / 1e3,
-                    "utilizacao_axial": eixo.utilizacao_axial,
-                    "indice_interacao": (
-                        None
-                        if eixo.indice_interacao is None or math.isinf(eixo.indice_interacao)
-                        else eixo.indice_interacao
-                    ),
-                    "utilizacao": None if math.isinf(eixo.utilizacao) else eixo.utilizacao,
-                    "governa": eixo.governa,
-                }
-                for eixo in (resultado.eixo_x, resultado.eixo_y)
+            "momento": {
+                "momento_primeira_ordem_kNm": momento.momento_primeira_ordem_Nmm / 1e6,
+                "b1": None if math.isinf(momento.b1) else momento.b1,
+                "momento_solicitante_kNm": (
+                    None
+                    if math.isinf(momento.momento_solicitante_Nmm)
+                    else momento.momento_solicitante_Nmm / 1e6
+                ),
+                "momento_resistente_kNm": (
+                    None
+                    if momento.momento_resistente_Nmm is None
+                    else momento.momento_resistente_Nmm / 1e6
+                ),
+                "modo_flexao": momento.flexao.modo_governante if momento.flexao else None,
             },
             "indice_interacao": (
                 None
@@ -1195,22 +1144,24 @@ with st.container(border=True):
             ],
         },
         metodo=(
-            "NBR 8800:2008 — N_c,Rd = χ·Q·A_g·f_y/γ_a1 (5.3.2) com λ_0 = √(Q·A_g·f_y/N_e), "
-            "χ pela curva única (5.3.3), N_e o menor entre flexão em x e y, torção e "
-            "flexo-torção (Anexo E) e Q = Q_s·Q_a das esbeltezes das paredes (Anexo F). "
-            "Momentos de cálculo (excentricidade e aplicados) amplificados por "
-            "B_1 = C_m/(1 − N_Sd/N_e) (Anexo D) e verificados pela interação 5.5.1.2 "
-            "com M_Rd do Anexo G."
+            f"NBR 8800:2008, eixo {rotulo_eixo} — N_c,Rd = χ·Q·A_g·f_y/γ_a1 (5.3.2) com "
+            f"λ_0 = √(Q·A_g·f_y/N_e), χ pela curva única (5.3.3), N_e = π²·E·I{eixo}/(K{eixo}·L{eixo})² "
+            "ou, se menor, o da torção/flexo-torção (Anexo E), e Q = Q_s·Q_a das esbeltezes das "
+            f"paredes (Anexo F). Momento de cálculo em {rotulo_eixo} (excentricidade, aplicado e "
+            "mão-francesa) amplificado por B_1 = C_m/(1 − N_Sd/N_e) (Anexo D) e verificado pela "
+            "interação 5.5.1.2 com M_Rd do Anexo G."
             + (
                 f" Mão-francesa: F_Sd = {esforcos_mf.forca_N / 1e3:.2f} kN a {esforcos_mf.angulo_graus:.0f}° "
                 f"decomposta em H = {esforcos_mf.componente_horizontal_N / 1e3:.2f} kN e "
                 f"V = {esforcos_mf.componente_vertical_N / 1e3:.2f} kN; {esforcos_mf.expressao} "
-                f"= {esforcos_mf.momento_Nmm / 1e6:.3f} kN·m somado a M_{eixo_mf},Sd."
+                f"= {esforcos_mf.momento_Nmm / 1e6:.3f} kN·m no eixo {eixo_mf}-{eixo_mf}."
                 if esforcos_mf is not None
                 else ""
             )
         ),
         premissas=[
+            f"Verificação do eixo {rotulo_eixo} com comprimento destravado L{eixo} = {comprimento_eixo_mm:.0f} mm "
+            f"e K{eixo} = {k_eixo:.2f}; o eixo {outro_eixo}-{outro_eixo} é verificado em registro próprio.",
             (
                 f"Ações majoradas: N_Sd = {gamma_g:.2f}·N_g + {gamma_q:.2f}·N_q (Tabela 1, combinação normal)."
                 if gamma_g is not None
@@ -1219,7 +1170,9 @@ with st.container(border=True):
             f"Resistência minorada por γ_a1 = {flambagem.GAMMA_A1:.2f} (Tabela 3).",
             (
                 "K é o valor recomendado para projeto da Tabela E.1 para a condição de apoio escolhida."
-                if usar_recomendado
+                if usar_recomendado and not k_manual
+                else "K informado manualmente."
+                if k_manual
                 else "K é o valor teórico da Tabela E.1 para a condição de apoio idealizada."
             ),
             "Barra prismática, isolada, com efeitos de 2ª ordem locais (B_1); B_2 e deslocabilidade do pórtico ficam na análise global.",
@@ -1248,8 +1201,12 @@ with st.container(border=True):
     )
     botao_registrar_calculo(
         registro_flambagem,
-        key="registrar_flambagem_colunas",
-        rotulo="Registrar verificação de flambagem no projeto ativo",
+        key=f"registrar_flambagem_colunas_{eixo}",
+        rotulo=f"Registrar verificação do eixo {rotulo_eixo} no projeto ativo",
+    )
+    st.caption(
+        f"Depois de registrar, troque para o eixo {outro_eixo}-{outro_eixo} na seção 2 e registre "
+        "também: cada eixo fica como um registro próprio no memorial."
     )
 
 with st.container(border=True):
@@ -1266,6 +1223,6 @@ with st.container(border=True):
         width="stretch",
     )
 st.caption(
-    "Verificação de barra isolada pela NBR 8800:2008. Para a estrutura completa "
-    "(pórtico, B_2, cargas nocionais, ligações e placa de base), use Estruturas de aço."
+    "Verificação de barra isolada pela NBR 8800:2008, um eixo por vez. Para a estrutura "
+    "completa (pórtico, B_2, cargas nocionais, ligações e placa de base), use Estruturas de aço."
 )

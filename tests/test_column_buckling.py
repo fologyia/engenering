@@ -436,5 +436,101 @@ class VerificacaoPorEixoTests(unittest.TestCase):
         )
 
 
+class VerificarEixoTests(unittest.TestCase):
+    """``verificar_flambagem_eixo``: um eixo por vez, com L e K próprios."""
+
+    def _eixo(self, eixo, geometria, comprimento_mm, **overrides):
+        parametros = dict(
+            eixo=eixo,
+            geometria=geometria,
+            comprimento_mm=comprimento_mm,
+            k=1.0,
+            modulo_elasticidade_MPa=200_000.0,
+            escoamento_MPa=250.0,
+            forca_solicitante_N=10_000.0,
+        )
+        parametros.update(overrides)
+        return flambagem.verificar_flambagem_eixo(**parametros)
+
+    def test_usa_o_comprimento_e_o_k_do_proprio_eixo(self):
+        geo = flambagem.geometria_retangular(30.0, 80.0)
+        x = self._eixo("x", geo, 2_890.0, k=0.8)
+        y = self._eixo("y", geo, 4_140.0, k=0.8)
+        self.assertAlmostEqual(x.comprimento_efetivo_mm, 0.8 * 2_890.0)
+        self.assertAlmostEqual(x.esbeltez, 0.8 * 2_890.0 / geo.raio_giracao_x_mm)
+        self.assertAlmostEqual(y.esbeltez, 0.8 * 4_140.0 / geo.raio_giracao_y_mm)
+        self.assertAlmostEqual(
+            x.ne_flexao_N, math.pi**2 * 200_000.0 * geo.perfil.ix_mm4 / (0.8 * 2_890.0) ** 2
+        )
+        self.assertEqual(x.modo_flambagem, "x")
+        self.assertEqual(y.modo_flambagem, "y")
+
+    def test_eixo_reproduz_a_verificacao_conjunta_quando_governa(self):
+        geo = flambagem.geometria_retangular(30.0, 80.0)
+        conjunta = _verificar(geo, 1_000.0, forca_solicitante_N=20_000.0)
+        y = self._eixo("y", geo, 1_000.0, forca_solicitante_N=20_000.0)
+        self.assertAlmostEqual(y.resistencia_N, conjunta.resistencia_N)
+        self.assertAlmostEqual(y.chi, conjunta.chi)
+        self.assertAlmostEqual(y.lambda_0, conjunta.lambda_0)
+
+    def test_torcao_governa_o_eixo_quando_nez_e_menor(self):
+        perfil = secoes.perfil_i_simetrico("I", 200, 100, 6, 10)
+        geo = flambagem.geometria_perfil_catalogo(perfil)
+        x = self._eixo("x", geo, 2_890.0, k=0.8, escoamento_MPa=345.0)
+        self.assertIsNotNone(x.ne_z_N)
+        self.assertLess(x.ne_z_N, x.ne_flexao_N)
+        self.assertEqual(x.modo_flambagem, "z (torção)")
+        self.assertAlmostEqual(x.ne_N, x.ne_z_N)
+        self.assertTrue(any("torção governa" in aviso for aviso in x.avisos))
+
+    def test_kz_muda_so_a_torcao(self):
+        perfil = secoes.perfil_i_simetrico("I", 200, 100, 6, 10)
+        geo = flambagem.geometria_perfil_catalogo(perfil)
+        livre = self._eixo("x", geo, 2_890.0, k=0.8)
+        travado = self._eixo("x", geo, 2_890.0, k=0.8, kz=0.5)
+        self.assertAlmostEqual(livre.ne_flexao_N, travado.ne_flexao_N)
+        self.assertGreater(travado.ne_z_N, livre.ne_z_N)
+        self.assertAlmostEqual(travado.comprimento_efetivo_z_mm, 0.5 * 2_890.0)
+
+    def test_u_acopla_x_com_torcao_e_nao_y(self):
+        perfil = secoes.perfil_u("U", 100, 50, 5, 8)
+        geo = flambagem.geometria_perfil_catalogo(perfil)
+        x = self._eixo("x", geo, 800.0)
+        y = self._eixo("y", geo, 800.0)
+        self.assertEqual(x.modo_flambagem, "xz (flexo-torção)")
+        self.assertAlmostEqual(x.ne_N, x.ne_acoplada_N)
+        self.assertEqual(y.modo_flambagem, "y")
+        self.assertAlmostEqual(y.ne_N, y.ne_flexao_N)
+
+    def test_momento_e_excentricidade_entram_na_interacao_do_eixo(self):
+        geo = flambagem.geometria_circular_macica(50.0)
+        x = self._eixo("x", geo, 2_000.0, forca_solicitante_N=50_000.0, excentricidade_mm=5.0)
+        self.assertAlmostEqual(x.momento.momento_primeira_ordem_Nmm, 250_000.0)
+        self.assertAlmostEqual(x.momento.b1, 1.0 / (1.0 - 50_000.0 / x.ne_flexao_N))
+        self.assertIsNotNone(x.interacao)
+        self.assertEqual(x.modo_governante, "Interação N + M (5.5.1.2)")
+        y = self._eixo("y", geo, 2_000.0, forca_solicitante_N=50_000.0, momento_Nmm=1.0e6)
+        self.assertGreater(y.interacao.razao_momento_y, 0.0)
+        self.assertEqual(y.interacao.razao_momento_x, 0.0)
+
+    def test_esbeltez_acima_de_200_reprova_o_eixo(self):
+        geo = flambagem.geometria_circular_macica(50.0)
+        y = self._eixo("y", geo, 4_140.0, k=0.8, forca_solicitante_N=100.0)
+        self.assertGreater(y.esbeltez, 200.0)
+        self.assertFalse(y.atende)
+        self.assertIn("200", y.modo_governante)
+
+    def test_geometria_direta_no_eixo(self):
+        geo = flambagem.geometria_direta(1_963.5, 12.5)
+        x = self._eixo("x", geo, 2_000.0)
+        self.assertIsNone(x.ne_z_N)
+        self.assertEqual(x.fator_q, 1.0)
+        self.assertTrue(any("Q de flambagem local" in aviso for aviso in x.avisos))
+
+    def test_eixo_invalido(self):
+        with self.assertRaises(ValueError):
+            self._eixo("z", flambagem.geometria_circular_macica(50.0), 1_000.0)
+
+
 if __name__ == "__main__":
     unittest.main()

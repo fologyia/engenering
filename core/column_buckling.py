@@ -39,6 +39,7 @@ from core.steel_sections import (
     PerfilAco,
     barra_circular,
     barra_retangular,
+    centro_de_cisalhamento_do_perfil,
     tubo_circular,
 )
 
@@ -733,6 +734,262 @@ def verificar_flambagem(
         interacao=interacao,
         eixo_x=eixos["x"],
         eixo_y=eixos["y"],
+        utilizacao=utilizacao,
+        modo_governante=governante,
+        atende=utilizacao <= 1.0,
+        avisos=tuple(dict.fromkeys(avisos)),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Verificação de um eixo por vez
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ResultadoFlambagemEixo:
+    """Verificação da coluna **num eixo** com o comprimento destravado e o K dele.
+
+    É o formato de trabalho da página: o engenheiro analisa x-x (por exemplo,
+    do piso ao nó da mão-francesa) e y-y (o contraventamento lateral) como
+    duas verificações, cada uma com o próprio ``L`` e ``K``, e registra as
+    duas. ``N_e`` é o da flexão nesse eixo — ou, se for menor, o da torção
+    (seções de simetria dupla) ou o modo flexo-torcional acoplado a esse
+    eixo (U em x, T em y) —, então cada registro é normativo por si e o
+    pior dos dois governa a coluna.
+    """
+
+    eixo: str
+    fator_k: float
+    comprimento_mm: float
+    comprimento_efetivo_mm: float
+    comprimento_efetivo_z_mm: float | None
+    raio_giracao_mm: float
+    esbeltez: float
+    # Anexo E
+    ne_flexao_N: float
+    ne_z_N: float | None
+    ne_acoplada_N: float | None
+    ne_N: float
+    modo_flambagem: str
+    # Anexo F
+    fator_q: float
+    elementos: tuple[ElementoDePlaca, ...]
+    # 5.3.3
+    lambda_0: float
+    chi: float
+    forca_escoamento_N: float
+    resistencia_N: float
+    forca_solicitante_N: float
+    utilizacao_axial: float
+    # 5.5.1.2
+    momento: MomentoFletor
+    interacao: ResultadoInteracaoNBR | None
+    # Conclusão
+    utilizacao: float
+    modo_governante: str
+    atende: bool
+    avisos: tuple[str, ...] = ()
+
+
+def verificar_flambagem_eixo(
+    *,
+    eixo: str,
+    geometria: GeometriaColuna,
+    comprimento_mm: float,
+    k: float,
+    modulo_elasticidade_MPa: float,
+    escoamento_MPa: float,
+    forca_solicitante_N: float,
+    kz: float | None = None,
+    modulo_cisalhamento_MPa: float | None = None,
+    momento_Nmm: float = 0.0,
+    excentricidade_mm: float = 0.0,
+    cm: float = 1.0,
+    comprimento_destravado_mm: float | None = None,
+    cb: float = 1.0,
+    soldado: bool = False,
+) -> ResultadoFlambagemEixo:
+    """``N_c,Rd`` e interação N + M da coluna **no eixo** ``eixo`` (``"x"`` ou ``"y"``).
+
+    ``comprimento_mm`` é o comprimento destravado para a flexão em torno
+    desse eixo (distância entre travamentos nesse plano) e ``k`` o fator de
+    flambagem correspondente. ``momento_Nmm`` e ``excentricidade_mm`` são os
+    do próprio eixo; ``kz`` multiplica ``comprimento_mm`` para o comprimento
+    de flambagem por torção. Os demais parâmetros seguem
+    :func:`verificar_flambagem`.
+    """
+    eixo = str(eixo).strip().lower()
+    if eixo not in {"x", "y"}:
+        raise ValueError("eixo deve ser 'x' ou 'y'.")
+    area = _positivo("area_mm2", geometria.area_mm2)
+    r = _positivo(
+        f"raio_giracao_{eixo}_mm",
+        geometria.raio_giracao_x_mm if eixo == "x" else geometria.raio_giracao_y_mm,
+    )
+    l = _positivo("comprimento_mm", comprimento_mm)
+    k = _positivo("k", k)
+    e = _positivo("modulo_elasticidade_MPa", modulo_elasticidade_MPa)
+    fy = _positivo("escoamento_MPa", escoamento_MPa)
+    g = (
+        _positivo("modulo_cisalhamento_MPa", modulo_cisalhamento_MPa)
+        if modulo_cisalhamento_MPa
+        else e / (2.0 * (1.0 + POISSON_ACO))
+    )
+    n_sd = _nao_negativo("forca_solicitante_N", forca_solicitante_N)
+    m1 = _nao_negativo("momento_Nmm", momento_Nmm)
+    excentricidade = _nao_negativo("excentricidade_mm", excentricidade_mm)
+    cm = _positivo("cm", cm)
+
+    l_e = k * l
+    lz = _positivo("kz", kz) * l if kz else None
+    esbeltez = l_e / r
+    avisos = _avisos_de_entrada(k, k, e, fy)
+    avisos = [aviso.replace("Kx", f"K{eixo}") for aviso in avisos if "Ky" not in aviso]
+
+    perfil = geometria.perfil
+    ne_flexao = math.pi**2 * e * area * r**2 / l_e**2
+    nez: float | None = None
+    acoplada: float | None = None
+    ne, modo = ne_flexao, eixo
+    lz_usado: float | None = None
+    if perfil is not None:
+        nex, ney, nez, acoplada, _, _ = nbr8800.forcas_de_flambagem_elastica(
+            perfil, e, g, l_e, l_e, lz
+        )
+        ne_flexao = nex if eixo == "x" else ney
+        ne, modo = ne_flexao, eixo
+        if nez is not None:
+            lz_usado = lz or l_e
+        if acoplada is not None:
+            # Monossimétrica: a flexão em torno do eixo de simetria acopla
+            # com a torção (E.1.2) — U em x, T em y.
+            x0, y0 = centro_de_cisalhamento_do_perfil(perfil)
+            acopla = (eixo == "x" and abs(x0) > 0) or (eixo == "y" and abs(y0) > 0)
+            if acopla:
+                ne, modo = acoplada, f"{eixo}z (flexo-torção)"
+        elif nez is not None and nez < ne_flexao:
+            ne, modo = nez, "z (torção)"
+        chi_q1 = nbr8800.fator_chi(math.sqrt(area * fy / ne))
+        q, elementos, avisos_q = nbr8800.fator_q(
+            perfil, fy, e, soldado=soldado, chi_para_sigma=chi_q1
+        )
+        avisos.extend(avisos_q)
+    else:
+        q, elementos = 1.0, ()
+        avisos.append(
+            "Geometria informada só por A e r: o fator Q de flambagem local foi "
+            "adotado igual a 1,0 e a flambagem por torção/flexo-torção (N_ez, Anexo E) "
+            "não foi verificada. Para perfis abertos ou de parede fina use uma seção "
+            "geométrica ou o perfil de catálogo."
+        )
+
+    lambda_0 = math.sqrt(q * area * fy / ne)
+    chi = nbr8800.fator_chi(lambda_0)
+    resistencia = chi * q * area * fy / GAMMA_A1
+    forca_escoamento = q * area * fy
+    utilizacao_axial = n_sd / resistencia
+
+    if esbeltez > ESBELTEZ_MAXIMA:
+        avisos.append(
+            f"K{eixo}L{eixo}/r{eixo} = {esbeltez:.0f} supera o limite de "
+            f"{ESBELTEZ_MAXIMA:.0f} para barras comprimidas (5.3.4.1): a barra não "
+            "atende independentemente da resistência calculada."
+        )
+    if q < 1.0:
+        avisos.append(
+            f"Flambagem local reduz a capacidade: Q = {q:.3f} (Anexo F) — "
+            + "; ".join(
+                f"{item.nome} b/t = {item.razao:.1f} > λ_r = {item.limite_r:.1f}"
+                for item in elementos
+                if item.razao > item.limite_r
+            )
+            + "."
+        )
+    if modo != eixo:
+        avisos.append(
+            f"Neste eixo o modo de flambagem elástica governante é {modo} "
+            f"(N_e = {ne / 1e3:.1f} kN < N_e{eixo} = {ne_flexao / 1e3:.1f} kN, Anexo E): "
+            "a torção governa sobre a flexão e N_c,Rd foi calculado com ela."
+        )
+
+    # -- flexocompressão no eixo (5.5.1.2) -----------------------------------
+    m1 += n_sd * excentricidade
+    b1 = fator_amplificacao_b1(n_sd, ne_flexao, cm) if m1 > 0 else 1.0
+    m_sd = m1 * b1 if m1 > 0 else 0.0
+    flexao: ResultadoFlexaoNBR | None = None
+    m_rd: float | None = None
+    if m1 > 0:
+        if perfil is not None:
+            flexao = nbr8800.verificar_flexao(
+                perfil,
+                fy,
+                e,
+                g,
+                0.0 if math.isinf(m_sd) else m_sd,
+                eixo=eixo,
+                comprimento_destravado_mm=(comprimento_destravado_mm if eixo == "x" else None),
+                cb=cb,
+                soldado=soldado,
+            )
+            m_rd = flexao.resistencia_Nmm
+            avisos.extend(flexao.avisos)
+        else:
+            m_rd, aviso = _momento_resistente_direto(geometria, eixo, fy)
+            if aviso:
+                avisos.append(aviso)
+        if math.isinf(b1):
+            avisos.append(
+                f"N_Sd = {n_sd / 1e3:.1f} kN alcança N_e{eixo} = {ne_flexao / 1e3:.1f} kN: "
+                f"a amplificação B_1 do momento em {eixo} diverge (Anexo D) — a coluna "
+                "não tem rigidez para a carga."
+            )
+    momento = MomentoFletor(eixo, m1, b1, m_sd, m_rd, flexao)
+
+    interacao: ResultadoInteracaoNBR | None = None
+    if m1 > 0 and m_rd:
+        if math.isinf(m_sd):
+            interacao = ResultadoInteracaoNBR(
+                utilizacao_axial, math.inf, 0.0, math.inf, "B_1 → ∞ (N_Sd ≥ N_e)", False
+            )
+        elif eixo == "x":
+            interacao = nbr8800.verificar_interacao(n_sd, resistencia, m_sd, m_rd)
+        else:
+            interacao = nbr8800.verificar_interacao(n_sd, resistencia, 0.0, 1.0, m_sd, m_rd)
+
+    candidatos = {"Compressão N_c,Rd (5.3)": utilizacao_axial}
+    if m_rd and m_sd > 0:
+        candidatos[f"Flexão em {eixo} (5.4.2)"] = m_sd / m_rd
+    if interacao is not None:
+        candidatos["Interação N + M (5.5.1.2)"] = interacao.indice
+    if esbeltez > ESBELTEZ_MAXIMA:
+        candidatos["Esbeltez KL/r > 200 (5.3.4.1)"] = math.inf
+    governante = max(candidatos, key=lambda chave: candidatos[chave])
+    utilizacao = candidatos[governante]
+
+    return ResultadoFlambagemEixo(
+        eixo=eixo,
+        fator_k=k,
+        comprimento_mm=l,
+        comprimento_efetivo_mm=l_e,
+        comprimento_efetivo_z_mm=lz_usado,
+        raio_giracao_mm=r,
+        esbeltez=esbeltez,
+        ne_flexao_N=ne_flexao,
+        ne_z_N=nez,
+        ne_acoplada_N=acoplada,
+        ne_N=ne,
+        modo_flambagem=modo,
+        fator_q=q,
+        elementos=tuple(elementos),
+        lambda_0=lambda_0,
+        chi=chi,
+        forca_escoamento_N=forca_escoamento,
+        resistencia_N=resistencia,
+        forca_solicitante_N=n_sd,
+        utilizacao_axial=utilizacao_axial,
+        momento=momento,
+        interacao=interacao,
         utilizacao=utilizacao,
         modo_governante=governante,
         atende=utilizacao <= 1.0,

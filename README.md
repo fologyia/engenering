@@ -285,9 +285,12 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
   `V = F·cos θ`; o momento `M = H·a` (engaste na base), `H·a·(L−a)/L`
   (biapoiada) ou o do engaste com topo apoiado, mais `V·e` da ligação, é
   somado a `M_Sd` automaticamente — o campo não fica em zero;
-- **leitura por eixo x-x e y-y**: esbeltez, `N_e`, `λ₀`, `χ`, `N_c,Rd` e a
-  interação de cada eixo lado a lado, com o eixo que governa marcado, além
-  da verificação normativa pelo menor `N_e`;
+- **um eixo por vez**: seletor x-x / y-y, cada eixo com o próprio comprimento
+  destravado, condição de apoio e K (por exemplo, x-x do piso ao nó da
+  mão-francesa e y-y entre os contraventamentos laterais); os campos de cada
+  eixo ficam guardados ao alternar e cada eixo vira um registro próprio no
+  projeto — o pior dos dois governa. `N_e` do eixo é o da flexão nele ou, se
+  menor, o da torção/flexo-torção (Anexo E);
 - reprovação automática com `KL/r > 200` (5.3.4.1), avisos de K fora da faixa
   física e unidades implausíveis, registro no projeto com o modo governante e
   curva χ·Q·f_y/γ_a1 × λ no memorial.

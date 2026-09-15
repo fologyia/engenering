@@ -1139,13 +1139,14 @@ elif modulo == "Flambagem de colunas":
            excentricidade e/ou M_Sd: eles entram amplificados por B_1 na interação.
            Com mão-francesa, ligue o bloco 5: F, θ, a e o vínculo geram o momento
            sozinhos (M = H·a no engaste, H·a·(L−a)/L na biapoiada) e ele é somado a M_Sd.
-        5. Leia primeiro a **verificação por eixo** (x-x e y-y lado a lado): λ, N_e,
-           χ e N_c,Rd de cada eixo, o eixo marcado como governante e a interação com
-           o momento do próprio eixo.
-        6. Leia N_ez (Anexo E), Q (Anexo F), λ_0 e χ (5.3.3) do modo governante e a
-           resistência normativa N_c,Rd = χ·Q·A_g·f_y/γ_a1.
-        7. Leia a utilização governante: compressão, flexão ou interação N + M
-           (5.5.1.2). KL/r acima de 200 reprova por si só (5.3.4.1).
+        5. Escolha o **eixo analisado** (x-x ou y-y) na seção 2 e informe o
+           comprimento destravado e o apoio daquele plano — x-x costuma ir do piso
+           ao nó da mão-francesa; y-y, entre os contraventamentos laterais.
+        6. Leia N_e do eixo, N_ez (Anexo E), Q (Anexo F), λ_0 e χ (5.3.3) e a
+           resistência N_c,Rd = χ·Q·A_g·f_y/γ_a1, com a interação N + M do eixo.
+        7. Registre o eixo no projeto, troque para o outro eixo e registre também:
+           são dois registros, e o pior deles governa a coluna. KL/r acima de 200
+           reprova por si só (5.3.4.1).
         """
     )
     mostrar_exemplo(
@@ -1185,10 +1186,10 @@ elif modulo == "Flambagem de colunas":
               obrigatória quando a força chega fora do eixo.
             - **Utilização > 100 %:** algum estado-limite (compressão, flexão,
               interação ou KL/r > 200) não atende.
-            - **Por eixo × normativa:** a leitura por eixo usa o N_e daquele eixo
-              e só o momento dele; a normativa usa o menor N_e (inclusive torção)
-              com os dois momentos — por isso pode ser mais severa que qualquer eixo
-              isolado, e é ela que decide.
+            - **Um eixo por vez:** cada registro usa o N_e da flexão naquele eixo
+              — ou o da torção/flexo-torção, se for menor — com o momento daquele
+              plano. Os dois registros juntos cobrem a coluna; o de maior
+              utilização governa.
             - **Mão-francesa:** H = F·sen θ flete a coluna com braço a; V = F·cos θ
               comprime. Marque "Somar V a N_Sd" só se a reação vertical ainda não
               estiver dentro de N_Sd.
