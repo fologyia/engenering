@@ -297,11 +297,44 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 
 ### Projeto de juntas parafusadas
 
+A página tem dois modos, escolhidos no topo:
+
+**Junta mecânica (NASA/ISO)** — pré-dimensionamento, que não substitui a norma estrutural:
+
 - roscas métricas de M3 a M36 e classes 4.6 a 12.9;
 - pré-carga, dispersão e torque de aperto;
-- distribuição de P, V, M e T em grupo circular;
-- prova, escoamento, ruptura, separação e deslizamento;
-- esmagamento, rasgamento da chapa e fadiga axial opcional.
+- distribuição de P, V, M e T em círculo, **grade retangular** ou coordenadas livres
+  (o 2 × 2 de 70 × 70 mm fica num círculo de diâmetro √(s² + g²), não de 70 mm);
+- cargas em serviço com fator mínimo n; valores já majorados são divididos por γ_f;
+  torque por excentricidade da cortante (T = V·a);
+- esmagamento e rasgamento com t da parte ligada mais fina (a pega vai em campo
+  separado), prova, escoamento, ruptura, separação, deslizamento e fadiga axial opcional;
+- diagnóstico de cada modo de falha com solicitante, resistente, aproveitamento, status,
+  fórmula e fonte, igual no CSV e no memorial.
+
+**Ligação estrutural de aço** — verificação pela norma (`core/bolted_connection.py`,
+conferido contra os exemplos do AISC Design Guide 29 e um caso real de planilha):
+
+- NBR 8800:2008, Projeto de revisão NBR 8800:2024 (sem valor normativo), AISC 360 LRFD e
+  RCSC 2004, com **Comparar normas** lado a lado;
+- parafusos ASTM A325, A490 e A307 (rosca no plano ou fora, n planos de corte), com
+  **Testar todos** para achar o menor que atende;
+- esforços característicos × de cálculo (γ_f), grupo excêntrico elástico (emenda por
+  sobreposição a = e + (n_col − 1)·s/2), grade ou coordenadas livres;
+- corte, contato e rasgamento por furo (ℓ_f medido a partir do furo), soma por furo no grupo,
+  deslizamento em serviço (F_Tb das tabelas da NBR/RCSC), tração da peça com C_t e colapso
+  por rasgamento;
+- disposições construtivas (bordas, espaçamentos, pega longa) e critério Anglo
+  AA-BR-DPST-DR-0001, item 9.1 (inclui a regra dos 75%);
+- tabela Verificação · Solicitante · Resistente · Unidade · Aproveitamento · Status ·
+  Fórmula · Referência, em CSV e no memorial; entradas inválidas (ℓ_f ≤ 0, C_t
+  indefinido, A307 por atrito, superfície sem μ) aparecem na tabela, não são corrigidas
+  em silêncio;
+- fora do escopo desta etapa: tração com alavanca e interação tração + corte, furos
+  alargados ou alongados, fadiga e perfis formados a frio.
+
+Valores da NBR 8800:2008 marcados “CONFERIR” no código (μ = 0,35 nas classes A e C, f_ub do
+A325 e C_t ≤ 0,90) precisam ser confirmados na norma antes de emitir documentos.
 
 ### Estruturas de aço
 

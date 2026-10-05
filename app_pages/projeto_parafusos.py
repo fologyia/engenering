@@ -4,24 +4,27 @@ import pandas as pd
 import streamlit as st
 
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
+from components.structural_bolted_ui import mostrar_ligacao_estrutural, mostrar_tabela_verificacoes
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import bolt_design as parafusos
+from core import bolted_connection as ligacao
+from core.bolted_joint_check import csv_verificacoes, linhas_para_registro
 
 configurar_pagina("Projeto de parafusos", ":material/build:")
+
+MODO_MECANICO = "Junta mecânica (NASA/ISO)"
+MODO_ESTRUTURAL = "Ligação estrutural de aço"
+PADRAO_CIRCULO = "Círculo"
+PADRAO_GRADE = "Grade retangular"
+PADRAO_LIVRE = "Coordenadas livres"
+NATUREZA_SERVICO = "Característicos (serviço)"
+NATUREZA_CALCULO = "Já majorados (cálculo)"
+TORQUE_INFORMADO = "Torque T informado"
+TORQUE_EXCENTRICIDADE = "Excentricidade da cortante (T = V·a)"
 
 
 def formatar_fator(valor: float) -> str:
     return "∞" if math.isinf(valor) else f"{valor:.2f}"
-
-
-def classificar_fator(valor: float, minimo: float) -> str:
-    if math.isinf(valor):
-        return "Não solicitado"
-    if valor >= minimo:
-        return "Atende"
-    if valor >= 1.0:
-        return "Abaixo da meta"
-    return "Falha prevista"
 
 
 def exibir_diagnostico(nome: str, valor: float, minimo: float) -> None:
@@ -47,7 +50,7 @@ def exibir_diagnostico(nome: str, valor: float, minimo: float) -> None:
 
 cabecalho_pagina(
     "Projeto completo de juntas parafusadas",
-    "Roscas ISO • pré-carga e torque • grupo circular • chapa • fadiga axial",
+    "Junta mecânica (NASA/ISO) • ligação estrutural de aço (NBR 8800, AISC 360, RCSC, Anglo)",
     categoria="Projetos",
     icone=":material/build:",
     cor="orange",
@@ -62,16 +65,34 @@ st.session_state.setdefault("parafuso_carga_cortante", 20.0)
 st.session_state.setdefault("parafuso_momento", 0.0)
 st.session_state.setdefault("parafuso_torque_grupo", 0.0)
 
+modo = st.segmented_control(
+    "Tipo de verificação",
+    [MODO_MECANICO, MODO_ESTRUTURAL],
+    default=MODO_MECANICO,
+    required=True,
+    width="stretch",
+    key="parafuso_modo",
+    help=(
+        "Junta mecânica: pré-carga, torque, rigidez e von Mises (NASA/ISO). "
+        "Ligação estrutural: corte, contato, deslizamento, peça e disposições pela norma."
+    ),
+    persist_state="session",
+)
+if modo == MODO_ESTRUTURAL:
+    mostrar_ligacao_estrutural()
+    st.stop()
+
 st.warning(
-    "Esta aba faz um pré-dimensionamento mecânico. Juntas de segurança, "
-    "estruturais, pressurizadas ou sujeitas a vibração exigem a norma aplicável, "
-    "dados certificados e validação do processo de aperto.",
+    "**Pré-dimensionamento mecânico — não substitui a verificação por norma estrutural.** "
+    "Ligações de aço estruturais (NBR 8800, AISC 360, RCSC, critério Anglo) devem usar o modo "
+    "“Ligação estrutural de aço”. Juntas de segurança, pressurizadas ou sujeitas a vibração "
+    "exigem a norma aplicável, dados certificados e validação do processo de aperto.",
     icon=":material/engineering:",
 )
 
 with st.container(border=True):
     st.subheader("1. Parafuso e padrão da junta")
-    selecao = st.columns(4)
+    selecao = st.columns(3)
     with selecao[0]:
         nomes_rosca = list(parafusos.ROSCAS_METRICAS)
         rosca_escolhida = st.selectbox(
@@ -92,26 +113,108 @@ with st.container(border=True):
             persist_state="session",
         )
     with selecao[2]:
-        numero_parafusos = st.number_input(
-            "Número de parafusos",
-            min_value=1,
-            step=1,
-            key="parafuso_numero",
+        padrao_parafusos = st.segmented_control(
+            "Padrão dos parafusos",
+            [PADRAO_CIRCULO, PADRAO_GRADE, PADRAO_LIVRE],
+            default=PADRAO_CIRCULO,
+            required=True,
+            width="stretch",
+            key="parafuso_padrao",
             persist_state="session",
         )
-    with selecao[3]:
-        diametro_circulo_mm = st.number_input(
-            "Diâmetro do círculo de parafusos (mm)",
-            min_value=0.0,
-            value=100.0,
-            step=5.0,
-            help=(
-                "Distância entre parafusos opostos. Pode ser zero somente "
-                "quando não há momento nem torque."
-            ),
-            key="parafuso_diametro_circulo",
-            persist_state="session",
+
+    # O cortante V atua na direção x (ao longo das colunas) e o momento de
+    # tombamento gira em torno do eixo y: tração proporcional a x.
+    coordenadas_grupo: tuple[tuple[float, float], ...] | None = None
+    diametro_circulo_mm = 0.0
+    if padrao_parafusos == PADRAO_CIRCULO:
+        padrao_circulo = st.columns(2)
+        with padrao_circulo[0]:
+            numero_parafusos = st.number_input(
+                "Número de parafusos",
+                min_value=1,
+                step=1,
+                key="parafuso_numero",
+                persist_state="session",
+            )
+        with padrao_circulo[1]:
+            diametro_circulo_mm = st.number_input(
+                "Diâmetro do círculo de parafusos (mm)",
+                min_value=0.0,
+                value=100.0,
+                step=5.0,
+                help=(
+                    "Distância entre parafusos opostos. Pode ser zero somente "
+                    "quando não há momento nem torque."
+                ),
+                key="parafuso_diametro_circulo",
+                persist_state="session",
+            )
+    elif padrao_parafusos == PADRAO_GRADE:
+        padrao_grade = st.columns(4)
+        with padrao_grade[0]:
+            grade_linhas = st.number_input(
+                "Linhas n_lin (ao longo de y)",
+                min_value=1,
+                value=2,
+                step=1,
+                key="parafuso_grade_linhas",
+                persist_state="session",
+            )
+        with padrao_grade[1]:
+            grade_colunas = st.number_input(
+                "Parafusos por linha n_col (ao longo de x)",
+                min_value=1,
+                value=2,
+                step=1,
+                key="parafuso_grade_colunas",
+                persist_state="session",
+            )
+        with padrao_grade[2]:
+            grade_passo = st.number_input(
+                "Passo s ao longo de x (mm)",
+                min_value=0.1,
+                value=70.0,
+                step=5.0,
+                key="parafuso_grade_passo",
+                persist_state="session",
+            )
+        with padrao_grade[3]:
+            grade_gabarito = st.number_input(
+                "Gabarito g ao longo de y (mm)",
+                min_value=0.1,
+                value=70.0,
+                step=5.0,
+                key="parafuso_grade_gabarito",
+                persist_state="session",
+            )
+        coordenadas_grupo = tuple(
+            ligacao.grade_retangular(
+                int(grade_linhas), int(grade_colunas), grade_passo, grade_gabarito
+            )
         )
+        numero_parafusos = len(coordenadas_grupo)
+        diametro_equivalente = math.hypot(grade_passo, grade_gabarito)
+        st.caption(
+            f"{numero_parafusos} parafusos em grade {int(grade_linhas)} × {int(grade_colunas)}. "
+            "Num 2 × 2 os parafusos ficam num círculo de diâmetro √(s² + g²) = "
+            f"{diametro_equivalente:.1f} mm — e não de {grade_passo:g} mm."
+        )
+    else:
+        coordenadas_editadas = st.data_editor(
+            pd.DataFrame({"x (mm)": [0.0, 70.0, 0.0, 70.0], "y (mm)": [0.0, 0.0, 70.0, 70.0]}),
+            num_rows="dynamic",
+            hide_index=True,
+            width="stretch",
+            key="parafuso_coordenadas_livres",
+        )
+        coordenadas_grupo = tuple(
+            (float(x), float(y)) for x, y in coordenadas_editadas.dropna().itertuples(index=False)
+        )
+        if not coordenadas_grupo:
+            st.error("Informe ao menos um parafuso.", icon=":material/error:")
+            st.stop()
+        numero_parafusos = len(coordenadas_grupo)
 
     try:
         classe = parafusos.obter_classe(classe_escolhida, rosca.diametro_mm)
@@ -235,37 +338,99 @@ with st.container(border=True):
     st.subheader("3. Carregamentos de serviço")
     st.caption(
         "A carga axial positiva abre a junta. O momento de tombamento distribui "
-        "tração de forma linear; o torque produz cisalhamento tangencial."
+        "tração de forma linear; o torque produz cisalhamento tangencial. Este modo "
+        "trabalha em serviço e aplica o fator mínimo n da seção 4."
     )
+    natureza_cargas = st.segmented_control(
+        "Natureza dos valores informados",
+        [NATUREZA_SERVICO, NATUREZA_CALCULO],
+        default=NATUREZA_SERVICO,
+        required=True,
+        width="stretch",
+        key="parafuso_natureza_cargas",
+        help=(
+            "Informe valores já majorados só se marcar a segunda opção: o programa "
+            "os divide por γ_f. Sem isso a margem de segurança é aplicada duas vezes."
+        ),
+        persist_state="session",
+    )
+    fator_majoracao = 1.0
+    if natureza_cargas == NATUREZA_CALCULO:
+        fator_majoracao = st.number_input(
+            "γ_f usado para majorar (os valores abaixo serão divididos por ele)",
+            min_value=1.0,
+            value=1.40,
+            step=0.05,
+            key="parafuso_gama_f",
+            persist_state="session",
+        )
     cargas_entrada = st.columns(4)
     with cargas_entrada[0]:
-        carga_axial_kN = st.number_input(
+        carga_axial_informada_kN = st.number_input(
             "Carga axial total P (kN)",
             step=5.0,
             key="parafuso_carga_axial",
             persist_state="session",
         )
     with cargas_entrada[1]:
-        carga_cortante_kN = st.number_input(
+        carga_cortante_informada_kN = st.number_input(
             "Força cortante total V (kN)",
             step=5.0,
             key="parafuso_carga_cortante",
             persist_state="session",
         )
     with cargas_entrada[2]:
-        momento_tombamento_Nm = st.number_input(
+        momento_informado_Nm = st.number_input(
             "Momento de tombamento M (N·m)",
             step=100.0,
             key="parafuso_momento",
             persist_state="session",
         )
-    with cargas_entrada[3]:
-        torque_grupo_Nm = st.number_input(
+    modo_torque = st.segmented_control(
+        "Torque no grupo",
+        [TORQUE_INFORMADO, TORQUE_EXCENTRICIDADE],
+        default=TORQUE_INFORMADO,
+        required=True,
+        width="stretch",
+        key="parafuso_modo_torque",
+        help=(
+            "Uma cortante aplicada fora do centro do grupo gera torque T = V·a "
+            "(V em kN × a em mm = N·m)."
+        ),
+        persist_state="session",
+    )
+    torque_informado_Nm = 0.0
+    excentricidade_cortante_mm = 0.0
+    if modo_torque == TORQUE_INFORMADO:
+        torque_informado_Nm = st.number_input(
             "Torque no grupo T (N·m)",
             step=100.0,
             key="parafuso_torque_grupo",
             persist_state="session",
         )
+    else:
+        excentricidade_cortante_mm = st.number_input(
+            "Excentricidade a da cortante em relação ao centro do grupo (mm)",
+            step=5.0,
+            key="parafuso_excentricidade_cortante",
+            persist_state="session",
+        )
+    # O cálculo roda sempre em serviço: valores majorados voltam ao nível característico.
+    carga_axial_kN = carga_axial_informada_kN / fator_majoracao
+    carga_cortante_kN = carga_cortante_informada_kN / fator_majoracao
+    momento_tombamento_Nm = momento_informado_Nm / fator_majoracao
+    torque_grupo_Nm = (
+        torque_informado_Nm / fator_majoracao
+        if modo_torque == TORQUE_INFORMADO
+        else carga_cortante_kN * excentricidade_cortante_mm
+    )
+    if natureza_cargas == NATUREZA_CALCULO:
+        st.caption(
+            f"Valores de serviço usados: P = {carga_axial_kN:.2f} kN · V = {carga_cortante_kN:.2f} kN · "
+            f"M = {momento_tombamento_Nm:.1f} N·m · T = {torque_grupo_Nm:.1f} N·m."
+        )
+    elif modo_torque == TORQUE_EXCENTRICIDADE:
+        st.caption(f"T = V·a = {torque_grupo_Nm:.1f} N·m.")
 
     plano_corte = st.segmented_control(
         "Posição da rosca no plano de cisalhamento",
@@ -311,11 +476,15 @@ with st.container(border=True):
     chapa = st.columns(4)
     with chapa[0]:
         espessura_chapa_mm = st.number_input(
-            "Espessura da chapa t (mm)",
+            "Espessura da parte ligada mais fina t (mm)",
             min_value=0.001,
             value=10.0,
             step=1.0,
             key="parafuso_espessura_chapa",
+            help=(
+                "Esmagamento e rasgamento usam a chapa mais fina — nunca a soma das "
+                "chapas, que dobraria a resistência. A soma vai no campo Pega."
+            ),
             persist_state="session",
         )
     with chapa[1]:
@@ -360,6 +529,21 @@ with st.container(border=True):
         ),
         persist_state="session",
     )
+    pega_mm = st.number_input(
+        "Pega — soma das espessuras das partes ligadas (mm, opcional)",
+        min_value=0.0,
+        value=0.0,
+        step=1.0,
+        key="parafuso_pega",
+        help="0 = não informada. Não entra no contato nem no rasgamento; só é registrada.",
+        persist_state="session",
+    )
+    if 0.0 < pega_mm < espessura_chapa_mm:
+        st.error(
+            "A pega (soma das espessuras) não pode ser menor que a parte mais fina t.",
+            icon=":material/error:",
+        )
+        st.stop()
 
 try:
     resultado = parafusos.avaliar_junta(
@@ -367,6 +551,7 @@ try:
         classe=classe,
         numero_parafusos=int(numero_parafusos),
         raio_grupo_mm=diametro_circulo_mm / 2.0,
+        coordenadas_mm=coordenadas_grupo,
         carga_axial_N=carga_axial_kN * 1_000.0,
         carga_cortante_N=carga_cortante_kN * 1_000.0,
         momento_tombamento_Nmm=momento_tombamento_Nm * 1_000.0,
@@ -455,54 +640,31 @@ criterios = [
     ("Esmagamento da chapa", resultado.fator_esmagamento),
     ("Rasgamento até a borda", resultado.fator_rasgamento_borda),
 ]
-tabela_criterios = pd.DataFrame(
-    {
-        "Critério": [nome for nome, _ in criterios],
-        "Fator calculado": [None if math.isinf(valor) else valor for _, valor in criterios],
-        "Resultado": [classificar_fator(valor, fator_minimo) for _, valor in criterios],
-    }
-)
-st.dataframe(
-    tabela_criterios,
-    hide_index=True,
-    column_config={
-        "Fator calculado": st.column_config.NumberColumn(format="%.3f"),
-    },
-)
-st.download_button(
-    "Baixar resultado em CSV",
-    data=tabela_criterios.to_csv(index=False).encode("utf-8-sig"),
-    file_name="projeto_parafusos.csv",
-    mime="text/csv",
-    icon=":material/download:",
-    width="stretch",
-    key="parafusos_baixar",
-)
+# A tabela completa (com a fadiga, quando ativada) e o CSV vêm depois da seção 5.
 
-with st.expander(
-    "Diagnóstico de cada modo de falha",
-    icon=":material/fact_check:",
-):
-    for nome, valor in criterios:
-        exibir_diagnostico(nome, valor, fator_minimo)
+raio = diametro_circulo_mm / 2.0
+coordenadas_tabela = (
+    coordenadas_grupo
+    if coordenadas_grupo is not None
+    else parafusos.coordenadas_circulares(int(numero_parafusos), raio)
+)
 
 with st.container(border=True):
     st.subheader("Distribuição entre os parafusos")
-    raio = diametro_circulo_mm / 2.0
     linhas = []
-    for indice, (axial, cisalhamento) in enumerate(
+    for indice, ((x_mm, y_mm), axial, cisalhamento) in enumerate(
         zip(
+            coordenadas_tabela,
             resultado.distribuicao.forcas_axiais_N,
             resultado.distribuicao.forcas_cisalhantes_N,
             strict=True,
         )
     ):
-        angulo = 2.0 * math.pi * indice / int(numero_parafusos)
         linhas.append(
             {
                 "Parafuso": indice + 1,
-                "x (mm)": raio * math.cos(angulo),
-                "y (mm)": raio * math.sin(angulo),
+                "x (mm)": x_mm,
+                "y (mm)": y_mm,
                 "Carga axial externa (kN)": axial / 1_000.0,
                 "Cisalhamento resultante (kN)": cisalhamento / 1_000.0,
             }
@@ -603,17 +765,15 @@ with st.container(border=True):
             )
 
         try:
-            dist_min = parafusos.distribuir_cargas_grupo_circular(
-                int(numero_parafusos),
-                raio,
+            dist_min = parafusos.distribuir_cargas_grupo(
+                coordenadas_tabela,
                 axial_min_kN * 1_000.0,
                 0.0,
                 momento_min_Nm * 1_000.0,
                 0.0,
             )
-            dist_max = parafusos.distribuir_cargas_grupo_circular(
-                int(numero_parafusos),
-                raio,
+            dist_max = parafusos.distribuir_cargas_grupo(
+                coordenadas_tabela,
                 axial_max_kN * 1_000.0,
                 0.0,
                 momento_max_Nm * 1_000.0,
@@ -687,6 +847,29 @@ with st.container(border=True):
                 "Se_MPa": Se_parafuso,
             }
 
+diagnostico = parafusos.diagnostico_junta(
+    resultado, rosca, classe, rigidez, fator_minimo, fadiga_resultado
+)
+with st.container(border=True):
+    st.subheader("Diagnóstico de cada modo de falha")
+    st.caption(
+        "Solicitante, resistente, aproveitamento (= 1/n), status, fórmula e fonte de cada "
+        f"critério. Meta n = {fator_minimo:.2f}: abaixo dela o status é ALERTA; abaixo de 1, NÃO OK."
+    )
+    mostrar_tabela_verificacoes(diagnostico)
+    st.download_button(
+        "Baixar resultado em CSV",
+        data=csv_verificacoes(diagnostico),
+        file_name="projeto_parafusos.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        width="stretch",
+        key="parafusos_baixar",
+    )
+    with st.expander("Leitura de cada modo de falha", icon=":material/fact_check:"):
+        for nome, valor in criterios:
+            exibir_diagnostico(nome, valor, fator_minimo)
+
 fronteira_modelo(
     [
         "Torque real de aperto medido em campo — o torque aqui é estimado por T = K·Fi·d.",
@@ -740,6 +923,7 @@ with st.container(border=True):
         "tensao_von_mises_MPa": resultado.tensao_von_mises_MPa,
         "fator_seguranca": None if math.isinf(pior_fator) else pior_fator,
         "fator_seguranca_minimo": fator_minimo,
+        "verificações": linhas_para_registro(diagnostico),
     }
     if fadiga_resultado is not None:
         resultados_registro.update(
@@ -780,27 +964,38 @@ with st.container(border=True):
         modulo_id="projeto_parafusos",
         titulo=f"Junta parafusada — {rosca.designacao} classe {classe.classe} ({int(numero_parafusos)}x)",
         status=status_registro,
-        resumo="Pré-dimensionamento de junta parafusada: pré-carga, torque, grupo circular, chapa e, quando ativada, fadiga axial.",
+        resumo="Pré-dimensionamento mecânico de junta parafusada (não substitui a verificação por norma estrutural): pré-carga, torque, grupo de parafusos, chapa e, quando ativada, fadiga axial.",
         entradas={
             "rosca": rosca.designacao,
             "classe": classe.classe,
             "numero_parafusos": int(numero_parafusos),
+            "padrao_parafusos": padrao_parafusos,
             "diametro_circulo_mm": diametro_circulo_mm,
+            **(
+                {"coordenadas_mm": [list(par) for par in coordenadas_grupo]}
+                if coordenadas_grupo is not None
+                else {}
+            ),
+            "natureza_dos_valores": natureza_cargas,
+            "gama_f": fator_majoracao,
             "carga_axial_kN": carga_axial_kN,
             "carga_cortante_kN": carga_cortante_kN,
             "momento_tombamento_Nm": momento_tombamento_Nm,
             "torque_grupo_Nm": torque_grupo_Nm,
             "fracao_pre_carga_prova": fracao_pre_carga,
             "coeficiente_atrito": coeficiente_atrito,
-            "espessura_chapa_mm": espessura_chapa_mm,
+            "espessura_parte_mais_fina_mm": espessura_chapa_mm,
+            "pega_mm": pega_mm if pega_mm > 0 else None,
             "escoamento_chapa_MPa": escoamento_chapa_MPa,
             "fadiga_avaliada": fadiga_resultado is not None,
             **({"fadiga": fadiga_entradas} if fadiga_entradas else {}),
         },
         resultados=resultados_registro,
-        metodo="Distribuição elástica em grupo circular; pré-carga por fração da carga de prova; Goodman modificado para fadiga axial opcional.",
+        metodo="Distribuição elástica em grupo (círculo, grade ou coordenadas livres); cargas de serviço com fator mínimo n; pré-carga por fração da carga de prova; Goodman modificado para fadiga axial opcional.",
         premissas=[
             "Distribuição elástica linear de carga entre os parafusos do grupo.",
+            "Esmagamento e rasgamento usam a parte ligada mais fina (t), nunca a soma das chapas.",
+            "Cargas tratadas em serviço (característicos); o fator mínimo n é a margem de segurança.",
             "Pré-carga estimada por T = K·Fi·d; a dispersão real de aperto pode ser maior.",
             "Modelo de fadiga válido enquanto a junta permanece fechada (sem separação).",
         ],

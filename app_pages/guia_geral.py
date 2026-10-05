@@ -1418,14 +1418,17 @@ elif modulo == "Círculo de Mohr":
 elif modulo == "Projeto de parafusos":
     st.header("Projeto de juntas parafusadas")
     st.markdown(
-        "Use para uma junta pré-carregada com parafusos igualmente espaçados em um círculo."
+        "A página tem **dois modos**, escolhidos no topo. **Junta mecânica (NASA/ISO)** é um "
+        "pré-dimensionamento de junta pré-carregada (círculo, grade retangular ou coordenadas "
+        "livres) e **não substitui a norma estrutural**. **Ligação estrutural de aço** verifica "
+        "a ligação pela NBR 8800, AISC 360, RCSC ou critério Anglo (veja a seção ao final)."
     )
     mostrar_tabela_campos(
         [
             ["Rosca e classe", "Designação e classe do parafuso", "Desenho e certificado"],
             [
-                "Número e círculo",
-                "Quantidade e diâmetro entre parafusos opostos",
+                "Padrão",
+                "Círculo (n e diâmetro), grade (n_lin, n_col, s, g) ou coordenadas",
                 "Desenho da junta",
             ],
             ["K e incerteza", "Relação torque–pré-carga e dispersão", "Ensaio ou processo"],
@@ -1481,6 +1484,93 @@ elif modulo == "Projeto de parafusos":
     st.warning(
         "O torque depende fortemente do atrito. Para juntas críticas, use ensaio "
         "torque–pré-carga e procedimento de montagem controlado.",
+        icon=":material/warning:",
+    )
+    st.divider()
+    st.subheader("Modo “Ligação estrutural de aço”")
+    st.markdown(
+        "Verifica corte, contato e rasgamento, deslizamento, peça tracionada, disposições "
+        "construtivas e o critério Anglo AA-BR-DPST-DR-0001 (item 9.1). Von Mises e torque "
+        "**não** são critérios de aprovação aqui; o torque é só referência de instalação."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "Norma",
+                "NBR 8800:2008, Projeto 2024, AISC 360 LRFD ou RCSC 2004",
+                "Contrato / cliente",
+            ],
+            ["Parafuso e grau", "Designação (M16, M22, 7/8″…), A325, A490 ou A307", "Projeto"],
+            [
+                "t da parte mais fina",
+                "Espessura da chapa mais fina — nunca a soma",
+                "Detalhe das partes ligadas",
+            ],
+            ["Geometria", "n_lin, n_col, s, g, e (e e_v, se houver borda vertical)", "Desenho"],
+            [
+                "N, V e M (ou a)",
+                "Esforços característicos no centro do grupo; M = V·a numa emenda",
+                "Análise estrutural",
+            ],
+            [
+                "γ_f",
+                "Fator que majora os característicos para o ELU (ou valores já de cálculo)",
+                "NBR 8681",
+            ],
+            [
+                "Superfície e atrito",
+                "Define μ; ligação por atrito é obrigatória na Anglo com inversão",
+                "Critério",
+            ],
+            [
+                "A_g e e_c da peça",
+                "Opcional: tração da peça com C_t e regra dos 75%",
+                "Catálogo do perfil",
+            ],
+        ]
+    )
+    st.markdown(
+        """
+        **Passo a passo:** (1) escolha a norma e o parafuso; (2) informe t, o aço e a geometria;
+        (3) informe os esforços **característicos** — o ELU usa γ_f·F_k e o deslizamento usa F_k;
+        (4) confira superfície, atrito e condições fora do escopo; (5) leia a tabela
+        *Verificação · Solicitante · Resistente · Unidade · Aproveitamento · Status · Fórmula ·
+        Referência*; (6) use **Comparar normas** e **Testar todos os parafusos** para decidir; (7)
+        registre o resultado — a tabela inteira vai para o memorial em Word e PDF.
+        """
+    )
+    mostrar_exemplo(
+        [
+            ["Norma / aço", "NBR 8800:2008 / ASTM A36"],
+            ["Parafuso", "M22, A325, rosca no plano, 1 plano de corte"],
+            ["Partes ligadas", "t = 5,08 mm (alma do U); pega opcional"],
+            ["Geometria", "Grade 2 × 2, e = s = g = 70 mm"],
+            ["Esforços", "V_k = 32 kN, N = 0, emenda por sobreposição (a = 105 mm), γ_f = 1,4"],
+            ["Superfície", "Galvanizada a fogo sem tratamento (μ = 0,20), ligação por atrito"],
+        ],
+        "Resultados: J = 9.800 mm²; parafuso crítico = 32,65 kN (ELU) e 23,32 kN (serviço); "
+        "resistência por parafuso = min(92,9; 79,5) = 79,5 kN → 41%; deslizamento = "
+        "0,80·0,20·176 = 28,16 kN → 83%; borda de 70 mm NÃO OK (12t = 60,96 mm). Com M16 o "
+        "deslizamento passa a 160% (NÃO OK).",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Status:** OK, NÃO OK, ALERTA (atende com ressalva ou não pôde ser calculado),
+              INFO (informação) e N/A (não se aplica).
+            - **Aproveitamento:** solicitante ÷ resistente. Acima de 100% é NÃO OK.
+            - **Distâncias e espaçamentos:** “solicitante” é o valor exigido e “resistente” o adotado.
+            - **ℓ_f ≤ 0, C_t indefinido (n_col = 1), A307 por atrito e superfície sem μ:**
+              aparecem como linhas da tabela — o programa não corrige a entrada em silêncio.
+            - **Fora do escopo:** tração com alavanca, furos alargados/alongados, fadiga e perfis
+              formados a frio. Marque o que se aplica e a tabela ganha um ALERTA.
+            """
+        )
+    st.warning(
+        "O Projeto NBR 8800:2024 não tem valor normativo, e alguns valores da NBR 8800:2008 "
+        "(μ = 0,35 nas classes A e C, f_ub do A325 e C_t ≤ 0,90) estão marcados “CONFERIR” até "
+        "serem confirmados na norma. O grupo excêntrico usa o método elástico (conservador).",
         icon=":material/warning:",
     )
     link_modulo("app_pages/projeto_parafusos.py", "Abrir o projeto de parafusos")

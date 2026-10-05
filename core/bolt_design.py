@@ -7,14 +7,18 @@ Unidades internas:
 - tensão: MPa (N/mm²)
 
 O módulo trata uma junta pré-carregada com parafusos igualmente espaçados
-em um círculo. Os resultados não substituem normas de produto, testes de
+em um círculo ou em qualquer arranjo de coordenadas (grade retangular, por
+exemplo). Os resultados não substituem normas de produto, testes de
 torque-pré-carga, análise de contato ou qualificação da junta.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from core.bolted_connection import Verificacao
 
 
 @dataclass(frozen=True)
@@ -227,47 +231,63 @@ def torque_para_pre_carga(
     return fator * pre_carga * diametro / 1_000.0
 
 
-def distribuir_cargas_grupo_circular(
-    numero_parafusos: int,
-    raio_grupo_mm: float,
+def coordenadas_circulares(
+    numero_parafusos: int, raio_grupo_mm: float
+) -> tuple[tuple[float, float], ...]:
+    """Coordenadas (x, y) de parafusos igualmente espaçados num círculo centrado na origem."""
+    return tuple(
+        (
+            raio_grupo_mm * math.cos(2.0 * math.pi * i / numero_parafusos),
+            raio_grupo_mm * math.sin(2.0 * math.pi * i / numero_parafusos),
+        )
+        for i in range(numero_parafusos)
+    )
+
+
+def distribuir_cargas_grupo(
+    coordenadas_mm: Sequence[tuple[float, float]],
     carga_axial_N: float = 0.0,
     carga_cortante_N: float = 0.0,
     momento_tombamento_Nmm: float = 0.0,
     torque_grupo_Nmm: float = 0.0,
 ) -> DistribuicaoGrupo:
-    """Distribui cargas em parafusos igualmente espaçados num círculo.
+    """Distribui cargas em um grupo de parafusos de coordenadas quaisquer.
 
-    A carga cortante atua no eixo x. O momento de tombamento gera tração
-    proporcional à coordenada x dos parafusos. O torque gera cisalhamento
-    tangencial.
+    As coordenadas podem estar em qualquer origem: as forças são medidas a partir
+    do centroide. A carga cortante atua no eixo x. O momento de tombamento gera
+    tração proporcional à coordenada x (M·x/Σx²). O torque gera cisalhamento
+    perpendicular ao raio de cada parafuso (T·r/Σr²).
     """
-    if int(numero_parafusos) != numero_parafusos or numero_parafusos < 1:
-        raise ValueError("numero_parafusos deve ser um inteiro positivo.")
-    numero = int(numero_parafusos)
-    raio = _nao_negativo("raio_grupo_mm", raio_grupo_mm)
+    if not coordenadas_mm:
+        raise ValueError("O grupo precisa de ao menos um parafuso.")
+    numero = len(coordenadas_mm)
     axial = _finito("carga_axial_N", carga_axial_N)
     cortante = _finito("carga_cortante_N", carga_cortante_N)
     momento = _finito("momento_tombamento_Nmm", momento_tombamento_Nmm)
     torque = _finito("torque_grupo_Nmm", torque_grupo_Nmm)
-    if raio == 0 and (momento != 0 or torque != 0):
-        raise ValueError("O raio do grupo deve ser positivo com momento ou torque.")
+    for x, y in coordenadas_mm:
+        _finito("coordenada x", x)
+        _finito("coordenada y", y)
 
-    angulos = tuple(2.0 * math.pi * i / numero for i in range(numero))
-    coordenadas_x = tuple(raio * math.cos(a) for a in angulos)
-    soma_x2 = sum(x * x for x in coordenadas_x)
+    xc = sum(x for x, _ in coordenadas_mm) / numero
+    yc = sum(y for _, y in coordenadas_mm) / numero
+    relativas = tuple((x - xc, y - yc) for x, y in coordenadas_mm)
+    soma_x2 = sum(x * x for x, _ in relativas)
+    soma_r2 = sum(x * x + y * y for x, y in relativas)
     if momento != 0 and soma_x2 <= 0:
         raise ValueError("O padrão informado não resiste ao momento aplicado.")
+    if torque != 0 and soma_r2 <= 0:
+        raise ValueError("O padrão informado não resiste ao torque aplicado.")
 
     axiais = tuple(
-        axial / numero + (momento * x / soma_x2 if momento else 0.0) for x in coordenadas_x
+        axial / numero + (momento * x / soma_x2 if momento else 0.0) for x, _ in relativas
     )
 
     cisalhantes = []
-    for angulo in angulos:
+    for x, y in relativas:
         direto_x = cortante / numero
-        torsao_tangencial = torque / (numero * raio) if torque else 0.0
-        torsao_x = -torsao_tangencial * math.sin(angulo)
-        torsao_y = torsao_tangencial * math.cos(angulo)
+        torsao_x = -torque * y / soma_r2 if torque else 0.0
+        torsao_y = torque * x / soma_r2 if torque else 0.0
         cisalhantes.append(math.hypot(direto_x + torsao_x, torsao_y))
 
     indice_axial = max(range(numero), key=lambda i: axiais[i])
@@ -279,6 +299,37 @@ def distribuir_cargas_grupo_circular(
         maior_cisalhamento_N=cisalhantes[indice_cisalhamento],
         indice_tracao_critico=indice_axial,
         indice_cisalhamento_critico=indice_cisalhamento,
+    )
+
+
+def distribuir_cargas_grupo_circular(
+    numero_parafusos: int,
+    raio_grupo_mm: float,
+    carga_axial_N: float = 0.0,
+    carga_cortante_N: float = 0.0,
+    momento_tombamento_Nmm: float = 0.0,
+    torque_grupo_Nmm: float = 0.0,
+) -> DistribuicaoGrupo:
+    """Distribui cargas em parafusos igualmente espaçados num círculo.
+
+    Caso particular de :func:`distribuir_cargas_grupo`: a carga cortante atua no
+    eixo x, o momento de tombamento gera tração proporcional à coordenada x e o
+    torque gera cisalhamento tangencial.
+    """
+    if int(numero_parafusos) != numero_parafusos or numero_parafusos < 1:
+        raise ValueError("numero_parafusos deve ser um inteiro positivo.")
+    numero = int(numero_parafusos)
+    raio = _nao_negativo("raio_grupo_mm", raio_grupo_mm)
+    momento = _finito("momento_tombamento_Nmm", momento_tombamento_Nmm)
+    torque = _finito("torque_grupo_Nmm", torque_grupo_Nmm)
+    if raio == 0 and (momento != 0 or torque != 0):
+        raise ValueError("O raio do grupo deve ser positivo com momento ou torque.")
+    return distribuir_cargas_grupo(
+        coordenadas_circulares(numero, raio),
+        carga_axial_N,
+        carga_cortante_N,
+        momento,
+        torque,
     )
 
 
@@ -304,8 +355,14 @@ def avaliar_junta(
     distancia_centro_borda_mm: float,
     limite_esmagamento_MPa: float,
     escoamento_chapa_MPa: float,
+    coordenadas_mm: Sequence[tuple[float, float]] | None = None,
 ) -> ResultadoJunta:
-    """Avalia resistência básica do parafuso, aperto e modos da chapa."""
+    """Avalia resistência básica do parafuso, aperto e modos da chapa.
+
+    Com ``coordenadas_mm`` o arranjo é livre (grade retangular, por exemplo) e
+    ``numero_parafusos`` precisa coincidir com a quantidade de pontos; sem elas,
+    vale o círculo de raio ``raio_grupo_mm``.
+    """
     numero = int(numero_parafusos)
     if numero != numero_parafusos or numero < 1:
         raise ValueError("numero_parafusos deve ser um inteiro positivo.")
@@ -338,14 +395,29 @@ def avaliar_junta(
     limite_esmagamento = _positivo("limite_esmagamento_MPa", limite_esmagamento_MPa)
     escoamento_chapa = _positivo("escoamento_chapa_MPa", escoamento_chapa_MPa)
 
-    distribuicao = distribuir_cargas_grupo_circular(
-        numero,
-        raio_grupo_mm,
-        carga_axial_N,
-        carga_cortante_N,
-        momento_tombamento_Nmm,
-        torque_grupo_Nmm,
-    )
+    if coordenadas_mm is None:
+        distribuicao = distribuir_cargas_grupo_circular(
+            numero,
+            raio_grupo_mm,
+            carga_axial_N,
+            carga_cortante_N,
+            momento_tombamento_Nmm,
+            torque_grupo_Nmm,
+        )
+        raios_parafusos = (raio_grupo_mm,) * numero
+    else:
+        if len(coordenadas_mm) != numero:
+            raise ValueError("numero_parafusos deve coincidir com o número de coordenadas.")
+        distribuicao = distribuir_cargas_grupo(
+            coordenadas_mm,
+            carga_axial_N,
+            carga_cortante_N,
+            momento_tombamento_Nmm,
+            torque_grupo_Nmm,
+        )
+        xc = sum(x for x, _ in coordenadas_mm) / numero
+        yc = sum(y for _, y in coordenadas_mm) / numero
+        raios_parafusos = tuple(math.hypot(x - xc, y - yc) for x, y in coordenadas_mm)
 
     carga_prova = classe.resistencia_prova_MPa * rosca.area_tracao_mm2
     pre_carga_nominal = fracao * carga_prova
@@ -371,7 +443,13 @@ def avaliar_junta(
     )
     aperto_total = sum(apertos_residuais)
     capacidade_atrito_forca = atrito * interfaces * aperto_total
-    capacidade_atrito_torque = capacidade_atrito_forca * raio_grupo_mm
+    capacidade_atrito_torque = (
+        atrito
+        * interfaces
+        * sum(
+            aperto * raio for aperto, raio in zip(apertos_residuais, raios_parafusos, strict=True)
+        )
+    )
     utilizacao_deslizamento = 0.0
     if abs(carga_cortante_N) > 0:
         utilizacao_deslizamento += (
@@ -462,3 +540,146 @@ def avaliar_fadiga_axial(
         fator_goodman=fator_goodman,
         fator_escoamento_maximo=_fator(classe.escoamento_min_MPa, tensao_maxima_local),
     )
+
+
+def _linha_diagnostico(
+    nome: str,
+    solicitante: float,
+    resistente: float,
+    unidade: str,
+    referencia: str,
+    formula: str,
+    fator: float,
+    fator_minimo: float,
+) -> Verificacao:
+    """Linha do diagnóstico: o status segue o fator n e a meta, não só n ≥ 1."""
+    if math.isinf(fator):
+        return Verificacao(
+            nome, None, None, unidade, referencia, f"{formula} — sem solicitação neste modo.", "N/A"
+        )
+    linha = Verificacao(
+        nome, solicitante, resistente, unidade, referencia, f"{formula}; n = {fator:.2f}"
+    )
+    if fator < 1.0:
+        linha.status = "NÃO OK"
+    elif fator < fator_minimo:
+        linha.status = "ALERTA"
+        linha.formula += f" (abaixo da meta n = {fator_minimo:.2f})"
+    else:
+        linha.status = "OK"
+    return linha
+
+
+def diagnostico_junta(
+    resultado: ResultadoJunta,
+    rosca: RoscaMetrica,
+    classe: ClasseParafuso,
+    constante_rigidez_C: float,
+    fator_minimo: float,
+    fadiga: ResultadoFadigaParafuso | None = None,
+) -> list[Verificacao]:
+    """Diagnóstico de cada modo de falha com solicitante, resistente, status, fórmula e fonte.
+
+    Substitui a tabela "Critério / Fator / Resultado", que perdia as grandezas. Forças em kN
+    e tensões em MPa; ``Aproveitamento`` = solicitante/resistente = 1/n. Para o
+    deslizamento e a fadiga, que combinam parcelas, o solicitante é a utilização (1/n) e o
+    resistente é 1,0.
+    """
+    kN = 1_000.0
+    carga_max = resultado.carga_maxima_parafuso_N
+    cisalhamento = resultado.distribuicao.maior_cisalhamento_N
+    tracao_externa = resultado.distribuicao.maior_tracao_N
+    linhas = [
+        _linha_diagnostico(
+            "Carga de prova do parafuso",
+            carga_max / kN,
+            resultado.carga_prova_N / kN,
+            "kN",
+            "ISO 898-1 (carga de prova S_p·A_t)",
+            "F_máx = F_i,máx + C·P_b ≤ S_p·A_t",
+            resultado.fator_prova,
+            fator_minimo,
+        ),
+        _linha_diagnostico(
+            "Escoamento combinado (von Mises)",
+            resultado.tensao_von_mises_MPa,
+            classe.escoamento_min_MPa,
+            "MPa",
+            "NASA-STD-5020 / ISO 898-1",
+            "σ_vm = √(σ² + 3τ²) ≤ S_y",
+            resultado.fator_escoamento_vm,
+            fator_minimo,
+        ),
+        _linha_diagnostico(
+            "Ruptura em tração",
+            carga_max / kN,
+            classe.ruptura_min_MPa * rosca.area_tracao_mm2 / kN,
+            "kN",
+            "ISO 898-1 (R_m·A_t)",
+            "F_máx ≤ S_ut·A_t",
+            resultado.fator_ruptura_tracao,
+            fator_minimo,
+        ),
+        _linha_diagnostico(
+            "Separação da junta",
+            (1.0 - constante_rigidez_C) * tracao_externa / kN,
+            resultado.pre_carga_minima_N / kN,
+            "kN",
+            "NASA Fastener Design Manual / NASA-STD-5020",
+            "(1 − C)·P_b ≤ F_i,mín",
+            resultado.fator_separacao,
+            fator_minimo,
+        ),
+        _linha_diagnostico(
+            "Deslizamento por atrito",
+            0.0 if math.isinf(resultado.fator_deslizamento) else 1.0 / resultado.fator_deslizamento,
+            1.0,
+            "adim.",
+            "NASA Fastener Design Manual",
+            "V/(μ·n·ΣF_res) + T/(μ·n·ΣF_res·r) ≤ 1 (aperto residual após a carga externa)",
+            resultado.fator_deslizamento,
+            fator_minimo,
+        ),
+        _linha_diagnostico(
+            "Esmagamento da chapa",
+            resultado.tensao_esmagamento_MPa,
+            (
+                math.inf
+                if math.isinf(resultado.fator_esmagamento)
+                else resultado.tensao_esmagamento_MPa * resultado.fator_esmagamento
+            ),
+            "MPa",
+            "NASA Fastener Design Manual",
+            "σ_b = F_cis/(d·t) ≤ limite adotado (parte mecânica; a norma estrutural usa f_u)",
+            resultado.fator_esmagamento,
+            fator_minimo,
+        ),
+        _linha_diagnostico(
+            "Rasgamento até a borda",
+            cisalhamento / kN,
+            (
+                math.inf
+                if math.isinf(resultado.fator_rasgamento_borda)
+                else cisalhamento * resultado.fator_rasgamento_borda / kN
+            ),
+            "kN",
+            "NASA Fastener Design Manual",
+            "F_cis ≤ 2·ℓ·t·S_y/√3 (ℓ = e − d_h/2)",
+            resultado.fator_rasgamento_borda,
+            fator_minimo,
+        ),
+    ]
+    if fadiga is not None:
+        linhas.append(
+            _linha_diagnostico(
+                "Fadiga axial (Goodman)",
+                0.0 if math.isinf(fadiga.fator_goodman) else 1.0 / fadiga.fator_goodman,
+                1.0,
+                "adim.",
+                "Goodman modificado (preliminar)",
+                "σ_a/S_e + σ_m/S_ut ≤ 1",
+                fadiga.fator_goodman,
+                fator_minimo,
+            )
+        )
+    return linhas
