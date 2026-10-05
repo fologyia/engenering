@@ -19,8 +19,6 @@ Unidades: comprimento em mm, tensão em MPa, força em kN, momento em kN·m.
 
 from __future__ import annotations
 
-import csv
-import io
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -28,8 +26,14 @@ from typing import Any
 
 from core import bolted_connection as bc
 from core.bolt_design import torque_para_pre_carga
-from core.bolted_connection import Verificacao
 from core.technical_records import criar_registro_tecnico
+from core.verificacao import (
+    STATUS_REGISTRO,
+    Verificacao,
+    formatar_percentual,
+    linhas_para_registro,
+    status_geral,
+)
 
 NORMAS_ROTULOS = {
     "NBR8800_2008": "ABNT NBR 8800:2008",
@@ -60,8 +64,6 @@ AVISOS_FIXOS = (
     "da porca, chave calibrada ou indicador direto de tração.",
     "O grupo excêntrico usa o método elástico, que é conservador frente ao centro instantâneo de rotação.",
 )
-
-_ORDEM_STATUS = {"NÃO OK": 4, "ALERTA": 3, "OK": 2, "INFO": 1, "N/A": 0}
 
 
 @dataclass(frozen=True)
@@ -144,14 +146,6 @@ def distancia_minima_entre_furos(coords: Sequence[tuple[float, float]]) -> float
             if menor is None or d < menor:
                 menor = d
     return menor
-
-
-def status_geral(verificacoes: Sequence[Verificacao]) -> str:
-    """NÃO OK > ALERTA > OK. INFO e N/A não decidem; sem nenhuma linha decisiva, N/A."""
-    decisivos = [v.status for v in verificacoes if v.status in ("NÃO OK", "ALERTA", "OK")]
-    if not decisivos:
-        return "N/A"
-    return max(decisivos, key=lambda status: _ORDEM_STATUS[status])
 
 
 def _aproveitamento_governante(
@@ -715,98 +709,14 @@ def comparar_normas(entrada: EntradaLigacao) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------------------------
-# Tabelas para a interface, o CSV e o registro técnico
-# ---------------------------------------------------------------------------------------------
-COLUNAS_TABELA = (
-    "Verificação",
-    "Solicitante",
-    "Resistente",
-    "Unidade",
-    "Aproveitamento",
-    "Status",
-    "Fórmula",
-    "Referência",
-)
-
-
-def tabela_verificacoes(verificacoes: Sequence[Verificacao]) -> list[dict[str, Any]]:
-    """Linhas da tabela de saída; aproveitamento em % (None quando não se aplica)."""
-    return [
-        {
-            "Verificação": v.nome,
-            "Solicitante": v.solicitante,
-            "Resistente": v.resistente,
-            "Unidade": v.unidade,
-            "Aproveitamento": None if v.aproveitamento is None else 100.0 * v.aproveitamento,
-            "Status": v.status,
-            "Fórmula": v.formula,
-            "Referência": v.referencia,
-        }
-        for v in verificacoes
-    ]
-
-
-def _numero_json(valor: float | None, casas: int = 3) -> float | str:
-    """Número arredondado, ou texto quando não houver número (o hash do registro proíbe NaN/∞)."""
-    if valor is None or math.isnan(valor):
-        return "—"
-    return "∞" if math.isinf(valor) else round(valor, casas)
-
-
-def linhas_para_registro(verificacoes: Sequence[Verificacao]) -> list[dict[str, Any]]:
-    """Mesma tabela, em chaves que o memorial (Word/PDF) transforma em colunas legíveis."""
-    return [
-        {
-            "verificação": v.nome,
-            "solicitante": _numero_json(v.solicitante),
-            "resistente": _numero_json(v.resistente),
-            "unidade": v.unidade,
-            "aproveitamento_pct": _numero_json(
-                None if v.aproveitamento is None else 100.0 * v.aproveitamento, 1
-            ),
-            "status": v.status,
-            "fórmula": v.formula or "—",
-            "referência": v.referencia,
-        }
-        for v in verificacoes
-    ]
-
-
-def csv_verificacoes(verificacoes: Sequence[Verificacao]) -> bytes:
-    """CSV (UTF-8 com BOM, aberto direto no Excel) com as oito colunas da tabela."""
-    saida = io.StringIO()
-    escritor = csv.writer(saida, lineterminator="\r\n")
-    cabecalho = [("Aproveitamento (%)" if c == "Aproveitamento" else c) for c in COLUNAS_TABELA]
-    escritor.writerow(cabecalho)
-    for linha in tabela_verificacoes(verificacoes):
-        escritor.writerow(
-            [
-                ""
-                if linha[c] is None
-                else (f"{linha[c]:.3f}" if isinstance(linha[c], float) else linha[c])
-                for c in COLUNAS_TABELA
-            ]
-        )
-    return saida.getvalue().encode("utf-8-sig")
-
-
-# ---------------------------------------------------------------------------------------------
 # Registro técnico (entra no memorial Word/PDF com a tabela completa de verificações)
 # ---------------------------------------------------------------------------------------------
-STATUS_REGISTRO = {"OK": "Atende", "ALERTA": "Atenção", "NÃO OK": "Não atende", "N/A": "Pendente"}
-
 REFERENCIAS_NORMA = {
     "NBR8800_2008": "ABNT NBR 8800:2008, itens 5.2, 6.3 e 6.5.6; Tabelas 14, 16, 19 e A.3.",
     "NBR8800_2024": "Projeto de revisão ABNT NBR 8800 (maio/2024, Rev6): itens 5.2, 6.3, 6.5.6 e 6.8; Tabelas 14, 16, 19 e A.3.",
     "AISC360_LRFD": "ANSI/AISC 360, capítulos D, J3 e J4 (LRFD), e AISC Design Guide 29.",
     "RCSC2004": "RCSC Specification for Structural Joints Using ASTM A325 or A490 Bolts (2004), §5 e §8.",
 }
-
-
-def formatar_percentual(valor: float | None) -> str:
-    if valor is None:
-        return "—"
-    return "∞" if math.isinf(valor) else f"{100 * valor:.0f}%"
 
 
 def _nome_curto_norma(norma: str) -> str:

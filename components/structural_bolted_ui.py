@@ -8,7 +8,6 @@ varreduras "Comparar normas" e "Testar todos" são botões que ligam e desligam 
 from __future__ import annotations
 
 import math
-from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -16,17 +15,14 @@ import streamlit as st
 from components.bolted_help import AJUDA
 from components.project_tools import botao_registrar_calculo
 from components.ui import comparador_cenarios, fronteira_modelo
+from components.verification_table import (
+    COR_BADGE,
+    estilizar,
+    mostrar_tabela_verificacoes,
+)
 from core import bolted_connection as bc
 from core import bolted_joint_check as chk
-
-_COR_STATUS = {
-    "OK": "background-color: rgba(34, 197, 94, 0.28)",
-    "NÃO OK": "background-color: rgba(239, 68, 68, 0.34)",
-    "ALERTA": "background-color: rgba(245, 158, 11, 0.34)",
-    "INFO": "background-color: rgba(59, 130, 246, 0.22)",
-    "N/A": "background-color: rgba(148, 163, 184, 0.25)",
-}
-_COR_BADGE = {"OK": "green", "NÃO OK": "red", "ALERTA": "orange", "INFO": "blue", "N/A": "gray"}
+from core.verificacao import csv_verificacoes, formatar_percentual
 
 _GEO_GRADE = "Grade retangular"
 _GEO_LIVRE = "Coordenadas livres"
@@ -41,59 +37,6 @@ _REVESTIMENTOS = {
     "zinco_aluminio": "Zn/Al (ASTM F1136, Dacromet)",
     "outro": "Outro / sem revestimento",
 }
-
-
-def _chaves_estilo(estilo: Any) -> Any:
-    """``Styler.map`` (pandas ≥ 2.1) ou o antigo ``applymap`` (pandas 2.0)."""
-    return getattr(estilo, "map", None) or estilo.applymap
-
-
-def _celula(valor: Any, formato: str) -> str:
-    """Número formatado, ou “—” quando não há valor (o Streamlit mostraria “None”)."""
-    if valor is None or (isinstance(valor, float) and math.isnan(valor)):
-        return "—"
-    return formato.format(valor)
-
-
-def _estilizar(tabela: pd.DataFrame, formatos: dict[str, str]) -> Any:
-    """Versão de exibição: números como texto formatado e a coluna Status colorida.
-
-    Os valores exatos continuam no DataFrame de origem, no CSV e no registro técnico.
-    """
-    exibicao = tabela.copy()
-    for coluna, formato in formatos.items():
-        exibicao[coluna] = [_celula(valor, formato) for valor in tabela[coluna]]
-    return _chaves_estilo(exibicao.style)(
-        lambda valor: _COR_STATUS.get(valor, ""), subset=["Status"]
-    )
-
-
-def mostrar_tabela_verificacoes(verificacoes: Any) -> pd.DataFrame:
-    """Tabela de oito colunas, com a coluna Status colorida. Devolve o DataFrame cru."""
-    tabela = pd.DataFrame(chk.tabela_verificacoes(verificacoes), columns=list(chk.COLUNAS_TABELA))
-    estilo = _estilizar(
-        tabela, {"Solicitante": "{:.2f}", "Resistente": "{:.2f}", "Aproveitamento": "{:.0f}"}
-    )
-    st.dataframe(
-        estilo,
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "Verificação": st.column_config.TextColumn(width="large"),
-            "Solicitante": st.column_config.TextColumn(
-                width="small", help=AJUDA["col_solicitante"]
-            ),
-            "Resistente": st.column_config.TextColumn(width="small", help=AJUDA["col_resistente"]),
-            "Unidade": st.column_config.TextColumn(width="small", help=AJUDA["col_unidade"]),
-            "Aproveitamento": st.column_config.TextColumn(
-                "Aproveitamento (%)", width="small", help=AJUDA["col_aproveitamento"]
-            ),
-            "Status": st.column_config.TextColumn(width="small", help=AJUDA["col_status"]),
-            "Fórmula": st.column_config.TextColumn(width="large", help=AJUDA["col_formula"]),
-            "Referência": st.column_config.TextColumn(width="medium", help=AJUDA["col_referencia"]),
-        },
-    )
-    return tabela
 
 
 def _avisos_fixos() -> None:
@@ -614,7 +557,7 @@ def _formulario() -> chk.EntradaLigacao | None:
     )
 
 
-_percentual = chk.formatar_percentual
+_percentual = formatar_percentual
 
 
 def _painel_resumo(entrada: chk.EntradaLigacao, resultado: chk.ResultadoLigacao) -> str | None:
@@ -623,7 +566,7 @@ def _painel_resumo(entrada: chk.EntradaLigacao, resultado: chk.ResultadoLigacao)
         st.subheader("Resumo", help=AJUDA["res_resumo"])
         st.badge(
             f"Status geral: {resultado.status_geral}",
-            color=_COR_BADGE[resultado.status_geral],
+            color=COR_BADGE[resultado.status_geral],
             icon=":material/verified:" if resultado.status_geral == "OK" else ":material/rule:",
             help=AJUDA["res_status"],
         )
@@ -719,7 +662,7 @@ def _varreduras(entrada: chk.EntradaLigacao) -> None:
                 for item in chk.comparar_normas(entrada)
             ]
             tabela = pd.DataFrame(linhas)
-            estilo = _estilizar(
+            estilo = estilizar(
                 tabela,
                 {
                     "Aproveitamento máx. (%)": "{:.0f}",
@@ -770,7 +713,7 @@ def _varreduras(entrada: chk.EntradaLigacao) -> None:
                     for item in varredura
                 ]
             )
-            estilo = _estilizar(tabela, {"d_b (mm)": "{:.1f}", "Aproveitamento máx. (%)": "{:.0f}"})
+            estilo = estilizar(tabela, {"d_b (mm)": "{:.1f}", "Aproveitamento máx. (%)": "{:.0f}"})
             st.dataframe(
                 estilo,
                 hide_index=True,
@@ -876,7 +819,7 @@ def mostrar_ligacao_estrutural() -> None:
         mostrar_tabela_verificacoes(resultado.verificacoes)
         st.download_button(
             "Baixar verificações em CSV",
-            data=chk.csv_verificacoes(resultado.verificacoes),
+            data=csv_verificacoes(resultado.verificacoes),
             file_name="ligacao_parafusada.csv",
             mime="text/csv",
             icon=":material/download:",

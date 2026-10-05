@@ -18,7 +18,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from core.bolted_connection import Verificacao
+from core.verificacao import Verificacao
 
 
 @dataclass(frozen=True)

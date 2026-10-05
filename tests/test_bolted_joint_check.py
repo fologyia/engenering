@@ -15,6 +15,12 @@ import pytest
 
 from core import bolted_connection as bc
 from core import bolted_joint_check as chk
+from core.verificacao import (
+    COLUNAS_TABELA,
+    csv_verificacoes,
+    linhas_para_registro,
+    tabela_verificacoes,
+)
 
 KIP = bc.KIP_KN
 
@@ -311,13 +317,13 @@ def test_comparar_normas_mostra_o_erro_em_vez_de_esconder():
 
 def test_tabela_tem_as_oito_colunas_e_status_validos():
     r = chk.verificar_ligacao(axial_m16())
-    tabela = chk.tabela_verificacoes(r.verificacoes)
+    tabela = tabela_verificacoes(r.verificacoes)
     assert len(tabela) == len(r.verificacoes) > 8
     for linha_ in tabela:
-        assert tuple(linha_) == chk.COLUNAS_TABELA
+        assert tuple(linha_) == COLUNAS_TABELA
         assert linha_["Status"] in {"OK", "NÃO OK", "ALERTA", "N/A", "INFO"}
         assert linha_["Referência"] and linha_["Verificação"]
-    registro = chk.linhas_para_registro(r.verificacoes)
+    registro = linhas_para_registro(r.verificacoes)
     assert len(registro[0]) == 8 and all(x["referência"] for x in registro)
 
 
@@ -339,7 +345,7 @@ def test_csv_tem_as_oito_colunas_e_as_grandezas():
     import io
 
     r = chk.verificar_ligacao(cortante_excentrica())
-    texto = chk.csv_verificacoes(r.verificacoes).decode("utf-8-sig")
+    texto = csv_verificacoes(r.verificacoes).decode("utf-8-sig")
     linhas = list(csv.reader(io.StringIO(texto)))
     assert linhas[0] == [
         "Verificação",

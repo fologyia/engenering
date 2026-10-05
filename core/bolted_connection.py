@@ -26,6 +26,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from core.verificacao import Verificacao
+
 KIP_KN = 4.448222  # 1 kip em kN
 TF_KN = 9.80665  # 1 tf em kN
 NORMAS = ("NBR8800_2008", "NBR8800_2024", "AISC360_LRFD", "RCSC2004")
@@ -152,30 +154,6 @@ def _fator_ruptura(norma: str) -> float:
 def _fator_escoamento(norma: str) -> float:
     """1/γ_a1 (NBR) ou φ = 0,90 (AISC/RCSC) — escoamento da seção bruta à tração."""
     return 1 / _P[norma]["g_a1"] if _nbr(norma) else _P[norma]["phi_ty"]
-
-
-@dataclass
-class Verificacao:
-    nome: str
-    solicitante: float | None
-    resistente: float | None
-    unidade: str
-    referencia: str
-    formula: str = ""
-    status: str = ""  # "OK", "NÃO OK", "ALERTA", "N/A", "INFO"
-    aproveitamento: float | None = None
-
-    def __post_init__(self) -> None:
-        if not self.status:
-            if self.solicitante is None or self.resistente is None:
-                self.status = "N/A"
-            else:
-                # Guarda: resistência nula OU NEGATIVA (ℓ_f ≤ 0) reprova; a divisão devolveria
-                # um aproveitamento negativo, que o teste "<= 1" aceitaria como OK.
-                self.aproveitamento = (
-                    self.solicitante / self.resistente if self.resistente > 0 else math.inf
-                )
-                self.status = "OK" if self.aproveitamento <= 1.0 else "NÃO OK"
 
 
 # ---------------------------------------------------------------------------------------------

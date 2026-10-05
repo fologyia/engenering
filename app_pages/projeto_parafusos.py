@@ -5,11 +5,12 @@ import streamlit as st
 
 from components.bolted_help import AJUDA
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
-from components.structural_bolted_ui import mostrar_ligacao_estrutural, mostrar_tabela_verificacoes
+from components.structural_bolted_ui import mostrar_ligacao_estrutural
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
+from components.verification_table import mostrar_tabela_verificacoes
 from core import bolt_design as parafusos
 from core import bolted_connection as ligacao
-from core.bolted_joint_check import csv_verificacoes, linhas_para_registro
+from core.verificacao import csv_verificacoes, linhas_para_registro
 
 configurar_pagina("Projeto de parafusos", ":material/build:")
 

@@ -295,13 +295,6 @@ AJUDA: dict[str, str] = {
         "- **Status**: OK, NÃO OK, ALERTA (ressalva), INFO (informação) ou N/A (não se aplica).\n"
         "- **Fórmula** e **Referência**: como foi calculado e o item da norma."
     ),
-    "col_solicitante": "O que atua (a carga) ou, nas distâncias e espaçamentos, o valor exigido.",
-    "col_resistente": "O que a ligação suporta ou, nas distâncias e espaçamentos, o valor adotado.",
-    "col_unidade": "Unidade do solicitante e do resistente.",
-    "col_aproveitamento": "Solicitante ÷ resistente, em %. Acima de 100% a verificação reprova.",
-    "col_status": "OK atende · NÃO OK reprova · ALERTA ressalva · INFO informação · N/A não se aplica.",
-    "col_formula": "Como o valor foi calculado, com os números desta ligação.",
-    "col_referencia": "Item da norma ou do critério de projeto em que a verificação se baseia.",
     "btn_comparar": (
         "Calcula a mesma ligação nas quatro normas e mostra o resultado lado a lado. Não muda a "
         "norma escolhida na seção 1."

@@ -14,7 +14,7 @@ from streamlit.testing.v1 import AppTest
 
 from core import bolt_design as parafusos
 from core import bolted_connection as bc
-from core.bolted_joint_check import COLUNAS_TABELA
+from core.verificacao import COLUNAS_TABELA
 
 PAGINA = "app_pages/projeto_parafusos.py"
 ESTRUTURAL = "Ligação estrutural de aço"
@@ -340,22 +340,13 @@ def test_simplificacoes_aparecem_nas_dicas(banco_isolado):
 def test_colunas_da_tabela_explicam_o_que_mostram(banco_isolado):
     import json
 
-    from components.bolted_help import AJUDA
+    from components.verification_table import AJUDA_COLUNAS
 
     t = estrutural(banco_isolado)
     tabela_el = next(d for d in t.dataframe if "Verificação" in d.value.columns)
     colunas = json.loads(tabela_el.proto.columns)
-    esperado = {
-        "Solicitante": "col_solicitante",
-        "Resistente": "col_resistente",
-        "Unidade": "col_unidade",
-        "Aproveitamento": "col_aproveitamento",
-        "Status": "col_status",
-        "Fórmula": "col_formula",
-        "Referência": "col_referencia",
-    }
-    for coluna, chave in esperado.items():
-        assert colunas[coluna]["help"] == AJUDA[chave], coluna
+    for coluna, texto in AJUDA_COLUNAS.items():
+        assert colunas[coluna]["help"] == texto, coluna
 
 
 # ------------------------------------------------------------------ sem o aviso de “valor normativo”
