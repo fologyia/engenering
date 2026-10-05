@@ -99,13 +99,24 @@ def _registrar_padrao() -> None:
         ModuloTecnico(
             id="flambagem_colunas",
             titulo="Flambagem de colunas",
-            versao="2.0",
+            versao="3.0",
             pagina="app_pages/flambagem_colunas.py",
             grupo_navegacao="Análises técnicas",
             ordem=15,
             icone=":material/architecture:",
-            descricao="Barra comprimida ou flexocomprimida pela NBR 8800: χ, Q, N_ez, B_1 e interação N + M.",
-            aliases=("Flambagem", "Euler", "Índice de esbeltez", "NBR 8800", "Coluna"),
+            descricao=(
+                "Barra inteira comprimida ou flexocomprimida pela NBR 8800:2008, pelo Projeto "
+                "NBR 8800:2024 e pelo AISC 360-16: todos os modos, B_1, interação N + Mx + My "
+                "e critério Anglo."
+            ),
+            aliases=(
+                "Flambagem",
+                "Euler",
+                "Índice de esbeltez",
+                "NBR 8800",
+                "AISC 360",
+                "Coluna",
+            ),
         ),
         ModuloTecnico(
             id="vigas_eixos",

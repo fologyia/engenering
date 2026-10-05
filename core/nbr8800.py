@@ -314,7 +314,9 @@ def fator_q(
             b_ef = _largura_efetiva(largura, t, sigma, e, 0.38)
             razao = largura / t
             elementos.append(ElementoDePlaca(nome, "AA", razao, limite, "1", 1.0, b_ef))
-            if razao > limite:
+            # A redução só vale acima de 1,40·√(E/σ) (F.3.2), isto é, do limite da Tabela F.1
+            # corrigido por √(f_y/σ): com σ ≪ f_y a largura efetiva da fórmula ficaria nula.
+            if razao > limite * math.sqrt(fy / sigma):
                 area_ineficaz += 2.0 * (largura - b_ef) * t
     elif familia in _FAMILIAS_I or familia in _FAMILIAS_U:
         grupo_mesa = "5" if soldado and familia in _FAMILIAS_I else "4"
@@ -330,7 +332,7 @@ def fator_q(
         limite_alma = 1.49 * raiz
         b_ef = _largura_efetiva(hw, tw, sigma, e, 0.34)
         elementos.append(ElementoDePlaca("alma", "AA", razao_alma, limite_alma, "2", 1.0, b_ef))
-        if razao_alma > limite_alma:
+        if razao_alma > limite_alma * math.sqrt(fy / sigma):  # idem: 1,49·√(E/σ)
             area_ineficaz += (hw - b_ef) * tw
     elif familia == "t":
         razao_mesa = (b / 2.0) / tf

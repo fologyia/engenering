@@ -1077,128 +1077,171 @@ elif modulo == "Flambagem de colunas":
     st.markdown(
         "Use para uma **peça esbelta sob compressão** (coluna, escora, montante "
         "comprimido, coluna que recebe uma mão-francesa) — a tensão σ = F/A "
-        "sozinha não avisa quando a peça vai flambar antes de escoar. A "
-        "verificação segue a **NBR 8800:2008** (estados-limites): ações "
-        "majoradas, resistência minorada e curva de flambagem χ."
+        "sozinha não avisa quando a peça vai flambar antes de escoar. Uma única "
+        "rodada verifica a **barra inteira**: os dois eixos, todos os modos de "
+        "flambagem, a flambagem local, a flexão em x e em y e a interação "
+        "**N + M_x + M_y numa equação só**, pela **NBR 8800:2008**, pelo **Projeto "
+        "NBR 8800:2024** ou pelo **AISC 360-16**, mais o critério da Anglo."
     )
     mostrar_tabela_campos(
         [
             [
+                "Norma",
+                "NBR 8800:2008 (fator Q), Projeto NBR 8800:2024 (área efetiva A_ef) ou AISC 360-16 (A_ef e φ = 0,90). “Comparar normas” mostra as três lado a lado",
+                "Contrato ou critério do projeto",
+            ],
+            [
                 "Seção",
-                "Geometria da peça (retangular, circular, tubo, perfil ou A/r direto). Só com perfil/geometria a norma calcula Q e N_ez",
+                "Perfil de catálogo, barra, tubo, I ou U por dimensões, só A e r, ou seção genérica (propriedades e paredes)",
                 "Desenho ou catálogo do perfil",
             ],
-            ["L", "Comprimento real da coluna, em mm", "Desenho ou montagem"],
             [
-                "Condição de apoio",
-                "K da Tabela E.1 mais próximo do apoio real — teórico ou recomendado para projeto, que é maior nos casos com engaste",
+                "L, L_x, L_y",
+                "Comprimento total da coluna e os comprimentos destravados de cada eixo (desligue “Mesmo comprimento destravado” quando o travamento difere por plano), em mm",
+                "Desenho ou montagem; travamentos laterais",
+            ],
+            [
+                "Condição de apoio, K_x, K_y, K_z, L_z",
+                "K da Tabela E.1 de cada plano — teórico ou recomendado para projeto — ou K informado; K_z e L_z só se a torção tem travamento próprio",
                 "Croqui de fixação nas extremidades",
             ],
             [
-                "Kx, Ky, Kz",
-                "Fatores por eixo quando o contraventamento é diferente; Kz é o da torção",
-                "Travamentos laterais",
+                "E, G, f_y",
+                "Módulos de elasticidade e de cisalhamento, em MPa (aço: 200 000 e 77 000), e a resistência ao escoamento",
+                "NBR 8800 4.5.2.9; certificado do material",
             ],
-            [
-                "E, G",
-                "Módulos de elasticidade e de cisalhamento, em MPa (aço: 200 000 e 77 000)",
-                "NBR 8800 4.5.2.9",
-            ],
-            ["f_y", "Resistência ao escoamento, em MPa", "Certificado ou base do material"],
             [
                 "N_g, N_q ou N_Sd",
                 "Cargas características permanente e variável (majoradas por γ_g e γ_q da Tabela 1) ou N_Sd já de cálculo, em kN",
                 "Casos de carga / Assistente de cargas",
             ],
             [
-                "e, M_x,Sd, M_y,Sd",
-                "Excentricidade da força (mm) e/ou momentos de cálculo de 1ª ordem (kN·m) — força inclinada de mão-francesa gera os dois",
-                "Detalhe da ligação e análise do nó",
+                "M_x,Sd, M_y,Sd, e_x, e_y",
+                "Momentos de cálculo de 1ª ordem (kN·m) e/ou excentricidades da força (mm), um para cada eixo",
+                "Análise da estrutura; detalhe da ligação",
             ],
             [
-                "C_m, L_b, C_b",
-                "Coeficiente de equivalência de momentos (1,0 conservador), comprimento destravado e fator de modificação para a FLT",
+                "Diagrama de momentos (C_m)",
+                "Não informado (C_m = 1,0, conservador), momentos nas pontas (M₁/M₂) ou força transversal entre os apoios",
+                "Diagrama de momentos da barra",
+            ],
+            [
+                "L_b e C_b",
+                "Comprimento destravado da mesa comprimida e fator de modificação da FLT (informado ou pelo diagrama de quatro pontos)",
                 "Travamentos da mesa comprimida",
             ],
             [
-                "Mão-francesa: F, θ, a, vínculo",
-                "Força na barra inclinada (kN), ângulo com a coluna (45° usual), altura do nó medida da base e vínculo da coluna nesse plano — o programa decompõe em H e V e soma o momento a M_Sd",
+                "M_Rd informado",
+                "Momento resistente calculado fora do programa, quando a seção não tem rotina (tubo não compacto, T, genérica)",
+                "Catálogo do fabricante ou cálculo próprio",
+            ],
+            [
+                "Mão-francesa: F, θ, a, vínculo, eixo",
+                "Força na barra inclinada (kN), ângulo com a coluna (45° usual), altura do nó medida da base, vínculo da coluna e o eixo que ela flete — o programa decompõe em H e V e soma o momento",
                 "Reação da viga/console que a mão-francesa apoia",
+            ],
+            [
+                "Paredes e confirmação",
+                "Só na seção genérica: tipo, grupo, b, t e quantidade das paredes (flambagem local) e a confirmação de que a seção é compacta e a torção não governa",
+                "Tabela 4 da norma; cálculo próprio",
             ],
         ]
     )
     st.subheader("Passo a passo")
     st.markdown(
         """
-        1. Escolha o tipo de seção e informe suas dimensões (ou perfil de catálogo).
-        2. Informe o comprimento real e a condição de apoio mais próxima da real —
-           deixe o K recomendado de norma ligado, salvo se a ligação for de fato ideal.
-        3. Informe E, G e f_y; escolha entre majorar aqui as cargas características
-           (γ_g·N_g + γ_q·N_q) ou informar N_Sd já de cálculo.
-        4. Se a força não passa pelo centroide ou há momento no nó, informe a
-           excentricidade e/ou M_Sd: eles entram amplificados por B_1 na interação.
-           Com mão-francesa, ligue o bloco 5: F, θ, a e o vínculo geram o momento
-           sozinhos (M = H·a no engaste, H·a·(L−a)/L na biapoiada) e ele é somado a M_Sd.
-        5. Escolha o **eixo analisado** (x-x ou y-y) na seção 2 e informe o
-           comprimento destravado e o apoio daquele plano — x-x costuma ir do piso
-           ao nó da mão-francesa; y-y, entre os contraventamentos laterais.
-        6. Leia N_e do eixo, N_ez (Anexo E), Q (Anexo F), λ_0 e χ (5.3.3) e a
-           resistência N_c,Rd = χ·Q·A_g·f_y/γ_a1, com a interação N + M do eixo.
-        7. Registre o eixo no projeto, troque para o outro eixo e registre também:
-           são dois registros, e o pior deles governa a coluna. KL/r acima de 200
-           reprova por si só (5.3.4.1).
+        1. Escolha a **norma** e o aço (f_y). Na dúvida, comece pela NBR 8800:2008.
+        2. Descreva a **seção**. Perfil de catálogo é o caminho mais seguro: as
+           propriedades vêm da tabela. “Área e raio de giração” e “Seção genérica”
+           deixam o resultado em **ALERTA** até as paredes serem informadas ou a
+           seção ser confirmada como compacta.
+        3. Informe o **comprimento total** e, se o travamento difere por plano,
+           desligue “Mesmo comprimento destravado” e informe L_x e L_y. Escolha a
+           condição de apoio de cada eixo — deixe o K recomendado ligado, salvo se a
+           ligação for de fato ideal.
+        4. Informe os **esforços de cálculo**: N_Sd (ou as cargas características),
+           M_x,Sd e M_y,Sd, as excentricidades e, para o efeito B₁, a forma do
+           diagrama de momentos de cada eixo.
+        5. Com **mão-francesa**, ligue o bloco 5: F, θ, a, o vínculo e o eixo geram
+           o momento sozinhos (M = H·a no engaste, H·a·(L−a)/L na biapoiada) e ele
+           é somado ao do eixo que ela flete.
+        6. Leia o **Resumo** (status, aproveitamento máximo, N_c,Rd, N_e, χ, Q ou
+           A_ef/A_g, B₁ e interação) e a **tabela de verificações**: cada linha tem
+           solicitante, resistente, aproveitamento, status, fórmula e item da norma.
+        7. Use **Comparar normas**, baixe o CSV e **registre** no projeto — o
+           memorial leva a tabela inteira.
         """
     )
     mostrar_exemplo(
         [
-            ["Seção", "Circular maciça, d = 50 mm"],
-            ["L", "2000 mm"],
-            ["Condição de apoio", "Biapoiada (pino-pino), K = 1,0"],
+            ["Norma", "NBR 8800:2008"],
+            ["Seção", "Barra circular maciça, d = 50 mm"],
+            ["L / apoio", "2000 mm / Biapoiada (pino-pino), K = 1,0 nos dois eixos"],
             ["E / f_y", "200000 MPa / 250 MPa"],
-            ["N_g / N_q", "30 kN (γ_g = 1,40) / 20 kN (γ_q = 1,40) → N_Sd = 70 kN"],
+            ["N_g / N_q", "30 kN (γ_g = 1,40) / 20 kN (γ_q = 1,50) → N_Sd = 72 kN"],
         ],
-        "Resultado esperado: λ = 160; N_e = 151,4 kN (Euler, só referência); "
-        "λ_0 = 1,80 > 1,5, portanto χ = 0,877/λ_0² = 0,270; Q = 1,0 (seção maciça); "
-        "N_c,Rd = 0,270 × 1963 × 250 / 1,10 ≈ 120,7 kN — utilização de 58 % para "
-        "N_Sd = 70 kN. Repare que a norma dá 80 % da carga de Euler mesmo na "
+        "Resultado esperado: λ = 160 (dentro do limite 200 da Anglo, item 8.3); "
+        "N_e = 151,4 kN; λ_0 = 1,80 > 1,5, portanto χ = 0,877/λ_0² = 0,270; Q = 1,0 "
+        "(seção maciça); N_c,Rd = 120,71 kN — aproveitamento de 60 % para "
+        "N_Sd = 72 kN. Repare que a norma dá 80 % da carga de Euler mesmo na "
         "coluna longa: é o efeito das imperfeições e tensões residuais.",
+    )
+    mostrar_exemplo(
+        [
+            ["Norma / aço", "AISC 360-16; f_y = 46 ksi (317 MPa); E = 29 000 ksi (199 948 MPa)"],
+            ["Seção", "Genérica, HSS8×8×1/2: A = 13,5 in² (8 710 mm²); r = 3,04 in (77,2 mm)"],
+            [
+                "Propriedades",
+                "I_x = I_y = A·r²; sem torção; confirmar “compacta e torção não governa”",
+            ],
+            ["Parede", "AA, grupo 1: b = 14,2·t = 167,7 mm, t = 0,465 in (11,81 mm), quantidade 4"],
+            ["L / apoio", "24 ft (7 315 mm); K = 1,0"],
+        ],
+        "Resultado esperado: N_c,Rd = 1 361 kN (φP_n = 306 kips do AISC Design Guide 29); "
+        "A_ef/A_g = 1,0, porque b/t = 14,2 fica abaixo de 1,40·√(E/F_y).",
     )
     with st.container(border=True):
         st.subheader("Como interpretar")
         st.markdown(
             """
+            - **Status geral:** OK quando nada reprova; NÃO OK quando alguma
+              verificação reprova **ou foi bloqueada**; ALERTA quando nada reprova
+              mas ficou algo que o programa não consegue conferir.
+            - **Linhas NÃO OK de bloqueio:** tubo circular com D/t > 0,45·E/f_y,
+              alma esbelta ou tubo não compacto na flexão, N_Sd ≥ N_e no B₁ e seção
+              sem Z não são estimados — o programa mostra o motivo em vez de
+              corrigir a entrada em silêncio.
             - **N_e (Anexo E):** a menor força de flambagem elástica entre flexão
               em x, flexão em y, torção (N_ez) e o modo acoplado das seções
               monossimétricas (U, T). Perfis abertos podem torcer antes de fletir.
-            - **Q (Anexo F):** menor que 1,0 quando alguma parede (mesa, alma,
-              tubo) é mais esbelta que λ_r — a flambagem local reduz a área que
-              trabalha.
-            - **λ_0 e χ (5.3.3):** λ_0 = √(Q·A_g·f_y/N_e); χ = 0,658^(λ_0²) até 1,5
-              e 0,877/λ_0² acima. χ substitui o fator de segurança global do modelo
-              elementar e já inclui imperfeições e tensões residuais.
-            - **Eixo governante:** o de maior esbeltez — geralmente o eixo mais
-              "fraco" (menor raio de giração) ou com maior K·L.
-            - **B_1 (Anexo D):** amplifica o momento de 1ª ordem pela compressão,
-              B_1 = C_m/(1 − N_Sd/N_e). Se N_Sd chega a N_e, B_1 diverge: a coluna
-              não tem rigidez para a carga.
-            - **Interação (5.5.1.2):** N_Sd/N_Rd + 8/9·(M_x,Sd/M_x,Rd + M_y,Sd/M_y,Rd)
-              ≤ 1,0 (ou N_Sd/(2N_Rd) + … quando N_Sd/N_Rd < 0,2). É a verificação
-              obrigatória quando a força chega fora do eixo.
-            - **Utilização > 100 %:** algum estado-limite (compressão, flexão,
-              interação ou KL/r > 200) não atende.
-            - **Um eixo por vez:** cada registro usa o N_e da flexão naquele eixo
-              — ou o da torção/flexo-torção, se for menor — com o momento daquele
-              plano. Os dois registros juntos cobrem a coluna; o de maior
-              utilização governa.
+            - **Q (NBR 2008) e A_ef (Projeto 2024 e AISC):** a flambagem local
+              reduz a área que trabalha quando alguma parede (mesa, alma, tubo) é
+              esbelta. A tabela “Paredes da seção” mostra b/t e o limite de cada uma.
+            - **λ_0 e χ:** χ = 0,658^(λ_0²) até λ_0 = 1,5 e 0,877/λ_0² acima — já
+              inclui imperfeições e tensões residuais.
+            - **B₁ e C_m (Anexo D):** B₁ = C_m/(1 − N_Sd/N_e) amplifica o momento de
+              1ª ordem; N_e usa o **comprimento real** da barra no plano de flexão
+              (K = 1). Sem M₁/M₂ informado, C_m = 1,0 (conservador).
+            - **Interação (5.5.1.2):** N/N_Rd + 8/9·(M_x/M_x,Rd + M_y/M_y,Rd) ≤ 1,0
+              (ou N/(2N_Rd) + … quando N/N_Rd < 0,2), com os **dois momentos na
+              mesma equação**. Verificar cada eixo separado aprova colunas que a
+              norma reprova.
+            - **Critério Anglo:** λ ≤ 200 na compressão (8.3) e espessura mínima das
+              partes (8.8). A espessura do I ou U da coluna é conferida sozinha.
             - **Mão-francesa:** H = F·sen θ flete a coluna com braço a; V = F·cos θ
-              comprime. Marque "Somar V a N_Sd" só se a reação vertical ainda não
-              estiver dentro de N_Sd.
+              comprime (marque “Somar V a N_Sd” só se a reação ainda não estiver em
+              N_Sd). O cisalhamento (5.4.3) não é verificado aqui: o programa avisa.
+            - **Norma 2008 “CONFERIR”:** Q_s e Q_a, a Tabela E.1 de K, o λ_p dos
+              tubos na flexão e a forma da FLT foram trazidos de memória; confirme
+              na norma antes de emitir.
             """
         )
     st.warning(
         "Verificação de barra isolada: os efeitos globais de 2ª ordem (B_2, "
         "deslocabilidade), as cargas nocionais e as ligações pertencem à análise "
-        "da estrutura — módulo Estruturas de aço (pórtico 2D, placa de base).",
+        "da estrutura — módulo Estruturas de aço (pórtico 2D, placa de base). "
+        "Cantoneira simples, barras compostas, perfis formados a frio, fadiga e "
+        "cisalhamento também ficam de fora.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/flambagem_colunas.py", "Abrir Flambagem de colunas")

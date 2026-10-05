@@ -321,6 +321,16 @@ def _numero(valor: Any) -> float | None:
     return numero if math.isfinite(numero) else None
 
 
+_NORMAS_COM_AREA_EFETIVA = ("NBR8800_2024", "AISC360_16_LRFD")
+
+# Rótulo da norma gravada no registro de Flambagem de colunas (``entradas["norma"]``).
+_ROTULOS_NORMA_FLAMBAGEM = {
+    "NBR8800_2008": "NBR 8800:2008",
+    "NBR8800_2024": "Projeto NBR 8800:2024",
+    "AISC360_16_LRFD": "AISC 360-16",
+}
+
+
 def _circulo(centro: float, raio: float, *, passos: int = 181) -> list[tuple[float, float]]:
     return [
         (
@@ -453,7 +463,11 @@ def imagens_mohr(
 def imagens_flambagem(
     entradas: Mapping[str, Any], resultados: Mapping[str, Any]
 ) -> list[ImagemDiagrama]:
-    """Curva de flambagem da NBR 8800 (χ·Q·f_y/γ_a1 × KL/r) com a coluna registrada."""
+    """Curva de flambagem (χ·Q·f_y × minoração × KL/r) com a coluna registrada.
+
+    A minoração é a do registro: ``fator_resistencia`` (1/γ_a1 nas normas brasileiras, φ = 0,90 no
+    AISC) quando o registro a traz; registros anteriores só guardam ``gamma_a1``.
+    """
     modulo_e = _numero(entradas.get("modulo_elasticidade_MPa"))
     escoamento = _numero(entradas.get("escoamento_MPa"))
     area = _numero(entradas.get("area_mm2"))
@@ -464,13 +478,20 @@ def imagens_flambagem(
     assert modulo_e and escoamento and area and esbeltez and chi
     fator_q = _numero(resultados.get("fator_q")) or 1.0
     gamma_a1 = _numero(entradas.get("gamma_a1")) or 1.10
+    minoracao = _numero(entradas.get("fator_resistencia")) or 1.0 / gamma_a1
+    rotulo_norma = _ROTULOS_NORMA_FLAMBAGEM.get(str(entradas.get("norma")), "NBR 8800")
+    rotulo_minoracao = "φ" if entradas.get("norma") == "AISC360_16_LRFD" else "1/γ_a1"
 
-    from core.nbr8800 import fator_chi
+    from core.column_design import fator_chi
+
+    # NBR 2008: λ_0 = √(Q·A·f_y/N_e). Projeto 2024 e AISC: λ_0 = √(A·f_y/N_e) e a redução vem da
+    # área efetiva (A_ef/A = fator_q do registro).
+    q_em_lambda = 1.0 if entradas.get("norma") in _NORMAS_COM_AREA_EFETIVA else fator_q
 
     def tensao_resistente(lam: float) -> float:
-        # λ_0 da flambagem por flexão: √(Q·A·f_y/N_e) = (λ/π)·√(Q·f_y/E).
-        lambda_0 = (lam / math.pi) * math.sqrt(fator_q * escoamento / modulo_e)
-        return fator_chi(lambda_0) * fator_q * escoamento / gamma_a1
+        # λ_0 da flambagem por flexão: (λ/π)·√(Q·f_y/E).
+        lambda_0 = (lam / math.pi) * math.sqrt(q_em_lambda * escoamento / modulo_e)
+        return fator_chi(lambda_0) * fator_q * escoamento * minoracao
 
     lambda_max = max(esbeltez * 1.25, 200.0 * 1.1)
     passos = 240
@@ -478,12 +499,12 @@ def imagens_flambagem(
         (lam, tensao_resistente(lam))
         for lam in (lambda_max * i / passos for i in range(1, passos + 1))
     ]
-    curva_norma.insert(0, (0.0, fator_q * escoamento / gamma_a1))
+    curva_norma.insert(0, (0.0, fator_q * escoamento * minoracao))
     euler = [
         (lam, min(math.pi**2 * modulo_e / lam**2, escoamento * 1.3))
         for lam in (lambda_max * i / passos for i in range(1, passos + 1))
     ]
-    lambda_1_5 = 1.5 * math.pi * math.sqrt(modulo_e / (fator_q * escoamento))
+    lambda_1_5 = 1.5 * math.pi * math.sqrt(modulo_e / (q_em_lambda * escoamento))
 
     resistencia = _numero(resultados.get("resistencia_kN"))
     forca = _numero(entradas.get("forca_solicitante_kN"))
@@ -494,7 +515,11 @@ def imagens_flambagem(
         Curva(
             euler, cor=COR_NEUTRA, espessura=1, tracejada=True, rotulo="Euler N_e/A (referência)"
         ),
-        Curva(curva_norma, cor=COR_PRINCIPAL, rotulo="NBR 8800: χ·Q·f_y/γ_a1"),
+        Curva(
+            curva_norma,
+            cor=COR_PRINCIPAL,
+            rotulo=f"{rotulo_norma}: χ·Q·f_y·{rotulo_minoracao}",
+        ),
         Curva(
             [(0.0, escoamento), (lambda_max, escoamento)],
             cor=COR_NEUTRA,
@@ -507,7 +532,7 @@ def imagens_flambagem(
             cor=COR_DESTAQUE,
             espessura=1,
             tracejada=True,
-            rotulo="KL/r = 200 (5.3.4.1)",
+            rotulo="KL/r = 200 (Anglo 8.3)",
         ),
     ]
     marcadores = [
@@ -537,7 +562,15 @@ def imagens_flambagem(
         marcadores.append(
             Marcador(esbeltez, sigma_sd, "coluna", cor=COR_TORQUE_SEGURA, deslocamento=(8, 4))
         )
-    notas = [f"Q = {fator_q:.3f}; χ = {chi:.3f}; γ_a1 = {gamma_a1:.2f}."]
+    if entradas.get("norma") == "AISC360_16_LRFD":
+        notas = [f"Q = {fator_q:.3f}; χ = {chi:.3f}; φ = {minoracao:.2f}."]
+    else:
+        notas = [f"Q = {fator_q:.3f}; χ = {chi:.3f}; γ_a1 = {1.0 / minoracao:.2f}."]
+    modo = str(resultados.get("modo_flambagem") or "")
+    if modo and not modo.startswith("flexão"):
+        notas.append(
+            f"Governa o modo «{modo}»: o ponto da coluna cai abaixo da curva de flexão traçada."
+        )
     utilizacao = _numero(resultados.get("utilizacao"))
     if utilizacao is not None:
         notas.append(
@@ -545,9 +578,9 @@ def imagens_flambagem(
         )
     indice = _numero(resultados.get("indice_interacao"))
     if indice is not None:
-        notas.append(f"Interação N + M (5.5.1.2) = {indice:.3f}.")
+        notas.append(f"Interação N + M_x + M_y = {indice:.3f}.")
     grafico = GraficoXY(
-        titulo="Curva de flambagem NBR 8800 × índice de esbeltez",
+        titulo=f"Curva de flambagem {rotulo_norma} × índice de esbeltez",
         eixo_x="Índice de esbeltez λ = KL/r",
         eixo_y="Tensão resistente N_c,Rd/A (MPa)",
         curvas=curvas,
@@ -559,7 +592,7 @@ def imagens_flambagem(
     return [
         renderizar_xy(
             grafico,
-            legenda="Curva única de flambagem da NBR 8800 (χ·Q·f_y/γ_a1) do material registrado, com a esbeltez governante da coluna, a tensão resistente e a solicitante de cálculo.",
+            legenda=f"Curva única de flambagem ({rotulo_norma}: χ·Q·f_y·{rotulo_minoracao}) do material registrado, com a esbeltez governante da coluna, a tensão resistente e a solicitante de cálculo.",
         )
     ]
 

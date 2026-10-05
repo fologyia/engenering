@@ -551,14 +551,16 @@ def sugerir_de_registro(registro: Mapping[str, Any]) -> dict[str, Any] | None:
         }
     if modulo_id == "flambagem_colunas":
         eixo = str(resultados.get("eixo_governante") or "x")
-        raio = entradas.get(f"raio_giracao_{eixo}_mm")
-        area = entradas.get("area_mm2")
-        inercia = None
-        if raio is not None and area is not None:
-            try:
-                inercia = float(area) * float(raio) ** 2
-            except (TypeError, ValueError):
-                inercia = None
+        inercia = entradas.get(f"inercia_{eixo}_mm4")
+        if inercia is None:
+            # Registros antigos guardavam só a área e o raio de giração do eixo governante.
+            raio = entradas.get(f"raio_giracao_{eixo}_mm")
+            area = entradas.get("area_mm2")
+            if raio is not None and area is not None:
+                try:
+                    inercia = float(area) * float(raio) ** 2
+                except (TypeError, ValueError):
+                    inercia = None
         modulo_elasticidade = entradas.get("modulo_elasticidade_MPa")
         return {
             "modelo_id": "carga_critica_euler",
@@ -566,7 +568,7 @@ def sugerir_de_registro(registro: Mapping[str, Any]) -> dict[str, Any] | None:
                 "E_GPa": modulo_elasticidade / 1_000.0 if modulo_elasticidade else None,
                 "I_mm4": inercia,
                 "K": entradas.get("kx" if eixo == "x" else "ky"),
-                "L_mm": entradas.get("comprimento_mm"),
+                "L_mm": entradas.get(f"comprimento_{eixo}_mm", entradas.get("comprimento_mm")),
             },
         }
     return None

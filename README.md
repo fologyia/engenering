@@ -267,33 +267,46 @@ Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 
 ### Flambagem de colunas
 
-- verificação pela **NBR 8800:2008** (método dos estados-limites) para
-  qualquer seção (retangular, circular, tubo, perfil do catálogo ou A e r
-  diretos): `N_c,Rd = χ·Q·A_g·f_y/γ_a1` com `λ₀ = √(Q·A_g·f_y/N_e)` e a curva
-  única de χ (5.3.3), que já embute imperfeições e tensões residuais;
-- ações majoradas na própria página (`N_Sd = γ_g·N_g + γ_q·N_q`, Tabela 1) ou
-  `N_Sd` já de cálculo; resistência minorada por `γ_a1 = 1,10`;
-- forças de flambagem elástica do Anexo E — flexão em x e y, torção (`N_ez`)
-  e o modo flexo-torcional das seções monossimétricas — e fator `Q = Q_s·Q_a`
-  de flambagem local do Anexo F, com a tabela de esbeltez das paredes;
-- K teórico ou **recomendado para projeto** (Tabela E.1) por condição de
-  apoio, `Kx ≠ Ky` e `Kz` para torção;
-- **flexocompressão** (5.5.1.2): excentricidade da força e/ou momentos de
-  cálculo, amplificados por `B_1 = C_m/(1 − N_Sd/N_e)` (Anexo D), contra
-  `M_Rd` do Anexo G na equação de interação;
-- **mão-francesa**: a força inclinada é decomposta em `H = F·sen θ` e
-  `V = F·cos θ`; o momento `M = H·a` (engaste na base), `H·a·(L−a)/L`
-  (biapoiada) ou o do engaste com topo apoiado, mais `V·e` da ligação, é
-  somado a `M_Sd` automaticamente — o campo não fica em zero;
-- **um eixo por vez**: seletor x-x / y-y, cada eixo com o próprio comprimento
-  destravado, condição de apoio e K (por exemplo, x-x do piso ao nó da
-  mão-francesa e y-y entre os contraventamentos laterais); os campos de cada
-  eixo ficam guardados ao alternar e cada eixo vira um registro próprio no
-  projeto — o pior dos dois governa. `N_e` do eixo é o da flexão nele ou, se
-  menor, o da torção/flexo-torção (Anexo E);
-- reprovação automática com `KL/r > 200` (5.3.4.1), avisos de K fora da faixa
-  física e unidades implausíveis, registro no projeto com o modo governante e
-  curva χ·Q·f_y/γ_a1 × λ no memorial.
+Verifica a **barra inteira numa só rodada** (`core/column_buckling.py`, com as fórmulas em
+`core/column_design.py`, validado contra o AISC Design Guide 29 e contra o módulo de barras de
+Estruturas de aço em todo o catálogo de perfis):
+
+- os **dois eixos** e **todos os modos de flambagem elástica** — flexão em x, flexão em y, torção,
+  flexo-torção das seções monossimétricas e a raiz da cúbica nas assimétricas; adota-se o menor
+  `N_e` (NBR 5.3.5; AISC E3/E4);
+- **três normas**, escolhidas na página: **NBR 8800:2008** (`N_c,Rd = χ·Q·A_g·f_y/γ_a1`, fator `Q`
+  do Anexo F), **Projeto NBR 8800:2024** e **AISC 360-16** (área efetiva `A_ef` com `c₁` e `c₂` das
+  Tabelas 4 e 5; `φ = 0,90` no AISC). *Comparar normas* mostra a mesma coluna nas três, e uma norma
+  que bloqueia o cálculo aparece com o motivo;
+- seções: perfil do catálogo (com as propriedades da tabela), barra circular ou retangular maciça,
+  tubo circular ou retangular, I e U por dimensões, área e raio de giração, ou seção genérica com as
+  paredes (b/t) informadas;
+- **flexão em x e em y** (FLT, FLM e FLA, com o limite `1,5·W·f_y`) e momentos amplificados por
+  `B₁` com o **comprimento real** da barra (K = 1); `C_m` pela razão `M₁/M₂` ou por força transversal
+  (sem a razão, `C_m = 1,0`); `C_b` informado ou pelo diagrama de quatro pontos;
+- **interação N + M_x + M_y numa só equação** (5.5.1.2; AISC H1-1) — verificar cada eixo separado
+  aprovaria colunas que a norma reprova;
+- **critério Anglo** AA-BR-DPST-DR-0001, como linhas da tabela: esbeltez `KL/r ≤ 200` (8.3) e
+  espessuras mínimas (8.8);
+- **o que a norma não cobre vira linha NÃO OK**, sem correção silenciosa: tubo circular com
+  `D/t > 0,45·E/f_y`, alma esbelta ou tubo não compacto na flexão, `N_Sd ≥ N_e` no `B₁` e seção sem
+  `Z`. Seção genérica sem as paredes ou sem a confirmação “compacta e torção não governa” fica em
+  **ALERTA**, nunca em OK; perfil formado a frio também (NBR 14762);
+- **mão-francesa**: a força inclinada é decomposta em `H = F·sen θ` e `V = F·cos θ`; o momento
+  (`H·a` no engaste, `H·a·(L−a)/L` na biapoiada ou o do engaste com topo apoiado, mais `V·e`) é
+  somado ao do eixo que ela flete e a força horizontal conta como transversal no `C_m`. O
+  cisalhamento (5.4.3) não é verificado, mas o programa avisa;
+- **tabela de verificações** de oito colunas (Verificação · Solicitante · Resistente · Unidade ·
+  Aproveitamento · Status · Fórmula · Referência), em CSV, no registro do projeto e no memorial
+  (Word e PDF), com a curva de flambagem da norma escolhida;
+- K teórico ou **recomendado para projeto** (Tabela E.1) por eixo, ou informado; `K_z` e `L_z` da
+  torção; ações majoradas na própria página (`N_Sd = γ_g·N_g + γ_q·N_q`, Tabela 1) ou `N_Sd` já de
+  cálculo;
+- cada campo tem um “?” em linguagem simples, com as simplificações adotadas.
+
+Valores da NBR 8800:2008 marcados “CONFERIR” no código (`Q_s` e `Q_a` do Anexo F, Tabela E.1 de K,
+`λ_p` dos tubos na flexão e a forma da FLT de 2008) vieram de memória do módulo de referência e
+precisam ser confirmados na norma antes de emitir documentos.
 
 ### Projeto de juntas parafusadas
 

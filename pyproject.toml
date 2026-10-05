@@ -61,6 +61,7 @@ files = [
     "core/bolted_joint_check.py",
     "core/checklist_templates.py",
     "core/column_buckling.py",
+    "core/column_design.py",
     "core/fatigue_report.py",
     "core/load_to_stress.py",
     "core/materials.py",
@@ -81,6 +82,7 @@ files = [
     "core/technical_modules.py",
     "core/technical_records.py",
     "core/unit_converter.py",
+    "core/verificacao.py",
     "core/wind_load.py",
 ]
 # Fora da lista acima ainda faltam anotações; a interface (app_pages) não é
