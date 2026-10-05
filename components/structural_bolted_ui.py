@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.bolted_help import AJUDA
 from components.project_tools import botao_registrar_calculo
 from components.ui import comparador_cenarios, fronteira_modelo
 from core import bolted_connection as bc
@@ -79,13 +80,17 @@ def mostrar_tabela_verificacoes(verificacoes: Any) -> pd.DataFrame:
         width="stretch",
         column_config={
             "Verificação": st.column_config.TextColumn(width="large"),
-            "Solicitante": st.column_config.TextColumn(width="small"),
-            "Resistente": st.column_config.TextColumn(width="small"),
-            "Unidade": st.column_config.TextColumn(width="small"),
-            "Aproveitamento": st.column_config.TextColumn("Aproveitamento (%)", width="small"),
-            "Status": st.column_config.TextColumn(width="small"),
-            "Fórmula": st.column_config.TextColumn(width="large"),
-            "Referência": st.column_config.TextColumn(width="medium"),
+            "Solicitante": st.column_config.TextColumn(
+                width="small", help=AJUDA["col_solicitante"]
+            ),
+            "Resistente": st.column_config.TextColumn(width="small", help=AJUDA["col_resistente"]),
+            "Unidade": st.column_config.TextColumn(width="small", help=AJUDA["col_unidade"]),
+            "Aproveitamento": st.column_config.TextColumn(
+                "Aproveitamento (%)", width="small", help=AJUDA["col_aproveitamento"]
+            ),
+            "Status": st.column_config.TextColumn(width="small", help=AJUDA["col_status"]),
+            "Fórmula": st.column_config.TextColumn(width="large", help=AJUDA["col_formula"]),
+            "Referência": st.column_config.TextColumn(width="medium", help=AJUDA["col_referencia"]),
         },
     )
     return tabela
@@ -107,7 +112,7 @@ def _formulario() -> chk.EntradaLigacao | None:
 
     # ------------------------------------------------------------------ 1. norma e parafuso
     with st.container(border=True):
-        st.subheader("1. Norma e parafuso")
+        st.subheader("1. Norma e parafuso", help=AJUDA["sec_est_1"])
         linha = st.columns(4)
         with linha[0]:
             norma = st.selectbox(
@@ -116,6 +121,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 format_func=lambda n: chk.NORMAS_ROTULOS[n],
                 key="ligest_norma",
                 persist_state="session",
+                help=AJUDA["norma"],
             )
         with linha[1]:
             designacao = st.selectbox(
@@ -123,7 +129,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 designacoes,
                 index=designacoes.index("M22"),
                 key="ligest_designacao",
-                help="Designação da tabela de parafusos (d_b, furo-padrão, borda mínima, F_Tb).",
+                help=AJUDA["parafuso"],
                 persist_state="session",
             )
         with linha[2]:
@@ -131,7 +137,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 "Grau (ASTM F3125 / A307)",
                 list(bc.GRAUS),
                 key="ligest_grau",
-                help="A Anglo exige A325 nas ligações principais. A 8.8 só entra como equivalente.",
+                help=AJUDA["grau"],
                 persist_state="session",
             )
         with linha[3]:
@@ -142,6 +148,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 step=1,
                 key="ligest_planos",
                 persist_state="session",
+                help=AJUDA["planos_corte"],
             )
         dados = bc.dados_parafuso(designacao)
         extras = st.columns(3)
@@ -153,10 +160,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 step=0.1,
                 format="%.1f",
                 key=f"ligest_dh_{designacao}",
-                help=(
-                    "Furo-padrão da tabela (Projeto NBR 8800:2024 Tab. 14 = AISC 360-16). O AISC "
-                    '360-10 usa 27,0 mm para o parafuso de 1" — altere aqui para reproduzi-lo.'
-                ),
+                help=AJUDA["furo"],
                 persist_state="session",
             )
         with extras[1]:
@@ -164,7 +168,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 "Rosca no plano de corte",
                 value=True,
                 key="ligest_rosca",
-                help="Exigência da Anglo. O efeito da rosca está no coeficiente α_v, não na área.",
+                help=AJUDA["rosca_plano"],
                 persist_state="session",
             )
         with extras[2]:
@@ -172,29 +176,37 @@ def _formulario() -> chk.EntradaLigacao | None:
                 "Deformação do furo limitada",
                 value=True,
                 key="ligest_deformacao",
-                help="Sim: k₁ = 1,2 e k₂ = 2,4. Não: 1,5 e 3,0.",
+                help=AJUDA["deformacao_furo"],
                 persist_state="session",
             )
         with st.container(horizontal=True):
-            st.metric("Diâmetro d_b", f"{dados['d_b']:.1f} mm", border=True)
-            st.metric("Borda mínima (Tab. 16)", f"{dados['e_min']:.0f} mm", border=True)
+            st.metric(
+                "Diâmetro d_b", f"{dados['d_b']:.1f} mm", border=True, help=AJUDA["m_diametro"]
+            )
+            st.metric(
+                "Borda mínima (Tab. 16)",
+                f"{dados['e_min']:.0f} mm",
+                border=True,
+                help=AJUDA["m_borda_min"],
+            )
             if bc.GRAUS[grau].protendivel:
-                st.metric("Protensão mínima F_Tb", f"{dados['F_Tb'][grau]:.0f} kN", border=True)
+                st.metric(
+                    "Protensão mínima F_Tb",
+                    f"{dados['F_Tb'][grau]:.0f} kN",
+                    border=True,
+                    help=AJUDA["m_protensao"],
+                )
             else:
-                st.metric("Protensão F_Tb", "não aplicável", border=True)
+                st.metric("Protensão F_Tb", "não aplicável", border=True, help=AJUDA["m_protensao"])
         if grau == "A307":
             st.info(
                 "O A307 não admite protensão: serve só a ligações secundárias, sem atrito.",
                 icon=":material/info:",
             )
-        if norma == "NBR8800_2024":
-            st.warning(
-                "O Projeto NBR 8800:2024 não tem valor normativo.", icon=":material/warning:"
-            )
 
     # ------------------------------------------------------------------ 2. partes ligadas e geometria
     with st.container(border=True):
-        st.subheader("2. Partes ligadas e geometria")
+        st.subheader("2. Partes ligadas e geometria", help=AJUDA["sec_est_2"])
         chapas = st.columns(3)
         with chapas[0]:
             t = st.number_input(
@@ -204,10 +216,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 step=0.01,
                 format="%.2f",
                 key="ligest_t",
-                help=(
-                    "Contato e rasgamento usam a chapa MAIS FINA — nunca a soma das chapas "
-                    "(NBR 6.3.3.3). A soma vai no campo Pega."
-                ),
+                help=AJUDA["t"],
                 persist_state="session",
             )
         with chapas[1]:
@@ -219,6 +228,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 ),
                 key="ligest_aco",
                 persist_state="session",
+                help=AJUDA["aco"],
             )
         with chapas[2]:
             pega_mm = st.number_input(
@@ -228,7 +238,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 step=0.01,
                 format="%.2f",
                 key="ligest_pega",
-                help="0 = não informada. Entra só na verificação de pega longa (Σt ≤ 5 d_b).",
+                help=AJUDA["pega"],
                 persist_state="session",
             )
         if 0 < pega_mm < t:
@@ -245,6 +255,7 @@ def _formulario() -> chk.EntradaLigacao | None:
             width="stretch",
             key="ligest_geometria",
             persist_state="session",
+            help=AJUDA["arranjo"],
         )
         coordenadas: tuple[tuple[float, float], ...] | None = None
         n_lin = n_col = 1
@@ -254,23 +265,25 @@ def _formulario() -> chk.EntradaLigacao | None:
             with grade[0]:
                 n_lin = int(
                     st.number_input(
-                        "Linhas paralelas à força n_lin",
+                        "Fileiras de parafusos n_lin",
                         min_value=1,
                         value=2,
                         step=1,
                         key="ligest_n_lin",
                         persist_state="session",
+                        help=AJUDA["n_lin"],
                     )
                 )
             with grade[1]:
                 n_col = int(
                     st.number_input(
-                        "Parafusos por linha n_col",
+                        "Parafusos por fileira n_col",
                         min_value=1,
                         value=2,
                         step=1,
                         key="ligest_n_col",
                         persist_state="session",
+                        help=AJUDA["n_col"],
                     )
                 )
             with grade[2]:
@@ -281,15 +294,17 @@ def _formulario() -> chk.EntradaLigacao | None:
                     step=1.0,
                     key="ligest_s",
                     persist_state="session",
+                    help=AJUDA["passo"],
                 )
             with grade[3]:
                 g = st.number_input(
-                    "Gabarito g entre linhas (mm)",
+                    "Gabarito g entre fileiras (mm)",
                     min_value=0.1,
                     value=70.0,
                     step=1.0,
                     key="ligest_g",
                     persist_state="session",
+                    help=AJUDA["gabarito"],
                 )
             with grade[4]:
                 e = st.number_input(
@@ -298,13 +313,14 @@ def _formulario() -> chk.EntradaLigacao | None:
                     value=70.0,
                     step=1.0,
                     key="ligest_e",
-                    help="Do centro do furo à borda da chapa, na direção da força.",
+                    help=AJUDA["borda"],
                     persist_state="session",
                 )
         else:
             padrao = pd.DataFrame(
                 {"x (mm)": [0.0, 70.0, 0.0, 70.0], "y (mm)": [0.0, 0.0, 70.0, 70.0]}
             )
+            st.caption("Posição de cada parafuso (mm)", help=AJUDA["coordenadas"])
             editado = st.data_editor(
                 padrao,
                 num_rows="dynamic",
@@ -324,6 +340,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 step=1.0,
                 key="ligest_e_livre",
                 persist_state="session",
+                help=AJUDA["borda"],
             )
             st.caption(
                 "Com coordenadas livres, ℓ_f entre furos usa a menor distância centro a centro; "
@@ -334,6 +351,7 @@ def _formulario() -> chk.EntradaLigacao | None:
             value=False,
             key="ligest_tem_ev",
             persist_state="session",
+            help=AJUDA["tem_borda_vertical"],
         )
         e_v = None
         if tem_borda_vertical:
@@ -344,11 +362,12 @@ def _formulario() -> chk.EntradaLigacao | None:
                 step=1.0,
                 key="ligest_ev",
                 persist_state="session",
+                help=AJUDA["borda_vertical"],
             )
 
     # ------------------------------------------------------------------ 3. esforços
     with st.container(border=True):
-        st.subheader("3. Esforços no centro do grupo")
+        st.subheader("3. Esforços no centro do grupo", help=AJUDA["sec_est_3"])
         st.caption(
             "N atua ao longo das linhas de parafusos (direção x); V é transversal (direção y). "
             "O ELU usa a força de cálculo; o deslizamento usa a de serviço (característica)."
@@ -359,17 +378,27 @@ def _formulario() -> chk.EntradaLigacao | None:
                 "Os valores informados já são de cálculo (majorados)",
                 value=False,
                 key="ligest_ja_majorado",
-                help="Desligado: informe os valores característicos e o programa majora por γ_f.",
+                help=AJUDA["ja_calculo"],
                 persist_state="session",
             )
         sufixo = "Sd" if valores_de_calculo else "k"
         with base[1]:
             N = st.number_input(
-                f"N_{sufixo} (kN)", value=0.0, step=1.0, key="ligest_N", persist_state="session"
+                f"N_{sufixo} (kN)",
+                value=0.0,
+                step=1.0,
+                key="ligest_N",
+                persist_state="session",
+                help=AJUDA["N"],
             )
         with base[2]:
             V = st.number_input(
-                f"V_{sufixo} (kN)", value=32.0, step=1.0, key="ligest_V", persist_state="session"
+                f"V_{sufixo} (kN)",
+                value=32.0,
+                step=1.0,
+                key="ligest_V",
+                persist_state="session",
+                help=AJUDA["V"],
             )
         with base[3]:
             gama_f = st.number_input(
@@ -378,10 +407,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 value=1.40,
                 step=0.05,
                 key="ligest_gama_f",
-                help=(
-                    "Majora os característicos para o ELU. Com valores já de cálculo, a força de "
-                    "serviço do deslizamento é F_d/γ_f."
-                ),
+                help=AJUDA["gama_f"],
                 persist_state="session",
             )
 
@@ -398,6 +424,7 @@ def _formulario() -> chk.EntradaLigacao | None:
             width="stretch",
             key=f"ligest_momento_{'g' if geometria == _GEO_GRADE else 'l'}",
             persist_state="session",
+            help=AJUDA["momento"],
         )
         M = 0.0
         excentricidade: float | None = None
@@ -410,17 +437,22 @@ def _formulario() -> chk.EntradaLigacao | None:
                 value=105.0,
                 step=5.0,
                 key="ligest_a",
-                help="Distância da linha de ação de V ao centro do grupo: M = V·a.",
+                help=AJUDA["excentricidade"],
                 persist_state="session",
             )
         elif modo_momento == _MOM_VALOR:
             M = st.number_input(
-                f"M_{sufixo} (kN·m)", value=0.0, step=0.5, key="ligest_M", persist_state="session"
+                f"M_{sufixo} (kN·m)",
+                value=0.0,
+                step=0.5,
+                key="ligest_M",
+                persist_state="session",
+                help=AJUDA["momento_valor"],
             )
 
     # ------------------------------------------------------------------ 4. opções
     with st.container(border=True):
-        st.subheader("4. Atrito, instalação e escopo")
+        st.subheader("4. Atrito, instalação e escopo", help=AJUDA["sec_est_4"])
         opcoes = st.columns(4)
         with opcoes[0]:
             superficie = st.selectbox(
@@ -428,7 +460,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 list(bc.SUPERFICIES),
                 format_func=lambda chave: chk.SUPERFICIES_ROTULOS[chave],
                 key="ligest_superficie",
-                help="Define o coeficiente de atrito μ da norma escolhida.",
+                help=AJUDA["superficie"],
                 persist_state="session",
             )
         with opcoes[1]:
@@ -436,21 +468,19 @@ def _formulario() -> chk.EntradaLigacao | None:
                 "Ligação por atrito",
                 value=True,
                 key="ligest_atrito",
-                help=(
-                    "Obrigatória pela Anglo com inversão de esforço, vibração ou deslizamento "
-                    "indesejável."
-                ),
+                help=AJUDA["atrito"],
                 persist_state="session",
             )
         with opcoes[2]:
             C_e = st.number_input(
-                "C_e (fator de furo/serviço)",
+                "C_e (fator do deslizamento)",
                 min_value=0.1,
                 max_value=2.0,
                 value=1.0,
                 step=0.05,
                 key="ligest_Ce",
                 persist_state="session",
+                help=AJUDA["Ce"],
             )
         with opcoes[3]:
             K_torque = st.number_input(
@@ -460,14 +490,14 @@ def _formulario() -> chk.EntradaLigacao | None:
                 value=0.20,
                 step=0.01,
                 key="ligest_K",
-                help="T ≈ K·F_Tb·d. É só referência de instalação — nunca critério de aprovação.",
+                help=AJUDA["K_torque"],
                 persist_state="session",
             )
         patinavel = st.toggle(
             "Aço patinável sem pintura",
             value=False,
             key="ligest_patinavel",
-            help="Espaçamento máximo cai para 14·t ≤ 180 mm.",
+            help=AJUDA["patinavel"],
             persist_state="session",
         )
         fora = st.pills(
@@ -476,13 +506,13 @@ def _formulario() -> chk.EntradaLigacao | None:
             selection_mode="multi",
             format_func=lambda chave: chk.FORA_DO_ESCOPO[chave],
             key="ligest_fora_escopo",
-            help="Marque o que se aplica: vira um ALERTA na tabela e o resultado não pode ser lido como completo.",
+            help=AJUDA["fora_escopo"],
             persist_state="session",
         )
 
     # ------------------------------------------------------------------ 5. peça tracionada
     with st.container(border=True):
-        st.subheader("5. Peça tracionada (opcional)")
+        st.subheader("5. Peça tracionada (opcional)", help=AJUDA["sec_est_5"])
         st.caption(
             "Necessária para a tração da peça (com C_t) e para a regra dos 75% da Anglo. "
             "A_n desconta os n_lin furos da seção, na espessura t."
@@ -496,6 +526,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 step=10.0,
                 key="ligest_Ag",
                 persist_state="session",
+                help=AJUDA["Ag"],
             )
         with peca[1]:
             e_c = st.number_input(
@@ -504,23 +535,26 @@ def _formulario() -> chk.EntradaLigacao | None:
                 value=0.0,
                 step=1.0,
                 key="ligest_ec",
-                help="Distância do centroide da peça ao plano da ligação (C_t = 1 − e_c/ℓ_c).",
+                help=AJUDA["ec"],
                 persist_state="session",
             )
 
     # ------------------------------------------------------------------ 6. Anglo
     with st.container(border=True):
-        st.subheader("6. Critério Anglo American (AA-BR-DPST-DR-0001, item 9.1)")
+        st.subheader(
+            "6. Critério Anglo American (AA-BR-DPST-DR-0001, item 9.1)", help=AJUDA["sec_est_6"]
+        )
         anglo = st.columns(3)
         with anglo[0]:
             principal = (
                 st.segmented_control(
-                    "Ligação",
+                    "Tipo da ligação (Anglo)",
                     ["Principal", "Secundária"],
                     default="Principal",
                     required=True,
                     key="ligest_principal",
                     persist_state="session",
+                    help=AJUDA["principal"],
                 )
                 == "Principal"
             )
@@ -531,13 +565,14 @@ def _formulario() -> chk.EntradaLigacao | None:
                 format_func=lambda chave: _REVESTIMENTOS[chave],
                 key="ligest_revestimento",
                 persist_state="session",
+                help=AJUDA["revestimento"],
             )
         with anglo[2]:
             por_esbeltez = st.toggle(
                 "Peça de treliça/contraventamento dimensionada por esbeltez",
                 value=False,
                 key="ligest_esbeltez",
-                help="Sim: a ligação deve resistir a ≥ 75% da tração da peça e ≥ 3 tf (informe A_g e e_c).",
+                help=AJUDA["esbeltez"],
                 persist_state="session",
             )
 
@@ -585,29 +620,38 @@ _percentual = chk.formatar_percentual
 def _painel_resumo(entrada: chk.EntradaLigacao, resultado: chk.ResultadoLigacao) -> str | None:
     menor = chk.menor_parafuso_que_atende(entrada)
     with st.container(border=True):
-        st.subheader("Resumo")
+        st.subheader("Resumo", help=AJUDA["res_resumo"])
         st.badge(
             f"Status geral: {resultado.status_geral}",
             color=_COR_BADGE[resultado.status_geral],
             icon=":material/verified:" if resultado.status_geral == "OK" else ":material/rule:",
+            help=AJUDA["res_status"],
         )
         with st.container(horizontal=True):
             st.metric(
-                "Aproveitamento máximo", _percentual(resultado.aproveitamento_max), border=True
+                "Aproveitamento máximo",
+                _percentual(resultado.aproveitamento_max),
+                border=True,
+                help=AJUDA["res_aproveitamento"],
             )
             st.metric(
-                "Menor parafuso que atende", menor or "nenhum com esta geometria", border=True
+                "Menor parafuso que atende",
+                menor or "nenhum com esta geometria",
+                border=True,
+                help=AJUDA["res_menor"],
             )
             if resultado.forcas:
                 st.metric(
                     "Parafuso crítico (ELU)",
                     f"{resultado.forcas['R_max_ELU_kN']:.2f} kN",
                     border=True,
+                    help=AJUDA["res_critico_elu"],
                 )
                 st.metric(
                     "Parafuso crítico (serviço)",
                     f"{resultado.forcas['R_max_ELS_kN']:.2f} kN",
                     border=True,
+                    help=AJUDA["res_critico_els"],
                 )
         st.markdown(f"**Verificação que governa:** {resultado.governante}")
         if resultado.forcas:
@@ -637,6 +681,7 @@ def _varreduras(entrada: chk.EntradaLigacao) -> None:
             icon=":material/compare_arrows:",
             width="stretch",
             key="ligest_btn_comparar",
+            help=AJUDA["btn_comparar"],
         ):
             st.session_state["ligest_ver_comparacao"] = not st.session_state.get(
                 "ligest_ver_comparacao", False
@@ -647,6 +692,7 @@ def _varreduras(entrada: chk.EntradaLigacao) -> None:
             icon=":material/checklist:",
             width="stretch",
             key="ligest_btn_testar",
+            help=AJUDA["btn_testar"],
         ):
             st.session_state["ligest_ver_varredura"] = not st.session_state.get(
                 "ligest_ver_varredura", False
@@ -740,7 +786,9 @@ def _distribuicao(resultado: chk.ResultadoLigacao) -> None:
     if not resultado.coordenadas:
         return
     with st.container(border=True):
-        st.subheader("Distribuição entre os parafusos (ELU, método elástico)")
+        st.subheader(
+            "Distribuição entre os parafusos (ELU, método elástico)", help=AJUDA["res_distribuicao"]
+        )
         linhas = [
             {
                 "Parafuso": indice + 1,
@@ -779,8 +827,8 @@ def _registro(
     registro = chk.registro_ligacao(entrada, resultado, menor)
 
     with st.container(border=True):
-        st.subheader("Registrar no projeto")
-        st.subheader("Comparar cenários", divider=False)
+        st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
+        st.subheader("Comparar cenários", divider=False, help=AJUDA["reg_comparar"])
         comparador_cenarios(
             escopo="projeto_parafusos_estrutural",
             resumo_entradas={
@@ -824,7 +872,7 @@ def mostrar_ligacao_estrutural() -> None:
     menor = _painel_resumo(entrada, resultado)
 
     with st.container(border=True):
-        st.subheader("Tabela de verificações")
+        st.subheader("Tabela de verificações", help=AJUDA["res_tabela"])
         mostrar_tabela_verificacoes(resultado.verificacoes)
         st.download_button(
             "Baixar verificações em CSV",
@@ -834,6 +882,7 @@ def mostrar_ligacao_estrutural() -> None:
             icon=":material/download:",
             width="stretch",
             key="ligest_baixar_csv",
+            help=AJUDA["btn_csv"],
         )
         with st.expander(
             "Fórmula e item da norma de cada verificação", icon=":material/functions:"
@@ -869,7 +918,7 @@ def mostrar_ligacao_estrutural() -> None:
             width="stretch",
         )
     st.caption(
-        "Referências: ABNT NBR 8800:2008 e Projeto de revisão (2024); AISC 360 (J3, J4) e Design "
+        "Referências: ABNT NBR 8800:2008 e Projeto NBR 8800:2024; AISC 360 (J3, J4) e Design "
         "Guide 29; RCSC (2004); Anglo American AA-BR-DPST-DR-0001, item 9.1. Confirme sempre a "
         "edição vigente da norma aplicável."
     )

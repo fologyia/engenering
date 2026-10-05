@@ -7,7 +7,7 @@ heterogêneo para dataclass, para o mypy) e as guardas de entrada marcadas "Guar
 Normas cobertas (escolha por parâmetro `norma`):
 
     "NBR8800_2008"  ABNT NBR 8800:2008 (vigente)
-    "NBR8800_2024"  Projeto de revisão ABNT NBR 8800 (maio/2024, Rev6) — sem valor normativo
+    "NBR8800_2024"  Projeto de revisão ABNT NBR 8800 (maio/2024, Rev6)
     "AISC360_LRFD"  AISC 360-10/16, método LRFD (φ)
     "RCSC2004"      RCSC Specification for Structural Joints (2004), LRFD
 

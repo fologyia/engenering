@@ -33,7 +33,7 @@ from core.technical_records import criar_registro_tecnico
 
 NORMAS_ROTULOS = {
     "NBR8800_2008": "ABNT NBR 8800:2008",
-    "NBR8800_2024": "Projeto NBR 8800:2024 (sem valor normativo)",
+    "NBR8800_2024": "Projeto NBR 8800:2024",
     "AISC360_LRFD": "AISC 360 (LRFD)",
     "RCSC2004": "RCSC 2004 (LRFD)",
 }
@@ -54,7 +54,6 @@ FORA_DO_ESCOPO = {
 }
 
 AVISOS_FIXOS = (
-    "O Projeto de revisão NBR 8800:2024 não tem valor normativo; use-o só como comparação.",
     "Valores da NBR 8800:2008 trazidos de memória no módulo de referência estão marcados "
     "“CONFERIR” (ver lista abaixo) e precisam ser confirmados na norma antes de emitir o documento.",
     "O torque de aperto é só uma estimativa (T ≈ K·F_Tb·d). A instalação deve ser por rotação "
@@ -798,7 +797,7 @@ STATUS_REGISTRO = {"OK": "Atende", "ALERTA": "Atenção", "NÃO OK": "Não atend
 
 REFERENCIAS_NORMA = {
     "NBR8800_2008": "ABNT NBR 8800:2008, itens 5.2, 6.3 e 6.5.6; Tabelas 14, 16, 19 e A.3.",
-    "NBR8800_2024": "Projeto de revisão ABNT NBR 8800 (maio/2024, Rev6), sem valor normativo.",
+    "NBR8800_2024": "Projeto de revisão ABNT NBR 8800 (maio/2024, Rev6): itens 5.2, 6.3, 6.5.6 e 6.8; Tabelas 14, 16, 19 e A.3.",
     "AISC360_LRFD": "ANSI/AISC 360, capítulos D, J3 e J4 (LRFD), e AISC Design Guide 29.",
     "RCSC2004": "RCSC Specification for Structural Joints Using ASTM A325 or A490 Bolts (2004), §5 e §8.",
 }
@@ -840,8 +839,6 @@ def registro_ligacao(
     alertas = [
         f"{v.nome}: {v.formula}" for v in resultado.verificacoes if v.status in ("NÃO OK", "ALERTA")
     ]
-    if entrada.norma == "NBR8800_2024":
-        alertas.append("Projeto NBR 8800:2024 sem valor normativo: usar só como comparação.")
     if entrada.norma == "NBR8800_2008":
         alertas.append(
             "Conferir na NBR 8800:2008 antes de emitir: " + " ".join(bc.CONFERIR_NBR8800_2008)

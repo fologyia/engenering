@@ -231,3 +231,156 @@ def test_mecanico_valores_majorados_voltam_ao_servico(banco_isolado):
 def test_mecanico_pega_menor_que_t_e_erro(banco_isolado):
     t = abrir(banco_isolado, parafuso_espessura_chapa=10.0, parafuso_pega=5.0)
     assert any("pega" in e.value for e in t.error)
+
+
+# ------------------------------------------------------------------ “?” em todos os campos
+TIPOS_COM_AJUDA = (
+    "number_input",
+    "selectbox",
+    "toggle",
+    "button_group",
+    "button",
+    "download_button",
+    "metric",
+    "subheader",
+    "badge",
+)
+# Único título sem “?”: ele próprio já é o convite para abrir o Guia.
+ISENTOS_DE_AJUDA = {("subheader", "Precisa de ajuda para preencher ou interpretar?")}
+
+
+def _ajuda_de(elemento) -> str | None:
+    proto = getattr(elemento, "proto", None)
+    for campo in ("help", "tooltip"):
+        for origem in (elemento, proto):
+            texto = getattr(origem, campo, None)
+            if texto:
+                return str(texto)
+    return None
+
+
+def _rotulo_de(elemento) -> str:
+    proto = getattr(elemento, "proto", None)
+    for origem in (elemento, proto):
+        for campo in ("label", "body"):
+            texto = getattr(origem, campo, None)
+            if texto:
+                return str(texto)
+    return repr(elemento)[:60]
+
+
+def sem_ajuda(teste: AppTest) -> set[tuple[str, str]]:
+    faltam = set()
+    for tipo in TIPOS_COM_AJUDA:
+        for elemento in teste.get(tipo):
+            if not _ajuda_de(elemento):
+                faltam.add((tipo, _rotulo_de(elemento)))
+    return faltam - ISENTOS_DE_AJUDA
+
+
+@pytest.mark.parametrize(
+    "estado",
+    [
+        pytest.param({"parafuso_modo": ESTRUTURAL}, id="estrutural-padrao"),
+        pytest.param(
+            {
+                "parafuso_modo": ESTRUTURAL,
+                "ligest_tem_ev": True,
+                "ligest_momento_g": "Excentricidade a informada",
+                "ligest_Ag": 1542.0,
+                "ligest_ec": 13.0,
+                "ligest_esbeltez": True,
+            },
+            id="estrutural-borda-vertical-excentricidade-peca",
+        ),
+        pytest.param(
+            {"parafuso_modo": ESTRUTURAL, "ligest_momento_g": "Momento M informado"},
+            id="estrutural-momento",
+        ),
+        pytest.param(
+            {"parafuso_modo": ESTRUTURAL, "ligest_geometria": "Coordenadas livres"},
+            id="estrutural-coordenadas-livres",
+        ),
+        pytest.param({}, id="mecanico-padrao"),
+        pytest.param(
+            {
+                "parafuso_padrao": "Grade retangular",
+                "parafuso_natureza_cargas": "Já majorados (cálculo)",
+                "parafuso_modo_torque": "Excentricidade da cortante (T = V·a)",
+            },
+            id="mecanico-grade-majorado-excentricidade",
+        ),
+        pytest.param(
+            {"parafuso_padrao": "Coordenadas livres", "parafuso_analisar_fadiga": True},
+            id="mecanico-coordenadas-fadiga",
+        ),
+    ],
+)
+def test_todo_campo_tem_interrogacao(banco_isolado, estado):
+    t = abrir(banco_isolado, **estado)
+    faltam = sem_ajuda(t)
+    assert not faltam, f"campos sem “?”: {sorted(faltam)}"
+
+
+def test_planos_de_corte_explicados_na_tela(banco_isolado):
+    t = estrutural(banco_isolado)
+    campo = next(n for n in t.number_input if n.label == "Planos de corte")
+    assert "1 plano" in campo.help and "2 planos" in campo.help
+    assert "Ex.: a alma de um perfil U" in campo.help
+
+
+def test_simplificacoes_aparecem_nas_dicas(banco_isolado):
+    t = estrutural(banco_isolado)
+    furo = next(n for n in t.number_input if n.label == "Furo d_h (mm)")
+    assert "Simplificação" in furo.help and "furo-padrão" in furo.help
+    secao = next(s for s in t.subheader if s.value.startswith("3. Esforços"))
+    assert "método elástico" in secao.help
+
+
+def test_colunas_da_tabela_explicam_o_que_mostram(banco_isolado):
+    import json
+
+    from components.bolted_help import AJUDA
+
+    t = estrutural(banco_isolado)
+    tabela_el = next(d for d in t.dataframe if "Verificação" in d.value.columns)
+    colunas = json.loads(tabela_el.proto.columns)
+    esperado = {
+        "Solicitante": "col_solicitante",
+        "Resistente": "col_resistente",
+        "Unidade": "col_unidade",
+        "Aproveitamento": "col_aproveitamento",
+        "Status": "col_status",
+        "Fórmula": "col_formula",
+        "Referência": "col_referencia",
+    }
+    for coluna, chave in esperado.items():
+        assert colunas[coluna]["help"] == AJUDA[chave], coluna
+
+
+# ------------------------------------------------------------------ sem o aviso de “valor normativo”
+def textos_da_tela(teste: AppTest) -> str:
+    partes: list[str] = []
+
+    def percorrer(no) -> None:
+        # Elementos folha não têm `children`: o AppTest repassa o atributo ao proto.
+        for filho in (getattr(no, "children", None) or {}).values():
+            proto = getattr(filho, "proto", None)
+            if proto is not None:
+                partes.append(str(proto))
+            percorrer(filho)
+
+    percorrer(teste.main)
+    partes += [d.value.to_csv() for d in teste.dataframe]
+    return "\n".join(partes).lower()
+
+
+@pytest.mark.parametrize("modo", [ESTRUTURAL, "Junta mecânica (NASA/ISO)"])
+def test_tela_nao_diz_que_o_projeto_2024_nao_tem_valor_normativo(banco_isolado, modo):
+    t = abrir(banco_isolado, parafuso_modo=modo, ligest_norma="NBR8800_2024")
+    if modo == ESTRUTURAL:
+        t.button(key="ligest_btn_comparar").click().run()  # abre a tabela das quatro normas
+        assert any("Projeto NBR 8800:2024" in str(d.value.to_dict()) for d in t.dataframe)
+    texto = textos_da_tela(t)
+    for frase in ("valor normativo", "sem valor", "não tem valor"):
+        assert frase not in texto, frase

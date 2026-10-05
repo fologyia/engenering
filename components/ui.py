@@ -101,6 +101,10 @@ def comparador_cenarios(
         fixar = st.button(
             "Fixar este cenário para comparar",
             key=f"{escopo}_fixar_cenario",
+            help=(
+                "Guarda o resultado atual numa tabela para comparar com outros cenários (até "
+                f"{max_cenarios}, só nesta sessão). Nada é salvo no projeto."
+            ),
             icon=":material/push_pin:",
             width="stretch",
         )
@@ -108,6 +112,7 @@ def comparador_cenarios(
         limpar = cenarios and st.button(
             "Limpar cenários",
             key=f"{escopo}_limpar_cenarios",
+            help="Apaga os cenários fixados nesta sessão.",
             icon=":material/delete_sweep:",
             width="stretch",
         )

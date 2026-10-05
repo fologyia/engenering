@@ -340,6 +340,7 @@ def botao_registrar_calculo(
                 icon=":material/add_circle:",
                 key=f"{key}_criar_projeto",
                 width="stretch",
+                help="Cria um projeto novo com o nome ao lado e já registra este cálculo nele.",
             )
             st.page_link(
                 "app_pages/gestao_projetos.py",

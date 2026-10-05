@@ -315,7 +315,7 @@ A página tem dois modos, escolhidos no topo:
 **Ligação estrutural de aço** — verificação pela norma (`core/bolted_connection.py`,
 conferido contra os exemplos do AISC Design Guide 29 e um caso real de planilha):
 
-- NBR 8800:2008, Projeto de revisão NBR 8800:2024 (sem valor normativo), AISC 360 LRFD e
+- NBR 8800:2008, Projeto NBR 8800:2024, AISC 360 LRFD e
   RCSC 2004, com **Comparar normas** lado a lado;
 - parafusos ASTM A325, A490 e A307 (rosca no plano ou fora, n planos de corte), com
   **Testar todos** para achar o menor que atende;

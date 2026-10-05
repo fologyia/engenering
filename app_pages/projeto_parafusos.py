@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import streamlit as st
 
+from components.bolted_help import AJUDA
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.structural_bolted_ui import mostrar_ligacao_estrutural, mostrar_tabela_verificacoes
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
@@ -91,7 +92,7 @@ st.warning(
 )
 
 with st.container(border=True):
-    st.subheader("1. Parafuso e padrão da junta")
+    st.subheader("1. Parafuso e padrão da junta", help=AJUDA["sec_mec_1"])
     selecao = st.columns(3)
     with selecao[0]:
         nomes_rosca = list(parafusos.ROSCAS_METRICAS)
@@ -111,6 +112,7 @@ with st.container(border=True):
             index=nomes_classe.index("8.8"),
             key="parafuso_classe",
             persist_state="session",
+            help=AJUDA["mec_classe"],
         )
     with selecao[2]:
         padrao_parafusos = st.segmented_control(
@@ -121,6 +123,7 @@ with st.container(border=True):
             width="stretch",
             key="parafuso_padrao",
             persist_state="session",
+            help=AJUDA["mec_padrao"],
         )
 
     # O cortante V atua na direção x (ao longo das colunas) e o momento de
@@ -136,6 +139,7 @@ with st.container(border=True):
                 step=1,
                 key="parafuso_numero",
                 persist_state="session",
+                help=AJUDA["mec_numero"],
             )
         with padrao_circulo[1]:
             diametro_circulo_mm = st.number_input(
@@ -154,21 +158,23 @@ with st.container(border=True):
         padrao_grade = st.columns(4)
         with padrao_grade[0]:
             grade_linhas = st.number_input(
-                "Linhas n_lin (ao longo de y)",
+                "Fileiras n_lin (ao longo de y)",
                 min_value=1,
                 value=2,
                 step=1,
                 key="parafuso_grade_linhas",
                 persist_state="session",
+                help=AJUDA["mec_grade_linhas"],
             )
         with padrao_grade[1]:
             grade_colunas = st.number_input(
-                "Parafusos por linha n_col (ao longo de x)",
+                "Parafusos por fileira n_col (ao longo de x)",
                 min_value=1,
                 value=2,
                 step=1,
                 key="parafuso_grade_colunas",
                 persist_state="session",
+                help=AJUDA["mec_grade_colunas"],
             )
         with padrao_grade[2]:
             grade_passo = st.number_input(
@@ -178,6 +184,7 @@ with st.container(border=True):
                 step=5.0,
                 key="parafuso_grade_passo",
                 persist_state="session",
+                help=AJUDA["mec_grade_passo"],
             )
         with padrao_grade[3]:
             grade_gabarito = st.number_input(
@@ -187,6 +194,7 @@ with st.container(border=True):
                 step=5.0,
                 key="parafuso_grade_gabarito",
                 persist_state="session",
+                help=AJUDA["mec_grade_gabarito"],
             )
         coordenadas_grupo = tuple(
             ligacao.grade_retangular(
@@ -227,21 +235,25 @@ with st.container(border=True):
             "Área resistente At",
             f"{rosca.area_tracao_mm2:.2f} mm²",
             border=True,
+            help=AJUDA["mec_m_At"],
         )
         st.metric(
             "Tensão de prova Sp",
             f"{classe.resistencia_prova_MPa:.0f} MPa",
             border=True,
+            help=AJUDA["mec_m_Sp"],
         )
         st.metric(
             "Escoamento mínimo",
             f"{classe.escoamento_min_MPa:.0f} MPa",
             border=True,
+            help=AJUDA["mec_m_Sy"],
         )
         st.metric(
             "Ruptura mínima",
             f"{classe.ruptura_min_MPa:.0f} MPa",
             border=True,
+            help=AJUDA["mec_m_Sut"],
         )
     if classe.observacao:
         st.caption(classe.observacao)
@@ -253,7 +265,7 @@ with st.container(border=True):
         )
 
 with st.container(border=True):
-    st.subheader("2. Pré-carga, torque e rigidez")
+    st.subheader("2. Pré-carga, torque e rigidez", help=AJUDA["sec_mec_2"])
     metodo = st.segmented_control(
         "Condição de instalação",
         ["Torque lubrificado", "Torque seco", "Controle aprimorado"],
@@ -262,6 +274,7 @@ with st.container(border=True):
         width="stretch",
         key="parafuso_metodo_instalacao",
         persist_state="session",
+        help=AJUDA["mec_instalacao"],
     )
     padroes_instalacao = {
         "Torque lubrificado": (0.18, 0.25),
@@ -335,7 +348,7 @@ with st.container(border=True):
     )
 
 with st.container(border=True):
-    st.subheader("3. Carregamentos de serviço")
+    st.subheader("3. Carregamentos de serviço", help=AJUDA["sec_mec_3"])
     st.caption(
         "A carga axial positiva abre a junta. O momento de tombamento distribui "
         "tração de forma linear; o torque produz cisalhamento tangencial. Este modo "
@@ -363,6 +376,7 @@ with st.container(border=True):
             step=0.05,
             key="parafuso_gama_f",
             persist_state="session",
+            help=AJUDA["mec_gama_f"],
         )
     cargas_entrada = st.columns(4)
     with cargas_entrada[0]:
@@ -371,6 +385,7 @@ with st.container(border=True):
             step=5.0,
             key="parafuso_carga_axial",
             persist_state="session",
+            help=AJUDA["mec_P"],
         )
     with cargas_entrada[1]:
         carga_cortante_informada_kN = st.number_input(
@@ -378,6 +393,7 @@ with st.container(border=True):
             step=5.0,
             key="parafuso_carga_cortante",
             persist_state="session",
+            help=AJUDA["mec_V"],
         )
     with cargas_entrada[2]:
         momento_informado_Nm = st.number_input(
@@ -385,6 +401,7 @@ with st.container(border=True):
             step=100.0,
             key="parafuso_momento",
             persist_state="session",
+            help=AJUDA["mec_M"],
         )
     modo_torque = st.segmented_control(
         "Torque no grupo",
@@ -407,6 +424,7 @@ with st.container(border=True):
             step=100.0,
             key="parafuso_torque_grupo",
             persist_state="session",
+            help=AJUDA["mec_T"],
         )
     else:
         excentricidade_cortante_mm = st.number_input(
@@ -414,6 +432,7 @@ with st.container(border=True):
             step=5.0,
             key="parafuso_excentricidade_cortante",
             persist_state="session",
+            help=AJUDA["mec_excentricidade"],
         )
     # O cálculo roda sempre em serviço: valores majorados voltam ao nível característico.
     carga_axial_kN = carga_axial_informada_kN / fator_majoracao
@@ -440,10 +459,11 @@ with st.container(border=True):
         width="stretch",
         key="parafuso_plano_corte",
         persist_state="session",
+        help=AJUDA["mec_rosca_plano"],
     )
 
 with st.container(border=True):
-    st.subheader("4. Atrito e verificações da chapa")
+    st.subheader("4. Atrito e verificações da chapa", help=AJUDA["sec_mec_4"])
     junta = st.columns(3)
     with junta[0]:
         coeficiente_atrito = st.number_input(
@@ -453,6 +473,7 @@ with st.container(border=True):
             step=0.05,
             key="parafuso_coeficiente_atrito",
             persist_state="session",
+            help=AJUDA["mec_atrito"],
         )
     with junta[1]:
         interfaces_atrito = st.number_input(
@@ -462,6 +483,7 @@ with st.container(border=True):
             step=1,
             key="parafuso_interfaces_atrito",
             persist_state="session",
+            help=AJUDA["mec_interfaces"],
         )
     with junta[2]:
         fator_minimo = st.number_input(
@@ -471,6 +493,7 @@ with st.container(border=True):
             step=0.10,
             key="parafuso_fator_minimo",
             persist_state="session",
+            help=AJUDA["mec_fator_minimo"],
         )
 
     chapa = st.columns(4)
@@ -495,6 +518,7 @@ with st.container(border=True):
             step=0.5,
             key=f"parafuso_furo_{rosca.designacao}",
             persist_state="session",
+            help=AJUDA["mec_furo"],
         )
     with chapa[2]:
         distancia_borda_mm = st.number_input(
@@ -507,6 +531,7 @@ with st.container(border=True):
             step=1.0,
             key=f"parafuso_borda_{rosca.designacao}_{diametro_furo_mm}",
             persist_state="session",
+            help=AJUDA["mec_borda"],
         )
     with chapa[3]:
         escoamento_chapa_MPa = st.number_input(
@@ -516,6 +541,7 @@ with st.container(border=True):
             step=10.0,
             key="parafuso_escoamento_chapa",
             persist_state="session",
+            help=AJUDA["mec_Sy"],
         )
     limite_esmagamento_MPa = st.number_input(
         "Limite adotado para esmagamento da chapa (MPa)",
@@ -577,12 +603,13 @@ except ValueError as erro:
 st.header("Resultados do projeto")
 
 with st.container(border=True):
-    st.subheader("Aperto especificado")
+    st.subheader("Aperto especificado", help=AJUDA["mec_aperto"])
     with st.container(horizontal=True):
         st.metric(
             "Pré-carga nominal por parafuso",
             f"{resultado.pre_carga_nominal_N / 1_000.0:.2f} kN",
             border=True,
+            help=AJUDA["mec_m_pre_carga"],
         )
         st.metric(
             "Faixa estimada de pré-carga",
@@ -591,16 +618,19 @@ with st.container(border=True):
                 f"{resultado.pre_carga_maxima_N / 1_000.0:.2f} kN"
             ),
             border=True,
+            help=AJUDA["mec_m_faixa"],
         )
         st.metric(
             "Torque nominal estimado",
             f"{resultado.torque_nominal_Nm:.2f} N·m",
             border=True,
+            help=AJUDA["mec_m_torque"],
         )
         st.metric(
             "Carga de prova por parafuso",
             f"{resultado.carga_prova_N / 1_000.0:.2f} kN",
             border=True,
+            help=AJUDA["mec_m_prova"],
         )
     st.caption(
         "O torque é uma estimativa pela relação T = K·Fi·d. Dispersão de atrito, "
@@ -608,27 +638,31 @@ with st.container(border=True):
     )
 
 with st.container(border=True):
-    st.subheader("Parafuso crítico")
+    st.subheader("Parafuso crítico", help=AJUDA["mec_critico"])
     with st.container(horizontal=True):
         st.metric(
             "Carga axial máxima",
             f"{resultado.carga_maxima_parafuso_N / 1_000.0:.2f} kN",
             border=True,
+            help=AJUDA["mec_m_carga_max"],
         )
         st.metric(
             "Tensão axial",
             f"{resultado.tensao_axial_MPa:.1f} MPa",
             border=True,
+            help=AJUDA["mec_m_sigma"],
         )
         st.metric(
             "Tensão de cisalhamento",
             f"{resultado.tensao_cisalhante_MPa:.1f} MPa",
             border=True,
+            help=AJUDA["mec_m_tau"],
         )
         st.metric(
             "von Mises combinada",
             f"{resultado.tensao_von_mises_MPa:.1f} MPa",
             border=True,
+            help=AJUDA["mec_m_vm"],
         )
 
 criterios = [
@@ -650,7 +684,7 @@ coordenadas_tabela = (
 )
 
 with st.container(border=True):
-    st.subheader("Distribuição entre os parafusos")
+    st.subheader("Distribuição entre os parafusos", help=AJUDA["mec_distribuicao"])
     linhas = []
     for indice, ((x_mm, y_mm), axial, cisalhamento) in enumerate(
         zip(
@@ -694,7 +728,7 @@ with st.container(border=True):
 fadiga_resultado = None
 fadiga_entradas: dict[str, float] = {}
 with st.container(border=True):
-    st.subheader("5. Verificação opcional de fadiga axial")
+    st.subheader("5. Verificação opcional de fadiga axial", help=AJUDA["sec_mec_5"])
     analisar_fadiga = st.toggle(
         "Ativar análise de fadiga",
         value=False,
@@ -714,6 +748,7 @@ with st.container(border=True):
                 step=5.0,
                 key="parafuso_fadiga_axial_min",
                 persist_state="session",
+                help=AJUDA["mec_P_min"],
             )
         with ciclo[1]:
             axial_max_kN = st.number_input(
@@ -722,6 +757,7 @@ with st.container(border=True):
                 step=5.0,
                 key="parafuso_fadiga_axial_max",
                 persist_state="session",
+                help=AJUDA["mec_P_max"],
             )
         with ciclo[2]:
             momento_min_Nm = st.number_input(
@@ -730,6 +766,7 @@ with st.container(border=True):
                 step=100.0,
                 key="parafuso_fadiga_momento_min",
                 persist_state="session",
+                help=AJUDA["mec_M_min"],
             )
         with ciclo[3]:
             momento_max_Nm = st.number_input(
@@ -738,6 +775,7 @@ with st.container(border=True):
                 step=100.0,
                 key="parafuso_fadiga_momento_max",
                 persist_state="session",
+                help=AJUDA["mec_M_max"],
             )
         propriedades_fadiga = st.columns(2)
         with propriedades_fadiga[0]:
@@ -810,21 +848,25 @@ with st.container(border=True):
                     "Tensão alternada",
                     f"{fadiga.tensao_alternada_MPa:.2f} MPa",
                     border=True,
+                    help=AJUDA["mec_m_alternada"],
                 )
                 st.metric(
                     "Tensão média",
                     f"{fadiga.tensao_media_MPa:.2f} MPa",
                     border=True,
+                    help=AJUDA["mec_m_media"],
                 )
                 st.metric(
                     "Fator de Goodman",
                     formatar_fator(fadiga.fator_goodman),
                     border=True,
+                    help=AJUDA["mec_m_goodman"],
                 )
                 st.metric(
                     "Fator contra escoamento máximo",
                     formatar_fator(fadiga.fator_escoamento_maximo),
                     border=True,
+                    help=AJUDA["mec_m_escoamento_max"],
                 )
             exibir_diagnostico(
                 "Fadiga por Goodman",
@@ -851,7 +893,7 @@ diagnostico = parafusos.diagnostico_junta(
     resultado, rosca, classe, rigidez, fator_minimo, fadiga_resultado
 )
 with st.container(border=True):
-    st.subheader("Diagnóstico de cada modo de falha")
+    st.subheader("Diagnóstico de cada modo de falha", help=AJUDA["mec_diagnostico"])
     st.caption(
         "Solicitante, resistente, aproveitamento (= 1/n), status, fórmula e fonte de cada "
         f"critério. Meta n = {fator_minimo:.2f}: abaixo dela o status é ALERTA; abaixo de 1, NÃO OK."
@@ -865,6 +907,7 @@ with st.container(border=True):
         icon=":material/download:",
         width="stretch",
         key="parafusos_baixar",
+        help=AJUDA["btn_csv"],
     )
     with st.expander("Leitura de cada modo de falha", icon=":material/fact_check:"):
         for nome, valor in criterios:
@@ -880,7 +923,7 @@ fronteira_modelo(
 )
 
 with st.container(border=True):
-    st.subheader("6. Registrar no projeto")
+    st.subheader("6. Registrar no projeto", help=AJUDA["reg_registrar"])
     fatores_criticos = [valor for _, valor in criterios if math.isfinite(valor)]
     if fadiga_resultado is not None and math.isfinite(fadiga_resultado.fator_goodman):
         fatores_criticos.append(fadiga_resultado.fator_goodman)
@@ -942,7 +985,7 @@ with st.container(border=True):
                 ),
             }
         )
-    st.subheader("Comparar cenários")
+    st.subheader("Comparar cenários", help=AJUDA["reg_comparar"])
     comparador_cenarios(
         escopo="projeto_parafusos",
         resumo_entradas={

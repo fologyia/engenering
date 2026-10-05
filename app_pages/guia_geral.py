@@ -1568,7 +1568,7 @@ elif modulo == "Projeto de parafusos":
             """
         )
     st.warning(
-        "O Projeto NBR 8800:2024 não tem valor normativo, e alguns valores da NBR 8800:2008 "
+        "Alguns valores da NBR 8800:2008 "
         "(μ = 0,35 nas classes A e C, f_ub do A325 e C_t ≤ 0,90) estão marcados “CONFERIR” até "
         "serem confirmados na norma. O grupo excêntrico usa o método elástico (conservador).",
         icon=":material/warning:",
