@@ -312,3 +312,43 @@ def test_numeros_grandes_nao_saem_em_notacao_cientifica():
     assert _valor(1963.5) == "1963,5"
     assert _valor(0.66051) == "0,66051"
     assert _valor(1e-7) == "1e-07"
+
+
+def test_larguras_da_tabela_de_lista_nao_cortam_a_maior_palavra_do_cabecalho():
+    from core.project_report import _larguras_por_conteudo
+
+    cabecalhos = [
+        "Verificação",
+        "Solicitante",
+        "Resistente",
+        "Unidade",
+        "Aproveitamento [%]",
+        "Status",
+        "Fórmula",
+        "Referência",
+    ]
+    linhas = [
+        [
+            "Compressão axial N_c,Rd (todos os modos)",
+            "72.0",
+            "120.705",
+            "kN",
+            "60.0",
+            "OK",
+            "N_c,Rd = χ·Q·A_g·f_y/γ_a1 = 0.270·1.000·1963·250/1.10 = 120.71 kN",
+            "NBR 5.3.2 / AISC E3",
+        ]
+    ] * 3
+    larguras = _larguras_por_conteudo(cabecalhos, linhas)
+    assert len(larguras) == 8 and sum(larguras) == 9360 and min(larguras) > 0
+    # "Aproveitamento" em negrito 6,8 pt na DejaVu mede 61,8 pt: com 3 pt de folga de cada lado
+    # pede 67,8 pt = 1 356 DXA. Em colunas iguais (1 170) a palavra seria partida ao meio.
+    assert larguras[4] >= 1356
+    assert larguras[0] > larguras[3] and larguras[6] > larguras[5]  # texto longo ganha a sobra
+    # Tabela que já cabe em colunas iguais fica como estava.
+    assert (
+        _larguras_por_conteudo(["x (m)", "Apoio", "Fy (kN)"], [["0", "pino", "45"]]) == [3120] * 3
+    )
+    # Se nem os mínimos cabem, divisão igual (a soma continua sendo a largura útil).
+    muitas = [f"Aproveitamento{i}" for i in range(8)]
+    assert _larguras_por_conteudo(muitas, [["1"] * 8]) == [1170] * 8

@@ -179,6 +179,44 @@ def _lista_de_mapas(valor: Any) -> bool:
     )
 
 
+def _larguras_por_conteudo(
+    cabecalhos: Sequence[str], linhas: Sequence[Sequence[Any]], total: int = 9360
+) -> list[int]:
+    """Larguras (DXA) das colunas de uma tabela de lista, sem cortar palavra no meio.
+
+    Colunas iguais continuam valendo quando a maior palavra de cada cabeçalho cabe nelas. Quando
+    não cabe (a tabela de verificações tem oito colunas e "Aproveitamento" em negrito), cada
+    coluna recebe o mínimo da sua maior palavra — com folga para uma fonte larga, como a DejaVu
+    do Linux — e a sobra é repartida pelo tamanho médio do texto, com teto. Se nem os mínimos
+    cabem, volta à divisão igual.
+    """
+    n = len(cabecalhos)
+    base = total // n
+    iguais = [base] * n
+    iguais[-1] += total - base * n
+    minimos = []
+    for indice, cabecalho in enumerate(cabecalhos):
+        palavra_do_cabecalho = max((len(p) for p in str(cabecalho).split()), default=1)
+        palavra_da_celula = max(
+            (min(len(p), 8) for linha in linhas for p in str(linha[indice]).split()), default=1
+        )
+        # 90 e 80 twips por letra (negrito 6,8 pt e texto 6,6 pt na DejaVu) mais 3 pt de cada lado.
+        minimos.append(max(palavra_do_cabecalho * 90, palavra_da_celula * 80) + 120)
+    if all(minimo <= base for minimo in minimos) or sum(minimos) >= total:
+        return iguais
+    pesos = [
+        min(sum(len(str(linha[indice])) for linha in linhas) / max(len(linhas), 1), 45.0)
+        for indice in range(n)
+    ]
+    soma = sum(pesos) or 1.0
+    sobra = total - sum(minimos)
+    larguras = [
+        minimo + int(sobra * peso / soma) for minimo, peso in zip(minimos, pesos, strict=True)
+    ]
+    larguras[-1] += total - sum(larguras)
+    return larguras
+
+
 def _tabela_de_lista(chave: Any, itens: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Uma lista de dicionários (reações, envoltória, ranking) vira tabela.
 
@@ -200,14 +238,13 @@ def _tabela_de_lista(chave: Any, itens: Sequence[Mapping[str, Any]]) -> dict[str
             "larguras": [900, 8460],
             "fonte": 7.2,
         }
-    largura = 9360 // len(colunas)
-    larguras = [largura] * len(colunas)
-    larguras[-1] += 9360 - largura * len(colunas)
+    cabecalhos = [_campo_legivel(nome) for nome in colunas]
+    linhas = [[_valor(item.get(nome)) for nome in colunas] for item in itens]
     return {
         "legenda": legenda,
-        "cabecalhos": [_campo_legivel(nome) for nome in colunas],
-        "linhas": [[_valor(item.get(nome)) for nome in colunas] for item in itens],
-        "larguras": larguras,
+        "cabecalhos": cabecalhos,
+        "linhas": linhas,
+        "larguras": _larguras_por_conteudo(cabecalhos, linhas),
         "fonte": 7.2,
     }
 
