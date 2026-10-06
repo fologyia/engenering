@@ -103,6 +103,10 @@ check_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# O pytest chamado como comando (como no CI) não põe a raiz do repositório no sys.path, e o
+# conftest importa `core`; `python -m pytest` faz isso sozinho. Sem esta linha o CI morre ao
+# carregar o conftest (código de saída 4).
+pythonpath = ["."]
 # O diretório temporário padrão do pytest fica inacessível no Windows deste
 # projeto; manter basetemp e cache dentro do repositório evita falhas de
 # permissão no setup de todo teste que usa tmp_path.

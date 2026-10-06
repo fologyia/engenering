@@ -28,6 +28,10 @@ from core.project_store import (
     salvar_projeto,
 )
 
+# `--basetemp=tmp/pytest` (pyproject.toml) pede que `tmp/` já exista; num checkout limpo, como o do
+# CI, ela não existe (está no .gitignore) e todo teste que usa tmp_path falharia no setup.
+Path(__file__).resolve().parent.parent.joinpath("tmp").mkdir(exist_ok=True)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _banco_da_sessao_isolado(tmp_path_factory):
