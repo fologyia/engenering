@@ -35,4 +35,23 @@ jobs:
         run: mypy
 
       - name: Testes
-        run: pytest -q
+        # -rfE lista cada falha numa linha só (COLUMNS evita o corte do texto); o log também vai
+        # para um arquivo, de onde o passo seguinte tira o resumo.
+        env:
+          COLUMNS: "300"
+        run: |
+          set -o pipefail
+          pytest -q -rfE --tb=short 2>&1 | tee pytest.log
+
+      - name: Resumo das falhas
+        # As anotações aparecem na página do job sem precisar abrir (nem estar logado para ver) o
+        # log completo: uma linha por teste que falhou e o rodapé do pytest.
+        if: failure()
+        run: |
+          falhas=$(grep -E "^(FAILED|ERROR) " pytest.log | head -40 | cut -c1-240 || true)
+          rodape=$(tail -n 3 pytest.log | cut -c1-240 || true)
+          texto="${falhas}"$'\n'"${rodape}"
+          texto="${texto//'%'/'%25'}"
+          texto="${texto//$'\r'/'%0D'}"
+          texto="${texto//$'\n'/'%0A'}"
+          echo "::error title=Resumo do pytest::${texto}"
