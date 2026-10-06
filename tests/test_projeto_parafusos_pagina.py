@@ -8,6 +8,8 @@ com solicitante, resistente, aproveitamento, status, fórmula e item da norma.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -16,13 +18,16 @@ from core import bolt_design as parafusos
 from core import bolted_connection as bc
 from core.verificacao import COLUNAS_TABELA
 
+# Caminho absoluto: o AppTest resolve um caminho relativo contra a pasta do arquivo de teste
+# (tests/app.py) nas versões novas do Streamlit, e não contra o diretório de trabalho.
+APP = str(Path(__file__).resolve().parent.parent / "app.py")
 PAGINA = "app_pages/projeto_parafusos.py"
 ESTRUTURAL = "Ligação estrutural de aço"
 KIP = bc.KIP_KN
 
 
 def abrir(banco_isolado, **estado) -> AppTest:
-    teste = AppTest.from_file("app.py", default_timeout=180)
+    teste = AppTest.from_file(APP, default_timeout=180)
     teste.run()
     teste.switch_page(PAGINA)
     for chave, valor in estado.items():

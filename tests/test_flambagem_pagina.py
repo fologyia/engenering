@@ -9,7 +9,9 @@ cisalhamento, tabela de oito colunas, CSV, comparação de normas e registro no 
 
 from __future__ import annotations
 
+import math
 import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -22,12 +24,15 @@ from core import section_catalog as catalogo
 from core.project_store import obter_projeto_ativo
 from core.verificacao import COLUNAS_TABELA
 
+# Caminho absoluto: o AppTest resolve um caminho relativo contra a pasta do arquivo de teste
+# (tests/app.py) nas versões novas do Streamlit, e não contra o diretório de trabalho.
+APP = str(Path(__file__).resolve().parent.parent / "app.py")
 PAGINA = "app_pages/flambagem_colunas.py"
 KSI, INCH, KIP = 6.894757, 25.4, 4.448222
 
 
 def abrir(banco_isolado, **estado) -> AppTest:
-    teste = AppTest.from_file("app.py", default_timeout=180)
+    teste = AppTest.from_file(APP, default_timeout=180)
     teste.run()
     teste.switch_page(PAGINA)
     for chave, valor in estado.items():
@@ -383,6 +388,82 @@ def test_flexao_mostra_flt_flm_fla_e_cb_pelo_diagrama(banco_isolado):
     assert f"Cb = {cb_esperado:.2f}" in formula_flt and "Lb = 6000 mm" in formula_flt
 
 
+def test_mao_francesa_somar_v_acrescenta_a_reacao_vertical_ao_nsd(banco_isolado):
+    base = dict(
+        col_tipo_secao=ui.SEC_I,
+        col_L=3000.0,
+        col_modo_carga=ui.MODO_CALCULO,
+        col_nsd=100.0,
+        col_mf_incluir=True,
+        col_mf_gamma="Já é de cálculo (γ = 1,00)",
+    )
+    v = 20.0 * math.cos(math.radians(45.0))  # F = 20 kN a 45° com a coluna
+    assert metrica(abrir(banco_isolado, **base), "N_Sd") == "100.00 kN"
+    assert (
+        metrica(abrir(banco_isolado, **base, col_mf_somar_v=True), "N_Sd") == f"{100.0 + v:.2f} kN"
+    )
+
+
+def test_mao_francesa_no_eixo_y_soma_o_momento_em_y(banco_isolado):
+    t = abrir(
+        banco_isolado,
+        col_tipo_secao=ui.SEC_I,
+        col_L=3000.0,
+        col_mf_incluir=True,
+        col_mf_eixo="y",
+        col_mf_e_y=0.0,
+        col_mf_gamma="Já é de cálculo (γ = 1,00)",
+    )
+    h_vezes_a = 20.0 * math.sin(math.radians(45.0)) * 800.0 / 1e3  # balanço: M = H·a
+    assert metrica(t, "M_y,Sd da mão-francesa") == f"{h_vezes_a:.3f} kN·m"
+    assert tem_metrica(t, "B₁ em y") and not tem_metrica(t, "B₁ em x")
+    assert numero(metrica(t, "M_y,Sd amplificado")) > h_vezes_a
+
+
+def test_excentricidade_da_ligacao_acompanha_a_secao(banco_isolado):
+    t = abrir(banco_isolado, col_tipo_secao=ui.SEC_I, col_mf_incluir=True, col_mf_eixo="x")
+
+    def e_da_ligacao() -> float:
+        return next(n.value for n in t.number_input if n.label == "e da ligação (mm)")
+
+    assert e_da_ligacao() == 150.0  # meia altura do I de 300 mm
+    t.session_state["col_I_d"] = 600.0
+    t.run()
+    assert e_da_ligacao() == 300.0  # o padrão seguiu a seção (antes ficava em 150)
+    t.session_state["col_mf_e_x"] = 40.0  # o que o usuário digita fica enquanto a seção não muda
+    t.run()
+    assert e_da_ligacao() == 40.0
+
+
+def test_lz_acompanha_o_comprimento_da_coluna(banco_isolado):
+    t = abrir(banco_isolado, col_kz_ativar=True)
+
+    def lz() -> float:
+        return next(n.value for n in t.number_input if n.label == "L_z (mm)")
+
+    assert lz() == 2000.0
+    t.session_state["col_L"] = 3500.0
+    t.run()
+    assert lz() == 3500.0
+
+
+def test_b1_bloqueado_aparece_como_infinito_e_mrd_informado_com_a_origem(banco_isolado):
+    t = abrir(banco_isolado, col_modo_carga=ui.MODO_CALCULO, col_nsd=200.0, col_Mx=1.0)
+    assert metrica(t, "B₁ em x") == "∞" and metrica(t, "M_x,Sd amplificado") == "∞"
+    informado = abrir(
+        banco_isolado,
+        col_tipo_secao=ui.SEC_TUBO_C,
+        col_tc_D=200.0,
+        col_tc_t=2.5,
+        col_Mx=2.0,
+        col_mrd_x_ativar=True,
+        col_mrd_x=30.0,
+    )
+    assert metrica(informado, "M_x,Rd") == "30.000 kN·m (informado)"
+    da_norma = abrir(banco_isolado, col_tipo_secao=ui.SEC_I, col_Mx=20.0)
+    assert "(informado)" not in metrica(da_norma, "M_x,Rd")
+
+
 # ------------------------------------------------------------------ outros tipos de seção
 @pytest.mark.parametrize(
     "estado",
@@ -437,6 +518,30 @@ def test_norma_2008_lista_os_valores_a_conferir(banco_isolado):
     assert itens_a_conferir(abrir(banco_isolado))
     assert not itens_a_conferir(abrir(banco_isolado, col_norma="AISC360_16_LRFD"))
     assert not itens_a_conferir(abrir(banco_isolado, col_norma="NBR8800_2024"))
+
+
+def test_registro_leva_os_campos_da_mao_francesa(banco_com_projeto):
+    t = abrir(
+        banco_com_projeto,
+        col_tipo_secao=ui.SEC_I,
+        col_L=3000.0,
+        col_mf_incluir=True,
+        col_mf_eixo="x",
+        col_mf_gamma="Já é de cálculo (γ = 1,00)",
+        col_mf_somar_v=True,
+    )
+    t.button(key="registrar_flambagem_colunas").click().run()
+    registros = [
+        r
+        for r in obter_projeto_ativo()["registros_tecnicos"]
+        if r["modulo_id"] == "flambagem_colunas"
+    ]
+    assert len(registros) == 1
+    entradas = registros[0]["entradas"]
+    assert entradas["mao_francesa_eixo"] == "x" and entradas["mao_francesa_V_somado_a_NSd"] is True
+    assert entradas["mao_francesa_forca_calculo_kN"] == pytest.approx(20.0)
+    assert entradas["mao_francesa_momento_kNm"] > 0
+    assert any("Mão-francesa: H = F_Sd·sen θ" in str(eq) for eq in registros[0]["equacoes"])
 
 
 def test_registrar_no_projeto_grava_a_tabela_inteira(banco_com_projeto):

@@ -95,6 +95,9 @@ def test_espessuras_minimas_da_dica_seguem_a_tabela_da_anglo():
 
 
 # ------------------------------------------------------------------ “?” em todos os campos na tela
+# Caminho absoluto: o AppTest resolve um caminho relativo contra a pasta do arquivo de teste
+# (tests/app.py) nas versões novas do Streamlit, e não contra o diretório de trabalho.
+APP = str(RAIZ / "app.py")
 PAGINA = "app_pages/flambagem_colunas.py"
 TIPOS_COM_AJUDA = (
     "number_input",
@@ -147,7 +150,7 @@ def sem_ajuda(teste: AppTest) -> set[tuple[str, str]]:
 
 
 def _abrir(banco_isolado, **estado) -> AppTest:
-    teste = AppTest.from_file("app.py", default_timeout=180)
+    teste = AppTest.from_file(APP, default_timeout=180)
     teste.run()
     teste.switch_page(PAGINA)
     for chave, valor in estado.items():

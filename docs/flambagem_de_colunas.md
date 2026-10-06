@@ -49,6 +49,12 @@ comprimentos e perfil soldado e laminado. As diferenças que sobram são intenci
 | Perfil U em y | `W = I_y/(b_f/2)` | `W = I_y/(distância à ponta da mesa)` | O módulo antigo superestimava o `W` do U. |
 | Larguras efetivas de colunas muito esbeltas | `b_ef` zerava e `Q` caía a 0,5 | limiar em `σ = χ·f_y` | Corrigido nos dois módulos (`fator_q`). |
 
+## Simplificações conservadoras
+
+- O limite `M_Rd ≤ 1,5·W·f_y` (NBR 5.4.2.2) é aplicado às três normas, como no módulo de referência. O AISC 360-16 não o tem na F2 (usa `1,6·S·F_y` só em F6 e F11): na verificação AISC de uma seção com `Z/W` acima de 1,5 (flexão em y de perfis I) o resultado sai menor que o da norma americana.
+- Sem `M₁/M₂` informado, `C_m = 1,0`; sem `C_b` informado, `C_b = 1,0`.
+- `verificar_barra` (`core/column_design.py`) é o caminho do módulo de referência, mantido para os testes de aceite; o app usa `verificar_coluna` (`core/column_buckling.py`), cujo `L_b` padrão é `L_y`.
+
 ## Casos de aceite
 
 Reproduzidos pela tela (`tests/test_flambagem_pagina.py`) e pelas funções

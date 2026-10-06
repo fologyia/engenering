@@ -46,6 +46,7 @@ from core.verificacao import (
     Verificacao,
     formatar_percentual,
     linhas_para_registro,
+    numero_json,
     status_geral,
 )
 
@@ -784,6 +785,8 @@ class ResultadoColuna:
     compressao: dict[str, Any] | None
     flexao_x: dict[str, Any] | None
     flexao_y: dict[str, Any] | None
+    mrd_x_kNm: float | None  # M_x,Rd usado na interação: o da norma ou o informado pelo usuário
+    mrd_y_kNm: float | None
     momento_x_primeira_ordem_kNm: float
     momento_y_primeira_ordem_kNm: float
     cm_x: float
@@ -997,9 +1000,20 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         )
         linhas.extend(linhas_de_limites())
         return _fechar(
-            entrada, None, None, None, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, None,
-            linhas, bloqueios, avisos, entrada.Cb, entrada.Lb_mm or ly,
-        )  # fmt: skip
+            entrada,
+            None,
+            _momentos_sem_calculo(),
+            mx1=0.0,
+            my1=0.0,
+            cm_x=1.0,
+            cm_y=1.0,
+            indice=None,
+            linhas=linhas,
+            bloqueios=bloqueios,
+            avisos=avisos,
+            cb_usado=entrada.Cb,
+            lb_usado=entrada.Lb_mm or ly,
+        )
 
     ne_modos: dict[str, float] = comp["modos"]
     ref_e = "NBR 5.3.5 e Anexo E / AISC E3–E4"
@@ -1222,6 +1236,9 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
                 "NBR Anexo D (D.2.2) / Projeto C.2.2",
                 f"{erro} N_Sd = {n_sd:.1f} kN, N_e{eixo} (K = 1) = {n_e_real:.1f} kN.",
             )
+            # B₁ diverge (N_Sd ≥ N_e): nem "1,0" nem momento zero podem passar por resultado.
+            dados["b1"] = math.inf
+            dados["amplificado"] = math.inf
             continue
         dados["amplificado"] = m1 * dados["b1"]
         linhas.append(
@@ -1236,7 +1253,9 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
             )
         )
         # M_Rd
-        usar_lb = lb if eixo == "x" else 0.0
+        # FLT: em x o trecho é L_b (padrão L_y). Em y só conta nas retangulares com o eixo forte em
+        # y; a mesa trava onde se impede a flexão em torno de x, isto é, em L_x.
+        usar_lb = lb if eixo == "x" else lx
         usar_cb = cb if eixo == "x" else 1.0
         informado = entrada.MRd_x_informado_kNm if eixo == "x" else entrada.MRd_y_informado_kNm
         try:
@@ -1355,25 +1374,36 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         )
 
     return _fechar(
-        entrada, comp, momentos["x"]["flexao"], momentos["y"]["flexao"], mx1, my1, cm_x, cm_y,
-        momentos["x"]["b1"], momentos["y"]["b1"], momentos["x"]["amplificado"],
-        momentos["y"]["amplificado"], indice, linhas, bloqueios, avisos, cb, lb,
-    )  # fmt: skip
+        entrada,
+        comp,
+        momentos,
+        mx1=mx1,
+        my1=my1,
+        cm_x=cm_x,
+        cm_y=cm_y,
+        indice=indice,
+        linhas=linhas,
+        bloqueios=bloqueios,
+        avisos=avisos,
+        cb_usado=cb,
+        lb_usado=lb,
+    )
+
+
+def _momentos_sem_calculo() -> dict[str, dict[str, Any]]:
+    """Estado dos dois eixos quando a compressão foi bloqueada e a flexão nem chegou a rodar."""
+    return {eixo: dict(b1=1.0, amplificado=0.0, mrd=None, flexao=None) for eixo in ("x", "y")}
 
 
 def _fechar(
     entrada: EntradaColuna,
     comp: dict[str, Any] | None,
-    flexao_x: dict[str, Any] | None,
-    flexao_y: dict[str, Any] | None,
+    momentos: Mapping[str, Mapping[str, Any]],
+    *,
     mx1: float,
     my1: float,
     cm_x: float,
     cm_y: float,
-    b1_x: float,
-    b1_y: float,
-    mx_amp: float,
-    my_amp: float,
     indice: float | None,
     linhas: list[Verificacao],
     bloqueios: list[str],
@@ -1391,16 +1421,18 @@ def _fechar(
     return ResultadoColuna(
         entrada=entrada,
         compressao=comp,
-        flexao_x=flexao_x,
-        flexao_y=flexao_y,
+        flexao_x=momentos["x"]["flexao"],
+        flexao_y=momentos["y"]["flexao"],
+        mrd_x_kNm=momentos["x"]["mrd"],
+        mrd_y_kNm=momentos["y"]["mrd"],
         momento_x_primeira_ordem_kNm=mx1,
         momento_y_primeira_ordem_kNm=my1,
         cm_x=cm_x,
         cm_y=cm_y,
-        b1_x=b1_x,
-        b1_y=b1_y,
-        momento_x_amplificado_kNm=mx_amp,
-        momento_y_amplificado_kNm=my_amp,
+        b1_x=momentos["x"]["b1"],
+        b1_y=momentos["y"]["b1"],
+        momento_x_amplificado_kNm=momentos["x"]["amplificado"],
+        momento_y_amplificado_kNm=momentos["y"]["amplificado"],
         indice_interacao=indice,
         verificacoes=tuple(linhas),
         status_geral=status_geral(linhas),
@@ -1548,6 +1580,8 @@ def registro_coluna(
         "forcas_transversais_y": entrada.forcas_transversais_y,
         "comprimento_destravado_FLT_mm": resultado.lb_usado_mm,
         "cb": resultado.cb_usado,
+        "MRd_x_informado_kNm": entrada.MRd_x_informado_kNm,
+        "MRd_y_informado_kNm": entrada.MRd_y_informado_kNm,
         "secao_compacta_confirmada": entrada.secao_compacta_confirmada,
         "espessuras_anglo_mm": dict(entrada.espessuras_anglo or {}),
         **dict(contexto or {}),
@@ -1565,16 +1599,17 @@ def registro_coluna(
         "indice_interacao": resultado.indice_interacao
         if resultado.indice_interacao is not None and math.isfinite(resultado.indice_interacao)
         else None,
-        "b1_x": resultado.b1_x if resultado.momento_x_primeira_ordem_kNm > 0 else None,
-        "b1_y": resultado.b1_y if resultado.momento_y_primeira_ordem_kNm > 0 else None,
-        "momento_x_amplificado_kNm": resultado.momento_x_amplificado_kNm or None,
-        "momento_y_amplificado_kNm": resultado.momento_y_amplificado_kNm or None,
-        "momento_resistente_x_kNm": None
-        if resultado.flexao_x is None
-        else resultado.flexao_x["MRd"],
-        "momento_resistente_y_kNm": None
-        if resultado.flexao_y is None
-        else resultado.flexao_y["MRd"],
+        # B₁ e momento amplificado divergem (∞) quando N_Sd ≥ N_e; o registro não aceita infinito.
+        "b1_x": numero_json(resultado.b1_x) if resultado.momento_x_primeira_ordem_kNm > 0 else None,
+        "b1_y": numero_json(resultado.b1_y) if resultado.momento_y_primeira_ordem_kNm > 0 else None,
+        "momento_x_amplificado_kNm": numero_json(resultado.momento_x_amplificado_kNm)
+        if resultado.momento_x_primeira_ordem_kNm > 0
+        else None,
+        "momento_y_amplificado_kNm": numero_json(resultado.momento_y_amplificado_kNm)
+        if resultado.momento_y_primeira_ordem_kNm > 0
+        else None,
+        "momento_resistente_x_kNm": resultado.mrd_x_kNm,
+        "momento_resistente_y_kNm": resultado.mrd_y_kNm,
         "atende": resultado.atende,
         "bloqueios": list(resultado.bloqueios) or None,
         "verificações": linhas_para_registro(resultado.verificacoes),

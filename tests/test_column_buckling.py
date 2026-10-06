@@ -663,6 +663,45 @@ class TestNormas:
         assert "φ" in linha(r, "N_c,Rd").formula
 
 
+class TestRevisao:
+    """Defeitos achados na revisão do código: cada um com o caso que o mostrava."""
+
+    def test_b1_bloqueado_nao_passa_por_resultado(self):
+        sec = cd.secao_circular_macica(50)
+        e = entrada(sec, N_Sd_kN=200.0, Mx_kNm=1.0)  # N_ex = 151,4 kN
+        r = cb.verificar_coluna(e)
+        assert math.isinf(r.b1_x) and math.isinf(r.momento_x_amplificado_kNm)
+        assert r.indice_interacao is None and r.mrd_x_kNm is None
+        resultados = cb.registro_coluna(e, r)["resultados"]
+        assert resultados["b1_x"] == "∞" and resultados["momento_x_amplificado_kNm"] == "∞"
+        assert "b1_y" not in resultados  # sem momento em y
+
+    def test_mrd_informado_vai_ao_registro_e_ao_resultado(self):
+        sec = cd.secao_tubo_circular(200, 2.5)  # não compacto: a norma não estima M_Rd
+        e = entrada(sec, N_Sd_kN=10.0, Mx_kNm=2.0, MRd_x_informado_kNm=30.0)
+        r = cb.verificar_coluna(e)
+        assert r.flexao_x is None and r.mrd_x_kNm == 30.0 and r.mrd_y_kNm is None
+        registro = cb.registro_coluna(e, r)
+        assert registro["entradas"]["MRd_x_informado_kNm"] == 30.0
+        assert registro["resultados"]["momento_resistente_x_kNm"] == 30.0
+        da_norma = cb.verificar_coluna(
+            entrada(cd.secao_I(300, 150, 12.5, 8.0), N_Sd_kN=10.0, Mx_kNm=20.0)
+        )
+        assert da_norma.flexao_x is not None
+        assert da_norma.mrd_x_kNm == pytest.approx(da_norma.flexao_x["MRd"])
+
+    def test_retangular_deitada_tem_flt_no_eixo_forte_y_com_lx(self):
+        em_pe = cd.secao_retangular_macica(50, 100)
+        deitada = cd.secao_retangular_macica(100, 50)
+        # a flexão em y da deitada trava onde se impede a flexão em x (L_x); a da peça em pé, em L_y
+        a = cb.verificar_coluna(entrada(em_pe, Lx_mm=1500.0, Ly_mm=4000.0, Mx_kNm=5.0))
+        b = cb.verificar_coluna(entrada(deitada, Lx_mm=4000.0, Ly_mm=1500.0, My_kNm=5.0))
+        assert a.flexao_x is not None and b.flexao_y is not None
+        assert "FLT" in a.flexao_x["estados"] and "FLT" in b.flexao_y["estados"]
+        assert b.mrd_y_kNm == pytest.approx(a.mrd_x_kNm, rel=1e-9)
+        assert b.indice_interacao == pytest.approx(a.indice_interacao, rel=0.02)
+
+
 # ------------------------------------------------------------------ curva, interação e avisos de entrada
 class TestComportamentoDaCurvaEAvisos:
     def test_coluna_mais_longa_resiste_menos_e_o_balanco_equivale_ao_dobro_do_comprimento(self):

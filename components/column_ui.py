@@ -111,6 +111,20 @@ def _numero(
     )
 
 
+def _acompanhar_padrao(chave: str, padrao: float) -> None:
+    """Faz um campo cujo padrão deriva de outro (ex.: meia altura do perfil) seguir o padrão.
+
+    A chave do campo persiste na sessão, então o ``value=`` só valeria na primeira abertura. Se o
+    padrão mudou desde a execução anterior, o campo volta a ele; na primeira execução nada é tocado
+    (o que já estiver na sessão fica).
+    """
+    chave_padrao = f"{chave}__padrao"
+    anterior = st.session_state.get(chave_padrao)
+    if anterior is not None and anterior != padrao:
+        st.session_state[chave] = padrao
+    st.session_state[chave_padrao] = padrao
+
+
 def _fmt(valor: float | None, casas: int = 3, unidade: str = "") -> str:
     if valor is None:
         return "—"
@@ -695,6 +709,7 @@ def formulario_comprimentos() -> DadosComprimentos:
                 passo=0.05,
                 alvo=torcao[0],
             )
+            _acompanhar_padrao("col_Lz", max(lx, ly))
             lz = _numero(
                 "L_z (mm)", "col_Lz", max(lx, ly), AJUDA["Lz"], passo=100.0, alvo=torcao[1]
             )
@@ -1041,10 +1056,12 @@ def formulario_mao_francesa(secao: Secao, comprimento_mm: float) -> DadosMaoFran
             persist_state="session",
             help=AJUDA["mf_eixo"],
         )
+        padrao_excentricidade = round(_distancia_fibra(secao, eixo), 1)
+        _acompanhar_padrao(f"col_mf_e_{eixo}", padrao_excentricidade)
         excentricidade = _numero(
             "e da ligação (mm)",
             f"col_mf_e_{eixo}",
-            round(_distancia_fibra(secao, eixo), 1),
+            padrao_excentricidade,
             AJUDA["mf_exc"],
             minimo=0.0,
             passo=1.0,
@@ -1267,9 +1284,9 @@ def _resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
         tem_my = resultado.momento_y_primeira_ordem_kNm > 0
         if tem_mx or tem_my:
             with st.container(horizontal=True):
-                for eixo, tem, b1, amplificado, flexao in (
-                    ("x", tem_mx, resultado.b1_x, resultado.momento_x_amplificado_kNm, resultado.flexao_x),
-                    ("y", tem_my, resultado.b1_y, resultado.momento_y_amplificado_kNm, resultado.flexao_y),
+                for eixo, tem, b1, amplificado, mrd, da_norma in (
+                    ("x", tem_mx, resultado.b1_x, resultado.momento_x_amplificado_kNm, resultado.mrd_x_kNm, resultado.flexao_x is not None),
+                    ("y", tem_my, resultado.b1_y, resultado.momento_y_amplificado_kNm, resultado.mrd_y_kNm, resultado.flexao_y is not None),
                 ):  # fmt: skip
                     if not tem:
                         continue
@@ -1282,7 +1299,9 @@ def _resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
                     )
                     st.metric(
                         f"M_{eixo},Rd",
-                        "—" if flexao is None else _fmt(flexao["MRd"], 3, " kN·m"),
+                        "—"
+                        if mrd is None
+                        else _fmt(mrd, 3, " kN·m" if da_norma else " kN·m (informado)"),
                         border=True,
                         help=AJUDA["res_mrd"],
                     )

@@ -561,7 +561,9 @@ def _flt_retangular(
     inércia: λ_p = 0,13 E √(JA)/M_pl, λ_r = 2,00 E √(JA)/M_r, M_cr = 2,00 C_b E √(JA)/λ (NBR Tab. G.1 /
     AISC F11 e F7.4)."""
     sJA = math.sqrt(sec.J * sec.A)
-    lam = Lb / sec.ry
+    lam = Lb / min(
+        sec.rx, sec.ry
+    )  # raio de giração em torno do eixo MENOR (o da flambagem lateral)
     Mr = fy * W
     lp = 0.13 * E * sJA / Mpl
     lr = 2.00 * E * (Cb if nova else 1.0) * sJA / Mr
@@ -656,7 +658,7 @@ def momento_resistente(
         res["plastificação"] = Mpl
     elif sec.tipo == "ret_macica":
         res["plastificação"] = Mpl
-        if eixo == "x" and sec.Ix > sec.Iy and Lb > 0:
+        if Lb > 0 and (sec.Ix > sec.Iy if eixo == "x" else sec.Iy > sec.Ix):
             res["FLT"] = _flt_retangular(sec, fy, W, Mpl, Lb, Cb, E, nova)
     elif sec.tipo == "tubo_circ":
         if sec.D_t is None:  # Guarda
@@ -678,8 +680,9 @@ def momento_resistente(
             )
         res["plastificação"] = Mpl
         # Acréscimo: a docstring prometia a FLT do tubo retangular, que faltava no código. Vale só
-        # para o eixo de maior inércia e seção não quadrada, com as mesmas expressões da barra.
-        if eixo == "x" and sec.Ix > sec.Iy and Lb > 0:
+        # para o eixo de maior inércia (x numa seção em pé, y numa deitada) e seção não quadrada,
+        # com as mesmas expressões da barra.
+        if Lb > 0 and (sec.Ix > sec.Iy if eixo == "x" else sec.Iy > sec.Ix):
             res["FLT"] = _flt_retangular(sec, fy, W, Mpl, Lb, Cb, E, nova)
     else:
         raise NotImplementedError(
@@ -819,7 +822,11 @@ def verificar_barra(
     norma: str = "NBR8800_2008",
     espessuras_anglo: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    """N_Sd (kN, compressão +), M_Sd (kN·m) JÁ amplificados (B1/B2). Devolve verificações e resumo."""
+    """N_Sd (kN, compressão +), M_Sd (kN·m) JÁ amplificados (B1/B2). Devolve verificações e resumo.
+
+    Caminho do módulo de referência, mantido para os testes de aceite. O app usa
+    :func:`core.column_buckling.verificar_coluna`, que difere em dois padrões: L_b = L_y (aqui,
+    K_y·L_y) e B1 calculado dentro da própria verificação."""
     c = resist_compressao(sec, fy, KxLx, KyLy, KzLz, norma)
     v = [
         Verificacao(

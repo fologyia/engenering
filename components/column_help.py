@@ -432,7 +432,8 @@ AJUDA: dict[str, str] = {
     ),
     "res_mrd": (
         "Momento resistente de cálculo: o menor entre flambagem lateral (FLT), da mesa (FLM) e "
-        "da alma (FLA), limitado a 1,5·W·f_y."
+        "da alma (FLA), limitado a 1,5·W·f_y. Quando o valor foi informado por você, aparece "
+        "“(informado)”."
     ),
     "res_interacao": (
         "Equação única de interação N + Mx + My: N/N_Rd + 8/9·(Mx/MxRd + My/MyRd) ≤ 1,0 (e "

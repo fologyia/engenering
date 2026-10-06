@@ -281,6 +281,27 @@ def test_barra_retangular_maciça_mantem_a_FLT_do_original():
     assert close(m["MRd"], 10.832, 0.001) and m["governa"] == "FLT"
 
 
+def test_FLT_da_retangular_vale_no_eixo_forte_seja_ele_x_ou_y():
+    # A mesma peça girada 90° tem de dar o mesmo M_Rd: numa seção deitada o eixo forte é y.
+    pares = (
+        (F.secao_retangular_macica(50, 100), F.secao_retangular_macica(100, 50)),
+        (F.secao_tubo_retangular(100, 200, 6), F.secao_tubo_retangular(200, 100, 6)),
+    )
+    for em_pe, deitada in pares:
+        for norma in F.NORMAS:
+            for lb in (500.0, 4000.0, 12000.0):
+                a = F.momento_resistente(em_pe, 250, "x", Lb=lb, Cb=1.3, norma=norma)
+                b = F.momento_resistente(deitada, 250, "y", Lb=lb, Cb=1.3, norma=norma)
+                assert close(b["MRd"], a["MRd"], 1e-9), (em_pe.nome, norma, lb)
+                assert set(a["estados"]) == set(b["estados"]), (em_pe.nome, norma, lb)
+        # o eixo fraco da deitada (x) continua sem FLT
+        assert "FLT" not in F.momento_resistente(deitada, 250, "x", Lb=12000.0)["estados"]
+    assert (
+        "FLT"
+        in F.momento_resistente(F.secao_retangular_macica(100, 50), 250, "y", Lb=4000.0)["estados"]
+    )
+
+
 def test_blocos_levantam_erro_em_vez_de_estimar():
     import pytest
 
