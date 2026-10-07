@@ -16,6 +16,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor, Twips
 
+from core.memorial_blocos import PALETA_TONS, blocos_da_secao, tom_valido
+
 CONTENT_WIDTH_DXA = 9360
 TABLE_INDENT_DXA = 120
 CELL_MARGINS_DXA = {"top": 80, "bottom": 80, "start": 120, "end": 120}
@@ -311,8 +313,16 @@ def _write_cell(
     paragraph.paragraph_format.space_before = Pt(0)
     paragraph.paragraph_format.space_after = Pt(0)
     paragraph.paragraph_format.line_spacing = 1.05
+    # Uma célula (principal, detalhe) leva o detalhe numa segunda linha, menor e em cinza: é como
+    # a tabela de verificações mostra o cálculo sob o nome da verificação sem ganhar uma coluna.
+    detalhe = None
+    if isinstance(value, (tuple, list)) and len(value) == 2:
+        value, detalhe = value
     run = paragraph.add_run(_texto(value, vazio))
     _set_run_font(run, size=size, color=color, bold=bold)
+    if detalhe is not None and str(detalhe).strip():
+        run = paragraph.add_run("\n" + _texto(detalhe, ""))
+        _set_run_font(run, size=max(size - 1.2, 6.0), color=MUTED, bold=False)
 
 
 def _add_data_table(
@@ -323,6 +333,7 @@ def _add_data_table(
     *,
     font_size: float = 8.5,
     header_fill: str = HEADER_FILL,
+    header_color: str = NAVY,
     zebra: bool = True,
     vazio: str = "-",
 ) -> Any:
@@ -332,7 +343,7 @@ def _add_data_table(
     _repeat_header(table.rows[0])
     for idx, header in enumerate(headers):
         _shade_cell(table.rows[0].cells[idx], header_fill)
-        _write_cell(table.rows[0].cells[idx], header, bold=True, color=NAVY, size=font_size)
+        _write_cell(table.rows[0].cells[idx], header, bold=True, color=header_color, size=font_size)
         # Mantém o cabeçalho junto da primeira linha de dados. Sem esta
         # propriedade, o Word pode deixar somente o cabeçalho no rodapé de
         # uma página e começar os dados na página seguinte.
@@ -611,6 +622,19 @@ def _add_masthead(
     _set_table_borders(cards_table)
 
 
+def _add_identificacao_curta(document: Document, metadata: Mapping[str, Any]) -> None:
+    """Uma linha que diz de que projeto e revisão são os capítulos que seguem."""
+    partes = [
+        _texto(metadata.get("projeto"), ""),
+        _texto(metadata.get("codigo"), ""),
+        f"Rev. {_texto(metadata.get('revisao'), '00')}",
+        _texto(metadata.get("emissao"), ""),
+    ]
+    paragraph = document.add_paragraph(style="Memorial Kicker")
+    paragraph.paragraph_format.space_after = Pt(8)
+    paragraph.add_run("MEMÓRIA DE CÁLCULO · " + " · ".join(parte for parte in partes if parte))
+
+
 def _add_executive_summary(
     document: Document,
     resumo_executivo: Mapping[str, Any],
@@ -705,44 +729,93 @@ def _add_image(document: Document, imagem: Mapping[str, Any]) -> None:
         legenda.add_run(_texto(imagem["legenda"]))
 
 
+def _add_destaque(
+    document: Document, rotulo: str, texto: str, tom: str, *, manter_com_proximo: bool = False
+) -> None:
+    """Caixa de resultado: o rótulo em negrito carrega a palavra do tom (legível sem cor)."""
+    cores = PALETA_TONS[tom_valido(tom)]
+    paragraph = document.add_paragraph(style="Memorial Note")
+    _paragraph_box(paragraph, cores["fundo"], border=cores["borda"])
+    paragraph.paragraph_format.keep_together = True
+    # O resultado que abre o capítulo não pode ficar sozinho no pé da página; o que o fecha, sim
+    # (senão a corrente de "manter com o próximo" atravessaria o documento todo).
+    paragraph.paragraph_format.keep_with_next = manter_com_proximo
+    paragraph.paragraph_format.space_after = Pt(6)
+    if rotulo:
+        label = paragraph.add_run(f"{rotulo} ")
+        _set_run_font(label, size=10, color=cores["texto"], bold=True)
+    body = paragraph.add_run(texto)
+    _set_run_font(body, size=9.5, color="26323D")
+
+
+def _add_subtitulo(document: Document, texto: str, tom: str) -> None:
+    """Rótulo curto de um trecho do capítulo, sem numeração (ex.: "O que passou")."""
+    paragraph = document.add_paragraph(style="Memorial Kicker")
+    paragraph.paragraph_format.space_before = Pt(8)
+    paragraph.paragraph_format.space_after = Pt(3)
+    paragraph.paragraph_format.keep_with_next = True
+    run = paragraph.add_run(texto)
+    _set_run_font(run, size=10.5, color=PALETA_TONS[tom_valido(tom)]["texto"], bold=True)
+
+
+def _render_block(document: Document, bloco: Mapping[str, Any], bullet_id: int) -> None:
+    tipo = bloco.get("tipo")
+    if tipo == "paragrafo":
+        paragraph = document.add_paragraph(_texto(bloco.get("texto")))
+        if bloco.get("manter_com_proximo"):
+            paragraph.paragraph_format.keep_with_next = True
+    elif tipo == "subtitulo":
+        _add_subtitulo(document, _texto(bloco.get("texto")), bloco.get("tom", "neutro"))
+    elif tipo == "destaque":
+        _add_destaque(
+            document,
+            _texto(bloco.get("rotulo"), ""),
+            _texto(bloco.get("texto")),
+            bloco.get("tom", "neutro"),
+            manter_com_proximo=bool(bloco.get("manter_com_proximo")),
+        )
+    elif tipo == "nota":
+        _add_note(document, _texto(bloco.get("texto")))
+    elif tipo == "bullets":
+        for item in bloco.get("itens", []):
+            _add_list_item(document, _texto(item), bullet_id)
+    elif tipo == "passos":
+        # Cada sequência representa um procedimento independente e deve
+        # reiniciar em 1, mesmo quando outra lista numerada já apareceu.
+        number_id = _create_numbering(document, numbered=True)
+        for item in bloco.get("itens", []):
+            _add_list_item(document, _texto(item), number_id)
+    elif tipo == "formula":
+        _add_formula(document, _texto(bloco.get("texto")))
+    elif tipo == "imagem":
+        _add_image(document, bloco)
+    elif tipo == "tabela":
+        if bloco.get("legenda"):
+            caption = document.add_paragraph(style="Memorial Caption")
+            caption.paragraph_format.keep_with_next = True
+            caption.add_run(_texto(bloco["legenda"]))
+        tom = bloco.get("tom")
+        cores = PALETA_TONS[tom_valido(tom)] if tom else None
+        _add_data_table(
+            document,
+            bloco["cabecalhos"],
+            bloco["linhas"],
+            bloco["larguras"],
+            font_size=float(bloco.get("fonte", 8.5)),
+            header_fill=cores["fundo"] if cores else bloco.get("preenchimento", HEADER_FILL),
+            header_color=cores["texto"] if cores else NAVY,
+            zebra=bool(bloco.get("zebra", True)),
+        )
+
+
 def _render_section(document: Document, section: Mapping[str, Any], bullet_id: int) -> None:
     if section.get("page_break_before"):
         document.add_page_break()
     document.add_heading(_texto(section.get("titulo")), level=int(section.get("nivel", 1)))
-    for paragraph_text in section.get("paragrafos", []):
-        document.add_paragraph(_texto(paragraph_text))
-    if section.get("nota"):
-        _add_note(document, _texto(section["nota"]))
-    for item in section.get("bullets", []):
-        _add_list_item(document, _texto(item), bullet_id)
-    passos = list(section.get("passos", []))
-    if passos:
-        # Cada sequência representa um procedimento independente e deve
-        # reiniciar em 1, mesmo quando outra lista numerada já apareceu.
-        number_id = _create_numbering(document, numbered=True)
-        for item in passos:
-            _add_list_item(document, _texto(item), number_id)
-    for formula in section.get("formulas", []):
-        _add_formula(document, _texto(formula))
-    for imagem in section.get("imagens", []):
-        _add_image(document, imagem)
-    for table_spec in section.get("tabelas", []):
-        if table_spec.get("legenda"):
-            caption = document.add_paragraph(style="Memorial Caption")
-            caption.add_run(_texto(table_spec["legenda"]))
-        _add_data_table(
-            document,
-            table_spec["cabecalhos"],
-            table_spec["linhas"],
-            table_spec["larguras"],
-            font_size=float(table_spec.get("fonte", 8.5)),
-            header_fill=table_spec.get("preenchimento", HEADER_FILL),
-            zebra=bool(table_spec.get("zebra", True)),
-        )
-    # Parágrafos que precisam vir depois das tabelas e figuras — a conclusão
-    # de um cálculo lê-se depois dos números, não antes.
-    for paragraph_text in section.get("paragrafos_finais", []):
-        document.add_paragraph(_texto(paragraph_text))
+    # Seção sem ``blocos`` segue a ordem histórica (parágrafos, nota, marcadores, passos, equações,
+    # figuras, tabelas e, por último, a conclusão: ela se lê depois dos números, não antes).
+    for bloco in blocos_da_secao(section):
+        _render_block(document, bloco, bullet_id)
 
 
 def gerar_memorial_word_padrao(
@@ -752,6 +825,7 @@ def gerar_memorial_word_padrao(
     resumo_executivo: Mapping[str, Any],
     secoes: Sequence[Mapping[str, Any]],
     status: tuple[str, str, str] | None = None,
+    somente_capitulos: bool = False,
 ) -> bytes:
     """Gera um DOCX padronizado; outros módulos podem reutilizar este esquema.
 
@@ -759,6 +833,11 @@ def gerar_memorial_word_padrao(
     controle de revisões, as ``secoes`` numeradas a partir de 3 e a tabela de
     aprovações — cujo número vem de ``metadata["numero_aprovacoes"]`` ou,
     sem ele, da contagem de seções de primeiro nível.
+
+    Com ``somente_capitulos`` o documento é feito para ser **incluído em outro**: sem capa,
+    resumo executivo, controle de revisões nem aprovações — só uma linha de identificação e as
+    ``secoes`` (numeradas a partir de 1 pelo chamador), em títulos e tabelas padrão do Word,
+    que assumem o estilo do documento que os receber.
     """
     document = Document()
     section = document.sections[0]
@@ -785,6 +864,14 @@ def gerar_memorial_word_padrao(
     props.author = _texto(metadata.get("responsavel"), "Mecânica Toolkit")
     props.keywords = "memorial de cálculo; engenharia mecânica; verificação; revisão"
     props.comments = "Documento gerado pelo Mecânica Toolkit em estrutura editável e padronizada."
+
+    if somente_capitulos:
+        _add_identificacao_curta(document, metadata)
+        for section_spec in secoes:
+            _render_section(document, section_spec, bullet_id)
+        memoria = BytesIO()
+        document.save(memoria)
+        return memoria.getvalue()
 
     _add_masthead(document, metadata, resumo)
     _add_executive_summary(document, resumo_executivo, status)

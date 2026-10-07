@@ -72,6 +72,8 @@ files = [
     "core/load_to_stress.py",
     "core/materials.py",
     "core/materials_registry.py",
+    "core/memorial_blocos.py",
+    "core/memorial_verificacoes.py",
     "core/nbr8800.py",
     "core/platform_loads.py",
     "core/project_assistant.py",

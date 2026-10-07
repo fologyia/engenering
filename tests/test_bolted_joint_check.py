@@ -404,24 +404,25 @@ def test_memorial_word_e_pdf_imprimem_a_tabela_de_verificacoes():
     ]
 
     modelo = montar_modelo_relatorio(projeto, secoes_incluidas=["registros"])
-    tabelas = [t for s in modelo["secoes"] for t in s.get("tabelas", [])]
-    verificacoes = next(t for t in tabelas if "Verificações" in t["legenda"])
-    assert verificacoes["cabecalhos"] == [
+    capitulo = next(s for s in modelo["secoes"] if "blocos" in s)
+    tabelas = [b for b in capitulo["blocos"] if b["tipo"] == "tabela"]
+    verificacoes = [t for t in tabelas if t["cabecalhos"][0] == "Verificação"]
+    assert verificacoes[0]["cabecalhos"] == [
         "Verificação",
         "Solicitante",
         "Resistente",
-        "Unidade",
-        "Aproveitamento [%]",
-        "Status",
-        "Fórmula",
-        "Referência",
+        "Un.",
+        "Aprov.",
+        "Cálculo e referência",
     ]
-    assert len(verificacoes["linhas"]) == len(resultado.verificacoes)
+    nomes = {linha[0] for t in verificacoes for linha in t["linhas"]}
+    assert any(nome.startswith("Deslizamento") for nome in nomes)
 
     pdf = gerar_relatorio_industrial_pdf(projeto, secoes_incluidas=["registros"])
     texto_pdf = "\n".join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)
-    for trecho in ("Deslizamento", "Aproveitamento", "NBR 6.3.4.4", "Fórmula", "NÃO OK"):
+    for trecho in ("Deslizamento", "Aprov.", "NBR 6.3.4.4", "Cálculo e referência", "Não passou"):
         assert trecho in texto_pdf
+    assert "Resultado: NÃO ATENDE." in texto_pdf
 
     word = Document(
         BytesIO(gerar_relatorio_industrial_word(projeto, secoes_incluidas=["registros"]))

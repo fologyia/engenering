@@ -154,12 +154,29 @@ computador.
   agrupada por peça, vigas e sensibilidade (só quando há registro do tipo),
   conclusão e aprovações — sem validação, checklist, matriz normativa, casos
   e combinações de carga, faixa de situação ou apêndices;
+- **o que passou e o que não passou**: nas análises com tabela de verificações
+  (flambagem de colunas e ligações parafusadas) o capítulo abre com o resultado
+  (ATENDE, NÃO ATENDE ou ATENÇÃO, com a contagem e o que governa), traz os dados de
+  entrada principais, o método e as premissas, lista **o que passou** — cada
+  verificação com solicitante, resistente, aproveitamento, cálculo e referência — e
+  **termina sempre com o que não passou**, o que pede atenção e o que o módulo manda
+  conferir antes de emitir (ou com a declaração de que nada reprovou). O que não é
+  critério (N_e, χ, λ…) vai numa tabela de valores de apoio;
+- **várias análises no mesmo projeto**: cada análise é um capítulo, agrupado pela
+  peça; o quadro-resumo conta o que passou e o que não passou em cada uma, a conclusão
+  lista o que não passou em todo o projeto, análises de mesmo título ganham
+  "(cálculo i de n)" e método, premissas e critérios iguais aparecem uma vez só
+  (as seguintes citam o item da primeira);
+- **para incluir em outro documento**: o perfil "Para incluir em outro documento" gera
+  só os capítulos numerados — sem capa, resumo executivo, controle de revisões nem
+  aprovações —, em títulos e tabelas padrão do Word, que assumem o estilo do
+  documento que os receber;
 - registros de Círculo de Mohr e de casos de carga não entram no memorial;
   registros superados ficam fora da seleção padrão;
 - listas de resultados (reações de apoio, envoltória, esbeltez de paredes,
   ranking de sensibilidade) viram tabelas próprias;
-- perfis de memorial completo, memorial de cálculos e resumo executivo, com
-  seleção independente das seções e dos registros anexados;
+- perfis de memorial completo, memorial de cálculos, resumo executivo e capítulos para incluir
+  em outro documento, com seleção independente das seções e dos registros anexados;
 - controle de código, revisão, situação, elaboração, verificação e aprovação;
 - Word editável e PDF gerados a partir do mesmo modelo de dados; o PDF usa uma
   fonte TrueType do sistema (Segoe UI, Arial, Calibri ou DejaVu), então σ, τ,

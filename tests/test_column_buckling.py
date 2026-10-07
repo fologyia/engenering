@@ -970,13 +970,25 @@ class TestTabelaERegistro:
         projeto["registros_tecnicos"] = [normalizar_registro_tecnico(cb.registro_coluna(e, r))]
         pdf = gerar_relatorio_industrial_pdf(projeto, secoes_incluidas=["registros"])
         texto = "\n".join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)
-        for trecho in ("Compress", "Interação", "Anglo 8.8", "Aproveitamento", "Espessura mínima"):
+        for trecho in (
+            "Compress",
+            "Interação",
+            "Anglo 8.8",
+            "aproveitamento",
+            "Espessura mínima",
+            "O que passou",
+            "Não passou",
+        ):
             assert trecho in texto, trecho
         word = Document(
             BytesIO(gerar_relatorio_industrial_word(projeto, secoes_incluidas=["registros"]))
         )
         celulas = " ".join(c.text for t in word.tables for linha_ in t.rows for c in linha_.cells)
-        assert "Compressão axial N_c,Rd" in celulas and "NÃO OK" in celulas
+        paragrafos = "\n".join(p.text for p in word.paragraphs)
+        assert "Compressão axial N_c,Rd" in celulas
+        # A espessura de 4,0 mm reprova o critério Anglo: o capítulo diz, no fim, o que não passou.
+        assert "Resultado: NÃO ATENDE." in paragrafos
+        assert paragrafos.index("O que passou") < paragrafos.index("Não passou (")
 
     def test_sensibilidade_le_o_registro_novo(self):
         from core.sensitivity import sugerir_de_registro

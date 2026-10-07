@@ -548,8 +548,11 @@ elif modulo == "Central de relatórios":
         "A central gera Word e PDF a partir da mesma revisão do projeto. Os cálculos "
         "registrados entram completos — entradas, equações, resultados, figuras, premissas "
         "e conclusão — e o que o programa não sabe fica marcado com “[a preencher]”, para "
-        "completar no Word. Você escolhe o perfil, as seções, a ordem dos capítulos e os "
-        "registros que entram na emissão."
+        "completar no Word. Na flambagem de colunas e nas ligações parafusadas, cada análise "
+        "abre com o resultado, lista o que passou e termina com o que não passou; um projeto "
+        "pode ter quantas análises quiser, e a conclusão reúne o que não passou em todas. "
+        "Você escolhe o perfil, as seções, a ordem dos capítulos e os registros que entram "
+        "na emissão."
     )
     st.dataframe(
         pd.DataFrame(
@@ -570,6 +573,12 @@ elif modulo == "Central de relatórios":
                     "Resumo executivo",
                     "Leitura rápida",
                     "Escopo, peças, materiais, quadro-resumo dos cálculos e conclusão",
+                ],
+                [
+                    "Para incluir em outro documento",
+                    "Capítulos que entram num memorial maior",
+                    "Quadro-resumo, memória de cálculo e conclusão, sem capa, resumo "
+                    "executivo, controle de revisões nem aprovações",
                 ],
             ],
             columns=["Perfil", "Uso", "Conteúdo sugerido"],

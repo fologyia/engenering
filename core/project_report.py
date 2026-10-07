@@ -19,6 +19,14 @@ from io import BytesIO
 from typing import Any
 
 from core.materials_registry import avaliar_material, resumir_fonte
+from core.memorial_blocos import PALETA_TONS, blocos_da_secao, tom_valido
+from core.memorial_verificacoes import (
+    assinatura_da_base,
+    capitulo_de_verificacoes,
+    contagens,
+    decimal_ptbr,
+    extrair_linhas,
+)
 from core.memorial_word import gerar_memorial_word_padrao
 from core.pdf_fonts import fonte_pdf, texto_para_fonte
 from core.project_criteria import normalizar_criterios_projeto, resumo_criterios_projeto
@@ -385,9 +393,30 @@ def _peca_registro(
     return ", ".join(rotulo_componente(item) for item in vinculados) or "-"
 
 
-def _titulo_sem_peca(registro: Mapping[str, Any]) -> str:
+def _titulos_exibidos(registros: Sequence[Mapping[str, Any]]) -> dict[int, str]:
+    """Título de cada registro no memorial; dois cálculos de mesmo título ganham "(cálculo i de n)".
+
+    Duas verificações da mesma peça, com a mesma seção e a mesma norma, têm o mesmo título — e,
+    no sumário e no quadro-resumo, ficariam indistinguíveis.
+    """
+    por_titulo: dict[str, list[int]] = {}
+    for registro in registros:
+        identificador = id(registro)
+        ids = por_titulo.setdefault(_texto(registro.get("titulo"), "Registro técnico"), [])
+        if identificador not in ids:
+            ids.append(identificador)
+    exibidos: dict[int, str] = {}
+    for titulo, ids in por_titulo.items():
+        for posicao, identificador in enumerate(ids, start=1):
+            exibidos[identificador] = (
+                titulo if len(ids) == 1 else f"{titulo} (cálculo {posicao} de {len(ids)})"
+            )
+    return exibidos
+
+
+def _titulo_sem_peca(registro: Mapping[str, Any], titulo_exibido: str | None = None) -> str:
     """Título do cálculo sem o prefixo da peça, para quadros que já a mostram."""
-    titulo = _texto(registro.get("titulo"), "Registro técnico")
+    titulo = titulo_exibido or _texto(registro.get("titulo"), "Registro técnico")
     peca = _texto(registro.get("peca"), "")
     prefixo = f"{peca}{SEPARADOR_PECA}"
     if peca and titulo.startswith(prefixo) and len(titulo) > len(prefixo):
@@ -436,17 +465,131 @@ def _metadados(
     }
 
 
+def _peca_ou_titulo(
+    registro: Mapping[str, Any],
+    componentes_por_id: Mapping[str, Mapping[str, Any]],
+    titulos_exibidos: Mapping[int, str],
+) -> str:
+    peca = _peca_registro(registro, componentes_por_id)
+    titulo = _titulo_sem_peca(registro, titulos_exibidos.get(id(registro)))
+    return titulo if peca == "-" else f"{peca} ({titulo})"
+
+
+def _reprovou(registro: Mapping[str, Any], contagens_por_id: Mapping[int, Any]) -> bool:
+    """O cálculo reprovou: alguma verificação "NÃO OK" ou, sem tabela, a situação "Não atende"."""
+    resumo = contagens_por_id.get(id(registro))
+    if resumo is not None:
+        return bool(resumo["reprovadas"])
+    return _SITUACOES.get(_texto(registro.get("status"), "").casefold()) == "nao_atendem"
+
+
+def _aproveitamento_texto(registro: Mapping[str, Any], resumo: Mapping[str, Any] | None) -> str:
+    """Aproveitamento máximo do cálculo, em %, quando o registro o declara."""
+    if resumo is not None and resumo["aproveitamento_max"] is not None:
+        valor = float(resumo["aproveitamento_max"])
+        return "∞" if math.isinf(valor) else f"{valor:.1f}%".replace(".", ",")
+    resultados = registro.get("resultados")
+    utilizacao = resultados.get("utilizacao_maxima") if isinstance(resultados, Mapping) else None
+    if isinstance(utilizacao, (int, float)) and not isinstance(utilizacao, bool):
+        if math.isfinite(utilizacao):
+            return f"{100 * utilizacao:.1f}%".replace(".", ",")
+    return "-"
+
+
+def _linha_do_quadro(
+    indice: int,
+    registro: Mapping[str, Any],
+    componentes_por_id: Mapping[str, Mapping[str, Any]],
+    titulos_exibidos: Mapping[int, str],
+    contagens_por_id: Mapping[int, Any],
+) -> list[Any]:
+    resumo = contagens_por_id.get(id(registro))
+    return [
+        str(indice),
+        _peca_registro(registro, componentes_por_id),
+        (
+            _titulo_sem_peca(registro, titulos_exibidos.get(id(registro))),
+            _texto(registro.get("modulo"), "-"),
+        ),
+        "-" if resumo is None else str(resumo["passaram"]),
+        "-" if resumo is None else str(resumo["reprovadas"]),
+        _aproveitamento_texto(registro, resumo),
+        _texto(registro.get("status")),
+    ]
+
+
+def _linhas_do_que_nao_passou(
+    reprovados: Sequence[Mapping[str, Any]],
+    componentes_por_id: Mapping[str, Mapping[str, Any]],
+    titulos_exibidos: Mapping[int, str],
+    contagens_por_id: Mapping[int, Any],
+) -> list[list[str]]:
+    """Uma linha por verificação reprovada em todo o projeto (e por cálculo "Não atende" sem tabela)."""
+    linhas: list[list[str]] = []
+    for registro in reprovados:
+        peca = _peca_registro(registro, componentes_por_id)
+        titulo = _titulo_sem_peca(registro, titulos_exibidos.get(id(registro)))
+        resumo = contagens_por_id.get(id(registro))
+        if resumo is None:
+            conclusao = _texto(registro.get("conclusao"), "")
+            linhas.append(
+                [
+                    peca,
+                    titulo,
+                    conclusao or "Situação registrada: Não atende",
+                    _aproveitamento_texto(registro, None),
+                ]
+            )
+            continue
+        for item in resumo["reprovacoes"]:
+            aprov = item["aproveitamento"]
+            linhas.append(
+                [
+                    peca,
+                    titulo,
+                    item["verificacao"],
+                    "-"
+                    if aprov is None
+                    else ("∞" if math.isinf(aprov) else f"{aprov:.1f}%".replace(".", ",")),
+                ]
+            )
+    return linhas
+
+
+def _item_de_conclusao(
+    registro: Mapping[str, Any],
+    contagens_por_id: Mapping[int, Any],
+    titulos_exibidos: Mapping[int, str],
+) -> str:
+    """Uma linha por cálculo na conclusão; a de uma análise com tabela diz também o que não passou."""
+    titulo = titulos_exibidos.get(id(registro), _texto(registro.get("titulo"), "Registro técnico"))
+    resumo = contagens_por_id.get(id(registro))
+    conclusao = _campo(registro.get("conclusao"))
+    if resumo is None:
+        return f"{titulo} ({_texto(registro.get('status'))}): {conclusao}"
+    # O que não passou está na tabela logo abaixo; repeti-lo aqui só alongaria a conclusão.
+    return f"{titulo} ({_texto(registro.get('status'))}): {decimal_ptbr(conclusao)}"
+
+
 def montar_modelo_relatorio(
     projeto: Mapping[str, Any],
     *,
     secoes_incluidas: Sequence[str] | None = None,
     registros_ids: Sequence[str] | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
+    somente_capitulos: bool = False,
 ) -> dict[str, Any]:
-    """Monta um modelo neutro, usado igualmente por Word e PDF."""
+    """Monta um modelo neutro, usado igualmente por Word e PDF.
+
+    Com ``somente_capitulos`` o modelo serve a um documento feito para ser incluído em outro: a
+    numeração das seções começa em 1 (não há resumo executivo nem controle do documento à frente)
+    e não existe a seção de aprovações.
+    """
 
     ativas = set(secoes_incluidas or SECOES_RELATORIO)
     metadata = _metadados(projeto, metadata_extra)
+    # Antes do hash: o mesmo conteúdo, com e sem capa, são documentos diferentes.
+    metadata["somente_capitulos"] = somente_capitulos
     registros = _filtrar_registros(projeto, registros_ids)
     componentes = [item for item in projeto.get("componentes", []) if isinstance(item, Mapping)]
     componentes_por_id = {
@@ -467,6 +610,9 @@ def montar_modelo_relatorio(
     hash_snapshot = _hash_snapshot(projeto, registros, sorted(ativas), metadata)
     metadata["snapshot_hash"] = hash_snapshot
     sintese = sintetizar_calculos(registros)
+    titulos_exibidos = _titulos_exibidos(registros)
+    contagens_por_id = {id(item): contagens(item) for item in registros}
+    reprovados = [item for item in registros if _reprovou(item, contagens_por_id)]
 
     resumo = [
         {"rotulo": "Cálculos anexados", "valor": str(len(registros))},
@@ -500,6 +646,17 @@ def montar_modelo_relatorio(
             "Situação declarada por cada módulo ao registrar o cálculo.",
         ],
     ]
+    if reprovados:
+        nomes = [_peca_ou_titulo(item, componentes_por_id, titulos_exibidos) for item in reprovados]
+        linhas_resumo.append(
+            [
+                "Não passou",
+                f"{len(reprovados)} cálculo(s)",
+                "; ".join(nomes[:6])
+                + (f"; e mais {len(nomes) - 6}" if len(nomes) > 6 else "")
+                + ".",
+            ]
+        )
     if registros_sensibilidade:
         linhas_resumo.append(
             [
@@ -510,7 +667,7 @@ def montar_modelo_relatorio(
         )
 
     secoes: list[dict[str, Any]] = []
-    numero = 3
+    numero = 1 if somente_capitulos else 3
 
     contexto_extensoes = {
         "registros": registros,
@@ -700,23 +857,28 @@ def montar_modelo_relatorio(
         "plano_calculo",
         {
             "paragrafos": [
-                "Cálculos anexados a esta emissão, na ordem em que aparecem na memória de cálculo."
+                "Cálculos anexados a esta emissão, na ordem em que aparecem na memória de cálculo. "
+                "Passou e Não passou contam as verificações com critério de cada análise."
             ],
             "tabelas": [
                 {
-                    "cabecalhos": ["Ordem", "Peça", "Cálculo", "Módulo", "Situação"],
+                    "cabecalhos": [
+                        "Ordem",
+                        "Peça",
+                        "Cálculo",
+                        "Passou",
+                        "Não passou",
+                        "Aprov. máx.",
+                        "Situação",
+                    ],
                     "linhas": [
-                        [
-                            str(indice),
-                            _peca_registro(item, componentes_por_id),
-                            _titulo_sem_peca(item),
-                            _texto(item.get("modulo")),
-                            _texto(item.get("status")),
-                        ]
+                        _linha_do_quadro(
+                            indice, item, componentes_por_id, titulos_exibidos, contagens_por_id
+                        )
                         for indice, item in enumerate(registros, start=1)
                     ]
-                    or [["-", "-", "Nenhum cálculo anexado", "-", "-"]],
-                    "larguras": [700, 2000, 3460, 1900, 1300],
+                    or [["-", "-", "Nenhum cálculo anexado", "-", "-", "-", "-"]],
+                    "larguras": [600, 1650, 3000, 760, 960, 1000, 1390],
                     "fonte": 7.4,
                 }
             ],
@@ -735,7 +897,10 @@ def montar_modelo_relatorio(
                 "titulo": titulo_secao,
                 "paragrafos": [
                     "Cada cálculo abaixo reproduz as entradas, as equações, os resultados, "
-                    "as premissas e a conclusão registradas pelo módulo que o produziu."
+                    "as premissas e a conclusão registradas pelo módulo que o produziu. Nas "
+                    "análises com tabela de verificações (flambagem de colunas, ligações "
+                    "parafusadas), o capítulo abre com o resultado, lista o que passou e termina "
+                    "com o que não passou."
                     + (
                         " Os cálculos estão agrupados pela peça do escopo físico que verificam; os sem vínculo ficam ao final."
                         if agrupar
@@ -745,9 +910,34 @@ def montar_modelo_relatorio(
             }
         )
 
+        bases_vistas: dict[tuple[Any, ...], str] = {}
+
         def capitulo_registro(
             numeracao: str, nivel: int, registro: Mapping[str, Any]
         ) -> dict[str, Any]:
+            titulo_exibido = titulos_exibidos.get(
+                id(registro), _texto(registro.get("titulo"), "Registro técnico")
+            )
+            linhas_verificacao = extrair_linhas(registro)
+            if linhas_verificacao is not None:
+                # Flambagem e parafusos fecham numa tabela de verificações: o capítulo mostra o
+                # resultado, o que passou e, no fim, o que não passou (core/memorial_verificacoes).
+                assinatura = assinatura_da_base(registro, linhas_verificacao)
+                repetida_de = bases_vistas.get(assinatura)
+                bases_vistas.setdefault(assinatura, numeracao)
+                imagens_verif, aviso_verif = imagens_do_registro(registro, projeto)
+                return capitulo_de_verificacoes(
+                    registro,
+                    linhas_verificacao,
+                    titulo=f"{numeracao} {titulo_exibido}",
+                    nivel=nivel,
+                    peca=_peca_registro(registro, componentes_por_id),
+                    formatar=_valor,
+                    rotular=_campo_legivel,
+                    base_repetida_de=repetida_de,
+                    imagens=imagens_verif,
+                    aviso_imagens=aviso_verif,
+                )
             entradas = (
                 registro.get("entradas", {})
                 if isinstance(registro.get("entradas"), Mapping)
@@ -768,7 +958,7 @@ def montar_modelo_relatorio(
             if aviso_imagens:
                 paragrafos.append(aviso_imagens)
             return {
-                "titulo": f"{numeracao} {_texto(registro.get('titulo'), 'Registro técnico')}",
+                "titulo": f"{numeracao} {titulo_exibido}",
                 "nivel": nivel,
                 "paragrafos": paragrafos,
                 "bullets": [f"Premissa: {_valor(item)}" for item in registro.get("premissas", [])]
@@ -902,15 +1092,30 @@ def montar_modelo_relatorio(
             )
         numero += 1
 
+    tabelas_conclusao = []
+    linhas_reprovacao = _linhas_do_que_nao_passou(
+        reprovados, componentes_por_id, titulos_exibidos, contagens_por_id
+    )
+    if linhas_reprovacao:
+        tabelas_conclusao.append(
+            {
+                "legenda": "O que não passou, por cálculo.",
+                "cabecalhos": ["Peça", "Cálculo", "Verificação", "Aprov."],
+                "linhas": linhas_reprovacao,
+                "larguras": [1700, 3000, 3560, 1100],
+                "fonte": 7.4,
+                "tom": "erro",
+            }
+        )
     adicionar(
         "conclusao",
         {
             "paragrafos": [f"Síntese dos cálculos anexados: {sintese['texto']}."],
             "bullets": [
-                f"{_texto(registro.get('titulo'), 'Registro técnico')} "
-                f"({_texto(registro.get('status'))}): {_campo(registro.get('conclusao'))}"
+                _item_de_conclusao(registro, contagens_por_id, titulos_exibidos)
                 for registro in registros
             ],
+            "tabelas": tabelas_conclusao,
             "paragrafos_finais": [
                 f"Conclusão geral: {A_PREENCHER}",
                 f"Recomendações: {A_PREENCHER}",
@@ -939,18 +1144,21 @@ def gerar_relatorio_industrial_word(
     secoes_incluidas: Sequence[str] | None = None,
     registros_ids: Sequence[str] | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
+    somente_capitulos: bool = False,
 ) -> bytes:
     modelo = montar_modelo_relatorio(
         projeto,
         secoes_incluidas=secoes_incluidas,
         registros_ids=registros_ids,
         metadata_extra=metadata_extra,
+        somente_capitulos=somente_capitulos,
     )
     return gerar_memorial_word_padrao(
         metadata=modelo["metadata"],
         resumo=modelo["resumo"],
         resumo_executivo=modelo["resumo_executivo"],
         secoes=modelo["secoes"],
+        somente_capitulos=somente_capitulos,
     )
 
 
@@ -960,6 +1168,7 @@ def gerar_relatorio_industrial_pdf(
     secoes_incluidas: Sequence[str] | None = None,
     registros_ids: Sequence[str] | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
+    somente_capitulos: bool = False,
 ) -> bytes:
     """Gera versão PDF com o mesmo modelo documental do Word."""
     try:
@@ -985,6 +1194,7 @@ def gerar_relatorio_industrial_pdf(
         secoes_incluidas=secoes_incluidas,
         registros_ids=registros_ids,
         metadata_extra=metadata_extra,
+        somente_capitulos=somente_capitulos,
     )
     metadata = modelo["metadata"]
     fonte = fonte_pdf()
@@ -1081,6 +1291,26 @@ def gerar_relatorio_industrial_pdf(
             spaceAfter=1.8 * mm,
             keepWithNext=True,
         ),
+        "subbloco": ParagraphStyle(
+            "IndustrialSubbloco",
+            parent=base["BodyText"],
+            fontName=fonte.negrito,
+            fontSize=8.8,
+            leading=11,
+            textColor=texto_corpo,
+            spaceBefore=2.5 * mm,
+            spaceAfter=1.2 * mm,
+            keepWithNext=True,
+        ),
+        "legenda": ParagraphStyle(
+            "IndustrialLegenda",
+            parent=base["BodyText"],
+            fontName=fonte.regular,
+            fontSize=6.6,
+            leading=8.2,
+            textColor=texto_corpo,
+            keepWithNext=True,
+        ),
         "pequeno": ParagraphStyle(
             "IndustrialPequeno",
             parent=base["BodyText"],
@@ -1107,22 +1337,45 @@ def gerar_relatorio_industrial_pdf(
         texto = "" if valor is None else str(valor)
         return texto_para_fonte(texto, fonte)
 
+    def marcado(valor: Any) -> str:
+        return escape(texto_pdf(valor)).replace("\n", "<br/>")
+
     def par(valor: Any, estilo: str = "corpo") -> Any:
-        return Paragraph(escape(texto_pdf(valor)).replace("\n", "<br/>"), estilos[estilo])
+        # Uma célula (principal, detalhe) leva o detalhe numa segunda linha, menor e em cinza.
+        if isinstance(valor, (tuple, list)) and len(valor) == 2:
+            principal, detalhe = valor
+            texto = marcado(principal)
+            if detalhe is not None and str(detalhe).strip():
+                texto += f'<br/><font size="5.6" color="#5F6B76">{marcado(detalhe)}</font>'
+            return Paragraph(texto, estilos[estilo])
+        return Paragraph(marcado(valor), estilos[estilo])
+
+    def cor_hex(codigo: str) -> Any:
+        return colors.HexColor(f"#{codigo}")
 
     def tabela(
-        cabecalhos: Sequence[Any], linhas: Sequence[Sequence[Any]], larguras: Sequence[float]
+        cabecalhos: Sequence[Any],
+        linhas: Sequence[Sequence[Any]],
+        larguras: Sequence[float],
+        tom: str | None = None,
     ) -> Any:
         dados = [[par(item, "cabecalho") for item in cabecalhos]] + [
             [par(item, "pequeno") for item in linha] for linha in linhas
         ]
+        # Cabeçalho escuro com texto branco; o tom "erro" ou "atencao" o pinta de vermelho ou
+        # âmbar escuros, e "ok" mantém o azul do documento.
+        fundo_cabecalho = (
+            azul_medio
+            if tom in (None, "ok", "neutro")
+            else cor_hex(PALETA_TONS[tom_valido(tom)]["texto"])
+        )
         tab = LongTable(
             dados, colWidths=[valor * mm for valor in larguras], repeatRows=1, hAlign="LEFT"
         )
         tab.setStyle(
             TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), azul_medio),
+                    ("BACKGROUND", (0, 0), (-1, 0), fundo_cabecalho),
                     ("GRID", (0, 0), (-1, -1), 0.35, borda),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 3),
@@ -1151,10 +1404,110 @@ def gerar_relatorio_industrial_pdf(
         )
         return box
 
-    historia: list[Any] = [
-        par(metadata["titulo"], "titulo"),
-        par(metadata["subtitulo"], "subtitulo"),
-    ]
+    def destaque(rotulo: str, texto: str, tom: str) -> Any:
+        cores = PALETA_TONS[tom_valido(tom)]
+        corpo = marcado(texto)
+        if rotulo:
+            corpo = f'<font color="#{cores["texto"]}"><b>{marcado(rotulo)}</b></font> {corpo}'
+        caixa_tom = Table([[Paragraph(corpo, estilos["corpo"])]], colWidths=[180 * mm])
+        caixa_tom.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), cor_hex(cores["fundo"])),
+                    ("BOX", (0, 0), (-1, -1), 0.6, cor_hex(cores["borda"])),
+                    ("LINEBEFORE", (0, 0), (0, -1), 2.2, cor_hex(cores["borda"])),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        return caixa_tom
+
+    def desenhar_bloco(bloco: Mapping[str, Any]) -> None:
+        tipo = bloco.get("tipo")
+        if tipo == "paragrafo":
+            historia.append(
+                par(
+                    bloco.get("texto"), "corpo_keep" if bloco.get("manter_com_proximo") else "corpo"
+                )
+            )
+        elif tipo == "subtitulo":
+            cores = PALETA_TONS[tom_valido(bloco.get("tom"))]
+            historia.append(
+                Paragraph(
+                    f'<font color="#{cores["texto"]}"><b>{marcado(bloco.get("texto"))}</b></font>',
+                    estilos["subbloco"],
+                )
+            )
+        elif tipo == "destaque":
+            historia.append(
+                destaque(
+                    str(bloco.get("rotulo") or ""),
+                    str(bloco.get("texto") or ""),
+                    bloco.get("tom", "neutro"),
+                )
+            )
+            historia.append(Spacer(1, 1.5 * mm))
+        elif tipo == "nota":
+            historia.append(caixa(par(f"Nota: {bloco.get('texto')}")))
+        elif tipo == "bullets":
+            for item in bloco.get("itens", []):
+                historia.append(Paragraph(f"<b>-</b>&nbsp; {marcado(item)}", estilos["corpo"]))
+        elif tipo == "passos":
+            for numero_passo, item in enumerate(bloco.get("itens", []), start=1):
+                historia.append(
+                    Paragraph(f"<b>{numero_passo}.</b>&nbsp; {marcado(item)}", estilos["corpo"])
+                )
+        elif tipo == "formula":
+            historia.append(caixa(par(f"Equação: {_valor(bloco.get('texto'))}")))
+            historia.append(Spacer(1, 1.5 * mm))
+        elif tipo == "imagem":
+            conteudo = bloco.get("png")
+            if not conteudo:
+                return
+            largura_mm = float(bloco.get("largura_mm", 165.0))
+            proporcao = float(bloco.get("altura_px", 1)) / max(
+                float(bloco.get("largura_px", 1)), 1.0
+            )
+            historia.append(
+                Image(BytesIO(conteudo), width=largura_mm * mm, height=largura_mm * proporcao * mm)
+            )
+            if bloco.get("legenda"):
+                historia.append(par(bloco["legenda"], "pequeno"))
+            historia.append(Spacer(1, 2 * mm))
+        elif tipo == "tabela":
+            if bloco.get("legenda"):
+                historia.append(par(bloco["legenda"], "legenda"))
+            larguras_word = bloco.get("larguras", [])
+            total = sum(larguras_word) or 1
+            larguras_mm = [180 * valor / total for valor in larguras_word]
+            historia.append(
+                tabela(bloco["cabecalhos"], bloco["linhas"], larguras_mm, bloco.get("tom"))
+            )
+            historia.append(Spacer(1, 2 * mm))
+
+    historia: list[Any] = []
+    if somente_capitulos:
+        # Uma linha diz de que projeto e revisão são os capítulos que seguem.
+        partes = [
+            _texto(metadata.get("projeto"), ""),
+            _texto(metadata.get("codigo"), ""),
+            f"Rev. {_texto(metadata.get('revisao'), '00')}",
+            _texto(metadata.get("emissao"), ""),
+        ]
+        historia.append(
+            par(
+                "MEMÓRIA DE CÁLCULO · " + " · ".join(parte for parte in partes if parte),
+                "subtitulo",
+            )
+        )
+    else:
+        historia += [
+            par(metadata["titulo"], "titulo"),
+            par(metadata["subtitulo"], "subtitulo"),
+        ]
     identificacao = [
         [
             "Projeto",
@@ -1176,98 +1529,61 @@ def gerar_relatorio_industrial_pdf(
             _campo(metadata.get("aprovador")),
         ],
     ]
-    historia.append(tabela(["Campo", "Valor", "Campo", "Valor"], identificacao, [25, 65, 28, 62]))
-    historia.append(Spacer(1, 3 * mm))
-    historia.append(par("1. Resumo executivo", "h1"))
-    resumo_linhas = [[item[0], item[1], item[2]] for item in modelo["resumo_executivo"]["linhas"]]
-    historia.append(tabela(["Item", "Valor", "Leitura rápida"], resumo_linhas, [42, 63, 75]))
-    historia.extend(
-        [
-            par("2. Controle do documento", "h1"),
-            tabela(
-                ["Rev.", "Data", "Situação", "Elaborado", "Verificado"],
-                [
-                    [
-                        metadata["revisao"],
-                        metadata["emissao"],
-                        _campo(metadata["situacao"]),
-                        _campo(metadata["responsavel"]),
-                        _campo(metadata["verificador"]),
-                    ],
-                    # Linhas em branco para as próximas revisões: o molde já
-                    # sai com lugar para elas.
-                    ["", "", "", "", ""],
-                    ["", "", "", "", ""],
-                ],
-                [14, 25, 46, 48, 47],
-            ),
+    if not somente_capitulos:
+        historia.append(
+            tabela(["Campo", "Valor", "Campo", "Valor"], identificacao, [25, 65, 28, 62])
+        )
+        historia.append(Spacer(1, 3 * mm))
+        historia.append(par("1. Resumo executivo", "h1"))
+        resumo_linhas = [
+            [item[0], item[1], item[2]] for item in modelo["resumo_executivo"]["linhas"]
         ]
-    )
+        historia.append(tabela(["Item", "Valor", "Leitura rápida"], resumo_linhas, [42, 63, 75]))
+        historia.extend(
+            [
+                par("2. Controle do documento", "h1"),
+                tabela(
+                    ["Rev.", "Data", "Situação", "Elaborado", "Verificado"],
+                    [
+                        [
+                            metadata["revisao"],
+                            metadata["emissao"],
+                            _campo(metadata["situacao"]),
+                            _campo(metadata["responsavel"]),
+                            _campo(metadata["verificador"]),
+                        ],
+                        # Linhas em branco para as próximas revisões: o molde já
+                        # sai com lugar para elas.
+                        ["", "", "", "", ""],
+                        ["", "", "", "", ""],
+                    ],
+                    [14, 25, 46, 48, 47],
+                ),
+            ]
+        )
 
     for secao in modelo["secoes"]:
         historia.append(
             par(secao.get("titulo"), {2: "h2", 3: "h3"}.get(int(secao.get("nivel", 1)), "h1"))
         )
-        paragrafos_secao = list(secao.get("paragrafos", []))
-        for indice_paragrafo, texto in enumerate(paragrafos_secao):
-            manter_com_tabela = (
-                bool(secao.get("tabelas")) and indice_paragrafo == len(paragrafos_secao) - 1
-            )
-            historia.append(par(texto, "corpo_keep" if manter_com_tabela else "corpo"))
-        if secao.get("nota"):
-            historia.append(caixa(par(f"Nota: {secao['nota']}")))
-        for item in secao.get("bullets", []):
-            historia.append(
-                Paragraph(f"<b>-</b>&nbsp; {escape(texto_pdf(item))}", estilos["corpo"])
-            )
-        for formula in secao.get("formulas", []):
-            historia.append(caixa(par(f"Equação: {_valor(formula)}")))
-            historia.append(Spacer(1, 1.5 * mm))
-        for imagem in secao.get("imagens", []):
-            conteudo = imagem.get("png")
-            if not conteudo:
-                continue
-            largura_mm = float(imagem.get("largura_mm", 165.0))
-            proporcao = float(imagem.get("altura_px", 1)) / max(
-                float(imagem.get("largura_px", 1)), 1.0
-            )
-            historia.append(
-                Image(
-                    BytesIO(conteudo),
-                    width=largura_mm * mm,
-                    height=largura_mm * proporcao * mm,
-                )
-            )
-            if imagem.get("legenda"):
-                historia.append(par(imagem["legenda"], "pequeno"))
-            historia.append(Spacer(1, 2 * mm))
-        for especificacao in secao.get("tabelas", []):
-            if especificacao.get("legenda"):
-                historia.append(par(especificacao["legenda"], "pequeno"))
-            larguras_word = especificacao.get("larguras", [])
-            total = sum(larguras_word) or 1
-            larguras_mm = [180 * valor / total for valor in larguras_word]
-            historia.append(
-                tabela(especificacao["cabecalhos"], especificacao["linhas"], larguras_mm)
-            )
-            historia.append(Spacer(1, 2 * mm))
-        for texto in secao.get("paragrafos_finais", []):
-            historia.append(par(texto))
+        for bloco in blocos_da_secao(secao):
+            desenhar_bloco(bloco)
 
-    historia.extend(
-        [
-            par(f"{modelo['numero_aprovacoes']}. Aprovações", "h1"),
-            tabela(
-                ["Função", "Nome", "Assinatura", "Data"],
-                [
-                    ["Elaboração", _campo(metadata["responsavel"]), "", "____/____/________"],
-                    ["Verificação", _campo(metadata["verificador"]), "", "____/____/________"],
-                    ["Aprovação", _campo(metadata["aprovador"]), "", "____/____/________"],
-                ],
-                [35, 60, 55, 30],
-            ),
-        ]
-    )
+    if not somente_capitulos:
+        historia.extend(
+            [
+                par(f"{modelo['numero_aprovacoes']}. Aprovações", "h1"),
+                tabela(
+                    ["Função", "Nome", "Assinatura", "Data"],
+                    [
+                        ["Elaboração", _campo(metadata["responsavel"]), "", "____/____/________"],
+                        ["Verificação", _campo(metadata["verificador"]), "", "____/____/________"],
+                        ["Aprovação", _campo(metadata["aprovador"]), "", "____/____/________"],
+                    ],
+                    [35, 60, 55, 30],
+                ),
+            ]
+        )
 
     def rodape(canvas: Any, doc: Any) -> None:
         canvas.saveState()

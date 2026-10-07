@@ -15,6 +15,7 @@ from components.project_tools import (
     tratar_conflito_de_gravacao,
 )
 from components.ui import cabecalho_pagina
+from core.memorial_blocos import contar_imagens
 from core.project_report import (
     MODULOS_FORA_DO_MEMORIAL,
     SECOES_RELATORIO,
@@ -44,7 +45,17 @@ PERFIS = {
         "plano_calculo",
         "conclusao",
     ],
+    # Só os capítulos de cálculo, para entrar num documento maior: sem capa, resumo executivo,
+    # controle de revisões nem aprovações, e com a numeração começando em 1.
+    "Para incluir em outro documento": [
+        "plano_calculo",
+        "registros",
+        "vigas_eixos",
+        "sensibilidade",
+        "conclusao",
+    ],
 }
+PERFIS_SOMENTE_CAPITULOS = frozenset({"Para incluir em outro documento"})
 PERFIL_PADRAO = "Memorial industrial completo"
 SUBTITULO_PADRAO = "Base de projeto e memória de cálculo"
 
@@ -150,6 +161,7 @@ if _perfil_rapido not in PERFIS:
 _secoes_rapidas = [
     chave for chave in _config_projeto.get("secoes") or [] if chave in SECOES_RELATORIO
 ] or PERFIS[_perfil_rapido]
+_so_capitulos_rapido = _perfil_rapido in PERFIS_SOMENTE_CAPITULOS
 # Registros superados não entram por padrão: o cálculo que os substituiu é
 # o que responde pela peça. Quem quiser anexá-los marca na composição abaixo.
 _ids_vigentes = [
@@ -205,12 +217,14 @@ with st.container(border=True):
                     secoes_incluidas=_secoes_rapidas,
                     registros_ids=_registros_rapidos,
                     metadata_extra=_metadata_rapida,
+                    somente_capitulos=_so_capitulos_rapido,
                 )
                 _pdf_rapido = gerar_relatorio_industrial_pdf(
                     projeto,
                     secoes_incluidas=_secoes_rapidas,
                     registros_ids=_registros_rapidos,
                     metadata_extra=_metadata_rapida,
+                    somente_capitulos=_so_capitulos_rapido,
                 )
             except Exception as erro:  # noqa: BLE001 - a falha precisa aparecer
                 st.exception(erro)
@@ -226,6 +240,7 @@ with st.container(border=True):
                     secoes_incluidas=_secoes_rapidas,
                     registros_ids=_registros_rapidos,
                     metadata_extra=_metadata_rapida,
+                    somente_capitulos=_so_capitulos_rapido,
                 )
                 _registrar_emissao(
                     projeto,
@@ -282,6 +297,14 @@ perfil = (
     )
     or perfil_padrao
 )
+
+somente_capitulos = perfil in PERFIS_SOMENTE_CAPITULOS
+if somente_capitulos:
+    st.caption(
+        ":material/content_paste: Este perfil gera só os capítulos numerados — sem capa, resumo "
+        "executivo, controle de revisões nem aprovações —, em títulos e tabelas padrão do Word, "
+        "para incluir em outro documento."
+    )
 
 chave_perfil = f"perfil_relatorio_anterior_{projeto['id']}"
 chave_secoes = f"secoes_relatorio_{projeto['id']}"
@@ -440,6 +463,7 @@ modelo = montar_modelo_relatorio(
     secoes_incluidas=selecoes,
     registros_ids=ids_registros,
     metadata_extra=metadata,
+    somente_capitulos=somente_capitulos,
 )
 
 st.subheader("Prévia da composição")
@@ -451,7 +475,7 @@ m3.metric(
     f"{round(sum(avaliar_integridade_registro(item)['percentual'] for item in modelo['registros']) / max(len(modelo['registros']), 1))}%",
 )
 _sintese = modelo["sintese"]
-m4.metric("Figuras", sum(len(secao.get("imagens", [])) for secao in modelo["secoes"]))
+m4.metric("Figuras", contar_imagens(modelo["secoes"]))
 st.caption(
     f"Situação declarada pelos módulos: {_sintese['texto']}. "
     f"Snapshot desta composição: `{modelo['snapshot_hash']}`"
@@ -466,7 +490,8 @@ if incompletos:
     )
 with st.expander("Sumário planejado"):
     st.markdown("\n".join(f"- {secao['titulo']}" for secao in modelo["secoes"]))
-    st.markdown(f"- {modelo['numero_aprovacoes']}. Aprovações")
+    if not somente_capitulos:
+        st.markdown(f"- {modelo['numero_aprovacoes']}. Aprovações")
 
 if not selecoes:
     st.warning("Selecione ao menos uma seção antes de gerar o documento.")
@@ -485,12 +510,14 @@ if st.button(
                 secoes_incluidas=selecoes,
                 registros_ids=ids_registros,
                 metadata_extra=metadata,
+                somente_capitulos=somente_capitulos,
             )
             pdf = gerar_relatorio_industrial_pdf(
                 projeto,
                 secoes_incluidas=selecoes,
                 registros_ids=ids_registros,
                 metadata_extra=metadata,
+                somente_capitulos=somente_capitulos,
             )
         except Exception as erro:
             st.exception(erro)
