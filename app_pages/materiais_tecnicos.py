@@ -65,7 +65,7 @@ cabecalho_pagina(
     "Separe valores preliminares de propriedades efetivamente rastreadas ao lote, produto e condição de serviço.",
     categoria="DADOS DE ENGENHARIA",
     icone=":material/science:",
-    cor="teal",
+    cor="green",
     ajuda_modulo="Materiais técnicos",
     acoes=(("app_pages/central_validacao.py", "Validação", ":material/fact_check:"),),
 )

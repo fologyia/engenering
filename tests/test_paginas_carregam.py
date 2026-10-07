@@ -21,6 +21,7 @@ outro.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,10 @@ RAIZ = Path(__file__).resolve().parent.parent
 APP = str(RAIZ / "app.py")
 
 PAGINAS = sorted(f"app_pages/{caminho.name}" for caminho in (RAIZ / "app_pages").glob("*.py"))
+COMPONENTES = sorted(f"components/{caminho.name}" for caminho in (RAIZ / "components").glob("*.py"))
+
+# Cores aceitas por ``st.badge`` no Streamlit 1.59 (``"rainbow"`` só vale em cabeçalhos e texto).
+CORES_DE_SELO = {"red", "orange", "yellow", "blue", "green", "violet", "gray", "grey", "primary"}
 
 
 def _abrir(pagina: str) -> AppTest:
@@ -61,6 +66,55 @@ def test_pagina_abre_sem_projeto(banco_isolado, pagina):
 def test_pagina_abre_com_projeto_ativo(banco_com_projeto, pagina):
     teste = _abrir(pagina)
     assert not teste.exception, f"{pagina}: {[str(e.value) for e in teste.exception]}"
+
+
+def _cores_literais_de_selos(caminho: Path) -> list[tuple[int, str]]:
+    """Cores escritas como texto em ``cabecalho_pagina(cor=...)`` e ``st.badge(color=...)``."""
+    argumento_da_chamada = {"cabecalho_pagina": "cor", "badge": "color"}
+    achadas: list[tuple[int, str]] = []
+    for no in ast.walk(ast.parse(caminho.read_text(encoding="utf-8"))):
+        if not isinstance(no, ast.Call):
+            continue
+        funcao = no.func
+        nome = funcao.attr if isinstance(funcao, ast.Attribute) else getattr(funcao, "id", "")
+        argumento = argumento_da_chamada.get(nome)
+        for palavra in no.keywords:
+            valor = palavra.value
+            if (
+                argumento is not None
+                and palavra.arg == argumento
+                and isinstance(valor, ast.Constant)
+                and isinstance(valor.value, str)
+            ):
+                achadas.append((valor.lineno, valor.value))
+    return achadas
+
+
+@pytest.mark.parametrize("arquivo", [*PAGINAS, *COMPONENTES])
+def test_selos_usam_so_cores_que_o_streamlit_conhece(arquivo):
+    """``st.badge`` com cor desconhecida não dá erro: a tela mostra o texto cru ``:teal-badge[...]``.
+
+    Foi o que aconteceu em Materiais técnicos, e nenhum teste de abertura de página percebe.
+    """
+    invalidas = [
+        f"linha {linha}: {cor!r}"
+        for linha, cor in _cores_literais_de_selos(RAIZ / arquivo)
+        if cor not in CORES_DE_SELO
+    ]
+    assert not invalidas, f"{arquivo}: cor de selo desconhecida em {invalidas}"
+
+
+def test_o_detector_de_cor_de_selo_pega_a_cor_errada(tmp_path):
+    """Sem isto o teste acima passaria vazio se o detector parasse de enxergar as chamadas."""
+    amostra = tmp_path / "amostra.py"
+    amostra.write_text(
+        "cabecalho_pagina('T', 'S', categoria='C', icone='i', cor='teal')\n"
+        "st.badge('x', color='violet')\n"
+        "st.badge('y', color=variavel)\n"
+        "st.metric('z', 1, color='teal')\n",
+        encoding="utf-8",
+    )
+    assert _cores_literais_de_selos(amostra) == [(1, "teal"), (2, "violet")]
 
 
 class TestCompatibilidadeDosCatalogos:
