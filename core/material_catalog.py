@@ -35,6 +35,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core import espelho_remoto
 from core import materials as base_csv
 
 PASTA_DADOS = Path(__file__).resolve().parent.parent / "data"
@@ -258,8 +259,17 @@ def _gravar_arquivo(caminho: Path, documento: Mapping[str, Any]) -> None:
     # Grava em temporário e troca: um desligamento durante a escrita não pode
     # deixar o catálogo do usuário truncado.
     temporario = caminho.with_suffix(caminho.suffix + ".tmp")
-    temporario.write_text(json.dumps(documento, ensure_ascii=False, indent=2), encoding="utf-8")
+    texto = json.dumps(documento, ensure_ascii=False, indent=2)
+    temporario.write_text(texto, encoding="utf-8")
     temporario.replace(caminho)
+    # Cópia fora do disco descartável da hospedagem (ver core/espelho_remoto.py); sem espelho
+    # configurado, isto não faz nada.
+    if caminho == ARQUIVO_USUARIO:
+        espelho_remoto.enviar(
+            f"catalogos/{caminho.name}",
+            texto.encode("utf-8"),
+            f"Catálogo do usuário: {caminho.name}",
+        )
 
 
 def catalogos_de_criterio() -> list[Path]:

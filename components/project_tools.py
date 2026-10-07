@@ -8,6 +8,7 @@ from typing import Any
 
 import streamlit as st
 
+from core.armazenamento import texto_de_confirmacao
 from core.project_store import (
     CAMPO_GRAVACAO,
     ProjetoConflitoErro,
@@ -403,8 +404,7 @@ def botao_registrar_calculo(
             return False
         st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
         st.success(
-            f"Registro incluído em {salvo['codigo']} · {salvo['nome']}. "
-            "A alteração já está gravada no banco local."
+            f"Registro incluído em {salvo['codigo']} · {salvo['nome']}. {texto_de_confirmacao()}"
         )
         return True
     return False

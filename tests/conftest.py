@@ -18,8 +18,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
+from github_falso import GitHubFalso
 
-from core import project_store
+from core import armazenamento, espelho_remoto, project_store
+from core.espelho_remoto import ConfiguracaoGitHub, EspelhoGitHub
 from core.project_records import superar_registro
 from core.project_store import (
     adicionar_registro_tecnico,
@@ -48,6 +50,47 @@ def banco_isolado(tmp_path, monkeypatch) -> Path:
     banco = tmp_path / "projetos.sqlite3"
     monkeypatch.setattr(project_store, "BANCO_PADRAO", banco)
     return banco
+
+
+@pytest.fixture(autouse=True)
+def _espelho_remoto_desligado(monkeypatch):
+    """Nenhum teste fala com o GitHub de verdade nem herda a configuração de quem roda a suíte.
+
+    Quem tem os segredos do espelho no ambiente (para usar o programa) não pode, ao rodar os
+    testes, empurrar projetos de teste para o repositório de dados real. Os testes do espelho
+    ligam o servidor falso por cima, com a fixture ``espelho_github``.
+    """
+    for variavel in (*espelho_remoto.VARIAVEIS, "MECANICA_TOOLKIT_AMBIENTE"):
+        monkeypatch.delenv(variavel, raising=False)
+    espelho_remoto.redefinir()
+    armazenamento.redefinir()
+    espelho_remoto.definir_espelho(None)
+    yield
+    espelho_remoto.redefinir()
+    armazenamento.redefinir()
+
+
+@pytest.fixture
+def github_falso():
+    """Servidor local que imita a API de conteúdo do GitHub (ver ``github_falso.py``)."""
+    servidor = GitHubFalso()
+    servidor.iniciar()
+    yield servidor
+    servidor.parar()
+
+
+@pytest.fixture
+def espelho_github(github_falso) -> EspelhoGitHub:
+    """Espelho ligado ao servidor falso: o que o programa gravar aparece em ``github_falso``."""
+    espelho = EspelhoGitHub(
+        ConfiguracaoGitHub(
+            repositorio=github_falso.repositorio,
+            token=github_falso.token,
+            api=github_falso.url,
+        )
+    )
+    espelho_remoto.definir_espelho(espelho)
+    return espelho
 
 
 @pytest.fixture

@@ -1,5 +1,6 @@
 import streamlit as st
 
+from components.armazenamento_ui import preparar_armazenamento, situacao_na_lateral
 from components.project_tools import sincronizar_projeto_ativo
 from core.technical_modules import listar_modulos, obter_modulo
 
@@ -15,6 +16,9 @@ st.logo(
 )
 
 st.session_state.setdefault("projeto_assistente_etapa", 1)
+# Antes de qualquer leitura do banco: segredos do espelho no GitHub e restauração do que o disco
+# da hospedagem perdeu num reinício.
+preparar_armazenamento()
 sincronizar_projeto_ativo()
 
 
@@ -117,6 +121,7 @@ pagina = st.navigation(
     expanded=True,
 )
 
+situacao_na_lateral()
 pagina.run()
 
 with st.sidebar:

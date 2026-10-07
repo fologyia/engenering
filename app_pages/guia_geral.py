@@ -286,7 +286,9 @@ elif modulo == "Projetos permanentes":
     st.header("Sistema permanente de projetos industriais")
     st.write(
         "Use esta área como a pasta-mestre do trabalho. O projeto fica salvo em banco local "
-        "mesmo depois de fechar o navegador, e cada cálculo pode ser registrado nele."
+        "mesmo depois de fechar o navegador, e cada cálculo pode ser registrado nele. Na versão web "
+        "(Streamlit Cloud) o disco do servidor é apagado quando o aplicativo reinicia: baixe a "
+        "carteira ao terminar ou ligue o espelho no GitHub (Painel industrial → Dados e backup)."
     )
     mostrar_tabela_campos(
         [

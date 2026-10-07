@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from core import espelho_remoto
 from core.project_dependencies import (
     preparar_registro_dependencias,
     sincronizar_estados_dependencias,
@@ -60,6 +61,10 @@ BANCO_LEGADO = RAIZ_PROJETO / "data" / NOME_BANCO
 VARIAVEL_BANCO = "MECANICA_TOOLKIT_DB"
 FORMATO_EXPORTACAO = "mecanica-toolkit-project"
 FORMATO_CARTEIRA = "mecanica-toolkit-carteira"
+# Espelho remoto (ver ``core/espelho_remoto.py``): um arquivo por projeto, com o documento, as
+# fotografias de revisão e a linha do tempo — o mesmo item que a carteira exportada carrega.
+FORMATO_ESPELHO = "mecanica-toolkit-espelho-projeto"
+PASTA_ESPELHO_PROJETOS = "projetos"
 VERSAO_ESQUEMA = 1
 # Campo do documento que carrega o contador de gravações da linha. Não é
 # gravado no payload nem nas fotografias de revisão: é metadado da linha,
@@ -450,6 +455,96 @@ def _ler_pacote(conteudo: bytes | str) -> dict[str, Any]:
     return pacote
 
 
+def _pacote_projeto(
+    conexao: sqlite3.Connection, projeto_id: str, payload_json: str
+) -> dict[str, Any]:
+    """Documento, fotografias de revisão e linha do tempo de um projeto.
+
+    É o item da carteira exportada e também o arquivo que o espelho remoto guarda.
+    """
+    revisoes = conexao.execute(
+        """
+        SELECT revision, reason, created_at, snapshot_json
+        FROM project_revisions WHERE project_id=? ORDER BY revision
+        """,
+        (projeto_id,),
+    ).fetchall()
+    eventos = conexao.execute(
+        """
+        SELECT created_at, kind, description, revision, status
+        FROM project_events WHERE project_id=? ORDER BY id
+        """,
+        (projeto_id,),
+    ).fetchall()
+    return {
+        "projeto": _validar_documento(json.loads(payload_json)),
+        "revisoes": [
+            {
+                "revisao": item["revision"],
+                "motivo": item["reason"],
+                "criado_em": item["created_at"],
+                "documento": json.loads(item["snapshot_json"]),
+            }
+            for item in revisoes
+        ],
+        "eventos": [
+            {
+                "quando": item["created_at"],
+                "tipo": item["kind"],
+                "descricao": item["description"],
+                "revisao": item["revision"],
+                "status": item["status"],
+            }
+            for item in eventos
+        ],
+    }
+
+
+def _mensagem_de_commit(codigo: Any, motivo: str) -> str:
+    texto = " ".join(f"Projeto {codigo}: {motivo}".split())
+    return texto[:120]
+
+
+def _espelhar_projeto(
+    projeto_id: str, motivo: str, *, caminho_banco: str | Path | None = None
+) -> None:
+    """Copia o projeto para o espelho remoto, se houver um configurado.
+
+    Roda depois que a gravação local foi confirmada e **nunca levanta**: um
+    GitHub fora do ar não pode desfazer nem impedir o salvamento no disco. O
+    erro fica na situação do espelho (:func:`core.espelho_remoto.situacao`),
+    e o conteúdo, na fila de pendências.
+    """
+    if espelho_remoto.obter_espelho() is None:
+        return
+    try:
+        with _conectar(caminho_banco) as conexao:
+            linha = conexao.execute(
+                "SELECT id, code, payload_json FROM projects WHERE id = ?", (str(projeto_id),)
+            ).fetchone()
+            if linha is None:
+                return
+            pacote = _pacote_projeto(conexao, linha["id"], linha["payload_json"])
+    except (sqlite3.Error, OSError, ValueError, ProjetoPersistenciaErro) as erro:
+        espelho_remoto.registrar_erro(f"Não foi possível preparar o projeto para o espelho: {erro}")
+        return
+    conteudo = json.dumps(
+        {
+            "formato": FORMATO_ESPELHO,
+            "versao": VERSAO_ESQUEMA,
+            "enviado_em": _agora(),
+            **pacote,
+        },
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    espelho_remoto.enviar(
+        f"{PASTA_ESPELHO_PROJETOS}/{linha['id']}.json",
+        conteudo,
+        _mensagem_de_commit(linha["code"], motivo),
+    )
+
+
 def criar_projeto(
     nome: str,
     *,
@@ -504,6 +599,7 @@ def criar_projeto(
                 """,
                 (projeto["id"],),
             )
+    _espelhar_projeto(projeto["id"], "Criação do projeto", caminho_banco=caminho_banco)
     return deepcopy(projeto)
 
 
@@ -686,6 +782,7 @@ def salvar_projeto(
                 status=documento["status"],
                 instante=instante,
             )
+    _espelhar_projeto(documento["id"], descricao, caminho_banco=caminho_banco)
     return deepcopy(documento)
 
 
@@ -831,6 +928,7 @@ def excluir_projeto(
         removido = conexao.execute("DELETE FROM projects WHERE id=?", (str(projeto_id),)).rowcount
     if not removido:
         raise ProjetoPersistenciaErro("Projeto nao encontrado.")
+    espelho_remoto.apagar(f"{PASTA_ESPELHO_PROJETOS}/{projeto_id}.json", "Projeto excluído")
 
 
 def _renumerar_itens_copia(copia: dict[str, Any]) -> dict[str, Any]:
@@ -961,6 +1059,7 @@ def duplicar_projeto(
             instante=instante,
         )
     definir_projeto_ativo(copia["id"], caminho_banco=caminho_banco)
+    _espelhar_projeto(copia["id"], f"Cópia de {origem['codigo']}", caminho_banco=caminho_banco)
     return deepcopy(copia)
 
 
@@ -1107,6 +1206,7 @@ def importar_projeto(
             instante=instante,
         )
     definir_projeto_ativo(copia["id"], caminho_banco=caminho_banco)
+    _espelhar_projeto(copia["id"], "Importação de projeto", caminho_banco=caminho_banco)
     return deepcopy(copia)
 
 
@@ -1197,44 +1297,7 @@ def exportar_carteira(
     pacotes: list[dict[str, Any]] = []
     with _conectar(caminho_banco) as conexao:
         for linha in conexao.execute(sql, parametros).fetchall():
-            revisoes = conexao.execute(
-                """
-                SELECT revision, reason, created_at, snapshot_json
-                FROM project_revisions WHERE project_id=? ORDER BY revision
-                """,
-                (linha["id"],),
-            ).fetchall()
-            eventos = conexao.execute(
-                """
-                SELECT created_at, kind, description, revision, status
-                FROM project_events WHERE project_id=? ORDER BY id
-                """,
-                (linha["id"],),
-            ).fetchall()
-            pacotes.append(
-                {
-                    "projeto": _validar_documento(json.loads(linha["payload_json"])),
-                    "revisoes": [
-                        {
-                            "revisao": item["revision"],
-                            "motivo": item["reason"],
-                            "criado_em": item["created_at"],
-                            "documento": json.loads(item["snapshot_json"]),
-                        }
-                        for item in revisoes
-                    ],
-                    "eventos": [
-                        {
-                            "quando": item["created_at"],
-                            "tipo": item["kind"],
-                            "descricao": item["description"],
-                            "revisao": item["revision"],
-                            "status": item["status"],
-                        }
-                        for item in eventos
-                    ],
-                }
-            )
+            pacotes.append(_pacote_projeto(conexao, linha["id"], linha["payload_json"]))
     pacote = {
         "formato": FORMATO_CARTEIRA,
         "versao": VERSAO_ESQUEMA,
@@ -1248,6 +1311,8 @@ def importar_carteira(
     conteudo: bytes | str,
     *,
     caminho_banco: str | Path | None = None,
+    registrar_evento: bool = True,
+    espelhar: bool = True,
 ) -> dict[str, list[str]]:
     """Restaura os projetos de um pacote de carteira, com identidade e histórico.
 
@@ -1257,6 +1322,11 @@ def importar_carteira(
     individual. Tudo entra numa transação só — um pacote malformado não
     deixa metade dos projetos no banco. O projeto ativo não muda. Devolve
     os códigos importados e os ignorados.
+
+    ``registrar_evento`` e ``espelhar`` existem para a restauração a partir do
+    espelho remoto (:func:`restaurar_projetos_do_espelho`): o que veio de lá
+    já está lá, então não gera o evento "Restaurado…" a cada reinício do
+    servidor nem é enviado de volta.
     """
     pacote = _ler_pacote(conteudo)
     if pacote.get("formato") != FORMATO_CARTEIRA:
@@ -1269,6 +1339,7 @@ def importar_carteira(
     inicializar_banco(caminho_banco)
     importados: list[str] = []
     ignorados: list[str] = []
+    ids_importados: list[str] = []
     with _conectar(caminho_banco) as conexao:
         for item in itens:
             if not isinstance(item, Mapping):
@@ -1330,16 +1401,81 @@ def importar_carteira(
                     status=str(evento.get("status") or documento["status"]),
                     instante=str(evento.get("quando") or "") or None,
                 )
-            _registrar_evento(
-                conexao,
-                documento["id"],
-                EVENTO_ADMINISTRACAO,
-                "Restaurado de uma carteira exportada",
-                revisao=int(documento.get("revisao", 0)),
-                status=documento["status"],
-            )
+            if registrar_evento:
+                _registrar_evento(
+                    conexao,
+                    documento["id"],
+                    EVENTO_ADMINISTRACAO,
+                    "Restaurado de uma carteira exportada",
+                    revisao=int(documento.get("revisao", 0)),
+                    status=documento["status"],
+                )
             importados.append(str(documento["codigo"]))
+            ids_importados.append(str(documento["id"]))
+    if espelhar:
+        for projeto_id in ids_importados:
+            _espelhar_projeto(
+                projeto_id, "Restaurado de uma carteira exportada", caminho_banco=caminho_banco
+            )
     return {"importados": importados, "ignorados": ignorados}
+
+
+def restaurar_projetos_do_espelho(*, caminho_banco: str | Path | None = None) -> dict[str, Any]:
+    """Traz do espelho remoto os projetos que este banco ainda não tem.
+
+    É o que devolve o trabalho depois de um reinício do servidor que apagou
+    o disco. Só entra o que falta (pelo ``id``): nunca sobrescreve um projeto
+    que já está no banco, e um arquivo ilegível no espelho não impede os
+    demais — ele aparece em ``falhas``. Sem espelho configurado não faz nada.
+    Erros de rede ou de acesso (:class:`core.espelho_remoto.EspelhoErro`)
+    sobem para quem chamou decidir como avisar.
+
+    Devolve ``{"importados": [códigos], "falhas": {arquivo: motivo}}``.
+    """
+    resultado: dict[str, Any] = {"importados": [], "falhas": {}}
+    if espelho_remoto.obter_espelho() is None:
+        return resultado
+    inicializar_banco(caminho_banco)
+    with _conectar(caminho_banco) as conexao:
+        locais = {linha["id"] for linha in conexao.execute("SELECT id FROM projects")}
+    conteudos, falhas = espelho_remoto.baixar(
+        PASTA_ESPELHO_PROJETOS, ignorar={f"{projeto_id}.json" for projeto_id in locais}
+    )
+    resultado["falhas"] = dict(falhas)
+    for nome, conteudo in sorted(conteudos.items()):
+        try:
+            item = _ler_pacote(conteudo)
+            carteira = {
+                "formato": FORMATO_CARTEIRA,
+                "versao": VERSAO_ESQUEMA,
+                "projetos": [item],
+            }
+            resposta = importar_carteira(
+                json.dumps(carteira, ensure_ascii=False),
+                caminho_banco=caminho_banco,
+                registrar_evento=False,
+                espelhar=False,
+            )
+        except (ProjetoPersistenciaErro, sqlite3.Error, ValueError) as erro:
+            resultado["falhas"][nome] = str(erro)
+            continue
+        resultado["importados"].extend(resposta["importados"])
+    return resultado
+
+
+def enviar_projetos_ao_espelho(*, caminho_banco: str | Path | None = None) -> dict[str, int]:
+    """Copia todos os projetos do banco para o espelho remoto (inclusive os arquivados).
+
+    Para quem ligou o espelho depois de já ter projetos no disco, ou quer
+    garantir que nada ficou para trás. Devolve a quantidade de projetos e
+    quantos envios ficaram pendentes.
+    """
+    inicializar_banco(caminho_banco)
+    with _conectar(caminho_banco) as conexao:
+        ids = [linha["id"] for linha in conexao.execute("SELECT id FROM projects ORDER BY name")]
+    for projeto_id in ids:
+        _espelhar_projeto(projeto_id, "Envio completo", caminho_banco=caminho_banco)
+    return {"projetos": len(ids), "pendentes": espelho_remoto.situacao().pendentes}
 
 
 def criar_item(

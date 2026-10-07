@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.armazenamento_ui import aviso_de_armazenamento
 from components.project_tools import (
     contexto_sessao_projeto,
     obter_projeto_para_edicao,
@@ -18,6 +19,7 @@ from components.project_tools import (
     tratar_conflito_de_gravacao,
 )
 from components.ui import cabecalho_pagina
+from core.armazenamento import texto_de_confirmacao
 from core.checklist_templates import (
     ARQUIVO_USUARIO as ARQUIVO_MODELOS_USUARIO,
 )
@@ -227,7 +229,7 @@ def _salvar(
         )
     registrar_gravacao_vista(salvo)
     st.session_state["projeto_ativo"] = contexto_sessao_projeto(salvo)
-    st.toast("Projeto salvo no banco local.", icon=":material/check_circle:")
+    st.toast(texto_de_confirmacao(), icon=":material/check_circle:")
     return salvo
 
 
@@ -359,6 +361,7 @@ def _dialogo_novo_projeto() -> None:
 
 
 sincronizar_projeto_ativo()
+aviso_de_armazenamento()
 mostrar_arquivados = st.toggle("Mostrar projetos arquivados", value=False)
 projetos = listar_projetos(incluir_arquivados=mostrar_arquivados)
 ativo_contexto = st.session_state.get("projeto_ativo")

@@ -9,8 +9,11 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.armazenamento_ui import painel_de_armazenamento
 from components.project_tools import sincronizar_projeto_ativo
 from components.ui import cabecalho_pagina
+from core.armazenamento import NIVEL_PROTEGIDO
+from core.armazenamento import situacao as situacao_do_armazenamento
 from core.project_portfolio import (
     proximos_passos,
     resumir_carteira,
@@ -83,10 +86,20 @@ def _secao_dados_e_backup(*, expandida: bool) -> None:
     uma carteira exportada é justamente o que se faz num banco vazio.
     """
     banco = caminho_banco_atual()
-    with st.expander("Dados e backup", icon=":material/database:", expanded=expandida):
+    estado = situacao_do_armazenamento()
+    with st.expander(
+        "Dados e backup", icon=":material/database:", expanded=expandida or estado.exige_atencao
+    ):
+        painel_de_armazenamento()
         tamanho = _tamanho(banco.stat().st_size) if banco.exists() else "ainda não criado"
+        if not estado.disco_descartavel:
+            disco = ""
+        elif estado.nivel == NIVEL_PROTEGIDO:
+            disco = " — disco da hospedagem, com cópia no GitHub"
+        else:
+            disco = " — disco temporário da hospedagem"
         st.caption(
-            f"Banco de projetos: `{banco}` ({tamanho}). Para usar outro arquivo, defina a "
+            f"Banco de projetos: `{banco}` ({tamanho}{disco}). Para usar outro arquivo, defina a "
             f"variável de ambiente `{VARIAVEL_BANCO}` antes de abrir o programa."
         )
         with st.container(horizontal=True):

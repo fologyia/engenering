@@ -26,6 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core import espelho_remoto
 from core.steel_sections import CATALOGO_PERFIS, PerfilAco
 
 PASTA_DADOS = Path(__file__).resolve().parent.parent / "data"
@@ -196,11 +197,17 @@ def _gravar_arquivo(caminho: Path, documento: Mapping[str, Any]) -> None:
     # Escrita em arquivo temporário e troca: um desligamento no meio da
     # gravação não pode deixar o catálogo do usuário truncado.
     temporario = caminho.with_suffix(caminho.suffix + ".tmp")
-    temporario.write_text(
-        json.dumps(documento, ensure_ascii=False, indent=2, sort_keys=False),
-        encoding="utf-8",
-    )
+    texto = json.dumps(documento, ensure_ascii=False, indent=2, sort_keys=False)
+    temporario.write_text(texto, encoding="utf-8")
     temporario.replace(caminho)
+    # Na hospedagem de disco descartável, o catálogo do usuário também precisa de uma cópia
+    # fora do disco (ver core/espelho_remoto.py); sem espelho configurado, isto não faz nada.
+    if caminho == ARQUIVO_USUARIO:
+        espelho_remoto.enviar(
+            f"catalogos/{caminho.name}",
+            texto.encode("utf-8"),
+            f"Catálogo do usuário: {caminho.name}",
+        )
 
 
 def catalogos_de_referencia() -> list[Path]:

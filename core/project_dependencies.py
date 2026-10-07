@@ -409,7 +409,7 @@ def linhas_grafo_dependencias(projeto: Mapping[str, Any]) -> list[dict[str, str]
             linhas.append(
                 {
                     "origem_chave": _texto(dependencia.get("chave")),
-                    "Origem": _texto(dependencia.get("rotulo"), dependencia.get("chave")),
+                    "Origem": _texto(dependencia.get("rotulo"), _texto(dependencia.get("chave"))),
                     "Destino ID": _texto(registro.get("id")),
                     "Destino": destino,
                     "Tipo": _texto(dependencia.get("tipo")),

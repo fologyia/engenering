@@ -41,6 +41,24 @@ carteira inteira em JSON — com revisões e linha do tempo — e restaura esse
 pacote num banco vazio ou parcial, sem sobrescrever projetos existentes.
 Os catálogos (`data/*.json`, `data/materials.csv`) continuam no repositório.
 
+### Versão web (Streamlit Cloud)
+
+O disco do Streamlit Community Cloud é **temporário**: é apagado a cada reinício do aplicativo
+(atualização do código, inatividade, manutenção), e os projetos salvos nele somem junto. Por isso a
+versão web avisa "dados temporários" na barra lateral, oferece **Baixar meus projetos** em toda
+página e, se você configurar um repositório **privado** do GitHub como espelho, copia cada
+gravação para lá e traz tudo de volta quando o aplicativo sobe:
+
+```toml
+# Streamlit Cloud → Settings → Secrets
+MECANICA_TOOLKIT_GITHUB_REPO = "seu-usuario/mecanica-toolkit-dados"
+MECANICA_TOOLKIT_GITHUB_TOKEN = "github_pat_..."
+```
+
+Passo a passo, variáveis, limites e cuidados (o aplicativo é público por padrão) em
+[`docs/armazenamento_na_nuvem.md`](docs/armazenamento_na_nuvem.md). Sem essas variáveis nada sai do
+computador.
+
 ## Interface
 
 - tema técnico em azul-petróleo com barra lateral de alto contraste;

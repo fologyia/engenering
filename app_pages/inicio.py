@@ -1,5 +1,6 @@
 import streamlit as st
 
+from core import armazenamento
 from core import material_catalog as mat
 from core import section_catalog as catalogo_perfis
 
@@ -78,7 +79,7 @@ if projeto_ativo:
         )
         st.caption(
             f"Objetivo: {projeto_ativo.get('objetivo') or 'ainda não definido'}. "
-            "O banco local mantém dados, registros e revisões entre sessões."
+            f"{armazenamento.frase_de_persistencia()}"
         )
         with st.container(horizontal=True, horizontal_alignment="right"):
             st.page_link(
