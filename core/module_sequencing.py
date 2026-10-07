@@ -65,6 +65,9 @@ FLUXOS: dict[str, tuple[str, ...]] = {
     ),
     "parafusos": ("casos_carga", "projeto_parafusos"),
     "aco": ("casos_carga", "vigas_eixos", "estruturas_aco", "flambagem_colunas"),
+    # O vento de uma edificação vira carga do pórtico, e o pórtico, esforço nas barras. Fica depois
+    # dos fluxos antigos: num empate de passos concluídos, o primeiro fluxo da lista continua valendo.
+    "vento": ("casos_carga", "vento_nbr6123", "estruturas_aco", "flambagem_colunas"),
 }
 
 SITUACOES = ("concluida", "atencao", "atual", "pendente")

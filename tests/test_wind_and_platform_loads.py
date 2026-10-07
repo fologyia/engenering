@@ -1,7 +1,8 @@
-"""Vento pela NBR 6123 e ações/geometria de plataformas de acesso.
+"""Vento pela NBR 6123:2023 numa peça isolada e ações/geometria de plataformas de acesso.
 
-Os valores de S2 são conferidos contra a Tabela 2 da NBR 6123 (que é a
-Tabela 1 aplicada), e os demais contra a definição direta de cada fórmula.
+Os valores de S2 são conferidos contra a Tabela 3 da NBR 6123:2023 (que é a
+Tabela 1 aplicada), e os demais contra a definição direta de cada fórmula. A
+cadeia completa de S1, S2 e S3 tem testes próprios em ``test_vento_nbr6123.py``.
 """
 
 import math
@@ -12,7 +13,7 @@ from core import wind_load as vento
 
 
 class FatorS2Tests(unittest.TestCase):
-    def test_reproduz_a_tabela_2(self):
+    def test_reproduz_a_tabela_3(self):
         # (z, categoria, classe, S2 tabelado)
         casos = [
             (5.0, "II", "A", 0.94),
@@ -30,6 +31,12 @@ class FatorS2Tests(unittest.TestCase):
     def test_abaixo_de_5_m_e_acima_da_altura_gradiente_saturam(self):
         self.assertEqual(vento.fator_s2(1.0, "II", "A"), vento.fator_s2(5.0, "II", "A"))
         self.assertEqual(vento.fator_s2(900.0, "III", "B"), vento.fator_s2(350.0, "III", "B"))
+
+    def test_categoria_v_tem_s2_constante_ate_10_m(self):
+        # 5.3.3: nas edificações o vento defletido para baixo aumenta a pressão junto ao solo.
+        self.assertEqual(vento.fator_s2(3.0, "V", "A"), vento.fator_s2(10.0, "V", "A"))
+        self.assertAlmostEqual(vento.fator_s2(10.0, "V", "A"), 0.74)
+        self.assertLess(vento.fator_s2(3.0, "IV", "A"), vento.fator_s2(10.0, "IV", "A"))
 
     def test_categoria_ou_classe_invalida(self):
         with self.assertRaises(ValueError):
@@ -84,7 +91,9 @@ class VentoTests(unittest.TestCase):
             largura_exposta_m=0.2032,
         )
         s2 = 0.86 * 1.0 * (6.0 / 10.0) ** 0.12
-        vk = 35.0 * s2 * 0.95
+        vk = (
+            35.0 * s2 * 1.00
+        )  # grupo 3 da Tabela 4 (2023): residências, hotéis, comércio, indústrias
         self.assertAlmostEqual(resultado.s2, s2)
         self.assertAlmostEqual(resultado.vk_m_s, vk)
         self.assertAlmostEqual(resultado.pressao_N_m2, 0.613 * vk**2)
@@ -92,6 +101,14 @@ class VentoTests(unittest.TestCase):
         self.assertAlmostEqual(resultado.carga_linear_kN_m, 2.0 * 0.613 * vk**2 * 0.2032 / 1e3)
         self.assertTrue(any("V_k" in linha for linha in resultado.memoria))
         self.assertTrue(any("F = C_f" in linha for linha in resultado.memoria))
+
+    def test_s3_dos_grupos_segue_a_tabela_4_de_2023(self):
+        esperado = {1: 1.11, 2: 1.06, 3: 1.00, 4: 0.95, 5: 0.83}
+        for grupo, s3 in esperado.items():
+            with self.subTest(grupo=grupo):
+                self.assertEqual(vento.fator_s3(grupo), s3)
+                self.assertEqual(vento.GRUPOS_S3[grupo][0], s3)
+                self.assertTrue(vento.GRUPOS_S3[grupo][1])  # a descrição que a tela mostra
 
     def test_s3_informado_sobrepoe_o_grupo(self):
         resultado = vento.calcular_vento(40.0, s3=1.0, grupo_s3=5)

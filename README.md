@@ -300,6 +300,27 @@ computador.
 - três círculos de Mohr, invariantes e tabelas de transformação.
 - registro 2D ou 3D no projeto permanente.
 
+### Vento nas estruturas
+
+Calcula a ação do vento numa edificação de planta retangular pela **ABNT NBR 6123:2023**
+(`core/vento_*.py`; detalhes em `docs/vento_nbr6123.md`):
+
+- **velocidade e pressão dinâmica**: `V_k = V₀·S₁·S₂·S₃` e `q = 0,613·V_k²`, com `S₁` por relevo,
+  `S₂` das Tabelas 1 a 3 (classe pela superfície frontal de cada direção; Anexo A acima de 80 m) e
+  `S₃` da Tabela 4 ou do Anexo B (nunca abaixo do mínimo do grupo);
+- **`C_e` de cada zona** das paredes (Tabela 6) e do telhado plano, de duas águas (Tabela 7) e de uma
+  água (Tabela 8), com `c_pe` médio nas zonas de altas sucções, nas duas direções do vento;
+- **pressão interna** `c_pi` pelo item 6.3.2 (quatro faces, duas faces opostas, estanque, abertura
+  dominante), com um caso de carga por valor;
+- **vedações e fixações** (telhas, painéis, terças): pressão de projeto da classe A em cada zona;
+- **forças globais**: soma das zonas, arrasto `F_a = q·C_a·A_e·f_v` (Figuras 4 e 5, lidas do gráfico),
+  torção pela excentricidade, atrito, fator de vizinhança e vento de alta turbulência;
+- **pórtico transversal**: carga por metro (normal ao elemento) de cada pilar e água, por direção do
+  vento e faixa de posição, com a solução pelo solver 2D (reações, esforços e deslocamento);
+- verificações de aplicabilidade (a/b, h/b, inclinação, T₁ ≤ 1 s, esbeltez), desenho da planta com as
+  zonas, CSV das tabelas e **registro no projeto** — o memorial traz o resultado, o que passou, as
+  tabelas e o que não passou.
+
 ### Flambagem de colunas
 
 Verifica a **barra inteira numa só rodada** (`core/column_buckling.py`, com as fórmulas em
@@ -397,7 +418,7 @@ A325 e C_t ≤ 0,90) precisam ser confirmados na norma antes de emitir documento
 - combinações pela **NBR 8681 / NBR 8800** por categoria de ação (γ_f, γ
   favorável, ψ₀/ψ₁/ψ₂ das Tabelas 1 e 2), ELU normais com permanentes
   favoráveis e ELS rara, frequente e quase permanente;
-- ações de plataforma: vento pela **NBR 6123** (S₁ por relevo, S₂ por
+- ações de plataforma: vento pela **NBR 6123:2023** (S₁ por relevo, S₂ por
   categoria/classe/altura, S₃ por grupo, `q = 0,613·V_k²`, força e carga por
   metro com C_f), guarda-corpo e impacto (NBR 6120 / NBR 14718 / ASCE 7) e
   conformidade de acessos da **NR-12** (guarda-corpo, rodapé, travessas,

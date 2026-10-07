@@ -254,6 +254,9 @@ def texto_do_resultado(registro: Mapping[str, Any], resumo: Resumo, formatar: Fo
         partes.append(f"{_plural(len(resumo.nao_avaliadas), 'não avaliada', 'não avaliadas')}.")
     resultados = registro.get("resultados")
     if isinstance(resultados, Mapping):
+        destaque = str(resultados.get("destaque_memorial") or "").strip()
+        if destaque:
+            partes.append(destaque)
         if resultados.get("resistencia_kN") is not None:
             partes.append(f"N_c,Rd = {formatar(resultados['resistencia_kN'])} kN.")
         menor = str(resultados.get("menor_parafuso_que_atende") or "").strip()
@@ -469,9 +472,42 @@ _ENTRADAS_PARAFUSOS: tuple[_Entrada, ...] = (
     ("fora_do_escopo_marcado", "Itens marcados como fora do escopo", "se_preenchido"),
 )
 
+_ENTRADAS_VENTO: tuple[_Entrada, ...] = (
+    ("edicao_da_norma", "Edição da norma", "sempre"),
+    ("v0_m_s", "Velocidade básica V₀ [m/s]", "sempre"),
+    ("relevo", "Relevo", "se_preenchido"),
+    ("s1", "Fator topográfico S₁", "sempre"),
+    ("categoria_rugosidade", "Categoria de rugosidade", "sempre"),
+    ("grupo_s3", "Grupo da edificação (S₃)", "sempre"),
+    ("probabilidade_pm", "Probabilidade P_m (Anexo B)", "se_preenchido"),
+    ("vida_util_anos", "Vida útil m_a [anos] (Anexo B)", "se_preenchido"),
+    ("s3_informado", "S₃ adotado (Anexo B)", "se_preenchido"),
+    ("classe_forcada", "Classe imposta (S₂)", "se_preenchido"),
+    ("referencia_de_altura", "Altura de referência de S₂", "sempre"),
+    ("vedacoes_com_092", "Vedações com 0,92·S₃", "se_preenchido"),
+    ("cobertura", "Cobertura", "sempre"),
+    ("comprimento_a_m", "Comprimento a [m]", "sempre"),
+    ("largura_b_m", "Largura b [m]", "sempre"),
+    ("altura_h_m", "Altura do beiral h [m]", "sempre"),
+    ("inclinacao_theta_graus", "Inclinação do telhado θ [°]", "sempre"),
+    ("altura_do_topo_m", "Altura do topo [m]", "sempre"),
+    ("balanco_do_beiral_m", "Balanço do beiral [m]", "se_preenchido"),
+    ("espacamento_porticos_m", "Espaçamento dos pórticos [m]", "sempre"),
+    ("periodo_fundamental_s", "Período fundamental T₁ [s]", "se_preenchido"),
+    ("permeabilidade", "Pressão interna (permeabilidade)", "sempre"),
+    ("alta_turbulencia_solicitada", "Alta turbulência solicitada", "se_preenchido"),
+    ("efeito_de_vizinhanca", "Efeito de vizinhança", "se_preenchido"),
+    ("afastamento_vizinha_m", "Afastamento da vizinha s [m]", "se_preenchido"),
+    ("coeficiente_de_atrito_ct", "Coeficiente de atrito C_t", "sempre"),
+    ("portico_bases", "Bases do pórtico", "se_preenchido"),
+    ("portico_pilar", "Seção dos pilares", "se_preenchido"),
+    ("portico_rafter", "Seção das águas", "se_preenchido"),
+)
+
 ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
     "flambagem_colunas": _ENTRADAS_FLAMBAGEM,
     "projeto_parafusos": _ENTRADAS_PARAFUSOS,
+    "vento_nbr6123": _ENTRADAS_VENTO,
 }
 
 LARGURAS_ENTRADAS = [2350, 2330, 2350, 2330]
@@ -520,6 +556,13 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "forca_parafuso_critico_ELS_kN",
         "momento_polar_J_mm2",
         "torque_estimado_Nm",
+        # vento nas estruturas
+        "destaque_memorial",
+        "tabelas_memorial",
+        "casos_de_vento",
+        "arrasto_global",
+        "cargas_do_portico",
+        "solucao_do_portico",
     }
 )
 
@@ -859,6 +902,7 @@ def capitulo_de_verificacoes(
     paredes = resultados.get("esbeltez_paredes") if isinstance(resultados, Mapping) else None
     if isinstance(paredes, Sequence) and not isinstance(paredes, (str, bytes)) and paredes:
         blocos.append({"tipo": "tabela", **_tabela_de_paredes(paredes, formatar)})
+    blocos.extend({"tipo": "tabela", **tabela} for tabela in tabelas_do_registro(registro))
     outros = pares_de_resultados(registro, formatar, rotular)
     if outros:
         blocos.append(
@@ -871,6 +915,52 @@ def capitulo_de_verificacoes(
         )
     blocos.extend(_bloco_nao_passou(registro, linhas, resumo, formatar))
     return {"titulo": titulo, "nivel": nivel, "blocos": blocos}
+
+
+def tabelas_do_registro(registro: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Tabelas prontas que o módulo guardou em ``resultados["tabelas_memorial"]``.
+
+    Cada uma traz ``legenda``, ``cabecalhos`` e ``linhas`` (textos já formatados) e, se quiser,
+    ``larguras`` (que somam a largura útil) e ``fonte``. Tabela malformada é ignorada: o capítulo
+    nunca deixa de sair por causa de uma tabela de apoio.
+    """
+    resultados = registro.get("resultados")
+    bruto = resultados.get("tabelas_memorial") if isinstance(resultados, Mapping) else None
+    if not isinstance(bruto, Sequence) or isinstance(bruto, (str, bytes)):
+        return []
+    tabelas: list[dict[str, Any]] = []
+    for item in bruto:
+        if not isinstance(item, Mapping):
+            continue
+        cabecalhos = item.get("cabecalhos")
+        linhas = item.get("linhas")
+        if (
+            not isinstance(cabecalhos, Sequence)
+            or isinstance(cabecalhos, (str, bytes))
+            or not cabecalhos
+            or not isinstance(linhas, Sequence)
+            or isinstance(linhas, (str, bytes))
+        ):
+            continue
+        n = len(cabecalhos)
+        linhas_texto = [
+            [str(celula) for celula in linha][:n] + [""] * (n - len(linha))
+            for linha in linhas
+            if isinstance(linha, Sequence) and not isinstance(linha, (str, bytes))
+        ]
+        larguras = item.get("larguras")
+        if not (isinstance(larguras, Sequence) and len(larguras) == n):
+            larguras = [round(9360 / n)] * n
+        tabelas.append(
+            {
+                "legenda": decimal_ptbr(str(item.get("legenda") or "")),
+                "cabecalhos": [str(c) for c in cabecalhos],
+                "linhas": linhas_texto or [["-"] * n],
+                "larguras": [int(x) for x in larguras],
+                "fonte": float(item.get("fonte") or 7.2),
+            }
+        )
+    return tabelas
 
 
 def _tabela_de_paredes(paredes: Sequence[Any], formatar: Formatador) -> dict[str, Any]:

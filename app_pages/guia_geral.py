@@ -64,6 +64,7 @@ opcoes = [
     "Conversor de unidades",
     "Análise estática",
     "Vigas e eixos",
+    "Vento nas estruturas",
     "Flambagem de colunas",
     "Análise de fadiga",
     "Assistente de cargas",
@@ -139,6 +140,11 @@ if modulo == "Comece aqui":
                 "Tensor 2D/3D de uma simulação",
                 "Círculo de Mohr",
                 "Transformar o plano e achar tensões principais",
+            ],
+            [
+                "Galpão ou edifício: preciso das forças do vento (paredes, telhado, pórtico)",
+                "Vento nas estruturas",
+                "Obter pressões por zona, vedações, forças globais e cargas do pórtico (NBR 6123:2023)",
             ],
             [
                 "Peça esbelta sob compressão (coluna, escora, tirante invertido)",
@@ -1081,6 +1087,162 @@ elif modulo == "Vigas e eixos":
         icon=":material/warning:",
     )
     link_modulo("app_pages/vigas_eixos.py", "Abrir vigas e eixos")
+
+
+elif modulo == "Vento nas estruturas":
+    from core import vento_edificio as _ve
+    from core import vento_portico as _vp
+
+    st.header("Vento nas estruturas")
+    st.markdown(
+        "Use para o vento numa **edificação de planta retangular** — galpão, edifício, "
+        "plataforma fechada — pela **NBR 6123:2023**: a pressão dinâmica do local, o "
+        "coeficiente de forma **C_e de cada zona** das paredes e do telhado, a pressão "
+        "interna, as pressões de projeto das **telhas e fixações**, a força de arrasto, a "
+        "torção e as **cargas por metro de um pórtico transversal**, com a solução do pórtico. "
+        "Para uma peça isolada (barra, perfil, painel de plataforma), use a calculadora de "
+        "vento de Estruturas de aço."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "V₀",
+                "Velocidade básica do vento, em m/s: a rajada de 3 s, a 10 m, que se repete a cada 50 anos",
+                "Mapa de isopletas da NBR 6123 (Figura 1), pelo local da obra",
+            ],
+            [
+                "Relevo (S₁), rugosidade (S₂), grupo (S₃)",
+                "Plano, vale protegido ou topo de talude/morro; categoria I a V do terreno a barlavento; grupo 1 a 5 de importância",
+                "Implantação da obra; ocupação (indústria e comércio = grupo 3)",
+            ],
+            [
+                "Classe e altura de referência",
+                "Automática pela maior dimensão da superfície que o vento enfrenta em cada direção; S₂ no topo da edificação",
+                "Desenho do galpão; recomendação do item 5.3.3",
+            ],
+            [
+                "Cobertura, θ, a, b, h",
+                "Plana, duas águas ou uma água; inclinação em graus; comprimento ao longo da cumeeira (a ≥ b), largura (vão) e altura do beiral",
+                "Desenho arquitetônico ou de formas",
+            ],
+            [
+                "Espaçamento dos pórticos e T₁",
+                "Distância entre pórticos (carga por metro) e período fundamental (0 = estimar; acima de 1 s a norma pede análise dinâmica)",
+                "Projeto estrutural; análise modal",
+            ],
+            [
+                "Permeabilidade (c_pi)",
+                "Quatro faces permeáveis, duas faces opostas, estanque, valores informados ou abertura dominante",
+                "Portões, janelas e frestas da edificação",
+            ],
+            [
+                "Vizinhança e alta turbulência",
+                "Afastamento da edificação alta vizinha (f_v até 1,3); vizinhança densa e alta a barlavento (sotavento × 2/3 e C_a da Figura 5)",
+                "Implantação; item 6.1.3.1",
+            ],
+            [
+                "Seção do pórtico",
+                "Perfil do catálogo ou A e I, módulo de elasticidade, bases engastadas ou rotuladas e o limite de deslocamento H/…",
+                "Pré-dimensionamento do pórtico",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Informe o **local**: V₀, relevo, a categoria do terreno e o grupo. Se a vida útil ou
+           o nível de segurança forem outros, ligue o **S₃ do Anexo B**.
+        2. Descreva a **edificação**: tipo de cobertura, inclinação, `a` (ao longo da cumeeira,
+           o lado maior), `b` (o vão), altura do beiral e espaçamento dos pórticos.
+        3. Escolha a **permeabilidade**. Com portão grande aberto use o assistente de **abertura
+           dominante**: ele calcula o c_pi da norma e o copia para os valores informados.
+        4. Leia o **Resumo** (V_k e q de cada direção, q das vedações) e a aba **Pressões por zona**:
+           o desenho mostra onde fica cada zona; Δp positiva empurra a superfície para dentro,
+           negativa puxa para fora.
+        5. Em **Vedações e fixações** estão as pressões de projeto de telhas, painéis, terças e
+           travessas — nas arestas e cantos vale o c_pe médio, bem mais severo.
+        6. **Forças globais** traz o arrasto (gráfico da norma), a soma das zonas, a torção e o
+           atrito. Para contraventamento e fundação use o maior dos dois resultados.
+        7. **Pórtico transversal** dá a carga por metro de cada elemento e resolve o pórtico com a
+           seção que você informar. Resolva os casos e fique com o pior.
+        8. Confira a tabela de **verificações** (se as tabelas valem para a sua construção) e
+           **registre** no projeto: o memorial leva as tabelas inteiras.
+        """
+    )
+    _exemplo = _ve.calcular_edificacao(
+        _ve.EntradaEdificio(
+            v0_m_s=40.0,
+            comprimento_a_m=60.0,
+            largura_b_m=30.0,
+            altura_h_m=8.0,
+            cobertura=_ve.COBERTURA_DUAS_AGUAS,
+            theta_graus=10.0,
+            categoria="III",
+            grupo_s3=3,
+            espacamento_porticos_m=6.0,
+        )
+    )
+    _casos_exemplo = _vp.casos_do_portico(_exemplo)
+    _caso_90 = next(c for c in _casos_exemplo if c.alpha == 90 and c.cpi.valor == -0.3)
+
+    def _pt(valor: float, casas: int = 2) -> str:
+        return f"{valor:.{casas}f}".replace(".", ",")
+
+    mostrar_exemplo(
+        [
+            ["Local", "V₀ = 40 m/s, terreno plano, categoria III, grupo 3 (indústria)"],
+            [
+                "Edificação",
+                "Galpão de 60 × 30 m, beiral a 8 m, duas águas a 10°; pórticos a cada 6 m",
+            ],
+            ["Pressão interna", "Quatro faces permeáveis: c_pi = −0,3 e c_pi = 0"],
+        ],
+        "Resultado esperado: a 0° o vento enfrenta 30 m (classe B) — V_k = "
+        f"{_pt(_exemplo.vento_por_alpha[0].vk_m_s)} m/s e q = "
+        f"{_pt(_exemplo.vento_por_alpha[0].q_kN_m2, 3)} kN/m²; a 90° enfrenta 60 m (classe C) — "
+        f"V_k = {_pt(_exemplo.vento_por_alpha[90].vk_m_s)} m/s e q = "
+        f"{_pt(_exemplo.vento_por_alpha[90].q_kN_m2, 3)} kN/m². Nas vedações (classe A) "
+        f"q = {_pt(_exemplo.vento_vedacoes.q_kN_m2, 3)} kN/m². A parede de barlavento recebe "
+        "C_e = +0,7 e, com c_pi = −0,3, Δp = q·(0,7 + 0,3); a água de barlavento a 90° leva "
+        f"C_e = {_pt(_exemplo.coef_telhado.efi_90)}. No pórtico, a 90° e c_pi = −0,3, o pilar de "
+        f"barlavento recebe {_pt(_caso_90.carga('pilar_esquerdo').carga_kN_m)} kN/m (pressão) e "
+        f"a água de barlavento {_pt(_caso_90.carga('agua_esquerda').carga_kN_m)} kN/m (sucção).",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **q (pressão dinâmica):** 0,613·V_k² em kN/m²; multiplicada pelo coeficiente da zona
+              e pela área, dá a força. Cada direção tem a sua classe e, portanto, a sua q.
+            - **C_e e Δp:** C_e é o coeficiente de forma externo de cada zona (Tabelas 6 a 8);
+              Δp = q·(f_v·C_e − c_pi) é a pressão líquida. **Positiva empurra para dentro**
+              (parede de barlavento); **negativa puxa para fora** (sucção no telhado e nas
+              paredes laterais).
+            - **c_pe médio:** vale só nas faixas de altas sucções (arestas e cantos), para telhas,
+              terças, travessas e fixações — nunca para a estrutura principal.
+            - **Dois casos de c_pi:** a norma manda considerar o mais nocivo; −0,3 costuma governar
+              a parede de barlavento e 0 (ou +0,2) o levantamento do telhado.
+            - **Arrasto e soma das zonas:** são duas leituras da força horizontal (o gráfico da
+              Figura 4/5 e as tabelas de C_e); não são iguais. Use o **maior** na estabilidade
+              global.
+            - **C_a lido do gráfico:** a norma só dá o gráfico; o programa o digitalizou, com
+              incerteza de ±0,03. Fora dele (h/ℓ₁ < 0,5) vale o contorno e há aviso.
+            - **Pórtico:** cargas **características**; o vento entra nas combinações com γ_q = 1,4 e
+              ψ₀ = 0,6 (NBR 8800). A 0° as zonas mudam ao longo do comprimento: use a faixa onde
+              está o pórtico, contada da empena de barlavento.
+            - **Verificações em ALERTA:** a/b > 4, h/b > 6, inclinação fora das tabelas, balanço do
+              beiral acima de 0,1·b, T₁ > 1 s (efeito dinâmico) ou h/b ≥ 6 (vórtices) — o resultado
+              pede estudo específico ou conferência.
+            """
+        )
+    st.warning(
+        "O programa cobre edificações retangulares de arestas vivas com cobertura plana, de uma ou "
+        "de duas águas. Telhados múltiplos, de calha central, curvos, coberturas isoladas, muros, "
+        "reticulados, torres, cilindros, pontes e os efeitos dinâmicos têm outras regras na "
+        "NBR 6123 e não estão aqui. Confira V₀ no mapa de isopletas.",
+        icon=":material/warning:",
+    )
+    link_modulo("app_pages/vento_nbr6123.py", "Abrir Vento nas estruturas")
 
 
 elif modulo == "Flambagem de colunas":

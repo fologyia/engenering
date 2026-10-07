@@ -90,6 +90,12 @@ files = [
     "core/technical_modules.py",
     "core/technical_records.py",
     "core/unit_converter.py",
+    "core/vento_arrasto_dados.py",
+    "core/vento_coeficientes.py",
+    "core/vento_edificio.py",
+    "core/vento_nbr6123.py",
+    "core/vento_portico.py",
+    "core/vento_registro.py",
     "core/verificacao.py",
     "core/wind_load.py",
 ]

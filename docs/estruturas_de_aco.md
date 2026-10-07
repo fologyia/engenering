@@ -83,14 +83,15 @@ registro avisam para não tratar máximos independentes como simultâneos.
 
 Abaixo da tabela de ações ficam três calculadoras com registro próprio:
 
-- **vento (NBR 6123, `core/wind_load.py`)**: `V_k = V₀·S₁·S₂·S₃` e
-  `q = 0,613·V_k²`, com `S₁` por relevo (plano, vale, topo de talude ou morro
-  pela fórmula de 5.2), `S₂ = b·F_r·(z/10)^p` da Tabela 1 (categorias I a V,
-  classes A a C, `z` entre 5 m e a altura gradiente), `S₃` por grupo da
-  Tabela 3, e força `F = C_f·q·A_e` ou carga por metro `w = C_f·q·d` com um
-  `C_f` de referência das tabelas de barras prismáticas e treliças. Os
-  parâmetros tabelados são os da NBR 6123:1988; `V₀` e `S₃` devem ser
-  conferidos na edição adotada;
+- **vento (NBR 6123:2023, `core/wind_load.py` sobre `core/vento_nbr6123.py`)**:
+  `V_k = V₀·S₁·S₂·S₃` e `q = 0,613·V_k²`, com `S₁` por relevo (plano, vale, topo
+  de talude ou morro pela fórmula de 5.2), `S₂ = b·F_r·(z/10)^p` das Tabelas 1 e 2
+  (categorias I a V, classes A a C, `z` entre 5 m — 10 m na categoria V — e a
+  altura gradiente), `S₃` por grupo da Tabela 4, e força `F = C_f·q·A_e` ou carga
+  por metro `w = C_f·q·d` com um `C_f` de referência das tabelas de barras
+  prismáticas e treliças. `V₀` vem do mapa de isopletas e deve ser conferido. Para
+  edificações (paredes, telhado, pórtico), veja o módulo **Vento nas estruturas**
+  (`docs/vento_nbr6123.md`);
 - **guarda-corpo e impacto (`core/platform_loads.py`)**: carga horizontal
   uniforme no topo (1,0 kN/m em uso comum, 2,0 kN/m com concentração de
   pessoas — NBR 6120:2019 / NBR 14718) e concentrada de 1,0 kN, esforços no
@@ -146,11 +147,16 @@ No pórtico, a estabilidade global segue a NBR 8800, 4.9:
   em segunda ordem, carga acima da crítica é recusada;
 - **classificação da deslocabilidade** por `Δ₂/Δ₁` (4.9.4.1): pequena
   (≤ 1,1), média (≤ 1,4) ou grande, com aviso pedindo a **rigidez reduzida a
-  80 %** (4.9.7.1.2) na média deslocabilidade;
+  80 %** (4.9.7.1.2) na média deslocabilidade. Com a rigidez reduzida a 80 %
+  os limites passam a **1,13 e 1,55** (4.10.4.5 do Projeto de 2024), e a
+  classificação os usa;
 - **coeficiente B₂** (4.9.4.6) com `R_s = 0,85`, para comparação com a
   amplificação exata;
-- **deslocamento horizontal** contra `H/400` (Anexo C) ou outro divisor, com
-  a altura de referência informada ou a altura total dos nós.
+- **deslocamento horizontal** contra `H/400` ou outro divisor — a tabela de
+  deslocamentos máximos da norma (Anexo C em 2008; Tabela B.1 do Projeto de 2024)
+  dá `H/300` para galpões e edificações de um pavimento e `H/400` para as de
+  dois ou mais pavimentos —, com a altura de referência informada ou a altura
+  total dos nós.
 
 A treliça continua sendo de primeira ordem. Nenhum dos dois modelos inclui
 plasticidade, cabos, apoios elásticos ou ligações semirrígidas, e a flambagem

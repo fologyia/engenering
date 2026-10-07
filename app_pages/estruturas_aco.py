@@ -1222,9 +1222,9 @@ elif modulo == "3. Combinações":
     )
     with aba_vento:
         st.caption(
-            "V_k = V₀·S₁·S₂·S₃ e q = 0,613·V_k² (NBR 6123, 4.2 e 5). Os parâmetros b, p, F_r "
-            "e S₃ tabelados são os da NBR 6123:1988; confira V₀ (isopletas) e S₃ na edição "
-            "adotada pelo projeto."
+            "V_k = V₀·S₁·S₂·S₃ e q = 0,613·V_k² (NBR 6123:2023, 4.2 e 5), com b, p, F_r e S₃ das "
+            "Tabelas 1 a 4 da edição de 2023. Confira V₀ no mapa de isopletas. Para galpões e "
+            "edifícios (paredes, telhado, vedações, pórtico), use o módulo **Vento nas estruturas**."
         )
         colunas_v = st.columns(4)
         v0 = colunas_v[0].number_input(
@@ -1310,7 +1310,7 @@ elif modulo == "3. Combinações":
             step=0.5,
             key="vento_altura",
             persist_state="session",
-            help="Topo da plataforma; a Tabela 2 começa em 5 m.",
+            help="Topo da plataforma; a Tabela 3 começa em 5 m (10 m na categoria V).",
         )
         grupo_s3 = colunas_w[1].selectbox(
             "Grupo (S₃)",
@@ -1427,11 +1427,11 @@ elif modulo == "3. Combinações":
                 metodo="V_k = V₀·S₁·S₂·S₃; q = 0,613·V_k²; F = C_f·q·A_e (NBR 6123, 4.2, 5 e 6).",
                 equacoes=list(resultado_vento.memoria),
                 premissas=[
-                    "Parâmetros b, p, F_r (Tabela 1) e S₃ (Tabela 3) da NBR 6123:1988; V₀ informado pelo projeto.",
+                    "Parâmetros b, p, F_r (Tabelas 1 e 2) e S₃ (Tabela 4) da NBR 6123:2023; V₀ informado pelo projeto.",
                     "C_f de barra prismática/treliça conforme tabela ou figura da norma indicada.",
                 ],
                 alertas=[
-                    "Confirmar V₀ e S₃ na edição vigente da NBR 6123 e o critério de vento do cliente.",
+                    "Confirmar V₀ no mapa de isopletas da NBR 6123:2023 e o critério de vento do cliente.",
                     "Efeitos dinâmicos (Capítulo 9) não avaliados: estruturas esbeltas ou flexíveis exigem verificação própria.",
                 ],
                 referencias=["ABNT NBR 6123 — Forças devidas ao vento em edificações."],
@@ -2497,7 +2497,11 @@ else:
                 step=50.0,
                 key="estrutura_2d_divisor_h",
                 persist_state="session",
-                help="Anexo C da NBR 8800; critérios de cliente costumam pedir H/400 em plataformas.",
+                help=(
+                    "Tabela de deslocamentos máximos da NBR 8800 (Anexo C; Tabela B.1 do Projeto 2024): "
+                    "H/300 em galpões e edificações de um pavimento, H/400 em edificações de "
+                    "dois ou mais pavimentos. Critérios de cliente costumam pedir H/400 em plataformas."
+                ),
             )
             opcoes_2a_ordem["carga_nocional"] = (
                 estrutural.CARGA_NOCIONAL_PADRAO if usar_nocional else 0.0

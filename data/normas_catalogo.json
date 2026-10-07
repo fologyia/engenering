@@ -119,11 +119,11 @@
     "aplicacao": "Estabelece procedimentos para obtenção das ações do vento em edificações.",
     "quando_consultar": "Em galpões, coberturas, fachadas, torres e componentes expostos ao vento.",
     "pontos_chave": ["velocidade básica", "fatores de terreno", "coeficientes de pressão", "pressão interna", "efeitos dinâmicos"],
-    "modulos": ["Assistente de cargas", "Estruturas de aço"],
-    "palavras_chave": ["vento", "pressão", "fachada", "cobertura", "velocidade"],
-    "aliases": ["NBR 6123", "NBR6123"],
+    "modulos": ["Vento nas estruturas", "Assistente de cargas", "Estruturas de aço"],
+    "palavras_chave": ["vento", "pressão", "fachada", "cobertura", "velocidade", "galpão"],
+    "aliases": ["NBR 6123", "NBR6123", "NBR 6123:2023"],
     "fonte_url": "https://www.abntcatalogo.com.br/",
-    "nota_edicao": "Confirme mapas, anexos, geometria e condição de permeabilidade da edificação."
+    "nota_edicao": "O programa segue a edição de 2023 (S₃ da Tabela 4, S₂ do Anexo A, coeficientes das Tabelas 6 a 8). Confirme o mapa de isopletas, a categoria do terreno, a geometria e a condição de permeabilidade da edificação."
   },
   {
     "id": "nbr-8681",

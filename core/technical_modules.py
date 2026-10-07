@@ -97,6 +97,29 @@ def _registrar_padrao() -> None:
             descricao="Estado plano de tensões, equivalentes e margens estáticas.",
         ),
         ModuloTecnico(
+            id="vento_nbr6123",
+            titulo="Vento nas estruturas",
+            versao="1.0",
+            pagina="app_pages/vento_nbr6123.py",
+            grupo_navegacao="Análises técnicas",
+            ordem=12,
+            icone=":material/air:",
+            descricao=(
+                "Forças do vento em edificações pela NBR 6123:2023: pressão dinâmica, coeficientes "
+                "por zona de paredes e telhado, pressão interna, vedações, arrasto, torção e "
+                "cargas do pórtico transversal."
+            ),
+            aliases=(
+                "Vento",
+                "NBR 6123",
+                "Ação do vento",
+                "Forças do vento",
+                "Pressão do vento",
+                "Cargas de vento",
+                "Galpão",
+            ),
+        ),
+        ModuloTecnico(
             id="flambagem_colunas",
             titulo="Flambagem de colunas",
             versao="3.0",
