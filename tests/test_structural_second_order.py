@@ -158,7 +158,9 @@ class DeslocabilidadeTests(unittest.TestCase):
         com = portico.analisar_portico(
             *portal(100_000.0, 0.0), carga_nocional=portico.CARGA_NOCIONAL_PADRAO
         )
-        self.assertEqual(sem.deslocamento_horizontal_1a_ordem_mm, 0.0)
+        # Sem carga horizontal o deslocamento é zero só a menos do ruído do solver: 6,5e-16 mm
+        # num processador diferente (o CI do GitHub muda de máquina) derrubava a igualdade exata.
+        self.assertAlmostEqual(sem.deslocamento_horizontal_1a_ordem_mm, 0.0, delta=1e-9)
         self.assertAlmostEqual(com.carga_nocional_total_N, 0.003 * 200_000.0)
         self.assertGreater(com.deslocamento_horizontal_1a_ordem_mm, 0.0)
         invertida = portico.analisar_portico(
