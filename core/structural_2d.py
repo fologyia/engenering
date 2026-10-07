@@ -84,9 +84,16 @@ class ResultadoEstrutural:
 
 
 # Limites da classificação quanto à sensibilidade a deslocamentos laterais
-# (NBR 8800, 4.9.4.1): razão entre o deslocamento lateral de 2ª e de 1ª ordem.
+# (NBR 8800, 4.9.4.1; 4.10.4 no Projeto de 2024): razão entre o deslocamento lateral de 2ª e de 1ª
+# ordem, calculados sem as imperfeições iniciais de material.
 LIMITE_PEQUENA_DESLOCABILIDADE = 1.10
 LIMITE_MEDIA_DESLOCABILIDADE = 1.40
+# Com as imperfeições de material consideradas (rigidez reduzida a 80 %, 4.10.7.1.2), a norma muda
+# os limites para 1,13 e 1,55 (4.10.4.5 do Projeto de 2024): é a mesma amplificação, medida na
+# estrutura mais flexível.
+REDUCAO_DE_RIGIDEZ_DO_LIMITE_NORMATIVO = 0.80
+LIMITE_PEQUENA_DESLOCABILIDADE_RIGIDEZ_REDUZIDA = 1.13
+LIMITE_MEDIA_DESLOCABILIDADE_RIGIDEZ_REDUZIDA = 1.55
 # Imperfeições geométricas iniciais como carga nocional horizontal: 0,3 % das
 # cargas gravitacionais de cálculo de cada pavimento (4.9.7.1.1).
 CARGA_NOCIONAL_PADRAO = 0.003
@@ -96,10 +103,33 @@ REDUCAO_RIGIDEZ_MEDIA_DESLOCABILIDADE = 0.80
 RS_PORTICO = 0.85
 
 
-def classificar_deslocabilidade(razao: float) -> str:
-    if razao <= LIMITE_PEQUENA_DESLOCABILIDADE:
+def limites_de_deslocabilidade(reducao_rigidez: float = 1.0) -> tuple[float, float]:
+    """Limites de ``Δ₂/Δ₁`` entre pequena, média e grande deslocabilidade.
+
+    Sem redução de rigidez valem 1,10 e 1,40; com a redução a 80 % da norma, 1,13 e 1,55. Para outra
+    redução ``τ`` o limite equivalente é ``1/(1 − (1 − 1/limite)/τ)`` — a mesma amplificação medida
+    na estrutura mais flexível (é a conta que dá 1,128 e 1,556 com ``τ`` = 0,8).
+    """
+    if reducao_rigidez >= 1.0 - 1e-9:
+        return LIMITE_PEQUENA_DESLOCABILIDADE, LIMITE_MEDIA_DESLOCABILIDADE
+    if abs(reducao_rigidez - REDUCAO_DE_RIGIDEZ_DO_LIMITE_NORMATIVO) < 1e-9:
+        return (
+            LIMITE_PEQUENA_DESLOCABILIDADE_RIGIDEZ_REDUZIDA,
+            LIMITE_MEDIA_DESLOCABILIDADE_RIGIDEZ_REDUZIDA,
+        )
+
+    def equivalente(limite: float) -> float:
+        denominador = 1.0 - (1.0 - 1.0 / limite) / reducao_rigidez
+        return 1.0 / denominador if denominador > 0 else math.inf
+
+    return equivalente(LIMITE_PEQUENA_DESLOCABILIDADE), equivalente(LIMITE_MEDIA_DESLOCABILIDADE)
+
+
+def classificar_deslocabilidade(razao: float, reducao_rigidez: float = 1.0) -> str:
+    pequena, media = limites_de_deslocabilidade(reducao_rigidez)
+    if razao <= pequena:
         return "pequena deslocabilidade"
-    if razao <= LIMITE_MEDIA_DESLOCABILIDADE:
+    if razao <= media:
         return "média deslocabilidade"
     return "grande deslocabilidade"
 
@@ -537,12 +567,12 @@ def analisar_portico(
     )
     classificacao = ""
     if razao is not None:
-        classificacao = classificar_deslocabilidade(razao)
+        classificacao = classificar_deslocabilidade(razao, reducao)
     elif fator_critico is not None and fator_critico > 1.0:
         # Sem a análise de 2ª ordem, a razão é estimada pela amplificação
         # elástica 1/(1 − 1/λ): é o que o B2 aproxima.
         classificacao = (
-            classificar_deslocabilidade(1.0 / (1.0 - 1.0 / fator_critico)) + " (estimada)"
+            classificar_deslocabilidade(1.0 / (1.0 - 1.0 / fator_critico), reducao) + " (estimada)"
         )
     coeficiente_b2: float | None = None
     if altura > 0 and horizontal_total != 0.0 and gravitacional_total > 0 and delta1 > 0:
@@ -601,11 +631,12 @@ def verificar_deslocamento_horizontal(
     altura_mm: float | None = None,
     divisor: float = 400.0,
 ) -> dict[str, float | bool | str]:
-    """Deslocamento horizontal do topo contra ``H/divisor`` (Anexo C da NBR 8800).
+    """Deslocamento horizontal do topo contra ``H/divisor`` (Anexo C da NBR 8800:2008).
 
-    Usa o deslocamento de segunda ordem quando ele existe. ``H/400`` é o
-    limite usual para colunas de plataformas e edifícios industriais sob
-    vento; o critério do projeto prevalece.
+    Usa o deslocamento de segunda ordem quando ele existe. A tabela de deslocamentos máximos da
+    norma (Tabela B.1 do Projeto de 2024) dá ``H/300`` para galpões e edificações de um pavimento
+    e ``H/400`` para edificações de dois ou mais pavimentos; ``H/400`` é também o que os
+    critérios de cliente costumam pedir em plataformas. O critério do projeto prevalece.
     """
     altura = _positivo("altura_mm", altura_mm) if altura_mm else resultado.altura_referencia_mm
     if altura <= 0:

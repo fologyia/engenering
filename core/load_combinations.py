@@ -42,6 +42,10 @@ class CategoriaAcao:
 # Tabelas 1 e 2 da NBR 8800:2008 (combinações normais), que remetem à
 # NBR 8681. As ações permanentes trazem o γ favorável (1,0) para a
 # combinação em que elas aliviam; as variáveis, os fatores ψ da NBR 8681.
+# Duas categorias vêm da revisão de 2024, que muda o tratamento de equipamentos (peso próprio com
+# 1,25 e não 1,50, junto com o da estrutura de aço) e traz a sobrecarga de cobertura na linha de
+# bibliotecas, depósitos e oficinas (ψ₀ = 0,8): estão com a edição no nome para a escolha ser
+# consciente.
 CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
     CategoriaAcao(
         "Peso próprio de estrutura metálica",
@@ -142,6 +146,26 @@ CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
         0.6,
         0.4,
         "NBR 6120 + NBR 8800 Tab. 2",
+    ),
+    CategoriaAcao(
+        "Peso próprio de equipamentos (Projeto NBR 8800:2024)",
+        "Permanente",
+        1.25,
+        1.00,
+        1.0,
+        1.0,
+        1.0,
+        "Projeto NBR 8800:2024, Tab. 1",
+    ),
+    CategoriaAcao(
+        "Sobrecarga de cobertura (Projeto NBR 8800:2024)",
+        "Variável",
+        1.50,
+        None,
+        0.8,
+        0.7,
+        0.6,
+        "Projeto NBR 8800:2024, Tab. 1 e 2",
     ),
     CategoriaAcao("Vento (NBR 6123)", "Variável", 1.40, None, 0.6, 0.3, 0.0, "NBR 8800 Tab. 1 e 2"),
     CategoriaAcao(
