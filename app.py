@@ -1,5 +1,11 @@
 import streamlit as st
 
+from core.atualizacao_de_codigo import renovar_modulos_desatualizados
+
+# O Streamlit Cloud atualiza os arquivos num push sem reiniciar o processo: antes de importar os
+# módulos do programa, descarta os que ficaram velhos na memória (core/atualizacao_de_codigo.py).
+renovar_modulos_desatualizados()
+
 from components.armazenamento_ui import preparar_armazenamento, situacao_na_lateral
 from components.project_tools import sincronizar_projeto_ativo
 from core.technical_modules import listar_modulos, obter_modulo

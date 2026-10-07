@@ -98,6 +98,14 @@ roda a suíte.
   baixar a carteira. Com os dados guardados de forma permanente, isso pesa mais: restrinja quem pode
   abrir em *Settings → Sharing* do Streamlit Cloud (visualizadores por e-mail) se os projetos forem
   de cliente.
+- **Depois de cada atualização do código.** O Streamlit Cloud troca os arquivos num push *sem
+  reiniciar o processo*, e os módulos já importados ficavam velhos na memória: o app novo chamava uma
+  função que o módulo velho não tinha (`module 'core.project_store' has no attribute …`) e, com o
+  espelho ligado, o módulo velho gravava projetos sem copiá-los para o GitHub. Agora o `app.py`
+  chama `core/atualizacao_de_codigo.py` no começo de cada execução, que descarta os módulos de
+  `core/` e `components/` quando os arquivos mudaram; não é preciso "Reboot app" depois de um push.
+  O reinício continua disponível e, com o espelho funcionando, é inofensivo: os projetos voltam do
+  GitHub.
 - **Um servidor, um conjunto de dados.** Não é um banco multiusuário: todos que abrem o aplicativo
   enxergam os mesmos projetos, e o "projeto ativo" é um só no servidor — duas pessoas trabalhando ao
   mesmo tempo disputam o mesmo ponteiro.

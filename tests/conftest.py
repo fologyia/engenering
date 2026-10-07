@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from github_falso import GitHubFalso
 
-from core import armazenamento, espelho_remoto, project_store
+from core import armazenamento, atualizacao_de_codigo, espelho_remoto, project_store
 from core.espelho_remoto import ConfiguracaoGitHub, EspelhoGitHub
 from core.project_records import superar_registro
 from core.project_store import (
@@ -39,6 +39,10 @@ Path(__file__).resolve().parent.parent.joinpath("tmp").mkdir(exist_ok=True)
 def _banco_da_sessao_isolado(tmp_path_factory):
     """Rede de proteção: a suíte inteira roda contra um banco temporário."""
     banco = tmp_path_factory.mktemp("banco_sessao") / "projetos_sessao.sqlite3"
+    # O app.py descarta os módulos do programa quando o código em disco mudou desde a última
+    # execução. Sem esta declaração a primeira execução do app numa suíte trataria os módulos já
+    # importados (e isolados pelos testes) como velhos e os reimportaria sem o isolamento.
+    atualizacao_de_codigo.registrar_codigo_atual()
     with pytest.MonkeyPatch.context() as ambiente:
         ambiente.setattr(project_store, "BANCO_PADRAO", banco)
         yield banco

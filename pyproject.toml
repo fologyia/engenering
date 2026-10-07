@@ -34,6 +34,9 @@ ignore = [
 # As páginas Streamlit executam de cima a baixo: import no meio do arquivo,
 # depois do sys.path.append, é o padrão exigido pelo próprio framework.
 "app_pages/*.py" = ["E402"]
+# O app.py chama renovar_modulos_desatualizados() antes de importar os módulos do programa
+# (core/atualizacao_de_codigo.py explica por quê): os imports vêm depois de uma chamada.
+"app.py" = ["E402"]
 # Os testes acessam helpers privados de propósito, para travar o contrato
 # interno de fórmulas que a interface não expõe.
 "tests/*.py" = ["SLF001"]
@@ -54,6 +57,7 @@ no_implicit_optional = true
 files = [
     "core/additional_load_models.py",
     "core/armazenamento.py",
+    "core/atualizacao_de_codigo.py",
     "core/base_plate.py",
     "core/beam_analysis.py",
     "core/beam_script.py",
