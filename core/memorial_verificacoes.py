@@ -61,7 +61,9 @@ LARGURAS_VERIFICACAO = [1950, 950, 950, 520, 760, 4230]
 CABECALHOS_APOIO = ["Grandeza", "Valor", "Un.", "Cálculo e referência"]
 LARGURAS_APOIO = [2900, 1100, 560, 4800]
 
-_DECIMAL_COM_PONTO = re.compile(r"(?<![\d.,])(\d+)\.(\d+)(?![\d.])")
+# O número logo depois de "Anglo " ou "item " é um item do critério ou da norma ("Anglo 10.2"), não
+# um decimal.
+_DECIMAL_COM_PONTO = re.compile(r"(?<![\d.,])(?<!Anglo )(?<!item )(?<!itens )(\d+)\.(\d+)(?![\d.])")
 _IDENTIFICADOR = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
 
 
@@ -69,8 +71,8 @@ def decimal_ptbr(texto: str) -> str:
     """Troca o ponto decimal por vírgula nos números soltos de um texto de cálculo.
 
     As fórmulas do módulo saem em notação de máquina ("0.270·1.000·1963·250/1.10 = 120.71 kN"); o
-    memorial é em português. Números de item ("5.3.2"), siglas ("A.3") e números já com vírgula não
-    mudam: só vira vírgula o ponto que fica entre dois grupos de dígitos isolados.
+    memorial é em português. Números de item ("5.3.2", "Anglo 10.2"), siglas ("A.3") e números já
+    com vírgula não mudam: só vira vírgula o ponto que fica entre dois grupos de dígitos isolados.
     """
     return _DECIMAL_COM_PONTO.sub(r"\1,\2", texto)
 
@@ -504,10 +506,58 @@ _ENTRADAS_VENTO: tuple[_Entrada, ...] = (
     ("portico_rafter", "Seção das águas", "se_preenchido"),
 )
 
+_ENTRADAS_DEGRAU: tuple[_Entrada, ...] = (
+    ("obra", "Obra", "se_preenchido"),
+    ("tag", "TAG", "se_preenchido"),
+    ("data_do_calculo", "Data do cálculo", "se_preenchido"),
+    ("enquadramento", "Enquadramento legal", "sempre"),
+    ("espelho_fechado", "Degrau com espelho fechado", "sempre"),
+    ("uso", "Uso (Anglo 10.2)", "sempre"),
+    ("desnivel_H_mm", "Desnível total H [mm]", "sempre"),
+    ("espelho_alvo_mm", "Espelho alvo [mm]", "sempre"),
+    ("n_espelhos_imposto", "Nº de espelhos imposto", "se_preenchido"),
+    ("piso_b_imposto_mm", "Piso b imposto [mm]", "se_preenchido"),
+    ("profundidade_C_imposta_mm", "Profundidade C imposta [mm]", "se_preenchido"),
+    ("C_padronizado", "C da série padrão (175, 200, … 300)", "sempre"),
+    ("comprimento_L_mm", "Comprimento do degrau L [mm]", "sempre"),
+    ("reducao_da_largura_util_mm", "Redução da largura útil [mm]", "se_preenchido"),
+    ("altura_max_lance_imposta_mm", "Altura máxima por lance imposta [mm]", "se_preenchido"),
+    ("patamar_mm", "Patamar intermediário [mm]", "sempre"),
+    ("selecao_do_modelo", "Seleção do modelo", "sempre"),
+    ("malha_preferida", "Malha preferencial", "sempre"),
+    ("ligacao_preferida", "Barras de ligação preferenciais", "sempre"),
+    ("modelo_manual", "Modelo escolhido", "se_preenchido"),
+    ("superficie", "Superfície", "sempre"),
+    ("chapa_xadrez_no_bocel", "Chapa xadrez no bocel", "sempre"),
+    ("acabamento", "Acabamento", "sempre"),
+    ("material", "Material", "sempre"),
+    ("lado_barra_ligacao_mm", "Lado da barra de ligação (adotado) [mm]", "sempre"),
+    ("parafuso", "Parafuso A307", "sempre"),
+    ("n_parafusos_por_lado", "Parafusos por chapa lateral", "sempre"),
+    ("sobrecarga_q_kN_m2", "Sobrecarga q [kN/m²]", "sempre"),
+    ("carga_concentrada_P_kN", "Carga concentrada P [kN]", "sempre"),
+    ("carga_ISO_kN", "Carga concentrada ISO [kN]", "sempre"),
+    ("largura_de_aplicacao_mm", "Largura de aplicação b_c [mm]", "sempre"),
+    ("n_ef_imposto", "n_ef imposto", "se_preenchido"),
+    ("gamma_g", "Coeficiente γg", "sempre"),
+    ("gamma_q", "Coeficiente γq", "sempre"),
+    ("gamma_a1", "Coeficiente γa1", "sempre"),
+    ("gamma_a2", "Coeficiente γa2", "sempre"),
+    ("cb", "Coeficiente Cb", "sempre"),
+    ("flecha_distribuida_L_sobre", "Flecha distribuída: L/", "sempre"),
+    ("flecha_ISO_L_sobre", "Flecha ISO: L/", "sempre"),
+    ("flecha_ISO_maxima_mm", "Flecha ISO máxima [mm]", "sempre"),
+    ("gc_travessao_superior_mm", "Guarda-corpo, travessão superior [mm]", "sempre"),
+    ("gc_travessao_intermediario_mm", "Guarda-corpo, travessão intermediário [mm]", "sempre"),
+    ("gc_rodape_mm", "Guarda-corpo, rodapé [mm]", "sempre"),
+    ("gc_espacamento_mm", "Guarda-corpo, espaçamento entre barras [mm]", "sempre"),
+)
+
 ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
     "flambagem_colunas": _ENTRADAS_FLAMBAGEM,
     "projeto_parafusos": _ENTRADAS_PARAFUSOS,
     "vento_nbr6123": _ENTRADAS_VENTO,
+    "degrau_escada": _ENTRADAS_DEGRAU,
 }
 
 LARGURAS_ENTRADAS = [2350, 2330, 2350, 2330]
@@ -563,6 +613,19 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "arrasto_global",
         "cargas_do_portico",
         "solucao_do_portico",
+        # degrau de escada em grade (as tabelas do memorial já trazem estes valores)
+        "modelo_adotado",
+        "número_de_espelhos",
+        "espelho_h_mm",
+        "piso_b_mm",
+        "inclinação_graus",
+        "profundidade_C_mm",
+        "furação_F_mm",
+        "distribuição_dos_lances",
+        "degraus_em_grade",
+        "projeção_horizontal_total_mm",
+        "peso_unitário_kg",
+        "peso_total_kg",
     }
 )
 

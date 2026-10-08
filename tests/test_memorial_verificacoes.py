@@ -178,6 +178,10 @@ class TestStatusEDecimais:
             ("1,5·W·f_y = 1,10", "1,5·W·f_y = 1,10"),
             ("γ_a1 = 1.10 (Tabela 3)", "γ_a1 = 1,10 (Tabela 3)"),
             ("sem números", "sem números"),
+            # item do critério Anglo e de norma: não é decimal
+            ("espelho (Anglo 10.2): h = 180.5 mm", "espelho (Anglo 10.2): h = 180,5 mm"),
+            ("conforme item 6.3 e Anglo 3.1", "conforme item 6.3 e Anglo 3.1"),
+            ("itens 11.2", "itens 11.2"),
         ],
     )
     def test_decimal_ptbr_so_mexe_em_numero_solto(self, texto, esperado):

@@ -71,6 +71,7 @@ opcoes = [
     "Círculo de Mohr",
     "Análise de sensibilidade",
     "Projeto de parafusos",
+    "Degrau de escada em grade",
     "Normas técnicas",
     "Estruturas de aço",
 ]
@@ -160,6 +161,11 @@ if modulo == "Comece aqui":
                 "Desenho da junta, parafusos e cargas de serviço",
                 "Projeto de parafusos",
                 "Conferir aperto, separação, atrito e chapa",
+            ],
+            [
+                "Escada industrial em grade de piso eletrofundida (degrau Selmec)",
+                "Degrau de escada em grade",
+                "Espelho, piso, lances, modelo do catálogo e 38 verificações NR-12, NR-22 e Anglo",
             ],
             [
                 "Geometria, apoios e ações de uma estrutura",
@@ -1790,6 +1796,139 @@ elif modulo == "Projeto de parafusos":
         icon=":material/warning:",
     )
     link_modulo("app_pages/projeto_parafusos.py", "Abrir o projeto de parafusos")
+
+
+elif modulo == "Degrau de escada em grade":
+    from core import degrau_escada as _de
+
+    st.header("Degrau de escada em grade")
+    st.markdown(
+        "Use para o **degrau de uma escada industrial em grade de piso eletrofundida** do "
+        "catálogo Selmec “Degraus” (DS): o programa define o espelho, o piso e a profundidade, "
+        "divide a escada em lances, avalia os **64 modelos** e adota o mais leve que atende; "
+        "dimensiona o degrau (flexão com flambagem lateral, cisalhamento, flechas, reações e "
+        "parafusos A307) e fecha em **38 verificações** com o item da norma em cada uma — "
+        "NR-12 (Anexo III), NR-22, Critério Anglo, NBR 8800, NBR 6120 e ISO 14122-3. Não "
+        "dimensiona a longarina, o patamar nem o guarda-corpo (só confere as medidas dele)."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "Enquadramento e espelho fechado",
+                "NR-12 (acesso a máquina) ou NR-22 (demais acessos da mineração); grade vazada é "
+                "escada sem espelho, e com espelho fechado vale o item 12 da NR-12",
+                "Quem manda no acesso: contrato, projeto da planta, NR aplicável",
+            ],
+            [
+                "Desnível H e espelho alvo",
+                "Altura de piso a piso em mm e o espelho que você gostaria (o programa respeita a "
+                "faixa da norma e o número inteiro de espelhos)",
+                "Levantamento ou projeto de arquitetura/processo",
+            ],
+            [
+                "Impor n, b ou C",
+                "Fixa o número de espelhos, o piso ou a profundidade no lugar do automático; "
+                "vazio = automático",
+                "Só quando o desenho ou o cliente já definiu; as verificações acusam o efeito",
+            ],
+            [
+                "Comprimento L e redução da largura útil",
+                "Vão entre chapas laterais (500 a 1.500 mm) e quanto o corrimão tira da passagem",
+                "Desenho da escada e do guarda-corpo",
+            ],
+            [
+                "Uso (Anglo 10.2)",
+                "Geral, permanência constante (rota de emergência) ou cabine; define a largura "
+                "mínima",
+                "Critério Anglo",
+            ],
+            [
+                "Malha, barras de ligação e modelo",
+                "Preferência de família (A, B, C, F) e de barra de ligação (100 ou 50 mm), ou o "
+                "modelo escolhido à mão",
+                "Catálogo Selmec; o Anglo cita a grade GS-A4",
+            ],
+            [
+                "Material, acabamento e parafuso",
+                'ASTM A36 galvanizado (padrão) ou inox passivado; parafuso A307 de 5/8" (padrão) '
+                'ou 1/2"',
+                "Critério Anglo 4.5 e 8.8",
+            ],
+            [
+                "Cargas e coeficientes",
+                "q = 3,00 kN/m², P = 2,50 kN, P_ISO = 1,50 kN, γ e limites de flecha",
+                "Anglo Tab. 2 e 3, NBR 6120, ISO 14122-3, NBR 8800",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Escolha o **enquadramento** e diga se o degrau tem espelho fechado.
+        2. Informe o **desnível H** e o comprimento **L**; deixe n, b e C em automático.
+        3. Leia o **Quadro-resumo**: modelo adotado, espelho × piso (com 2h + b e α), C × L (com
+           F e r), lances e degraus, aproveitamento máximo, peso e o **nível** em que a altura
+           do espelho foi resolvida.
+        4. Na aba **Verificações** veja as 38 linhas; ligue “só o que merece atenção” para ver
+           apenas NÃO OK, ALERTA e N/A.
+        5. A aba **Os 64 modelos** mostra por que o adotado foi escolhido e os outros não.
+        6. Copie o **texto da requisição** e baixe o CSV ou o PDF; **registre** no projeto para
+           o memorial levar as 38 verificações e as tabelas.
+        """
+    )
+    _exemplo = _de.calcular_escada(_de.EntradaDegrau())
+
+    def _pt(valor: float, casas: int = 2) -> str:
+        return _de.numero_pt(valor, casas)
+
+    mostrar_exemplo(
+        [
+            ["Enquadramento", "NR-12, degrau sem espelho, uso geral"],
+            ["Escada", "H = 3.600 mm; espelho alvo 175 mm; L = 800 mm; patamar de 900 mm"],
+            [
+                "Degrau",
+                'Malha A, barras de ligação a cada 100 mm, ASTM A36 galvanizado, parafuso 5/8"',
+            ],
+        ],
+        f"Resultado esperado: {_exemplo.geometria.n} espelhos de "
+        f"{_pt(_exemplo.geometria.h_mm, 0)} mm e piso de {_pt(_exemplo.geometria.b_mm, 0)} mm "
+        f"(2h + b = {_pt(_exemplo.geometria.blondel_mm, 0)} mm; α = "
+        f"{_pt(_exemplo.geometria.alfa_graus, 1)}°), C = {_pt(_exemplo.geometria.C_mm, 0)} mm e F = "
+        f"{_exemplo.geometria.F_mm} mm, em {_exemplo.lances.texto} e "
+        f"{_exemplo.lances.n_degraus_grade} degraus. Modelo adotado: "
+        f"{_exemplo.adotado.modelo.nome}, com M_Rd = {_pt(_exemplo.adotado.MRd_kNm, 3)} kN·m por "
+        f"barra; a carga concentrada de 2,5 kN governa, com "
+        f"{_pt(100 * _exemplo.adotado.u_flex_c, 0)} % de aproveitamento. "
+        f"Verificações: {_de.texto_da_contagem(_exemplo.contagem)} — os dois ALERTAS são o furo "
+        'do catálogo (para parafuso de 5/8" é preciso furo oblongo especial) e o guarda-corpo '
+        "de 1.200 mm contra os 1.300 mm do Anglo.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Nível 1 a 4:** em que faixa de espelho a escada coube — 1 atende norma, Anglo e
+              catálogo; 2 atende norma e Anglo, mas o degrau passa de 300 mm; 3 só a norma (o
+              Anglo manda prevalecer a lei, item 3.1); 4 nenhuma.
+            - **ALERTA:** atende com ressalva ou há conflito entre normas (aparecem sempre no
+              bloco “Conflitos entre normas”). **NÃO OK** reprova. Linhas informativas (INFO) não
+              entram na contagem.
+            - **Atende (tabela dos 64):** aproveitamento ≤ 1 **e** L dentro da largura
+              recomendada do catálogo. O catálogo não diz com que carga as larguras foram
+              definidas, por isso o programa exige as duas coisas.
+            - **Carga concentrada:** é ela que costuma governar a flexão (P = 2,5 kN junto ao
+              bocel, sobre poucas barras); não se soma à distribuída.
+            - **Peso:** é estimativa (a barra de ligação tem lado adotado).
+            """
+        )
+    st.warning(
+        "Fora do escopo: longarina, patamar e ligações da longarina; guarda-corpo (só as "
+        "dimensões são conferidas); pressão de contato do parafuso na chapa lateral (o catálogo "
+        "não informa a espessura). O item da NBR 6120 da carga de 2,5 kN deve ser conferido na "
+        "edição 2019, e o inox está fora do escopo da NBR 8800.",
+        icon=":material/warning:",
+    )
+    link_modulo("app_pages/degrau_escada.py", "Abrir Degrau de escada em grade")
 
 
 elif modulo == "Normas técnicas":

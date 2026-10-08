@@ -67,6 +67,8 @@ files = [
     "core/checklist_templates.py",
     "core/column_buckling.py",
     "core/column_design.py",
+    "core/degrau_escada.py",
+    "core/degrau_registro.py",
     "core/espelho_remoto.py",
     "core/fatigue_report.py",
     "core/load_to_stress.py",

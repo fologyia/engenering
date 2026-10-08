@@ -321,6 +321,28 @@ Calcula a ação do vento numa edificação de planta retangular pela **ABNT NBR
   zonas, CSV das tabelas e **registro no projeto** — o memorial traz o resultado, o que passou, as
   tabelas e o que não passou.
 
+### Degrau de escada em grade
+
+Dimensiona o degrau de uma escada industrial em **grade de piso eletrofundida** e escolhe o modelo do
+catálogo **Selmec "Degraus" (DS)**, verificando a NR-12 (Anexo III), a NR-22, o Critério Anglo
+AA-BR-DPST-DR-0001, a NBR 8800:2008, a NBR 6120 e a ISO 14122-3 (`core/degrau_escada.py`; detalhes em
+`docs/degrau_escada.md`):
+
+- **geometria**: nº de espelhos, espelho `h` e piso `b` pelo requisito legal, pelo critério Anglo e pelo
+  limite do catálogo (nessa ordem de prioridade), profundidade `C`, furação `F`, sobreposição `r`,
+  lances, degraus em grade, projeção horizontal e larguras mínimas;
+- **64 modelos do catálogo** avaliados, com o mais leve que atende ao cálculo e à largura recomendada
+  (ou a escolha manual) e a tabela que explica por que um modelo entrou e os outros não;
+- **dimensionamento do degrau**: flexão com flambagem lateral por torção (NBR 8800 Tabela G.1),
+  cisalhamento, flechas (Anglo L/300 e ISO 14122-3), reação na longarina e parafusos A307;
+- **38 verificações** com a norma e o item em cada uma, contagem `OK · NÃO OK · ALERTA · N/A`, bloco
+  fixo de **conflitos entre normas** e texto pronto para a requisição de compra;
+- CSV das verificações e dos 64 modelos, relatório em PDF e **registro no projeto** (o memorial traz o
+  resultado, o que passou, as tabelas e o que não passou).
+
+Entrada impossível (desnível ou comprimento nulo, altura por lance menor que um espelho, `C ≤ b`…) vira
+erro claro: nada é corrigido em silêncio. Não dimensiona longarina, patamar nem guarda-corpo.
+
 ### Flambagem de colunas
 
 Verifica a **barra inteira numa só rodada** (`core/column_buckling.py`, com as fórmulas em
@@ -553,6 +575,7 @@ mecanica_toolkit/
 │   ├── assistente_cargas.py
 │   ├── circulo_mohr.py
 │   ├── projeto_parafusos.py
+│   ├── degrau_escada.py
 │   ├── estruturas_aco.py
 │   ├── catalogo_materiais.py
 │   ├── catalogo_perfis.py

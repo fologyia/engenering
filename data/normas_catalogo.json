@@ -21,8 +21,8 @@
     "aplicacao": "Estabelece requisitos mínimos de proteção para projeto, utilização, manutenção e demais fases de vida de máquinas no Brasil.",
     "quando_consultar": "Em máquinas novas ou usadas, adequações de segurança, acessos, comandos, proteções e procedimentos.",
     "pontos_chave": ["arranjo físico", "sistemas de segurança", "parada de emergência", "acessos", "manuais e capacitação"],
-    "modulos": ["Assistente de projeto"],
-    "palavras_chave": ["máquinas", "proteções", "trabalho", "emergência", "acesso"],
+    "modulos": ["Assistente de projeto", "Degrau de escada em grade"],
+    "palavras_chave": ["máquinas", "proteções", "trabalho", "emergência", "acesso", "escada"],
     "aliases": ["NR 12", "NR12"],
     "fonte_url": "https://www.gov.br/trabalho-e-emprego/pt-br/acesso-a-informacao/participacao-social/conselhos-e-orgaos-colegiados/comissao-tripartite-partitaria-permanente/normas-regulamentadora/normas-regulamentadoras-vigentes/norma-regulamentadora-no-12-nr-12",
     "nota_edicao": "Use sempre o texto consolidado oficial e verifique anexos aplicáveis."
@@ -40,6 +40,34 @@
     "aliases": ["ISO 13849-1", "NBR ISO 13849-1", "ISO13849"],
     "fonte_url": "https://www.iso.org/standard/69883.html",
     "nota_edicao": "Confirme a parte, a edição e a compatibilidade com o sistema elétrico, hidráulico ou pneumático."
+  },
+  {
+    "id": "nr-22",
+    "codigo": "NR-22",
+    "titulo": "Segurança e saúde ocupacional na mineração",
+    "segmento": "Segurança do trabalho",
+    "aplicacao": "Fixa requisitos de segurança e saúde nas atividades de mineração, inclusive escadas, passarelas e guarda-corpos de acesso a locais de trabalho.",
+    "quando_consultar": "Em escadas, passarelas e acessos de minas e plantas de beneficiamento que não sejam acesso a máquina ou equipamento (estes seguem a NR-12 Anexo III).",
+    "pontos_chave": ["escadas fixas", "espelho de 180 a 200 mm", "lance de até 3,6 m", "largura mínima", "guarda-corpo"],
+    "modulos": ["Degrau de escada em grade"],
+    "palavras_chave": ["mineração", "escada", "degrau", "passarela", "guarda-corpo"],
+    "aliases": ["NR 22", "NR22"],
+    "fonte_url": "https://www.gov.br/trabalho-e-emprego/pt-br/acesso-a-informacao/participacao-social/conselhos-e-orgaos-colegiados/comissao-tripartite-partitaria-permanente/normas-regulamentadora/normas-regulamentadoras-vigentes/norma-regulamentadora-no-22-nr-22",
+    "nota_edicao": "Use o texto consolidado oficial vigente e confira a numeração dos itens (22.6.5, 22.9.3 e 22.10) na edição adotada; o módulo segue a numeração informada na especificação do projeto."
+  },
+  {
+    "id": "iso-14122-3",
+    "codigo": "ISO 14122-3",
+    "titulo": "Safety of machinery - Permanent means of access to machinery - Part 3: Stairs, stepladders and guard-rails",
+    "segmento": "Segurança de máquinas",
+    "aplicacao": "Define requisitos de escadas, escadas de degraus e guarda-corpos de acesso permanente a máquinas, inclusive cargas e flechas dos degraus.",
+    "quando_consultar": "Ao dimensionar degraus, inclinação e guarda-corpos de acesso a máquinas e equipamentos.",
+    "pontos_chave": ["inclinação preferencial", "carga concentrada no degrau", "flecha máxima", "guarda-corpo"],
+    "modulos": ["Degrau de escada em grade"],
+    "palavras_chave": ["escada", "degrau", "guarda-corpo", "acesso", "flecha"],
+    "aliases": ["ISO 14122-3", "ISO 14122"],
+    "fonte_url": "https://www.iso.org/",
+    "nota_edicao": "Confirme a edição vigente (a especificação do módulo cita 4.7.1 para a flecha sob carga concentrada de 1,5 kN)."
   },
   {
     "id": "iso-14120",

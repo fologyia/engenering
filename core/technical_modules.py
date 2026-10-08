@@ -214,6 +214,27 @@ def _registrar_padrao() -> None:
             descricao="Verificação orientativa de juntas e grupos parafusados.",
         ),
         ModuloTecnico(
+            id="degrau_escada",
+            titulo="Degrau de escada em grade",
+            versao="1.0",
+            pagina="app_pages/degrau_escada.py",
+            grupo_navegacao="Dimensionamento complementar",
+            ordem=15,
+            icone=":material/stairs:",
+            descricao=(
+                "Degrau de escada industrial em grade de piso eletrofundida (Selmec DS): "
+                "espelho, piso, lances, 64 modelos, flexão, flechas e parafusos, com NR-12, "
+                "NR-22, Critério Anglo, NBR 8800 e ISO 14122-3."
+            ),
+            aliases=(
+                "Degrau de escada",
+                "Escada industrial",
+                "Grade de piso",
+                "Degraus Selmec",
+                "Escada NR-12",
+            ),
+        ),
+        ModuloTecnico(
             id="estruturas_aco",
             titulo="Estruturas de aço",
             versao="1.1",
