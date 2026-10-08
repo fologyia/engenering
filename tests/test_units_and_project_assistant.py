@@ -48,11 +48,45 @@ class ProjectAssistantTests(unittest.TestCase):
 
     def test_unknown_problem_uses_component_as_hint(self):
         rota = projetos.recomendar_rota(
-            projetos.OBJETIVOS[6],
-            projetos.DADOS_DISPONIVEIS[5],
+            projetos.OBJ_INDEFINIDO,
+            projetos.DADOS_INDEFINIDO,
             projetos.COMPONENTES[3],
         )
         self.assertEqual(rota.chave, "parafusos")
+
+    def test_novos_modulos_tem_rota_por_objetivo_dado_e_componente(self):
+        esperado = {
+            "Calcular as forças do vento em uma edificação": "vento",
+            "Dimensionar o degrau de uma escada industrial em grade": "degrau",
+            "Dimensionar a ligação de um contraventamento (chapa de nó)": "contraventamento",
+        }
+        for objetivo, chave in esperado.items():
+            rota = projetos.recomendar_rota(objetivo, projetos.DADOS_INDEFINIDO)
+            self.assertEqual(rota.chave, chave)
+            self.assertTrue(rota.pagina.startswith("app_pages/"))
+        dados = {
+            "Dimensões, local e terreno de uma edificação": "vento",
+            "Desnível e comprimento do degrau de uma escada": "degrau",
+            "Força, ângulo e perfis de um contraventamento": "contraventamento",
+        }
+        for item, chave in dados.items():
+            rota = projetos.recomendar_rota(projetos.OBJ_INDEFINIDO, item)
+            self.assertEqual(rota.chave, chave)
+        componentes = {
+            "Edificação sujeita ao vento": "vento",
+            "Escada industrial": "degrau",
+            "Nó de contraventamento": "contraventamento",
+        }
+        for item, chave in componentes.items():
+            rota = projetos.recomendar_rota(
+                projetos.OBJ_INDEFINIDO, projetos.DADOS_INDEFINIDO, item
+            )
+            self.assertEqual(rota.chave, chave)
+
+    def test_vocabularios_terminam_no_item_indefinido(self):
+        self.assertEqual(projetos.OBJ_INDEFINIDO, "Ainda não sei qual análise usar")
+        self.assertEqual(projetos.DADOS_INDEFINIDO, "Somente uma ideia inicial do problema")
+        self.assertEqual(projetos.COMPONENTE_INDEFINIDO, "Outro ou ainda não definido")
 
     def test_cycle_components(self):
         media, alternada = projetos.calcular_tensoes_ciclo(-20, 100)
@@ -71,7 +105,7 @@ class ProjectAssistantTests(unittest.TestCase):
         )
 
     def test_sequencia_recomendada_sempre_comeca_e_termina_no_mesmo_par(self):
-        for objetivo in projetos.OBJETIVOS[:6]:
+        for objetivo in projetos.OBJETIVOS[:-1]:
             for dados in projetos.DADOS_DISPONIVEIS:
                 try:
                     sequencia = projetos.sequencia_recomendada(objetivo, dados)

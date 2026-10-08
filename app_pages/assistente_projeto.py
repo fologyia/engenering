@@ -40,6 +40,11 @@ def valor_convertido(chave: str, categoria: str, destino: str) -> float:
     return unidades.converter(valor, categoria, origem, destino)
 
 
+#: Módulos que o roteiro só abre: os dados deles (edificação, escada, nó) são muitos e se
+#: preenchem na própria página, então o assistente não transfere nenhum valor.
+ROTAS_SEM_PREENCHIMENTO = frozenset({"vento", "degrau", "contraventamento"})
+
+
 def coletar_entradas(
     rota: projetos.RotaProjeto,
 ) -> tuple[dict[str, object], dict[str, object]]:
@@ -184,6 +189,9 @@ def coletar_entradas(
         }
         return valores, resumo
 
+    if rota.chave in ROTAS_SEM_PREENCHIMENTO:
+        return {}, {"Módulo inicial": rota.titulo}
+
     modelo = catalogo.resolver_chave(st.session_state.get("projeto_modelo_carga"))
     return {"modelo": modelo}, {"Modelo inicial": modelo}
 
@@ -247,6 +255,9 @@ def preparar_modulo(rota: projetos.RotaProjeto) -> None:
         st.session_state["estrutura_mdx_kNm"] = valores["momento"]
         st.session_state["estrutura_vd_kN"] = valores["vd"]
         st.session_state["estrutura_comprimento_m"] = valores["comprimento"]
+
+    elif rota.chave in ROTAS_SEM_PREENCHIMENTO:
+        pass
 
     else:
         st.session_state["assistente_geometria"] = valores["modelo"]
@@ -593,6 +604,13 @@ elif etapa == 3:
                 ["m", "mm", "cm", "ft"],
                 key="projeto_aco_comprimento_unidade",
                 persist_state="session",
+            )
+
+        elif rota.chave in ROTAS_SEM_PREENCHIMENTO:
+            st.info(
+                f"{rota.titulo} recebe {rota.entrada}. Esses dados se preenchem na própria "
+                "página; o roteiro cria o projeto e abre o módulo.",
+                icon=rota.icone,
             )
 
         else:

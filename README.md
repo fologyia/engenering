@@ -55,6 +55,9 @@ MECANICA_TOOLKIT_GITHUB_REPO = "seu-usuario/mecanica-toolkit-dados"
 MECANICA_TOOLKIT_GITHUB_TOKEN = "github_pat_..."
 ```
 
+Para **fechar o acesso**, defina também `MECANICA_TOOLKIT_SENHA` nos segredos: o aplicativo passa a
+pedir a senha antes de mostrar qualquer projeto (`core/acesso.py`).
+
 Passo a passo, variáveis, limites e cuidados (o aplicativo é público por padrão) em
 [`docs/armazenamento_na_nuvem.md`](docs/armazenamento_na_nuvem.md). Sem essas variáveis nada sai do
 computador.
@@ -196,7 +199,9 @@ computador.
 
 ### Assistente de projeto
 
-- organiza o problema em quatro etapas: definição, objetivo, dados e plano;
+- organiza o problema em quatro etapas: definição, objetivo, dados e plano, com rotas para os
+  módulos de cálculo, entre eles Vento nas estruturas, Degrau de escada em grade e Ligação de
+  contraventamento (esses três só abrem o módulo: os dados se preenchem na página);
 - valida nome e coerência dos dados antes de avançar;
 - recomenda a primeira análise e a sequência completa de módulos;
 - mantém um checklist de DCL, geometria, material, cargas, critério e norma;
@@ -342,6 +347,17 @@ AA-BR-DPST-DR-0001, a NBR 8800:2008, a NBR 6120 e a ISO 14122-3 (`core/degrau_es
 
 Entrada impossível (desnível ou comprimento nulo, altura por lance menor que um espelho, `C ≤ b`…) vira
 erro claro: nada é corrigido em silêncio. Não dimensiona longarina, patamar nem guarda-corpo.
+
+### Ligação de contraventamento
+
+Dimensiona a **chapa de nó** de um contraventamento vertical que chega ao canto viga–coluna pelo
+**Método das Forças Uniformes** do AISC Design Guide 29 (caso geral e casos especiais 1, 2 e 3) e
+verifica pelo AISC 360-16, em LRFD ou ASD: parafusos da barra, seção de Whitmore, bloco de
+cisalhamento, flambagem da chapa, interfaces, soldas e alma/mesa da viga e da coluna (cerca de 24
+linhas com o item da norma em cada uma). Reproduz os Exemplos 5.1 a 5.4 do guia
+(`core/contraventamento_*.py`; detalhes em `docs/ligacao_contraventamento.md`). O registro leva as
+forças nas interfaces e a geometria para o memorial. Não verifica a barra nem a chapa de topo
+parafusada.
 
 ### Flambagem de colunas
 
@@ -576,6 +592,7 @@ mecanica_toolkit/
 │   ├── circulo_mohr.py
 │   ├── projeto_parafusos.py
 │   ├── degrau_escada.py
+│   ├── ligacao_contraventamento.py
 │   ├── estruturas_aco.py
 │   ├── catalogo_materiais.py
 │   ├── catalogo_perfis.py

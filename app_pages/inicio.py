@@ -220,6 +220,30 @@ modulos = [
         "violet",
     ),
     (
+        "Vento nas estruturas",
+        ":material/air:",
+        "NBR 6123:2023",
+        "Calcula a pressão do vento, os coeficientes por zona, o arrasto e as cargas do pórtico transversal de uma edificação.",
+        "app_pages/vento_nbr6123.py",
+        "blue",
+    ),
+    (
+        "Degrau de escada em grade",
+        ":material/stairs:",
+        "NR-12, NR-22 e Anglo",
+        "Define a geometria da escada, escolhe o modelo Selmec e fecha 38 verificações do degrau em grade eletrofundida.",
+        "app_pages/degrau_escada.py",
+        "green",
+    ),
+    (
+        "Ligação de contraventamento",
+        ":material/hub:",
+        "Chapa de nó (AISC DG29)",
+        "Divide a força da barra entre chapa, viga e coluna pelo Método das Forças Uniformes e verifica parafusos, Whitmore, soldas e alma.",
+        "app_pages/ligacao_contraventamento.py",
+        "violet",
+    ),
+    (
         "Normas técnicas",
         ":material/library_books:",
         "Referências e PDFs locais",
@@ -269,6 +293,9 @@ with st.container(border=True):
         "Quero localizar a norma aplicável ou pesquisar meus PDFs",
         "Quero cadastrar propriedades de material com origem confiável",
         "Quero saber quais entradas governam o resultado e avaliar incertezas",
+        "Preciso das forças do vento em uma edificação (NBR 6123:2023)",
+        "Preciso dimensionar o degrau de uma escada industrial em grade",
+        "Preciso dimensionar a chapa de nó de um contraventamento no canto viga–coluna",
     ]
     situacao = st.selectbox("Escolha o que você possui", situacoes)
 
@@ -363,6 +390,24 @@ with st.container(border=True):
             "Ordena entradas por influência e propaga as incertezas declaradas com OAT e Monte Carlo.",
             "app_pages/analise_sensibilidade.py",
             ":material/tune:",
+        ),
+        situacoes[15]: (
+            "Vento nas estruturas",
+            "Calcula as forças do vento pela NBR 6123:2023: pressão dinâmica, coeficientes por zona, arrasto e cargas do pórtico.",
+            "app_pages/vento_nbr6123.py",
+            ":material/air:",
+        ),
+        situacoes[16]: (
+            "Degrau de escada em grade",
+            "Define a geometria da escada, escolhe o modelo do catálogo e fecha as 38 verificações da NR-12, da NR-22 e do critério Anglo.",
+            "app_pages/degrau_escada.py",
+            ":material/stairs:",
+        ),
+        situacoes[17]: (
+            "Ligação de contraventamento",
+            "Divide a força da barra entre chapa, viga e coluna pelo Método das Forças Uniformes e verifica a chapa de nó pelo AISC 360-16.",
+            "app_pages/ligacao_contraventamento.py",
+            ":material/hub:",
         ),
     }
     titulo, descricao, destino, icone = recomendacoes[situacao]

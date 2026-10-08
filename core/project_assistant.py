@@ -70,6 +70,30 @@ ROTAS: dict[str, RotaProjeto] = {
         "cenários operacionais e fatores de cada caso",
         "vetor de esforços governante por componente",
     ),
+    "vento": RotaProjeto(
+        "vento",
+        "Vento nas estruturas",
+        "app_pages/vento_nbr6123.py",
+        ":material/air:",
+        "dimensões da edificação, local, terreno e aberturas",
+        "forças do vento (NBR 6123:2023) e cargas do pórtico transversal",
+    ),
+    "degrau": RotaProjeto(
+        "degrau",
+        "Degrau de escada em grade",
+        "app_pages/degrau_escada.py",
+        ":material/stairs:",
+        "desnível, comprimento do degrau e enquadramento (NR-12 ou NR-22)",
+        "geometria da escada, modelo do catálogo e 38 verificações",
+    ),
+    "contraventamento": RotaProjeto(
+        "contraventamento",
+        "Ligação de contraventamento",
+        "app_pages/ligacao_contraventamento.py",
+        ":material/hub:",
+        "força e ângulo do contraventamento, perfis da viga e da coluna, chapa e parafusos",
+        "forças nas interfaces pelo UFM e verificações da chapa de nó (AISC 360-16)",
+    ),
     "analise_sensibilidade": RotaProjeto(
         "analise_sensibilidade",
         "Análise de sensibilidade",
@@ -88,8 +112,12 @@ OBJETIVOS = [
     "Verificar fadiga e estimar vida",
     "Dimensionar ou conferir uma junta parafusada",
     "Verificar uma estrutura de aço",
+    "Calcular as forças do vento em uma edificação",
+    "Dimensionar o degrau de uma escada industrial em grade",
+    "Dimensionar a ligação de um contraventamento (chapa de nó)",
     "Ainda não sei qual análise usar",
 ]
+OBJ_INDEFINIDO = OBJETIVOS[-1]
 
 
 DADOS_DISPONIVEIS = [
@@ -98,8 +126,12 @@ DADOS_DISPONIVEIS = [
     "Tensões máxima e mínima de um ciclo",
     "Desenho e cargas de uma junta parafusada",
     "Geometria, apoios e ações de uma estrutura",
+    "Dimensões, local e terreno de uma edificação",
+    "Desnível e comprimento do degrau de uma escada",
+    "Força, ângulo e perfis de um contraventamento",
     "Somente uma ideia inicial do problema",
 ]
+DADOS_INDEFINIDO = DADOS_DISPONIVEIS[-1]
 
 
 COMPONENTES = [
@@ -108,8 +140,12 @@ COMPONENTES = [
     "Componente sob carga variável",
     "Junta parafusada",
     "Estrutura de aço",
+    "Edificação sujeita ao vento",
+    "Escada industrial",
+    "Nó de contraventamento",
     "Outro ou ainda não definido",
 ]
+COMPONENTE_INDEFINIDO = COMPONENTES[-1]
 
 
 _ROTA_POR_OBJETIVO = {
@@ -119,6 +155,9 @@ _ROTA_POR_OBJETIVO = {
     OBJETIVOS[3]: "fadiga",
     OBJETIVOS[4]: "parafusos",
     OBJETIVOS[5]: "aco",
+    OBJETIVOS[6]: "vento",
+    OBJETIVOS[7]: "degrau",
+    OBJETIVOS[8]: "contraventamento",
 }
 
 _ROTA_POR_DADOS = {
@@ -127,7 +166,10 @@ _ROTA_POR_DADOS = {
     DADOS_DISPONIVEIS[2]: "fadiga",
     DADOS_DISPONIVEIS[3]: "parafusos",
     DADOS_DISPONIVEIS[4]: "aco",
-    DADOS_DISPONIVEIS[5]: "cargas",
+    DADOS_DISPONIVEIS[5]: "vento",
+    DADOS_DISPONIVEIS[6]: "degrau",
+    DADOS_DISPONIVEIS[7]: "contraventamento",
+    DADOS_INDEFINIDO: "cargas",
 }
 
 _ROTA_POR_COMPONENTE = {
@@ -136,7 +178,10 @@ _ROTA_POR_COMPONENTE = {
     COMPONENTES[2]: "fadiga",
     COMPONENTES[3]: "parafusos",
     COMPONENTES[4]: "aco",
-    COMPONENTES[5]: "cargas",
+    COMPONENTES[5]: "vento",
+    COMPONENTES[6]: "degrau",
+    COMPONENTES[7]: "contraventamento",
+    COMPONENTE_INDEFINIDO: "cargas",
 }
 
 
@@ -158,10 +203,10 @@ def recomendar_rota(
     }:
         return ROTAS["cargas"]
 
-    if objetivo == OBJETIVOS[6]:
+    if objetivo == OBJ_INDEFINIDO:
         if componente is not None and componente not in COMPONENTES:
             raise ValueError("Tipo de componente desconhecido.")
-        if dados_disponiveis == DADOS_DISPONIVEIS[5] and componente:
+        if dados_disponiveis == DADOS_INDEFINIDO and componente:
             return ROTAS[_ROTA_POR_COMPONENTE[componente]]
         return ROTAS[_ROTA_POR_DADOS[dados_disponiveis]]
 
