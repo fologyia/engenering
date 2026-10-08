@@ -57,6 +57,7 @@ no_implicit_optional = true
 files = [
     "core/additional_load_models.py",
     "core/armazenamento.py",
+    "core/acesso.py",
     "core/atualizacao_de_codigo.py",
     "core/base_plate.py",
     "core/beam_analysis.py",
@@ -67,6 +68,10 @@ files = [
     "core/checklist_templates.py",
     "core/column_buckling.py",
     "core/column_design.py",
+    "core/contraventamento_chapa.py",
+    "core/contraventamento_ligacao.py",
+    "core/contraventamento_registro.py",
+    "core/contraventamento_ufm.py",
     "core/degrau_escada.py",
     "core/degrau_registro.py",
     "core/espelho_remoto.py",

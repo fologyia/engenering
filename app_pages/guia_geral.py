@@ -72,6 +72,7 @@ opcoes = [
     "Análise de sensibilidade",
     "Projeto de parafusos",
     "Degrau de escada em grade",
+    "Ligação de contraventamento",
     "Normas técnicas",
     "Estruturas de aço",
 ]
@@ -166,6 +167,11 @@ if modulo == "Comece aqui":
                 "Escada industrial em grade de piso eletrofundida (degrau Selmec)",
                 "Degrau de escada em grade",
                 "Espelho, piso, lances, modelo do catálogo e 38 verificações NR-12, NR-22 e Anglo",
+            ],
+            [
+                "Contraventamento vertical chegando ao canto viga–coluna por chapa de nó",
+                "Ligação de contraventamento",
+                "Forças nas interfaces pelo Método das Forças Uniformes e verificações do AISC 360-16",
             ],
             [
                 "Geometria, apoios e ações de uma estrutura",
@@ -1929,6 +1935,131 @@ elif modulo == "Degrau de escada em grade":
         icon=":material/warning:",
     )
     link_modulo("app_pages/degrau_escada.py", "Abrir Degrau de escada em grade")
+
+
+elif modulo == "Ligação de contraventamento":
+    from components.contraventamento_ui import PERFIS_PADRAO as _perfis_cv
+    from core import contraventamento_chapa as _ch
+    from core import contraventamento_ligacao as _lig
+
+    st.header("Ligação de contraventamento")
+    st.markdown(
+        "Use para a **chapa de nó** de um contraventamento vertical que chega ao canto formado "
+        "por uma viga e uma coluna: o programa divide a força da barra entre a chapa, a viga e a "
+        "coluna pelo **Método das Forças Uniformes** (Design Guide 29 do AISC, caso geral e casos "
+        "especiais 1, 2 e 3) e verifica os parafusos da barra, a seção de Whitmore, o bloco de "
+        "cisalhamento, a flambagem da chapa, as soldas e a alma da viga e da coluna, em LRFD ou "
+        "ASD, com o item do AISC 360-16 em cada linha. Não verifica a barra do contraventamento "
+        "nem a chapa de topo parafusada."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "Força P e ângulo θ",
+                "Tração e/ou compressão da barra (kN, de cálculo) e o ângulo dela com a vertical; "
+                "o atalho H / sen θ converte a força horizontal do vento em força na barra",
+                "Módulo Vento nas estruturas e análise do pórtico",
+            ],
+            [
+                "Viga e coluna",
+                "d, t_w, t_f, b_f, k, Z_x e I_x do perfil e o aço (ou um perfil do catálogo do "
+                "programa, de seção idealizada); chapa na mesa ou na alma da coluna",
+                "Catálogo do fabricante do perfil",
+            ],
+            [
+                "Caso e ajuste do método",
+                "Geral, ponto de trabalho no canto (1), menos cisalhamento na viga–coluna (2) ou "
+                "chapa só na viga (3); e qual medida o programa ajusta (α, β ou o binário)",
+                "Arranjo do nó no desenho",
+            ],
+            [
+                "Chapa e parafusos",
+                "Espessura e aço da chapa, comprimentos l_h e l_v com os cortes, parafuso, grau, "
+                "fileiras, passo, gabarito e extremidade",
+                "Desenho da ligação",
+            ],
+            [
+                "Whitmore e flambagem",
+                "Comprimento livre da chapa, K e o trecho da seção de Whitmore que cai na alma",
+                "Desenho em escala (o programa não vê a geometria)",
+            ],
+            [
+                "Soldas e distorção",
+                "Eletrodo, pernas na viga e na coluna e, se quiser, as forças de distorção do "
+                "pórtico (área da barra e comprimentos b e c)",
+                "Procedimento de soldagem e DG29 seção 4.4",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Escolha **LRFD** ou **ASD** e informe a força **P** e o ângulo **θ** com a vertical.
+        2. Informe a **viga** e a **coluna** (medidas do perfil) e o **caso** do método.
+        3. Dê as dimensões da **chapa**, os **parafusos** e as **soldas**.
+        4. Leia o **quadro-resumo** e, na aba **Verificações**, cada estado-limite com a norma;
+           na aba **Forças e geometria** veja as forças em cada interface e o α̅ e o β̅ ideais.
+        5. Se α real e α̅ ideal diferem, há momento nas interfaces: ajuste l_h, l_v ou os
+           cortes até os dois coincidirem.
+        6. **Registre** no projeto para o memorial levar as verificações e as tabelas.
+        """
+    )
+    _d = _perfis_cv["viga"]
+    _c = _perfis_cv["coluna"]
+    _viga = _ch.PerfilDoNo(
+        _d[0], _d[1], _d[2], _d[3], _d[4], _d[5], 345.0, _d[6] * 1e3, _d[7] * 1e4, 450.0
+    )
+    _col = _ch.PerfilDoNo(
+        _c[0], _c[1], _c[2], _c[3], _c[4], _c[5], 345.0, _c[6] * 1e3, _c[7] * 1e4, 450.0
+    )
+    _ex = _lig.calcular_ligacao(
+        _lig.EntradaLigacao(
+            perfil_viga=_viga,
+            perfil_coluna=_col,
+            t_chapa_mm=25.0,
+            lh_mm=800.0,
+            lv_mm=600.0,
+            perna_na_viga_mm=10.0,
+            perna_na_coluna_mm=10.0,
+        )
+    )
+    mostrar_exemplo(
+        [
+            ["Barra", "P = 800 kN em tração e em compressão, a 45° da vertical, LRFD"],
+            ["Perfis", "Viga W 530 × 85 e coluna W 360 × 91 em ASTM A992"],
+            [
+                "Chapa e parafusos",
+                'Chapa de 25 mm em A572 Gr 50, l_h = 800 mm, l_v = 600 mm; 2 × 5 parafusos A325 de 7/8"',
+            ],
+        ],
+        f"Resultado esperado: α̅ = {_ex.forcas.alfa_ideal_mm:.0f} mm e β̅ = "
+        f"{_ex.forcas.beta_ideal_mm:.0f} mm; chapa–viga com cisalhante de "
+        f"{_ex.forcas.viga_cisalhamento_kN:.0f} kN e normal de {_ex.forcas.viga_normal_kN:.0f} kN; "
+        f"aproveitamento máximo de {100 * _ex.aproveitamento_maximo:.0f} % em "
+        f"{len(_ex.verificacoes)} linhas.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **α̅ e β̅ ideais:** posições em que a resultante passa pelo centro das soldas e as
+              interfaces ficam sem momento (Eq. 4-1). Se a geometria real diferir, o momento
+              aparece na tabela das interfaces.
+            - **Caso especial 3:** só para barra muito “deitada” (θ perto de 60° ou mais).
+            - **Contraventamento reversível:** as forças das interfaces valem para tração e
+              compressão; a compressão acrescenta a flambagem da chapa.
+            - **Mesa da coluna (ALERTA):** a flexão local da mesa pede análise própria quando a
+              normal H_c é grande; o programa avisa e não aprova sozinho.
+            """
+        )
+    st.warning(
+        "Fora do escopo: a barra do contraventamento, a chapa de topo parafusada na coluna e na "
+        "viga, ligações em treliça, chevron e base de coluna, e a resistência sísmica. O "
+        "programa não vê o desenho: Whitmore, folgas e distâncias mínimas precisam ser "
+        "conferidos. Estados-limites e coeficientes são os do AISC 360-16, não os da NBR 8800.",
+        icon=":material/warning:",
+    )
+    link_modulo("app_pages/ligacao_contraventamento.py", "Abrir Ligação de contraventamento")
 
 
 elif modulo == "Normas técnicas":

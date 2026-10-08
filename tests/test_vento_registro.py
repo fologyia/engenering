@@ -301,7 +301,7 @@ def test_tabela_compacta_do_portico():
 def test_vento_tem_o_seu_fluxo_sugerido_sem_mudar_o_dos_outros_modulos():
     from core import module_sequencing as seq
 
-    assert seq.fluxos_do_modulo("vento_nbr6123") == ["vento"]
+    assert seq.fluxos_do_modulo("vento_nbr6123") == ["vento", "contraventamento"]
     etapas = seq.montar_sequencia(None, "vento_nbr6123")
     assert [e.modulo_id for e in etapas] == [
         "casos_carga",

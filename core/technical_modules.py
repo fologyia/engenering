@@ -235,6 +235,28 @@ def _registrar_padrao() -> None:
             ),
         ),
         ModuloTecnico(
+            id="ligacao_contraventamento",
+            titulo="Ligação de contraventamento",
+            versao="1.0",
+            pagina="app_pages/ligacao_contraventamento.py",
+            grupo_navegacao="Dimensionamento complementar",
+            ordem=17,
+            icone=":material/hub:",
+            descricao=(
+                "Chapa de nó de contraventamento em canto viga–coluna pelo Método das Forças "
+                "Uniformes (AISC Design Guide 29): forças nas interfaces, parafusos, Whitmore, "
+                "bloco de cisalhamento, flambagem da chapa, soldas e alma, em LRFD ou ASD."
+            ),
+            aliases=(
+                "Contraventamento",
+                "Chapa de nó",
+                "Gusset",
+                "Método das Forças Uniformes",
+                "Ligação de contraventamento vertical",
+                "Design Guide 29",
+            ),
+        ),
+        ModuloTecnico(
             id="estruturas_aco",
             titulo="Estruturas de aço",
             versao="1.1",
