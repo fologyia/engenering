@@ -13,7 +13,7 @@ from datetime import date
 
 import streamlit as st
 
-from core import armazenamento, espelho_remoto
+from core import acesso, armazenamento, espelho_remoto
 from core.armazenamento import (
     NIVEL_FALHA,
     NIVEL_LOCAL,
@@ -62,7 +62,7 @@ def exportar_segredos_para_ambiente() -> None:
         segredos = {str(chave): valor for chave, valor in st.secrets.items()}
     except Exception:  # sem arquivo de segredos o Streamlit levanta; é o caso normal
         return
-    for nome in (*espelho_remoto.VARIAVEIS, armazenamento.VARIAVEL_AMBIENTE):
+    for nome in (*espelho_remoto.VARIAVEIS, armazenamento.VARIAVEL_AMBIENTE, acesso.VARIAVEL_SENHA):
         valor = segredos.get(nome)
         if valor is not None and not os.environ.get(nome):
             os.environ[nome] = str(valor)

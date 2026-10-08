@@ -92,6 +92,24 @@ arquivos e repete as regras da API (`sha` obrigatório para atualizar, `sha` vel
 repositório sem acesso). Nenhum teste fala com o GitHub de verdade nem herda os segredos de quem
 roda a suíte.
 
+## Senha de acesso
+
+Para fechar o endereço, defina o segredo `MECANICA_TOOLKIT_SENHA` em *Settings → Secrets* (ou como
+variável de ambiente):
+
+```toml
+MECANICA_TOOLKIT_SENHA = "uma-frase-longa-e-so-sua"
+```
+
+Com o segredo definido, o `app.py` mostra uma tela de senha **antes** de ler qualquer projeto
+(`core/acesso.py`, `components/acesso_ui.py`); sem a senha nada de projeto chega à tela. A sessão
+guarda só uma marca derivada da senha, e trocar o segredo derruba as sessões abertas. Depois de
+duas senhas erradas seguidas a sessão espera 2, 4, 8… até 60 s, e cada erro tem 1 s de pausa. A
+barra lateral ganha o botão **Sair**. Sem o segredo o programa abre livre; na nuvem a barra
+lateral avisa "Acesso aberto". Uma só senha para todos: não identifica quem entrou. A senha é
+sua para definir — nunca a digite em conversa nem a grave no repositório. Combine com *Settings →
+Sharing* (visualizadores por e-mail), que impede até de abrir a tela.
+
 ## Cuidados
 
 - **O aplicativo é público por padrão.** Quem tem o link abre as páginas, vê os projetos e pode

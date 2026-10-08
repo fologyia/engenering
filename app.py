@@ -6,6 +6,7 @@ from core.atualizacao_de_codigo import renovar_modulos_desatualizados
 # módulos do programa, descarta os que ficaram velhos na memória (core/atualizacao_de_codigo.py).
 renovar_modulos_desatualizados()
 
+from components.acesso_ui import acesso_na_lateral, exigir_acesso
 from components.armazenamento_ui import preparar_armazenamento, situacao_na_lateral
 from components.project_tools import sincronizar_projeto_ativo
 from core.technical_modules import listar_modulos, obter_modulo
@@ -21,6 +22,8 @@ st.logo(
     icon_image="assets/logo_mark.svg",
 )
 
+# Com a senha de acesso definida (core/acesso.py), nada abaixo roda antes de ela ser digitada.
+exigir_acesso()
 st.session_state.setdefault("projeto_assistente_etapa", 1)
 # Antes de qualquer leitura do banco: segredos do espelho no GitHub e restauração do que o disco
 # da hospedagem perdeu num reinício.
@@ -128,6 +131,7 @@ pagina = st.navigation(
 )
 
 situacao_na_lateral()
+acesso_na_lateral()
 pagina.run()
 
 with st.sidebar:

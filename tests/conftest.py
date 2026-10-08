@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from github_falso import GitHubFalso
 
-from core import armazenamento, atualizacao_de_codigo, espelho_remoto, project_store
+from core import acesso, armazenamento, atualizacao_de_codigo, espelho_remoto, project_store
 from core.espelho_remoto import ConfiguracaoGitHub, EspelhoGitHub
 from core.project_records import superar_registro
 from core.project_store import (
@@ -64,7 +64,7 @@ def _espelho_remoto_desligado(monkeypatch):
     testes, empurrar projetos de teste para o repositório de dados real. Os testes do espelho
     ligam o servidor falso por cima, com a fixture ``espelho_github``.
     """
-    for variavel in (*espelho_remoto.VARIAVEIS, "MECANICA_TOOLKIT_AMBIENTE"):
+    for variavel in (*espelho_remoto.VARIAVEIS, "MECANICA_TOOLKIT_AMBIENTE", acesso.VARIAVEL_SENHA):
         monkeypatch.delenv(variavel, raising=False)
     espelho_remoto.redefinir()
     armazenamento.redefinir()
