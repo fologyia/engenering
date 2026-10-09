@@ -16,6 +16,17 @@ Streamlit.
 | `components/contraventamento_ui.py`, `contraventamento_help.py` | interface e textos dos "?" |
 | `app_pages/ligacao_contraventamento.py` | a página |
 
+## Modo simplificado
+
+No modo **simplificado** (o padrão da página) basta a força, o ângulo, a viga, a coluna (do
+catálogo, com o `k` tabelado da Gerdau — `core/perfis_gerdau_k.py`) e o parafuso:
+`core/contraventamento_dimensionamento.py` escolhe duas fileiras de parafusos com passo e gabarito de
+3·d e o menor número que resiste à força; os comprimentos mínimos para caber o grupo e, dentro
+deles, o par `l_h`/`l_v` que zera o momento nas interfaces (Eq. 4-1); a menor espessura da série
+comercial em que chapa, soldas e parafusos passam; e as pernas das soldas arredondadas para cima. No
+Exemplo 5.1 do guia, o resultado é uma chapa de 25 mm (o guia usa 1"). A página **Contraventamento
+de estruturas abertas** manda as forças da diagonal mais solicitada para cá com um botão.
+
 ## O que faz e o que não faz
 
 **Faz:** distribui a força P do contraventamento (tração e/ou compressão) entre a chapa–viga, a

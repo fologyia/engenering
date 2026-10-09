@@ -22,9 +22,11 @@ from components.ui import fronteira_modelo
 from components.verification_table import mostrar_tabela_verificacoes
 from core import bolted_connection as bc
 from core import contraventamento_chapa as ch
+from core import contraventamento_dimensionamento as dm
 from core import contraventamento_ligacao as lig
 from core import contraventamento_registro as reg
 from core import contraventamento_ufm as ufm
+from core import perfis_gerdau_k as gk
 from core import section_catalog as sc
 from core import steel_sections as ss
 from core.verificacao import csv_verificacoes, status_geral
@@ -32,6 +34,9 @@ from core.verificacao import csv_verificacoes, status_geral
 PREFIXO = "cv_"
 ORIGEM_DIGITAR = "Digitar as medidas"
 ORIGEM_CATALOGO = "Catálogo do programa"
+MODO_SIMPLES = "Simplificado — o programa dimensiona a chapa"
+MODO_COMPLETO = "Completo — eu informo todas as medidas"
+PERFIS_DO_CATALOGO_PADRAO = {"viga": "W 530 x 85,0", "coluna": "W 360 x 91,0(H)"}
 ACO_PADRAO_PERFIL = "ASTM A992"
 ACO_PADRAO_CHAPA = "ASTM A572 Gr 50"
 PERFIS_PADRAO = {
@@ -228,17 +233,20 @@ def reg_pt(valor: float, casas: int = 1) -> str:
     return f"{valor:.{casas}f}".replace(".", ",")
 
 
-def _perfil(papel: str, titulo: str) -> ch.PerfilDoNo:
+def _perfil(papel: str, titulo: str, *, simplificado: bool = False) -> ch.PerfilDoNo:
     nome_padrao, d, tw, tf, bf, k, zx, ix = PERFIS_PADRAO[papel]
     st.markdown(f"**{titulo}**")
-    origem = st.radio(
-        "Origem das medidas",
-        [ORIGEM_DIGITAR, ORIGEM_CATALOGO],
-        key=f"{PREFIXO}{papel}_origem",
-        persist_state="session",
-        horizontal=True,
-        help=AJUDA["perfil_origem"],
-    )
+    if simplificado:
+        origem = ORIGEM_CATALOGO
+    else:
+        origem = st.radio(
+            "Origem das medidas",
+            [ORIGEM_DIGITAR, ORIGEM_CATALOGO],
+            key=f"{PREFIXO}{papel}_origem",
+            persist_state="session",
+            horizontal=True,
+            help=AJUDA["perfil_origem"],
+        )
     aco = _selecao(
         "Aço do perfil",
         f"{papel}_aco",
@@ -251,22 +259,31 @@ def _perfil(papel: str, titulo: str) -> ch.PerfilDoNo:
         catalogo = sc.listar_perfis()
         nomes = [n for n, p in catalogo.items() if ss.familia_do_perfil(p) in ("i", "w", "hp")]
         escolhido = _selecao(
-            "Perfil do catálogo", f"{papel}_catalogo", nomes, AJUDA["perfil_catalogo"]
+            "Perfil do catálogo",
+            f"{papel}_catalogo",
+            nomes,
+            AJUDA["perfil_catalogo"],
+            padrao=PERFIS_DO_CATALOGO_PADRAO[papel],
         )
         perfil = catalogo[escolhido]
-        k_mm = _numero(
-            "Distância k [mm]",
-            f"{papel}_k_cat",
-            perfil.espessura_mesa_mm + 6.0,
-            AJUDA["k"],
-            minimo=1.0,
-            passo=1.0,
-            formato="%.1f",
-        )
+        k_tabela = gk.k_tabelado_mm(escolhido, perfil.espessura_mesa_mm)
+        if k_tabela is not None and simplificado:
+            k_mm = k_tabela
+        else:
+            k_mm = _numero(
+                "Distância k [mm]",
+                f"{papel}_k_cat",
+                k_tabela if k_tabela is not None else perfil.espessura_mesa_mm + 6.0,
+                AJUDA["k"],
+                minimo=1.0,
+                passo=1.0,
+                formato="%.1f",
+            )
         st.caption(
-            f"Seção idealizada: d = {reg_pt(perfil.altura_mm, 0)} mm, t_w = "
+            f"d = {reg_pt(perfil.altura_mm, 0)} mm, t_w = "
             f"{reg_pt(perfil.espessura_alma_mm)} mm, t_f = {reg_pt(perfil.espessura_mesa_mm)} mm, "
-            f"b_f = {reg_pt(perfil.largura_mm, 0)} mm."
+            f"b_f = {reg_pt(perfil.largura_mm, 0)} mm, k = {reg_pt(k_mm)} mm"
+            + (" (catálogo Gerdau)." if k_tabela is not None else " (informado).")
         )
         return ch.PerfilDoNo(
             escolhido,
@@ -322,14 +339,14 @@ def _perfil(papel: str, titulo: str) -> ch.PerfilDoNo:
     )
 
 
-def formulario_perfis() -> tuple[ch.PerfilDoNo, ch.PerfilDoNo, bool]:
+def formulario_perfis(*, simplificado: bool = False) -> tuple[ch.PerfilDoNo, ch.PerfilDoNo, bool]:
     with st.container(border=True):
         st.subheader("3. Viga e coluna", help=AJUDA["sec_3"])
         esquerda, direita = st.columns(2)
         with esquerda:
-            viga = _perfil("viga", "Viga")
+            viga = _perfil("viga", "Viga", simplificado=simplificado)
         with direita:
-            coluna = _perfil("coluna", "Coluna")
+            coluna = _perfil("coluna", "Coluna", simplificado=simplificado)
         na_mesa = st.toggle(
             "Chapa soldada na mesa da coluna",
             value=True,
@@ -972,10 +989,154 @@ def _registrar(r: lig.ResultadoLigacao, ident: Identificacao) -> None:
         )
 
 
+@dataclass(frozen=True)
+class DadosSimples:
+    aco_chapa: str
+    parafuso: str
+    grau: str
+    planos: int
+    rosca: bool
+    reacao: float
+    transferencia: float
+
+
+def formulario_simplificado() -> DadosSimples:
+    with st.container(border=True):
+        st.subheader("4. Parafusos e chapa", help=AJUDA["sec_simples"])
+        linha = st.columns(4)
+        aco = _selecao(
+            "Aço da chapa",
+            "aco_chapa",
+            list(lig.ACOS),
+            AJUDA["aco_chapa"],
+            padrao=ACO_PADRAO_CHAPA,
+            alvo=linha[0],
+        )
+        parafuso = _selecao(
+            "Parafuso",
+            "parafuso",
+            list(bc.PARAFUSOS),
+            AJUDA["parafuso"],
+            padrao='7/8"',
+            alvo=linha[1],
+        )
+        grau = _selecao("Grau", "grau", list(lig.GRAUS_DE_PARAFUSO), AJUDA["grau"], alvo=linha[2])
+        planos = int(
+            linha[3].radio(
+                "Planos de corte",
+                [1, 2],
+                index=0,
+                key=PREFIXO + "planos_simples",
+                persist_state="session",
+                horizontal=True,
+                help=AJUDA["planos"],
+            )
+        )
+        rosca = bool(
+            st.toggle(
+                "Rosca no plano de corte",
+                value=True,
+                key=PREFIXO + "rosca_simples",
+                persist_state="session",
+                help=AJUDA["rosca"],
+            )
+        )
+        with st.expander("Esforços da viga no nó (opcional)"):
+            colunas = st.columns(2)
+            reacao = _numero(
+                "Reação da viga no nó [kN]",
+                "reacao_viga",
+                0.0,
+                AJUDA["reacao_viga"],
+                minimo=-1.0e6,
+                passo=5.0,
+                formato="%.1f",
+                alvo=colunas[0],
+            )
+            transferencia = _numero(
+                "Força axial da viga no nó [kN]",
+                "transferencia",
+                0.0,
+                AJUDA["transferencia"],
+                minimo=-1.0e6,
+                passo=5.0,
+                formato="%.1f",
+                alvo=colunas[1],
+            )
+    return DadosSimples(aco, parafuso, grau, planos, rosca, reacao, transferencia)
+
+
+def _dimensoes_adotadas(dim: dm.Dimensionamento) -> None:
+    st.subheader("Dimensões adotadas", help=AJUDA["res_dimensoes"])
+    st.markdown("\n".join(f"- {passo}" for passo in dim.passos))
+    if not dim.chapa_atende:
+        st.warning(
+            "Nenhuma espessura da série fechou todas as verificações da chapa: veja as linhas "
+            "NÃO OK ou passe para o modo completo.",
+            icon=":material/warning:",
+        )
+
+
+def _mostrar_resultados(resultado: lig.ResultadoLigacao, ident: Identificacao) -> None:
+    st.header("Resultados")
+    _resumo(resultado)
+    aba_verificacoes, aba_forcas = st.tabs(["Verificações", "Forças e geometria"])
+    with aba_verificacoes:
+        _aba_verificacoes(resultado)
+    with aba_forcas:
+        _aba_forcas(resultado)
+    st.subheader("Referências", help=AJUDA["res_avisos"])
+    st.caption("\n".join(f"- {item}" for item in reg.REFERENCIAS))
+    _registrar(resultado, ident)
+
+
+def _modo_simplificado(ident: Identificacao) -> None:
+    forca = formulario_forca()
+    viga, coluna, na_mesa = formulario_perfis(simplificado=True)
+    dados = formulario_simplificado()
+    fy, fu = lig.ACOS[dados.aco_chapa]
+    base = lig.EntradaLigacao(
+        perfil_viga=viga,
+        perfil_coluna=coluna,
+        metodo=forca.metodo,
+        P_tracao_kN=forca.P_tracao,
+        P_compressao_kN=forca.P_compressao,
+        theta_graus=forca.theta,
+        ligacao_na_mesa_da_coluna=na_mesa,
+        reacao_viga_kN=dados.reacao,
+        transferencia_kN=dados.transferencia,
+        Fy_chapa_MPa=fy,
+        Fu_chapa_MPa=fu,
+        designacao_do_parafuso=dados.parafuso,
+        grau_do_parafuso=dados.grau,
+        rosca_no_plano=dados.rosca,
+        planos_de_corte=dados.planos,
+    )
+    try:
+        dimensionado = dm.dimensionar_ligacao(base)
+    except (ufm.UFMInvalido, ch.ChapaInvalida) as erro:
+        st.error(f"Não foi possível dimensionar: {erro}", icon=":material/error:")
+        st.stop()
+    st.header("Dimensionamento")
+    _dimensoes_adotadas(dimensionado)
+    _mostrar_resultados(dimensionado.resultado, ident)
+
+
 def mostrar_ligacao_de_contraventamento() -> None:
     """Desenha a página: entradas, resultados e registro."""
     fronteira_modelo(list(reg.FORA_DO_ESCOPO), titulo="O que esta página não faz")
     ident = formulario_identificacao()
+    modo = st.radio(
+        "Como preencher",
+        [MODO_SIMPLES, MODO_COMPLETO],
+        key=PREFIXO + "modo",
+        persist_state="session",
+        horizontal=True,
+        help=AJUDA["modo"],
+    )
+    if modo == MODO_SIMPLES:
+        _modo_simplificado(ident)
+        return
     forca = formulario_forca()
     viga, coluna, na_mesa = formulario_perfis()
     dados_ufm = formulario_ufm()
@@ -997,13 +1158,4 @@ def mostrar_ligacao_de_contraventamento() -> None:
     except (ufm.UFMInvalido, ch.ChapaInvalida) as erro:
         st.error(f"Não foi possível calcular: {erro}", icon=":material/error:")
         st.stop()
-    st.header("Resultados")
-    _resumo(resultado)
-    aba_verificacoes, aba_forcas = st.tabs(["Verificações", "Forças e geometria"])
-    with aba_verificacoes:
-        _aba_verificacoes(resultado)
-    with aba_forcas:
-        _aba_forcas(resultado)
-    st.subheader("Referências", help=AJUDA["res_avisos"])
-    st.caption("\n".join(f"- {item}" for item in reg.REFERENCIAS))
-    _registrar(resultado, ident)
+    _mostrar_resultados(resultado, ident)

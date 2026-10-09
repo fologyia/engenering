@@ -15,6 +15,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from components.contraventamento_help import AJUDA
+from components.contraventamento_ui import MODO_COMPLETO, MODO_SIMPLES
 from core import contraventamento_ufm as ufm
 from core.project_store import obter_projeto_ativo
 
@@ -119,6 +120,8 @@ def sem_ajuda(teste: AppTest) -> set[tuple[str, str]]:
 
 
 def abrir(banco_isolado, **estado) -> AppTest:
+    """Abre a página; sem ``cv_modo``, no modo completo (o das medidas informadas)."""
+    estado.setdefault("cv_modo", MODO_COMPLETO)
     teste = AppTest.from_file(APP, default_timeout=180)
     teste.run()
     teste.switch_page(PAGINA)
@@ -147,6 +150,11 @@ ESTADOS = [
     pytest.param({"cv_so_atencao": True}, id="so-atencao"),
     pytest.param({"cv_t_chapa": 6.0}, id="chapa-fina"),
     pytest.param({"cv_corte_h": 5000.0}, id="entrada-invalida"),
+    pytest.param({"cv_modo": MODO_SIMPLES}, id="simplificado"),
+    pytest.param(
+        {"cv_modo": MODO_SIMPLES, "cv_P_tracao": 50.0, "cv_P_compressao": 0.0},
+        id="simplificado-pequeno",
+    ),
 ]
 
 
@@ -193,3 +201,28 @@ def test_registrar_leva_a_ligacao_para_o_projeto(banco_com_projeto):
     assert len(achados) == 1
     assert achados[0]["entradas"]["tag"] == "LC-7"
     assert len(achados[0]["resultados"]["verificações"]) >= 20
+
+
+# ------------------------------------------------------------------ modo simplificado
+def test_modo_simplificado_dimensiona_e_fecha(banco_isolado):
+    t = abrir(banco_isolado, cv_modo=MODO_SIMPLES)
+    texto = " ".join(m.value for m in t.markdown)
+    assert "Parafusos: 2 fileiras" in texto and "Espessura da chapa" in texto
+    assert metrica(t, "Status geral") in ("OK", "ALERTA")
+    assert not t.error
+    # O simplificado não pede as medidas da chapa.
+    assert not [n for n in t.number_input if n.key in ("cv_t_chapa", "cv_lh", "cv_lv")]
+
+
+def test_modo_simplificado_usa_o_k_do_catalogo_gerdau(banco_isolado):
+    t = abrir(banco_isolado, cv_modo=MODO_SIMPLES)
+    legendas = " ".join(c.value for c in t.caption)
+    assert "k = 28,5 mm (catálogo Gerdau)" in legendas  # W 530 × 85: 16,5 + (502 − 478)/2
+
+
+def test_forca_que_chega_da_pagina_de_contraventamento_e_usada(banco_isolado):
+    t = abrir(
+        banco_isolado, cv_modo=MODO_SIMPLES, cv_P_tracao=123.4, cv_P_compressao=0.0, cv_theta=56.31
+    )
+    numeros = {n.key: n.value for n in t.number_input}
+    assert numeros["cv_P_tracao"] == 123.4 and numeros["cv_theta"] == 56.31

@@ -51,6 +51,20 @@ AJUDA: dict[str, str] = {
         "se alonga (DG29, seção 4.4). Só entra se você informar a área da barra e os "
         "comprimentos b e c."
     ),
+    "sec_simples": (
+        "No modo simplificado você escolhe só o parafuso e o aço: o programa define o número de "
+        "parafusos, a espessura e o tamanho da chapa e as soldas, e verifica tudo."
+    ),
+    "modo": (
+        "**Simplificado**: você informa a força, o ângulo, a viga, a coluna e o parafuso; o "
+        "programa dimensiona a chapa de nó (parafusos, espessura, comprimentos sem momento nas "
+        "interfaces e soldas). **Completo**: você informa todas as medidas, para conferir um "
+        "desenho pronto."
+    ),
+    "res_dimensoes": (
+        "O que o programa escolheu no modo simplificado e por quê. É um ponto de partida que "
+        "fecha nas verificações; leve as medidas para o desenho e confira."
+    ),
     # ------------------------------------------------------------------ identificação
     "obra": "Nome da obra ou do projeto, só para identificar o documento.",
     "tag": "Código da ligação no desenho (por exemplo, LC-12). Sai no registro e no memorial.",
