@@ -55,7 +55,7 @@ def test_combinacao_com_vento_usa_1_4_e_o_permanente_favoravel_aliviando():
     peso = comb.acao_da_categoria("PP aço", "Peso próprio de estrutura metálica", 0.0, -100.0, 0.0)
     vento = comb.acao_da_categoria("Vento", "Vento (NBR 6123)", 0.0, 60.0, 0.0)
     combinacoes = comb.gerar_combinacoes([peso, vento])
-    elu_vento = [c for c in combinacoes if c.estado_limite == "ELU fundamental"]
+    elu_vento = [c for c in combinacoes if c.estado_limite == "ELU normal"]
     # Vento principal: 1,25·PP + 1,4·W; com o permanente aliviando (sucção): 1,0·PP + 1,4·W.
     normal = next(
         c for c in elu_vento if c.acao_principal == "Vento" and "favoráveis" not in c.nome

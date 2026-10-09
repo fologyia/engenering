@@ -982,11 +982,11 @@ elif modulo == "2. Barras":
 elif modulo == "3. Combinações":
     st.header("Combinações de ações pela NBR 8681 / NBR 8800")
     st.info(
-        "Escolha a **categoria** de cada ação e os coeficientes γ_f e ψ das "
-        "Tabelas 1 e 2 da NBR 8800 (NBR 8681) são aplicados automaticamente — "
-        "inclusive a combinação com as permanentes favoráveis (γ_g = 1,0), que "
-        "governa vento de sucção e tombamento. Use a categoria personalizada "
-        "para informar γ e ψ próprios.",
+        "Escolha a **categoria** de cada ação e os coeficientes γ_f e ψ das Tabelas 1 e 2 da "
+        "NBR 8800 são aplicados automaticamente — inclusive as permanentes favoráveis (γ_g = 1,0), "
+        "que governam vento de sucção e tombamento. Ações com o mesmo **grupo** nunca atuam juntas "
+        "(W+ e W−, ou vento a 0° e a 90°). A tabela de baixo, **envoltória rigorosa**, aplica a "
+        "regra que a lista não consegue: variável que alivia fica de fora.",
         icon=":material/edit_note:",
     )
     categorias = [combinacoes.CATEGORIA_PERSONALIZADA] + [
@@ -998,6 +998,7 @@ elif modulo == "3. Combinações":
                 "PP",
                 "Peso próprio de estrutura metálica",
                 "Permanente",
+                "",
                 50.0,
                 10.0,
                 20.0,
@@ -1010,6 +1011,7 @@ elif modulo == "3. Combinações":
                 "Piso",
                 "Elementos construtivos industrializados (grades, pisos, guarda-corpos)",
                 "Permanente",
+                "",
                 10.0,
                 2.0,
                 4.0,
@@ -1022,6 +1024,7 @@ elif modulo == "3. Combinações":
                 "SC",
                 "Sobrecarga de uso — predominância de equipamentos fixos ou concentração de pessoas",
                 "Variável",
+                "",
                 30.0,
                 5.0,
                 15.0,
@@ -1030,13 +1033,26 @@ elif modulo == "3. Combinações":
                 0.6,
                 0.4,
             ],
-            ["W+", "Vento (NBR 6123)", "Variável", 0.0, 20.0, 40.0, 1.40, 0.6, 0.3, 0.0],
-            ["W−", "Vento (NBR 6123)", "Variável", -15.0, -20.0, -40.0, 1.40, 0.6, 0.3, 0.0],
+            ["W+", "Vento (NBR 6123)", "Variável", "Vento", 0.0, 20.0, 40.0, 1.40, 0.6, 0.3, 0.0],
+            [
+                "W−",
+                "Vento (NBR 6123)",
+                "Variável",
+                "Vento",
+                -15.0,
+                -20.0,
+                -40.0,
+                1.40,
+                0.6,
+                0.3,
+                0.0,
+            ],
         ],
         columns=[
             "nome",
             "categoria",
             "tipo",
+            "grupo",
             "N (kN)",
             "V (kN)",
             "M (kN·m)",
@@ -1050,7 +1066,7 @@ elif modulo == "3. Combinações":
         acoes_padrao,
         num_rows="dynamic",
         hide_index=True,
-        key="estrutura_acoes_editor",
+        key="estrutura_acoes_editor_v2",
         column_config={
             "categoria": st.column_config.SelectboxColumn(
                 options=categorias,
@@ -1058,9 +1074,15 @@ elif modulo == "3. Combinações":
                 help="Categoria da NBR 8800 (Tabelas 1 e 2). Define tipo, γ_f e ψ; a personalizada usa as colunas γ e ψ.",
             ),
             "tipo": st.column_config.SelectboxColumn(
-                options=["Permanente", "Variável"],
+                options=list(combinacoes.TIPOS_DE_ACAO),
                 required=True,
                 help="Só é usado na categoria personalizada.",
+            ),
+            "grupo": st.column_config.TextColumn(
+                help=(
+                    "Ações com o mesmo grupo nunca atuam juntas: escreva o mesmo nome (ex.: Vento) "
+                    "em W+ e W−, ou nas várias direções do vento. Vazio = atua com todas."
+                ),
             ),
             "γ": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
             "ψ0": st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.3f"),
@@ -1068,10 +1090,32 @@ elif modulo == "3. Combinações":
             "ψ2": st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.3f"),
         },
     )
+    estados_escolhidos = st.multiselect(
+        "Estados-limite",
+        list(combinacoes.TODOS_OS_ESTADOS),
+        default=list(combinacoes.ESTADOS_PADRAO),
+        key="estrutura_estados_limite",
+        persist_state="session",
+        help=(
+            "ELU normal (uso previsto), especial ou de construção (ação transitória de curta "
+            "duração), excepcional (precisa de uma ação do tipo Excepcional), e as de serviço: "
+            "rara (danos irreversíveis), frequente (reversíveis) e quase permanente (aspecto)."
+        ),
+    )
+    curta_duracao = st.toggle(
+        "Ação especial de curtíssima duração (ψ0,ef = ψ2)",
+        key="estrutura_especial_curta",
+        persist_state="session",
+        help=(
+            "Nas combinações especiais ou de construção, as acompanhantes entram com ψ0 — ou com "
+            "ψ2 quando a ação especial dura muito pouco (NBR 8800, 4.8.7.2.2)."
+        ),
+    )
     try:
         lista_acoes = []
         for _, linha in editadas.dropna(subset=["nome", "N (kN)", "V (kN)", "M (kN·m)"]).iterrows():
             categoria = str(linha.get("categoria") or combinacoes.CATEGORIA_PERSONALIZADA)
+            grupo = str(linha.get("grupo") or "").strip()
             if categoria != combinacoes.CATEGORIA_PERSONALIZADA:
                 lista_acoes.append(
                     combinacoes.acao_da_categoria(
@@ -1080,13 +1124,15 @@ elif modulo == "3. Combinações":
                         float(linha["N (kN)"]),
                         float(linha["V (kN)"]),
                         float(linha["M (kN·m)"]),
+                        grupo=grupo,
                     )
                 )
             else:
+                tipo = str(linha["tipo"])
                 lista_acoes.append(
                     combinacoes.AcaoEstrutural(
                         nome=str(linha["nome"]),
-                        tipo=str(linha["tipo"]),
+                        tipo=tipo,
                         n_kN=float(linha["N (kN)"]),
                         v_kN=float(linha["V (kN)"]),
                         m_kNm=float(linha["M (kN·m)"]),
@@ -1094,11 +1140,22 @@ elif modulo == "3. Combinações":
                         psi0=float(linha["ψ0"]),
                         psi1=float(linha["ψ1"]),
                         psi2=float(linha["ψ2"]),
-                        gamma_favoravel=1.0 if str(linha["tipo"]) == "Permanente" else None,
+                        gamma_favoravel=1.0 if tipo == combinacoes.TIPO_PERMANENTE else None,
                         categoria=categoria,
+                        grupo=grupo,
                     )
                 )
-        resultados = combinacoes.gerar_combinacoes(lista_acoes)
+        if not estados_escolhidos:
+            raise ValueError("escolha pelo menos um estado-limite.")
+        resultados = combinacoes.gerar_combinacoes(
+            lista_acoes, estados_escolhidos, especial_curta_duracao=curta_duracao
+        )
+        extremos = combinacoes.envoltoria(
+            lista_acoes,
+            ["N", "V", "M"],
+            estados_escolhidos,
+            especial_curta_duracao=curta_duracao,
+        )
     except (ValueError, TypeError) as erro:
         st.error(f"Revise a tabela: {erro}", icon=":material/error:")
         st.stop()
@@ -1110,8 +1167,10 @@ elif modulo == "3. Combinações":
                     "Ação": acao.nome,
                     "Categoria": acao.categoria or combinacoes.CATEGORIA_PERSONALIZADA,
                     "Tipo": acao.tipo,
+                    "Grupo": acao.grupo or "—",
                     "γ_f": acao.gamma,
                     "γ_f favorável": acao.gamma_favoravel,
+                    "γ_f especial": combinacoes.gamma_desfavoravel(acao, combinacoes.ELU_ESPECIAL),
                     "ψ0": acao.psi0,
                     "ψ1": acao.psi1,
                     "ψ2": acao.psi2,
@@ -1122,21 +1181,25 @@ elif modulo == "3. Combinações":
         hide_index=True,
         column_config={
             coluna: st.column_config.NumberColumn(format="%.2f")
-            for coluna in ("γ_f", "γ_f favorável", "ψ0", "ψ1", "ψ2")
+            for coluna in ("γ_f", "γ_f favorável", "γ_f especial", "ψ0", "ψ1", "ψ2")
         },
     )
 
-    tabela_resultados = pd.DataFrame([asdict(item) for item in resultados]).rename(
-        columns={
-            "nome": "Combinação",
-            "estado_limite": "Estado-limite",
-            "acao_principal": "Ação principal",
-            "n_kN": "N (kN)",
-            "v_kN": "V (kN)",
-            "m_kNm": "M (kN·m)",
-            "expressao": "Expressão",
-        }
+    tabela_resultados = pd.DataFrame(
+        [
+            {
+                "Combinação": item.nome,
+                "Estado-limite": item.estado_limite,
+                "Ação principal": item.acao_principal,
+                "N (kN)": item.n_kN,
+                "V (kN)": item.v_kN,
+                "M (kN·m)": item.m_kNm,
+                "Expressão": item.expressao,
+            }
+            for item in resultados
+        ]
     )
+    st.subheader(f"Lista de combinações ({len(resultados)})")
     st.dataframe(
         tabela_resultados,
         hide_index=True,
@@ -1145,6 +1208,25 @@ elif modulo == "3. Combinações":
             "V (kN)": st.column_config.NumberColumn(format="%.3f"),
             "M (kN·m)": st.column_config.NumberColumn(format="%.3f"),
         },
+    )
+    tabela_extremos = pd.DataFrame(
+        [
+            {
+                "Esforço": item.efeito,
+                "Estado-limite": item.estado_limite,
+                "Extremo": "máximo" if item.sentido > 0 else "mínimo",
+                "Valor": item.valor,
+                "Ação principal": item.acao_principal,
+                "Expressão": item.expressao,
+            }
+            for item in extremos
+        ]
+    )
+    st.subheader("Envoltória rigorosa por esforço")
+    st.dataframe(
+        tabela_extremos,
+        hide_index=True,
+        column_config={"Valor": st.column_config.NumberColumn(format="%.3f")},
     )
     st.download_button(
         "Baixar combinações em CSV",
@@ -1155,22 +1237,19 @@ elif modulo == "3. Combinações":
         width="stretch",
         key="aco_baixar_combinacoes",
     )
+    elu = tabela_extremos[tabela_extremos["Estado-limite"].isin(combinacoes.COMBINACOES_ULTIMAS)]
     with st.container(horizontal=True):
-        st.metric(
-            "Maior |N|",
-            f"{tabela_resultados['N (kN)'].abs().max():.2f} kN",
-            border=True,
-        )
-        st.metric(
-            "Maior |V|",
-            f"{tabela_resultados['V (kN)'].abs().max():.2f} kN",
-            border=True,
-        )
-        st.metric(
-            "Maior |M|",
-            f"{tabela_resultados['M (kN·m)'].abs().max():.2f} kN·m",
-            border=True,
-        )
+        for rotulo, efeito, unidade in (
+            ("Maior |N| (ELU)", "N", "kN"),
+            ("Maior |V| (ELU)", "V", "kN"),
+            ("Maior |M| (ELU)", "M", "kN·m"),
+        ):
+            valores = elu.loc[elu["Esforço"] == efeito, "Valor"].abs()
+            st.metric(
+                rotulo,
+                f"{valores.max():.2f} {unidade}" if len(valores) else "—",
+                border=True,
+            )
     st.caption(
         "O envelope de cada esforço pode vir de combinações diferentes. "
         "Não combine máximos independentes como se fossem simultâneos."
@@ -1180,25 +1259,28 @@ elif modulo == "3. Combinações":
         modulo_id="estruturas_aco",
         titulo="Combinações de ações ELU e ELS",
         status="Calculado",
-        resumo="Geração de combinações editáveis e envelope de esforços para uso nas verificações estruturais.",
+        resumo="Geração de combinações editáveis e envoltória rigorosa de esforços para uso nas verificações estruturais.",
         entradas={
-            "acoes": [asdict(item) for item in lista_acoes],
+            "acoes": [combinacoes.acao_para_dicionario(item) for item in lista_acoes],
             "numero_acoes": len(lista_acoes),
+            "estados_limite": list(estados_escolhidos),
         },
         resultados={
             "maior_N_absoluto_kN": float(tabela_resultados["N (kN)"].abs().max()),
             "maior_V_absoluto_kN": float(tabela_resultados["V (kN)"].abs().max()),
             "maior_M_absoluto_kNm": float(tabela_resultados["M (kN·m)"].abs().max()),
             "numero_combinacoes": len(resultados),
-            "combinacoes": [asdict(item) for item in resultados],
+            "combinacoes": tabela_resultados.to_dict(orient="records"),
+            "envoltoria": tabela_extremos.to_dict(orient="records"),
         },
         premissas=[
             "Coeficientes γ_f e ψ das Tabelas 1 e 2 da NBR 8800 (NBR 8681) aplicados por categoria de ação; a categoria personalizada usa os valores informados.",
             "Ações permanentes entram também com γ_g favorável (1,0) na combinação em que aliviam o efeito.",
+            "Ações do mesmo grupo exclusivo não atuam juntas; na envoltória, variável favorável fica de fora.",
         ],
         alertas=["Os máximos independentes do envelope podem pertencer a combinações diferentes."],
         referencias=[
-            "ABNT NBR 8800:2008, Tabelas 1 e 2 (γ_f e ψ) e ABNT NBR 8681:2003 — confirmar a edição vigente e as ações do projeto."
+            "ABNT NBR 8800 (Projeto de revisão 2024), 4.8.7 e Tabelas 1 e 2 (γ_f e ψ), e ABNT NBR 8681:2003."
         ],
         conclusao="Combinações geradas; selecionar casos simultâneos governantes para cada verificação.",
     )

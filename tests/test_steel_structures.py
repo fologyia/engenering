@@ -168,7 +168,7 @@ class LoadCombinationTests(unittest.TestCase):
         ]
         resultados = comb.gerar_combinacoes(acoes)
         self.assertEqual(len(resultados), 7)
-        elu_q = next(r for r in resultados if r.nome == "ELU — Q principal")
+        elu_q = next(r for r in resultados if r.nome == "ELU normal — Q principal")
         self.assertAlmostEqual(elu_q.n_kN, 1.4 * 10 + 1.4 * 5)
         self.assertAlmostEqual(elu_q.v_kN, 1.4 * 0.6 * 4)
 

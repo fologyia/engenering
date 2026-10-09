@@ -69,15 +69,26 @@ metálico (1,25 / 1,0 favorável), pré-moldados (1,30), moldados no local e
 elementos industrializados (1,35), com adições (1,40), equipamentos e
 sobrecarga (1,50, com `ψ` por tipo de uso), guarda-corpo, vento (1,40; `ψ`
 0,6 / 0,3 / 0), temperatura (1,20), truncada (1,20) — ou a categoria
-personalizada com `γ` e `ψ` próprios. O gerador cria:
+personalizada com `γ` e `ψ` próprios. Cada categoria traz também os `γ` das
+combinações especiais ou de construção e das excepcionais (Tabela 1). O gerador cria:
 
 - ELU normais, alternando a ação variável principal, inclusive a combinação
   com as permanentes favoráveis (`γ_g = 1,0`), que governa vento de sucção e
-  tombamento;
-- ELS rara, frequente e quase permanente.
+  tombamento; ELU especiais ou de construção (com `ψ_0,ef` = ψ₀, ou ψ₂ se a ação
+  for de curtíssima duração) e excepcionais (`F_Q,exc` com γ = 1,0 e
+  acompanhantes com ψ₂), escolhidas na página;
+- ELS rara (`ΣG + Q₁ + Σψ₁·Q_j` — até 2026-10 o programa usava ψ₀ nas
+  acompanhantes, o que a norma não pede), frequente e quase permanente.
 
-O envelope de cada esforço pode vir de combinações diferentes; a página e o
-registro avisam para não tratar máximos independentes como simultâneos.
+Ações com o mesmo **grupo** (coluna "grupo": W+ e W−, ou o vento nas quatro
+direções) nunca atuam juntas — antes o vento a barlavento e o de sotavento
+podiam entrar na mesma combinação. A tabela **envoltória rigorosa** dá, para N,
+V e M, o máximo e o mínimo de cada estado-limite aplicando as regras que a lista
+explícita não consegue: variável que alivia fica de fora (nota a da Tabela 1) e
+cada permanente entra com o γ desfavorável ou o favorável conforme o sinal do
+seu efeito. O envelope de cada esforço pode vir de combinações diferentes; a
+página e o registro avisam para não tratar máximos independentes como
+simultâneos.
 
 ### Ações de plataforma
 
