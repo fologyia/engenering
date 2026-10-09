@@ -42,7 +42,7 @@ def valor_convertido(chave: str, categoria: str, destino: str) -> float:
 
 #: Módulos que o roteiro só abre: os dados deles (edificação, escada, nó) são muitos e se
 #: preenchem na própria página, então o assistente não transfere nenhum valor.
-ROTAS_SEM_PREENCHIMENTO = frozenset({"vento", "degrau", "contraventamento"})
+ROTAS_SEM_PREENCHIMENTO = frozenset({"vento", "degrau", "contraventamento", "estrutura_aberta"})
 
 
 def coletar_entradas(

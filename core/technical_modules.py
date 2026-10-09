@@ -235,6 +235,29 @@ def _registrar_padrao() -> None:
             ),
         ),
         ModuloTecnico(
+            id="contraventamento_estrutura",
+            titulo="Contraventamento de estruturas abertas",
+            versao="1.0",
+            pagina="app_pages/contraventamento_estrutura.py",
+            grupo_navegacao="Dimensionamento complementar",
+            ordem=16,
+            icone=":material/grid_on:",
+            descricao=(
+                "Contraventamento vertical de plataformas, mezaninos e pipe racks: vento por "
+                "reticulados (NBR 6123:2023, cap. 8), combinações ELU/ELS com forças nocionais, "
+                "B₂, diagonais (cantoneira, tubo ou tirante), ligações e deslocamentos."
+            ),
+            aliases=(
+                "Contraventamento de plataforma",
+                "Estrutura aberta",
+                "Plataforma aberta",
+                "Pipe rack",
+                "Mezanino",
+                "Diagonais de contraventamento",
+                "Vento em reticulados",
+            ),
+        ),
+        ModuloTecnico(
             id="ligacao_contraventamento",
             titulo="Ligação de contraventamento",
             versao="1.0",

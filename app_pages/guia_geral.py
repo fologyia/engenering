@@ -72,6 +72,7 @@ opcoes = [
     "Análise de sensibilidade",
     "Projeto de parafusos",
     "Degrau de escada em grade",
+    "Contraventamento de estruturas abertas",
     "Ligação de contraventamento",
     "Normas técnicas",
     "Estruturas de aço",
@@ -167,6 +168,11 @@ if modulo == "Comece aqui":
                 "Escada industrial em grade de piso eletrofundida (degrau Selmec)",
                 "Degrau de escada em grade",
                 "Espelho, piso, lances, modelo do catálogo e 38 verificações NR-12, NR-22 e Anglo",
+            ],
+            [
+                "Plataforma, mezanino ou pipe rack sem fechamento a contraventar",
+                "Contraventamento de estruturas abertas",
+                "Vento nos reticulados, combinações, B₂, diagonais e deslocamentos",
             ],
             [
                 "Contraventamento vertical chegando ao canto viga–coluna por chapa de nó",
@@ -1937,6 +1943,106 @@ elif modulo == "Degrau de escada em grade":
     link_modulo("app_pages/degrau_escada.py", "Abrir Degrau de escada em grade")
 
 
+elif modulo == "Contraventamento de estruturas abertas":
+    from core import contraventamento_plataforma as _cp
+
+    st.header("Contraventamento de estruturas abertas")
+    st.markdown(
+        "Use para o **contraventamento vertical** de plataformas, mezaninos, pipe racks e outras "
+        "estruturas **sem fechamento**. Com a planta, os pisos, as cargas e o vento do local, o "
+        "programa calcula o vento nos pórticos como **reticulados** (NBR 6123:2023, capítulo 8 — "
+        "C_a da Figura 12 e proteção η da Figura 14), nos guarda-corpos e nos equipamentos; monta "
+        "as **combinações** ELU e ELS com as forças nocionais de 0,3 %; avalia a segunda ordem "
+        "(**B₂**); leva o cortante de cada andar às diagonais e verifica barra (cantoneira, tubo ou "
+        "tirante), parafusos, solda e deslocamentos pela NBR 8800. A chapa de nó segue para a "
+        "página Ligação de contraventamento com um clique."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "Planta, pisos e vãos",
+                "L_x, L_y, número de pisos e altura do andar (ou as cotas), vãos em X e em Y",
+                "Desenho de arranjo",
+            ],
+            [
+                "Pilares e vigas",
+                "Perfis do catálogo: o vento enxerga a maior medida do pilar e a altura da viga",
+                "Lista de material ou pré-dimensionamento",
+            ],
+            [
+                "Cargas por piso",
+                "Peso da estrutura e do piso (kN/m²), sobrecarga (kN/m²), equipamentos e outras "
+                "forças horizontais",
+                "Critério do cliente, NBR 6120, folhas de dados dos equipamentos",
+            ],
+            [
+                "Vento",
+                "V₀ (isopletas), S₁, categoria do terreno e grupo de S₃",
+                "NBR 6123:2023",
+            ],
+            [
+                "Contraventamento",
+                "Tipo (X só tração, X tração e compressão, diagonal simples, V invertido), linhas e "
+                "painéis por direção, barra e ligação",
+                "Desenho do contraventamento",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Informe a **planta** e os **pisos**; escolha os perfis dos pilares e das vigas.
+        2. Confira as **cargas** por m²; em "Equipamentos, outras forças horizontais e
+           categorias", acrescente vasos, painéis e forças de operação.
+        3. Informe o **vento** do local.
+        4. Escolha o **contraventamento** e a barra (o padrão é X só tração com cantoneira).
+        5. Leia o quadro-resumo; na aba **Combinações e andares** veja a combinação que governa
+           cada andar; na aba **Ligação**, leve as forças para a chapa de nó.
+        6. **Registre** no projeto para o memorial trazer o vento, as ações, os andares e as
+           verificações.
+        """
+    )
+    _ex = _cp.calcular(_cp.EntradaContraventamento())
+    _gov = _ex.diagonal_governante()
+    mostrar_exemplo(
+        [
+            ["Planta", "12 × 6 m, um piso a 4 m, 2 vãos em X e 1 em Y, guarda-corpo"],
+            ["Cargas", "estrutura 0,60, piso 0,45 e sobrecarga 5,0 kN/m²"],
+            ["Vento", "V₀ = 35 m/s, terreno III, grupo 3"],
+            ["Contraventamento", 'X só tração, 2 linhas × 1 painel, L 2 1/2" × 1/4" A36'],
+        ],
+        f"Resultado esperado: vento de {_ex.vento.x.total_kN:.1f} kN em X e "
+        f"{_ex.vento.y.total_kN:.1f} kN em Y; diagonal mais solicitada em {_gov.direcao} com "
+        f"N_t = {_gov.tracao_kN:.1f} kN ({_gov.cortante_elu.expressao}); B₂ = {_gov.b2:.3f} "
+        f"(pequena deslocabilidade); aproveitamento máximo de {100 * _ex.aproveitamento_maximo:.0f} %.".replace(
+            ".", ","
+        ),
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Força nocional:** 0,3 % do peso de cada piso, sempre a favor da segurança, em todas
+              as combinações — é a imperfeição da estrutura (4.10.7.1).
+            - **Combinação governante:** a envoltória rigorosa tira a variável que alivia e usa
+              γ = 1,0 na permanente que alivia; o vento está num grupo exclusivo (+X, −X, +Y, −Y).
+            - **B₂:** até 1,10, pequena deslocabilidade; até 1,40, média (forças amplificadas com
+              80 % da rigidez); acima, grande — aumente as diagonais.
+            - **X só tração:** a diagonal comprimida é desprezada; por isso a esbeltez da
+              tracionada (L/r ≤ 300) importa — o tirante dispensa o limite se tiver pré-tensão.
+            """
+        )
+    st.warning(
+        "Fora do escopo: pilares, vigas e bases (o programa dá o acréscimo de força nos pilares do "
+        "painel), o contraventamento horizontal do piso (grade não é diafragma), efeitos "
+        "dinâmicos e sismo. As barras circulares usam o C_a de faces planas (a favor da segurança).",
+        icon=":material/warning:",
+    )
+    link_modulo(
+        "app_pages/contraventamento_estrutura.py", "Abrir Contraventamento de estruturas abertas"
+    )
+
+
 elif modulo == "Ligação de contraventamento":
     from components.contraventamento_ui import PERFIS_PADRAO as _perfis_cv
     from core import contraventamento_chapa as _ch
@@ -1994,6 +2100,9 @@ elif modulo == "Ligação de contraventamento":
     st.subheader("Passo a passo")
     st.markdown(
         """
+        0. Escolha o **modo**: no **simplificado** você informa a força, o ângulo, a viga, a
+           coluna e o parafuso, e o programa dimensiona a chapa (parafusos, espessura,
+           comprimentos sem momento nas interfaces e soldas); no **completo**, você informa tudo.
         1. Escolha **LRFD** ou **ASD** e informe a força **P** e o ângulo **θ** com a vertical.
         2. Informe a **viga** e a **coluna** (medidas do perfil) e o **caso** do método.
         3. Dê as dimensões da **chapa**, os **parafusos** e as **soldas**.

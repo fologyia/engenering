@@ -236,6 +236,14 @@ modulos = [
         "green",
     ),
     (
+        "Contraventamento de estruturas abertas",
+        ":material/grid_on:",
+        "Plataformas e pipe racks",
+        "Vento nos reticulados, combinações ELU/ELS com forças nocionais, B₂, diagonais e deslocamentos.",
+        "app_pages/contraventamento_estrutura.py",
+        "blue",
+    ),
+    (
         "Ligação de contraventamento",
         ":material/hub:",
         "Chapa de nó (AISC DG29)",
@@ -296,6 +304,7 @@ with st.container(border=True):
         "Preciso das forças do vento em uma edificação (NBR 6123:2023)",
         "Preciso dimensionar o degrau de uma escada industrial em grade",
         "Preciso dimensionar a chapa de nó de um contraventamento no canto viga–coluna",
+        "Preciso contraventar uma plataforma, mezanino ou pipe rack aberto",
     ]
     situacao = st.selectbox("Escolha o que você possui", situacoes)
 
@@ -408,6 +417,12 @@ with st.container(border=True):
             "Divide a força da barra entre chapa, viga e coluna pelo Método das Forças Uniformes e verifica a chapa de nó pelo AISC 360-16.",
             "app_pages/ligacao_contraventamento.py",
             ":material/hub:",
+        ),
+        situacoes[18]: (
+            "Contraventamento de estruturas abertas",
+            "Calcula o vento nos pórticos abertos, combina as ações com as forças nocionais e verifica as diagonais e os deslocamentos.",
+            "app_pages/contraventamento_estrutura.py",
+            ":material/grid_on:",
         ),
     }
     titulo, descricao, destino, icone = recomendacoes[situacao]

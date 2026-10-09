@@ -94,6 +94,14 @@ ROTAS: dict[str, RotaProjeto] = {
         "força e ângulo do contraventamento, perfis da viga e da coluna, chapa e parafusos",
         "forças nas interfaces pelo UFM e verificações da chapa de nó (AISC 360-16)",
     ),
+    "estrutura_aberta": RotaProjeto(
+        "estrutura_aberta",
+        "Contraventamento de estruturas abertas",
+        "app_pages/contraventamento_estrutura.py",
+        ":material/grid_on:",
+        "planta, pisos, cargas por m², vento do local e o tipo de contraventamento",
+        "vento nos reticulados, combinações, B₂, diagonais e deslocamentos verificados",
+    ),
     "analise_sensibilidade": RotaProjeto(
         "analise_sensibilidade",
         "Análise de sensibilidade",
@@ -115,6 +123,7 @@ OBJETIVOS = [
     "Calcular as forças do vento em uma edificação",
     "Dimensionar o degrau de uma escada industrial em grade",
     "Dimensionar a ligação de um contraventamento (chapa de nó)",
+    "Contraventar uma plataforma ou estrutura aberta",
     "Ainda não sei qual análise usar",
 ]
 OBJ_INDEFINIDO = OBJETIVOS[-1]
@@ -129,6 +138,7 @@ DADOS_DISPONIVEIS = [
     "Dimensões, local e terreno de uma edificação",
     "Desnível e comprimento do degrau de uma escada",
     "Força, ângulo e perfis de um contraventamento",
+    "Planta, pisos e cargas de uma plataforma aberta",
     "Somente uma ideia inicial do problema",
 ]
 DADOS_INDEFINIDO = DADOS_DISPONIVEIS[-1]
@@ -143,6 +153,7 @@ COMPONENTES = [
     "Edificação sujeita ao vento",
     "Escada industrial",
     "Nó de contraventamento",
+    "Plataforma, mezanino ou pipe rack aberto",
     "Outro ou ainda não definido",
 ]
 COMPONENTE_INDEFINIDO = COMPONENTES[-1]
@@ -158,6 +169,7 @@ _ROTA_POR_OBJETIVO = {
     OBJETIVOS[6]: "vento",
     OBJETIVOS[7]: "degrau",
     OBJETIVOS[8]: "contraventamento",
+    OBJETIVOS[9]: "estrutura_aberta",
 }
 
 _ROTA_POR_DADOS = {
@@ -169,6 +181,7 @@ _ROTA_POR_DADOS = {
     DADOS_DISPONIVEIS[5]: "vento",
     DADOS_DISPONIVEIS[6]: "degrau",
     DADOS_DISPONIVEIS[7]: "contraventamento",
+    DADOS_DISPONIVEIS[8]: "estrutura_aberta",
     DADOS_INDEFINIDO: "cargas",
 }
 
@@ -181,6 +194,7 @@ _ROTA_POR_COMPONENTE = {
     COMPONENTES[5]: "vento",
     COMPONENTES[6]: "degrau",
     COMPONENTES[7]: "contraventamento",
+    COMPONENTES[8]: "estrutura_aberta",
     COMPONENTE_INDEFINIDO: "cargas",
 }
 

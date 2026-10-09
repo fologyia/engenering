@@ -348,13 +348,32 @@ AA-BR-DPST-DR-0001, a NBR 8800:2008, a NBR 6120 e a ISO 14122-3 (`core/degrau_es
 Entrada impossível (desnível ou comprimento nulo, altura por lance menor que um espelho, `C ≤ b`…) vira
 erro claro: nada é corrigido em silêncio. Não dimensiona longarina, patamar nem guarda-corpo.
 
+### Contraventamento de estruturas abertas
+
+Contraventamento vertical de **plataformas, mezaninos e pipe racks sem fechamento**, da planta à
+diagonal verificada (`core/contraventamento_plataforma.py`; detalhes em
+`docs/contraventamento_estrutura.md`):
+
+- **vento por reticulados** pela NBR 6123:2023, capítulo 8 — C_a da Figura 12 por φ, proteção η da
+  Figura 14 entre pórticos, guarda-corpos e equipamentos (cilindros pelas Tabelas 27 e 28), levados
+  aos pisos (`core/vento_estrutura_aberta.py`);
+- **ações e combinações** da NBR 8800 com forças nocionais de 0,3 % em todas as combinações
+  últimas, vento nas quatro direções num grupo exclusivo e cortante de cada andar pela envoltória
+  rigorosa, com a combinação governante escrita por extenso;
+- **B₂** de cada andar (Anexo C) e classificação da deslocabilidade, com amplificação na média;
+- **diagonais** em X (só tração ou tração e compressão), diagonal simples ou V invertido, em
+  cantoneira (5.3.5.4), tubo ou tirante, com parafusos, rasgamento e solda; **deslocamentos** do
+  Anexo B; botão que leva as forças para a Ligação de contraventamento.
+
 ### Ligação de contraventamento
 
 Dimensiona a **chapa de nó** de um contraventamento vertical que chega ao canto viga–coluna pelo
 **Método das Forças Uniformes** do AISC Design Guide 29 (caso geral e casos especiais 1, 2 e 3) e
 verifica pelo AISC 360-16, em LRFD ou ASD: parafusos da barra, seção de Whitmore, bloco de
 cisalhamento, flambagem da chapa, interfaces, soldas e alma/mesa da viga e da coluna (cerca de 24
-linhas com o item da norma em cada uma). Reproduz os Exemplos 5.1 a 5.4 do guia
+linhas com o item da norma em cada uma). No **modo simplificado** o programa dimensiona a chapa
+sozinho (parafusos, espessura, comprimentos sem momento nas interfaces e soldas) a partir da força,
+do ângulo, dos perfis do catálogo (com o `k` tabelado) e do parafuso. Reproduz os Exemplos 5.1 a 5.4 do guia
 (`core/contraventamento_*.py`; detalhes em `docs/ligacao_contraventamento.md`). O registro leva as
 forças nas interfaces e a geometria para o memorial. Não verifica a barra nem a chapa de topo
 parafusada.
@@ -455,7 +474,9 @@ A325 e C_t ≤ 0,90) precisam ser confirmados na norma antes de emitir documento
   por estado-limite;
 - combinações pela **NBR 8681 / NBR 8800** por categoria de ação (γ_f, γ
   favorável, ψ₀/ψ₁/ψ₂ das Tabelas 1 e 2), ELU normais com permanentes
-  favoráveis e ELS rara, frequente e quase permanente;
+  favoráveis, especiais ou de construção e excepcionais, ELS rara (ψ₁ nas
+  acompanhantes), frequente e quase permanente, grupos de ações exclusivas
+  (W+ e W− nunca juntos) e envoltória rigorosa por esforço;
 - ações de plataforma: vento pela **NBR 6123:2023** (S₁ por relevo, S₂ por
   categoria/classe/altura, S₃ por grupo, `q = 0,613·V_k²`, força e carga por
   metro com C_f), guarda-corpo e impacto (NBR 6120 / NBR 14718 / ASCE 7) e
@@ -592,6 +613,7 @@ mecanica_toolkit/
 │   ├── circulo_mohr.py
 │   ├── projeto_parafusos.py
 │   ├── degrau_escada.py
+│   ├── contraventamento_estrutura.py
 │   ├── ligacao_contraventamento.py
 │   ├── estruturas_aco.py
 │   ├── catalogo_materiais.py

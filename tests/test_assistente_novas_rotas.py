@@ -16,6 +16,7 @@ NOVAS = [
     ("Calcular as forças do vento em uma edificação", "vento"),
     ("Dimensionar o degrau de uma escada industrial em grade", "degrau"),
     ("Dimensionar a ligação de um contraventamento (chapa de nó)", "contraventamento"),
+    ("Contraventar uma plataforma ou estrutura aberta", "estrutura_aberta"),
 ]
 
 
@@ -69,6 +70,7 @@ def test_pagina_inicial_traz_os_tres_cartoes_e_as_tres_rotas_rapidas(banco_isola
         "Vento nas estruturas",
         "Degrau de escada em grade",
         "Ligação de contraventamento",
+        "Contraventamento de estruturas abertas",
     ):
         assert titulo in corpo, titulo
     opcoes = t.selectbox[0].options

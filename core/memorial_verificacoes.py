@@ -602,7 +602,39 @@ _ENTRADAS_CONTRAVENTAMENTO: tuple[_Entrada, ...] = (
     ("considerar_distorcao", "Considerar a distorção do pórtico", "se_preenchido"),
 )
 
+_ENTRADAS_CONTRAVENTAMENTO_ESTRUTURA: tuple[_Entrada, ...] = (
+    ("obra", "Obra", "se_preenchido"),
+    ("tag", "TAG", "se_preenchido"),
+    ("data_do_calculo", "Data do cálculo", "se_preenchido"),
+    ("comprimento_x_m", "Comprimento L_x [m]", "sempre"),
+    ("largura_y_m", "Largura L_y [m]", "sempre"),
+    ("cotas_dos_pisos_m", "Cotas dos pisos [m]", "sempre"),
+    ("vaos_x", "Vãos em X", "sempre"),
+    ("vaos_y", "Vãos em Y", "sempre"),
+    ("largura_do_pilar_m", "Largura do pilar vista pelo vento [m]", "sempre"),
+    ("altura_da_viga_m", "Altura da viga [m]", "sempre"),
+    ("guarda_corpo", "Guarda-corpo no perímetro", "sempre"),
+    ("altura_do_guarda_corpo_m", "Altura do guarda-corpo [m]", "se_preenchido"),
+    ("indice_do_guarda_corpo", "Índice φ do guarda-corpo", "se_preenchido"),
+    ("equipamentos", "Equipamentos", "se_preenchido"),
+    ("V0_m_s", "V₀ [m/s]", "sempre"),
+    ("S1", "S₁", "sempre"),
+    ("categoria_de_rugosidade", "Categoria do terreno", "sempre"),
+    ("grupo_S3", "Grupo de S₃", "se_preenchido"),
+    ("S3_informado", "S₃ informado", "se_preenchido"),
+    ("peso_da_estrutura_kN_m2", "Peso da estrutura [kN/m²]", "sempre"),
+    ("peso_do_piso_kN_m2", "Peso do piso [kN/m²]", "sempre"),
+    ("sobrecarga_kN_m2", "Sobrecarga [kN/m²]", "sempre"),
+    ("categoria_da_sobrecarga", "Categoria da sobrecarga", "sempre"),
+    ("forcas_horizontais", "Outras forças horizontais", "se_preenchido"),
+    ("contraventamento_X", "Contraventamento das linhas em X", "sempre"),
+    ("contraventamento_Y", "Contraventamento das linhas em Y", "sempre"),
+    ("excentricidade", "Excentricidade (fração)", "sempre"),
+    ("combinacao_de_servico", "Combinação dos deslocamentos", "sempre"),
+)
+
 ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
+    "contraventamento_estrutura": _ENTRADAS_CONTRAVENTAMENTO_ESTRUTURA,
     "ligacao_contraventamento": _ENTRADAS_CONTRAVENTAMENTO,
     "flambagem_colunas": _ENTRADAS_FLAMBAGEM,
     "projeto_parafusos": _ENTRADAS_PARAFUSOS,
@@ -665,6 +697,8 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "solucao_do_portico",
         # ligação de contraventamento (as tabelas do memorial já trazem as forças)
         "forcas_do_UFM",
+        # contraventamento de estruturas abertas
+        "forcas_para_a_ligacao",
         # degrau de escada em grade (as tabelas do memorial já trazem estes valores)
         "modelo_adotado",
         "número_de_espelhos",
