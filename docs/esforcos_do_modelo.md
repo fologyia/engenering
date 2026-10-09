@@ -104,8 +104,35 @@ nem majorar** (critério Anglo, item 5.9: quem projeta a fundação faz as combi
   Anglo e a convenção, Quadro, Compressão por pilar), CSV e registro no projeto (capítulo de cálculo
   no memorial com as duas tabelas).
 
+## Placas de base dos pilares (`core/placa_base_pilares.py`)
+
+Uma **placa padrão** para todos os pilares (gravada em `esforcos_do_modelo["placa"]`): comprimento N
+(na direção da alma, a do momento do eixo forte), largura B, espessura, aço, f_ck, A₂/A₁, número de
+chumbadores (total e na linha tracionada), diâmetro, aço do chumbador e a distância f do centro à
+linha tracionada (vazio = N/2 − 50 mm).
+
+* Para cada pilar do quadro das fundações, os esforços da base de cada caso (N com compressão
+  positiva, cortantes, momentos) são **combinados com os fatores ELU** do plano; o momento é o do
+  **eixo forte** da tabela das barras e o cortante, a resultante de V₁ e V₂.
+* Em cada combinação, `core/base_plate.verificar_placa_base` (AISC Design Guide 1): compressão
+  centrada (3.1), momento pequeno (3.3), momento grande com tração nos chumbadores (3.4) ou tração
+  (3.2); **espessura da placa** com utilização (t_req/t)² (o momento resistente cresce com t²),
+  **chumbadores** na tração, no cisalhamento e na interação (AISC J3.6 e J3.7). Vale a combinação
+  de maior utilização.
+* No **momento grande** o concreto trabalha em f_p,máx num comprimento Y por construção: a linha do
+  contato é informativa (não é 100 % de uso); se Y não existe, a placa é pequena para o momento e o
+  pilar **não atende**.
+* **Alertas**: momento no eixo fraco acima de 10 % do forte (o DG1 trata um eixo só) e pilar que não
+  é seção I. Placa menor que o pilar ou chumbador fora da placa deixa o pilar pendente.
+* **Critério Anglo**: espessura mínima da placa (8.8: 16 mm; 12,5 mm em elemento leve), diâmetro
+  mínimo do chumbador (5/8") e, para o diâmetro escolhido, o furo na placa, a arruela (não soldada) e
+  o graute mínimo da tabela do item 8.7.
+* **Saídas**: desenho da placa em planta (`svg_placa_de_base`), tabela por pilar, o cálculo completo
+  do pilar escolhido, CSV e registro (uma linha por pilar; capítulo com o que passou e o que não
+  passou no memorial). A ancoragem no concreto (cone, comprimento) e o bloco ficam para a fundação.
+
 ## Testes
 
 `tests/test_esforcos_modelo.py` (leitura com arquivos no formato do SolidWorks gerados por
 `tests/dados_solidworks.py` a partir do pórtico do mini exemplo, conferência, envoltória ponto a
-ponto contra a conta à mão, malhas diferentes), `tests/test_verificacao_barras.py` (pilar contra a página Flambagem de colunas, B₂, pendências, tirante, cantoneira, registro e memorial) `tests/test_quadro_fundacoes.py` e `tests/test_esforcos_modelo_pagina.py`.
+ponto contra a conta à mão, malhas diferentes), `tests/test_verificacao_barras.py` (pilar contra a página Flambagem de colunas, B₂, pendências, tirante, cantoneira, registro e memorial) `tests/test_quadro_fundacoes.py`, `tests/test_placa_base_pilares.py` (conta à mão do Design Guide 1, momento grande, critério Anglo, placa pequena, pendências, eixo fraco, ida e volta pelo projeto, registro e desenho) e `tests/test_esforcos_modelo_pagina.py`.

@@ -98,6 +98,55 @@ AJUDA: dict[str, str] = {
         "Grava o quadro no projeto ativo: o memorial ganha o capítulo com a compressão por "
         "pilar e o quadro completo."
     ),
+    "sec_placas": (
+        "A placa de base e os chumbadores de cada pilar, pelo Design Guide 1 do AISC: os esforços "
+        "da base (os mesmos do quadro das fundações) são combinados com os fatores do plano de "
+        "cargas e vale a combinação que mais exige. Uma placa padrão para todos os pilares."
+    ),
+    "placa_n": (
+        "Comprimento N da placa (mm), na direção da alma do pilar — a direção em que o momento do "
+        "eixo forte comprime um lado e puxa os chumbadores do outro."
+    ),
+    "placa_b": "Largura B da placa (mm), na direção das mesas. Precisa ser ao menos a largura da mesa.",
+    "placa_t": (
+        "Espessura da placa (mm). O critério Anglo pede no mínimo 16 mm (12,5 mm em elementos "
+        "leves)."
+    ),
+    "placa_aco": "Aço da placa: dá o f_y da flexão da placa.",
+    "placa_fck": "Resistência do concreto (ou do graute) sob a placa, em MPa.",
+    "placa_a2a1": (
+        "A₂/A₁: área do topo do bloco ÷ área da placa. 1,0 se a placa cobre o bloco inteiro; "
+        "maior aumenta a pressão admissível (no máximo o dobro, limite do AISC)."
+    ),
+    "placa_chumbadores": "Quantos chumbadores a placa tem no total (metade em cada linha).",
+    "placa_lado": "Quantos chumbadores ficam na linha tracionada — os que seguram o momento.",
+    "placa_diametro": (
+        'Diâmetro do chumbador. O critério Anglo pede no mínimo 5/8" e dá, para cada diâmetro, o '
+        "furo na placa, a arruela e o graute mínimo (item 8.7)."
+    ),
+    "placa_aco_chumbador": "Aço do chumbador: dá o f_u da tração e do cisalhamento.",
+    "placa_f": (
+        "Distância do centro da placa à linha dos chumbadores tracionados (mm). Zero = N/2 − 50 mm."
+    ),
+    "placa_leve": "Ligue para elemento leve (escada, passarela): a placa mínima Anglo cai para 12,5 mm.",
+    "btn_gravar_placa": "Grava a placa no projeto e verifica todos os pilares com ela.",
+    "placa_anglo": (
+        "Liga as exigências do critério Anglo: espessura mínima da placa, diâmetro mínimo do "
+        "chumbador e o furo, a arruela e o graute do item 8.7. Vem da base técnica."
+    ),
+    "res_placas": (
+        "Utilização da placa mais exigida (flexão da placa, contato no concreto ou chumbadores) "
+        "e quantos pilares atendem."
+    ),
+    "res_desenho_placa": (
+        "A placa em planta, em escala: o pilar, os chumbadores, os furos e as arruelas (tracejadas)."
+    ),
+    "placa_detalhe": "Mostra a verificação completa da placa de um pilar, na combinação que governa.",
+    "btn_csv_placas": "A verificação das placas de todos os pilares em CSV (abre no Excel).",
+    "reg_placas": (
+        "Grava a verificação das placas no projeto ativo: o memorial ganha o capítulo com o "
+        "resultado de cada pilar."
+    ),
     "reg_registrar": (
         "Grava a verificação no projeto ativo: o memorial ganha o capítulo com o resultado, as "
         "barras que passaram e, no fim, as que não passaram."

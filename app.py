@@ -85,6 +85,11 @@ pagina = st.navigation(
                 title="Esforços do modelo",
                 icon=":material/upload_file:",
             ),
+            st.Page(
+                "app_pages/lista_de_material.py",
+                title="Lista de material",
+                icon=":material/inventory_2:",
+            ),
             pagina_modulo("casos_carga"),
             st.Page(
                 "app_pages/central_validacao.py",

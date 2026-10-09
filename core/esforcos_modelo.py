@@ -491,6 +491,8 @@ class EsforcosDoModelo:
     eixo_vertical: str = "Y"
     parametros: Mapping[str, ParametrosDoTipo] = field(default_factory=dict)
     norma: str = NORMA_PADRAO
+    #: Placa de base padrão dos pilares (lida por :mod:`core.placa_base_pilares`).
+    placa: Mapping[str, Any] = field(default_factory=dict)
 
     def parametros_do_tipo(self, tipo: str) -> ParametrosDoTipo:
         return self.parametros.get(tipo, ParametrosDoTipo())
@@ -565,6 +567,10 @@ def com_parametros(
     return replace(dados, parametros={**dados.parametros, **parametros}, norma=norma or dados.norma)
 
 
+def com_placa(dados: EsforcosDoModelo, placa: Mapping[str, Any]) -> EsforcosDoModelo:
+    return replace(dados, placa=dict(placa))
+
+
 def _r(valor: float) -> float:
     return float(f"{valor:.6g}")
 
@@ -621,6 +627,7 @@ def para_dicionario(dados: EsforcosDoModelo) -> dict[str, Any]:
             for tipo, t in dados.parametros.items()
         },
         "norma": dados.norma,
+        "placa": dict(dados.placa),
     }
 
 
@@ -707,6 +714,7 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
         str(dados.get("eixo_vertical") or "Y"),
         parametros,
         str(dados.get("norma") or NORMA_PADRAO),
+        dict(dados["placa"]) if isinstance(dados.get("placa"), Mapping) else {},
     )
 
 

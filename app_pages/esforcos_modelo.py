@@ -9,15 +9,18 @@ import pandas as pd
 import streamlit as st
 
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
-from components.base_tecnica_ui import gravar_campo_do_projeto, mapa_do_projeto
+from components.base_tecnica_ui import base_ativa, gravar_campo_do_projeto, mapa_do_projeto
 from components.esforcos_modelo_help import AJUDA
+from components.figuras_estrutura import svg_placa_de_base
 from components.project_tools import botao_registrar_calculo
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
 from core import cantoneiras as ct
 from core import column_buckling as cbk
+from core import criterio_anglo as ca
 from core import esforcos_modelo as em
 from core import load_combinations as comb
+from core import placa_base_pilares as pb
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import section_catalog as sc
@@ -597,3 +600,265 @@ with st.container(border=True):
             rotulo="Registrar o quadro das fundações no projeto ativo",
             identificar_peca=False,
         )
+
+# ============================================================ 9. placas de base
+with st.container(border=True):
+    st.subheader("9. Placas de base dos pilares", help=AJUDA["sec_placas"])
+    if not quadro.pilares:
+        st.info(
+            "Marque os pilares na tabela das barras (tipo **Pilar**) para verificar as placas.",
+            icon=":material/info:",
+        )
+        st.stop()
+    placa = pb.placa_do_modelo(dados)
+    with st.form("em_placa_form", border=False):
+        colunas = st.columns(4)
+        comprimento_placa = colunas[0].number_input(
+            "N — comprimento (mm)",
+            50.0,
+            3000.0,
+            float(placa.comprimento_mm),
+            10.0,
+            format="%.0f",
+            key="em_placa_n",
+            help=AJUDA["placa_n"],
+        )
+        largura_placa = colunas[1].number_input(
+            "B — largura (mm)",
+            50.0,
+            3000.0,
+            float(placa.largura_mm),
+            10.0,
+            format="%.0f",
+            key="em_placa_b",
+            help=AJUDA["placa_b"],
+        )
+        espessura_placa = colunas[2].number_input(
+            "Espessura (mm)",
+            3.0,
+            150.0,
+            float(placa.espessura_mm),
+            0.5,
+            format="%.1f",
+            key="em_placa_t",
+            help=AJUDA["placa_t"],
+        )
+        aco_placa = colunas[3].selectbox(
+            "Aço da placa",
+            list(vb.ACOS),
+            index=list(vb.ACOS).index(placa.aco),
+            key="em_placa_aco",
+            help=AJUDA["placa_aco"],
+        )
+        colunas = st.columns(4)
+        fck_placa = colunas[0].number_input(
+            "f_ck do concreto (MPa)",
+            10.0,
+            90.0,
+            float(placa.fck_MPa),
+            5.0,
+            format="%.0f",
+            key="em_placa_fck",
+            help=AJUDA["placa_fck"],
+        )
+        a2a1_placa = colunas[1].number_input(
+            "A₂/A₁",
+            1.0,
+            4.0,
+            float(placa.razao_a2_a1),
+            0.1,
+            format="%.2f",
+            key="em_placa_a2a1",
+            help=AJUDA["placa_a2a1"],
+        )
+        chumbadores_placa = colunas[2].number_input(
+            "Chumbadores (total)",
+            1,
+            16,
+            int(placa.chumbadores),
+            1,
+            key="em_placa_chumbadores",
+            help=AJUDA["placa_chumbadores"],
+        )
+        lado_placa = colunas[3].number_input(
+            "Na linha tracionada",
+            1,
+            8,
+            int(placa.lado_tracionado),
+            1,
+            key="em_placa_lado",
+            help=AJUDA["placa_lado"],
+        )
+        colunas = st.columns(4)
+        diametro_placa = colunas[0].selectbox(
+            "Diâmetro do chumbador",
+            list(pb.DIAMETROS_MM),
+            index=list(pb.DIAMETROS_MM).index(placa.diametro),
+            key="em_placa_diametro",
+            help=AJUDA["placa_diametro"],
+        )
+        aco_chumbador_placa = colunas[1].selectbox(
+            "Aço do chumbador",
+            list(pb.ACOS_CHUMBADOR),
+            index=list(pb.ACOS_CHUMBADOR).index(placa.aco_chumbador),
+            key="em_placa_aco_chumbador",
+            help=AJUDA["placa_aco_chumbador"],
+        )
+        distancia_placa = colunas[2].number_input(
+            "f — centro à linha tracionada (mm)",
+            0.0,
+            1500.0,
+            float(placa.distancia_mm or 0.0),
+            5.0,
+            format="%.0f",
+            key="em_placa_f",
+            help=AJUDA["placa_f"],
+        )
+        leve_placa = colunas[3].toggle(
+            "Elemento leve",
+            value=placa.elemento_leve,
+            key="em_placa_leve",
+            help=AJUDA["placa_leve"],
+        )
+        gravar_placa = st.form_submit_button(
+            "Gravar a placa",
+            icon=":material/save:",
+            key="em_gravar_placa",
+            help=AJUDA["btn_gravar_placa"],
+        )
+    if gravar_placa:
+        nova_placa = pb.ParametrosDaPlaca(
+            comprimento_mm=float(comprimento_placa),
+            largura_mm=float(largura_placa),
+            espessura_mm=float(espessura_placa),
+            aco=str(aco_placa),
+            fck_MPa=float(fck_placa),
+            razao_a2_a1=float(a2a1_placa),
+            chumbadores=int(chumbadores_placa),
+            lado_tracionado=int(lado_placa),
+            diametro=str(diametro_placa),
+            aco_chumbador=str(aco_chumbador_placa),
+            distancia_mm=float(distancia_placa) or None,
+            elemento_leve=bool(leve_placa),
+        )
+        erros_placa = pb.validar(nova_placa)
+        for erro_placa in erros_placa:
+            st.error(erro_placa, icon=":material/error:")
+        if not erros_placa and gravar(
+            em.com_placa(dados, pb.para_dicionario(nova_placa)), "Esforços do modelo: placa de base"
+        ):
+            st.rerun()
+    base = base_ativa()
+    anglo_placa = st.toggle(
+        "Aplicar o critério Anglo American",
+        value=bool(base and base.anglo),
+        key="em_placa_anglo",
+        help=AJUDA["placa_anglo"],
+    )
+    resultados_placa = pb.verificar_placas(dados, plano, placa, anglo=anglo_placa, estados=estados)
+    verificadas_placa = [r for r in resultados_placa if r.linhas]
+    pior_placa = max(verificadas_placa, key=lambda r: r.utilizacao or 0.0, default=None)
+    colunas = st.columns(3)
+    colunas[0].metric(
+        "Pilares que atendem",
+        f"{sum(r.status == 'OK' for r in resultados_placa)} de {len(resultados_placa)}",
+        help=AJUDA["res_placas"],
+    )
+    colunas[1].metric(
+        "Maior utilização",
+        "—"
+        if pior_placa is None or pior_placa.utilizacao is None
+        else f"{100 * pior_placa.utilizacao:.0f} %",
+        help=AJUDA["res_placas"],
+    )
+    espessuras = [r.espessura_requerida_mm for r in resultados_placa if r.espessura_requerida_mm]
+    colunas[2].metric(
+        "Espessura necessária",
+        "—" if not espessuras else f"{max(espessuras):.1f} mm".replace(".", ","),
+        help=AJUDA["res_placas"],
+    )
+    perfil_da_figura = next(
+        (r.perfil for r in [pior_placa, *resultados_placa] if r and r.perfil in sc.listar_perfis()),
+        None,
+    )
+    if perfil_da_figura is not None and not pb.validar(placa):
+        secao = sc.obter_perfil(perfil_da_figura)
+        furo, _, _, lado_arruela, _ = ca.CHUMBADORES[placa.diametro]
+        st.subheader("A placa", help=AJUDA["res_desenho_placa"])
+        st.image(
+            svg_placa_de_base(
+                comprimento_mm=placa.comprimento_mm,
+                largura_mm=placa.largura_mm,
+                altura_perfil_mm=secao.altura_mm,
+                largura_mesa_mm=secao.largura_mm,
+                espessura_mesa_mm=secao.espessura_mesa_mm,
+                espessura_alma_mm=secao.espessura_alma_mm,
+                chumbadores=placa.chumbadores,
+                distancia_mm=placa.distancia_mm or placa.comprimento_mm / 2 - 50,
+                furo_mm=furo,
+                arruela_mm=lado_arruela,
+            ),
+            width=470,
+        )
+        st.caption(
+            f"Pilar {perfil_da_figura}; furo e arruela do item 8.7 do critério Anglo para o "
+            f"chumbador de {placa.diametro}."
+        )
+    st.dataframe(
+        pd.DataFrame(pb.linhas_da_tabela(resultados_placa), columns=list(pb.COLUNAS)).replace(
+            "", None
+        ),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Utilização (%)": st.column_config.ProgressColumn(
+                min_value=0.0, max_value=100.0, format="%.0f %%"
+            ),
+            **{
+                c: st.column_config.NumberColumn(format="%.2f")
+                for c in pb.COLUNAS
+                if "(kN" in c or "(mm)" in c
+            },
+        },
+    )
+    if verificadas_placa:
+        nomes_placa = [r.pilar for r in verificadas_placa]
+        escolhido = st.selectbox(
+            "Ver o cálculo da placa do pilar",
+            nomes_placa,
+            index=nomes_placa.index(pior_placa.pilar) if pior_placa is not None else 0,
+            key="em_placa_detalhe",
+            help=AJUDA["placa_detalhe"],
+        )
+        detalhe_placa = next(r for r in verificadas_placa if r.pilar == escolhido)
+        st.caption(
+            f"{detalhe_placa.perfil} · {detalhe_placa.combinacao} · N = {detalhe_placa.n:.2f} kN, "
+            f"M = {detalhe_placa.m:.2f} kN·m, V = {detalhe_placa.v:.2f} kN (de cálculo)".replace(
+                ".", ","
+            )
+        )
+        mostrar_tabela_verificacoes(list(detalhe_placa.linhas))
+    st.download_button(
+        "Verificação das placas (CSV)",
+        data=pb.csv_das_placas(resultados_placa),
+        file_name=f"placas_de_base_{projeto.get('codigo') or 'projeto'}.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        key="em_csv_placas",
+        help=AJUDA["btn_csv_placas"],
+    )
+    st.subheader("Registrar as placas no projeto", help=AJUDA["reg_placas"])
+    botao_registrar_calculo(
+        pb.registro_das_placas(
+            resultados_placa,
+            placa,
+            anglo=anglo_placa,
+            contexto={
+                "casos_do_modelo": ", ".join(dados.casos),
+                "estados_limites": ", ".join(estados),
+            },
+        ),
+        key="registrar_placas_de_base",
+        rotulo="Registrar as placas de base no projeto ativo",
+        identificar_peca=False,
+    )

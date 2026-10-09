@@ -818,3 +818,169 @@ def svg_limite_de_deslocamento(divisor: float, maximo_mm: float | None, altura_m
         ),
     ]
     return _svg(360, 262, corpo, "Limite do deslocamento horizontal do topo")
+
+
+def svg_viga_de_piso(
+    vao_m: float, q_kN_m: float, p_kN: float, flecha_mm: float, reacao_kN: float
+) -> str:
+    """Viga biapoiada com a carga distribuída, a concentrada no meio, a deformada e as reações."""
+    x0, x1, y = 90.0, 550.0, 130.0
+    meio = (x0 + x1) / 2
+    corpo: list[str] = [
+        f'<polygon points="{x0:.0f},{y + 2:.0f} {x0 - 12:.0f},{y + 22:.0f} {x0 + 12:.0f},{y + 22:.0f}" '
+        f'fill="none" stroke="{COR_ESTRUTURA}" stroke-width="1.6"/>',
+        f'<polygon points="{x1:.0f},{y + 2:.0f} {x1 - 12:.0f},{y + 18:.0f} {x1 + 12:.0f},{y + 18:.0f}" '
+        f'fill="none" stroke="{COR_ESTRUTURA}" stroke-width="1.6"/>',
+        f'<circle cx="{x1:.0f}" cy="{y + 22:.0f}" r="3.5" fill="none" stroke="{COR_ESTRUTURA}"/>',
+        _linha(x0 - 20, y + 26, x0 + 20, y + 26, cor=COR_ESTRUTURA, largura=1.2),
+        _linha(x1 - 20, y + 26, x1 + 20, y + 26, cor=COR_ESTRUTURA, largura=1.2),
+        f'<path d="M{x0:.0f},{y:.0f} Q{meio:.0f},{y + 48:.0f} {x1:.0f},{y:.0f}" fill="none" '
+        f'stroke="{COR_TRACAO}" stroke-width="1.8" stroke-dasharray="6 4"/>',
+        _linha(x0, y, x1, y, cor=COR_ESTRUTURA, largura=5),
+        _linha(x0, 78, x1, 78, cor=COR_COMPRESSAO, largura=1.2),
+        _texto(
+            x0,
+            64,
+            f"q = {_n(q_kN_m, 2)} kN/m (total)",
+            tamanho=11,
+            ancora="start",
+            cor=COR_COMPRESSAO,
+        ),
+    ]
+    passo = (x1 - x0) / 10
+    for i in range(11):
+        if p_kN > 0 and i == 5:
+            continue  # o meio do vão fica para a carga concentrada
+        x = x0 + i * passo
+        corpo.append(_seta(x, 78, x, y - 4, cor=COR_COMPRESSAO, largura=1.3))
+    if p_kN > 0:
+        corpo.append(_seta(meio, 30, meio, y - 4, cor=COR_VENTO, largura=2.6))
+        corpo.append(
+            _texto(
+                meio + 10,
+                38,
+                f"P = {_n(p_kN, 1)} kN",
+                tamanho=12,
+                ancora="start",
+                cor=COR_VENTO,
+                peso="bold",
+            )
+        )
+    esbeltez = vao_m * 1000 / flecha_mm if flecha_mm > 0 else math.inf
+    corpo += [
+        _texto(
+            meio,
+            y + 40,
+            f"δ = {_n(flecha_mm, 1)} mm (L/{esbeltez:.0f})",
+            tamanho=11,
+            cor=COR_TRACAO,
+            peso="bold",
+        ),
+        _seta(x0, y + 72, x0, y + 32, cor=COR_ESTRUTURA, largura=1.8),
+        _seta(x1, y + 72, x1, y + 32, cor=COR_ESTRUTURA, largura=1.8),
+        _texto(x0 + 8, y + 64, f"R = {_n(reacao_kN, 1)} kN", tamanho=11, ancora="start"),
+        _texto(x1 - 8, y + 64, f"R = {_n(reacao_kN, 1)} kN", tamanho=11, ancora="end"),
+        _linha(x0, y + 92, x1, y + 92, cor=COR_TEXTO, largura=1),
+        _linha(x0, y + 86, x0, y + 98, cor=COR_TEXTO, largura=1),
+        _linha(x1, y + 86, x1, y + 98, cor=COR_TEXTO, largura=1),
+        _texto(meio, y + 106, f"L = {_n(vao_m, 2)} m", tamanho=12, peso="bold"),
+    ]
+    return _svg(640, y + 118, corpo, "Viga de piso biapoiada")
+
+
+def svg_placa_de_base(
+    *,
+    comprimento_mm: float,
+    largura_mm: float,
+    altura_perfil_mm: float,
+    largura_mesa_mm: float,
+    espessura_mesa_mm: float,
+    espessura_alma_mm: float,
+    chumbadores: int,
+    distancia_mm: float,
+    furo_mm: float,
+    arruela_mm: float,
+) -> str:
+    """Planta da placa de base: o pilar (seção I), os chumbadores em duas linhas a ±f, furos e arruelas."""
+    escala = 300.0 / max(comprimento_mm, largura_mm)
+    cx, cy = 180.0, 190.0
+    meio_n, meio_b = comprimento_mm * escala / 2, largura_mm * escala / 2
+    corpo: list[str] = [
+        f'<rect x="{cx - meio_n:.1f}" y="{cy - meio_b:.1f}" width="{2 * meio_n:.1f}" '
+        f'height="{2 * meio_b:.1f}" fill="#e9edf2" stroke="{COR_ESTRUTURA}" stroke-width="1.6"/>',
+    ]
+    # Pilar: a alma na direção de N (a do momento), as mesas perpendiculares.
+    d, bf = altura_perfil_mm * escala, largura_mesa_mm * escala
+    tf, tw = max(espessura_mesa_mm * escala, 2.0), max(espessura_alma_mm * escala, 1.5)
+    for lado in (-1, 1):
+        x = cx + lado * (d / 2 - tf / 2)
+        corpo.append(
+            f'<rect x="{x - tf / 2:.1f}" y="{cy - bf / 2:.1f}" width="{tf:.1f}" height="{bf:.1f}" '
+            f'fill="{COR_CONTRAVENTADO}"/>'
+        )
+    corpo.append(
+        f'<rect x="{cx - d / 2:.1f}" y="{cy - tw / 2:.1f}" width="{d:.1f}" height="{tw:.1f}" '
+        f'fill="{COR_CONTRAVENTADO}"/>'
+    )
+    # Chumbadores: metade em cada linha (a do lado tracionado e a oposta).
+    por_linha = [chumbadores - chumbadores // 2, chumbadores // 2]
+    borda = max(furo_mm, arruela_mm) * escala / 2 + 6
+    for lado, quantidade in zip((1, -1), por_linha, strict=True):
+        x = cx + lado * distancia_mm * escala
+        if quantidade == 1:
+            posicoes = [cy]
+        else:
+            passo = (2 * meio_b - 2 * borda) / (quantidade - 1)
+            posicoes = [cy - meio_b + borda + i * passo for i in range(quantidade)]
+        for y in posicoes:
+            a = arruela_mm * escala
+            corpo += [
+                f'<rect x="{x - a / 2:.1f}" y="{y - a / 2:.1f}" width="{a:.1f}" height="{a:.1f}" '
+                f'fill="none" stroke="{COR_PARAFUSO}" stroke-width="1" stroke-dasharray="3 2"/>',
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{furo_mm * escala / 2:.1f}" fill="#ffffff" '
+                f'stroke="{COR_PARAFUSO}" stroke-width="1.2"/>',
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{max(furo_mm * escala / 4, 2):.1f}" '
+                f'fill="{COR_PARAFUSO}"/>',
+            ]
+    topo, base = cy - meio_b, cy + meio_b
+    esquerda, direita = cx - meio_n, cx + meio_n
+    corpo += [
+        # N embaixo, B à direita, f em cima.
+        _linha(esquerda, base + 22, direita, base + 22, cor=COR_TEXTO, largura=1),
+        _linha(esquerda, base + 16, esquerda, base + 28, cor=COR_TEXTO, largura=1),
+        _linha(direita, base + 16, direita, base + 28, cor=COR_TEXTO, largura=1),
+        _texto(cx, base + 38, f"N = {_n(comprimento_mm, 0)} mm", tamanho=12, peso="bold"),
+        _linha(direita + 22, topo, direita + 22, base, cor=COR_TEXTO, largura=1),
+        _linha(direita + 16, topo, direita + 28, topo, cor=COR_TEXTO, largura=1),
+        _linha(direita + 16, base, direita + 28, base, cor=COR_TEXTO, largura=1),
+        _texto(
+            direita + 36, cy, f"B = {_n(largura_mm, 0)} mm", tamanho=12, ancora="start", peso="bold"
+        ),
+        _linha(cx, topo - 18, cx + distancia_mm * escala, topo - 18, cor=COR_TRACAO, largura=1),
+        _linha(cx, topo - 24, cx, topo - 12, cor=COR_TRACAO, largura=1),
+        _linha(
+            cx + distancia_mm * escala,
+            topo - 24,
+            cx + distancia_mm * escala,
+            topo - 12,
+            cor=COR_TRACAO,
+            largura=1,
+        ),
+        _texto(
+            cx + distancia_mm * escala / 2,
+            topo - 30,
+            f"f = {_n(distancia_mm, 0)} mm",
+            tamanho=11,
+            cor=COR_TRACAO,
+        ),
+        _texto(
+            esquerda,
+            topo - 52,
+            f"Furo {_n(furo_mm, 0)} mm · arruela {_n(arruela_mm, 0)} mm (tracejada)",
+            tamanho=11,
+            ancora="start",
+        ),
+        _linha(cx, topo - 6, cx, base + 6, cor=COR_COMPRESSAO, largura=1, tracejado="8 3 2 3"),
+        _texto(cx + 6, base - 10, "eixo forte", tamanho=10, ancora="start", cor=COR_COMPRESSAO),
+    ]
+    return _svg(470, base + 56, corpo, "Placa de base do pilar em planta")

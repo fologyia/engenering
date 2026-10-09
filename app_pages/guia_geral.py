@@ -75,6 +75,7 @@ opcoes = [
     "Base técnica do projeto",
     "Plano de cargas",
     "Esforços do modelo",
+    "Lista de material",
     "Casos de carga",
     "Central de validação",
     "Central de relatórios",
@@ -91,6 +92,7 @@ opcoes = [
     "Análise de sensibilidade",
     "Projeto de parafusos",
     "Degrau de escada em grade",
+    "Vigas de piso",
     "Vento em estruturas abertas",
     "Contraventamento de estruturas abertas",
     "Ligação de contraventamento",
@@ -2202,6 +2204,10 @@ elif modulo == "Esforços do modelo":
         8. Marque os **pilares** (tipo Pilar) e veja o **quadro de cargas para as fundações**:
            a base de cada pilar, caso a caso, sem combinar nem majorar (critério Anglo 5.9), com
            Excel, CSV e registro.
+        9. Em **Placas de base dos pilares**, informe a placa padrão (N, B, espessura, f_ck e os
+           chumbadores) e grave: o programa combina os esforços da base de cada pilar e verifica
+           a placa e os chumbadores pelo Design Guide 1 do AISC, com as exigências da Anglo
+           (placa ≥ 16 mm, chumbador ≥ 5/8" e o furo, a arruela e o graute do item 8.7).
         """
     )
     mostrar_exemplo(
@@ -2228,9 +2234,208 @@ elif modulo == "Esforços do modelo":
               os esforços pelo B₂ do tipo de barra (a favor da segurança).
             - **Verificação:** o mesmo motor da página Flambagem de colunas, nos pontos mais
               críticos de cada barra; barras sem perfil ou sem comprimentos ficam "sem dados".
+            - **Placa de base:** com momento grande (excentricidade além do limite do Design
+              Guide 1), o concreto trabalha na pressão máxima num trecho Y e os chumbadores do
+              outro lado seguram o resto — por isso o contato aparece como informação, e quem
+              governa costuma ser a espessura da placa ou a tração nos chumbadores. A ancoragem
+              no concreto (cone, comprimento) e o bloco ficam para o projeto da fundação.
             """
         )
     link_modulo("app_pages/esforcos_modelo.py", "Abrir Esforços do modelo")
+
+
+elif modulo == "Lista de material":
+    from core import lista_de_material as _lm
+
+    st.header("Lista de material")
+    st.markdown(
+        "A lista dos perfis, chapas e demais itens da estrutura, com a **massa**, o **peso**, a "
+        "**área de pintura** e as **barras comerciais** de cada perfil — para o orçamento — e a "
+        "**conferência do peso próprio do modelo**: o peso da lista contra a reação vertical do "
+        "caso PP importado do SolidWorks."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "Lista de corte",
+                "CSV gerado pela macro da página (direto da peça) ou salvo da tabela de "
+                "lista de corte de um desenho",
+                "SolidWorks",
+            ],
+            [
+                "Perfil",
+                "Nome do catálogo (W 200 x 35,9 (H)), do SolidWorks (W8X31, C8X13.75, L2X2X1/4) "
+                "ou as medidas (TUBO QUADRADO 50 X 50 X 3)",
+                "Lista de corte / desenho",
+            ],
+            [
+                "Chapa",
+                "Comprimento, largura e espessura de cada peça",
+                "Desenho de detalhe",
+            ],
+            [
+                "Grade, outros",
+                "Grade: área e kg/m² do fabricante; outros: kg por unidade",
+                "Catálogo do fornecedor",
+            ],
+            [
+                "Acréscimo",
+                "Ligações, parafusos e soldas que a lista não traz (5 a 10 %)",
+                "Prática da empresa",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Baixe na página a **Macro do SolidWorks** e, com a peça aberta, use Ferramentas ›
+           Macro › **Nova** (dê um nome e salve), apague o texto do editor, cole o da macro e
+           tecle **F5**: ela lê a lista de corte direto da árvore da peça e salva o CSV na pasta
+           da peça. Das próximas vezes, Ferramentas › Macro › **Executar**. (Também serve o CSV
+           da tabela de lista de corte de um desenho; o Excel antigo, .xls, não é lido.)
+        2. Envie o arquivo, confira as linhas lidas e use **Acrescentar** ou **Substituir**.
+        3. Complete na tabela o que faltou (largura das chapas, kg/m de perfil fora do catálogo)
+           e acrescente o que não está no modelo (grades, guarda-corpos, chumbadores).
+        4. Use **Incluir as placas de base** para trazer a placa de cada pilar verificada em
+           Esforços do modelo.
+        5. Grave, confira o resumo e a **conferência com o peso próprio do modelo** e exporte o
+           Excel para o orçamento.
+        """
+    )
+    _lista = _lm.ListaDeMaterial(
+        itens=(
+            _lm.ItemDaLista("P1", _lm.TIPO_PERFIL, "W 200 x 35,9 (H)", 2, 4.0),
+            _lm.ItemDaLista("V1", _lm.TIPO_PERFIL, "W 310 x 32,7", 1, 6.0),
+            _lm.ItemDaLista("PB", _lm.TIPO_CHAPA, "Placa de base", 2, 0.35, 300.0, 19.0),
+        )
+    )
+    _res = _lm.resumir(_lista)
+
+    def _virgula(valor: float, casas: int = 1) -> str:
+        return f"{valor:,.{casas}f}".replace(",", " ").replace(".", ",")
+
+    mostrar_exemplo(
+        [
+            ["Pilares", "2 × W 200 × 35,9 com 4,0 m"],
+            ["Viga", "1 × W 310 × 32,7 com 6,0 m"],
+            ["Placas de base", "2 × 350 × 300 × 19 mm"],
+            ["Acréscimo", "5 % de ligações, parafusos e soldas"],
+        ],
+        f"Resultado esperado: {_virgula(_res.massa_itens_kg)} kg de itens, "
+        f"{_virgula(_res.massa_total_kg)} kg com o acréscimo ({_virgula(_res.peso_total_kN, 2)} "
+        f"kN) e {_virgula(_res.area_pintura_m2)} m² de pintura; 1 barra de 12 m de cada perfil.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Massa:** perfil = kg/m do catálogo × comprimento; chapa = volume × 7 850 kg/m³.
+            - **Pintura:** o contorno do perfil (faces de dentro e de fora das mesas e da alma)
+              vezes o comprimento, mais as duas faces das chapas. Grades não entram.
+            - **Barras comerciais:** o comprimento total dividido pela barra, arredondado para
+              cima — sem otimização de corte nem perdas.
+            - **Conferência:** o peso dos itens sem o acréscimo contra a reação vertical do caso
+              PP; diferença acima de 5 % quer dizer barra faltando no modelo ou na lista, ou outras
+              cargas no caso PP.
+            - A lista é ferramenta de orçamento: não vai para o memorial.
+            """
+        )
+    link_modulo("app_pages/lista_de_material.py", "Abrir Lista de material")
+
+
+elif modulo == "Vigas de piso":
+    from dataclasses import replace as _replace
+
+    from core import viga_de_piso as _vp
+
+    st.header("Vigas de piso")
+    st.markdown(
+        "A viga que apoia a grade (ou a chapa) da plataforma, **biapoiada**. A página monta as "
+        "combinações da NBR 8800 com o peso próprio, o piso e a sobrecarga, verifica a **flexão** "
+        "(com a flambagem lateral e local), o **cortante** e a **flecha**, dá a **reação** para "
+        "dimensionar a ligação e procura o **perfil mais leve** da mesma família que atende."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "Perfil e aço",
+                "W, U, I ou HP do catálogo; ASTM A572 Gr 50 é o usual",
+                "Lista de material / desenho",
+            ],
+            [
+                "Tipo",
+                "Principal (recebe outras vigas ou apoia nos pilares) ou secundária (só a grade)",
+                "Planta da plataforma",
+            ],
+            [
+                "Vão e faixa",
+                "Distância entre apoios e a largura de piso que a viga carrega",
+                "Planta da plataforma",
+            ],
+            [
+                "Travamento",
+                "Se a grade trava a mesa comprimida, o espaçamento entre os pontos travados",
+                "Detalhe de fixação da grade",
+            ],
+            [
+                "Cargas",
+                "Piso (grade 0,3 a 0,5 kN/m²), sobrecarga, carga linear extra e equipamento no meio",
+                "Base técnica / fornecedor",
+            ],
+            [
+                "Critério",
+                "Anglo: flecha L/350 ou L/300, espessura mínima 4,8 mm, ligação ≥ 75 % (9.1)",
+                "Base técnica do projeto",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Escolha o perfil, o aço e se a viga é principal ou secundária.
+        2. Informe o vão e a largura de influência (em geral a distância entre vigas vizinhas).
+        3. Ligue **Mesa travada pela grade** só se a fixação da grade travar de fato a mesa
+           comprimida; senão a flambagem lateral usa o vão inteiro.
+        4. Preencha as cargas características: o programa soma o peso próprio do perfil e monta as
+           combinações.
+        5. Leia o status, o aproveitamento e a tabela; se houver um perfil mais leve que atende,
+           use **Adotar**.
+        6. **Registre** no projeto: o memorial ganha o capítulo da viga.
+        """
+    )
+
+    def _virgula(valor: float) -> str:
+        return f"{valor:.1f}".replace(".", ",")
+
+    _e = _vp.EntradaVigaDePiso()
+    _r = _vp.calcular(_e)
+    _leve = _vp.perfil_mais_leve(_replace(_e, anglo=True))
+    mostrar_exemplo(
+        [
+            ["Perfil", f"{_e.perfil}, {_e.aco}, viga principal"],
+            ["Vão e faixa", "4,0 m; 1,0 m de largura de influência, mesa sem travamento"],
+            ["Cargas", "piso 0,45 kN/m²; sobrecarga 5,0 kN/m²"],
+        ],
+        f"Resultado esperado: M_Sd = {_virgula(_r.momento_sd_kNm)} kN·m e M_Rd = "
+        f"{_virgula(_r.momento_rd_kNm)} kN·m ({100 * _r.aproveitamento_maximo:.0f} %), flecha "
+        f"de {_virgula(_r.flecha_mm)} mm (L/{_e.vao_m * 1000 / _r.flecha_mm:.0f}). Ligando o "
+        "critério Anglo, a alma de 4,3 mm fica abaixo dos 4,8 mm do item 8.8 e o mais leve que "
+        f"atende passa a ser o {_leve[0] if _leve else '—'}.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Flexão:** M_Sd no meio do vão contra M_Rd, o menor entre flambagem lateral (FLT,
+              com o C_b da carga), flambagem local da mesa (FLM) e da alma (FLA).
+            - **Flecha:** com todas as cargas características; o critério Anglo pede L/350 nas
+              principais e L/300 nas secundárias, a NBR 8800 pede L/350 (Anexo C).
+            - **Reação:** a característica e a de cálculo; com o critério Anglo, a ligação precisa
+              resistir ao menos a 75 % da carga uniforme que a viga suporta (item 9.1).
+            - **Frequência:** só informativa; abaixo de uns 3 Hz o piso tende a vibrar ao andar.
+            """
+        )
+    link_modulo("app_pages/viga_de_piso.py", "Abrir Vigas de piso")
 
 
 elif modulo == "Vento em estruturas abertas":

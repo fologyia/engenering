@@ -365,7 +365,30 @@ modos, FLT/FLM/FLA, B₁, N + Mx + My, esbeltez), cantoneiras pela 5.3.5.4, cort
 capítulo de cada barra no memorial. **Quadro de cargas para as fundações** (`core/quadro_fundacoes.py`):
 os esforços na base de cada pilar, caso a caso, sem combinar nem majorar (critério Anglo 5.9), com a
 base achada pela ponta mais comprimida, conferência da soma contra a reação total, Excel, CSV e
-registro no memorial.
+registro no memorial. **Placas de base dos pilares** (`core/placa_base_pilares.py`): uma placa padrão
+verificada em cada pilar pelo AISC Design Guide 1 com os esforços da base combinados (ELU) — contato,
+espessura da placa, tração e cisalhamento nos chumbadores — e, com o critério Anglo, placa ≥ 16 mm,
+chumbador ≥ 5/8" e o furo, a arruela e o graute do item 8.7; desenho da placa em planta, CSV e registro.
+
+### Lista de material
+
+Perfis, chapas, grades e outros itens com a **massa**, o **peso**, a **área de pintura** e as **barras
+comerciais** de cada perfil, para o orçamento (`core/lista_de_material.py`; detalhes em
+`docs/lista_de_material.md`). Importa a **lista de corte do SolidWorks** (CSV ou Excel, colunas achadas
+pelo nome, perfis reconhecidos pela descrição ou pelas medidas) — com a **macro**
+`macros_solidworks/exportar_lista_de_corte.bas`, que exporta a lista direto da árvore da peça, sem
+desenho —, traz as placas de base dos pilares e
+**confere o peso com a reação do caso PP** do modelo. Excel (resumo, itens, por perfil, chapas) e CSV.
+Não vai para o memorial.
+
+### Vigas de piso
+
+A viga biapoiada que apoia a grade da plataforma (`core/viga_de_piso.py`; detalhes em
+`docs/vigas_de_piso.md`): combinações da NBR 8800 com o peso próprio, flexão com FLT (C_b do diagrama
+ou mesa travada pela grade), FLM e FLA, cortante, flecha (L/350 da NBR; L/350 ou L/300 do critério
+Anglo), espessura mínima Anglo, reação para a ligação com o mínimo de 75 % do item 9.1, frequência
+natural, o **perfil mais leve** da família com o botão para adotá-lo, desenho da viga e registro no
+memorial.
 
 ### Vento em estruturas abertas
 
@@ -677,6 +700,7 @@ mecanica_toolkit/
 │   ├── base_tecnica.py
 │   ├── plano_cargas.py
 │   ├── esforcos_modelo.py
+│   ├── lista_de_material.py
 │   ├── central_validacao.py
 │   ├── central_relatorios.py
 │   ├── assistente_projeto.py
@@ -692,6 +716,7 @@ mecanica_toolkit/
 │   ├── vento_estrutura_aberta.py
 │   ├── contraventamento_estrutura.py
 │   ├── ligacao_contraventamento.py
+│   ├── viga_de_piso.py
 │   ├── estruturas_aco.py
 │   ├── catalogo_materiais.py
 │   ├── catalogo_perfis.py
@@ -704,6 +729,11 @@ mecanica_toolkit/
 │   ├── plano_de_cargas.py
 │   ├── exportacao_cargas.py
 │   ├── esforcos_modelo.py
+│   ├── verificacao_barras.py
+│   ├── quadro_fundacoes.py
+│   ├── placa_base_pilares.py
+│   ├── lista_de_material.py
+│   ├── viga_de_piso.py
 │   ├── beam_analysis.py
 │   ├── beam_script.py
 │   ├── section_stress.py

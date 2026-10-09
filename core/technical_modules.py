@@ -270,6 +270,21 @@ def _registrar_padrao() -> None:
             ),
         ),
         ModuloTecnico(
+            id="viga_de_piso",
+            titulo="Vigas de piso",
+            versao="1.0",
+            pagina="app_pages/viga_de_piso.py",
+            grupo_navegacao="Dimensionamento complementar",
+            ordem=17,
+            icone=":material/view_week:",
+            descricao=(
+                "Viga que apoia a grade da plataforma: combinações da NBR 8800, flexão com FLT, "
+                "cortante, flecha pelo critério Anglo e pela NBR, reação para a ligação e o perfil "
+                "mais leve que atende."
+            ),
+            aliases=("Viga de piso", "Viga da plataforma", "Viga de grade"),
+        ),
+        ModuloTecnico(
             id="contraventamento_estrutura",
             titulo="Contraventamento de estruturas abertas",
             versao="1.0",

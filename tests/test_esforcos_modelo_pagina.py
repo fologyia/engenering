@@ -195,3 +195,34 @@ def test_quadro_das_fundacoes_na_pagina(banco_com_projeto):
     assert not t.exception
     titulos = [r["titulo"] for r in obter_projeto_ativo()["registros_tecnicos"]]
     assert any(t_.startswith("Quadro de cargas para as fundações") for t_ in titulos)
+
+
+def test_placas_de_base_na_pagina(banco_com_projeto):
+    from core import placa_base_pilares as pb
+    from tests.test_quadro_fundacoes import PILAR_2, portico
+
+    gravar_no_projeto(portico(PILAR, PILAR_2))
+    t = abrir()
+    assert not sem_ajuda(t), sorted(sem_ajuda(t))
+    assert "9. Placas de base dos pilares" in [s.value for s in t.subheader]
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Pilares que atendem"] == "0 de 2"  # a placa padrão de 19 mm não passa
+    assert len(t.get("image")) == 1  # a planta da placa, em SVG
+    t.number_input(key="em_placa_t").set_value(25.0)
+    t.button(key="em_gravar_placa").click()
+    t.run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    assert pb.placa_do_modelo(em.esforcos_do_projeto(obter_projeto_ativo())).espessura_mm == 25.0
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Pilares que atendem"] == "2 de 2"
+    t.button(key="registrar_placas_de_base").click().run()
+    assert not t.exception
+    titulos = [r["titulo"] for r in obter_projeto_ativo()["registros_tecnicos"]]
+    assert "Placas de base dos pilares — 2 pilar(es)" in titulos
+
+
+def test_placas_sem_pilar_marcado_explicam_o_que_fazer(banco_com_projeto):
+    gravar_no_projeto(importar("PP"))
+    t = abrir()
+    assert not t.exception
+    assert any("verificar as placas" in i.value for i in t.info)
