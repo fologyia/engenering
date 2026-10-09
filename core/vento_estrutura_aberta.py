@@ -292,6 +292,7 @@ class PlanoReticulado:
     phi: float
     ca: float
     eta: float  # 1,0 no de barlavento
+    coordenada_m: float = 0.0  # posição do pórtico ao longo da direção do vento (x ou y)
 
 
 @dataclass(frozen=True)
@@ -319,6 +320,16 @@ class VentoNaDirecao:
     niveis: tuple[ForcaNoNivel, ...]
     forca_na_base_kN: float  # metade inferior do 1º andar, direto à fundação
     detalhes_equipamentos: tuple[str, ...] = ()
+    #: Força da estrutura (pilares, vigas, diagonais) em cada pórtico e nível: [pórtico][nível].
+    estrutura_por_portico_kN: tuple[tuple[float, ...], ...] = ()
+    #: Guarda-corpo em cada pórtico e nível (só o primeiro e o último pórtico recebem).
+    guarda_corpo_por_portico_kN: tuple[tuple[float, ...], ...] = ()
+    base_por_portico_kN: tuple[float, ...] = ()
+    pilares_por_portico: int = 0
+    #: Equipamentos por nível: (nome, força em kN, cota do centro em m).
+    equipamentos_por_nivel: tuple[tuple[tuple[str, float, float], ...], ...] = ()
+    #: Carga por metro do guarda-corpo (barlavento, sotavento) em cada nível, kN/m.
+    guarda_corpo_kN_m: tuple[tuple[float, float], ...] = ()
 
     @property
     def forcas_nos_niveis_kN(self) -> tuple[float, ...]:
@@ -477,6 +488,7 @@ def _calcular_direcao(
                 phi=phi,
                 ca=ca_reticulado_plano(phi),
                 eta=eta,
+                coordenada_m=k * afastamento,
             )
         )
         phi_anterior = phi
@@ -484,6 +496,10 @@ def _calcular_direcao(
     faixas = _faixas(g)
     niveis: list[ForcaNoNivel] = []
     detalhes_eq: list[str] = []
+    por_portico: list[list[float]] = [[] for _ in planos]
+    gc_por_portico: list[list[float]] = [[] for _ in planos]
+    equip_por_nivel: list[tuple[tuple[str, float, float], ...]] = []
+    gc_por_metro: list[tuple[float, float]] = []
     # Guarda-corpo: um de barlavento e um de sotavento; o de sotavento protegido pelo primeiro.
     if g.guarda_corpo:
         ca_gc = ca_reticulado_plano(g.indice_guarda_corpo)
@@ -494,21 +510,41 @@ def _calcular_direcao(
     for i, (baixo, alto) in enumerate(faixas):
         vento = _vento(p, alto, classe)
         q_kN = vento.q_N_m2 / 1e3
-        estrutura = sum(
+        parcelas = [
             plano.eta * plano.ca * q_kN * area_estrutura(k, baixo, alto, i)
             for plano, k in zip(planos, ordem_planos, strict=True)
-        )
+        ]
+        for j, parcela in enumerate(parcelas):
+            por_portico[j].append(parcela)
+        estrutura = sum(parcelas)
         guarda = 0.0
         if g.guarda_corpo:
             q_gc = _vento(p, g.cotas_m[i] + g.altura_guarda_corpo_m, classe).q_N_m2 / 1e3
-            guarda = ca_gc * q_gc * area_gc * (1.0 + eta_gc)
+            barlavento = ca_gc * q_gc * area_gc
+            sotavento = eta_gc * barlavento
+            guarda = barlavento + sotavento
+            gc_por_metro.append((barlavento / largura, sotavento / largura))
+            for j in range(len(planos)):
+                if j == 0:
+                    gc_por_portico[j].append(barlavento)
+                elif j == len(planos) - 1:
+                    gc_por_portico[j].append(sotavento)
+                else:
+                    gc_por_portico[j].append(0.0)
+        else:
+            gc_por_metro.append((0.0, 0.0))
+            for j in range(len(planos)):
+                gc_por_portico[j].append(0.0)
         equipamentos = 0.0
+        deste_nivel: list[tuple[str, float, float]] = []
         for eq in g.equipamentos:
             if eq.nivel != i + 1:
                 continue
             forca, texto = _forca_equipamento(eq, g.cotas_m[i], direcao, p, classe)
             equipamentos += forca
             detalhes_eq.append(texto)
+            deste_nivel.append((eq.nome, forca, g.cotas_m[i] + eq.altura_m / 2.0))
+        equip_por_nivel.append(tuple(deste_nivel))
         niveis.append(
             ForcaNoNivel(
                 nivel=i + 1,
@@ -523,10 +559,11 @@ def _calcular_direcao(
     # Faixa da base: pilares de 0 até a metade do primeiro andar.
     base_alto = faixas[0][0]
     q_base = _vento(p, base_alto, classe).q_N_m2 / 1e3
-    forca_base = sum(
+    base_por_portico = [
         plano.eta * plano.ca * q_base * area_estrutura(k, 0.0, base_alto, None)
         for plano, k in zip(planos, ordem_planos, strict=True)
-    )
+    ]
+    forca_base = sum(base_por_portico)
     return VentoNaDirecao(
         direcao=direcao,
         largura_frontal_m=largura,
@@ -536,6 +573,12 @@ def _calcular_direcao(
         niveis=tuple(niveis),
         forca_na_base_kN=forca_base,
         detalhes_equipamentos=tuple(detalhes_eq),
+        estrutura_por_portico_kN=tuple(tuple(v) for v in por_portico),
+        guarda_corpo_por_portico_kN=tuple(tuple(v) for v in gc_por_portico),
+        base_por_portico_kN=tuple(base_por_portico),
+        pilares_por_portico=pilares_por_plano,
+        equipamentos_por_nivel=tuple(equip_por_nivel),
+        guarda_corpo_kN_m=tuple(gc_por_metro),
     )
 
 
@@ -608,3 +651,137 @@ def calcular_vento_aberto(g: GeometriaAberta, p: ParametrosVento) -> ResultadoVe
         y=resultados["Y"],
         avisos=tuple(avisos),
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Saídas para o modelo (SolidWorks, Robot): forças nos nós e cargas distribuídas
+# ---------------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CargaNodal:
+    """Força horizontal num nível de um pórtico, e a parcela de cada pilar (nó pilar–viga)."""
+
+    direcao: str
+    portico: int  # 1 = barlavento
+    coordenada_m: float
+    nivel: int  # 0 = base (vai direto à fundação)
+    cota_m: float
+    estrutura_kN: float
+    guarda_corpo_kN: float
+    pilares: int
+
+    @property
+    def total_kN(self) -> float:
+        return self.estrutura_kN + self.guarda_corpo_kN
+
+    @property
+    def por_pilar_kN(self) -> float:
+        return self.total_kN / self.pilares if self.pilares else self.total_kN
+
+
+def cargas_nodais(r: VentoNaDirecao, *, incluir_base: bool = False) -> list[CargaNodal]:
+    """Uma linha por pórtico e nível: a força que vai nos nós daquele nível do pórtico.
+
+    A soma de todas as linhas (mais os equipamentos) é a força do vento na direção. A faixa da base
+    (até meio primeiro andar) vai direto à fundação e só entra com ``incluir_base``.
+    """
+    linhas: list[CargaNodal] = []
+    for j, plano in enumerate(r.planos):
+        if incluir_base and r.base_por_portico_kN:
+            linhas.append(
+                CargaNodal(
+                    r.direcao,
+                    plano.posicao,
+                    plano.coordenada_m,
+                    0,
+                    0.0,
+                    r.base_por_portico_kN[j],
+                    0.0,
+                    r.pilares_por_portico,
+                )
+            )
+        for i, nivel in enumerate(r.niveis):
+            linhas.append(
+                CargaNodal(
+                    direcao=r.direcao,
+                    portico=plano.posicao,
+                    coordenada_m=plano.coordenada_m,
+                    nivel=nivel.nivel,
+                    cota_m=nivel.cota_m,
+                    estrutura_kN=r.estrutura_por_portico_kN[j][i],
+                    guarda_corpo_kN=r.guarda_corpo_por_portico_kN[j][i],
+                    pilares=r.pilares_por_portico,
+                )
+            )
+    return linhas
+
+
+@dataclass(frozen=True)
+class CargaDistribuida:
+    direcao: str
+    portico: int
+    elemento: str
+    trecho: str
+    w_kN_m: float
+    calculo: str = ""
+
+
+def _m(valor: float) -> str:
+    return f"{valor:.2f}".replace(".", ",")
+
+
+def cargas_distribuidas(g: GeometriaAberta, r: VentoNaDirecao) -> list[CargaDistribuida]:
+    """Carga por metro em cada pilar, viga e guarda-corpo dos pórticos (q da faixa de cada nível).
+
+    Para quem prefere lançar o vento nas barras em vez de nos nós. Pilares: ``η·C_a·q·b``; vigas
+    de cada piso: ``η·C_a·q·d``; guarda-corpo: ``C_a·q·φ·h`` na viga de borda (o de sotavento com
+    o seu η). As diagonais ficam de fora (o vento nelas já está na força nos nós, e numa barra
+    inclinada a carga por metro depende do modelo).
+    """
+    faixas = _faixas(g)
+    q_niveis = [n.q_N_m2 / 1e3 for n in r.niveis]
+    linhas: list[CargaDistribuida] = []
+    for j, plano in enumerate(r.planos):
+        fator = plano.eta * plano.ca
+        # Pilares em faixas; a primeira começa na base e usa o q do primeiro nível (maior que o
+        # da base: a favor da segurança).
+        for i, (baixo, alto) in enumerate(faixas):
+            inicio = 0.0 if i == 0 else baixo
+            fim = min(alto, g.altura_m)
+            if fim > inicio:
+                linhas.append(
+                    CargaDistribuida(
+                        r.direcao,
+                        plano.posicao,
+                        "Pilares (cada um)",
+                        f"z = {_m(inicio)} a {_m(fim)} m",
+                        fator * q_niveis[i] * g.largura_pilar_m,
+                        f"η·C_a·q·b = {plano.eta:.3f}·{plano.ca:.2f}·{q_niveis[i]:.3f}·"
+                        f"{g.largura_pilar_m:.3f}",
+                    )
+                )
+        for i, nivel in enumerate(r.niveis):
+            linhas.append(
+                CargaDistribuida(
+                    r.direcao,
+                    plano.posicao,
+                    f"Vigas do nível {nivel.nivel}",
+                    f"z = {_m(nivel.cota_m)} m, ao longo de {_m(r.largura_frontal_m)} m",
+                    fator * q_niveis[i] * g.altura_viga_m,
+                    f"η·C_a·q·d = {plano.eta:.3f}·{plano.ca:.2f}·{q_niveis[i]:.3f}·"
+                    f"{g.altura_viga_m:.3f}",
+                )
+            )
+            if r.guarda_corpo_kN_m and j in (0, len(r.planos) - 1):
+                w = r.guarda_corpo_kN_m[i][0 if j == 0 else 1]
+                if w > 0:
+                    linhas.append(
+                        CargaDistribuida(
+                            r.direcao,
+                            plano.posicao,
+                            f"Guarda-corpo do nível {nivel.nivel}",
+                            f"viga de borda a z = {_m(nivel.cota_m)} m",
+                            w,
+                            "C_a·q·φ·h" + (" (barlavento)" if j == 0 else " × η (sotavento)"),
+                        )
+                    )
+    return linhas

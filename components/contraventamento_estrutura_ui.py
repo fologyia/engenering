@@ -14,13 +14,22 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components.base_tecnica_ui import (
+    base_ativa,
+    botao_recarregar_da_base,
+    gravar_acoes_no_plano,
+    legenda_da_base,
+)
 from components.contraventamento_estrutura_help import AJUDA
+from components.figuras_estrutura import svg_elevacao_linha, svg_planta, svg_vento_elevacao
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
 from components.verification_table import mostrar_tabela_verificacoes
+from core import base_tecnica as bt
 from core import bolted_connection as bc
 from core import contraventamento_barras as cb
 from core import contraventamento_estrutura_registro as reg
@@ -28,6 +37,7 @@ from core import contraventamento_plataforma as cp
 from core import load_combinations as comb
 from core import section_catalog as sc
 from core import steel_sections as ss
+from core import vento_aberto_registro as var
 from core import vento_estrutura_aberta as va
 from core import vento_nbr6123 as vb
 
@@ -297,7 +307,7 @@ def formulario_estrutura(erros: list[str]) -> DadosEstrutura:
     )
 
 
-def _tabela_equipamentos(erros: list[str]) -> tuple[va.Equipamento, ...]:
+def tabela_equipamentos(erros: list[str]) -> tuple[va.Equipamento, ...]:
     vazia = pd.DataFrame(columns=COLUNAS_EQUIPAMENTOS)
     editada = st.data_editor(
         vazia,
@@ -402,7 +412,9 @@ def _tabela_forcas(erros: list[str]) -> tuple[cp.ForcaHorizontal, ...]:
     return tuple(forcas)
 
 
-def formulario_cargas(erros: list[str]) -> tuple[cp.Cargas, tuple[va.Equipamento, ...]]:
+def formulario_cargas(
+    erros: list[str], base: bt.BaseTecnica | None = None
+) -> tuple[cp.Cargas, tuple[va.Equipamento, ...]]:
     with st.container(border=True):
         st.subheader("3. Cargas de cada piso", help=AJUDA["sec_3"])
         linha = st.columns(3)
@@ -427,7 +439,7 @@ def formulario_cargas(erros: list[str]) -> tuple[cp.Cargas, tuple[va.Equipamento
         sobrecarga = _numero(
             "Sobrecarga (kN/m²)",
             "sobrecarga",
-            5.0,
+            base.sobrecarga_kN_m2 if base else 5.0,
             AJUDA["sobrecarga"],
             passo=0.5,
             formato="%.2f",
@@ -451,7 +463,7 @@ def formulario_cargas(erros: list[str]) -> tuple[cp.Cargas, tuple[va.Equipamento
                 alvo=colunas[1],
             )
             st.subheader("Equipamentos", help=AJUDA["equipamentos"])
-            equipamentos = _tabela_equipamentos(erros)
+            equipamentos = tabela_equipamentos(erros)
             st.subheader("Outras forças horizontais", help=AJUDA["forcas_h"])
             forcas = _tabela_forcas(erros)
     return (
@@ -467,17 +479,40 @@ def formulario_cargas(erros: list[str]) -> tuple[cp.Cargas, tuple[va.Equipamento
     )
 
 
-def formulario_vento() -> va.ParametrosVento:
+CHAVES_DO_VENTO = ("v0", "s1", "categoria", "grupo_s3")
+
+
+def formulario_vento(
+    base: bt.BaseTecnica | None = None, *, titulo: str = "4. Vento (NBR 6123:2023)"
+) -> va.ParametrosVento:
+    """V₀, S₁, terreno e S₃ — começando com os valores da base técnica do projeto."""
+    vento = base.vento if base else bt.VentoDoLocal()
+    opcoes = [str(g) for g in vb.GRUPOS_S3]
+    if vento.grupo_s3 == bt.S3_DO_CLIENTE and vento.s3_cliente is not None:
+        opcoes.append(bt.S3_DO_CLIENTE)
+
+    def rotulo_s3(g: str) -> str:
+        if g == bt.S3_DO_CLIENTE:
+            return f"Critério do cliente (S₃ = {_pt(vento.s3_cliente or 0.0, 2)})"
+        return f"{g} (S₃ = {_pt(vb.GRUPOS_S3[int(g)][0], 2)})"
+
     with st.container(border=True):
-        st.subheader("4. Vento (NBR 6123:2023)", help=AJUDA["sec_4"])
+        st.subheader(titulo, help=AJUDA["sec_4"])
         linha = st.columns(4)
         v0 = _numero(
-            "V₀ (m/s)", "v0", 35.0, AJUDA["v0"], minimo=10.0, maximo=70.0, passo=1.0, alvo=linha[0]
+            "V₀ (m/s)",
+            "v0",
+            vento.v0_m_s,
+            AJUDA["v0"],
+            minimo=10.0,
+            maximo=70.0,
+            passo=1.0,
+            alvo=linha[0],
         )
         s1 = _numero(
             "S₁",
             "s1",
-            1.0,
+            vento.s1,
             AJUDA["s1"],
             minimo=0.5,
             maximo=2.0,
@@ -490,22 +525,34 @@ def formulario_vento() -> va.ParametrosVento:
             "categoria",
             list(vb.CATEGORIAS_RUGOSIDADE),
             AJUDA["categoria"],
-            padrao="III",
+            padrao=vento.categoria,
             alvo=linha[2],
         )
         grupo = _selecao(
             "Grupo de S₃",
             "grupo_s3",
-            [str(g) for g in vb.GRUPOS_S3],
+            opcoes,
             AJUDA["grupo_s3"],
-            formatar=lambda g: f"{g} (S₃ = {_pt(vb.GRUPOS_S3[int(g)][0], 2)})",
-            padrao="3",
+            formatar=rotulo_s3,
+            padrao=vento.grupo_s3 if vento.grupo_s3 in opcoes else "3",
             alvo=linha[3],
+        )
+        if base is not None:
+            botao_recarregar_da_base(
+                [_chave(c) for c in CHAVES_DO_VENTO],
+                key=_chave("recarregar_vento"),
+                ajuda=AJUDA["btn_recarregar"],
+            )
+    if grupo == bt.S3_DO_CLIENTE:
+        return va.ParametrosVento(
+            v0_m_s=v0, s1=s1, categoria=categoria, grupo_s3=3, s3=vento.s3_cliente
         )
     return va.ParametrosVento(v0_m_s=v0, s1=s1, categoria=categoria, grupo_s3=int(grupo))
 
 
-def _sistema(sufixo: str, titulo: str, alvo: Any) -> cp.SistemaDeContraventamento:
+def _sistema(
+    sufixo: str, titulo: str, alvo: Any, *, com_ligacao: bool = True
+) -> cp.SistemaDeContraventamento:
     with alvo:
         if titulo:
             st.markdown(f"**{titulo}**")
@@ -547,7 +594,7 @@ def _sistema(sufixo: str, titulo: str, alvo: Any) -> cp.SistemaDeContraventament
         )
         aco = _selecao("Aço", f"aco{sufixo}", list(cb.ACOS), AJUDA["aco"], alvo=linha[2])
         diagonal = cb.Diagonal(familia=familia, perfil=perfil, aco=aco)
-        if familia == cb.FAMILIA_BARRA_REDONDA:
+        if familia == cb.FAMILIA_BARRA_REDONDA or not com_ligacao:
             return cp.SistemaDeContraventamento(tipo, diagonal, linhas, paineis)
         with st.expander("Ligação da diagonal na chapa de nó"):
             opcoes_ligacao = (
@@ -673,11 +720,11 @@ def _sistema(sufixo: str, titulo: str, alvo: Any) -> cp.SistemaDeContraventament
     return cp.SistemaDeContraventamento(tipo, diagonal, linhas, paineis)
 
 
-def formulario_contraventamento() -> tuple[
-    cp.SistemaDeContraventamento, cp.SistemaDeContraventamento
-]:
+def formulario_contraventamento(
+    *, com_ligacao: bool = True, titulo: str = "5. Contraventamento"
+) -> tuple[cp.SistemaDeContraventamento, cp.SistemaDeContraventamento]:
     with st.container(border=True):
-        st.subheader("5. Contraventamento", help=AJUDA["sec_5"])
+        st.subheader(titulo, help=AJUDA["sec_5"])
         mesmo = _toggle(
             "Mesmo contraventamento nas duas direções",
             "mesmo_sistema",
@@ -685,11 +732,15 @@ def formulario_contraventamento() -> tuple[
             valor=True,
         )
         if mesmo:
-            sistema = _sistema("_x", "", st.container())
+            sistema = _sistema("_x", "", st.container(), com_ligacao=com_ligacao)
             return sistema, sistema
         esquerda, direita = st.columns(2)
-        sx = _sistema("_x", "Linhas paralelas a X (resistem ao vento em X)", esquerda)
-        sy = _sistema("_y", "Linhas paralelas a Y (resistem ao vento em Y)", direita)
+        sx = _sistema(
+            "_x", "Linhas paralelas a X (resistem ao vento em X)", esquerda, com_ligacao=com_ligacao
+        )
+        sy = _sistema(
+            "_y", "Linhas paralelas a Y (resistem ao vento em Y)", direita, com_ligacao=com_ligacao
+        )
         return sx, sy
 
 
@@ -698,9 +749,14 @@ class Ajustes:
     excentricidade: float
     cruzamento: bool
     combinacao_servico: str
+    tipo_de_estrutura: str = ""
+    criterio_anglo: bool = False
 
 
-def formulario_ajustes() -> Ajustes:
+TIPO_NBR = ""
+
+
+def formulario_ajustes(base: bt.BaseTecnica | None = None) -> Ajustes:
     with st.container(border=True):
         st.subheader("6. Ajustes do cálculo", help=AJUDA["sec_6"])
         linha = st.columns(3)
@@ -724,7 +780,25 @@ def formulario_ajustes() -> Ajustes:
             AJUDA["comb_servico"],
             alvo=linha[2],
         )
-    return Ajustes(exc / 100.0, cruz, servico)
+        linha = st.columns(2)
+        tipos = [TIPO_NBR, *bt.TIPOS_DE_ESTRUTURA]
+        tipo = _selecao(
+            "Limite do deslocamento",
+            "tipo_estrutura",
+            tipos,
+            AJUDA["tipo_estrutura"],
+            formatar=lambda k: k or "NBR 8800, Tabela B.1 (pelo número de pisos)",
+            padrao=base.tipo_de_estrutura if base else TIPO_NBR,
+            alvo=linha[0],
+        )
+        anglo = _toggle(
+            "Aplicar o critério Anglo AA-BR-DPST-DR-0001",
+            "criterio_anglo",
+            AJUDA["criterio_anglo"],
+            valor=bool(base and base.anglo),
+            alvo=linha[1],
+        )
+    return Ajustes(exc / 100.0, cruz, servico, tipo, anglo)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -785,10 +859,68 @@ def _tabela(tabela: dict[str, Any]) -> None:
     st.caption(tabela["legenda"])
 
 
+def grafico_do_cortante(andares: list[cp.AndarNaDirecao]) -> alt.Chart:
+    dados = pd.DataFrame(
+        [
+            {
+                "Andar": f"{a.direcao} — andar {a.andar}",
+                "Direção": a.direcao,
+                "Cortante (kN)": abs(a.cortante_elu.valor),
+                "Na linha mais carregada (kN)": a.forca_na_linha_kN,
+            }
+            for a in andares
+        ]
+    )
+    return (
+        alt.Chart(dados)
+        .mark_bar()
+        .encode(
+            x=alt.X("Cortante (kN):Q"),
+            y=alt.Y("Andar:N", sort=None),
+            color=alt.Color("Direção:N", scale=alt.Scale(range=["#1f6feb", "#d4760a"])),
+            tooltip=["Andar", "Cortante (kN)", "Na linha mais carregada (kN)"],
+        )
+        .properties(height=40 + 34 * len(andares))
+    )
+
+
+def _aba_desenhos(r: cp.ResultadoContraventamento) -> None:
+    e = r.entrada
+    st.subheader("Planta", help=AJUDA["res_desenhos"])
+    st.image(svg_planta(e), width="stretch")
+    direcao = st.radio(
+        "Direção",
+        list(cp.DIRECOES),
+        key=_chave("desenho_direcao"),
+        horizontal=True,
+        help=AJUDA["desenho_direcao"],
+    )
+    st.subheader(f"Elevação da linha contraventada — {direcao}", help=AJUDA["res_desenhos"])
+    st.image(svg_elevacao_linha(e, r.andares_da_direcao(direcao), direcao), width="stretch")
+    st.subheader(f"Vento em {direcao} nos pórticos", help=AJUDA["res_vento_niveis"])
+    st.image(
+        svg_vento_elevacao(cp.geometria_do_vento(e), r.vento.direcao(direcao)), width="stretch"
+    )
+    st.subheader("Cortante de cálculo por andar", help=AJUDA["res_cortante"])
+    st.altair_chart(grafico_do_cortante(list(r.andares)), width="stretch")
+
+
 def _aba_vento(r: cp.ResultadoContraventamento) -> None:
     tabelas = reg.tabelas_para_memorial(r)
     st.subheader("Vento por nível", help=AJUDA["res_vento_niveis"])
     _tabela(tabelas[0])
+    st.subheader("Forças nos nós de cada pórtico (para o modelo)", help=AJUDA["res_nos"])
+    nos = var.tabelas_para_memorial(r.vento)[2]
+    _tabela(nos)
+    if st.button(
+        "Enviar o vento ao plano de cargas (W0, W90, W180, W270)",
+        icon=":material/table_chart:",
+        key=_chave("vento_para_plano"),
+        help=AJUDA["btn_plano"],
+    ) and gravar_acoes_no_plano(
+        var.acoes_para_o_plano(r.vento), origem="Contraventamento de estruturas abertas"
+    ):
+        st.success("Vento gravado no plano de cargas do projeto.", icon=":material/check_circle:")
     st.caption(" · ".join(r.vento.vento_no_topo.memoria))
     st.subheader("Pórticos (reticulados)", help=AJUDA["res_porticos"])
     _tabela(tabelas[1])
@@ -848,6 +980,7 @@ def _aba_ligacao(r: cp.ResultadoContraventamento) -> None:
         st.session_state["cv_P_compressao"] = round(forcas.compressao_kN, 1)
         st.session_state["cv_theta"] = round(forcas.theta_vertical_graus, 2)
         st.session_state["cv_metodo"] = "LRFD"
+        st.session_state["cv_criterio_anglo"] = r.entrada.criterio_anglo
         st.switch_page("app_pages/ligacao_contraventamento.py")
 
 
@@ -869,13 +1002,15 @@ def _registrar(r: cp.ResultadoContraventamento, ident: Identificacao) -> None:
 
 def mostrar_contraventamento_de_estrutura() -> None:
     fronteira_modelo(list(reg.FORA_DO_ESCOPO), titulo="O que esta página não faz")
+    base = base_ativa()
+    legenda_da_base(base)
     erros: list[str] = []
     ident = formulario_identificacao()
     estrutura = formulario_estrutura(erros)
-    cargas, equipamentos = formulario_cargas(erros)
-    vento = formulario_vento()
+    cargas, equipamentos = formulario_cargas(erros, base)
+    vento = formulario_vento(base)
     sx, sy = formulario_contraventamento()
-    ajustes = formulario_ajustes()
+    ajustes = formulario_ajustes(base)
     if erros:
         for erro in erros:
             st.error(erro, icon=":material/error:")
@@ -899,6 +1034,8 @@ def mostrar_contraventamento_de_estrutura() -> None:
         excentricidade=ajustes.excentricidade,
         ligadas_no_cruzamento=ajustes.cruzamento,
         combinacao_de_servico=ajustes.combinacao_servico,
+        criterio_anglo=ajustes.criterio_anglo,
+        tipo_de_estrutura=ajustes.tipo_de_estrutura,
     )
     problemas = cp.validar_entrada(entrada)
     if problemas:
@@ -912,14 +1049,16 @@ def mostrar_contraventamento_de_estrutura() -> None:
         st.stop()
     st.header("Resultados")
     _resumo(resultado)
-    abas = st.tabs(["Verificações", "Vento", "Combinações e andares", "Ligação"])
+    abas = st.tabs(["Desenhos", "Verificações", "Vento", "Combinações e andares", "Ligação"])
     with abas[0]:
-        _aba_verificacoes(resultado)
+        _aba_desenhos(resultado)
     with abas[1]:
-        _aba_vento(resultado)
+        _aba_verificacoes(resultado)
     with abas[2]:
-        _aba_combinacoes(resultado)
+        _aba_vento(resultado)
     with abas[3]:
+        _aba_combinacoes(resultado)
+    with abas[4]:
         _aba_ligacao(resultado)
     st.subheader("Referências", help=AJUDA["res_avisos"])
     st.caption("\n".join(f"- {item}" for item in reg.REFERENCIAS))

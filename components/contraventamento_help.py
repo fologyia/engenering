@@ -240,6 +240,16 @@ AJUDA: dict[str, str] = {
     "so_atencao": "Mostra só o que reprova, tem ressalva ou não se aplica.",
     "res_exportar": "Baixar as verificações em CSV, para planilha ou conferência.",
     "btn_csv": "Baixa a tabela de verificações em CSV (separador ponto e vírgula, UTF-8).",
+    "criterio_anglo": (
+        "Liga as exigências do critério da Anglo American para ligações: chapa de nó com pelo "
+        'menos 8 mm, parafuso A325 de 5/8" a 1", ao menos 2 parafusos e o filete mínimo da '
+        "Tabela 6. Vem ligado quando a base técnica do projeto usa o critério Anglo."
+    ),
+    "res_desenho": (
+        "A ligação desenhada em escala: coluna à esquerda, viga em cima, a chapa no canto e a "
+        "diagonal chegando no ângulo informado. Mostra a seção de Whitmore (a faixa da chapa "
+        "que trabalha) e as forças que o método distribui para a viga e a coluna."
+    ),
     "res_avisos": "O que o programa avisa que não conferiu e deve ser visto no desenho.",
     "reg_registrar": (
         "Grava este cálculo no projeto ativo: entradas, tabelas e verificações. O memorial e "

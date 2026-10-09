@@ -155,6 +155,8 @@ ESTADOS = [
         {"cv_modo": MODO_SIMPLES, "cv_P_tracao": 50.0, "cv_P_compressao": 0.0},
         id="simplificado-pequeno",
     ),
+    pytest.param({"cv_criterio_anglo": True}, id="anglo"),
+    pytest.param({"cv_modo": MODO_SIMPLES, "cv_criterio_anglo": True}, id="simplificado-anglo"),
 ]
 
 
@@ -226,3 +228,11 @@ def test_forca_que_chega_da_pagina_de_contraventamento_e_usada(banco_isolado):
     )
     numeros = {n.key: n.value for n in t.number_input}
     assert numeros["cv_P_tracao"] == 123.4 and numeros["cv_theta"] == 56.31
+
+
+def test_criterio_anglo_entra_na_tabela_e_o_desenho_aparece(banco_isolado):
+    t = abrir(banco_isolado, cv_criterio_anglo=True, cv_grau="A307")
+    assert [tab.label for tab in t.tabs][:3] == ["Desenho", "Verificações", "Forças e geometria"]
+    textos = " ".join(str(d.value) for d in t.dataframe)
+    assert "Anglo: grau do parafuso" in textos
+    assert metrica(t, "Status geral") == "NÃO OK"

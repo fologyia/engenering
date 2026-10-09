@@ -16,6 +16,7 @@ from streamlit.testing.v1 import AppTest
 from components.contraventamento_estrutura_help import AJUDA
 from core import contraventamento_barras as cb
 from core import contraventamento_plataforma as cp
+from core import criterio_anglo as ca
 from core import load_combinations as comb
 from core.project_store import obter_projeto_ativo
 
@@ -120,6 +121,10 @@ ESTADOS = [
         {"ce_familia_x": cb.FAMILIA_BARRA_REDONDA, "ce_tipo_x": cp.TIPO_DIAGONAL_SIMPLES},
         id="tirante-sem-x",
     ),
+    pytest.param(
+        {"ce_criterio_anglo": True, "ce_tipo_estrutura": ca.TIPO_PIPE_RACK}, id="anglo-pipe-rack"
+    ),
+    pytest.param({"ce_desenho_direcao": "Y", "ce_n_pisos": 3}, id="desenho-y-tres-pisos"),
 ]
 
 
@@ -180,6 +185,14 @@ def test_botao_leva_as_forcas_para_a_ligacao(banco_isolado):
     assert t.session_state["cv_P_tracao"] > 0
     assert 0 < t.session_state["cv_theta"] < 90
     assert t.session_state["cv_metodo"] == "LRFD"
+    assert t.session_state["cv_criterio_anglo"] is False
+
+
+def test_criterio_anglo_acrescenta_as_exigencias_e_o_limite_do_tipo(banco_isolado):
+    t = abrir(banco_isolado, ce_criterio_anglo=True, ce_tipo_estrutura=ca.TIPO_PIPE_RACK)
+    textos = " ".join(str(d.value) for d in t.dataframe)
+    assert "espessura mínima da cantoneira" in textos
+    assert "Anglo 7.2" in textos
 
 
 def test_registrar_grava_no_projeto(banco_com_projeto):

@@ -14,6 +14,11 @@ páginas por análise. Este módulo reorganiza o capítulo pelo que o leitor pro
 6. **Não passou**, sempre no fim: o que reprovou, o que passou com ressalva ou não pôde ser avaliado
    e o que o módulo manda conferir antes de emitir — ou a declaração explícita de que nada reprovou.
 
+Os cálculos que não fecham numa tabela de verificações mas guardam um texto de destaque e tabelas
+próprias (as forças do vento numa estrutura aberta, por exemplo) usam :func:`capitulo_de_calculo`:
+o mesmo roteiro — resultado, dados de entrada, método, tabelas do módulo e o que conferir —, sem as
+seções de passou e não passou.
+
 O memorial existe para ser incluído em outro documento, então nada aqui é decoração: cada tabela é
 nativa do Word e cada bloco se lê sozinho.
 """
@@ -600,6 +605,7 @@ _ENTRADAS_CONTRAVENTAMENTO: tuple[_Entrada, ...] = (
     ("perna_da_solda_na_coluna_mm", "Perna da solda na coluna [mm]", "se_preenchido"),
     ("fator_de_ductilidade_da_solda", "Fator de ductilidade da solda", "sempre"),
     ("considerar_distorcao", "Considerar a distorção do pórtico", "se_preenchido"),
+    ("criterio_do_cliente", "Critério do cliente", "se_preenchido"),
 )
 
 _ENTRADAS_CONTRAVENTAMENTO_ESTRUTURA: tuple[_Entrada, ...] = (
@@ -631,9 +637,33 @@ _ENTRADAS_CONTRAVENTAMENTO_ESTRUTURA: tuple[_Entrada, ...] = (
     ("contraventamento_Y", "Contraventamento das linhas em Y", "sempre"),
     ("excentricidade", "Excentricidade (fração)", "sempre"),
     ("combinacao_de_servico", "Combinação dos deslocamentos", "sempre"),
+    ("criterio_do_cliente", "Critério do cliente", "se_preenchido"),
+    ("limite_do_deslocamento", "Limite do deslocamento", "sempre"),
+)
+
+_ENTRADAS_VENTO_ABERTO: tuple[_Entrada, ...] = (
+    ("obra", "Obra", "se_preenchido"),
+    ("tag", "TAG", "se_preenchido"),
+    ("data_do_calculo", "Data do cálculo", "se_preenchido"),
+    ("comprimento_x_m", "Comprimento L_x [m]", "sempre"),
+    ("largura_y_m", "Largura L_y [m]", "sempre"),
+    ("cotas_dos_pisos_m", "Cotas dos pisos [m]", "sempre"),
+    ("vaos_x", "Vãos em X", "sempre"),
+    ("vaos_y", "Vãos em Y", "sempre"),
+    ("largura_do_pilar_m", "Largura do pilar vista pelo vento [m]", "sempre"),
+    ("altura_da_viga_m", "Altura da viga [m]", "sempre"),
+    ("guarda_corpo", "Guarda-corpo no perímetro", "sempre"),
+    ("indice_do_guarda_corpo", "Índice φ do guarda-corpo", "se_preenchido"),
+    ("equipamentos", "Equipamentos", "se_preenchido"),
+    ("V0_m_s", "V₀ [m/s]", "sempre"),
+    ("S1", "S₁", "sempre"),
+    ("categoria_de_rugosidade", "Categoria do terreno", "sempre"),
+    ("grupo_S3", "Grupo de S₃", "se_preenchido"),
+    ("S3", "S₃", "se_preenchido"),
 )
 
 ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
+    "vento_estrutura_aberta": _ENTRADAS_VENTO_ABERTO,
     "contraventamento_estrutura": _ENTRADAS_CONTRAVENTAMENTO_ESTRUTURA,
     "ligacao_contraventamento": _ENTRADAS_CONTRAVENTAMENTO,
     "flambagem_colunas": _ENTRADAS_FLAMBAGEM,
@@ -699,6 +729,12 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "forcas_do_UFM",
         # contraventamento de estruturas abertas
         "forcas_para_a_ligacao",
+        # vento em estruturas abertas (o destaque e as tabelas já trazem estes valores)
+        "forca_total_X_kN",
+        "forca_total_Y_kN",
+        "momento_na_base_X_kNm",
+        "momento_na_base_Y_kNm",
+        "q_no_topo_kN_m2",
         # degrau de escada em grade (as tabelas do memorial já trazem estes valores)
         "modelo_adotado",
         "número_de_espelhos",
@@ -1063,6 +1099,83 @@ def capitulo_de_verificacoes(
             }
         )
     blocos.extend(_bloco_nao_passou(registro, linhas, resumo, formatar))
+    return {"titulo": titulo, "nivel": nivel, "blocos": blocos}
+
+
+def tem_capitulo_de_calculo(registro: Mapping[str, Any]) -> bool:
+    """O registro sem tabela de verificações traz destaque ou tabelas próprias para o memorial."""
+    resultados = registro.get("resultados")
+    if not isinstance(resultados, Mapping):
+        return False
+    return bool(str(resultados.get("destaque_memorial") or "").strip()) or bool(
+        tabelas_do_registro(registro)
+    )
+
+
+def capitulo_de_calculo(
+    registro: Mapping[str, Any],
+    *,
+    titulo: str,
+    nivel: int,
+    peca: str,
+    formatar: Formatador,
+    rotular: Callable[[str], str],
+    imagens: Sequence[Mapping[str, Any]] = (),
+    aviso_imagens: str = "",
+) -> dict[str, Any]:
+    """O capítulo de um cálculo sem tabela de verificações (forças, cargas, coeficientes).
+
+    Abre com o resultado em destaque (o texto que o módulo guardou), segue com os dados de entrada
+    legíveis, o método e as tabelas do módulo, e fecha com o que o módulo manda conferir.
+    """
+    resultados = registro.get("resultados")
+    resultados = resultados if isinstance(resultados, Mapping) else {}
+    destaque = str(resultados.get("destaque_memorial") or registro.get("resumo") or "").strip()
+    blocos: list[dict[str, Any]] = [
+        {
+            "tipo": "destaque",
+            "rotulo": "Resultado do cálculo.",
+            "texto": destaque or "-",
+            "tom": "neutro",
+            "manter_com_proximo": True,
+        }
+    ]
+    quando = _data_legivel(registro.get("criado_em"))
+    blocos.append(
+        {
+            "tipo": "paragrafo",
+            "texto": (
+                f"Módulo: {registro.get('modulo') or '-'}. Peça: {peca}. "
+                f"Situação registrada: {registro.get('status') or '-'}."
+                + (f" Registrado em {quando}." if quando else "")
+            ),
+        }
+    )
+    if aviso_imagens:
+        blocos.append({"tipo": "paragrafo", "texto": aviso_imagens})
+    pares = pares_de_entrada(registro, formatar, rotular)
+    if pares:
+        blocos.append({"tipo": "tabela", **tabela_de_entradas(pares, legenda="Dados de entrada.")})
+    blocos.extend(_base_do_calculo(registro, equacoes_gerais(registro, ()), None))
+    blocos.extend({"tipo": "imagem", **imagem} for imagem in imagens)
+    blocos.extend({"tipo": "tabela", **tabela} for tabela in tabelas_do_registro(registro))
+    outros = pares_de_resultados(registro, formatar, rotular)
+    if outros:
+        blocos.append(
+            {
+                "tipo": "tabela",
+                **tabela_de_entradas(
+                    outros, legenda="Outros resultados registrados.", rotulo="Resultado"
+                ),
+            }
+        )
+    livres = alertas_livres(registro, ())
+    if livres:
+        blocos.append({"tipo": "subtitulo", "texto": "Conferir antes de emitir", "tom": "atencao"})
+        blocos.append({"tipo": "bullets", "itens": livres})
+    conclusao = str(registro.get("conclusao") or "").strip()
+    if conclusao and conclusao != destaque:  # o destaque já abre o capítulo
+        blocos.append({"tipo": "paragrafo", "texto": f"Conclusão: {decimal_ptbr(conclusao)}"})
     return {"titulo": titulo, "nivel": nivel, "blocos": blocos}
 
 

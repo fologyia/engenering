@@ -82,6 +82,15 @@ AJUDA: dict[str, str] = {
         "- **4** (0,95): depósitos e silos sem ocupação humana nem circulação no entorno.\n"
         "- **5** (0,83): obras temporárias não reutilizáveis ou construção (até 2 anos)."
     ),
+    "s3_cliente": (
+        "O critério do cliente (na base técnica do projeto) fixa um S₃ próprio. Ligado, o "
+        "programa usa esse valor no lugar do S₃ do grupo. Se ele for menor que o do grupo da "
+        "norma, confirme com o cliente: o aviso de conflito aparece logo acima."
+    ),
+    "btn_recarregar_base": (
+        "Descarta o que foi digitado em V₀, relevo, terreno, grupo e S₃ do cliente e volta aos "
+        "valores da base técnica do projeto ativo."
+    ),
     "s3_estat": (
         "Calcula S₃ pela **probabilidade e vida útil** que você escolher (Anexo B), em vez de usar "
         "o valor do grupo. Serve para uma vida útil diferente de 50 anos ou outro nível de "

@@ -190,6 +190,27 @@ computador.
 
 ## Recursos
 
+### Caminho do projeto (estrutura metálica)
+
+O programa ajuda a **conseguir as informações, registrar e anotar tudo e fazer as verificações**, junto
+com o modelo (SolidWorks hoje; Robot Structural quando houver). O projeto segue cinco etapas, mostradas
+na página inicial e nas páginas de cada etapa com o que o projeto ativo já tem
+(`docs/fluxo_do_projeto.md`):
+
+1. **Base técnica do projeto** — uma vez por projeto: critério do cliente (somente as normas ou o
+   critério Anglo American AA-BR-DPST-DR-0001), V₀, S₁, terreno, S₃, tipo de estrutura (limite do
+   deslocamento), sobrecarga, agressividade e vida útil. As páginas de vento, contraventamento,
+   ligação e estruturas de aço começam com esses valores e mostram de onde vieram; a consulta do
+   critério Anglo (sobrecargas, deslocamentos, mínimos, chumbadores, ligações, combinações, vibração,
+   escadas, materiais e conflitos) fica na mesma página (`docs/criterio_anglo.md`).
+2. **Ações** — cada página gera as suas; o vento de estruturas abertas sai por nível, por pórtico e
+   em cada nó, com desenho e CSV.
+3. **Plano de cargas** — as ações com código padrão (PP, PE, EQ, EO, SC, W0…W270, T±, PRV, HT, HL, MO,
+   IM, EX), de onde vieram, as cargas para lançar no modelo e as combinações ELU e ELS numeradas, com
+   CSV e a cobertura das combinações mínimas do critério Anglo (5.9).
+4. **Verificações** — contraventamento, ligação, barras, parafusos, degraus; cada cálculo registrado.
+5. **Memorial** — Word e PDF com os cálculos registrados.
+
 ### Visão geral
 
 - recomenda o módulo a partir dos dados disponíveis;
@@ -324,7 +345,25 @@ Calcula a ação do vento numa edificação de planta retangular pela **ABNT NBR
   vento e faixa de posição, com a solução pelo solver 2D (reações, esforços e deslocamento);
 - verificações de aplicabilidade (a/b, h/b, inclinação, T₁ ≤ 1 s, esbeltez), desenho da planta com as
   zonas, CSV das tabelas e **registro no projeto** — o memorial traz o resultado, o que passou, as
-  tabelas e o que não passou.
+  tabelas e o que não passou;
+- V₀, relevo, terreno, grupo e o S₃ do cliente começam com os valores da **base técnica** do projeto.
+
+### Vento em estruturas abertas
+
+Só o vento de **plataformas, mezaninos e pipe racks sem fechamento**, para anotar no relatório e lançar
+no modelo (`core/vento_estrutura_aberta.py`, `core/vento_aberto_registro.py`): pórticos como
+reticulados (NBR 6123:2023, capítulo 8), guarda-corpos e equipamentos; **forças por nível**, **por
+pórtico**, **em cada nó** pilar–viga e **carga por metro** em pilares, vigas e guarda-corpos; desenho
+dos pórticos com as forças; CSV (ponto e vírgula, vírgula decimal); envio de W0, W90, W180 e W270 ao
+**plano de cargas**; registro com capítulo próprio no memorial (resultado, entradas, método e as
+tabelas). Usa os mesmos campos do Contraventamento de estruturas abertas.
+
+### Base técnica do projeto e Plano de cargas
+
+`core/base_tecnica.py` e `core/plano_de_cargas.py` (ver o caminho do projeto acima e
+`docs/fluxo_do_projeto.md`). O plano guarda uma ação por código; enviar o vento de novo substitui as
+quatro direções. Na página **Estruturas de aço → Combinações**, o botão **Trazer as ações do plano de
+cargas** monta a tabela com as ações do plano para receber os esforços da barra tirados do modelo.
 
 ### Degrau de escada em grade
 
@@ -363,7 +402,11 @@ diagonal verificada (`core/contraventamento_plataforma.py`; detalhes em
 - **B₂** de cada andar (Anexo C) e classificação da deslocabilidade, com amplificação na média;
 - **diagonais** em X (só tração ou tração e compressão), diagonal simples ou V invertido, em
   cantoneira (5.3.5.4), tubo ou tirante, com parafusos, rasgamento e solda; **deslocamentos** do
-  Anexo B; botão que leva as forças para a Ligação de contraventamento.
+  Anexo B ou da Tabela 4 do critério Anglo (pelo tipo de estrutura); botão que leva as forças para a
+  Ligação de contraventamento;
+- **desenhos** (planta, elevação de cada linha com as forças, vento nos pórticos, cortante por andar),
+  forças nos nós e envio do vento ao plano de cargas; com o **critério Anglo**, as exigências de
+  espessura, diâmetros, parafusos e capacidade mínima da ligação.
 
 ### Ligação de contraventamento
 
@@ -374,9 +417,11 @@ cisalhamento, flambagem da chapa, interfaces, soldas e alma/mesa da viga e da co
 linhas com o item da norma em cada uma). No **modo simplificado** o programa dimensiona a chapa
 sozinho (parafusos, espessura, comprimentos sem momento nas interfaces e soldas) a partir da força,
 do ângulo, dos perfis do catálogo (com o `k` tabelado) e do parafuso. Reproduz os Exemplos 5.1 a 5.4 do guia
-(`core/contraventamento_*.py`; detalhes em `docs/ligacao_contraventamento.md`). O registro leva as
-forças nas interfaces e a geometria para o memorial. Não verifica a barra nem a chapa de topo
-parafusada.
+(`core/contraventamento_*.py`; detalhes em `docs/ligacao_contraventamento.md`). A aba **Desenho**
+mostra a chapa de nó em escala com a seção de Whitmore e as forças em cada interface; com o **critério
+Anglo**, a tabela ganha chapa ≥ 8 mm, parafusos A325 de 5/8" a 1", ao menos 2 parafusos e o filete
+mínimo da Tabela 6. O registro leva as forças nas interfaces e a geometria para o memorial. Não
+verifica a barra nem a chapa de topo parafusada.
 
 ### Flambagem de colunas
 
@@ -569,6 +614,8 @@ A página **Guia geral** reúne:
 - a tabela de comandos de vigas e eixos, com os apoios da Tabela 12.1 e a
   leitura de cada diagrama.
 - uso completo dos projetos permanentes, da validação e dos relatórios modulares.
+- o caminho do projeto em cinco etapas (base técnica, ações, plano de cargas, verificações e
+  memorial), com capítulos para a base técnica, o plano de cargas e o vento em estruturas abertas.
 
 ## Qualidade
 
@@ -602,6 +649,8 @@ mecanica_toolkit/
 │   ├── inicio.py
 │   ├── painel_industrial.py
 │   ├── gestao_projetos.py
+│   ├── base_tecnica.py
+│   ├── plano_cargas.py
 │   ├── central_validacao.py
 │   ├── central_relatorios.py
 │   ├── assistente_projeto.py
@@ -613,6 +662,8 @@ mecanica_toolkit/
 │   ├── circulo_mohr.py
 │   ├── projeto_parafusos.py
 │   ├── degrau_escada.py
+│   ├── vento_nbr6123.py
+│   ├── vento_estrutura_aberta.py
 │   ├── contraventamento_estrutura.py
 │   ├── ligacao_contraventamento.py
 │   ├── estruturas_aco.py
@@ -622,6 +673,9 @@ mecanica_toolkit/
 │   └── guia_geral.py
 ├── core/
 │   ├── technical_modules.py
+│   ├── base_tecnica.py
+│   ├── criterio_anglo.py
+│   ├── plano_de_cargas.py
 │   ├── beam_analysis.py
 │   ├── beam_script.py
 │   ├── section_stress.py

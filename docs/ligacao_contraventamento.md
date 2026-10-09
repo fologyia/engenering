@@ -74,6 +74,23 @@ cisalhamento 858 kips, soldas 9,8 mm e 8,8 mm necessários). Diferenças deliber
 chapa** usa a área efetiva de Whitmore (conservador: o guia usa uma área de 20,9 in² que não é
 reproduzível pelos dados publicados) e as unidades são convertidas (1 kip = 4,448222 kN).
 
+## Desenho
+
+A aba **Desenho** (`components/figuras_estrutura.svg_ligacao`) mostra a ligação em escala: coluna à
+esquerda, viga em cima, a chapa com `l_h`, `l_v` e os cortes, o grupo de parafusos ao longo do eixo da
+diagonal, a seção de Whitmore (30° a partir da fileira mais afastada) e as forças de cálculo em cada
+interface pelo UFM. A posição do grupo ao longo do eixo é ilustrativa (60 mm de folga das faces):
+confira no desenho de fabricação.
+
+## Critério Anglo
+
+Com **Aplicar o critério Anglo American** (ligada quando a base técnica do projeto é a da Anglo ou
+quando a força vem da página de contraventamento com o critério ligado), a tabela ganha: chapa de nó
+≥ 8 mm (8.8), chapa > 31,5 mm com ultrassom (4.5, ALERTA), ≥ 2 parafusos e parafuso ≥ 5/8" (8.8 e
+9.1), parafuso > 1" (ALERTA), grau A307 (NÃO OK) ou A490 (ALERTA), filete mínimo da Tabela 6 na viga
+e na coluna (9.2.1) e a lembrança da capacidade mínima da ligação (9.1). No modo simplificado as
+pernas das soldas respeitam a Tabela 6. Ver `docs/criterio_anglo.md`.
+
 ## Registro e memorial
 
 O registro leva as entradas, as verificações (`resultados.verificações`), a tabela das **forças nas

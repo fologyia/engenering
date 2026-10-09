@@ -1,5 +1,7 @@
 import streamlit as st
 
+from components.base_tecnica_help import AJUDA as AJUDA_BASE
+from components.base_tecnica_ui import mapa_do_projeto
 from core import armazenamento
 from core import material_catalog as mat
 from core import section_catalog as catalogo_perfis
@@ -98,6 +100,8 @@ if projeto_ativo:
                 icon=":material/description:",
             )
 
+mapa_do_projeto(AJUDA_BASE["sec_mapa"])
+
 modulos = [
     (
         "Painel industrial",
@@ -114,6 +118,22 @@ modulos = [
         "Base de projeto, critérios, escopo, documentos, normas, registros, checklist com prazos, fluxo de situação e revisões comparáveis.",
         "app_pages/gestao_projetos.py",
         "blue",
+    ),
+    (
+        "Base técnica do projeto",
+        ":material/tune:",
+        "Etapa 1 — preencher uma vez",
+        "Critério do cliente (Anglo), vento do local, tipo de estrutura e sobrecarga: as demais páginas começam com esses valores.",
+        "app_pages/base_tecnica.py",
+        "violet",
+    ),
+    (
+        "Plano de cargas",
+        ":material/table_chart:",
+        "Etapa 3 — ações e combinações",
+        "Ações com código padrão (PP, SC, W0…), cargas para o modelo (SolidWorks, Robot), combinações ELU/ELS e CSV.",
+        "app_pages/plano_cargas.py",
+        "violet",
     ),
     (
         "Casos e combinações de carga",
@@ -236,6 +256,14 @@ modulos = [
         "green",
     ),
     (
+        "Vento em estruturas abertas",
+        ":material/air:",
+        "Só o vento, para anotar",
+        "Força do vento por nível, por pórtico e em cada nó (NBR 6123, cap. 8), com desenho e CSV para lançar no modelo.",
+        "app_pages/vento_estrutura_aberta.py",
+        "blue",
+    ),
+    (
         "Contraventamento de estruturas abertas",
         ":material/grid_on:",
         "Plataformas e pipe racks",
@@ -305,6 +333,9 @@ with st.container(border=True):
         "Preciso dimensionar o degrau de uma escada industrial em grade",
         "Preciso dimensionar a chapa de nó de um contraventamento no canto viga–coluna",
         "Preciso contraventar uma plataforma, mezanino ou pipe rack aberto",
+        "Quero definir uma vez o vento do local e o critério do cliente (Anglo) para o projeto",
+        "Preciso só da força do vento numa plataforma ou pipe rack aberto, para o modelo",
+        "Quero montar o plano de cargas com códigos e combinações para o modelo",
     ]
     situacao = st.selectbox("Escolha o que você possui", situacoes)
 
@@ -423,6 +454,24 @@ with st.container(border=True):
             "Calcula o vento nos pórticos abertos, combina as ações com as forças nocionais e verifica as diagonais e os deslocamentos.",
             "app_pages/contraventamento_estrutura.py",
             ":material/grid_on:",
+        ),
+        situacoes[19]: (
+            "Base técnica do projeto",
+            "Guarda no projeto o critério do cliente, V₀, S₁, terreno, S₃, o tipo de estrutura e a sobrecarga; as páginas de cálculo começam com esses valores.",
+            "app_pages/base_tecnica.py",
+            ":material/tune:",
+        ),
+        situacoes[20]: (
+            "Vento em estruturas abertas",
+            "Calcula a força do vento por nível, por pórtico e em cada nó (NBR 6123, cap. 8), com desenho, CSV e envio ao plano de cargas.",
+            "app_pages/vento_estrutura_aberta.py",
+            ":material/air:",
+        ),
+        situacoes[21]: (
+            "Plano de cargas",
+            "Reúne as ações com código padrão, as cargas para o modelo e as combinações ELU e ELS numeradas, com CSV.",
+            "app_pages/plano_cargas.py",
+            ":material/table_chart:",
         ),
     }
     titulo, descricao, destino, icone = recomendacoes[situacao]

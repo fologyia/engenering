@@ -22,10 +22,12 @@ from core.materials_registry import avaliar_material, resumir_fonte
 from core.memorial_blocos import PALETA_TONS, blocos_da_secao, tom_valido
 from core.memorial_verificacoes import (
     assinatura_da_base,
+    capitulo_de_calculo,
     capitulo_de_verificacoes,
     contagens,
     decimal_ptbr,
     extrair_linhas,
+    tem_capitulo_de_calculo,
 )
 from core.memorial_word import gerar_memorial_word_padrao
 from core.pdf_fonts import fonte_pdf, texto_para_fonte
@@ -937,6 +939,20 @@ def montar_modelo_relatorio(
                     base_repetida_de=repetida_de,
                     imagens=imagens_verif,
                     aviso_imagens=aviso_verif,
+                )
+            if tem_capitulo_de_calculo(registro):
+                # Forças, cargas e coeficientes sem tabela de verificações (vento em estruturas
+                # abertas): o mesmo roteiro, sem as seções de passou e não passou.
+                imagens_calc, aviso_calc = imagens_do_registro(registro, projeto)
+                return capitulo_de_calculo(
+                    registro,
+                    titulo=f"{numeracao} {titulo_exibido}",
+                    nivel=nivel,
+                    peca=_peca_registro(registro, componentes_por_id),
+                    formatar=_valor,
+                    rotular=_campo_legivel,
+                    imagens=imagens_calc,
+                    aviso_imagens=aviso_calc,
                 )
             entradas = (
                 registro.get("entradas", {})

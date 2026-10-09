@@ -25,6 +25,25 @@ Nenhuma linha da tabela do módulo some: cada verificação aparece uma vez, na 
 avaliadas). Os números saem em português: o ponto decimal das fórmulas vira vírgula, sem mexer em
 números de item ("5.3.2") nem em siglas ("Tab. A.3").
 
+## Capítulo de um cálculo sem tabela de verificações
+
+Vale para os registros que guardam um texto de destaque ou tabelas próprias
+(`resultados["destaque_memorial"]`, `resultados["tabelas_memorial"]`) mas não fecham numa tabela de
+verificações — hoje, o **Vento em estruturas abertas** (forças por nível, por pórtico e nos nós). O
+capítulo segue o mesmo roteiro, sem as seções de passou e não passou:
+
+| Ordem | Bloco | O que mostra |
+| --- | --- | --- |
+| 1 | **Resultado do cálculo** (caixa em destaque) | O texto que o módulo guardou (forças totais, momentos na base, q no topo). |
+| 2 | Identificação | Módulo, peça, situação registrada e quando foi registrado. |
+| 3 | **Dados de entrada** | Os mesmos rótulos legíveis do capítulo de verificações. |
+| 4 | Método, premissas e critérios | Método, premissas, referências e equações. |
+| 5 | Tabelas do módulo | As tabelas prontas que o módulo registrou. |
+| 6 | Conferir antes de emitir | Os alertas do registro (os conflitos da base técnica, por exemplo). |
+
+Os demais módulos sem tabela continuam com o capítulo de sempre (`core/memorial_verificacoes.py`,
+`capitulo_de_calculo`).
+
 ## Vários cálculos no mesmo projeto
 
 * Cada análise é um capítulo, agrupado pela peça do escopo físico.

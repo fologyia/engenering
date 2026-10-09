@@ -156,6 +156,19 @@ AJUDA: dict[str, str] = {
         "Combinação usada nos deslocamentos (Anexo B): rara (vento característico, a favor da "
         "segurança) ou frequente (ψ₁ = 0,3 do vento)."
     ),
+    "tipo_estrutura": (
+        "Qual limite do deslocamento horizontal do topo sob vento vale aqui: o do critério Anglo "
+        "(Tabela 4: plataformas de equipamentos H/400, pipe rack H/250, cobertura H/400) ou o da "
+        "NBR 8800 (H/300 com um piso; H/400 e h/500 com dois ou mais)."
+    ),
+    "criterio_anglo": (
+        "Acrescenta as exigências do critério Anglo: espessura mínima da cantoneira (4,75 mm), "
+        'diâmetros mínimos de parafuso (5/8") e de tirante (1/2"), A325 nas ligações principais, '
+        "ligação com no mínimo 75 % da tração da peça e 3 t, e a redução de comprimento da Tabela 5."
+    ),
+    "btn_recarregar": (
+        "Descarta o que foi digitado no vento e volta aos valores da base técnica do projeto."
+    ),
     # ------------------------------------------------------------------ resultados
     "res_status": "OK atende · NÃO OK reprova · ALERTA ressalva · INFO informação · N/A não se aplica.",
     "res_aproveitamento": (
@@ -201,6 +214,21 @@ AJUDA: dict[str, str] = {
         "Abre a página Ligação de contraventamento já com estas forças e o ângulo preenchidos."
     ),
     "res_avisos": "O que o programa avisa que não conferiu e deve ser visto no desenho.",
+    "res_desenhos": (
+        "Desenhos em escala gerados com os seus dados: a planta com as linhas contraventadas e a "
+        "elevação da linha mais carregada com a força em cada diagonal (azul tração, vermelho "
+        "compressão)."
+    ),
+    "desenho_direcao": "Qual direção desenhar na elevação e no vento.",
+    "res_cortante": "Cortante de cálculo de cada andar (ELU, com a força nocional), por direção.",
+    "res_nos": (
+        "A força do vento em cada pórtico e nível, e a parcela de cada nó pilar–viga: é o que se "
+        "lança no modelo (SolidWorks, Robot) como carga nodal. Valores característicos."
+    ),
+    "btn_plano": (
+        "Grava W0, W90, W180 e W270 no plano de cargas do projeto, com as forças nos nós. Se já "
+        "existirem, são substituídas."
+    ),
     "reg_registrar": (
         "Grava este cálculo no projeto ativo: entradas, tabelas e verificações. O memorial passa "
         "a trazer o contraventamento."

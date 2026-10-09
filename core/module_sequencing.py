@@ -77,7 +77,7 @@ FLUXOS: dict[str, tuple[str, ...]] = {
     ),
     # Estrutura aberta: o vento dos reticulados já sai na página do contraventamento.
     "estrutura_aberta": (
-        "casos_carga",
+        "vento_estrutura_aberta",
         "contraventamento_estrutura",
         "ligacao_contraventamento",
         "flambagem_colunas",

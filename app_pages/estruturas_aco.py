@@ -8,14 +8,17 @@ import streamlit as st
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import base_plate as placa_base
+from core import base_tecnica as base_tec
 from core import bolt_design as parafusos
 from core import load_combinations as combinacoes
 from core import nbr8800, platform_loads, wind_load
+from core import plano_de_cargas as plano_cargas
 from core import section_catalog as catalogo_perfis
 from core import steel_connections as ligacoes
 from core import steel_member_design as barras
 from core import steel_sections as secoes
 from core import structural_2d as estrutural
+from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Estruturas de aço", ":material/domain:")
 
@@ -1048,25 +1051,58 @@ elif modulo == "3. Combinações":
                 0.0,
             ],
         ],
-        columns=[
-            "nome",
-            "categoria",
-            "tipo",
-            "grupo",
-            "N (kN)",
-            "V (kN)",
-            "M (kN·m)",
-            "γ",
-            "ψ0",
-            "ψ1",
-            "ψ2",
-        ],
+        columns=list(plano_cargas.COLUNAS_DOS_ESFORCOS),
     )
+    projeto_ativo = obter_projeto_ativo()
+    plano_do_projeto = plano_cargas.plano_do_projeto(projeto_ativo)
+    versao_da_tabela = int(st.session_state.get("estrutura_acoes_versao", 0))
+    linhas_do_plano = st.session_state.get("estrutura_acoes_do_plano")
+    botoes_plano = st.columns(2)
+    if botoes_plano[0].button(
+        "Trazer as ações do plano de cargas",
+        icon=":material/table_chart:",
+        key="estrutura_trazer_plano",
+        disabled=not plano_do_projeto.acoes,
+        help=(
+            "Troca a tabela pelas ações do plano de cargas do projeto ativo (código, categoria, "
+            "grupo e coeficientes). N, V e M vêm zerados: preencha com os esforços "
+            "característicos desta barra tirados do modelo (SolidWorks, Robot)."
+        ),
+    ):
+        st.session_state["estrutura_acoes_do_plano"] = plano_cargas.linhas_para_esforcos(
+            plano_do_projeto
+        )
+        st.session_state["estrutura_acoes_versao"] = versao_da_tabela + 1
+        st.rerun()
+    if linhas_do_plano and botoes_plano[1].button(
+        "Voltar à tabela de exemplo",
+        icon=":material/restart_alt:",
+        key="estrutura_voltar_exemplo",
+        help="Descarta as ações trazidas do plano e volta à tabela de exemplo.",
+    ):
+        st.session_state.pop("estrutura_acoes_do_plano", None)
+        st.session_state["estrutura_acoes_versao"] = versao_da_tabela + 1
+        st.rerun()
+    if linhas_do_plano:
+        acoes_padrao = pd.DataFrame(
+            linhas_do_plano, columns=list(plano_cargas.COLUNAS_DOS_ESFORCOS)
+        )
+        st.caption(
+            f"{len(linhas_do_plano)} ações do plano de cargas: preencha N, V e M de cada uma com os "
+            "esforços característicos da barra (sem coeficientes) tirados do modelo."
+        )
+    elif not plano_do_projeto.acoes:
+        st.caption(
+            "O projeto ativo não tem plano de cargas: monte-o na página **Plano de cargas** para "
+            "trazer as ações com o código padrão."
+        )
     editadas = st.data_editor(
         acoes_padrao,
         num_rows="dynamic",
         hide_index=True,
-        key="estrutura_acoes_editor_v2",
+        key="estrutura_acoes_editor_v2"
+        if not versao_da_tabela
+        else f"estrutura_acoes_editor_v2_{versao_da_tabela}",
         column_config={
             "categoria": st.column_config.SelectboxColumn(
                 options=categorias,
@@ -1308,12 +1344,19 @@ elif modulo == "3. Combinações":
             "Tabelas 1 a 4 da edição de 2023. Confira V₀ no mapa de isopletas. Para galpões e "
             "edifícios (paredes, telhado, vedações, pórtico), use o módulo **Vento nas estruturas**."
         )
+        base_do_projeto = base_tec.base_do_projeto(projeto_ativo)
+        vento_da_base = base_do_projeto.vento if base_do_projeto else base_tec.VentoDoLocal()
+        if base_do_projeto is not None:
+            st.caption(
+                f":material/fact_check: Valores iniciais da base técnica do projeto — "
+                f"{base_do_projeto.rotulo_cliente}: {base_tec.texto_do_vento(base_do_projeto)}."
+            )
         colunas_v = st.columns(4)
         v0 = colunas_v[0].number_input(
             "V₀ (m/s)",
             min_value=10.0,
             max_value=70.0,
-            value=35.0,
+            value=float(vento_da_base.v0_m_s),
             step=1.0,
             key="vento_v0",
             persist_state="session",
@@ -1322,6 +1365,7 @@ elif modulo == "3. Combinações":
         relevo = colunas_v[1].selectbox(
             "Relevo (S₁)",
             ["plano", "vale", "talude"],
+            index=1 if abs(vento_da_base.s1 - 0.9) < 1e-9 else 0,
             key="vento_relevo",
             persist_state="session",
             format_func=lambda item: {
@@ -1333,7 +1377,10 @@ elif modulo == "3. Combinações":
         categoria_rug = colunas_v[2].selectbox(
             "Rugosidade (S₂)",
             list(wind_load.CATEGORIAS_RUGOSIDADE),
-            index=3,
+            index=list(wind_load.CATEGORIAS_RUGOSIDADE).index(vento_da_base.categoria)
+            if base_do_projeto is not None
+            and vento_da_base.categoria in wind_load.CATEGORIAS_RUGOSIDADE
+            else 3,
             key="vento_categoria",
             persist_state="session",
             format_func=lambda item: f"Categoria {item}",
@@ -1397,7 +1444,7 @@ elif modulo == "3. Combinações":
         grupo_s3 = colunas_w[1].selectbox(
             "Grupo (S₃)",
             list(wind_load.GRUPOS_S3),
-            index=2,
+            index=int(vento_da_base.grupo_s3) - 1 if vento_da_base.grupo_s3.isdigit() else 2,
             key="vento_grupo",
             persist_state="session",
             format_func=lambda item: f"Grupo {item} — S₃ = {wind_load.GRUPOS_S3[item][0]:.2f}",
@@ -1419,6 +1466,24 @@ elif modulo == "3. Combinações":
             key=f"vento_cf_{wind_load.COEFICIENTES_ARRASTO_USUAIS[cf_opcao]:.1f}",
             help="Edite quando a tabela ou figura da norma der outro valor para a sua geometria.",
         )
+        s3_do_cliente: float | None = None
+        if (
+            base_do_projeto is not None
+            and vento_da_base.grupo_s3 == base_tec.S3_DO_CLIENTE
+            and st.toggle(
+                f"Usar o S₃ = {vento_da_base.s3_cliente:.2f} do critério do cliente".replace(
+                    ".", ","
+                ),
+                value=True,
+                key="vento_s3_cliente",
+                persist_state="session",
+                help=(
+                    "A base técnica do projeto usa o S₃ do critério do cliente. Ligado, ele "
+                    "substitui o S₃ do grupo; se for menor que o da norma, confirme com o cliente."
+                ),
+            )
+        ):
+            s3_do_cliente = vento_da_base.s3_cliente
         colunas_a = st.columns(2)
         largura_exposta = colunas_a[0].number_input(
             "Largura exposta da barra d (m) — carga por metro",
@@ -1447,6 +1512,7 @@ elif modulo == "3. Combinações":
                 classe=classe_edif,
                 altura_m=altura_vento,
                 grupo_s3=int(grupo_s3),
+                s3=s3_do_cliente,
                 coeficiente_arrasto=cf_valor,
                 area_efetiva_m2=area_exposta if area_exposta > 0 else None,
                 largura_exposta_m=largura_exposta if largura_exposta > 0 else None,
@@ -1494,6 +1560,7 @@ elif modulo == "3. Combinações":
                     "classe": classe_edif,
                     "altura_m": altura_vento,
                     "grupo_s3": int(grupo_s3),
+                    "s3_do_cliente": s3_do_cliente,
                     "coeficiente_arrasto": cf_valor,
                     "largura_exposta_m": largura_exposta,
                     "area_efetiva_m2": area_exposta,

@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from core import bolted_connection as bc
 from core import contraventamento_chapa as ch
 from core import contraventamento_ufm as ufm
+from core import criterio_anglo as ca
 from core.verificacao import Verificacao
 
 REF_AISC = "AISC 360-16"
@@ -96,6 +97,8 @@ class EntradaLigacao:
     area_do_contraventamento_mm2: float = 0.0
     b_viga_mm: float = 0.0
     c_coluna_mm: float = 0.0
+    # critério do cliente
+    criterio_anglo: bool = False
 
 
 @dataclass(frozen=True)
@@ -226,6 +229,110 @@ def _limite(
 ) -> Verificacao:
     status = "OK" if atende else ("ALERTA" if alerta else "NÃO OK")
     return Verificacao(nome, None, None, "—", referencia, texto, status=status, tipo="limite")
+
+
+def verificacoes_anglo(e: EntradaLigacao, n_parafusos: int) -> list[Verificacao]:
+    """Exigências do critério Anglo AA-BR-DPST-DR-0001 para a chapa de nó e a sua ligação."""
+    linhas: list[Verificacao] = []
+    minimo = ca.ESPESSURAS_MINIMAS_MM["Chapas de ligação e enrijecedores"]
+    linhas.append(
+        Verificacao(
+            "Anglo: espessura mínima da chapa de nó",
+            minimo,
+            e.t_chapa_mm,
+            "mm",
+            ca.item("8.8"),
+            f"t = {_pt(e.t_chapa_mm)} mm ≥ {_pt(minimo)} mm (chapas de ligação)",
+            tipo="limite",
+        )
+    )
+    if e.t_chapa_mm > ca.CHAPA_COM_ULTRASSOM_MM:
+        linhas.append(
+            _limite(
+                "Anglo: chapa espessa ensaiada por ultrassom",
+                f"{ca.item('4.5')}, nota 1",
+                False,
+                f"t = {_pt(e.t_chapa_mm)} mm > {_pt(ca.CHAPA_COM_ULTRASSOM_MM)} mm: a chapa precisa "
+                "ser 100 % ensaiada por ultrassom — anote na lista de material",
+                alerta=True,
+            )
+        )
+    linhas.append(
+        Verificacao(
+            "Anglo: número mínimo de parafusos na ligação",
+            float(ca.PARAFUSOS_MINIMOS_POR_LIGACAO),
+            float(n_parafusos),
+            "—",
+            ca.item("9.1"),
+            f"{n_parafusos} parafusos ≥ {ca.PARAFUSOS_MINIMOS_POR_LIGACAO}",
+            tipo="limite",
+        )
+    )
+    db = bc.PARAFUSOS[e.designacao_do_parafuso][0]
+    minimo_db = ca.DIAMETROS_MINIMOS_MM["Parafusos"]
+    linhas.append(
+        Verificacao(
+            "Anglo: diâmetro mínimo do parafuso",
+            minimo_db,
+            db,
+            "mm",
+            ca.item("8.8"),
+            f'd = {_pt(db)} mm ≥ 5/8" ({_pt(minimo_db)} mm)',
+            tipo="limite",
+        )
+    )
+    if db > ca.DIAMETRO_MAXIMO_PREFERENCIAL_MM + 1e-6:
+        linhas.append(
+            _limite(
+                'Anglo: parafuso acima de 1"',
+                ca.item("9.1"),
+                False,
+                f'd = {_pt(db)} mm: o critério pede, de preferência, parafusos de até 1"',
+                alerta=True,
+            )
+        )
+    if e.grau_do_parafuso != "A325":
+        linhas.append(
+            _limite(
+                "Anglo: grau do parafuso",
+                ca.item("9.1"),
+                False,
+                f"{e.grau_do_parafuso}: ligação principal pede {ca.PARAFUSO_PRINCIPAL}"
+                + (
+                    "; A490 não pode ser galvanizado a fogo — confirme com o cliente"
+                    if e.grau_do_parafuso == "A490"
+                    else "; A307 só em ligações secundárias"
+                ),
+                alerta=e.grau_do_parafuso == "A490",
+            )
+        )
+    filete = ca.filete_minimo_mm(e.t_chapa_mm)
+    pernas = [("viga", e.perna_na_viga_mm)]
+    if e.caso != ufm.CASO_3:
+        pernas.append(("coluna", e.perna_na_coluna_mm))
+    for onde, perna in pernas:
+        linhas.append(
+            Verificacao(
+                f"Anglo: filete mínimo da solda na {onde}",
+                filete,
+                perna,
+                "mm",
+                f"{ca.item('9.2.1')}, Tabela 6",
+                f"perna = {_pt(perna)} mm ≥ {_pt(filete)} mm (chapa de {_pt(e.t_chapa_mm)} mm)",
+                tipo="limite",
+            )
+        )
+    linhas.append(
+        _info(
+            "Anglo: capacidade mínima da ligação",
+            None,
+            "—",
+            ca.item("9.1"),
+            "a ligação precisa resistir a ≥ 75 % da tração resistente da diagonal e ≥ 3 t: a "
+            "página Contraventamento de estruturas abertas confere com a diagonal escolhida",
+        )
+    )
+    return linhas
 
 
 def calcular_ligacao(e: EntradaLigacao) -> ResultadoLigacao:
@@ -667,6 +774,9 @@ def calcular_ligacao(e: EntradaLigacao) -> ResultadoLigacao:
                 f"M_bc = {_pt(forcas.vc_momento_kNm, 2)} kN·m contra {base}·M_p da viga (confira a ligação)",
             )
         )
+
+    if e.criterio_anglo:
+        linhas.extend(verificacoes_anglo(e, arranjo.numero_de_parafusos))
 
     # ---- avisos de projeto
     lh_ideal = ufm.comprimento_horizontal_para_alfa(

@@ -14,11 +14,13 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.base_tecnica_ui import base_ativa, botao_recarregar_da_base, legenda_da_base
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
 from components.verification_table import COR_BADGE, mostrar_tabela_verificacoes
 from components.wind_figures import svg_planta
 from components.wind_help import AJUDA
+from core import base_tecnica as bt
 from core import section_catalog as catalogo_perfis
 from core import vento_coeficientes as coef
 from core import vento_edificio as ve
@@ -128,15 +130,42 @@ class DadosLocal:
     avisos: tuple[str, ...]
 
 
+CHAVES_DA_BASE = ("vt_v0", "vt_relevo", "vt_categoria", "vt_grupo", "vt_s3_cliente")
+
+
+def _relevo_da_base(s1: float) -> str:
+    if abs(s1 - 0.9) < 1e-9:
+        return RELEVO_VALE
+    return RELEVO_PLANO
+
+
 def formulario_local() -> DadosLocal:
+    """Vento no local — começando com o V₀, S₁, terreno e S₃ da base técnica do projeto."""
     avisos: list[str] = []
+    base = base_ativa()
+    vento_base = base.vento if base else bt.VentoDoLocal()
+    s3_cliente = (
+        vento_base.s3_cliente
+        if base is not None and vento_base.grupo_s3 == bt.S3_DO_CLIENTE
+        else None
+    )
+    grupo_base = int(vento_base.grupo_s3) if vento_base.grupo_s3.isdigit() else 3
+    relevos = list(ROTULOS_RELEVO)
+    categorias = list(v6123.CATEGORIAS_RUGOSIDADE)
+    grupos = list(v6123.GRUPOS_S3)
     with st.container(border=True):
         st.subheader("1. Vento no local", help=AJUDA["sec_1"])
+        legenda_da_base(base)
+        if base is not None and abs(vento_base.s1 - 1.0) > 1e-9 and abs(vento_base.s1 - 0.9) > 1e-9:
+            st.caption(
+                f"A base técnica tem S₁ = {_pt(vento_base.s1)}: escolha o relevo (talude ou morro) "
+                "aqui e confira."
+            )
         linha = st.columns(4)
         v0 = _numero(
             "Velocidade básica V₀ (m/s)",
             "vt_v0",
-            35.0,
+            vento_base.v0_m_s,
             AJUDA["v0"],
             minimo=10.0,
             maximo=80.0,
@@ -146,7 +175,8 @@ def formulario_local() -> DadosLocal:
         )
         relevo = linha[1].selectbox(
             "Relevo (S₁)",
-            list(ROTULOS_RELEVO),
+            relevos,
+            index=relevos.index(_relevo_da_base(vento_base.s1)),
             format_func=lambda item: ROTULOS_RELEVO[item],
             key="vt_relevo",
             persist_state="session",
@@ -154,8 +184,10 @@ def formulario_local() -> DadosLocal:
         )
         categoria = linha[2].selectbox(
             "Rugosidade do terreno (S₂)",
-            list(v6123.CATEGORIAS_RUGOSIDADE),
-            index=2,
+            categorias,
+            index=categorias.index(vento_base.categoria)
+            if vento_base.categoria in categorias
+            else 2,
             format_func=lambda item: f"Categoria {item}",
             key="vt_categoria",
             persist_state="session",
@@ -163,8 +195,8 @@ def formulario_local() -> DadosLocal:
         )
         grupo = linha[3].selectbox(
             "Grupo da edificação (S₃)",
-            list(v6123.GRUPOS_S3),
-            index=2,
+            grupos,
+            index=grupos.index(grupo_base) if grupo_base in grupos else 2,
             format_func=lambda item: f"Grupo {item} — S₃ = {_pt(v6123.GRUPOS_S3[item][0])}",
             key="vt_grupo",
             persist_state="session",
@@ -230,14 +262,38 @@ def formulario_local() -> DadosLocal:
             value=False,
             help=AJUDA["vedacao_092"],
         )
-        estatistico = st.toggle(
-            "Calcular S₃ por probabilidade e vida útil (Anexo B)",
-            key="vt_s3_estat",
-            value=False,
-            help=AJUDA["s3_estat"],
+        usar_cliente = False
+        if s3_cliente is not None:
+            usar_cliente = bool(
+                st.toggle(
+                    f"Usar o S₃ = {_pt(s3_cliente)} do critério do cliente",
+                    value=True,
+                    key="vt_s3_cliente",
+                    persist_state="session",
+                    help=AJUDA["s3_cliente"],
+                )
+            )
+        estatistico = (
+            False
+            if usar_cliente
+            else st.toggle(
+                "Calcular S₃ por probabilidade e vida útil (Anexo B)",
+                key="vt_s3_estat",
+                value=False,
+                help=AJUDA["s3_estat"],
+            )
         )
         pm = ma = None
-        s3: float | None = None
+        s3: float | None = s3_cliente if usar_cliente else None
+        if usar_cliente:
+            st.caption(
+                f"S₃ = {_pt(s3_cliente or 0.0)} do {base.rotulo_cliente if base else 'cliente'}, "
+                f"no lugar do S₃ do grupo {grupo}: confirme o conflito acima com o cliente."
+            )
+        if base is not None:
+            botao_recarregar_da_base(
+                CHAVES_DA_BASE, key="vt_recarregar_base", ajuda=AJUDA["btn_recarregar_base"]
+            )
         if estatistico:
             colunas_s3 = st.columns(2)
             pm = _numero(

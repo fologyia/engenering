@@ -70,6 +70,16 @@ pagina = st.navigation(
                 title="Projetos permanentes",
                 icon=":material/folder_managed:",
             ),
+            st.Page(
+                "app_pages/base_tecnica.py",
+                title="Base técnica do projeto",
+                icon=":material/tune:",
+            ),
+            st.Page(
+                "app_pages/plano_cargas.py",
+                title="Plano de cargas",
+                icon=":material/table_chart:",
+            ),
             pagina_modulo("casos_carga"),
             st.Page(
                 "app_pages/central_validacao.py",

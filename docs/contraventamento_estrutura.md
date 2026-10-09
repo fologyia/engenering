@@ -90,16 +90,34 @@ meio painel).
 * **Cantoneiras**: seção idealizada (dois retângulos, sem raios) — fica a menos de 1,5 % das
   tabelas do AISC (conferido nos testes).
 
-## Deslocamentos (Anexo B, Tabela B.1)
+## Deslocamentos (Anexo B, Tabela B.1, ou o critério do cliente)
 
 Deformação axial das diagonais da linha mais carregada, na combinação de serviço escolhida (rara ou
-frequente): um piso, `H/300`; dois ou mais, `H/400` no topo e `h/500` entre pisos.
+frequente): um piso, `H/300`; dois ou mais, `H/400` no topo e `h/500` entre pisos. Em **Limite do
+deslocamento** (aba de ajustes) dá para escolher o tipo de estrutura da Tabela 4 do critério Anglo —
+plataforma de equipamentos H/400, pipe rack ou cable rack H/250, estrutura com cobertura H/400 (com
+`h/500` entre pisos quando há mais de um) —, que vem da base técnica do projeto.
+
+## Critério Anglo
+
+Com a chave **Aplicar o critério Anglo** (ligada quando a base técnica é a da Anglo), a diagonal
+ganha as exigências do critério: espessura mínima da cantoneira (8.8), redução do comprimento para
+montagem com protensão (8.2, Tabela 5), diâmetros mínimos de tirante e parafuso (8.8), parafuso até
+1" e A325 (9.1) e capacidade mínima da ligação (9.1). Detalhes em `docs/criterio_anglo.md`.
+
+## Desenhos e saídas para o modelo
+
+A aba **Desenhos** mostra a planta com as linhas contraventadas, a elevação de cada linha com as
+diagonais e as forças, o vento nos pórticos e o gráfico do cortante por andar. A aba **Vento** traz as
+forças nos nós por pórtico e o botão que envia W0, W90, W180 e W270 ao **Plano de cargas**; a página
+**Vento em estruturas abertas** usa os mesmos campos para quem só quer as forças (ver
+`docs/fluxo_do_projeto.md`).
 
 ## Ligação
 
 A aba "Ligação" mostra a diagonal mais solicitada (tração, compressão e ângulo com a vertical) e o
-botão leva esses valores para a página **Ligação de contraventamento**, que dimensiona a chapa de nó
-(modo simplificado) pelo AISC DG29.
+botão leva esses valores — e a chave do critério Anglo — para a página **Ligação de
+contraventamento**, que dimensiona a chapa de nó (modo simplificado) pelo AISC DG29.
 
 ## Fora do escopo
 

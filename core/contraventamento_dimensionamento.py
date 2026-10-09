@@ -11,7 +11,7 @@ Com a força, o ângulo, a viga, a coluna e o parafuso, o programa escolhe o res
    ``l_h`` e acha ``l_v``.
 3. **Espessura**: a menor da série comercial em que todas as verificações da chapa, das soldas e
    dos parafusos passam; as **pernas das soldas** são as necessárias arredondadas para cima na série
-   usual (nunca abaixo da mínima).
+   usual (nunca abaixo da mínima; com o critério Anglo, nunca abaixo da Tabela 6).
 
 O resultado é um ponto de partida que fecha nas verificações — as dimensões precisam ir para o
 desenho e ser conferidas (Whitmore, comprimento livre, folgas).
@@ -26,6 +26,7 @@ from core import bolted_connection as bc
 from core import contraventamento_chapa as ch
 from core import contraventamento_ligacao as lig
 from core import contraventamento_ufm as ufm
+from core import criterio_anglo as ca
 
 ESPESSURAS_MM: tuple[float, ...] = (8.0, 9.5, 12.5, 16.0, 19.0, 22.4, 25.0, 31.5, 37.5, 44.5, 50.0)
 PERNAS_MM: tuple[float, ...] = (5.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0)
@@ -173,9 +174,15 @@ def dimensionar_ligacao(base: lig.EntradaLigacao) -> Dimensionamento:
             perna_na_coluna_mm=PERNAS_MM[0],
         )
         r = lig.calcular_ligacao(entrada)
-        perna_v = _perna(r.solda_viga.perna_necessaria_mm, r.solda_viga.perna_minima_mm)
+        minima_cliente = ca.filete_minimo_mm(t) if base.criterio_anglo else 0.0
+        perna_v = _perna(
+            r.solda_viga.perna_necessaria_mm, max(r.solda_viga.perna_minima_mm, minima_cliente)
+        )
         perna_c = (
-            _perna(r.solda_coluna.perna_necessaria_mm, r.solda_coluna.perna_minima_mm)
+            _perna(
+                r.solda_coluna.perna_necessaria_mm,
+                max(r.solda_coluna.perna_minima_mm, minima_cliente),
+            )
             if r.solda_coluna is not None
             else entrada.perna_na_coluna_mm
         )

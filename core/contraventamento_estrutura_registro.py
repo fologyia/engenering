@@ -250,6 +250,10 @@ def _entradas(r: cp.ResultadoContraventamento, contexto: Mapping[str, Any] | Non
         or None,
         "excentricidade": e.excentricidade,
         "combinacao_de_servico": e.combinacao_de_servico,
+        "criterio_do_cliente": "Anglo American AA-BR-DPST-DR-0001 Rev. 1"
+        if e.criterio_anglo
+        else None,
+        "limite_do_deslocamento": cp.limite_de_deslocamento(e).referencia,
     }
     for d in cp.DIRECOES:
         s = e.sistema(d)

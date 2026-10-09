@@ -27,7 +27,9 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
+from core import base_tecnica as bt
 from core import contraventamento_barras as cb
+from core import criterio_anglo as ca
 from core import load_combinations as comb
 from core import vento_estrutura_aberta as va
 from core.verificacao import Verificacao, status_geral
@@ -151,6 +153,10 @@ class EntradaContraventamento:
     excentricidade: float = 0.075  # fração da dimensão perpendicular à força
     ligadas_no_cruzamento: bool = True  # X: as diagonais se travam no cruzamento
     combinacao_de_servico: str = comb.ELS_RARA
+    #: Critério do cliente: Anglo AA-BR-DPST-DR-0001 acrescenta verificações (8.8, 9.1, Tab. 5).
+    criterio_anglo: bool = False
+    #: Tipo de estrutura para o limite do deslocamento (vazio = NBR 8800, Tabela B.1).
+    tipo_de_estrutura: str = ""
 
     def sistema(self, direcao: str) -> SistemaDeContraventamento:
         return self.contraventamento_x if direcao == "X" else self.contraventamento_y
@@ -239,6 +245,8 @@ def validar_entrada(e: EntradaContraventamento) -> list[str]:
         nomes.add(f.nome)
     if not 0.0 <= e.excentricidade <= 0.5:
         erros.append("A excentricidade vai de 0 a 0,5 da dimensão perpendicular à força.")
+    if e.tipo_de_estrutura and e.tipo_de_estrutura not in bt.TIPOS_DE_ESTRUTURA:
+        erros.append(f"Tipo de estrutura desconhecido: {e.tipo_de_estrutura!r}.")
     if e.combinacao_de_servico not in (comb.ELS_RARA, comb.ELS_FREQUENTE):
         erros.append("A combinação de serviço para os deslocamentos é a rara ou a frequente.")
     return erros
@@ -623,6 +631,7 @@ def _verificacoes_do_andar(
         comprimento_destravado_mm=_comprimento_destravado(e, s, a),
         tracao_kN=a.tracao_kN,
         compressao_kN=a.compressao_kN,
+        criterio_anglo=e.criterio_anglo,
     )
     linhas.extend(resultado.verificacoes)
     linhas.append(
@@ -650,54 +659,53 @@ def _comprimento_destravado(
     return a.comprimento_diagonal_mm
 
 
+def limite_de_deslocamento(e: EntradaContraventamento) -> bt.LimiteDoTopo:
+    """Limite do topo e entre pisos: o do tipo de estrutura (Anglo, Tabela 4) ou o da NBR 8800."""
+    base = bt.BaseTecnica(tipo_de_estrutura=e.tipo_de_estrutura) if e.tipo_de_estrutura else None
+    return bt.limite_do_topo(base, len(e.cotas_m))
+
+
 def _verificacoes_de_deslocamento(
     e: EntradaContraventamento, d: str, topo_mm: float
 ) -> list[Verificacao]:
     altura_mm = e.cotas_m[-1] * 1e3
-    linhas: list[Verificacao] = []
-    estado = e.combinacao_de_servico
-    if len(e.cotas_m) == 1:
-        limite = altura_mm / 300.0
-        linhas.append(
-            Verificacao(
-                f"{d}: deslocamento horizontal do topo",
-                topo_mm,
-                limite,
-                "mm",
-                f"{REF} Anexo B, Tabela B.1",
-                f"{estado}; δ = Σ f·V_serv/K_linha (só a deformação axial das diagonais) ≤ H/300 "
-                f"= {_n(altura_mm, 0)}/300",
-                tipo="limite",
-            )
-        )
-        return linhas
-    linhas.append(
+    limite = limite_de_deslocamento(e)
+    texto_limite = f"H/{limite.divisor:g}" + (
+        f" e máx. {limite.maximo_mm:g} mm" if limite.maximo_mm else ""
+    )
+    return [
         Verificacao(
             f"{d}: deslocamento horizontal do topo",
             topo_mm,
-            altura_mm / 400.0,
+            limite.limite_mm(altura_mm),
             "mm",
-            f"{REF} Anexo B, Tabela B.1",
-            f"{estado}; δ = Σ f·V_serv/K_linha ≤ H/400 = {_n(altura_mm, 0)}/400",
+            limite.referencia,
+            f"{e.combinacao_de_servico}; δ = Σ f·V_serv/K_linha (só a deformação axial das "
+            f"diagonais) ≤ {texto_limite} = {_n(altura_mm, 0)}/{limite.divisor:g}",
             tipo="limite",
         )
-    )
-    return linhas
+    ]
 
 
 def verificacoes_interpavimento(r: ResultadoContraventamento) -> list[Verificacao]:
-    """``h/500`` entre pisos consecutivos (edificações de dois ou mais pavimentos)."""
-    if len(r.entrada.cotas_m) < 2:
+    """``h/500`` entre pisos consecutivos (dois ou mais pisos), pela NBR ou pelo critério Anglo."""
+    limite = limite_de_deslocamento(r.entrada)
+    if limite.entre_pisos_divisor is None:
         return []
+    referencia = (
+        f"{ca.item('7.2')}, Tabela 4"
+        if r.entrada.tipo_de_estrutura in ca.LIMITE_DO_TOPO_POR_TIPO
+        else f"{REF} Anexo B, Tabela B.1"
+    )
     return [
         Verificacao(
             f"{a.direcao}, andar {a.andar}: deslocamento entre pisos",
             a.deslocamento_mm,
-            a.altura_mm / 500.0,
+            a.altura_mm / limite.entre_pisos_divisor,
             "mm",
-            f"{REF} Anexo B, Tabela B.1",
-            f"{r.entrada.combinacao_de_servico}; Δ = f·V_serv/K_linha ≤ h/500 = "
-            f"{_n(a.altura_mm, 0)}/500",
+            referencia,
+            f"{r.entrada.combinacao_de_servico}; Δ = f·V_serv/K_linha ≤ "
+            f"h/{limite.entre_pisos_divisor:g} = {_n(a.altura_mm, 0)}/{limite.entre_pisos_divisor:g}",
             tipo="limite",
         )
         for a in r.andares

@@ -120,6 +120,27 @@ def _registrar_padrao() -> None:
             ),
         ),
         ModuloTecnico(
+            id="vento_estrutura_aberta",
+            titulo="Vento em estruturas abertas",
+            versao="1.0",
+            pagina="app_pages/vento_estrutura_aberta.py",
+            grupo_navegacao="Análises técnicas",
+            ordem=13,
+            icone=":material/air:",
+            descricao=(
+                "Vento em plataformas, mezaninos e pipe racks pela NBR 6123:2023 (capítulo 8): "
+                "pórticos como reticulados com proteção η, guarda-corpos e equipamentos; forças por "
+                "nível, nos nós e nas barras para o modelo."
+            ),
+            aliases=(
+                "Vento em plataforma",
+                "Vento estrutura aberta",
+                "Reticulados",
+                "Pipe rack vento",
+                "Forças do vento nos pórticos",
+            ),
+        ),
+        ModuloTecnico(
             id="flambagem_colunas",
             titulo="Flambagem de colunas",
             versao="3.0",

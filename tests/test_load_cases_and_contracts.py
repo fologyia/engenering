@@ -101,6 +101,7 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
     assert [item.id for item in analises] == [
         "analise_estatica",
         "vento_nbr6123",
+        "vento_estrutura_aberta",
         "flambagem_colunas",
         "analise_fadiga",
         "vigas_eixos",

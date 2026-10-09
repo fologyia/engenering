@@ -27,6 +27,22 @@ def mostrar_exemplo(linhas: list[list[str]], observacao: str | None = None) -> N
             st.caption(observacao)
 
 
+def entrada_padrao_das_estruturas_abertas():
+    """A entrada que as páginas de estruturas abertas abrem: perfis padrão do catálogo.
+
+    O exemplo do guia precisa dar o mesmo número que a página mostra sem mexer em nada.
+    """
+    from components.contraventamento_estrutura_ui import PILAR_PADRAO, VIGA_PADRAO
+    from core import contraventamento_plataforma as cp
+    from core import section_catalog as sc
+
+    pilar, viga = sc.obter_perfil(PILAR_PADRAO), sc.obter_perfil(VIGA_PADRAO)
+    return cp.EntradaContraventamento(
+        largura_pilar_m=max(pilar.altura_mm, pilar.largura_mm) / 1e3,
+        altura_viga_m=viga.altura_mm / 1e3,
+    )
+
+
 def link_modulo(destino: str, rotulo: str) -> None:
     st.page_link(
         destino,
@@ -56,6 +72,8 @@ opcoes = [
     "Comece aqui",
     "Painel industrial",
     "Projetos permanentes",
+    "Base técnica do projeto",
+    "Plano de cargas",
     "Casos de carga",
     "Central de validação",
     "Central de relatórios",
@@ -72,6 +90,7 @@ opcoes = [
     "Análise de sensibilidade",
     "Projeto de parafusos",
     "Degrau de escada em grade",
+    "Vento em estruturas abertas",
     "Contraventamento de estruturas abertas",
     "Ligação de contraventamento",
     "Normas técnicas",
@@ -91,6 +110,27 @@ with st.container(border=True):
 
 
 if modulo == "Comece aqui":
+    with st.container(border=True):
+        st.badge("Projeto de estrutura metálica", icon=":material/route:", color="violet")
+        st.subheader("O caminho em cinco etapas")
+        st.markdown(
+            """
+            1. **Base técnica do projeto** — uma vez por projeto: critério do cliente (por exemplo
+               o da Anglo American), V₀, S₁, terreno, S₃, tipo de estrutura e sobrecarga.
+            2. **Ações** — cada página gera as suas: o vento em **Vento em estruturas abertas**
+               (forças por nível, por pórtico e em cada nó), os pesos e a sobrecarga.
+            3. **Plano de cargas** — as ações com código padrão (PP, SC, W0, W90…), as cargas para
+               lançar no modelo (SolidWorks, Robot) e as combinações ELU e ELS numeradas.
+            4. **Verificações** — contraventamento, ligação, barras, parafusos, degraus; cada
+               cálculo registrado no projeto.
+            5. **Memorial** — a Central de relatórios monta o Word e o PDF com o que foi
+               registrado.
+            """
+        )
+        st.caption(
+            "A página inicial e as páginas das etapas mostram o caminho com o que o projeto ativo "
+            "já tem."
+        )
     st.header("Escolha o caminho pelos dados que você possui")
     caminhos = pd.DataFrame(
         [
@@ -103,6 +143,16 @@ if modulo == "Comece aqui":
                 "Quero guardar dados, cálculos e revisões entre sessões",
                 "Projetos permanentes",
                 "Criar a base rastreável do trabalho",
+            ],
+            [
+                "Projeto novo de estrutura metálica, com ou sem critério do cliente",
+                "Base técnica do projeto",
+                "Fixar vento do local, critério do cliente, limites e sobrecarga uma vez",
+            ],
+            [
+                "Tenho as ações do projeto e vou montar o modelo",
+                "Plano de cargas",
+                "Ações com código padrão, cargas para o modelo e combinações numeradas",
             ],
             [
                 "Tenho operação, partida, parada, teste ou emergência",
@@ -168,6 +218,11 @@ if modulo == "Comece aqui":
                 "Escada industrial em grade de piso eletrofundida (degrau Selmec)",
                 "Degrau de escada em grade",
                 "Espelho, piso, lances, modelo do catálogo e 38 verificações NR-12, NR-22 e Anglo",
+            ],
+            [
+                "Plataforma ou pipe rack aberto: preciso só das forças do vento para o modelo",
+                "Vento em estruturas abertas",
+                "Força por nível, por pórtico e em cada nó, com desenho e CSV",
             ],
             [
                 "Plataforma, mezanino ou pipe rack sem fechamento a contraventar",
@@ -1943,6 +1998,186 @@ elif modulo == "Degrau de escada em grade":
     link_modulo("app_pages/degrau_escada.py", "Abrir Degrau de escada em grade")
 
 
+elif modulo == "Base técnica do projeto":
+    from core import base_tecnica as _bt
+    from core import criterio_anglo as _ca
+
+    st.header("Base técnica do projeto")
+    st.markdown(
+        "O que se preenche **uma vez por projeto** e as demais páginas leem: o **critério do "
+        "cliente** (somente as normas, ou o critério da Anglo American "
+        f"{_ca.CODIGO} Rev. {_ca.REVISAO}), o **vento do local** (V₀, S₁, categoria do terreno e "
+        "S₃), o **tipo de estrutura** que define o limite do deslocamento horizontal, a "
+        "**sobrecarga** de referência, a classe de agressividade e a vida útil. As páginas de vento, "
+        "contraventamento, ligação e estruturas de aço começam com esses valores e mostram de onde "
+        "vieram; um botão volta aos valores da base quando algo foi digitado."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Critério do cliente", "Nenhum ou Anglo American", "Contrato e critérios de projeto"],
+            [
+                "V₀",
+                "Velocidade básica do mapa de isopletas",
+                "NBR 6123:2023, Figura 1, ou o cliente",
+            ],
+            ["S₁ e terreno", "Relevo e categoria de rugosidade", "Visita, imagens de satélite"],
+            [
+                "S₃",
+                "Grupo da Tabela 4 ou o valor do cliente",
+                "NBR 6123:2023 ou critério do cliente",
+            ],
+            ["Tipo de estrutura", "Plataforma, pipe rack, cobertura ou edificação NBR", "Arranjo"],
+            [
+                "Sobrecarga",
+                "Local da Tabela 2 do critério Anglo ou valor informado",
+                "Cliente, NBR 6120",
+            ],
+        ]
+    )
+    _base = _bt.base_do_cliente(_bt.CLIENTE_ANGLO)
+    _limite = _bt.limite_do_topo(_base, 1)
+    mostrar_exemplo(
+        [
+            ["Critério", "Anglo American"],
+            ["Vento", _bt.texto_do_vento(_base)],
+            ["Tipo de estrutura", _base.tipo_de_estrutura],
+            [
+                "Sobrecarga",
+                f"{_base.sobrecarga_local}: {_bt.numero(_base.sobrecarga_kN_m2, 1)} kN/m²",
+            ],
+        ],
+        f"Resultado esperado: limite do topo H/{_limite.divisor:.0f} ({_limite.referencia}) — "
+        f"{_bt.numero(_limite.limite_mm(6000.0), 1)} mm numa estrutura de 6 m; e o aviso de "
+        "conflito do S₃.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Conflitos:** o critério Anglo fixa S₃ = 0,95, que na NBR 6123:2023 é o grupo 4
+              (sem ocupação humana); indústrias ficam no grupo 3 (S₃ = 1,00). O programa usa o valor
+              do cliente e mostra o aviso — confirme com o cliente qual vale.
+            - **Consulta do critério:** a página traz as tabelas do critério Anglo (sobrecargas,
+              deslocamentos, mínimos, chumbadores, ligações, combinações, vibração, escadas e
+              materiais) com o número do item.
+            - **Sem projeto ativo** nada é gravado: abra ou crie um em Projetos permanentes.
+            """
+        )
+    link_modulo("app_pages/base_tecnica.py", "Abrir Base técnica do projeto")
+
+
+elif modulo == "Plano de cargas":
+    from core import load_combinations as _comb
+    from core import plano_de_cargas as _pc
+    from core.memorial_verificacoes import decimal_ptbr as _decimal
+
+    st.header("Plano de cargas")
+    st.markdown(
+        "Reúne as **ações do projeto com código padrão** (PP, PE, EQ, EO, SC, W0, W90, W180, W270, "
+        "T+, T−, PRV, HT, HL, MO, IM, EX), de onde cada uma veio, as **cargas para lançar no "
+        "modelo** (SolidWorks, Robot) e as **combinações** ELU e ELS numeradas pelas Tabelas 1 e 2 "
+        "da NBR 8800. O vento nas quatro direções forma um grupo exclusivo (nunca atuam juntas). "
+        "O modelo recebe os valores **característicos**; as combinações saem daqui."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Vento", "Botão “Enviar ao plano de cargas” nas páginas de vento", "Gerado"],
+            ["Sobrecarga", "Botão “Incluir a sobrecarga da base técnica”", "Base técnica"],
+            ["Temperatura", "Botão “Incluir temperatura ±10 °C”", "Critério Anglo 5.8"],
+            [
+                "Pesos e demais",
+                "Formulário “Adicionar ou substituir uma ação”",
+                "Modelo, folhas de dados",
+            ],
+        ]
+    )
+    _plano = _pc.PlanoDeCargas((), "")
+    for _codigo in ("PP", "PE", "SC", "W0", "W90", "W180", "W270"):
+        _plano = _pc.com_acao(_plano, _pc.nova_acao(_codigo))
+    _lista = _pc.combinacoes(_plano, _comb.ESTADOS_PADRAO)
+    _elu = [c for c in _lista if c.estado_limite == _comb.ELU_NORMAL]
+    mostrar_exemplo(
+        [
+            ["Ações", "PP, PE, SC e o vento W0, W90, W180 e W270"],
+            ["Estados-limite", ", ".join(_comb.ESTADOS_PADRAO)],
+        ],
+        f"Resultado esperado: {len(_lista)} combinações, {len(_elu)} delas ELU normais — por "
+        f"exemplo, nº {_elu[0].numero}: {_decimal(_elu[0].expressao)}.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Um código por ação:** enviar o vento de novo substitui W0 a W270 — o plano não
+              acumula cópias.
+            - **Combinações numeradas:** o número serve de nome do caso de carga no modelo; o CSV
+              abre no Excel (ponto e vírgula, vírgula decimal).
+            - **Critério Anglo (5.9):** com a base técnica da Anglo, a página mostra quais das
+              combinações mínimas do cliente já podem ser formadas e quais ações faltam.
+            - O plano **não entra no memorial** (o memorial é o molde dos cálculos): use os CSV
+              como anexo ou para o modelo.
+            """
+        )
+    link_modulo("app_pages/plano_cargas.py", "Abrir Plano de cargas")
+
+
+elif modulo == "Vento em estruturas abertas":
+    from core import contraventamento_plataforma as _cp
+    from core import vento_estrutura_aberta as _va
+    from core.base_tecnica import numero as _numero_pt
+
+    def _n(valor: float) -> str:
+        return _numero_pt(valor, 1)
+
+    st.header("Vento em estruturas abertas")
+    st.markdown(
+        "Use quando você precisa **só das forças do vento** de uma plataforma, mezanino ou pipe "
+        "rack sem fechamento — para anotar no relatório e lançar no modelo. Os pórticos são "
+        "**reticulados** (NBR 6123:2023, capítulo 8): C_a pelo índice de área exposta φ "
+        "(Figura 12), proteção η dos pórticos de trás (Figura 14), mais guarda-corpos e "
+        "equipamentos. Saem a força **por nível**, **por pórtico**, **em cada nó** pilar–viga e a "
+        "**carga por metro** nas barras, com desenho e CSV. Os campos são os mesmos da página "
+        "Contraventamento de estruturas abertas: o que se digita numa aparece na outra."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Planta e pisos", "L_x, L_y, cotas e vãos", "Desenho de arranjo"],
+            ["Pilares e vigas", "Largura do pilar vista pelo vento e altura da viga", "Perfis"],
+            ["Guarda-corpo", "Altura e índice de área exposta", "Detalhe do guarda-corpo"],
+            ["Vento", "V₀, S₁, terreno e S₃ (vêm da base técnica)", "NBR 6123:2023 ou cliente"],
+            ["Equipamentos", "Vasos (cilindro) e caixas, com cota e dimensões", "Folhas de dados"],
+        ]
+    )
+    _entrada = entrada_padrao_das_estruturas_abertas()
+    _r = _va.calcular_vento_aberto(_cp.geometria_do_vento(_entrada), _entrada.vento)
+    mostrar_exemplo(
+        [
+            ["Planta", "12 × 6 m, um piso a 4 m, 2 vãos em X e 1 em Y, guarda-corpo"],
+            ["Vento", "V₀ = 35 m/s, S₁ = 1,0, terreno III, grupo 3"],
+        ],
+        f"Resultado esperado: {_n(_r.x.total_kN)} kN em X e {_n(_r.y.total_kN)} kN em Y; "
+        f"momento na base {_n(_r.x.momento_na_base_kNm)} kN·m em X.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Forças nos nós:** o que lançar como carga nodal — a força de cada pórtico em cada
+              nível dividida pelos pilares; a soma bate com o total da direção.
+            - **Cargas nas barras:** alternativa em kN/m para pilares, vigas e guarda-corpos; as
+              diagonais ficam de fora (já estão nas forças nos nós).
+            - **Enviar ao plano de cargas** grava W0, W90, W180 e W270 com as forças nos nós.
+            - **Registrar** leva as três tabelas (níveis, pórticos e nós) ao memorial.
+            """
+        )
+    st.warning(
+        "Fora do escopo: vento oblíquo, efeitos dinâmicos (capítulo 9) e coberturas isoladas — "
+        "use o módulo Vento nas estruturas para edificações fechadas e coberturas.",
+        icon=":material/warning:",
+    )
+    link_modulo("app_pages/vento_estrutura_aberta.py", "Abrir Vento em estruturas abertas")
+
+
 elif modulo == "Contraventamento de estruturas abertas":
     from core import contraventamento_plataforma as _cp
 
@@ -2002,7 +2237,7 @@ elif modulo == "Contraventamento de estruturas abertas":
            verificações.
         """
     )
-    _ex = _cp.calcular(_cp.EntradaContraventamento())
+    _ex = _cp.calcular(entrada_padrao_das_estruturas_abertas())
     _gov = _ex.diagonal_governante()
     mostrar_exemplo(
         [

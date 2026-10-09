@@ -15,6 +15,7 @@ from typing import Any
 from core import contraventamento_chapa as ch
 from core import contraventamento_ligacao as lig
 from core import contraventamento_ufm as ufm
+from core import criterio_anglo as ca
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import STATUS_REGISTRO, linhas_para_registro, numero_json, status_geral
 
@@ -234,6 +235,9 @@ def _entradas(r: lig.ResultadoLigacao, contexto: Mapping[str, Any] | None) -> di
         "perna_da_solda_na_coluna_mm": e.perna_na_coluna_mm if e.caso != ufm.CASO_3 else None,
         "fator_de_ductilidade_da_solda": e.fator_de_ductilidade,
         "considerar_distorcao": e.considerar_distorcao,
+        "criterio_do_cliente": f"Anglo American {ca.CODIGO} Rev. {ca.REVISAO}"
+        if e.criterio_anglo
+        else None,
     }
     entradas.update(dict(contexto or {}))
     return {chave: valor for chave, valor in entradas.items() if valor is not None}

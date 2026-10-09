@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from core import bolted_connection as bc
 from core import cantoneiras as ct
+from core import criterio_anglo as ca
 from core import nbr8800
 from core import section_catalog as sc
 from core import steel_sections as ss
@@ -164,6 +165,7 @@ class ResultadoDiagonal:
     verificacoes: tuple[Verificacao, ...]
     resistencia_tracao_kN: float | None
     resistencia_compressao_kN: float | None
+    resistencia_da_ligacao_kN: float | None = None
 
 
 def verificar_diagonal(
@@ -174,11 +176,15 @@ def verificar_diagonal(
     comprimento_destravado_mm: float,
     tracao_kN: float,
     compressao_kN: float,
+    criterio_anglo: bool = False,
 ) -> ResultadoDiagonal:
     """Tração, compressão, esbeltez e ligação da diagonal (forças de cálculo, em kN).
 
     ``comprimento_destravado_mm`` é o comprimento entre pontos travados (a metade da diagonal num X
     ligado no cruzamento). ``prefixo`` vai no começo do nome de cada linha (andar e direção).
+    Com ``criterio_anglo`` entram também as exigências do critério Anglo AA-BR-DPST-DR-0001
+    (espessuras e diâmetros mínimos, 8.8; capacidade mínima da ligação, 9.1; redução do
+    comprimento das cantoneiras tracionadas, Tabela 5).
     """
     erros = validar(d)
     if erros:
@@ -187,6 +193,7 @@ def verificar_diagonal(
     linhas: list[Verificacao] = []
     nt_rd: float | None = None
     nc_rd: float | None = None
+    ligacao_rd: float | None = None
     lb = comprimento_destravado_mm
 
     if d.familia == FAMILIA_CANTONEIRA:
@@ -205,9 +212,13 @@ def verificar_diagonal(
         if compressao_kN > 0:
             nc_rd = _compressao_cantoneira(d, cant, fy, prefixo, lb, compressao_kN, linhas)
         if d.ligacao == LIGACAO_PARAFUSADA:
-            _parafusos_cantoneira(d, cant, fy, fu, prefixo, max(tracao_kN, compressao_kN), linhas)
+            ligacao_rd = _parafusos_cantoneira(
+                d, cant, fy, fu, prefixo, max(tracao_kN, compressao_kN), linhas
+            )
         else:
-            _solda(d, prefixo, max(tracao_kN, compressao_kN), linhas, numero_de_cordoes=2)
+            ligacao_rd = _solda(
+                d, prefixo, max(tracao_kN, compressao_kN), linhas, numero_de_cordoes=2
+            )
     elif d.familia == FAMILIA_TUBO:
         perfil = sc.obter_perfil(d.perfil)
         nt_rd = _tracao_tubo(d, perfil, fy, fu, prefixo, tracao_kN, linhas)
@@ -247,8 +258,10 @@ def verificar_diagonal(
                     "5.3.4.1",
                 )
             )
-        _solda(d, prefixo, max(tracao_kN, compressao_kN), linhas, numero_de_cordoes=4)
-        _parede_do_tubo(d, perfil, fy, prefixo, max(tracao_kN, compressao_kN), linhas)
+        ligacao_rd = min(
+            _solda(d, prefixo, max(tracao_kN, compressao_kN), linhas, numero_de_cordoes=4),
+            _parede_do_tubo(d, perfil, fy, prefixo, max(tracao_kN, compressao_kN), linhas),
+        )
     else:
         perfil = sc.obter_perfil(d.perfil)
         db = perfil.altura_mm
@@ -265,7 +278,7 @@ def verificar_diagonal(
                     "kN",
                     f"F_t,Rd = mín(0,75·A_b·f_u/γ_a2 = {_n(rosca)}; A_b·f_y/γ_a1 = {_n(corpo)}) kN, "
                     f"A_b = {_n(ab, 0)} mm²",
-                    "6.3.3.1",
+                    "5.2.7 e 6.3.3.1",
                 )
             )
             linhas.append(
@@ -292,7 +305,127 @@ def verificar_diagonal(
                     aproveitamento=math.inf,
                 )
             )
-    return ResultadoDiagonal(tuple(linhas), nt_rd, nc_rd)
+    if criterio_anglo:
+        linhas.extend(
+            verificacoes_anglo(
+                d,
+                prefixo,
+                comprimento_mm=comprimento_mm,
+                tracao_rd_kN=nt_rd,
+                ligacao_rd_kN=ligacao_rd,
+            )
+        )
+    return ResultadoDiagonal(tuple(linhas), nt_rd, nc_rd, ligacao_rd)
+
+
+def verificacoes_anglo(
+    d: Diagonal,
+    prefixo: str,
+    *,
+    comprimento_mm: float,
+    tracao_rd_kN: float | None,
+    ligacao_rd_kN: float | None,
+) -> list[Verificacao]:
+    """Exigências do critério Anglo AA-BR-DPST-DR-0001 para a diagonal e a sua ligação."""
+    linhas: list[Verificacao] = []
+    if d.familia == FAMILIA_CANTONEIRA:
+        cant = ct.obter_cantoneira(d.perfil)
+        minimo = ca.ESPESSURAS_MINIMAS_MM["Cantoneiras"]
+        linhas.append(
+            Verificacao(
+                f"{prefixo}: espessura mínima da cantoneira",
+                minimo,
+                cant.t_mm,
+                "mm",
+                f"{ca.item('8.8')}",
+                f"t = {_n(cant.t_mm, 2)} mm ≥ {_n(minimo, 2)} mm",
+                tipo="limite",
+            )
+        )
+        reducao = ca.reducao_de_comprimento_mm(comprimento_mm / 1000.0)
+        linhas.append(
+            Verificacao(
+                f"{prefixo}: redução do comprimento da cantoneira (protensão)",
+                None,
+                reducao,
+                "mm",
+                f"{ca.item('8.2')}, Tabela 5",
+                (
+                    f"Peça de {_n(comprimento_mm / 1000.0, 2)} m: reduzir {_n(reducao, 0)} mm a "
+                    "distância entre os furos das pontas, para montar com protensão."
+                    if reducao
+                    else f"Peça de {_n(comprimento_mm / 1000.0, 2)} m (até 3 m): não se aplica."
+                ),
+                status="INFO",
+                tipo="informativo",
+            )
+        )
+    elif d.familia == FAMILIA_BARRA_REDONDA:
+        diametro = sc.obter_perfil(d.perfil).altura_mm
+        minimo = ca.DIAMETROS_MINIMOS_MM["Tirantes"]
+        linhas.append(
+            Verificacao(
+                f"{prefixo}: diâmetro mínimo do tirante",
+                minimo,
+                diametro,
+                "mm",
+                f"{ca.item('8.8')}",
+                f'd = {_n(diametro, 1)} mm ≥ 1/2" ({_n(minimo, 1)} mm)',
+                tipo="limite",
+            )
+        )
+    if d.familia == FAMILIA_CANTONEIRA and d.ligacao == LIGACAO_PARAFUSADA:
+        db = bc.PARAFUSOS[d.parafuso][0]
+        minimo = ca.DIAMETROS_MINIMOS_MM["Parafusos"]
+        linhas.append(
+            Verificacao(
+                f"{prefixo}: diâmetro mínimo do parafuso",
+                minimo,
+                db,
+                "mm",
+                f"{ca.item('8.8')}",
+                f'd = {_n(db, 1)} mm ≥ 5/8" ({_n(minimo, 1)} mm)',
+                tipo="limite",
+            )
+        )
+        if db > ca.DIAMETRO_MAXIMO_PREFERENCIAL_MM + 1e-6:
+            linhas.append(
+                _info(
+                    f'{prefixo}: parafuso acima de 1"',
+                    'O critério pede, de preferência, parafusos de até 1" (item 9.1).',
+                    "9.1",
+                    status="ALERTA",
+                )
+            )
+        if d.grau == "A307":
+            linhas.append(
+                _info(
+                    f"{prefixo}: grau do parafuso",
+                    "Contraventamento é ligação principal: o critério pede ASTM F3125 Gr A325 "
+                    "galvanizado, com rosca no plano de corte (item 9.1); A307 só em ligações secundárias.",
+                    "9.1",
+                    status="NÃO OK",
+                )
+            )
+    if (
+        tracao_rd_kN is not None
+        and ligacao_rd_kN is not None
+        and d.familia != FAMILIA_BARRA_REDONDA
+    ):
+        exigido = ca.capacidade_minima_da_ligacao_kN(tracao_rd_kN)
+        linhas.append(
+            Verificacao(
+                f"{prefixo}: capacidade mínima da ligação",
+                exigido,
+                ligacao_rd_kN,
+                "kN",
+                f"{ca.item('9.1')}",
+                f"ligação ≥ máx(0,75·N_t,Rd = {_n(0.75 * tracao_rd_kN)}; 3 t = "
+                f"{_n(ca.CAPACIDADE_MINIMA_DA_LIGACAO_kN)}) kN — exigida em treliças e "
+                "contraventamentos dimensionados pela esbeltez",
+            )
+        )
+    return linhas
 
 
 def _tracao_cantoneira(
@@ -401,7 +534,7 @@ def _parafusos_cantoneira(
     prefixo: str,
     forca_kN: float,
     linhas: list[Verificacao],
-) -> None:
+) -> float:
     db, dh, emin, _, _ = bc.PARAFUSOS[d.parafuso]
     fu_chapa = ACOS[d.aco_chapa_no][1]
     fv = bc.resist_corte(db, d.grau, NORMA, rosca_no_plano=d.rosca_no_plano, n_planos=1)
@@ -432,6 +565,7 @@ def _parafusos_cantoneira(
     agv = comprimento * cant.t_mm
     anv = (comprimento - (d.n_parafusos - 0.5) * dhl) * cant.t_mm
     ant = (cant.b_mm - g - 0.5 * dhl) * cant.t_mm
+    bloco = 0.0
     if ant <= 0:
         linhas.append(
             _info(
@@ -473,6 +607,7 @@ def _parafusos_cantoneira(
             "6.3.11",
         )
     )
+    return min(grupo, bloco)
 
 
 def _tracao_tubo(
@@ -517,7 +652,7 @@ def _tracao_tubo(
 
 def _solda(
     d: Diagonal, prefixo: str, forca_kN: float, linhas: list[Verificacao], *, numero_de_cordoes: int
-) -> None:
+) -> float:
     aw = 0.707 * d.perna_solda_mm * d.comprimento_solda_mm * numero_de_cordoes
     resistencia = 0.60 * FW_E70_MPA * aw / GAMMA_W2 / 1e3
     linhas.append(
@@ -531,6 +666,7 @@ def _solda(
             "6.2.5",
         )
     )
+    return resistencia
 
 
 def _parede_do_tubo(
@@ -540,7 +676,7 @@ def _parede_do_tubo(
     prefixo: str,
     forca_kN: float,
     linhas: list[Verificacao],
-) -> None:
+) -> float:
     area = 4.0 * d.comprimento_solda_mm * perfil.espessura_alma_mm
     resistencia = 0.60 * fy * area / GAMMA_A1 / 1e3
     linhas.append(
@@ -553,3 +689,4 @@ def _parede_do_tubo(
             "6.2.5 (metal-base)",
         )
     )
+    return resistencia

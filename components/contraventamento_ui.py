@@ -9,14 +9,16 @@ para calcular vira erro claro — nada é corrigido em silêncio.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
+from components.base_tecnica_ui import base_ativa
 from components.contraventamento_help import AJUDA
+from components.figuras_estrutura import svg_ligacao
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
 from components.verification_table import mostrar_tabela_verificacoes
@@ -1077,10 +1079,40 @@ def _dimensoes_adotadas(dim: dm.Dimensionamento) -> None:
         )
 
 
+def _aba_desenho(r: lig.ResultadoLigacao) -> None:
+    st.subheader("Chapa de nó em escala", help=AJUDA["res_desenho"])
+    st.image(svg_ligacao(r), width="stretch")
+    st.caption(
+        "Perfis, chapa, grupo de parafusos, seção de Whitmore e as forças de cálculo em cada "
+        "interface. A posição do grupo ao longo da diagonal é ilustrativa: confira as folgas no "
+        "desenho de fabricação."
+    )
+
+
+def criterio_do_cliente() -> bool:
+    """Liga o critério Anglo; o padrão vem da base técnica do projeto ativo."""
+    chave = PREFIXO + "criterio_anglo"
+    if chave not in st.session_state:
+        base = base_ativa()
+        st.session_state[chave] = bool(base is not None and base.anglo)
+    return bool(
+        st.toggle(
+            "Aplicar o critério Anglo American (AA-BR-DPST-DR-0001)",
+            key=chave,
+            persist_state="session",
+            help=AJUDA["criterio_anglo"],
+        )
+    )
+
+
 def _mostrar_resultados(resultado: lig.ResultadoLigacao, ident: Identificacao) -> None:
     st.header("Resultados")
     _resumo(resultado)
-    aba_verificacoes, aba_forcas = st.tabs(["Verificações", "Forças e geometria"])
+    aba_desenho, aba_verificacoes, aba_forcas = st.tabs(
+        ["Desenho", "Verificações", "Forças e geometria"]
+    )
+    with aba_desenho:
+        _aba_desenho(resultado)
     with aba_verificacoes:
         _aba_verificacoes(resultado)
     with aba_forcas:
@@ -1090,7 +1122,7 @@ def _mostrar_resultados(resultado: lig.ResultadoLigacao, ident: Identificacao) -
     _registrar(resultado, ident)
 
 
-def _modo_simplificado(ident: Identificacao) -> None:
+def _modo_simplificado(ident: Identificacao, anglo: bool) -> None:
     forca = formulario_forca()
     viga, coluna, na_mesa = formulario_perfis(simplificado=True)
     dados = formulario_simplificado()
@@ -1111,6 +1143,7 @@ def _modo_simplificado(ident: Identificacao) -> None:
         grau_do_parafuso=dados.grau,
         rosca_no_plano=dados.rosca,
         planos_de_corte=dados.planos,
+        criterio_anglo=anglo,
     )
     try:
         dimensionado = dm.dimensionar_ligacao(base)
@@ -1134,8 +1167,9 @@ def mostrar_ligacao_de_contraventamento() -> None:
         horizontal=True,
         help=AJUDA["modo"],
     )
+    anglo = criterio_do_cliente()
     if modo == MODO_SIMPLES:
-        _modo_simplificado(ident)
+        _modo_simplificado(ident, anglo)
         return
     forca = formulario_forca()
     viga, coluna, na_mesa = formulario_perfis()
@@ -1145,8 +1179,11 @@ def mostrar_ligacao_de_contraventamento() -> None:
     whitmore = formulario_whitmore()
     solda = formulario_solda()
     distorcao = formulario_distorcao(dados_ufm.caso)
-    entrada = montar_entrada(
-        forca, viga, coluna, na_mesa, dados_ufm, chapa, parafusos, whitmore, solda, distorcao
+    entrada = replace(
+        montar_entrada(
+            forca, viga, coluna, na_mesa, dados_ufm, chapa, parafusos, whitmore, solda, distorcao
+        ),
+        criterio_anglo=anglo,
     )
     erros = lig.validar_entrada(entrada)
     if erros:
