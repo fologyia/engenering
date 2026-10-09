@@ -2086,10 +2086,35 @@ elif modulo == "Plano de cargas":
             ["Temperatura", "Botão “Incluir temperatura ±10 °C”", "Critério Anglo 5.8"],
             [
                 "Pesos e demais",
-                "Formulário “Adicionar ou substituir uma ação”",
+                "Formulário “Adicionar ou editar uma ação”",
                 "Modelo, folhas de dados",
             ],
+            [
+                "Programa de destino",
+                "Unidades (N e mm, N e m, kN e m) e eixo vertical (Y no SolidWorks, Z no Robot)",
+                "O modelo",
+            ],
         ]
+    )
+    from components.figuras_estrutura import svg_convencao_de_eixos as _figura_eixos
+    from core import exportacao_cargas as _ex
+
+    st.subheader("Convenção de eixos e sinais")
+    st.image(_figura_eixos(_ex.EIXO_Y_PARA_CIMA), width="stretch")
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Leia a **Conferência do plano** no topo: ela diz o que falta (peso próprio,
+           sobrecarga, vento nas quatro direções, temperatura nos dois sentidos) e o que não
+           fecha (unidade trocada, carga sem direção).
+        2. Inclua ou **edite** as ações: escolha o código (os que já estão no plano vêm marcados)
+           e os campos trazem o que está gravado.
+        3. Confira as **combinações** na matriz de fatores (laranja = majorada; azul = até 1).
+        4. Em **Exportar para o modelo**, escolha as unidades e o eixo vertical do programa e
+           baixe a **planilha Excel**: abas Leia-me, Ações, Cargas, Combinações e lista.
+        5. No SolidWorks, crie um caso primário por código (o PP é a gravidade), aplique as
+           cargas da aba Cargas e monte as combinações da aba Combinações.
+        """
     )
     _plano = _pc.PlanoDeCargas((), "")
     for _codigo in ("PP", "PE", "SC", "W0", "W90", "W180", "W270"):
@@ -2110,8 +2135,11 @@ elif modulo == "Plano de cargas":
             """
             - **Um código por ação:** enviar o vento de novo substitui W0 a W270 — o plano não
               acumula cópias.
-            - **Combinações numeradas:** o número serve de nome do caso de carga no modelo; o CSV
-              abre no Excel (ponto e vírgula, vírgula decimal).
+            - **Combinações numeradas:** C01-ELU, C02-ELU… servem de nome do caso combinado no
+              modelo; ELSR, ELSF e ELSQ são as de serviço rara, frequente e quase permanente.
+            - **Componentes com sinal:** F_x, F_y e F_z já saem nos eixos do programa escolhido;
+              Z (vertical) com valor positivo é para baixo, e no SolidWorks (Y para cima) o Y da
+              planta vira −Z.
             - **Critério Anglo (5.9):** com a base técnica da Anglo, a página mostra quais das
               combinações mínimas do cliente já podem ser formadas e quais ações faltam.
             - O plano **não entra no memorial** (o memorial é o molde dos cálculos): use os CSV

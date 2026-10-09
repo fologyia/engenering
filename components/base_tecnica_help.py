@@ -60,6 +60,14 @@ AJUDA: dict[str, str] = {
     "res_q": "Pressão dinâmica a 10 m de altura com os valores acima (para conferência).",
     "res_limite": "Limite do deslocamento horizontal do topo sob vento para o tipo escolhido.",
     "res_sobrecarga": "Sobrecarga de referência que as páginas vão usar.",
+    "res_figura_limite": (
+        "O deslocamento horizontal do topo sob o vento (δ) não pode passar do limite do tipo de "
+        "estrutura escolhido: H dividido pelo número da tabela, e o máximo em mm quando houver."
+    ),
+    "res_grafico_q": (
+        "Como a pressão dinâmica q cresce com a altura no terreno da base (S₂ da NBR 6123:2023). "
+        "As classes dependem da maior dimensão da superfície que recebe o vento."
+    ),
     "sec_consulta": (
         "O critério Anglo AA-BR-DPST-DR-0001 Rev. 1 em tabelas, com o item de cada valor, para "
         "consultar sem abrir o PDF."
@@ -73,10 +81,17 @@ AJUDA: dict[str, str] = {
         "As ações do projeto com código padrão, a origem de cada uma e as cargas que vão para o "
         "modelo. Valores característicos: as combinações saem daqui com os coeficientes da NBR 8800."
     ),
-    "sec_adicionar": (
-        "Inclua uma ação à mão (pesos, equipamentos, ponte rolante, impacto). O vento chega das "
-        "páginas de vento com um clique. Uma ação com código que já existe é substituída."
+    "sec_conferencia": (
+        "O que falta ou não fecha antes de exportar: peso próprio, sobrecarga, vento nas quatro "
+        "direções, temperatura nos dois sentidos, ação sem carga para o modelo, unidade trocada, "
+        "carga sem direção e, com o critério Anglo, as combinações mínimas (5.9)."
     ),
+    "sec_adicionar": (
+        "Inclua uma ação à mão (pesos, equipamentos, ponte rolante, impacto) ou escolha um código "
+        "que já está no plano para editá-lo: os campos trazem o que está gravado. O vento chega "
+        "das páginas de vento com um clique."
+    ),
+    "btn_editar": "Abre esta ação no formulário abaixo para corrigir cargas, nome ou categoria.",
     "codigo": (
         "PP peso próprio; PE permanentes de elementos (piso, guarda-corpo, tubulação); EQ "
         "equipamento vazio; EO conteúdo em operação; SC sobrecarga; W0/W90/W180/W270 vento; "
@@ -97,6 +112,10 @@ AJUDA: dict[str, str] = {
         "ELU normal; especial ou de construção; excepcional (precisa de ação EX); ELS rara "
         "(danos irreversíveis), frequente (reversíveis) e quase permanente (aspecto)."
     ),
+    "ver_como": (
+        "Matriz: uma linha por combinação e uma coluna por ação, com o fator γ·ψ (o mesmo "
+        "arranjo do gerenciador de casos de carga do SolidWorks). Expressões: a soma por extenso."
+    ),
     "res_combinacoes": (
         "Combinações numeradas, com os fatores de cada ação: use o número como nome do caso "
         "combinado no modelo. Ações do mesmo grupo (vento) nunca entram juntas."
@@ -105,11 +124,38 @@ AJUDA: dict[str, str] = {
         "As combinações mínimas do critério Anglo (5.9) e os códigos que o plano ainda não tem. "
         "PRV, HT, HL e MO só existem se houver ponte rolante ou monovia."
     ),
-    "res_exportar": (
-        "CSV com ponto e vírgula e vírgula decimal (abre no Excel): as ações, as cargas para o "
-        "modelo e as combinações com os fatores."
+    "sec_modelo": (
+        "Tudo o que vai para o modelo, nas unidades e nos eixos do programa de destino: as "
+        "cargas de cada caso com F_x, F_y e F_z já com sinal e o comando equivalente no "
+        "SolidWorks e no Robot, e as combinações. A planilha Excel traz também um passo a passo."
+    ),
+    "unidades_destino": (
+        "N e mm para o SolidWorks no sistema MMGS; N e m para o SolidWorks no SI; kN e m para o "
+        "Robot, o SAP2000 e o Ftool. A conversão vale para força, carga por metro, por área e "
+        "momento; a temperatura fica em °C."
+    ),
+    "eixos_destino": (
+        "No SolidWorks a vertical costuma ser o eixo Y (o Y da planta vira −Z); no Robot e no "
+        "SAP2000, o Z. As componentes F_x, F_y e F_z saem já nos eixos escolhidos."
+    ),
+    "res_convencao": (
+        "Para que lado sopra cada vento (W0 = +X, W90 = +Y, W180 = −X, W270 = −Y), qual é o eixo "
+        "vertical e como os eixos do plano viram os do SolidWorks."
+    ),
+    "res_previa": (
+        "Uma linha por carga: o caso (código), o tipo (força, carga por metro, por área, "
+        "temperatura, gravidade), onde aplicar, o valor convertido, as componentes e o comando "
+        "do SolidWorks. O PP sem cargas vira a gravidade do modelo."
+    ),
+    "btn_xlsx": (
+        "Planilha com as abas Leia-me (passo a passo no SolidWorks, no Robot e em outros "
+        "programas), Ações, Cargas, Combinações (matriz) e Combinações (lista)."
     ),
     "btn_csv_acoes": "Ações com categoria, γ e ψ.",
-    "btn_csv_cargas": "Cargas para lançar no SolidWorks ou no Robot (valores característicos).",
-    "btn_csv_comb": "Combinações numeradas com o fator de cada ação.",
+    "btn_csv_cargas": "Cargas de cada caso nas unidades e eixos escolhidos, com F_x, F_y e F_z.",
+    "btn_csv_matriz": "Uma linha por combinação e uma coluna por ação, com o fator.",
+    "btn_csv_lista": (
+        "Uma linha por ação de cada combinação (combinação, caso, fator): o formato que SAP2000, "
+        "ETABS e STAAD importam."
+    ),
 }

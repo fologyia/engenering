@@ -323,3 +323,62 @@ def test_pagina_inicial_mostra_o_caminho_do_projeto(banco_com_projeto):
         assert titulo in corpo, titulo
     opcoes = t.selectbox[0].options
     assert any("plano de cargas" in o.lower() for o in opcoes)
+
+
+# ------------------------------------------------------------------ plano: conferência, edição e exportação
+def _plano_completo_no_projeto() -> None:
+    from tests.test_exportacao_cargas import plano_completo
+
+    gravar_no_projeto(plano_de_cargas=pc.para_dicionario(plano_completo()))
+
+
+def test_conferencia_do_plano_diz_o_que_falta(banco_com_projeto):
+    gravar_no_projeto(
+        plano_de_cargas=pc.para_dicionario(pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("W0")))
+    )
+    t = abrir(PLANO)
+    avisos = " ".join(w.value for w in t.warning)
+    assert "Sem PP" in avisos and "Vento incompleto" in avisos
+
+
+def test_editar_traz_a_acao_gravada_e_gravar_mantem_a_origem(banco_com_projeto):
+    _plano_completo_no_projeto()
+    t = abrir(PLANO)
+    t.button(key="pc_editar_SC").click().run()
+    assert t.selectbox(key="pc_codigo").value == "SC"
+    nome = next(i for i in t.text_input if i.key and i.key.startswith("pc_nome_SC_"))
+    assert nome.value == "Sobrecarga de uso"
+    # Num formulário o valor digitado só vale com o clique em gravar, na mesma execução.
+    nome.set_value("Sobrecarga das plataformas")
+    next(b for b in t.button if b.label == "Gravar a ação").click()
+    t.run()
+    assert not t.exception and not t.error
+    sc = pc.plano_do_projeto(obter_projeto_ativo()).acao("SC")
+    assert sc.nome == "Sobrecarga das plataformas" and sc.origem == "Informada"
+    assert len(sc.cargas) == 1 and sc.cargas[0].valor == 5.0
+
+
+def test_exportacao_mostra_as_cargas_nas_unidades_e_eixos_escolhidos(banco_com_projeto):
+    from core import exportacao_cargas as ex
+
+    _plano_completo_no_projeto()
+    t = abrir(PLANO, pc_unidades=ex.UNIDADES_N_M.nome, pc_eixos=ex.EIXO_Y_PARA_CIMA)
+    previa = next(d.value for d in t.dataframe if "Sentido" in d.value.columns)
+    sc = previa[previa["Caso"] == "SC"].iloc[0]
+    assert sc["Valor"] == 5000.0 and sc["Fy"] == -5000.0 and sc["Unidade"] == "N/m² (Pa)"
+    w90 = previa[previa["Caso"] == "W90"].iloc[0]
+    assert w90["Fz"] == -3000.0
+    chaves = {b.key for b in t.get("download_button")}
+    assert {"pc_xlsx", "pc_csv_cargas", "pc_csv_matriz", "pc_csv_lista", "pc_csv_acoes"} <= chaves
+    assert "Convenção de eixos e sinais" in [s.value for s in t.subheader]
+
+
+def test_combinacoes_em_matriz_ou_expressoes(banco_com_projeto):
+    _plano_completo_no_projeto()
+    t = abrir(PLANO)
+    matriz = next(d.value for d in t.dataframe if "Combinação" in getattr(d.value, "columns", []))
+    t2 = abrir(PLANO, pc_ver_como="Expressões")
+    expressoes = next(
+        d.value for d in t2.dataframe if "Expressão" in getattr(d.value, "columns", [])
+    )
+    assert len(matriz) == len(expressoes) > 0

@@ -362,8 +362,14 @@ tabelas). Usa os mesmos campos do Contraventamento de estruturas abertas.
 
 `core/base_tecnica.py` e `core/plano_de_cargas.py` (ver o caminho do projeto acima e
 `docs/fluxo_do_projeto.md`). O plano guarda uma ação por código; enviar o vento de novo substitui as
-quatro direções. Na página **Estruturas de aço → Combinações**, o botão **Trazer as ações do plano de
-cargas** monta a tabela com as ações do plano para receber os esforços da barra tirados do modelo.
+quatro direções. A **conferência do plano** aponta o que falta ou não fecha antes de exportar, cada
+ação pode ser editada e a matriz de fatores das combinações sai colorida (majorada × acompanhante).
+**Exportar para o modelo** (`core/exportacao_cargas.py`): escolha as unidades (N e mm, N e m, kN e m)
+e o eixo vertical (Y no SolidWorks, Z no Robot) e baixe a planilha Excel (Leia-me, Ações, Cargas com
+F_x, F_y e F_z já com sinal e o comando equivalente em cada programa, Combinações em matriz e em
+lista) ou os CSV; o PP vira a gravidade do modelo. Na página **Estruturas de aço → Combinações**, o
+botão **Trazer as ações do plano de cargas** monta a tabela com as ações do plano para receber os
+esforços da barra tirados do modelo.
 
 ### Degrau de escada em grade
 

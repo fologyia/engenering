@@ -135,7 +135,9 @@ COMBINACOES_ANGLO: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...] = (
 CODIGOS_OPCIONAIS = frozenset({"PRV", "HT", "HL", "MO"})
 
 UNIDADES = ("kN", "kN/m", "kN/m²", "kN·m", "°C")
-DIRECOES = ("X", "Y", "Z (vertical)", "—")
+#: Direções aceitas. Z (vertical): valor positivo = para baixo. X e Y: o sinal está no valor
+#: ("+X" e "−X" são rótulos que o vento usa).
+DIRECOES = ("X", "Y", "Z (vertical)", "+X", "−X", "+Y", "−Y", "—")
 
 
 class PlanoInvalido(ValueError):
@@ -489,6 +491,125 @@ def csv_das_combinacoes(
         for c in lista
     ]
     return _csv(["Nº", "Estado-limite", "Combinação", *codigos, "Expressão"], linhas)
+
+
+# ---------------------------------------------------------------------------------------------
+# Símbolos e conferência do plano
+# ---------------------------------------------------------------------------------------------
+#: Símbolo de cada código: a seta é a direção da carga na planta (vento) ou a gravidade.
+SIMBOLOS: dict[str, str] = {
+    "PP": "↓ g",
+    "PE": "↓ g",
+    "EQ": "↓ g",
+    "EO": "↓ g",
+    "SC": "↓ q",
+    "W0": "→ +X",
+    "W90": "↑ +Y",
+    "W180": "← −X",
+    "W270": "↓ −Y",
+    "T+": "ΔT +",
+    "T−": "ΔT −",
+    "PRV": "↓ PR",
+    "HT": "⇄ HT",
+    "HL": "⇅ HL",
+    "MO": "↓ MO",
+    "IM": "≈ IM",
+    "EX": "✱ EX",
+}
+
+
+def simbolo(acao: Acao) -> str:
+    """Um símbolo curto para a tabela: a seta da carga, ΔT da temperatura."""
+    if acao.codigo in SIMBOLOS:
+        return SIMBOLOS[acao.codigo]
+    unidades = {c.unidade for c in acao.cargas}
+    direcoes = {c.direcao.strip().lstrip("+−-")[:1].upper() for c in acao.cargas}
+    if "°C" in unidades:
+        return "ΔT"
+    if "Z" in direcoes:
+        return "↓"
+    if direcoes & {"X", "Y"}:
+        return "⇄"
+    return "•"
+
+
+NIVEL_OK = "ok"
+NIVEL_ATENCAO = "atencao"
+NIVEL_ERRO = "erro"
+
+
+@dataclass(frozen=True)
+class ItemDeConferencia:
+    nivel: str  # "ok", "atencao" ou "erro"
+    texto: str
+
+
+def conferir_plano(plano: PlanoDeCargas, *, anglo: bool = False) -> list[ItemDeConferencia]:
+    """O que falta ou não fecha no plano antes de exportar para o modelo.
+
+    Erro: o que o modelo não aceita (temperatura em kN, força em °C). Atenção: o que costuma ser
+    esquecido (peso próprio, sobrecarga, vento numa direção só, ação sem carga para o modelo).
+    """
+    itens: list[ItemDeConferencia] = []
+    if not plano.acoes:
+        return [ItemDeConferencia(NIVEL_ERRO, "O plano está vazio: inclua as ações do projeto.")]
+    codigos = set(plano.codigos)
+
+    def atencao(texto: str) -> None:
+        itens.append(ItemDeConferencia(NIVEL_ATENCAO, texto))
+
+    def erro(texto: str) -> None:
+        itens.append(ItemDeConferencia(NIVEL_ERRO, texto))
+
+    if "PP" not in codigos:
+        atencao("Sem PP: inclua o peso próprio (no modelo ele é a gravidade do caso PP).")
+    if not codigos & {"SC", "EO"}:
+        atencao("Sem sobrecarga (SC): inclua a da base técnica ou a do uso previsto.")
+    ventos = codigos & {"W0", "W90", "W180", "W270"}
+    if not ventos:
+        atencao("Sem vento: gere W0 a W270 na página Vento em estruturas abertas.")
+    elif len(ventos) < 4:
+        faltam = ", ".join(sorted({"W0", "W90", "W180", "W270"} - ventos))
+        atencao(f"Vento incompleto: faltam {faltam} (o vento atua nos dois sentidos).")
+    if len(codigos & {"T+", "T−"}) == 1:
+        atencao("Temperatura num sentido só: inclua T+ e T− (±10 °C, critério Anglo 5.8).")
+    for a in plano.acoes:
+        temperatura = a.categoria == CATEGORIA_TEMPERATURA
+        if not a.cargas and a.codigo != "PP":
+            atencao(f"{a.codigo}: sem cargas para o modelo — só entra nas combinações.")
+        vistos: set[tuple[str, str]] = set()
+        for c in a.cargas:
+            if temperatura and c.unidade != "°C":
+                erro(f"{a.codigo}: ação de temperatura com carga em {c.unidade} ({c.elemento}).")
+            if not temperatura and c.unidade == "°C":
+                erro(f"{a.codigo}: carga em °C numa ação que não é de temperatura ({c.elemento}).")
+            if c.valor == 0:
+                atencao(f"{a.codigo}: carga nula em {c.elemento!r}.")
+            if c.unidade != "°C" and c.direcao.strip() in ("", "—"):
+                erro(f"{a.codigo}: carga sem direção em {c.elemento!r} (X, Y ou Z).")
+            chave = (c.elemento.strip().casefold(), c.direcao.strip())
+            if chave in vistos:
+                atencao(f"{a.codigo}: {c.elemento!r} aparece duas vezes na mesma direção.")
+            vistos.add(chave)
+        if a.grupo == GRUPO_VENTO and any(
+            c.direcao.strip().upper().startswith("Z") for c in a.cargas
+        ):
+            atencao(f"{a.codigo}: vento com carga vertical — confira (o vento aqui é horizontal).")
+    if anglo:
+        faltam_anglo = [c for c in cobertura_das_combinacoes_anglo(plano) if not c.coberta]
+        if faltam_anglo:
+            codigos_faltantes = sorted({f for c in faltam_anglo for f in c.faltantes})
+            atencao(
+                f"Critério Anglo 5.9: faltam {', '.join(codigos_faltantes)} para formar "
+                f"{len(faltam_anglo)} combinação(ões) mínima(s) do cliente."
+            )
+    if not itens:
+        itens.append(
+            ItemDeConferencia(
+                NIVEL_OK, "Plano completo: peso próprio, sobrecarga e vento nas quatro direções."
+            )
+        )
+    return itens
 
 
 def resumo_do_plano(plano: PlanoDeCargas) -> str:

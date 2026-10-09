@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
 from components.base_tecnica_help import AJUDA
 from components.base_tecnica_ui import gravar_base, mapa_do_projeto
+from components.figuras_estrutura import svg_limite_de_deslocamento
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import base_tecnica as bt
 from core import criterio_anglo as ca
@@ -221,6 +223,60 @@ else:
             st.caption(f"{bt.texto_do_vento(salva)}. Limite: {limite_1.referencia}.")
             for aviso in bt.avisos(salva):
                 st.warning(aviso, icon=":material/balance:")
+            figura, grafico = st.columns(2)
+            with figura:
+                st.subheader("Limite do deslocamento", help=AJUDA["res_figura_limite"])
+                st.image(
+                    svg_limite_de_deslocamento(limite_1.divisor, limite_1.maximo_mm, 6.0),
+                    width="stretch",
+                )
+                st.caption(
+                    "Exemplo com H = 6 m: o Contraventamento usa a altura da estrutura."
+                    + (
+                        f" Com dois ou mais pisos, entre pisos h/{limite_1.entre_pisos_divisor:g}."
+                        if limite_1.entre_pisos_divisor
+                        else ""
+                    )
+                )
+            with grafico:
+                st.subheader("Pressão do vento com a altura", help=AJUDA["res_grafico_q"])
+                pontos = [
+                    {
+                        "Altura z (m)": z,
+                        "q (kN/m²)": vb.calcular_vento_no_local(
+                            salva.vento.v0_m_s,
+                            s1=salva.vento.s1,
+                            categoria=salva.vento.categoria,
+                            classe=classe,
+                            altura_m=float(z),
+                            s3=salva.vento.s3,
+                        ).q_N_m2
+                        / 1e3,
+                        "Classe": f"Classe {classe}",
+                    }
+                    for classe in ("A", "B", "C")
+                    for z in range(0, 41)
+                ]
+                st.altair_chart(
+                    alt.Chart(pd.DataFrame(pontos))
+                    .mark_line()
+                    .encode(
+                        x=alt.X("q (kN/m²):Q", scale=alt.Scale(zero=False)),
+                        y="Altura z (m):Q",
+                        color=alt.Color("Classe:N", legend=alt.Legend(orient="bottom")),
+                        tooltip=[
+                            "Classe",
+                            "Altura z (m)",
+                            alt.Tooltip("q (kN/m²):Q", format=".3f"),
+                        ],
+                    )
+                    .properties(height=260),
+                    width="stretch",
+                )
+                st.caption(
+                    "Terreno categoria "
+                    f"{salva.vento.categoria}; classe A até 20 m de maior dimensão, B até 50 m, C acima."
+                )
 
 # ============================================================ consulta do critério Anglo
 st.header("Critério Anglo — consulta", help=AJUDA["sec_consulta"])

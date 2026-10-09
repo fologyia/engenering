@@ -4,14 +4,35 @@
     {
       "name": "mecanica-toolkit",
       "runtimeExecutable": ".venv/Scripts/streamlit.exe",
-      "runtimeArgs": ["run", "app.py", "--server.headless", "true"],
+      "runtimeArgs": [
+        "run",
+        "app.py",
+        "--server.headless",
+        "true"
+      ],
       "port": 8501
     },
     {
       "name": "mecanica-toolkit-8502",
       "runtimeExecutable": ".venv/Scripts/streamlit.exe",
-      "runtimeArgs": ["run", "app.py", "--server.headless", "true", "--server.port", "8502"],
+      "runtimeArgs": [
+        "run",
+        "app.py",
+        "--server.headless",
+        "true",
+        "--server.port",
+        "8502"
+      ],
       "port": 8502
+    },
+    {
+      "name": "mecanica-toolkit-demo",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set MECANICA_TOOLKIT_DB=tmp\\demo\\projetos_demo.sqlite3&& .venv\\Scripts\\streamlit.exe run app.py --server.headless true --server.port 8503"
+      ],
+      "port": 8503
     }
   ]
 }

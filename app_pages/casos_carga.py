@@ -50,6 +50,15 @@ cabecalho_pagina(
     ),
     modulo_id="casos_carga",
 )
+st.info(
+    "Esta página cadastra **cenários operacionais** de equipamentos (partida, parada, teste) com "
+    "fatores próprios. Para estrutura metálica — peso próprio, sobrecarga, vento, combinações da "
+    "NBR 8800 e exportação para o SolidWorks ou o Robot — use o **Plano de cargas**.",
+    icon=":material/info:",
+)
+st.page_link(
+    "app_pages/plano_cargas.py", label="Abrir o Plano de cargas", icon=":material/table_chart:"
+)
 
 
 def _limpar(valor: Any) -> Any:

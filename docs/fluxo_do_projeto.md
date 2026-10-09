@@ -52,11 +52,8 @@ que se digita numa aparece na outra. O cálculo é o do capítulo 8 da NBR 6123:
 
 ### No SolidWorks (Simulation)
 
-1. Modele os pórticos com os nós nas cotas dos pisos.
-2. Para cada direção, aplique em cada nó pilar–viga a coluna **Por pilar (kN)** do CSV dos nós (a
-   faixa da base, nível 0, vai direto à fundação e não precisa entrar no modelo).
-3. Crie um estudo por ação (W0, W90…) e, se o programa de análise combinar, use as combinações do
-   Plano de cargas com o número como nome; senão, aplique os fatores da tabela de combinações.
+Use a exportação do **Plano de cargas** (abaixo): ela já converte as unidades e os eixos. A faixa
+da base (nível 0 do CSV dos nós) vai direto à fundação e não precisa entrar no modelo.
 
 ## 3. Plano de cargas
 
@@ -85,6 +82,42 @@ cargas que vão para o modelo.
 * Na página **Estruturas de aço → Combinações**, o botão **Trazer as ações do plano de cargas** monta a
   tabela com código, categoria, grupo e coeficientes do plano; N, V e M ficam zerados para receber os
   esforços característicos da barra tirados do modelo.
+* **Conferência do plano** (`conferir_plano`): erro para o que o modelo não aceita (temperatura em
+  kN, força em °C, carga sem direção) e atenção para o que costuma ser esquecido (sem PP, sem
+  sobrecarga, vento numa direção só, temperatura num sentido só, ação sem carga, carga nula ou
+  repetida, vento com carga vertical, combinações mínimas Anglo com a ação que falta).
+* **Editar** uma ação: escolha o código que já está no plano e os campos trazem o que está gravado.
+* **Símbolos** na tabela: ↓ g gravidade, → ↑ ← ↓ vento na planta, ΔT temperatura, ⇄ ⇅ ponte rolante.
+
+### Exportar para o modelo (`core/exportacao_cargas.py`)
+
+| Escolha | Opções |
+| --- | --- |
+| Unidades | N e mm (SolidWorks MMGS), N e m (SolidWorks SI), kN e m (Robot, SAP2000, Ftool) |
+| Eixo vertical | Y para cima (SolidWorks) ou Z para cima (Robot, SAP2000) |
+
+* **Cargas por caso**: uma linha por carga com o tipo (força concentrada, carga distribuída em
+  barra, por área, momento, temperatura), onde aplicar, o valor convertido, **F_x, F_y e F_z com
+  sinal** nos eixos escolhidos, o sentido por extenso e o comando equivalente no SolidWorks e no
+  Robot. O **PP** sem cargas vira a **gravidade** do modelo (9,81 m/s² para baixo).
+* Convenção: Z (vertical) com valor positivo é para baixo; X e Y levam o sinal no valor. Com Y para
+  cima, (F_x, F_y, F_z) do programa vira (F_x, F_z, −F_y): na vista Superior do SolidWorks o
+  desenho fica igual à planta.
+* **Combinações**: matriz (uma linha por combinação, uma coluna por caso — o arranjo do gerenciador
+  de casos de carga do SolidWorks) e lista (combinação, caso, fator — o formato que SAP2000, ETABS e
+  STAAD importam). Nomes curtos: C01-ELU, C14-ELSR, C20-ELSF, C27-ELSQ.
+* **Planilha Excel** com as abas Leia-me (passo a passo no SolidWorks, no Robot e em outros
+  programas), Ações, Cargas, Combinações e Combinações (lista); os mesmos dados em CSV.
+
+### Passo a passo no SolidWorks Simulation
+
+1. Estudo estático com o material do aço (200 GPa, 7850 kg/m³).
+2. No **Gerenciador de casos de carga**, um caso primário por código da aba Cargas (PP, SC, W0…).
+3. Em cada caso, as cargas da aba Cargas (tipo e comando nas colunas "Tipo da carga" e "No
+   SolidWorks"); o PP é a Gravidade.
+4. As combinações da aba Combinações, uma por linha, com os fatores de cada caso.
+5. Os esforços característicos de cada caso nas barras a verificar vão para as páginas de
+   verificação (Estruturas de aço → "Trazer as ações do plano de cargas").
 
 ## 4 e 5. Verificações e memorial
 

@@ -71,3 +71,23 @@ def test_chapa_de_no_e_svg_valido_com_as_forcas(troca):
     assert f"P = {P:.0f} kN" in escrito
     assert f"H_b = {r.forcas.viga_cisalhamento_kN:.0f} kN" in escrito
     assert ("Chapa–coluna" in escrito) is (r.entrada.caso != ufm.CASO_3)
+
+
+def test_convencao_de_eixos_mostra_o_vento_e_o_eixo_vertical():
+    from core import exportacao_cargas as ex
+
+    solidworks = textos(fig.svg_convencao_de_eixos(ex.EIXO_Y_PARA_CIMA))
+    robot = textos(fig.svg_convencao_de_eixos(ex.EIXO_Z_PARA_CIMA))
+    for escrito in (solidworks, robot):
+        for direcao in ("W0 → +X", "W90 → +Y", "W180 → −X", "W270 → −Y"):
+            assert direcao in escrito
+    assert "No SolidWorks (Y para cima)" in solidworks
+    assert "No SolidWorks" not in robot
+
+
+@pytest.mark.parametrize(
+    ("divisor", "maximo", "texto"),
+    [(400, None, "δ ≤ H/400 = 15,0 mm"), (300, 10.0, "δ ≤ H/300 (máx. 10 mm) = 10,0 mm")],
+)
+def test_limite_de_deslocamento(divisor, maximo, texto):
+    assert texto in textos(fig.svg_limite_de_deslocamento(divisor, maximo, 6.0))

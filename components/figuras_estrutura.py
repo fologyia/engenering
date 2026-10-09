@@ -722,3 +722,99 @@ def svg_ligacao(r: lig.ResultadoLigacao) -> str:
         )
     )
     return _svg(largura, altura, corpo, "Chapa de nó do contraventamento")
+
+
+# ---------------------------------------------------------------------------------------------
+# Convenção de eixos do plano de cargas e limite de deslocamento da base técnica
+# ---------------------------------------------------------------------------------------------
+def svg_convencao_de_eixos(eixos: str) -> str:
+    """Planta com as direções do vento e elevação com o eixo vertical e a gravidade."""
+    from core import exportacao_cargas as ex
+
+    vertical = ex.eixo_vertical(eixos)
+    corpo: list[str] = [
+        _texto(175, 20, "Planta — direções do vento", tamanho=13, peso="bold"),
+        _texto(490, 20, "Elevação — vertical e gravidade", tamanho=13, peso="bold"),
+        f'<rect x="110" y="100" width="130" height="80" fill="#eef1f5" stroke="{COR_ESTRUTURA}" '
+        'stroke-width="1.5"/>',
+        _texto(175, 140, "estrutura", tamanho=11, cor=COR_ESTRUTURA),
+        _seta(40, 140, 100, 140),
+        _texto(62, 126, "W0 → +X", tamanho=11, cor=COR_VENTO, peso="bold"),
+        _seta(310, 140, 250, 140),
+        _texto(290, 126, "W180 → −X", tamanho=11, cor=COR_VENTO, peso="bold"),
+        _seta(175, 250, 175, 190),
+        _texto(185, 238, "W90 → +Y", tamanho=11, ancora="start", cor=COR_VENTO, peso="bold"),
+        _seta(175, 40, 175, 92),
+        _texto(185, 56, "W270 → −Y", tamanho=11, ancora="start", cor=COR_VENTO, peso="bold"),
+        _seta(30, 262, 72, 262, cor=COR_TEXTO, largura=1.8),
+        _texto(80, 262, "X", tamanho=12, ancora="start", peso="bold"),
+        _seta(30, 262, 30, 220, cor=COR_TEXTO, largura=1.8),
+        _texto(
+            22, 210, "Y" if vertical == "Z" else "Y → −Z", tamanho=12, ancora="start", peso="bold"
+        ),
+        _linha(420, 235, 620, 235, cor=COR_ESTRUTURA, largura=1.5),
+        _linha(450, 235, 450, 110, cor=COR_ESTRUTURA, largura=3),
+        _linha(590, 235, 590, 110, cor=COR_ESTRUTURA, largura=3),
+        _linha(450, 110, 590, 110, cor=COR_ESTRUTURA, largura=3),
+        _seta(520, 135, 520, 200, cor=COR_COMPRESSAO, largura=2.2),
+        _texto(530, 168, "g", tamanho=13, ancora="start", cor=COR_COMPRESSAO, peso="bold"),
+        _seta(380, 262, 380, 205, cor=COR_TEXTO, largura=1.8),
+        _texto(380, 195, vertical, tamanho=12, peso="bold"),
+        _seta(380, 262, 420, 262, cor=COR_TEXTO, largura=1.8),
+        _texto(428, 262, "X", tamanho=12, ancora="start", peso="bold"),
+        _texto(
+            320,
+            288,
+            "No plano: Z (vertical) com valor positivo = para baixo; X e Y levam o sinal no valor.",
+            tamanho=11,
+        ),
+    ]
+    altura = 310.0
+    if vertical == "Y":
+        corpo.append(
+            _texto(
+                320,
+                305,
+                "No SolidWorks (Y para cima): X → X · Y da planta → −Z · Z (vertical) → Y",
+                tamanho=11,
+                peso="bold",
+            )
+        )
+        altura = 322.0
+    return _svg(640, altura, corpo, "Convenção de eixos e direções do vento")
+
+
+def svg_limite_de_deslocamento(divisor: float, maximo_mm: float | None, altura_m: float) -> str:
+    """Pórtico deslocado pelo vento com o limite δ ≤ H/divisor escrito."""
+    limite = altura_m * 1000.0 / divisor
+    if maximo_mm:
+        limite = min(limite, maximo_mm)
+    corpo = [
+        _linha(90, 220, 330, 220, cor=COR_ESTRUTURA, largura=1.5),
+        _linha(130, 220, 130, 70, cor=COR_ESTRUTURA, largura=3),
+        _linha(290, 220, 290, 70, cor=COR_ESTRUTURA, largura=3),
+        _linha(130, 70, 290, 70, cor=COR_ESTRUTURA, largura=3),
+        _linha(130, 220, 162, 70, cor=COR_TRACAO, largura=2, tracejado="6 4"),
+        _linha(290, 220, 322, 70, cor=COR_TRACAO, largura=2, tracejado="6 4"),
+        _linha(162, 70, 322, 70, cor=COR_TRACAO, largura=2, tracejado="6 4"),
+        _seta(30, 55, 122, 55),
+        _texto(60, 42, "vento", tamanho=11, cor=COR_VENTO, peso="bold"),
+        _linha(290, 50, 322, 50, cor=COR_TEXTO, largura=1.2),
+        _linha(290, 44, 290, 56, cor=COR_TEXTO, largura=1.2),
+        _linha(322, 44, 322, 56, cor=COR_TEXTO, largura=1.2),
+        _texto(306, 36, "δ", tamanho=14, peso="bold"),
+        _linha(100, 220, 100, 70, cor=COR_TEXTO, largura=1.2),
+        _linha(94, 220, 106, 220, cor=COR_TEXTO, largura=1.2),
+        _linha(94, 70, 106, 70, cor=COR_TEXTO, largura=1.2),
+        _texto(92, 145, f"H = {_n(altura_m, 2)} m", tamanho=11, ancora="end"),
+        _texto(
+            210,
+            245,
+            f"δ ≤ H/{divisor:g}"
+            + (f" (máx. {maximo_mm:g} mm)" if maximo_mm else "")
+            + f" = {_n(limite, 1)} mm",
+            tamanho=13,
+            peso="bold",
+        ),
+    ]
+    return _svg(360, 262, corpo, "Limite do deslocamento horizontal do topo")
