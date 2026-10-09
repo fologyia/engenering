@@ -3,18 +3,24 @@ cada barra com as combinações do plano de cargas."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 import streamlit as st
 
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import gravar_campo_do_projeto, mapa_do_projeto
 from components.esforcos_modelo_help import AJUDA
+from components.project_tools import botao_registrar_calculo
 from components.ui import cabecalho_pagina, configurar_pagina
+from components.verification_table import mostrar_tabela_verificacoes
 from core import cantoneiras as ct
+from core import column_buckling as cbk
 from core import esforcos_modelo as em
 from core import load_combinations as comb
 from core import plano_de_cargas as pc
 from core import section_catalog as sc
+from core import verificacao_barras as vb
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Esforços do modelo", ":material/upload_file:")
@@ -137,7 +143,7 @@ with st.container(border=True):
             key="em_gravar_arquivos",
             help=AJUDA["btn_gravar_arquivos"],
         ):
-            novos = em.EsforcosDoModelo(dados.casos, dados.membros, eixo)
+            novos = replace(dados, eixo_vertical=eixo)
             problemas: list[str] = []
             casos_por_arquivo = dict(zip(tabela["Arquivo"], tabela["Caso"], strict=True))
             for a in sorted(lidos, key=lambda x: x.tipo != em.TIPO_VIGAS):
@@ -160,7 +166,7 @@ with st.container(border=True):
                 st.session_state["em_versao"] = versao + 1
                 st.rerun()
     elif eixo != dados.eixo_vertical and dados.casos:
-        if gravar(em.EsforcosDoModelo(dados.casos, dados.membros, eixo), "Eixo vertical do modelo"):
+        if gravar(replace(dados, eixo_vertical=eixo), "Eixo vertical do modelo"):
             st.rerun()
 
 if not dados.casos:
@@ -225,6 +231,10 @@ with st.container(border=True):
                 "Perfil": cfg.perfil if cfg.perfil in catalogo else "",
                 "Tipo": cfg.tipo,
                 "Eixo forte": cfg.eixo_forte,
+                "Aço": cfg.aco,
+                "Lx (m)": cfg.lx_m,
+                "Ly (m)": cfg.ly_m,
+                "Lb (m)": cfg.lb_m,
                 "|N| máx. (kN)": max((abs(p.n) for p in pontos), default=0.0),
                 "|M1| máx. (kN·m)": max((abs(p.m1) for p in pontos), default=0.0),
                 "|M2| máx. (kN·m)": max((abs(p.m2) for p in pontos), default=0.0),
@@ -253,6 +263,15 @@ with st.container(border=True):
                 options=[em.EIXO_M1, em.EIXO_M2],
                 help="Qual momento do SolidWorks é o do eixo forte (o que domina numa viga).",
             ),
+            "Aço": st.column_config.SelectboxColumn(
+                options=["", *vb.ACOS], help="Vazio = o aço do tipo (tabela de parâmetros)."
+            ),
+            **{
+                c: st.column_config.NumberColumn(
+                    min_value=0.0, format="%.2f", help="Vazio = o do tipo (tabela de parâmetros)."
+                )
+                for c in ("Lx (m)", "Ly (m)", "Lb (m)")
+            },
             **{
                 c: st.column_config.NumberColumn(format="%.2f")
                 for c in ("|N| máx. (kN)", "|M1| máx. (kN·m)", "|M2| máx. (kN·m)")
@@ -274,6 +293,16 @@ with st.container(border=True):
                 perfil=str(linha["Perfil"] or ""),
                 tipo=str(linha["Tipo"] or "—"),
                 eixo_forte=str(linha["Eixo forte"] or em.EIXO_M2),
+                aco=str(linha["Aço"] or "") if not pd.isna(linha["Aço"]) else "",
+                lx_m=None
+                if pd.isna(linha["Lx (m)"]) or not linha["Lx (m)"]
+                else float(linha["Lx (m)"]),
+                ly_m=None
+                if pd.isna(linha["Ly (m)"]) or not linha["Ly (m)"]
+                else float(linha["Ly (m)"]),
+                lb_m=None
+                if pd.isna(linha["Lb (m)"]) or not linha["Lb (m)"]
+                else float(linha["Lb (m)"]),
             )
             for _, linha in barras.iterrows()
         }
@@ -328,8 +357,152 @@ with st.container(border=True):
             key="em_csv",
             help=AJUDA["btn_csv"],
         )
-        st.info(
-            "Próxima etapa: a verificação automática de cada barra (perfil, aço, comprimento de "
-            "flambagem) com estes esforços, e o quadro de cargas para as fundações.",
-            icon=":material/construction:",
+
+# ============================================================ 6. parâmetros
+with st.container(border=True):
+    st.subheader("6. Parâmetros da verificação", help=AJUDA["sec_parametros"])
+    normas = list(cbk.NORMAS)
+    norma = st.selectbox(
+        "Norma",
+        normas,
+        index=normas.index(dados.norma) if dados.norma in normas else 0,
+        format_func=lambda n: cbk.NORMAS_ROTULOS.get(n, n),
+        key="em_norma",
+        help=AJUDA["norma"],
+    )
+    parametros = st.data_editor(
+        pd.DataFrame(
+            [
+                {
+                    "Tipo": tipo,
+                    "Aço": dados.parametros_do_tipo(tipo).aco,
+                    "Lx (m)": dados.parametros_do_tipo(tipo).lx_m,
+                    "Ly (m)": dados.parametros_do_tipo(tipo).ly_m,
+                    "Lb (m)": dados.parametros_do_tipo(tipo).lb_m,
+                    "Cb": dados.parametros_do_tipo(tipo).cb,
+                    "B₂": dados.parametros_do_tipo(tipo).b2,
+                }
+                for tipo in em.TIPOS_DE_BARRA
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+        key=f"em_parametros_{versao}",
+        disabled=["Tipo"],
+        column_config={
+            "Aço": st.column_config.SelectboxColumn(options=list(vb.ACOS), help="f_y e f_u."),
+            "Lx (m)": st.column_config.NumberColumn(
+                min_value=0.0, format="%.2f", help="K·L para a flambagem em torno do eixo forte."
+            ),
+            "Ly (m)": st.column_config.NumberColumn(
+                min_value=0.0, format="%.2f", help="K·L para a flambagem em torno do eixo fraco."
+            ),
+            "Lb (m)": st.column_config.NumberColumn(
+                min_value=0.0,
+                format="%.2f",
+                help="Comprimento destravado da mesa comprimida (FLT). Vazio = Ly.",
+            ),
+            "Cb": st.column_config.NumberColumn(
+                min_value=1.0, max_value=3.0, format="%.2f", help="Fator de momento da FLT."
+            ),
+            "B₂": st.column_config.NumberColumn(
+                min_value=1.0,
+                max_value=2.0,
+                format="%.3f",
+                help="Amplificação da 2ª ordem global (da página Contraventamento).",
+            ),
+        },
+    )
+    st.caption(
+        "Valem para todas as barras do tipo; a tabela das barras pode mudar o aço e os "
+        "comprimentos de uma barra. O estudo do SolidWorks é de 1ª ordem: o B₂ multiplica todos "
+        "os esforços (a favor da segurança)."
+    )
+    if st.button(
+        "Gravar os parâmetros",
+        icon=":material/save:",
+        key="em_gravar_parametros",
+        help=AJUDA["btn_gravar_parametros"],
+    ):
+
+        def _comprimento(valor: object) -> float | None:
+            return None if pd.isna(valor) or not valor else float(valor)  # type: ignore[arg-type]
+
+        novos = {
+            str(linha["Tipo"]): em.ParametrosDoTipo(
+                aco=str(linha["Aço"] or em.ACO_PADRAO),
+                lx_m=_comprimento(linha["Lx (m)"]),
+                ly_m=_comprimento(linha["Ly (m)"]),
+                lb_m=_comprimento(linha["Lb (m)"]),
+                cb=_comprimento(linha["Cb"]) or 1.0,
+                b2=_comprimento(linha["B₂"]) or 1.0,
+            )
+            for _, linha in parametros.iterrows()
+        }
+        if gravar(em.com_parametros(dados, novos, norma), "Esforços do modelo: parâmetros"):
+            st.rerun()
+
+# ============================================================ 7. verificação
+with st.container(border=True):
+    st.subheader("7. Verificação das barras", help=AJUDA["sec_verificacao"])
+    resultados, avisos_verificacao = vb.verificar_barras(dados, plano, estados)
+    for aviso in avisos_verificacao:
+        st.warning(aviso, icon=":material/warning:")
+    sintese = vb.resumo(resultados)
+    colunas = st.columns(4)
+    colunas[0].metric("Atendem", sintese["atendem"], help=AJUDA["res_resumo"])
+    colunas[1].metric("Não atendem", sintese["nao_atendem"], help=AJUDA["res_resumo"])
+    colunas[2].metric("Sem dados", sintese["pendentes"], help=AJUDA["res_resumo"])
+    pior = sintese["pior"]
+    colunas[3].metric(
+        "Maior aproveitamento",
+        "—" if pior is None else f"{100 * (pior.aproveitamento or 0.0):.0f} %",
+        help=AJUDA["res_resumo"],
+    )
+    tabela_verif = pd.DataFrame(vb.linhas_da_tabela(resultados), columns=list(vb.COLUNAS))
+    if filtro != "Todas":
+        tabela_verif = tabela_verif[tabela_verif["Tipo"] == filtro]
+    st.dataframe(
+        tabela_verif.replace("", None),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Aproveitamento (%)": st.column_config.ProgressColumn(
+                min_value=0.0, max_value=100.0, format="%.0f %%"
+            ),
+            **{c: st.column_config.NumberColumn(format="%.2f") for c in vb.COLUNAS if "(kN" in c},
+        },
+    )
+    verificadas = [r for r in resultados if r.linhas]
+    if verificadas:
+        nomes = [r.membro for r in verificadas]
+        escolhida = st.selectbox(
+            "Ver o cálculo da barra",
+            nomes,
+            index=nomes.index(pior.membro) if pior is not None and pior.membro in nomes else 0,
+            key="em_barra_detalhe",
+            help=AJUDA["barra_detalhe"],
         )
+        detalhe = next(r for r in verificadas if r.membro == escolhida)
+        st.caption(
+            f"{detalhe.perfil} · {detalhe.combinacao}, {detalhe.ponto} · N = {detalhe.n:.2f} kN, "
+            f"M forte = {detalhe.m_forte:.2f} kN·m, M fraco = {detalhe.m_fraco:.2f} kN·m "
+            f"(de cálculo, com B₂) · {detalhe.metodo}".replace(".", ",")
+        )
+        mostrar_tabela_verificacoes(list(detalhe.linhas))
+    st.download_button(
+        "Verificação das barras (CSV)",
+        data=vb.csv_das_barras(resultados),
+        file_name=f"verificacao_barras_{projeto.get('codigo') or 'projeto'}.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        key="em_csv_verificacao",
+        help=AJUDA["btn_csv_verificacao"],
+    )
+    st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
+    botao_registrar_calculo(
+        vb.registro_das_barras(resultados, dados, estados),
+        key="registrar_esforcos_modelo",
+        rotulo="Registrar a verificação das barras no projeto ativo",
+        identificar_peca=False,
+    )

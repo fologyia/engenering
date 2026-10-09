@@ -451,9 +451,31 @@ class CasoImportado:
 
 @dataclass(frozen=True)
 class ConfiguracaoDoMembro:
+    """A barra na tabela: perfil, tipo, eixo forte e, se diferente do tipo, aço e comprimentos."""
+
     perfil: str = ""
     tipo: str = "—"
     eixo_forte: str = EIXO_M2
+    aco: str = ""  # vazio = o do tipo
+    lx_m: float | None = None  # comprimento de flambagem K·L em torno do eixo forte
+    ly_m: float | None = None  # em torno do eixo fraco
+    lb_m: float | None = None  # comprimento destravado da mesa comprimida (FLT)
+
+
+ACO_PADRAO = "ASTM A572 Gr 50"
+NORMA_PADRAO = "NBR8800_2024"
+
+
+@dataclass(frozen=True)
+class ParametrosDoTipo:
+    """O que vale para todas as barras de um tipo, salvo o que a barra informar."""
+
+    aco: str = ACO_PADRAO
+    lx_m: float | None = None
+    ly_m: float | None = None
+    lb_m: float | None = None  # vazio = L_y
+    cb: float = 1.0
+    b2: float = 1.0  # amplificação da 2ª ordem global (o estudo do SolidWorks é de 1ª ordem)
 
 
 @dataclass(frozen=True)
@@ -461,6 +483,11 @@ class EsforcosDoModelo:
     casos: Mapping[str, CasoImportado] = field(default_factory=dict)
     membros: Mapping[str, ConfiguracaoDoMembro] = field(default_factory=dict)
     eixo_vertical: str = "Y"
+    parametros: Mapping[str, ParametrosDoTipo] = field(default_factory=dict)
+    norma: str = NORMA_PADRAO
+
+    def parametros_do_tipo(self, tipo: str) -> ParametrosDoTipo:
+        return self.parametros.get(tipo, ParametrosDoTipo())
 
     @property
     def nomes_dos_membros(self) -> list[str]:
@@ -500,7 +527,7 @@ def com_caso(dados: EsforcosDoModelo, caso: CasoImportado) -> EsforcosDoModelo:
             membros[nome] = ConfiguracaoDoMembro(
                 perfil=perfil_do_nome(nome) or "", eixo_forte=eixo_forte_sugerido(pontos)
             )
-    return EsforcosDoModelo(casos, membros, dados.eixo_vertical)
+    return replace(dados, casos=casos, membros=membros)
 
 
 def com_reacoes(
@@ -513,18 +540,23 @@ def com_reacoes(
         )
     casos = dict(dados.casos)
     casos[codigo] = replace(caso, reacoes=reacoes, arquivo_reacoes=arquivo)
-    return EsforcosDoModelo(casos, dados.membros, dados.eixo_vertical)
+    return replace(dados, casos=casos)
 
 
 def sem_caso(dados: EsforcosDoModelo, codigo: str) -> EsforcosDoModelo:
-    casos = {k: v for k, v in dados.casos.items() if k != codigo}
-    return EsforcosDoModelo(casos, dados.membros, dados.eixo_vertical)
+    return replace(dados, casos={k: v for k, v in dados.casos.items() if k != codigo})
 
 
 def com_membros(
     dados: EsforcosDoModelo, membros: Mapping[str, ConfiguracaoDoMembro]
 ) -> EsforcosDoModelo:
-    return EsforcosDoModelo(dados.casos, {**dados.membros, **membros}, dados.eixo_vertical)
+    return replace(dados, membros={**dados.membros, **membros})
+
+
+def com_parametros(
+    dados: EsforcosDoModelo, parametros: Mapping[str, ParametrosDoTipo], norma: str | None = None
+) -> EsforcosDoModelo:
+    return replace(dados, parametros={**dados.parametros, **parametros}, norma=norma or dados.norma)
 
 
 def _r(valor: float) -> float:
@@ -559,9 +591,29 @@ def para_dicionario(dados: EsforcosDoModelo) -> dict[str, Any]:
             for codigo, c in dados.casos.items()
         },
         "membros": {
-            nome: {"perfil": m.perfil, "tipo": m.tipo, "eixo_forte": m.eixo_forte}
+            nome: {
+                "perfil": m.perfil,
+                "tipo": m.tipo,
+                "eixo_forte": m.eixo_forte,
+                "aco": m.aco,
+                "lx_m": m.lx_m,
+                "ly_m": m.ly_m,
+                "lb_m": m.lb_m,
+            }
             for nome, m in dados.membros.items()
         },
+        "parametros": {
+            tipo: {
+                "aco": t.aco,
+                "lx_m": t.lx_m,
+                "ly_m": t.ly_m,
+                "lb_m": t.lb_m,
+                "cb": t.cb,
+                "b2": t.b2,
+            }
+            for tipo, t in dados.parametros.items()
+        },
+        "norma": dados.norma,
     }
 
 
@@ -569,6 +621,14 @@ def _tripla(valor: Any) -> tuple[float, float, float] | None:
     if not isinstance(valor, Sequence) or len(valor) != 3:
         return None
     return (float(valor[0]), float(valor[1]), float(valor[2]))
+
+
+def _comprimento(valor: Any) -> float | None:
+    try:
+        numero_ = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero_ if math.isfinite(numero_) and numero_ > 0 else None
 
 
 def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
@@ -611,11 +671,33 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
             eixo_forte=str(m.get("eixo_forte") or EIXO_M2)
             if str(m.get("eixo_forte") or EIXO_M2) in (EIXO_M1, EIXO_M2)
             else EIXO_M2,
+            aco=str(m.get("aco") or ""),
+            lx_m=_comprimento(m.get("lx_m")),
+            ly_m=_comprimento(m.get("ly_m")),
+            lb_m=_comprimento(m.get("lb_m")),
         )
         for nome, m in (dados.get("membros") or {}).items()
         if isinstance(m, Mapping)
     }
-    return EsforcosDoModelo(casos, membros_cfg, str(dados.get("eixo_vertical") or "Y"))
+    parametros = {
+        str(tipo): ParametrosDoTipo(
+            aco=str(t.get("aco") or ACO_PADRAO),
+            lx_m=_comprimento(t.get("lx_m")),
+            ly_m=_comprimento(t.get("ly_m")),
+            lb_m=_comprimento(t.get("lb_m")),
+            cb=_comprimento(t.get("cb")) or 1.0,
+            b2=_comprimento(t.get("b2")) or 1.0,
+        )
+        for tipo, t in (dados.get("parametros") or {}).items()
+        if isinstance(t, Mapping)
+    }
+    return EsforcosDoModelo(
+        casos,
+        membros_cfg,
+        str(dados.get("eixo_vertical") or "Y"),
+        parametros,
+        str(dados.get("norma") or NORMA_PADRAO),
+    )
 
 
 def esforcos_do_projeto(projeto: Mapping[str, Any] | None) -> EsforcosDoModelo:
@@ -819,68 +901,99 @@ def _pontos_alinhados(
     return None
 
 
+#: (combinação, ponto, (N, V1, V2, M1, M2, T)) — esforços de cálculo de uma barra.
+Combinado = tuple[str, str, tuple[float, ...]]
+
+
+@dataclass(frozen=True)
+class PreparoDasCombinacoes:
+    importados: tuple[str, ...]
+    nomes: tuple[str, ...]
+    fatores: tuple[tuple[float, ...], ...]
+    casos: tuple[CasoImportado, ...]
+
+
+def preparar_combinacoes(
+    dados: EsforcosDoModelo, plano: pc.PlanoDeCargas, estados: Sequence[str]
+) -> PreparoDasCombinacoes | None:
+    """As combinações do plano só com os casos importados (``None`` se nenhum foi importado)."""
+    importados = tuple(c for c in plano.codigos if c in dados.casos)
+    if not importados:
+        return None
+    plano_filtrado = pc.PlanoDeCargas(tuple(a for a in plano.acoes if a.codigo in importados))
+    lista = pc.combinacoes(plano_filtrado, estados)
+    return PreparoDasCombinacoes(
+        importados,
+        tuple(ex.nome_da_combinacao(c, len(lista)) for c in lista),
+        tuple(tuple(float(c.fatores.get(k, 0.0)) for k in importados) for c in lista),
+        tuple(dados.casos[k] for k in importados),
+    )
+
+
+def combinados_do_membro(
+    membro: str, preparo: PreparoDasCombinacoes
+) -> tuple[list[Combinado], str, str | None]:
+    """Os esforços de cálculo da barra em cada combinação e ponto, o método e o aviso (se houver)."""
+    nomes, fatores, casos = preparo.nomes, preparo.fatores, preparo.casos
+    alinhados = _pontos_alinhados(membro, casos)
+    if alinhados is not None:
+        vetores, rotulos, metodo = alinhados
+        aviso = (
+            None
+            if metodo == "ponto a ponto"
+            else f"{membro}: a numeração dos elementos muda entre os estudos; combinei pela "
+            "ordem. Use a mesma malha em todos os estudos (duplique o estudo)."
+        )
+        combinados = [
+            (
+                nomes[i],
+                rotulos[j],
+                tuple(
+                    sum(f * vetores[k][j][comp] for k, f in enumerate(fatores[i]))
+                    for comp in range(6)
+                ),
+            )
+            for i in range(len(nomes))
+            for j in range(len(rotulos))
+        ]
+        return combinados, metodo, aviso
+    combinados = []
+    for i in range(len(nomes)):
+        for sentido in (-1.0, 1.0):
+            vetor = []
+            for comp in range(6):
+                total = 0.0
+                for k, f in enumerate(fatores[i]):
+                    valores = [p.vetor()[comp] for p in casos[k].membros.get(membro, ())] or [0.0]
+                    escolhido = max(valores) if f * sentido >= 0 else min(valores)
+                    total += f * escolhido
+                vetor.append(total)
+            combinados.append((nomes[i], "envoltória dos pontos", tuple(vetor)))
+    return (
+        combinados,
+        "soma dos máximos (conservador)",
+        f"{membro}: não está em todos os casos com os mesmos elementos — usei a soma dos máximos "
+        "de cada caso (a favor da segurança).",
+    )
+
+
 def envoltoria(
     dados: EsforcosDoModelo, plano: pc.PlanoDeCargas, estados: Sequence[str]
 ) -> ResultadoDaEnvoltoria:
     """Combina os casos importados com os fatores do plano e acha o pior de cada barra."""
-    avisos: list[str] = []
-    importados = [c for c in plano.codigos if c in dados.casos]
-    if not importados:
+    preparo = preparar_combinacoes(dados, plano, estados)
+    if preparo is None:
         return ResultadoDaEnvoltoria((), 0, (), ("Nenhum caso do plano de cargas foi importado.",))
-    plano_filtrado = pc.PlanoDeCargas(tuple(a for a in plano.acoes if a.codigo in importados))
-    lista = pc.combinacoes(plano_filtrado, estados)
-    nomes = [ex.nome_da_combinacao(c, len(lista)) for c in lista]
-    fatores = [[float(c.fatores.get(k, 0.0)) for k in importados] for c in lista]
-    casos = [dados.casos[k] for k in importados]
+    avisos: list[str] = []
     membros: list[EnvoltoriaDoMembro] = []
     for membro in dados.nomes_dos_membros:
-        alinhados = _pontos_alinhados(membro, casos)
-        if alinhados is not None:
-            vetores, rotulos, metodo = alinhados
-            if metodo != "ponto a ponto":
-                avisos.append(
-                    f"{membro}: a numeração dos elementos muda entre os estudos; combinei pela "
-                    "ordem. Use a mesma malha em todos os estudos (duplique o estudo)."
-                )
-            combinados = [
-                (
-                    nomes[i],
-                    rotulos[j],
-                    tuple(
-                        sum(f * vetores[k][j][comp] for k, f in enumerate(fatores[i]))
-                        for comp in range(6)
-                    ),
-                )
-                for i in range(len(lista))
-                for j in range(len(rotulos))
-            ]
-        else:
-            metodo = "soma dos máximos (conservador)"
-            avisos.append(
-                f"{membro}: não está em todos os casos com os mesmos elementos — usei a soma dos "
-                "máximos de cada caso (a favor da segurança)."
-            )
-            combinados = []
-            for i in range(len(lista)):
-                for sentido in (-1.0, 1.0):
-                    vetor = []
-                    for comp in range(6):
-                        total = 0.0
-                        for k, f in enumerate(fatores[i]):
-                            valores = [
-                                p.vetor()[comp] for p in casos[k].membros.get(membro, ())
-                            ] or [0.0]
-                            escolhido = max(valores) if f * sentido >= 0 else min(valores)
-                            total += f * escolhido
-                        vetor.append(total)
-                    combinados.append((nomes[i], "envoltória dos pontos", tuple(vetor)))
+        combinados, metodo, aviso = combinados_do_membro(membro, preparo)
+        if aviso:
+            avisos.append(aviso)
 
-        def extremo(
-            chave: Any, combinados_: Sequence[tuple[str, str, tuple[float, ...]]]
-        ) -> Extremo:
+        def extremo(chave: Any, combinados_: Sequence[Combinado]) -> Extremo:
             nome, ponto, v = max(combinados_, key=chave)
-            valor = chave((nome, ponto, v))
-            return Extremo(valor, nome, ponto, v[0], v[3], v[4])
+            return Extremo(chave((nome, ponto, v)), nome, ponto, v[0], v[3], v[4])
 
         menor_n = min(combinados, key=lambda x: x[2][0])
         maior_n = max(combinados, key=lambda x: x[2][0])
@@ -915,7 +1028,9 @@ def envoltoria(
         avisos.append(
             f"Casos importados fora do plano de cargas (não combinados): {', '.join(sobram)}."
         )
-    return ResultadoDaEnvoltoria(tuple(membros), len(lista), tuple(importados), tuple(avisos))
+    return ResultadoDaEnvoltoria(
+        tuple(membros), len(preparo.nomes), preparo.importados, tuple(avisos)
+    )
 
 
 def momento_forte_e_fraco(e: EnvoltoriaDoMembro, eixo_forte: str) -> tuple[Extremo, Extremo]:

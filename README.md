@@ -358,6 +358,11 @@ cargas (caso vertical sem reação horizontal, forças concentradas equilibradas
 combina os casos **ponto a ponto** para achar o pior de cada barra (compressão, tração, momento
 forte com o N junto, momento fraco, cortante, torque). Perfil lido do nome da viga quando o
 SolidWorks diz qual é; tabela das barras com perfil, tipo e eixo forte gravada no projeto.
+**Verificação de todas as barras** (`core/verificacao_barras.py`) pela NBR 8800 com os esforços de
+todas as combinações ELU em todos os pontos, multiplicados pelo B₂ do tipo: varredura rápida da
+interação e verificação completa dos pontos críticos pelo motor da Flambagem de colunas (todos os
+modos, FLT/FLM/FLA, B₁, N + Mx + My, esbeltez), cantoneiras pela 5.3.5.4, cortante; registro com o
+capítulo de cada barra no memorial.
 
 ### Vento em estruturas abertas
 

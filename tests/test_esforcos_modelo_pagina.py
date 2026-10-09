@@ -145,3 +145,36 @@ def test_guia_tem_o_capitulo_com_o_exemplo_que_o_nucleo_calcula(banco_isolado):
     assert f"{pilar.compressao.valor:.1f}".replace(".", ",").replace("-", "−") in esperado
     assert f"{pilar.m2.valor:.1f}".replace(".", ",") in esperado
     assert f"{viga.m2.valor:.1f}".replace(".", ",") in esperado
+
+
+def test_verificacao_das_barras_e_registro_no_projeto(banco_com_projeto):
+    from tests.test_verificacao_barras import portico_configurado
+
+    gravar_no_projeto(portico_configurado())
+    t = abrir()
+    assert not sem_ajuda(t), sorted(sem_ajuda(t))
+    subtitulos = " ".join(s.value for s in t.subheader)
+    assert (
+        "6. Parâmetros da verificação" in subtitulos and "7. Verificação das barras" in subtitulos
+    )
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Atendem"] == "3" and metricas["Sem dados"] == "0"
+    assert metricas["Maior aproveitamento"].endswith("%")
+    assert t.selectbox(key="em_barra_detalhe").value == PILAR  # começa pela mais solicitada
+    t.button(key="registrar_esforcos_modelo").click().run()
+    assert not t.exception
+    registros = [
+        r
+        for r in obter_projeto_ativo()["registros_tecnicos"]
+        if r["modulo_id"] == "esforcos_modelo"
+    ]
+    assert len(registros) == 1 and len(registros[0]["resultados"]["verificações"]) == 3
+
+
+def test_gravar_os_parametros_por_tipo(banco_com_projeto):
+    gravar_no_projeto(importar("PP"))
+    t = abrir(em_norma="NBR8800_2008")
+    t.button(key="em_gravar_parametros").click().run()
+    assert not t.exception
+    salvo = em.esforcos_do_projeto(obter_projeto_ativo())
+    assert salvo.norma == "NBR8800_2008" and set(salvo.parametros) == set(em.TIPOS_DE_BARRA)

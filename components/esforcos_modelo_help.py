@@ -54,4 +54,33 @@ AJUDA: dict[str, str] = {
     ),
     "filtro_tipo": "Mostra só as barras de um tipo (o da tabela das barras).",
     "btn_csv": "A tabela do pior caso de cada barra em CSV (abre no Excel).",
+    "sec_parametros": (
+        "O que vale para todas as barras de um tipo: aço, comprimentos de flambagem K·L em torno "
+        "do eixo forte (Lx) e do fraco (Ly), comprimento destravado Lb para a flambagem lateral, "
+        "Cb e o B₂ da segunda ordem global. Uma barra pode ter os seus na tabela das barras."
+    ),
+    "norma": (
+        "Norma da verificação: o Projeto de revisão da NBR 8800 (2024), a NBR 8800:2008 ou o AISC "
+        "360-16. É o mesmo motor da página Flambagem de colunas."
+    ),
+    "btn_gravar_parametros": "Grava a norma e os parâmetros por tipo no projeto ativo.",
+    "sec_verificacao": (
+        "Cada barra verificada pela NBR 8800 com os esforços de todas as combinações ELU em "
+        "todos os pontos: compressão (todos os modos de flambagem), flexão (FLT, FLM, FLA), "
+        "interação N + Mx + My, cortante e esbeltez. Sem perfil ou sem comprimentos, a barra fica "
+        "sem dados."
+    ),
+    "res_resumo": (
+        "Quantas barras atendem, quantas não atendem, quantas faltam dados (perfil ou "
+        "comprimentos) e o maior aproveitamento (solicitante ÷ resistente)."
+    ),
+    "barra_detalhe": (
+        "Mostra a tabela completa da verificação de uma barra, na combinação e no ponto que a "
+        "governam (começa pela mais solicitada)."
+    ),
+    "btn_csv_verificacao": "A verificação de todas as barras em CSV (abre no Excel).",
+    "reg_registrar": (
+        "Grava a verificação no projeto ativo: o memorial ganha o capítulo com o resultado, as "
+        "barras que passaram e, no fim, as que não passaram."
+    ),
 }

@@ -87,6 +87,20 @@ def _registrar_padrao() -> None:
             provedor_relatorio="carregamentos",
         ),
         ModuloTecnico(
+            id="esforcos_modelo",
+            titulo="Esforços do modelo",
+            versao="1.0",
+            pagina="app_pages/esforcos_modelo.py",
+            grupo_navegacao="Gestão industrial",
+            ordem=14,
+            icone=":material/upload_file:",
+            descricao=(
+                "Resultados do SolidWorks Simulation (forças das vigas e reações) conferidos contra o "
+                "plano de cargas, combinados ponto a ponto e verificados barra a barra pela NBR 8800."
+            ),
+            aliases=("Esforços do SolidWorks", "Verificação das barras do modelo"),
+        ),
+        ModuloTecnico(
             id="analise_estatica",
             titulo="Análise estática",
             versao="1.1",

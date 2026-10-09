@@ -59,15 +59,41 @@ normal por padrão). Para cada barra: a maior compressão e a maior tração (co
 ponto), o maior momento forte com o N da mesma combinação e ponto (para a interação N + M), o maior
 momento fraco, cortante (resultante de V1 e V2) e torque. CSV com ponto e vírgula.
 
-## Próximas etapas
+## Verificação das barras (`core/verificacao_barras.py`)
 
-1. Verificação automática de cada barra (perfil, aço, comprimento de flambagem, B₂) com os módulos de
-   barras e flambagem, registro e capítulo no memorial.
-2. Quadro de cargas para as fundações (critério Anglo 5.9: ações sem combinar nem majorar) a partir
-   das reações de cada apoio.
+**Parâmetros por tipo** (Pilar, Viga, Diagonal, Contraventamento, Outro; gravados no projeto): aço,
+comprimentos de flambagem K·L em torno do eixo forte (`Lx`) e do fraco (`Ly`), comprimento
+destravado `Lb` (vazio = `Ly`), `Cb` e `B₂`. A **tabela das barras** pode mudar o aço e os
+comprimentos de uma barra. Norma: Projeto NBR 8800:2024 (padrão), NBR 8800:2008 ou AISC 360-16.
+
+Para cada barra, com as combinações **ELU** escolhidas (as de serviço ficam de fora):
+
+1. Os esforços de todas as combinações e pontos (os mesmos da envoltória) são multiplicados pelo
+   **B₂** do tipo — todos, sem separar a parcela de translação (a favor da segurança; o estudo
+   estático do SolidWorks é de primeira ordem).
+2. **Varredura rápida**: com N_c,Rd, N_t,Rd = A_g·f_y/γ_a1, M_x,Rd e M_y,Rd da barra, o índice da
+   interação da NBR 8800 5.5.1.2 em cada combinação e ponto.
+3. **Verificação completa** dos três pontos de maior índice na compressão, dos três na tração e do
+   de maior compressão, pelo motor da página Flambagem de colunas (`core/column_buckling.py`):
+   todos os modos de flambagem, flambagem local, FLT/FLM/FLA, B₁ com C_m = 1, interação N + M_x +
+   M_y e o limite de esbeltez (200 na compressão; 300 numa barra só tracionada). Na tração, o
+   escoamento da seção bruta e a interação; a ruptura da seção líquida depende da ligação.
+4. **Cantoneiras simples**: compressão pela 5.3.5.4 (`compressao_de_cantoneira_simples`), tração no
+   escoamento e aviso quando a flexão passa de 10 % de f_y.
+5. **Cortante** (resultante de V₁ e V₂) contra 0,6·f_y·A_w/γ_a1 e **torção** informada.
+
+Sem perfil, sem comprimentos ou com aço desconhecido a barra fica **sem dados** (pendente). O
+resultado de cada barra traz a combinação e o ponto que governam e a tabela completa da
+verificação; o **registro** leva uma linha por barra e a tabela de todas para o memorial (capítulo
+com o resultado, o que passou e o que não passou).
+
+## Próxima etapa
+
+Quadro de cargas para as fundações (critério Anglo 5.9: ações sem combinar nem majorar) a partir das
+reações de cada apoio.
 
 ## Testes
 
 `tests/test_esforcos_modelo.py` (leitura com arquivos no formato do SolidWorks gerados por
 `tests/dados_solidworks.py` a partir do pórtico do mini exemplo, conferência, envoltória ponto a
-ponto contra a conta à mão, malhas diferentes) e `tests/test_esforcos_modelo_pagina.py`.
+ponto contra a conta à mão, malhas diferentes), `tests/test_verificacao_barras.py` (pilar contra a página Flambagem de colunas, B₂, pendências, tirante, cantoneira, registro e memorial) e `tests/test_esforcos_modelo_pagina.py`.

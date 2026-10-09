@@ -526,6 +526,17 @@ def _compressao_cantoneira(
     return resistencia
 
 
+def compressao_de_cantoneira_simples(
+    cant: ct.Cantoneira, fy: float, comprimento_mm: float, compressao_kN: float, prefixo: str
+) -> tuple[float, list[Verificacao]]:
+    """N_c,Rd da cantoneira simples ligada por uma aba (5.3.5.4) e as linhas da verificação."""
+    linhas: list[Verificacao] = []
+    resistencia = _compressao_cantoneira(
+        Diagonal(), cant, fy, prefixo, comprimento_mm, compressao_kN, linhas
+    )
+    return resistencia, linhas
+
+
 def _parafusos_cantoneira(
     d: Diagonal,
     cant: ct.Cantoneira,

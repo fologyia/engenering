@@ -2195,6 +2195,10 @@ elif modulo == "Esforços do modelo":
            dar quase zero; as forças concentradas do plano precisam bater com as reações.
         5. Preencha a **tabela das barras** (perfil, tipo, eixo forte) e veja o **pior caso de cada
            barra**.
+        6. Em **Parâmetros da verificação**, informe por tipo de barra o aço, os comprimentos de
+           flambagem Lx e Ly, o Lb, o Cb e o B₂ (da página Contraventamento).
+        7. Leia a **Verificação das barras** (atendem, não atendem, sem dados), abra o cálculo
+           completo de qualquer barra e **registre** no projeto: o memorial ganha o capítulo.
         """
     )
     mostrar_exemplo(
@@ -2217,8 +2221,10 @@ elif modulo == "Esforços do modelo":
               favor da segurança) e avisa.
             - **N junto:** o esforço normal na combinação e no ponto do maior momento forte,
               para a interação N + M.
-            - **Segunda ordem:** o estudo estático é de primeira ordem; a verificação das barras
-              (próxima etapa) aplica o B₂ do contraventamento.
+            - **Segunda ordem:** o estudo estático é de primeira ordem; a verificação multiplica
+              os esforços pelo B₂ do tipo de barra (a favor da segurança).
+            - **Verificação:** o mesmo motor da página Flambagem de colunas, nos pontos mais
+              críticos de cada barra; barras sem perfil ou sem comprimentos ficam "sem dados".
             """
         )
     link_modulo("app_pages/esforcos_modelo.py", "Abrir Esforços do modelo")
