@@ -44,8 +44,23 @@ def _banco_da_sessao_isolado(tmp_path_factory):
     # importados (e isolados pelos testes) como velhos e os reimportaria sem o isolamento.
     atualizacao_de_codigo.registrar_codigo_atual()
     with pytest.MonkeyPatch.context() as ambiente:
+        # A variável de ambiente é a rede que sobrevive à reimportação: se o guarda do app.py
+        # descartar os módulos (código editado com a suíte rodando), o ``core.project_store``
+        # reimportado calcula o banco padrão por ela — e nunca cai no banco real do usuário.
+        ambiente.setenv(project_store.VARIAVEL_BANCO, str(banco))
         ambiente.setattr(project_store, "BANCO_PADRAO", banco)
         yield banco
+
+
+@pytest.fixture(autouse=True)
+def _codigo_em_disco_declarado():
+    """Editar o código com a suíte rodando não troca os módulos isolados no meio dela.
+
+    Sem isto, a primeira execução do ``app.py`` depois de uma edição descartava os módulos do
+    programa (``core/atualizacao_de_codigo.py``) e os reimportava sem o banco temporário, o espelho
+    falso e as demais fixtures — e os testes seguintes gravavam no banco de trabalho do usuário.
+    """
+    atualizacao_de_codigo.registrar_codigo_atual()
 
 
 @pytest.fixture
