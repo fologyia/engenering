@@ -19,6 +19,7 @@ from core import column_buckling as cbk
 from core import esforcos_modelo as em
 from core import load_combinations as comb
 from core import plano_de_cargas as pc
+from core import quadro_fundacoes as qf
 from core import section_catalog as sc
 from core import verificacao_barras as vb
 from core.project_store import obter_projeto_ativo
@@ -235,6 +236,7 @@ with st.container(border=True):
                 "Lx (m)": cfg.lx_m,
                 "Ly (m)": cfg.ly_m,
                 "Lb (m)": cfg.lb_m,
+                "Base (pilar)": cfg.base,
                 "|N| máx. (kN)": max((abs(p.n) for p in pontos), default=0.0),
                 "|M1| máx. (kN·m)": max((abs(p.m1) for p in pontos), default=0.0),
                 "|M2| máx. (kN·m)": max((abs(p.m2) for p in pontos), default=0.0),
@@ -265,6 +267,10 @@ with st.container(border=True):
             ),
             "Aço": st.column_config.SelectboxColumn(
                 options=["", *vb.ACOS], help="Vazio = o aço do tipo (tabela de parâmetros)."
+            ),
+            "Base (pilar)": st.column_config.SelectboxColumn(
+                options=list(em.BASES),
+                help="Qual ponta do pilar é a base, para o quadro das fundações.",
             ),
             **{
                 c: st.column_config.NumberColumn(
@@ -303,6 +309,7 @@ with st.container(border=True):
                 lb_m=None
                 if pd.isna(linha["Lb (m)"]) or not linha["Lb (m)"]
                 else float(linha["Lb (m)"]),
+                base=str(linha["Base (pilar)"] or em.BASE_AUTOMATICA),
             )
             for _, linha in barras.iterrows()
         }
@@ -506,3 +513,87 @@ with st.container(border=True):
         rotulo="Registrar a verificação das barras no projeto ativo",
         identificar_peca=False,
     )
+
+# ============================================================ 8. fundações
+with st.container(border=True):
+    st.subheader("8. Quadro de cargas para as fundações", help=AJUDA["sec_fundacoes"])
+    quadro = qf.montar_quadro(dados)
+    for item in quadro.conferencia:
+        MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])
+    if quadro.pilares and any(p.cargas for p in quadro.pilares):
+        numeros = qf.resumo_numerico(quadro)
+        colunas = st.columns(3)
+        colunas[0].metric("Pilares", numeros["pilares"], help=AJUDA["res_fundacoes"])
+        colunas[1].metric(
+            "Maior compressão",
+            "—"
+            if numeros["maior_compressao"] is None
+            else f"{numeros['maior_compressao']:.1f} kN".replace(".", ","),
+            help=AJUDA["res_fundacoes"],
+        )
+        colunas[2].metric(
+            "Maior tração (arrancamento)",
+            "—"
+            if numeros["maior_tracao"] is None
+            else f"{-numeros['maior_tracao']:.1f} kN".replace(".", ","),
+            help=AJUDA["res_fundacoes"],
+        )
+        ver_quadro = st.radio(
+            "Mostrar",
+            ["Compressão por pilar", "Quadro completo"],
+            horizontal=True,
+            key="em_ver_quadro",
+            help=AJUDA["ver_quadro"],
+        )
+        if ver_quadro == "Compressão por pilar":
+            cabecalho, linhas_m = qf.matriz_de_compressao(quadro)
+            st.dataframe(
+                pd.DataFrame(linhas_m, columns=cabecalho).replace("", None),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    c: st.column_config.NumberColumn(format="%.2f") for c in cabecalho[1:]
+                },
+            )
+        else:
+            st.dataframe(
+                pd.DataFrame(qf.linhas_do_quadro(quadro, plano), columns=list(qf.COLUNAS)),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    c: st.column_config.NumberColumn(format="%.2f")
+                    for c in qf.COLUNAS
+                    if "(kN" in c
+                },
+            )
+        st.caption(f"{qf.NOTA_ANGLO} {qf.CONVENCAO}")
+        colunas = st.columns(2)
+        colunas[0].download_button(
+            "Quadro das fundações (Excel)",
+            data=qf.xlsx_do_quadro(
+                quadro, plano, titulo=f"{projeto.get('nome', '')} ({projeto.get('codigo', '')})"
+            ),
+            file_name=f"quadro_fundacoes_{projeto.get('codigo') or 'projeto'}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            icon=":material/table_view:",
+            key="em_xlsx_quadro",
+            help=AJUDA["btn_xlsx_quadro"],
+            width="stretch",
+        )
+        colunas[1].download_button(
+            "Quadro das fundações (CSV)",
+            data=qf.csv_do_quadro(quadro, plano),
+            file_name=f"quadro_fundacoes_{projeto.get('codigo') or 'projeto'}.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            key="em_csv_quadro",
+            help=AJUDA["btn_csv_quadro"],
+            width="stretch",
+        )
+        st.subheader("Registrar o quadro no projeto", help=AJUDA["reg_quadro"])
+        botao_registrar_calculo(
+            qf.registro_do_quadro(quadro, plano),
+            key="registrar_quadro_fundacoes",
+            rotulo="Registrar o quadro das fundações no projeto ativo",
+            identificar_peca=False,
+        )

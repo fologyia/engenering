@@ -49,6 +49,11 @@ NIVEL_INFO = "info"
 TIPOS_DE_BARRA: tuple[str, ...] = ("—", "Pilar", "Viga", "Diagonal", "Contraventamento", "Outro")
 EIXO_M1 = "Momento 1"
 EIXO_M2 = "Momento 2"
+#: Qual ponta do pilar é a base (para o quadro de cargas das fundações).
+BASE_AUTOMATICA = "Automática"
+BASE_INICIO = "Início da lista"
+BASE_FIM = "Fim da lista"
+BASES: tuple[str, ...] = (BASE_AUTOMATICA, BASE_INICIO, BASE_FIM)
 
 _FORCA_PARA_KN = {"n": 1e-3, "kn": 1.0, "lbf": 4.448222e-3, "kgf": 9.80665e-3, "tf": 9.80665}
 _MOMENTO_PARA_KNM = {
@@ -460,6 +465,7 @@ class ConfiguracaoDoMembro:
     lx_m: float | None = None  # comprimento de flambagem K·L em torno do eixo forte
     ly_m: float | None = None  # em torno do eixo fraco
     lb_m: float | None = None  # comprimento destravado da mesa comprimida (FLT)
+    base: str = BASE_AUTOMATICA  # ponta da base do pilar no arquivo do SolidWorks
 
 
 ACO_PADRAO = "ASTM A572 Gr 50"
@@ -599,6 +605,7 @@ def para_dicionario(dados: EsforcosDoModelo) -> dict[str, Any]:
                 "lx_m": m.lx_m,
                 "ly_m": m.ly_m,
                 "lb_m": m.lb_m,
+                "base": m.base,
             }
             for nome, m in dados.membros.items()
         },
@@ -675,6 +682,9 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
             lx_m=_comprimento(m.get("lx_m")),
             ly_m=_comprimento(m.get("ly_m")),
             lb_m=_comprimento(m.get("lb_m")),
+            base=str(m.get("base") or BASE_AUTOMATICA)
+            if str(m.get("base") or BASE_AUTOMATICA) in BASES
+            else BASE_AUTOMATICA,
         )
         for nome, m in (dados.get("membros") or {}).items()
         if isinstance(m, Mapping)

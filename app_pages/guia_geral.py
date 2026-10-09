@@ -2199,6 +2199,9 @@ elif modulo == "Esforços do modelo":
            flambagem Lx e Ly, o Lb, o Cb e o B₂ (da página Contraventamento).
         7. Leia a **Verificação das barras** (atendem, não atendem, sem dados), abra o cálculo
            completo de qualquer barra e **registre** no projeto: o memorial ganha o capítulo.
+        8. Marque os **pilares** (tipo Pilar) e veja o **quadro de cargas para as fundações**:
+           a base de cada pilar, caso a caso, sem combinar nem majorar (critério Anglo 5.9), com
+           Excel, CSV e registro.
         """
     )
     mostrar_exemplo(

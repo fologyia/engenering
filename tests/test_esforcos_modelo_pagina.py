@@ -178,3 +178,20 @@ def test_gravar_os_parametros_por_tipo(banco_com_projeto):
     assert not t.exception
     salvo = em.esforcos_do_projeto(obter_projeto_ativo())
     assert salvo.norma == "NBR8800_2008" and set(salvo.parametros) == set(em.TIPOS_DE_BARRA)
+
+
+def test_quadro_das_fundacoes_na_pagina(banco_com_projeto):
+    from tests.test_quadro_fundacoes import PILAR_2, portico
+
+    gravar_no_projeto(portico(PILAR, PILAR_2))
+    t = abrir()
+    assert not sem_ajuda(t), sorted(sem_ajuda(t))
+    assert "8. Quadro de cargas para as fundações" in [s.value for s in t.subheader]
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Pilares"] == "2" and metricas["Maior compressão"].endswith("kN")
+    matriz = next(d.value for d in t.dataframe if list(d.value.columns)[:2] == ["Pilar", "PP"])
+    assert len(matriz) == 2
+    t.button(key="registrar_quadro_fundacoes").click().run()
+    assert not t.exception
+    titulos = [r["titulo"] for r in obter_projeto_ativo()["registros_tecnicos"]]
+    assert any(t_.startswith("Quadro de cargas para as fundações") for t_ in titulos)

@@ -73,6 +73,7 @@ files = [
     "core/criterio_anglo.py",
     "core/esforcos_modelo.py",
     "core/exportacao_cargas.py",
+    "core/quadro_fundacoes.py",
     "core/verificacao_barras.py",
     "core/contraventamento_barras.py",
     "core/contraventamento_chapa.py",

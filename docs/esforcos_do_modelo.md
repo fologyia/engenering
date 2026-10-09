@@ -87,13 +87,25 @@ resultado de cada barra traz a combinação e o ponto que governam e a tabela co
 verificação; o **registro** leva uma linha por barra e a tabela de todas para o memorial (capítulo
 com o resultado, o que passou e o que não passou).
 
-## Próxima etapa
+## Quadro de cargas para as fundações (`core/quadro_fundacoes.py`)
 
-Quadro de cargas para as fundações (critério Anglo 5.9: ações sem combinar nem majorar) a partir das
-reações de cada apoio.
+Para cada barra marcada como **Pilar**, os esforços na ponta de **base**, caso a caso, **sem combinar
+nem majorar** (critério Anglo, item 5.9: quem projeta a fundação faz as combinações dela).
+
+* **Base**: a ponta inicial ou final da lista de pontos do pilar no arquivo. Automática = a ponta
+  mais comprimida (o peso próprio faz a compressão crescer para baixo); com as duas pontas iguais
+  (sem peso próprio no estudo), escolhe-se na coluna "Base (pilar)" da tabela das barras.
+* **Convenção**: N = força vertical na fundação, compressão positiva (negativo = arrancamento);
+  V₁, V₂, M₁, M₂ e T = esforços internos na seção da base, nos eixos 1 e 2 da seção do SolidWorks.
+* **Conferência**: a soma de N das bases tem de bater com a reação vertical total do modelo (2 % ou
+  0,1 kN) — se não bate, há apoios que não são base de pilar marcado ou alguma base está na ponta
+  errada.
+* **Saídas**: compressão por pilar (pilar × caso), quadro completo, Excel (Leia-me com a nota da
+  Anglo e a convenção, Quadro, Compressão por pilar), CSV e registro no projeto (capítulo de cálculo
+  no memorial com as duas tabelas).
 
 ## Testes
 
 `tests/test_esforcos_modelo.py` (leitura com arquivos no formato do SolidWorks gerados por
 `tests/dados_solidworks.py` a partir do pórtico do mini exemplo, conferência, envoltória ponto a
-ponto contra a conta à mão, malhas diferentes), `tests/test_verificacao_barras.py` (pilar contra a página Flambagem de colunas, B₂, pendências, tirante, cantoneira, registro e memorial) e `tests/test_esforcos_modelo_pagina.py`.
+ponto contra a conta à mão, malhas diferentes), `tests/test_verificacao_barras.py` (pilar contra a página Flambagem de colunas, B₂, pendências, tirante, cantoneira, registro e memorial) `tests/test_quadro_fundacoes.py` e `tests/test_esforcos_modelo_pagina.py`.

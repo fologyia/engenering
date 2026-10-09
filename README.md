@@ -362,7 +362,10 @@ SolidWorks diz qual é; tabela das barras com perfil, tipo e eixo forte gravada 
 todas as combinações ELU em todos os pontos, multiplicados pelo B₂ do tipo: varredura rápida da
 interação e verificação completa dos pontos críticos pelo motor da Flambagem de colunas (todos os
 modos, FLT/FLM/FLA, B₁, N + Mx + My, esbeltez), cantoneiras pela 5.3.5.4, cortante; registro com o
-capítulo de cada barra no memorial.
+capítulo de cada barra no memorial. **Quadro de cargas para as fundações** (`core/quadro_fundacoes.py`):
+os esforços na base de cada pilar, caso a caso, sem combinar nem majorar (critério Anglo 5.9), com a
+base achada pela ponta mais comprimida, conferência da soma contra a reação total, Excel, CSV e
+registro no memorial.
 
 ### Vento em estruturas abertas
 

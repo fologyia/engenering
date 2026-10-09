@@ -79,6 +79,25 @@ AJUDA: dict[str, str] = {
         "governam (começa pela mais solicitada)."
     ),
     "btn_csv_verificacao": "A verificação de todas as barras em CSV (abre no Excel).",
+    "sec_fundacoes": (
+        "As cargas na base de cada pilar (as barras marcadas como Pilar), caso a caso, sem "
+        "combinar nem majorar — como pede o critério Anglo (5.9): quem projeta a fundação faz as "
+        "combinações dela. A soma das bases é conferida contra a reação total do modelo."
+    ),
+    "res_fundacoes": (
+        "Quantos pilares entram no quadro, a maior compressão na base e a maior tração "
+        "(arrancamento), entre todos os casos."
+    ),
+    "ver_quadro": (
+        "Compressão por pilar: uma linha por pilar e uma coluna por caso. Quadro completo: N, "
+        "cortantes, momentos e torção de cada pilar em cada caso."
+    ),
+    "btn_xlsx_quadro": "O quadro em Excel, com a nota do critério Anglo e a convenção de sinais.",
+    "btn_csv_quadro": "O quadro completo em CSV (abre no Excel).",
+    "reg_quadro": (
+        "Grava o quadro no projeto ativo: o memorial ganha o capítulo com a compressão por "
+        "pilar e o quadro completo."
+    ),
     "reg_registrar": (
         "Grava a verificação no projeto ativo: o memorial ganha o capítulo com o resultado, as "
         "barras que passaram e, no fim, as que não passaram."
