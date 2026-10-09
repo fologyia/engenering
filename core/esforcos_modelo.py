@@ -424,6 +424,22 @@ def perfil_do_nome(nome: str) -> str | None:
             if n.startswith("W ") and abs(float(re.findall(r"\d+", n)[0]) - altura) <= 15
         }
         return min(candidatos, key=lambda n: abs(candidatos[n] - massa)) if candidatos else None
+    # U, I e HP pela altura (mm; em polegadas se for pequena) e pela massa: os nomes métricos de um
+    # catálogo próprio ("U 152 x 12,2", "HP 200 x 53") e o S americano (S6X12.5 → I 6").
+    m = re.search(r"\b(U|I|HP|S)\s*(\d+)\s*[xX]\s*([\d.]+)", texto)
+    if m:
+        from core import section_catalog as sc
+
+        prefixo = "I" if m.group(1) == "S" else m.group(1)
+        altura, massa = float(m.group(2)), float(m.group(3))
+        if altura < 50:  # polegadas e lb/ft
+            altura, massa = altura * 25.4, massa * 1.48816
+        candidatos = {
+            n: p.massa_kg_m
+            for n, p in sc.listar_perfis().items()
+            if n.startswith(f"{prefixo} ") and abs(p.altura_mm - altura) <= 15
+        }
+        return min(candidatos, key=lambda n: abs(candidatos[n] - massa)) if candidatos else None
     return None
 
 

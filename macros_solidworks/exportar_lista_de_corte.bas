@@ -92,7 +92,7 @@ Sub main()
     Open caminho For Output As #arquivo
     Dim linha As String
     linha = "ITEM;QTD.;DESCRICAO;COMPRIMENTO;NOME NA LISTA DE CORTE;" & _
-        "VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg)"
+        "VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg);CAIXA (mm)"
     For j = 0 To totalNomes - 1
         linha = linha & ";" & Campo(nomes(j))
     Next j
@@ -100,7 +100,7 @@ Sub main()
 
     Dim valor As String, resolvido As String, comprimento As String, descricao As String
     Dim vCorpos As Variant, vMassa As Variant, swCorpo As SldWorks.Body2
-    Dim volume As Double, corpos As Long, k As Long
+    Dim volume As Double, corpos As Long, k As Long, caixa As String
     For i = 1 To pastas.Count
         Set swSub = pastas(i)
         Set swPasta = swSub.GetSpecificFeature2
@@ -137,9 +137,18 @@ Sub main()
             Next k
         End If
         If corpos > 0 Then volume = volume / corpos
+        ' Caixa justa de uma peca nos eixos da peca (mm): pelas chapas, comprimento x largura x espessura.
+        caixa = ""
+        If IsArray(vCorpos) Then
+            Set swCorpo = vCorpos(0)
+            caixa = Format(Extensao(swCorpo, 1, 0, 0), "0.0") & " x " & _
+                Format(Extensao(swCorpo, 0, 1, 0), "0.0") & " x " & _
+                Format(Extensao(swCorpo, 0, 0, 1), "0.0")
+        End If
         linha = i & ";" & swPasta.GetBodyCount & ";" & Campo(descricao) & ";" & _
             Campo(comprimento) & ";" & Campo(swSub.Name) & ";" & _
-            Campo(Format(volume * 1000000#, "0.0")) & ";" & Campo(Format(volume * 7850#, "0.000"))
+            Campo(Format(volume * 1000000#, "0.0")) & ";" & Campo(Format(volume * 7850#, "0.000")) & _
+            ";" & Campo(caixa)
         For j = 0 To totalNomes - 1
             valor = ""
             resolvido = ""
@@ -176,6 +185,14 @@ Function SemSufixo(nome As String) As String
     Else
         SemSufixo = Trim(nome)
     End If
+End Function
+
+Function Extensao(swCorpo As SldWorks.Body2, ByVal dx As Double, ByVal dy As Double, ByVal dz As Double) As Double
+    ' Tamanho do corpo na direcao (dx, dy, dz), em mm: ponto extremo de um lado mais o do outro.
+    Dim x1 As Double, y1 As Double, z1 As Double, x2 As Double, y2 As Double, z2 As Double
+    swCorpo.GetExtremePoint dx, dy, dz, x1, y1, z1
+    swCorpo.GetExtremePoint -dx, -dy, -dz, x2, y2, z2
+    Extensao = Abs((x1 - x2) * dx + (y1 - y2) * dy + (z1 - z2) * dz) * 1000#
 End Function
 
 Function NomeGenerico(nome As String) As Boolean

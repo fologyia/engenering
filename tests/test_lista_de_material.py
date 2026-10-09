@@ -35,6 +35,10 @@ ACO = 7850e-6  # kg/m por mm² de seção
         ("C6x8.2<1>(4)", 'U 6" x 12,20'),
         ("L2.5x2.5x0.25<3>", 'L 2 1/2" × 1/4"'),
         ("W8x31<1>(2)", "W 200 x 46,1 (H)"),
+        # Nomes métricos de um catálogo próprio e o S americano.
+        ("U 152 x 12,2", 'U 6" x 12,20'),
+        ("HP 200 x 53", "HP 200 x 53,0 (H)"),
+        ("S6X12.5", 'I 6" x 18,60'),
     ],
 )
 def test_perfil_pelo_nome_do_catalogo_ou_do_solidworks(descricao, nome):
@@ -261,6 +265,91 @@ def test_macro_com_a_massa_da_geometria_completa_o_que_o_catalogo_nao_tem():
     assert lm.de_dicionario(json.loads(json.dumps(lm.para_dicionario(lista)))) == lista
 
 
+def _linha_da_macro(
+    item,
+    qtd,
+    descricao,
+    comprimento_mm=0.0,
+    area_mm2=0.0,
+    angulos=("0°", "0°"),
+    caixa="",
+    massa=None,
+):
+    """Uma linha do CSV da macro; a massa sai da área × comprimento × 7 850 kg/m³."""
+    if massa is None:
+        massa = area_mm2 * 7850e-6 * comprimento_mm / 1000
+    comprimento = f"{comprimento_mm} mm" if comprimento_mm else ""
+    massa_texto = f"{massa:.3f}".replace(".", ",")
+    return (
+        f'{item};{qtd};"{descricao}";"{comprimento}";"{descricao}<{item}>";"";"{massa_texto}";'
+        f'"{caixa}";"{angulos[0]}";"{angulos[1]}"\r\n'
+    )
+
+
+CABECALHO_DA_MACRO = (
+    "ITEM;QTD.;DESCRICAO;COMPRIMENTO;NOME NA LISTA DE CORTE;VOLUME POR PECA (cm3);"
+    'MASSA DO ACO POR PECA (kg);CAIXA (mm);"ÂNGULO1";"ÂNGULO2"\r\n'
+)
+
+
+def test_secao_desenhada_vale_mais_que_o_nome_do_perfil_no_solidworks():
+    """Perfil do SolidWorks ajustado ao catálogo da Gerdau: o nome ficou W8x31, a seção é W 200 x 31,3."""
+    texto = CABECALHO_DA_MACRO + "".join(
+        [
+            _linha_da_macro(1, 2, "W8x31", 3936.8, 4030.0),  # corte reto: área exata
+            _linha_da_macro(2, 4, "C6x8.2", 1636.7, 1410.0, ("45°", "45°")),  # −9 %, cortado
+            _linha_da_macro(3, 1, "C8x13.75", 1800.0, 1800.0),  # −31 % e sem U igual
+        ]
+    )
+    itens, avisos = lm.ler_lista_de_corte(texto.encode("cp1252"), "modelo_lista_de_corte.csv")
+    w, u6, u8 = itens
+    assert w.descricao == "W 200 x 31,3" and "no SolidWorks: W8x31" in w.observacao
+    assert (
+        u6.descricao == 'U 6" x 12,20' and u6.massa_unitaria is None
+    )  # o corte explica a diferença
+    assert u8.descricao == 'U 8" x 20,50'
+    assert u8.massa_unitaria == pytest.approx(1800.0 * 7850e-6)  # kg/m pela geometria
+    texto_avisos = " ".join(avisos)
+    assert "W8x31 → W 200 x 31,3" in texto_avisos and "C8x13.75 (18,0 cm²" in texto_avisos
+    r = lm.resumir(lm.ListaDeMaterial(itens=tuple(itens)))
+    assert next(p for p in r.perfis if p.perfil == "W 200 x 31,3").massa_kg == pytest.approx(
+        2 * 3.9368 * 31.3
+    )
+
+
+def test_chapa_de_piso_pelas_medidas_da_caixa_do_modelo():
+    texto = CABECALHO_DA_MACRO + "".join(
+        [
+            _linha_da_macro(
+                48, 1, "Item da lista de corte48", caixa="6,4 x 2000,0 x 1500,0", massa=150.72
+            ),
+            _linha_da_macro(7, 2, "PLACA 19", caixa="350,0 x 19,0 x 300,0", massa=15.66),
+            _linha_da_macro(
+                9, 1, "Item da lista de corte9", caixa="500,0 x 400,0 x 300,0", massa=471.0
+            ),
+        ]
+    )
+    itens, avisos = lm.ler_lista_de_corte(texto.encode("cp1252"), "modelo_lista_de_corte.csv")
+    piso, placa, bloco = itens
+    assert (piso.tipo, piso.comprimento_m, piso.largura_mm, piso.espessura_mm) == (
+        lm.TIPO_CHAPA,
+        2.0,
+        1500.0,
+        6.4,
+    )
+    assert (placa.tipo, placa.comprimento_m, placa.largura_mm, placa.espessura_mm) == (
+        lm.TIPO_CHAPA,
+        0.35,
+        300.0,
+        19.0,
+    )
+    assert bloco.tipo == lm.TIPO_OUTRO and bloco.massa_geometria_kg == pytest.approx(471.0)
+    assert any("2 chapa(s) com as medidas da caixa do modelo" in a for a in avisos)
+    r = lm.resumir(lm.ListaDeMaterial(itens=tuple(itens)))
+    assert [c.espessura_mm for c in r.chapas] == [6.4, 19.0]
+    assert r.linhas[0].area_pintura_m2 == pytest.approx(2 * 2.0 * 1.5)
+
+
 def test_conferencia_usa_a_geometria_e_aponta_a_razao_de_10():
     dados = importar("PP")  # 9,0 kN de reação vertical
     item = lm.ItemDaLista("V", lm.TIPO_PERFIL, "W 310 x 32,7", 1, 6.0, massa_geometria_kg=917.7)
@@ -280,7 +369,7 @@ def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
     macro = lm.macro_da_lista_de_corte().decode("ascii")
     assert "\r\n" in macro and "\n" not in macro.replace("\r\n", "")
     assert '"ITEM;QTD.;DESCRICAO;COMPRIMENTO;NOME NA LISTA DE CORTE;"' in macro
-    assert '"VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg)"' in macro
+    assert '"VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg);CAIXA (mm)"' in macro
     for chamada in (
         "UpdateCutList",
         "GetBodyCount",
@@ -288,6 +377,7 @@ def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
         "swUnitsLinear",
         "GetBodies",
         "GetMassProperties",
+        "GetExtremePoint",
     ):
         assert chamada in macro, chamada
 

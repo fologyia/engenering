@@ -46,10 +46,22 @@ desenho pode sair vazia. Por isso a página oferece a **macro do SolidWorks**
   descrição), COMPRIMENTO (a propriedade LENGTH/COMPRIMENTO com a unidade do documento), o nome do
   item, VOLUME POR PECA (cm3) e MASSA DO ACO POR PECA (kg) — o volume médio dos corpos da pasta
   (`Body2.GetMassProperties`) × 7 850 kg/m³ — e todas as propriedades da lista de corte;
+* grava também a **CAIXA (mm)** de uma peça: a extensão do corpo nos três eixos da peça, pelos pontos
+  extremos (`Body2.GetExtremePoint`, caixa justa);
 * a leitura ignora os itens sem corpo (quantidade 0, sobras de alterações no modelo, com o LENGTH sem
-  resolver) e avisa quantos foram; o item que o catálogo não conhece (perfil de outra biblioteca,
-  corpo com nome automático) entra com a **massa da geometria** — como perfil, se tiver
-  comprimento, ou como "Outro" — e o aviso pede para conferir o material;
+  resolver) e avisa quantos foram;
+* **seção pela geometria** (`_conferir_secoes`): quem monta o próprio catálogo de perfis no SolidWorks
+  ajusta o desenho a um catálogo (Gerdau…) e o nome do perfil pode ficar o antigo. Para cada nome, a
+  área da seção = volume ÷ comprimento é comparada com a do perfil que o nome indica. Nas peças de
+  corte reto (ÂNGULO1 e ÂNGULO2 = 0°) a área é exata e a tolerância é 3 %; só com cortes inclinados
+  (o volume encolhe) a tolerância é 15 %. Fora dela, com peça reta, vale o perfil da mesma família
+  com a mesma área (± 2 %; no empate, a altura mais perto do nome) — no modelo real, "W8x31" tinha a
+  seção do W 200 x 31,3 (40,4 cm²) —; sem equivalente, o kg/m sai da geometria. Tudo vira aviso;
+* **chapas pela caixa**: item fora do catálogo cuja menor medida da caixa é ≤ 50 mm e ≤ 1/4 da do
+  meio (chapa de piso, de ligação) vira chapa com comprimento × largura × espessura da caixa (a
+  chapa de compra; a massa líquida fica na geometria); o nome PLACA/CHAPA também usa a caixa;
+* o resto fora do catálogo (perfil de outra biblioteca, bloco) entra com a **massa da geometria** —
+  como perfil, se tiver comprimento, ou como "Outro";
 * texto ASCII, para colar no editor sem problema de acento: Ferramentas › Macro › Nova (nome e
   salvar), apagar o texto do editor, colar e F5; depois, Ferramentas › Macro › Executar.
 

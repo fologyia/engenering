@@ -507,7 +507,14 @@ _COLUNAS_DESCRICAO = (
 )
 _COLUNA_COMPRIMENTO = re.compile(r"(compr|length|tamanho)")
 _COLUNA_MARCA = re.compile(r"^(n[o°º]?\.?\s*do\s*item|item|marca|pos|posicao|mark)")
-_COLUNA_MASSA_GEOMETRIA = re.compile(r"^massa do aco")  # coluna da macro do SolidWorks
+_COLUNA_MASSA_GEOMETRIA = re.compile(r"^massa do aco")  # colunas da macro do SolidWorks
+_COLUNA_CAIXA = re.compile(r"^caixa")
+_COLUNA_ANGULO1 = re.compile(r"^(angulo|angle)\s*1")
+_COLUNA_ANGULO2 = re.compile(r"^(angulo|angle)\s*2")
+ESPESSURA_MAXIMA_CHAPA_MM = 50.0
+TOLERANCIA_SECAO_RETA = 0.03
+TOLERANCIA_SECAO_CORTADA = 0.15
+TOLERANCIA_ADOCAO = 0.02
 _CHAPA = re.compile(r"^\s*(chapa|placa|pl\b|ch\b|plate)", re.IGNORECASE)
 
 
@@ -604,6 +611,102 @@ def macro_da_lista_de_corte() -> bytes:
     return texto.replace("\r\n", "\n").replace("\n", "\r\n").encode("ascii")
 
 
+def _caixa(texto: str) -> tuple[float, float, float] | None:
+    """ "2000,0 x 1500,0 x 6,4" (a caixa da macro, em mm) → medidas em ordem decrescente."""
+    numeros = re.findall(r"\d+(?:[.,]\d+)?", texto)
+    if len(numeros) != 3:
+        return None
+    a, b, c = sorted((float(n.replace(",", ".")) for n in numeros), reverse=True)
+    return (a, b, c) if c > 0 else None
+
+
+def _angulo(texto: str) -> float | None:
+    """Ângulo do corte da ponta ("0°", "45°"); "-" (sem corte reto informado) dá ``None``."""
+    return numero_da_celula(texto)[0]
+
+
+def _secao_do_catalogo(nome: str) -> tuple[float, str, float] | None:
+    """(área em mm², família, altura em mm) do perfil do catálogo ou da cantoneira."""
+    perfis = sc.listar_perfis()
+    if nome in perfis:
+        p = perfis[nome]
+        return p.area_mm2, p.familia, p.altura_mm
+    if nome in ct.CATALOGO_CANTONEIRAS:
+        c = ct.CATALOGO_CANTONEIRAS[nome]
+        return c.area_mm2, "Cantoneira", c.b_mm
+    return None
+
+
+def _mesma_secao(familia: str, area: float, altura: float) -> str | None:
+    """O perfil da família com a área do modelo (± 2 %); empate: a altura mais perto do nome."""
+    if familia == "Cantoneira":
+        opcoes = {n: (c.area_mm2, c.b_mm) for n, c in ct.CATALOGO_CANTONEIRAS.items()}
+    else:
+        opcoes = {
+            n: (p.area_mm2, p.altura_mm)
+            for n, p in sc.listar_perfis().items()
+            if p.familia == familia
+        }
+    perto = [
+        (abs(h - altura), abs(a - area), n)
+        for n, (a, h) in opcoes.items()
+        if abs(a - area) / area <= TOLERANCIA_ADOCAO
+    ]
+    return min(perto)[2] if perto else None
+
+
+def _conferir_secoes(
+    itens: list[ItemDaLista], secoes: Mapping[str, Sequence[tuple[int, float, bool]]]
+) -> tuple[list[str], list[str]]:
+    """Compara a área da seção pela geometria com a do perfil que o nome indica (muda ``itens``).
+
+    Quem monta o próprio catálogo no SolidWorks às vezes ajusta o desenho do perfil a outro
+    catálogo (Gerdau…) e o nome fica o antigo: vale a geometria. As peças de corte reto (ângulos
+    0° nas duas pontas) dão a área exata (tolerância de 3 %); com cortes inclinados o volume
+    encolhe e só uma diferença acima de 15 % conta. Achando no catálogo um perfil da mesma família
+    com a mesma área (± 2 %), ele é adotado; senão, o kg/m sai da geometria.
+    """
+    adotados: list[str] = []
+    divergentes: list[str] = []
+    for nome_solidworks, pecas in secoes.items():
+        nome_catalogo = itens[pecas[0][0]].descricao
+        dados = _secao_do_catalogo(nome_catalogo)
+        if dados is None:
+            continue
+        area_catalogo, familia, altura = dados
+        retas = [area for _, area, reta in pecas if reta]
+        if retas:
+            area_modelo, tolerancia = max(retas), TOLERANCIA_SECAO_RETA
+        else:
+            area_modelo, tolerancia = max(area for _, area, _ in pecas), TOLERANCIA_SECAO_CORTADA
+        if abs(area_modelo - area_catalogo) / area_catalogo <= tolerancia:
+            continue
+        candidato = _mesma_secao(familia, area_modelo, altura) if retas else None
+        cm2 = f"{_n(area_modelo / 100, 1)} cm²"
+        for indice, _, _ in pecas:
+            if candidato is not None:
+                itens[indice] = replace(
+                    itens[indice],
+                    descricao=candidato,
+                    observacao=f"seção do modelo = {candidato} (no SolidWorks: {nome_solidworks})",
+                )
+            else:
+                itens[indice] = replace(
+                    itens[indice],
+                    massa_unitaria=area_modelo * DENSIDADE_ACO * 1e-6,
+                    observacao=f"seção do modelo ({cm2}) diferente do {nome_catalogo}: kg/m pela "
+                    "geometria",
+                )
+        if candidato is not None:
+            adotados.append(f"{nome_solidworks} → {candidato} ({cm2} no modelo)")
+        else:
+            divergentes.append(
+                f"{nome_solidworks} ({cm2} no modelo; {nome_catalogo} tem "
+                f"{_n(area_catalogo / 100, 1)} cm²)"
+            )
+    return adotados, divergentes
+
+
 def _leitor_de_celulas(linha: Sequence[str]) -> Any:
     def celula(j: int | None) -> str:
         return str(linha[j]).strip() if j is not None and j < len(linha) else ""
@@ -649,9 +752,15 @@ def ler_lista_de_corte(
         m = re.search(r"\((mm|cm|m)\)", nomes[c_comp])
         unidade_coluna = m.group(1) if m else unidade
     c_geometria = coluna(_COLUNA_MASSA_GEOMETRIA)
+    c_caixa = coluna(_COLUNA_CAIXA)
+    c_angulo1 = coluna(_COLUNA_ANGULO1)
+    c_angulo2 = coluna(_COLUNA_ANGULO2)
     itens: list[ItemDaLista] = []
     estranhos: list[str] = []
     pela_geometria: list[str] = []
+    chapas_pela_caixa: list[str] = []
+    #: nome no SolidWorks → (posição na lista, área da seção pela geometria, peça de corte reto)
+    secoes: dict[str, list[tuple[int, float, bool]]] = {}
     vazios = 0
     for linha in linhas[cabecalho_i + 1 :]:
         celula = _leitor_de_celulas(linha)
@@ -673,32 +782,70 @@ def ler_lista_de_corte(
             comprimento_m=comprimento_m,
             massa_geometria_kg=massa_geometria,
         )
-        if _CHAPA.match(descricao):
-            espessura, _ = numero_da_celula(_CHAPA.sub("", descricao))
-            itens.append(
-                replace(
+        perfil = perfil_conhecido(descricao)
+        caixa = _caixa(celula(c_caixa))
+        fina = (
+            caixa is not None
+            and caixa[2] <= ESPESSURA_MAXIMA_CHAPA_MM
+            and caixa[2] <= 0.25 * caixa[1]
+        )
+        pelo_nome = _CHAPA.match(descricao) is not None
+        if pelo_nome or (perfil is None and fina):
+            espessura = numero_da_celula(_CHAPA.sub("", descricao))[0] if pelo_nome else None
+            if caixa is not None and fina:
+                chapas_pela_caixa.append(descricao)
+                chapa = replace(
+                    base,
+                    tipo=TIPO_CHAPA,
+                    comprimento_m=caixa[0] / 1e3,
+                    largura_mm=caixa[1],
+                    espessura_mm=espessura or caixa[2],
+                    observacao="chapa: medidas da caixa do modelo",
+                )
+            else:
+                chapa = replace(
                     base,
                     tipo=TIPO_CHAPA,
                     espessura_mm=espessura or 0.0,
                     observacao="confira a largura da chapa",
                 )
-            )
+            itens.append(chapa)
             continue
-        perfil = perfil_conhecido(descricao)
         if perfil is not None:
             itens.append(replace(base, descricao=perfil.nome))
+            if massa_geometria and comprimento_m > 0:
+                area = massa_geometria / DENSIDADE_ACO / comprimento_m * 1e6
+                reta = _angulo(celula(c_angulo1)) == 0 and _angulo(celula(c_angulo2)) == 0
+                secoes.setdefault(descricao, []).append((len(itens) - 1, area, reta))
         elif massa_geometria is not None:
             pela_geometria.append(descricao)
             itens.append(
                 replace(
                     base,
                     tipo=TIPO_PERFIL if comprimento_m > 0 else TIPO_OUTRO,
-                    observacao="fora do catálogo: massa pela geometria do modelo, como aço",
+                    observacao="fora do catálogo: massa pela geometria do modelo (aço)",
                 )
             )
         else:
             estranhos.append(descricao)
             itens.append(replace(base, observacao="fora do catálogo: informe a massa (kg/m)"))
+    adotados, divergentes = _conferir_secoes(itens, secoes)
+    if adotados:
+        avisos.append(
+            "O nome no SolidWorks não é a seção desenhada; vale o perfil do catálogo com a mesma "
+            f"área: {'; '.join(adotados)}."
+        )
+    if divergentes:
+        avisos.append(
+            "Seção do modelo diferente do perfil do nome e sem igual no catálogo — kg/m pela "
+            f"geometria: {'; '.join(divergentes)}."
+        )
+    if chapas_pela_caixa:
+        amostra = ", ".join(sorted(set(chapas_pela_caixa))[:5])
+        avisos.append(
+            f"{len(chapas_pela_caixa)} chapa(s) com as medidas da caixa do modelo ({amostra}): "
+            "comprimento × largura × espessura da peça como está desenhada."
+        )
     if estranhos:
         amostra = ", ".join(sorted(set(estranhos))[:5])
         avisos.append(
@@ -709,7 +856,7 @@ def ler_lista_de_corte(
         amostra = ", ".join(sorted(set(pela_geometria))[:5])
         avisos.append(
             f"{len(pela_geometria)} item(ns) fora do catálogo ({amostra}) entram com a massa da "
-            "geometria do modelo, como aço (7 850 kg/m³): confira o material de cada um."
+            "geometria do modelo (aço, 7 850 kg/m³)."
         )
     if vazios:
         avisos.append(
