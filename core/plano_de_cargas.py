@@ -153,6 +153,13 @@ class CargaDoModelo:
     unidade: str = "kN"
     direcao: str = "X"
     observacao: str = ""
+    #: Em quantos pontos iguais a carga vai (os nós pilar–viga de um pórtico, por exemplo): o
+    #: total da linha é valor × quantidade.
+    quantidade: int = 1
+
+    @property
+    def total(self) -> float:
+        return self.valor * self.quantidade
 
 
 @dataclass(frozen=True)
@@ -236,6 +243,8 @@ def validar_acao(a: Acao) -> list[str]:
             erros.append(f"{a.codigo}: valor inválido em {c.elemento!r}.")
         if c.unidade not in UNIDADES:
             erros.append(f"{a.codigo}: unidade desconhecida ({c.unidade!r}).")
+        if c.quantidade < 1:
+            erros.append(f"{a.codigo}: a quantidade de {c.elemento!r} precisa ser 1 ou mais.")
     return erros
 
 
@@ -275,6 +284,7 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> PlanoDeCargas:
                 unidade=str(c.get("unidade") or "kN"),
                 direcao=str(c.get("direcao") or "—"),
                 observacao=str(c.get("observacao") or ""),
+                quantidade=max(1, int(c.get("quantidade") or 1)),
             )
             for c in item.get("cargas") or []
             if isinstance(c, Mapping)
@@ -468,11 +478,14 @@ def csv_das_acoes(plano: PlanoDeCargas) -> bytes:
 def csv_das_cargas(plano: PlanoDeCargas) -> bytes:
     """Uma linha por carga de cada ação: o que lançar no modelo (valores característicos)."""
     linhas = [
-        [a.codigo, a.nome, c.elemento, c.direcao, c.valor, c.unidade, c.observacao]
+        [a.codigo, a.nome, c.elemento, c.direcao, c.valor, c.unidade, c.observacao, c.quantidade]
         for a in plano.acoes
         for c in a.cargas
     ]
-    return _csv(["Ação", "Nome", "Elemento", "Direção", "Valor", "Unidade", "Observação"], linhas)
+    return _csv(
+        ["Ação", "Nome", "Elemento", "Direção", "Valor", "Unidade", "Observação", "Quantidade"],
+        linhas,
+    )
 
 
 def csv_das_combinacoes(

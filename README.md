@@ -348,6 +348,17 @@ Calcula a ação do vento numa edificação de planta retangular pela **ABNT NBR
   tabelas e o que não passou;
 - V₀, relevo, terreno, grupo e o S₃ do cliente começam com os valores da **base técnica** do projeto.
 
+### Esforços do modelo
+
+Importa os resultados do **SolidWorks Simulation** (`core/esforcos_modelo.py`; detalhes em
+`docs/esforcos_do_modelo.md`): "Listar forças da viga" e "Listar forças resultantes" de cada estudo
+(um por caso de carga, com o código no nome). O programa lê o formato em português (cp1252, ponto de
+milhar), converte para esforço interno com tração positiva, **confere as reações** contra o Plano de
+cargas (caso vertical sem reação horizontal, forças concentradas equilibradas, área carregada) e
+combina os casos **ponto a ponto** para achar o pior de cada barra (compressão, tração, momento
+forte com o N junto, momento fraco, cortante, torque). Perfil lido do nome da viga quando o
+SolidWorks diz qual é; tabela das barras com perfil, tipo e eixo forte gravada no projeto.
+
 ### Vento em estruturas abertas
 
 Só o vento de **plataformas, mezaninos e pipe racks sem fechamento**, para anotar no relatório e lançar
@@ -657,6 +668,7 @@ mecanica_toolkit/
 │   ├── gestao_projetos.py
 │   ├── base_tecnica.py
 │   ├── plano_cargas.py
+│   ├── esforcos_modelo.py
 │   ├── central_validacao.py
 │   ├── central_relatorios.py
 │   ├── assistente_projeto.py
@@ -682,6 +694,8 @@ mecanica_toolkit/
 │   ├── base_tecnica.py
 │   ├── criterio_anglo.py
 │   ├── plano_de_cargas.py
+│   ├── exportacao_cargas.py
+│   ├── esforcos_modelo.py
 │   ├── beam_analysis.py
 │   ├── beam_script.py
 │   ├── section_stress.py

@@ -191,6 +191,7 @@ class LinhaDeCarga:
     elemento: str
     valor: float
     unidade: str
+    quantidade: int
     fx: float | None
     fy: float | None
     fz: float | None
@@ -207,6 +208,7 @@ COLUNAS_CARGAS = (
     "Onde aplicar",
     "Valor",
     "Unidade",
+    "Quantidade",
     "Fx",
     "Fy",
     "Fz",
@@ -239,6 +241,7 @@ def linhas_de_carga(
                     "Toda a estrutura (peso das peças do modelo)",
                     GRAVIDADE_M_S2,
                     "m/s²",
+                    1,
                     *vetor,
                     sentido(vetor, eixos),
                     sw,
@@ -268,6 +271,7 @@ def linhas_de_carga(
                     carga.elemento,
                     valor,
                     unidade,
+                    carga.quantidade,
                     None if vetor is None else vetor[0],
                     None if vetor is None else vetor[1],
                     None if vetor is None else vetor[2],
@@ -288,6 +292,7 @@ def _linha_csv(linha: LinhaDeCarga) -> list[object]:
         linha.elemento,
         linha.valor,
         linha.unidade,
+        linha.quantidade,
         "" if linha.fx is None else linha.fx,
         "" if linha.fy is None else linha.fy,
         "" if linha.fz is None else linha.fz,

@@ -10,7 +10,7 @@ técnica, o Plano de cargas e o Guia mostram esse caminho com o que o projeto at
 | 1. Base técnica | **Base técnica do projeto** | critério do cliente, vento do local, tipo de estrutura (limite do deslocamento), sobrecarga, agressividade, vida útil |
 | 2. Ações | **Vento em estruturas abertas**, **Vento nas estruturas**, pesos | forças características por nível, por pórtico e em cada nó; CSV |
 | 3. Plano de cargas | **Plano de cargas** | ações com código padrão, cargas para o modelo, combinações ELU e ELS numeradas; CSV |
-| 4. Verificações | Contraventamento, Ligação, Estruturas de aço, Flambagem, Parafusos, Degrau | tabelas de verificação com a norma e o item de cada linha; registro no projeto |
+| 4. Verificações | **Esforços do modelo** (resultados do SolidWorks), Contraventamento, Ligação, Estruturas de aço, Flambagem, Parafusos, Degrau | conferência das reações, pior caso de cada barra, tabelas de verificação com a norma e o item de cada linha; registro no projeto |
 | 5. Memorial | **Central de relatórios** | Word e PDF com os cálculos registrados (o plano de cargas não entra: o memorial é o molde dos cálculos) |
 
 ## 1. Base técnica do projeto
@@ -120,6 +120,10 @@ cargas que vão para o modelo.
    verificação (Estruturas de aço → "Trazer as ações do plano de cargas").
 
 ## 4 e 5. Verificações e memorial
+
+Os resultados do SolidWorks (forças das vigas e reações de cada estudo/caso) entram pela página
+**Esforços do modelo**: conferência das reações contra o plano e pior caso de cada barra nas
+combinações (ver `docs/esforcos_do_modelo.md`).
 
 Cada página de verificação registra o cálculo no projeto. Os registros com tabela de verificações têm o
 capítulo com o resultado, o que passou e o que não passou (`docs/memorial_de_calculo.md`). Os de

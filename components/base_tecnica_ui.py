@@ -104,9 +104,9 @@ ETAPAS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "4. Verificações",
-        "app_pages/contraventamento_estrutura.py",
+        "app_pages/esforcos_modelo.py",
         ":material/fact_check:",
-        "Barras, contraventamento, ligações",
+        "Esforços do modelo, barras, ligações",
     ),
     (
         "5. Memorial",
@@ -126,11 +126,16 @@ def situacao_das_etapas(projeto: Any) -> list[tuple[bool, str]]:
     geradas = [a for a in plano.acoes if a.origem != "Informada"]
     registros = [r for r in projeto.get("registros_tecnicos", []) if isinstance(r, dict)]
     verificacoes = [r for r in registros if (r.get("resultados") or {}).get("verificações")]
+    casos_do_modelo = len((projeto.get("esforcos_do_modelo") or {}).get("casos") or {})
     return [
         (base is not None, base.rotulo_cliente if base else "não preenchida"),
         (bool(geradas), f"{len(geradas)} gerada(s)" if geradas else "nenhuma gerada"),
         (bool(plano.acoes), f"{len(plano.acoes)} ação(ões)" if plano.acoes else "vazio"),
-        (bool(verificacoes), f"{len(verificacoes)} verificado(s)"),
+        (
+            bool(verificacoes) or bool(casos_do_modelo),
+            f"{len(verificacoes)} verificado(s)"
+            + (f", {casos_do_modelo} caso(s) do modelo" if casos_do_modelo else ""),
+        ),
         (bool(registros), f"{len(registros)} registro(s)"),
     ]
 

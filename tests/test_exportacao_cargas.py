@@ -180,7 +180,7 @@ def test_csv_em_portugues():
     )
     assert cargas[0] == list(ex.COLUNAS_CARGAS)
     sc = next(r for r in cargas if r[0] == "SC")
-    assert sc[4] == "0,0050" and sc[7] == "-0,0050"
+    assert sc[4] == "0,0050" and sc[6] == "1" and sc[8] == "-0,0050"
 
 
 def test_planilha_excel_tem_as_cinco_abas():

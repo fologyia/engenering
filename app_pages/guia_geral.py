@@ -74,6 +74,7 @@ opcoes = [
     "Projetos permanentes",
     "Base técnica do projeto",
     "Plano de cargas",
+    "Esforços do modelo",
     "Casos de carga",
     "Central de validação",
     "Central de relatórios",
@@ -121,7 +122,8 @@ if modulo == "Comece aqui":
                (forças por nível, por pórtico e em cada nó), os pesos e a sobrecarga.
             3. **Plano de cargas** — as ações com código padrão (PP, SC, W0, W90…), as cargas para
                lançar no modelo (SolidWorks, Robot) e as combinações ELU e ELS numeradas.
-            4. **Verificações** — contraventamento, ligação, barras, parafusos, degraus; cada
+            4. **Verificações** — os **Esforços do modelo** importados do SolidWorks (o pior
+               caso de cada barra), contraventamento, ligação, barras, parafusos, degraus; cada
                cálculo registrado no projeto.
             5. **Memorial** — a Central de relatórios monta o Word e o PDF com o que foi
                registrado.
@@ -2147,6 +2149,79 @@ elif modulo == "Plano de cargas":
             """
         )
     link_modulo("app_pages/plano_cargas.py", "Abrir Plano de cargas")
+
+
+elif modulo == "Esforços do modelo":
+    st.header("Esforços do modelo")
+    st.markdown(
+        "Em vez de digitar N, V e M barra por barra, importe os resultados do **SolidWorks "
+        "Simulation**. O programa lê as forças de todas as vigas, **confere se o modelo recebeu as "
+        "cargas do plano** e combina os casos com os fatores do Plano de cargas, **ponto a ponto** "
+        "ao longo de cada barra, para achar o pior de cada uma."
+    )
+    mostrar_tabela_campos(
+        [
+            [
+                "Forças da viga",
+                "Resultados › botão direito › Listar forças da viga (todas as vigas) › Salvar CSV",
+                "Um estudo por caso",
+            ],
+            [
+                "Reações",
+                "Resultados › Listar forças resultantes › Força de reação, modelo inteiro › CSV",
+                "O mesmo estudo",
+            ],
+            [
+                "Caso de carga",
+                "Nome do estudo = código do plano (PP, SC, W0…): o programa lê do arquivo",
+                "Plano de cargas",
+            ],
+            [
+                "Barras",
+                "Perfil (vem do nome quando o SolidWorks diz qual é), tipo e eixo forte",
+                "Lista de material",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. No SolidWorks, rode **um estudo por caso de carga**, com o código no nome do estudo,
+           aplicando as cargas da planilha do Plano de cargas. Duplique o estudo para manter a
+           **mesma malha** em todos (os esforços são combinados elemento a elemento).
+        2. Em cada estudo, salve **Listar forças da viga** e **Listar forças resultantes**.
+        3. Envie os arquivos de uma vez, confira o caso de cada um e grave.
+        4. Leia a **conferência das reações**: num caso só vertical, a reação horizontal precisa
+           dar quase zero; as forças concentradas do plano precisam bater com as reações.
+        5. Preencha a **tabela das barras** (perfil, tipo, eixo forte) e veja o **pior caso de cada
+           barra**.
+        """
+    )
+    mostrar_exemplo(
+        [
+            ["Estrutura", "2 pilares W 200 × 35,9 de 4 m e viga W 310 × 32,7 de 6 m"],
+            ["Casos", "PP 1,5 kN/m, SC 10 kN/m na viga, W0 e W180 com 8 kN no topo"],
+        ],
+        "Resultado esperado: pilar com −52,6 kN e 36,8 kN·m no topo (C03, vento para −X); "
+        "viga com 45,1 kN·m no meio do vão (C01). Reações: SC soma 60,0 kN na vertical e W0, "
+        "8,0 kN na horizontal.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Sinal:** tração positiva. O SolidWorks dá as forças nas pontas de cada elemento,
+              com sinais opostos; o programa as converte em esforço interno.
+            - **Ponto a ponto:** a mesma combinação é somada no mesmo ponto em todos os casos.
+              Com malhas diferentes, o programa combina pela ordem ou pela soma dos máximos (a
+              favor da segurança) e avisa.
+            - **N junto:** o esforço normal na combinação e no ponto do maior momento forte,
+              para a interação N + M.
+            - **Segunda ordem:** o estudo estático é de primeira ordem; a verificação das barras
+              (próxima etapa) aplica o B₂ do contraventamento.
+            """
+        )
+    link_modulo("app_pages/esforcos_modelo.py", "Abrir Esforços do modelo")
 
 
 elif modulo == "Vento em estruturas abertas":

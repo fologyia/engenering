@@ -192,6 +192,7 @@ def cargas_para_o_plano(r: va.ResultadoVentoAberto, direcao: str) -> list[pc.Car
             unidade="kN",
             direcao=direcao,
             observacao=f"total do pórtico {_n(c.total_kN)} kN",
+            quantidade=max(1, c.pilares),
         )
         for c in va.cargas_nodais(d)
     ]

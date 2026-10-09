@@ -80,10 +80,8 @@ def test_acoes_para_o_plano_levam_os_nos_e_o_equipamento(dois_pisos):
     assert [a.codigo for a in acoes] == ["W0", "W90", "W180", "W270"]
     w0, _, w180, _ = acoes
     assert w0.registro_id == "abc" and w0.origem == var.ORIGEM
-    total_por_pilar = sum(
-        c.valor * (int(c.elemento.split("dos ")[1].split(" ")[0]) if "nós" in c.elemento else 1)
-        for c in w0.cargas
-    )
+    total_por_pilar = sum(c.total for c in w0.cargas)  # nós × quantidade + equipamento
+    assert all(c.quantidade == 2 for c in w0.cargas if c.observacao != "equipamento")
     assert total_por_pilar == pytest.approx(sum(r.x.forcas_nos_niveis_kN))
     assert any(c.observacao == "equipamento" for c in w0.cargas)
     assert w180.cargas[0].valor == pytest.approx(-w0.cargas[0].valor)

@@ -80,6 +80,11 @@ pagina = st.navigation(
                 title="Plano de cargas",
                 icon=":material/table_chart:",
             ),
+            st.Page(
+                "app_pages/esforcos_modelo.py",
+                title="Esforços do modelo",
+                icon=":material/upload_file:",
+            ),
             pagina_modulo("casos_carga"),
             st.Page(
                 "app_pages/central_validacao.py",

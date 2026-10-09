@@ -119,6 +119,7 @@ with st.container(border=True):
                                     "Direção": c.direcao,
                                     "Valor": c.valor,
                                     "Unidade": c.unidade,
+                                    "Qtde": c.quantidade,
                                     "Observação": c.observacao,
                                 }
                                 for c in a.cargas
@@ -266,11 +267,12 @@ with st.container(border=True):
                         "Valor": c.valor,
                         "Unidade": c.unidade,
                         "Direção": c.direcao,
+                        "Qtde": c.quantidade,
                         "Observação": c.observacao,
                     }
                     for c in (existente.cargas if existente else ())
                 ],
-                columns=["Elemento", "Valor", "Unidade", "Direção", "Observação"],
+                columns=["Elemento", "Valor", "Unidade", "Direção", "Qtde", "Observação"],
             ),
             num_rows="dynamic",
             hide_index=True,
@@ -285,6 +287,11 @@ with st.container(border=True):
                 ),
                 "Direção": st.column_config.SelectboxColumn(
                     options=list(pc.DIRECOES), help="Eixo da carga (Z = vertical, para baixo)."
+                ),
+                "Qtde": st.column_config.NumberColumn(
+                    min_value=1,
+                    step=1,
+                    help="Em quantos pontos iguais a carga vai (os nós de um pórtico, por exemplo).",
                 ),
                 "Observação": st.column_config.TextColumn(help="Nota livre."),
             },
@@ -304,6 +311,7 @@ with st.container(border=True):
                     str(linha.get("Unidade") or "kN"),
                     str(linha.get("Direção") or "—"),
                     str(linha.get("Observação") or ""),
+                    1 if pd.isna(linha.get("Qtde")) else max(1, int(linha.get("Qtde"))),
                 )
             )
         acao = pc.nova_acao(
