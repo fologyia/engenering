@@ -77,8 +77,8 @@ def test_lista_gravada_mostra_resumo_pendencias_e_conferencia(banco_com_projeto)
     assert any("PERFIL ESQUISITO" in w.value for w in t.warning)
     subtitulos = [s.value for s in t.subheader]
     assert "Por perfil" in subtitulos and "Chapas por espessura" in subtitulos
-    conferencia = " ".join(x.value for x in [*t.success, *t.warning])
-    assert "Caso PP do modelo" in conferencia
+    conferencia = " ".join(x.value for x in [*t.success, *t.warning, *t.error])
+    assert "PP: reação vertical" in conferencia and "peso da estrutura" in conferencia
 
 
 def test_incluir_as_placas_de_base_e_gravar(banco_com_projeto):

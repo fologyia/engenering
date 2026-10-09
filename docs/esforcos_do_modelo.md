@@ -49,7 +49,15 @@ Para cada caso importado, nos eixos do plano (Z para cima; o Y do SolidWorks é 
 * **Forças concentradas do plano** (kN, com a quantidade de cada linha): a soma das reações tem de
   equilibrar a soma das forças (tolerância de 2 % ou 0,1 kN).
 * **Carga por área**: reação ÷ carga = área carregada, para comparar com o piso.
-* **PP sem cargas no plano**: o peso do modelo (kN e kg).
+* **PP sem cargas no plano**: o peso do modelo (kN e kg) e, com a Lista de material montada
+  (`conferir_peso_proprio`, peso pela geometria do modelo ou pela lista sem o acréscimo), a
+  comparação: até 5 % bate; reação γ vezes o peso (γ usual da NBR 8800 a ± 2 %: 1,25; 1,30; 1,35;
+  1,40; 1,50) é **erro — estudo majorado**; mais pesado que isso é **erro — o estudo PP leva só a
+  gravidade** (sobrecarga, equipamentos e o não modelado vão nos estudos deles); mais leve é aviso.
+* **Estudo majorado**: forças concentradas do plano recebidas γ vezes também viram erro. No
+  SolidWorks cada caso leva as cargas características — os coeficientes estão nas combinações do
+  programa; com o estudo majorado a verificação majoraria duas vezes e o quadro das fundações, que
+  pede cargas sem majorar (Anglo 5.9), sairia errado. Não há modo de importar estudo combinado.
 * Casos do plano ainda sem esforços e casos importados fora do plano são avisados.
 
 ## Pior caso de cada barra (`envoltoria`)

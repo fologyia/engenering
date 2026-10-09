@@ -355,14 +355,14 @@ def test_conferencia_usa_a_geometria_e_aponta_a_razao_de_10():
     item = lm.ItemDaLista("V", lm.TIPO_PERFIL, "W 310 x 32,7", 1, 6.0, massa_geometria_kg=917.7)
     r = lm.resumir(lm.ListaDeMaterial(itens=(item,)))  # catálogo 196 kg; geometria 918 kg
     texto = lm.conferir_com_o_modelo(r, dados)[0].texto
-    assert "pela geometria do modelo" in texto and "bate com a lista" in texto
+    assert "pela geometria do modelo" in texto and "bate com a estrutura" in texto
     dez_vezes = lm.resumir(
         lm.ListaDeMaterial(
             itens=(lm.ItemDaLista("V", lm.TIPO_OUTRO, "viga", 1, massa_unitaria=91.8),)
         )
     )
     texto = lm.conferir_com_o_modelo(dez_vezes, dados)[0].texto
-    assert "quase 10 vezes" in texto and "gravidade" in texto
+    assert "quase de 10 em 10" in texto and "gravidade (9,81" in texto
 
 
 def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
@@ -401,20 +401,23 @@ def test_conferencia_com_o_caso_pp_do_modelo():
         )
     )
     itens = lm.conferir_com_o_modelo(certa, dados)
-    assert itens[0].nivel == pc.NIVEL_OK and "bate com a lista" in itens[0].texto
-    leve = lm.resumir(
-        lm.ListaDeMaterial(
-            itens=(lm.ItemDaLista("V", lm.TIPO_OUTRO, "viga", 1, massa_unitaria=600.0),)
+    assert itens[0].nivel == pc.NIVEL_OK and "bate com a estrutura" in itens[0].texto
+
+    def com_massa(kg):
+        return lm.resumir(
+            lm.ListaDeMaterial(
+                itens=(lm.ItemDaLista("V", lm.TIPO_OUTRO, "viga", 1, massa_unitaria=kg),)
+            )
         )
-    )
-    itens = lm.conferir_com_o_modelo(leve, dados)
-    assert itens[0].nivel == pc.NIVEL_ATENCAO and "pesa mais que a lista" in itens[0].texto
-    pesada = lm.resumir(
-        lm.ListaDeMaterial(
-            itens=(lm.ItemDaLista("V", lm.TIPO_OUTRO, "viga", 1, massa_unitaria=1500.0),)
-        )
-    )
-    assert "pesa menos que a lista" in lm.conferir_com_o_modelo(pesada, dados)[0].texto
+
+    # Estudo PP com mais que a gravidade: é erro, o PP leva só o peso próprio.
+    leve = lm.conferir_com_o_modelo(com_massa(400.0), dados)[0]
+    assert leve.nivel == pc.NIVEL_ERRO and "leva só a gravidade" in leve.texto
+    # 9,0 kN ÷ 1,25 = 7,2 kN: estudo majorado com γ = 1,25.
+    majorado = lm.conferir_com_o_modelo(com_massa(7.2e3 / 9.80665), dados)[0]
+    assert majorado.nivel == pc.NIVEL_ERRO and "parece majorado (γ ≈ 1,25)" in majorado.texto
+    pesada = lm.conferir_com_o_modelo(com_massa(1500.0), dados)[0]
+    assert pesada.nivel == pc.NIVEL_ATENCAO and "pesa menos que a estrutura" in pesada.texto
     sem_pp = lm.conferir_com_o_modelo(certa, importar("SC"))
     assert "importe em Esforços do modelo o caso PP" in sem_pp[0].texto
 

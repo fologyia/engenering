@@ -779,10 +779,72 @@ def total_esperado(acao: pc.Acao) -> tuple[float, float, float] | None:
     return (soma[0], soma[1], soma[2]) if achou else None
 
 
+#: Coeficientes de ponderação usuais (NBR 8800, Tabela 1). Reação = γ × carga denuncia um estudo
+#: com as cargas já majoradas.
+COEFICIENTES_USUAIS = (1.25, 1.30, 1.35, 1.40, 1.50)
+TOLERANCIA_PESO = 0.05
+ESTUDO_MAJORADO = (
+    "No SolidWorks cada caso leva as cargas características, sem coeficiente: os coeficientes estão "
+    "nas combinações do programa. Com o estudo majorado, a verificação majora duas vezes e o "
+    "quadro das fundações (que pede cargas sem majorar) sai errado."
+)
+
+
+def coeficiente_aparente(razao: float) -> float | None:
+    """O coeficiente usual a ± 2 % da razão reação ÷ carga, se houver."""
+    perto = [g for g in COEFICIENTES_USUAIS if abs(razao - g) / g <= 0.02]
+    return min(perto, key=lambda g: abs(razao - g)) if perto else None
+
+
+def conferir_peso_proprio(
+    reacao_kN: float, peso_kN: float, origem: str = "pela Lista de material"
+) -> pc.ItemDeConferencia:
+    """A reação do caso PP contra o peso da estrutura: o estudo PP leva só a gravidade."""
+    razao = reacao_kN / peso_kN
+    texto = (
+        f"PP: reação vertical de {_n(reacao_kN)} kN; peso da estrutura {origem}: {_n(peso_kN)} kN"
+    )
+    if abs(razao - 1.0) <= TOLERANCIA_PESO:
+        return pc.ItemDeConferencia(
+            pc.NIVEL_OK, f"{texto} — o peso próprio do modelo bate com a estrutura."
+        )
+    gama = coeficiente_aparente(razao)
+    if gama is not None:
+        return pc.ItemDeConferencia(
+            pc.NIVEL_ERRO,
+            f"{texto} — a reação é {_n(razao)} vez o peso: o estudo PP parece majorado "
+            f"(γ ≈ {_n(gama)}). {ESTUDO_MAJORADO}",
+        )
+    if razao > 1.0:
+        texto += (
+            f" — o modelo pesa {_n(razao, 1)} vezes a estrutura. O estudo PP leva só a gravidade: "
+            "sobrecarga, equipamentos e o que não está modelado vão nos estudos deles (SC, EQ, "
+            "PE…), com as cargas características."
+        )
+        if 9.5 <= razao <= 10.5 or 950 <= razao <= 1050:
+            texto += (
+                " A razão é quase de 10 em 10 — confira também a gravidade (9,81 m/s²) e a "
+                "densidade do material (7 850 kg/m³) do estudo."
+            )
+        return pc.ItemDeConferencia(pc.NIVEL_ERRO, texto)
+    return pc.ItemDeConferencia(
+        pc.NIVEL_ATENCAO,
+        f"{texto} — o modelo pesa menos que a estrutura: falta peça no modelo, há peça sem material "
+        "(densidade) ou a lista tem itens que o modelo não tem.",
+    )
+
+
 def conferir_reacoes(
-    dados: EsforcosDoModelo, plano: pc.PlanoDeCargas
+    dados: EsforcosDoModelo,
+    plano: pc.PlanoDeCargas,
+    *,
+    peso_da_estrutura_kN: float | None = None,
 ) -> list[pc.ItemDeConferencia]:
-    """O modelo recebeu a carga do plano? Compara a soma das reações com as cargas, caso a caso."""
+    """O modelo recebeu a carga do plano? Compara a soma das reações com as cargas, caso a caso.
+
+    Com ``peso_da_estrutura_kN`` (da Lista de material), o caso PP é conferido contra o peso da
+    estrutura; forças do plano recebidas γ vezes denunciam um estudo majorado.
+    """
     itens: list[pc.ItemDeConferencia] = []
     for codigo, caso in dados.casos.items():
         if caso.reacoes is None:
@@ -845,15 +907,26 @@ def conferir_reacoes(
                     )
                 )
             else:
-                itens.append(
-                    pc.ItemDeConferencia(
-                        pc.NIVEL_ATENCAO,
-                        f"{codigo}: o plano soma ({_n(esperado[0])}; {_n(esperado[1])}; "
-                        f"{_n(esperado[2])}) kN em X, Y e Z, e as reações ({_n(rx)}; {_n(ry)}; "
-                        f"{_n(rz)}) kN — diferença de {_n(residuo)} kN. Falta ou sobra carga no "
-                        "modelo.",
-                    )
+                texto = (
+                    f"{codigo}: o plano soma ({_n(esperado[0])}; {_n(esperado[1])}; "
+                    f"{_n(esperado[2])}) kN em X, Y e Z, e as reações ({_n(rx)}; {_n(ry)}; "
+                    f"{_n(rz)}) kN — diferença de {_n(residuo)} kN."
                 )
+                gama = coeficiente_aparente(math.hypot(rx, ry, rz) / referencia)
+                if gama is not None:
+                    itens.append(
+                        pc.ItemDeConferencia(
+                            pc.NIVEL_ERRO,
+                            f"{texto} As reações são {_n(gama)} vez as forças: o estudo parece "
+                            f"majorado. {ESTUDO_MAJORADO}",
+                        )
+                    )
+                else:
+                    itens.append(
+                        pc.ItemDeConferencia(
+                            pc.NIVEL_ATENCAO, f"{texto} Falta ou sobra carga no modelo."
+                        )
+                    )
         por_area = [c for c in acao.cargas if c.unidade == "kN/m²" and c.valor > 0]
         if por_area and rz > 0:
             q = max(c.valor for c in por_area)
@@ -867,9 +940,17 @@ def conferir_reacoes(
         if codigo == "PP" and not acao.cargas and rz > 0:
             itens.append(
                 pc.ItemDeConferencia(
-                    NIVEL_INFO, f"PP: peso do modelo = {_n(rz)} kN ({_n(rz / 9.81 * 1000, 0)} kg)."
+                    NIVEL_INFO,
+                    f"PP: peso do modelo = {_n(rz)} kN ({_n(rz / 9.81 * 1000, 0)} kg)."
+                    + (
+                        " Monte a Lista de material para conferir com o peso da estrutura."
+                        if not peso_da_estrutura_kN
+                        else ""
+                    ),
                 )
             )
+            if peso_da_estrutura_kN:
+                itens.append(conferir_peso_proprio(rz, peso_da_estrutura_kN))
     faltam = [c for c in plano.codigos if c not in dados.casos]
     if dados.casos and faltam:
         itens.append(

@@ -402,16 +402,24 @@ def texto_leia_me(
         "Valores característicos (sem coeficientes): os coeficientes estão nas combinações.",
         "",
         "NO SOLIDWORKS SIMULATION",
-        "1. Crie um estudo estático e aplique o material (aço: 200 GPa, 7850 kg/m³).",
-        "2. Abra o Gerenciador de casos de carga e crie um caso primário por código da aba "
-        "Cargas (PP, SC, W0…).",
-        "3. Em cada caso, aplique as cargas da aba Cargas: o tipo e o comando estão nas colunas "
-        "Tipo da carga e No SolidWorks; use Fx, Fy e Fz (ou o valor e o sentido) na direção "
-        "selecionada.",
-        "4. PP: use a Gravidade (9,81 m/s² para baixo) no caso PP — o peso das peças sai do modelo.",
-        "5. Na aba Combinações, crie uma combinação por linha com os fatores de cada caso.",
-        "6. Anote os esforços característicos de cada caso nas barras que vai verificar e use as "
-        "combinações nas páginas de verificação.",
+        "Um estudo estático por caso da aba Cargas, com o código do caso no nome do estudo, e as "
+        "cargas CARACTERÍSTICAS: nunca majore no SolidWorks — os coeficientes estão nas "
+        "combinações, que o programa monta na página Esforços do modelo.",
+        "1. Estudo PP: material (aço A36 ou A572 Gr 50: 200 GPa, 7850 kg/m³), juntas das vigas, "
+        "fixações nas bases, malha e SÓ a Gravidade (9,81 m/s² para baixo). Rode.",
+        "2. Botão direito na aba do estudo PP › Duplicar, com o nome do próximo caso (SC, PE, EQ, "
+        "W0, W90, W180, W270, T+ como T+, T− como T-). No estudo novo, exclua a Gravidade e aplique "
+        "só as cargas desse caso da aba Cargas (colunas Tipo da carga e No SolidWorks; Fx, Fy e Fz "
+        "já com o sinal nos eixos do modelo). Não refaça a malha: os casos são combinados ponto a "
+        "ponto, na mesma malha. Rode.",
+        "3. Em cada estudo: Resultados › Listar forças da viga (todas as vigas) e Listar forças "
+        "resultantes (força de reação, modelo inteiro), salvando os dois em CSV.",
+        "4. Envie todos os CSV na página Esforços do modelo: ela confere as reações de cada caso "
+        "contra este plano (o PP contra o peso da Lista de material) e aponta estudo majorado ou "
+        "carga faltando.",
+        "5. Mudou a geometria? Refaça todos os estudos. Um estudo com as combinações (aba "
+        "Combinações) serve só para olhar tensões e deslocamentos no SolidWorks — não entra na "
+        "importação.",
         "",
         "NO ROBOT STRUCTURAL ANALYSIS",
         "1. Crie os casos de carga com os códigos da aba Cargas (natureza: permanente, "

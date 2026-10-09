@@ -37,7 +37,6 @@ DENSIDADE_ACO = 7850.0  # kg/m³
 G = 9.80665
 ACRESCIMO_PADRAO = 5.0  # % de ligações, parafusos e soldas
 BARRA_PADRAO_M = 12.0
-TOLERANCIA_PP = 0.05  # diferença aceitável entre a lista e o caso PP do modelo
 CASO_PP = "PP"
 
 
@@ -365,41 +364,21 @@ def conferir_com_o_modelo(
             pc.ItemDeConferencia(pc.NIVEL_ATENCAO, "A lista ainda não tem massa para comparar.")
         ]
     _, _, vertical = em.para_o_plano(importado.reacoes.modelo, dados.eixo_vertical)
-    geometria = resumo.massa_geometria_kg
-    massa = geometria if geometria else resumo.massa_itens_kg
-    lista_kN = massa * G / 1e3
-    diferenca = (vertical - lista_kN) / lista_kN
     origem = (
         "pela geometria do modelo (aço, 7 850 kg/m³)"
-        if geometria
+        if resumo.massa_geometria_kg
         else "pela lista, sem o acréscimo"
     )
-    texto = (
-        f"Caso {caso} do modelo: reação vertical {_n(vertical, 2)} kN; peso {origem}: "
-        f"{_n(lista_kN, 2)} kN ({_n(massa, 0)} kg) — diferença de {_n(100 * diferenca, 1)} %."
-    )
-    if abs(diferenca) <= TOLERANCIA_PP:
-        return [
-            pc.ItemDeConferencia(pc.NIVEL_OK, texto + " O peso próprio do modelo bate com a lista.")
-        ]
-    if diferenca < 0:
-        motivo = (
-            " O modelo pesa menos que a lista: falta barra no modelo, o peso próprio não está em "
-            "todas as peças ou a lista tem itens que o modelo não representa (placas, grades)."
-        )
-    else:
-        motivo = (
-            " O modelo pesa mais que a lista: a lista está incompleta ou o caso PP tem outras "
-            "cargas além do peso próprio do aço."
-        )
-    razao = vertical / lista_kN if lista_kN > 0 else 0.0
-    if 9.5 <= razao <= 10.5 or 950 <= razao <= 1050:
-        motivo += (
-            f" A razão é quase {round(razao, -1 if razao < 100 else -3):.0f} vezes — típico de "
-            "unidade trocada: confira no estudo a gravidade (9,81 m/s²) e a densidade do material "
-            "(7 850 kg/m³)."
-        )
-    return [pc.ItemDeConferencia(pc.NIVEL_ATENCAO, texto + motivo)]
+    peso = peso_da_estrutura_kN(resumo)
+    assert peso is not None  # a massa dos itens é positiva
+    return [em.conferir_peso_proprio(vertical, peso, origem)]
+
+
+def peso_da_estrutura_kN(resumo: ResumoDaLista) -> float | None:
+    """O peso que a gravidade do modelo deveria dar no caso PP: pela geometria, se todos os itens a
+    tiverem (é o que o modelo pesa), senão pela lista sem o acréscimo; ``None`` sem massa."""
+    massa = resumo.massa_geometria_kg or resumo.massa_itens_kg
+    return massa * G / 1e3 if massa > 0 else None
 
 
 # ---------------------------------------------------------------------------------------------

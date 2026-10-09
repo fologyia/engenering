@@ -193,6 +193,32 @@ def test_conferencia_do_portico_correto():
     assert "PP: peso do modelo = 9,00 kN" in r[em.NIVEL_INFO]
 
 
+@pytest.mark.parametrize(
+    ("peso_kN", "nivel", "trecho"),
+    [
+        (9.1, pc.NIVEL_OK, "bate com a estrutura"),
+        (9.0 / 1.4, pc.NIVEL_ERRO, "parece majorado (γ ≈ 1,40)"),
+        (1.3, pc.NIVEL_ERRO, "leva só a gravidade"),
+        (12.0, pc.NIVEL_ATENCAO, "pesa menos que a estrutura"),
+    ],
+)
+def test_pp_conferido_contra_o_peso_da_estrutura(peso_kN, nivel, trecho):
+    r = niveis(
+        em.conferir_reacoes(importar("PP"), plano_do_portico(), peso_da_estrutura_kN=peso_kN)
+    )
+    assert trecho in r[nivel]
+    assert "Monte a Lista de material" not in r[em.NIVEL_INFO]
+    sem_lista = niveis(em.conferir_reacoes(importar("PP"), plano_do_portico()))
+    assert "Monte a Lista de material" in sem_lista[em.NIVEL_INFO]
+
+
+def test_forcas_recebidas_gama_vezes_denunciam_estudo_majorado():
+    # O modelo recebeu 8 kN de vento; o plano tem 8 ÷ 1,4: o estudo foi majorado por 1,4.
+    r = niveis(em.conferir_reacoes(importar("W0"), plano_do_portico(vento_kN=8.0 / 1.4)))
+    assert "As reações são 1,40 vez as forças: o estudo parece majorado" in r[pc.NIVEL_ERRO]
+    assert "cargas características" in r[pc.NIVEL_ERRO]
+
+
 def test_conferencia_usa_a_quantidade_das_cargas():
     r = niveis(em.conferir_reacoes(importar("W0"), plano_do_portico(vento_kN=8.0, quantidade=4)))
     assert "W0: as reações equilibram" in r[pc.NIVEL_OK]

@@ -19,6 +19,7 @@ from core import cantoneiras as ct
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
 from core import esforcos_modelo as em
+from core import lista_de_material as lm
 from core import load_combinations as comb
 from core import placa_base_pilares as pb
 from core import plano_de_cargas as pc
@@ -217,7 +218,8 @@ with st.container(border=True):
 # ============================================================ 3. conferência
 with st.container(border=True):
     st.subheader("3. Conferência das reações", help=AJUDA["sec_conferencia"])
-    for item in em.conferir_reacoes(dados, plano):
+    peso_da_estrutura = lm.peso_da_estrutura_kN(lm.resumir(lm.lista_do_projeto(projeto)))
+    for item in em.conferir_reacoes(dados, plano, peso_da_estrutura_kN=peso_da_estrutura):
         MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])
 
 # ============================================================ 4. barras

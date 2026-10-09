@@ -2189,12 +2189,18 @@ elif modulo == "Esforços do modelo":
     st.markdown(
         """
         1. No SolidWorks, rode **um estudo por caso de carga**, com o código no nome do estudo,
-           aplicando as cargas da planilha do Plano de cargas. Duplique o estudo para manter a
-           **mesma malha** em todos (os esforços são combinados elemento a elemento).
+           aplicando as cargas da planilha do Plano de cargas **características, sem
+           coeficiente** — nunca majore no SolidWorks: os coeficientes estão nas combinações do
+           programa. O estudo PP leva **só a gravidade**. Duplique o estudo PP para os outros
+           casos (excluindo a gravidade) para manter a **mesma malha** em todos (os esforços são
+           combinados elemento a elemento).
         2. Em cada estudo, salve **Listar forças da viga** e **Listar forças resultantes**.
         3. Envie os arquivos de uma vez, confira o caso de cada um e grave.
         4. Leia a **conferência das reações**: num caso só vertical, a reação horizontal precisa
-           dar quase zero; as forças concentradas do plano precisam bater com as reações.
+           dar quase zero; as forças concentradas do plano precisam bater com as reações; o PP
+           precisa dar o peso da estrutura (com a **Lista de material** montada). Reações γ vezes
+           a carga (1,25; 1,4; 1,5…) denunciam estudo majorado: refaça com as cargas
+           características.
         5. Preencha a **tabela das barras** (perfil, tipo, eixo forte) e veja o **pior caso de cada
            barra**.
         6. Em **Parâmetros da verificação**, informe por tipo de barra o aço, os comprimentos de

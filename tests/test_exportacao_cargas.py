@@ -203,6 +203,8 @@ def test_planilha_excel_tem_as_cinco_abas():
     ]
     leia = " ".join(str(c.value) for c in livro["Leia-me"]["A"] if c.value)
     assert "NO SOLIDWORKS SIMULATION" in leia and "Plataforma P1" in leia and "5.9" in leia
+    assert "Um estudo estático por caso" in leia and "nunca majore no SolidWorks" in leia
+    assert "Gerenciador de casos" not in leia
     cargas = list(livro["Cargas"].values)
     assert cargas[0] == ex.COLUNAS_CARGAS
     assert len(cargas) == 1 + len(ex.linhas_de_carga(plano, ex.UNIDADES_N_MM, ex.EIXO_Y_PARA_CIMA))
