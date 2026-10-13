@@ -68,6 +68,9 @@ desenho pode sair vazia. Por isso a página oferece a **macro do SolidWorks**
   `GetExtremePoint`) — que vai na página **Esforços do modelo** (leitura do modelo:
   tipo de cada barra pela posição, perfil e comprimento; ver `docs/esforcos_do_modelo.md`). Enviado
   aqui por engano, é recusado com essa orientação;
+* **v5**: o esqueleto ganha a direção da medida maior da seção de cada corpo (a alma — dá Lx e Ly
+  certos nos pilares) e, nas chapas, o contorno da face maior e as aberturas (`Face2.GetLoops`,
+  `Loop2.GetCoEdges`; furo redondo com 12 pontos) — a carga do piso vai pelas chapas reais;
 * **v4, robusta**: os dois arquivos começam com a peça, a configuração, a data e a versão da macro
   (a leitura pula essas linhas); a CAIXA (mm) sai nas direções do próprio corpo (chapa inclinada com
   as medidas certas); números sempre com vírgula decimal (antes, num Windows em inglês, "12.345 kg"

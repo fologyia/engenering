@@ -19,6 +19,12 @@ TODOS = ("PP", "SC", "W0", "W180")
 CODIGOS = ["PP", "SC", "W0", "W180"]
 
 
+def outros_avisos(g: ld.GeometriaDoModelo) -> tuple[str, ...]:
+    """Os avisos do esqueleto sem o do nome × seção: no pórtico do exemplo, o corpo da viga se
+    chama "Canal c C8X13.75" e tem a seção do W 310 × 32,7 (o aviso é de propósito)."""
+    return tuple(a for a in g.avisos if not a.startswith("Nome do membro"))
+
+
 def geometria(**kwargs) -> ld.GeometriaDoModelo:
     return ld.ler_esqueleto(sw.csv_esqueleto(**kwargs), "portico_esqueleto.csv")
 
@@ -698,10 +704,13 @@ def test_le_o_cabecalho_da_macro():
         "portico.SLDPRT",
         "Padrão",
         "2026-10-12 18:30",
-        "v4",
+        "v5",
     )
     assert g.origem == "portico.SLDPRT, configuração Padrão, gerado em 2026-10-12 18:30"
-    assert g.avisos == ()
+    assert outros_avisos(g) == ()
+    (nome,) = [a for a in g.avisos if a.startswith("Nome do membro")]
+    assert '“Canal c C8X13.75(1)” (1 corpo(s)): o nome diz U 8" x 20,50' in nome
+    assert "(W 310 x 32,7)" in nome
     assert g.formas == {ld.FORMA_BARRA: 3, ld.FORMA_CHAPA: 0, ld.FORMA_BLOCO: 0}
     pilar = g.corpo("Aparar/Estender12[1]")
     assert pilar.forma == ld.FORMA_BARRA and pilar.e_barra
@@ -711,7 +720,7 @@ def test_le_o_cabecalho_da_macro():
 def test_versao_antiga_da_macro_ainda_le_e_avisa():
     g = geometria(versao_antiga=True)
     assert len(g.corpos) == 3 and g.corpos[0].forma == "" and g.corpos[0].e_barra
-    assert g.avisos == (ld.MACRO_ANTIGA,) and g.versao_da_macro == ""
+    assert outros_avisos(g) == (ld.MACRO_ANTIGA,) and g.versao_da_macro == ""
 
 
 def test_linhas_ruins_viram_aviso_e_nao_erro():
@@ -732,10 +741,13 @@ def test_linhas_ruins_viram_aviso_e_nao_erro():
 
 def test_versao_diferente_da_esperada_avisa():
     conteudo = sw.csv_esqueleto().replace(
-        b"exportar_lista_de_corte v4", b"exportar_lista_de_corte v3"
+        b"exportar_lista_de_corte v5", b"exportar_lista_de_corte v9"
     )
-    (aviso,) = ld.ler_esqueleto(conteudo, "x.csv").avisos
-    assert "macro v3" in aviso and "espera a v4" in aviso
+    (aviso,) = outros_avisos(ld.ler_esqueleto(conteudo, "x.csv"))
+    assert "macro v9" in aviso and "espera a v5" in aviso
+    # A v4 ainda vale: lê tudo e diz o que falta (orientação e contorno).
+    (aviso,) = outros_avisos(ld.ler_esqueleto(sw.csv_esqueleto(versao="v4"), "x.csv"))
+    assert aviso.startswith("Esqueleto da macro v4") and "contorno das chapas" in aviso
 
 
 def test_sem_a_linha_das_colunas_explica():
@@ -806,17 +818,19 @@ def test_contrato_com_a_macro():
     import re
 
     macro = lm.macro_da_lista_de_corte().decode("ascii")
-    partes = re.search(r'"(CORPO;[^"]*)" & _\s*"([^"]*)"', macro)
+    partes = re.search(r'"(CORPO;[^"]*)" & _\s*"([^"]*)" & _\s*"([^"]*)"', macro)
     assert partes is not None
-    colunas = (partes.group(1) + partes.group(2)).split(";")
+    colunas = "".join(partes.groups()).split(";")
     chaves = re.findall(r'Print #numeroDoArquivo, "(\w+);"', macro)
     assert {c.lower() for c in chaves} == set(ld._METADADOS)
     versao = re.search(r'VERSAO_DA_MACRO As String = "(v\d+)"', macro).group(1)
     assert versao == ld.VERSAO_ATUAL_DA_MACRO
     # Uma linha como a macro escreve (EscreverCorpo): nome, item, descrição, forma, 6
-    # coordenadas, comprimento, seção A e B e volume — tantos campos quanto colunas.
+    # coordenadas, comprimento, seção A e B, volume, a direção da seção e, numa chapa, o contorno
+    # e as aberturas — tantos campos quanto colunas.
     valores = ['"Viga[1]"', '"W8x31<1>"', '"W8x31"', "BARRA", "0,0", "0,0", "0,0", "0,0"]
     valores += ["4000,0", "0,0", "4000,0", "201,0", "165,0", "18280,0"]
+    valores += ["1,0000", "0,0000", "-0,0000", '""', '""']
     assert len(valores) == len(colunas)
     cabecalho = [
         f'{chave};"{valor}"'
@@ -837,7 +851,21 @@ def test_contrato_com_a_macro():
     assert g.avisos == () and g.versao_da_macro == versao and g.peca == "p.SLDPRT"
     assert corpo.forma == "BARRA" and corpo.secao_mm == (201.0, 165.0)
     assert corpo.fim == pytest.approx((0.0, 4.0, 0.0)) and corpo.volume_m3 == pytest.approx(0.01828)
+    assert corpo.direcao_secao == pytest.approx((1.0, 0.0, 0.0))
     assert ld.tipo_do_arquivo(conteudo) == ld.TIPO_ESQUELETO
+    # Uma chapa, com o contorno e uma abertura como a macro escreve (PontosDoLaco).
+    contorno = '"0,0 0,0 0,0 | 2000,0 0,0 0,0 | 2000,0 0,0 1000,0 | 0,0 0,0 1000,0"'
+    furo = '"500,0 0,0 300,0 | 700,0 0,0 300,0 | 700,0 0,0 500,0"'
+    chapa = ['"Chapa[1]"', '"Item48"', '"Item48"', "CHAPA", "0,0", "0,0", "500,0", "2000,0"]
+    chapa += ["0,0", "500,0", "2000,0", "1000,0", "6,4", "12800,0", "0,0000", "0,0000"]
+    chapa += ["1,0000", contorno, furo]
+    conteudo = "\r\n".join(
+        [*cabecalho, ";".join(colunas), ";".join(valores), ";".join(chapa)]
+    ).encode("ascii")
+    placa = ld.ler_esqueleto(conteudo, "p_esqueleto.csv").corpo("Chapa[1]")
+    esperado = ((0, 0, 0), (2, 0, 0), (2, 0, 1), (0, 0, 1))
+    assert all(p == pytest.approx(e) for p, e in zip(placa.contorno, esperado, strict=True))
+    assert len(placa.aberturas) == 1 and placa.aberturas[0][1] == pytest.approx((0.7, 0, 0.3))
 
 
 # ------------------------------------------------------------------ tensões da viga
@@ -967,11 +995,8 @@ def test_corte_em_meia_esquadria_nao_troca_o_perfil():
         casos={"PP": caso_manual("PP", {"Viga-2(Cortada[1])": membros["Viga-2(Cortada[1])"]})}
     )
     (leitura,) = ld.ler_barras(dados, so_cortada)
+    # O U 6" teria a área, mas não cabe na seção medida (203 mm): fica o U 8" do item.
     assert leitura.perfil_sugerido == 'U 8" x 20,50'
-    assert (
-        'lembra o U 6" x 15,62' in leitura.origem_do_perfil
-        and "não cabe" in leitura.origem_do_perfil
-    )
 
 
 def test_peca_curta_toma_a_direcao_do_peso_proprio():
@@ -995,3 +1020,185 @@ def test_mesmo_perfil_com_volumes_diferentes_avisa():
     g = geometria(corpos=corpos, volumes_cm3={"Diagonal[2]": volume / 2})
     assert any("volumes por metro diferentes" in a and "AL T SECTION" in a for a in g.avisos)
     assert not any("volumes por metro" in a for a in geometria().avisos)
+
+
+@pytest.mark.parametrize(
+    "extras",
+    [
+        [None, "contorno", 7],
+        [[1, 0], [[0, 0, 0], [1, "a", 0], "x"], [[[0, 0, 0]], "lixo"]],
+        [[0, 0, 0], [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], [[[0.1, 0, 0.1]] * 3]],
+        [["a", "b", "c"], [], None],
+    ],
+)
+def test_direcao_e_contorno_gravados_estragados(extras):
+    linha = ["a", "b", "c", 0, 0, 0, 0, 4, 0, 4, 0.01, "CHAPA", 2000, 6, *extras]
+    (corpo,) = ld.de_dicionario({"corpos": [linha]}).corpos
+    assert corpo.direcao_secao is None  # vetor nulo, curto ou com texto
+    assert len(corpo.contorno) in (0, 4) and all(len(a) >= 3 for a in corpo.aberturas)
+    # E o que é lido continua servindo para as cargas do piso e os travamentos.
+    g = ld.GeometriaDoModelo(corpos=(corpo,))
+    from core import cargas_pelo_modelo as cpm
+
+    cpm.distribuir(g, {"SC": 5.0}, "Y")
+
+
+# ------------------------------------------------------------------ nomes brasileiros e corpos renomeados
+@pytest.mark.parametrize(
+    ("nome", "perfil"),
+    [
+        ('U 8"x17,1 - Plataforma[1]', 'U 8" x 17,10'),
+        ('Viga-3(U 8" x 20,5 - Escada[2])', 'U 8" x 20,50'),
+        ('W 8" x 31,3', "W 200 x 31,3"),
+        ('U 8"x99', None),  # massa sem perfil perto: não chuta
+        ("Perfil T - Plataforma[5]", None),
+    ],
+)
+def test_nome_brasileiro_em_polegadas_e_kg_por_metro(nome, perfil):
+    assert em.perfil_do_nome(nome) == perfil
+
+
+def test_lista_de_corte_reconhece_o_nome_brasileiro():
+    assert lm.perfil_conhecido('U 8"x17,1').nome == 'U 8" x 17,10'
+    assert lm.perfil_conhecido("C8x13.75").nome == 'U 8" x 20,50'
+
+
+def renomeado(*, isca: bool = False) -> ld.GeometriaDoModelo:
+    """O pórtico com o corpo da viga renomeado depois do estudo (o Simulation tem o antigo)."""
+    corpos = dict(sw.CORPOS)
+    corpos['U 8"x17,1 - Plataforma[2]'] = corpos.pop("Canal c C8X13.75(1)[2]")
+    if isca:
+        # Outro grupo com o mesmo número [2], mas em pé: a inclinação do PP descarta.
+        corpos['U 8"x17,1 - Escada[2]'] = ("x", "x", (9000, 0, 0), (9000, 4000, 0), "W 310 x 32,7")
+    return geometria(corpos=corpos)
+
+
+@pytest.mark.parametrize("isca", [False, True])
+def test_corpo_renomeado_depois_do_estudo(isca):
+    g = renomeado(isca=isca)
+    dados = importar("PP", "W0")
+    assert ld.corpo_da_viga(g, VIGA) is None  # pelo nome, não acha
+    casamento = ld.correspondencia(g, dados.nomes_dos_membros, dados)
+    assert casamento.corpos[VIGA].nome == 'U 8"x17,1 - Plataforma[2]'
+    assert casamento.renomeados == {"Canal c C8X13.75(1)": 'U 8"x17,1 - Plataforma'}
+    assert casamento.pela_renomeacao == 1
+    leituras = {lb.barra: lb for lb in ld.ler_barras(dados, g)}
+    assert leituras[VIGA].corpo.nome == 'U 8"x17,1 - Plataforma[2]'
+    achados = ld.diagnosticar(dados, plano_do_portico(), g, list(leituras.values()))
+    atencao = achado(achados, "Corpos renomeados depois do estudo")
+    assert '“Canal c C8X13.75(1)” → “U 8"x17,1 - Plataforma”' in atencao.texto
+    assert "Barras fora do esqueleto" not in titulos(achados)
+
+
+def test_sem_numero_que_case_fica_sem_corpo():
+    corpos = dict(sw.CORPOS)
+    corpos["Outro nome"] = corpos.pop("Canal c C8X13.75(1)[2]")  # sem [n]: não dá para casar
+    g = geometria(corpos=corpos)
+    casamento = ld.correspondencia(g, importar("PP").nomes_dos_membros, importar("PP"))
+    assert VIGA not in casamento.corpos and not casamento.renomeados
+
+
+def test_pp_so_com_a_gravidade_nas_barras_confirma():
+    achados = ld.diagnosticar(importar("PP"), plano_do_portico(), geometria_coerente())
+    ok = achado(achados, "PP só com a gravidade nas barras")
+    assert ok.nivel == pc.NIVEL_OK and "Em 3 barra(s)" in ok.texto
+    # Sem as reações: a conferência barra a barra continua (não depende delas).
+    sem_reacoes = importar("PP", com_reacoes=False)
+    assert "PP só com a gravidade nas barras" in titulos(
+        ld.diagnosticar(sem_reacoes, plano_do_portico(), geometria_coerente())
+    )
+    erro = achado(
+        ld.diagnosticar(sem_reacoes, plano_do_portico(), geometria()),
+        "Carga além do peso próprio no PP",
+    )
+    assert erro.barras == (VIGA,)
+
+
+def test_mesmo_item_com_dois_perfis_corpo_a_corpo():
+    """O membro renomeado para U 8"x17,1 com a seção nova; um banzo ficou com o perfil antigo."""
+    u17, u20 = sw.sc.obter_perfil('U 8" x 17,10'), sw.sc.obter_perfil('U 8" x 20,50')
+    corpos = {
+        'U 8"x17,1 - Plataforma[1]': (
+            "C8x13.75<1>",
+            "C8x13.75",
+            (0, 4000, 0),
+            (6000, 4000, 0),
+            'U 8" x 17,10',
+        ),
+        'U 8"x17,1 - Plataforma[2]': (
+            "C8x13.75<1>",
+            "C8x13.75",
+            (0, 4000, 1500),
+            (6000, 4000, 1500),
+            'U 8" x 17,10',
+        ),
+        "Aparar/Estender24": (
+            "C8x13.75<34>",
+            "C8x13.75",
+            (0, 0, 3000),
+            (3200, 2100, 3000),
+            'U 8" x 20,50',
+        ),
+    }
+    # O banzo tem cortes: 8 % de volume a menos que o perfil cheio.
+    banzo = u20.area_mm2 * 3827.5 / 1000 * 0.92
+    g = geometria(corpos=corpos, volumes_cm3={"Aparar/Estender24": banzo})
+    perfis = {c.nome: ld.perfil_do_corpo(c)[0] for c in g.corpos}
+    assert perfis['U 8"x17,1 - Plataforma[1]'] == 'U 8" x 17,10'
+    assert perfis["Aparar/Estender24"] == 'U 8" x 20,50'  # 0,92 × 26,1 > 21,8 × 1,03
+    (aviso,) = [a for a in g.avisos if a.startswith("O mesmo item da lista de corte")]
+    assert (
+        '“C8x13.75”: 2 corpo(s) com a seção do U 8" x 17,10, 1 com o U 8" x 20,50 (Aparar/Estender24)'
+        in aviso
+    )
+    # Sem o nome do corpo, a área decide: o mais leve que ainda cobre a seção.
+    assert u17.area_mm2 < u20.area_mm2
+
+
+@pytest.mark.parametrize(
+    ("volume_relativo", "esperado"),
+    [(1.0, 'U 8" x 17,10'), (0.75, 'U 8" x 17,10'), (1.2, 'U 8" x 20,50')],
+)
+def test_perfil_pela_area_com_folga_do_corte(volume_relativo, esperado):
+    u17 = sw.sc.obter_perfil('U 8" x 17,10')
+    corpos = {"Peca[1]": ("C8x13.75<1>", "C8x13.75", (0, 0, 0), (1000, 0, 0), 'U 8" x 17,10')}
+    g = geometria(corpos=corpos, volumes_cm3={"Peca[1]": u17.area_mm2 * volume_relativo})
+    (corpo,) = g.corpos
+    perfil, origem = ld.perfil_do_corpo(corpo)
+    assert perfil == esperado
+    if esperado == 'U 8" x 17,10':
+        assert "área da seção" in origem
+
+
+def test_pecas_cortadas_seguem_as_retas_do_mesmo_membro():
+    """O nome diz U 8"x17,1, mas a peça reta do membro é do U 8" x 20,50: a cortada segue a reta
+    (é o que está desenhado), não o nome."""
+    u20 = sw.sc.obter_perfil('U 8" x 20,50')
+    corpos = {
+        'U 8"x17,1 - Escada[1]': (
+            "C8x13.75<17>",
+            "C8x13.75",
+            (0, 0, 0),
+            (0, 0, 800),
+            'U 8" x 20,50',
+        ),
+        'U 8"x17,1 - Escada[7]': (
+            "C8x13.75<24>",
+            "C8x13.75",
+            (0, 0, 0),
+            (760, 0, 0),
+            'U 8" x 20,50',
+        ),
+    }
+    cortada = u20.area_mm2 * 760 / 1000 * 0.73  # dois cortes a 45°
+    g = geometria(corpos=corpos, volumes_cm3={'U 8"x17,1 - Escada[7]': cortada})
+    perfis = ld.perfis_do_esqueleto(g)
+    assert perfis['U 8"x17,1 - Escada[1]'][0] == 'U 8" x 20,50'  # reta: caixa e área exatas
+    assert perfis['U 8"x17,1 - Escada[7]'][0] == 'U 8" x 20,50'
+    assert "as peças retas do mesmo membro" in perfis['U 8"x17,1 - Escada[7]'][1]
+    # Sozinha, a peça cortada fica com o que o nome diz (os dois perfis cabem nela).
+    so = geometria(
+        corpos={'U 8"x17,1 - Escada[7]': corpos['U 8"x17,1 - Escada[7]']},
+        volumes_cm3={'U 8"x17,1 - Escada[7]': cortada},
+    )
+    assert ld.perfis_do_esqueleto(so)['U 8"x17,1 - Escada[7]'][0] == 'U 8" x 17,10'

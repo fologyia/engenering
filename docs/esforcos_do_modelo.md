@@ -162,14 +162,24 @@ de estranho".
 são **erro e bloqueiam a gravação**; nome do estudo que indica outro caso, forças e reações de
 estudos diferentes são aviso; forças sem as reações, informação.
 
-**Perfis com corte e peças curtas.** A área pelo volume encolhe com o corte em meia-esquadria (um
-U 8" cortado "parecia" um U 6"). Por isso a área de cada perfil é a maior entre os corpos de mesmo
-nome (a peça mais reta — `areas_por_perfil`, o critério da Lista de material), e um perfil adotado
-pela área é recusado se não cabe na seção medida pela macro (`cabe_na_secao`: a diagonal do perfil
-tem de alcançar a maior medida da seção do corpo — um L 2" não chega aos 91,8 mm de um L 2½" medido
-nos eixos principais). Numa peça curta (BLOCO), a maior medida pode ser a da seção: a direção vem do
-peso próprio. Perfil de mesmo nome com volume por metro diferente (peças longas, ± 30 %) vira aviso
-do esqueleto: corpo recortado ou com outra seção.
+**Perfil de cada corpo** (`perfil_do_corpo`, `perfis_do_esqueleto`). Corpo a corpo, entre os
+perfis da família do item da lista de corte: a área da seção (volume ÷ comprimento) só pode ser
+menor que a do perfil (o corte nas pontas tira volume, no máximo duas alturas de seção sobre o
+comprimento, até 60 %); o perfil tem de caber na seção medida (`cabe_na_secao`: um L 2" não chega
+aos 91,8 mm de um L 2½" medido nos eixos principais) e, numa barra comprida, a caixa não pode ser
+menor que a seção (I, U, W, H: altura × aba — um corpo com aba de 57,4 mm não é U 8" x 20,50). Entre
+os que passam, nesta ordem: a peça reta (caixa e área exatas do perfil, ± 2,5 % e ± 3 %), as peças
+retas do mesmo membro (o nome antes do [n]: as cortadas seguem as retas do membro), o nome do
+corpo (U 8"x17,1), o item da lista de corte; sem nenhum, o mais leve que cobre a área. A caixa
+sozinha engana (um 17,1 cortado a 45° chega à aba de 59,5 mm do 20,5) e o nome também (o modelo
+já teve membros chamados "U 8"x17,1" desenhados com o C8x13.75): a geometria vem antes. Quando o
+mesmo item da lista de corte sai com perfis diferentes, o esqueleto avisa e diz quais corpos — no
+modelo real, os dois banzos da escada que ficaram com o perfil antigo (U 8" x 20,50) depois da troca
+dos outros 24 corpos para o U 8" x 17,10. Numa peça curta (BLOCO), a maior medida pode ser a da
+seção: a direção vem do peso próprio, e a caixa não entra na conferência. Perfil de mesmo nome
+com volume por metro diferente (peças longas, ± 30 %) também vira aviso do esqueleto. A Lista de
+material faz o mesmo item a item: o perfil adotado pelas peças retas de um nome do SolidWorks não
+vale para o item com a seção maior que a dele (fica o do nome).
 
 **Tensões da viga** (`em.TIPO_TENSOES_VIGA`, `conferir_tensoes`). O "Listar tensões da viga" tem o
 mesmo cabeçalho do "Listar forças da viga", mas em tensão (N/m², MPa, psi…) — reconhecido pela
@@ -182,9 +192,53 @@ mais de 5 % de diferença é aviso. No modelo real, a seção nominal apareceu e
 25,9 cm²; pilares: 40,4 cm² do W 200 x 31,3), menos numa peça de 340 mm com cortes a 53°/37°, em
 que o Simulation tomou 14,8 cm² — a seção errada.
 
+**Corpos renomeados depois do estudo** (`correspondencia`). O Simulation guarda o nome do corpo de
+quando a malha foi feita; renomeado o membro estrutural depois ("Canal c C8X13.75(1)" → "U 8"x17,1 -
+Plataforma"), o nome não casa mais. O membro mantém a numeração `[n]` dos corpos: cada grupo antigo
+vai para o grupo novo com os mesmos números, o perfil do item da lista de corte no nome antigo
+("C8x13.75" em "Canal c C8X13.75") e, com o caso PP, a mesma inclinação do peso próprio (o poste
+vertical e as peças a 45° da escada desempatam "Plataforma" de "Escada"). Um grupo novo serve a um
+só antigo; na dúvida, fica sem corpo. Vira aviso "Corpos renomeados depois do estudo" com o mapa.
+No modelo real: 46 de 46 vigas casadas, 24 pela renomeação.
+
+**Nome do membro × seção desenhada.** O nome brasileiro com polegadas e kg/m (`U 8"x17,1`,
+`W 8" x 31,3`) é lido por `perfil_do_nome`. Se o nome do membro indica um perfil cuja área difere
+mais de 5 % da seção desenhada, o esqueleto avisa: no modelo real, "U 8"x17,1" (21,8 cm²) com a seção
+do C8x13.75 = U 8" x 20,50 (25,9 cm²) — o Simulation calcula com a desenhada.
+
+**PP só com a gravidade nas barras** (informação positiva): sem precisar das reações, a carga que o
+PP mostra ao longo de cada barra é comparada com o peso dela pelo volume do esqueleto. No modelo
+real, o estudo novo ("Apenas Gravidade") deu 13,95 kN ao longo das barras contra 13,75 kN de aço.
+O nome do estudo sugere o caso também pelo assunto: "Apenas Gravidade", "Peso próprio" → PP;
+"Sobrecarga" → SC (`caso_sugerido`).
+
+**Comprimentos de flambagem pelos travamentos** (`core/travamentos.py`, `comprimentos`). Com o
+esqueleto, o programa acha onde cada barra é ligada a outras (`ligacoes`: a ponta da outra encosta
+nela, a até 0,30 m, ou as duas se cruzam; paralelas lado a lado não contam) e em que direção cada
+ligação trava: a outra barra trava a direção d se tem componente nela (|cos| ≥ 0,5). Entre dois
+travamentos, o trecho destravado; o maior é o comprimento de flambagem, com K = 1 — o B₂ da segunda
+ordem global (página Contraventamento) cobre o deslocamento lateral, como no método da amplificação
+dos esforços da NBR 8800. Nas pontas, qualquer ligação faz um nó (só a ponta que não encosta em
+nada, fora do apoio, é balanço: K = 2,1, NBR 8800 Tabela E.1); ligações a menos de 0,10 m são o mesmo
+nó, e a sobra de esqueleto de até 0,40 m além do último nó não é balanço quando a barra tem vão.
+
+* **Pilar**: as duas direções em planta. Com a orientação da seção (macro v5: a direção da medida
+  maior, a alma), Lx é o trecho na direção da alma e Ly na da mesa; sem ela (v4), Lx = Ly = o maior
+  dos dois, a favor da segurança.
+* **Viga**: Lx entre os apoios verticais (pontas, pilares e mãos-francesas que chegam nela); Ly e Lb
+  entre os travamentos laterais (vigas e contraventamentos que chegam de lado, e os apoios — o topo
+  do pilar segura a viga de lado e contra a torção). A chapa de piso sobre a mesa superior fica dita
+  no motivo (presa à viga, trava a mesa comprimida no momento positivo), mas não entra no Lb sugerido.
+* **Barra inclinada**: no plano vertical dela e fora dele; contraventamento: Lx = Ly = o maior.
+
+No modelo real: a viga principal de 4,48 m saiu com Lx = 1,23 m (apoiada no pilar do meio e nas
+mãos-francesas) e Lb = 0,60 m (as transversais e as cantoneiras que chegam de lado); o pilar com a
+mão-francesa em X e outra em Z, 2,83 m em X e 3,14 m em Z (sem a orientação, Lx = Ly = 3,14 m).
+A tabela das barras mostra "Lx / Ly / Lb sugeridos (m)" e a leitura barra a barra, o motivo.
+
 **Sugestões** (`aplicar_sugestoes`, botão "Aplicar as sugestões"): preenchem só o que está vazio —
-tipo, perfil (só se estiver no catálogo), eixo forte (quando o tipo também era vazio), Lx = Ly = Lb =
-comprimento. O perfil que entrou sozinho pelo nome da viga na importação dá lugar ao do modelo
+tipo, perfil (só se estiver no catálogo), eixo forte (quando o tipo também era vazio) e Lx, Ly e Lb
+pelos travamentos do esqueleto (sem eles, o comprimento da barra). O perfil que entrou sozinho pelo nome da viga na importação dá lugar ao do modelo
 (com o esqueleto). Nada escolhido à mão é trocado. O esqueleto fica em
 `projeto["geometria_do_modelo"]` (lido de forma tolerante: linhas fora do formato são puladas).
 
@@ -269,6 +323,9 @@ linha tracionada (vazio = N/2 − 50 mm).
 
 ## Testes
 
+`tests/test_travamentos.py` (pontos mais próximos entre barras, pilar travado numa direção, com e
+sem a orientação, balanço, viga com secundárias e pilar no meio, mão-francesa, sobra curta,
+paralelas, chapa sobre a viga, contraventamento em X, leitura e sugestões),
 `tests/test_leitura_do_modelo.py` (esqueleto, tipo pela posição e pelos esforços, pontas, malha, cada achado do diagnóstico, avisos do envio, sugestões, gravado corrompido), `tests/test_esforcos_modelo.py` (leitura com arquivos no formato do SolidWorks gerados por
 `tests/dados_solidworks.py` a partir do pórtico do mini exemplo, conferência, envoltória ponto a
 ponto contra a conta à mão, malhas diferentes), `tests/test_verificacao_barras.py` (pilar contra a página Flambagem de colunas, B₂, pendências, tirante, cantoneira, registro e memorial) `tests/test_quadro_fundacoes.py`, `tests/test_placa_base_pilares.py` (conta à mão do Design Guide 1, momento grande, critério Anglo, placa pequena, pendências, eixo fraco, ida e volta pelo projeto, registro e desenho) e `tests/test_esforcos_modelo_pagina.py`.

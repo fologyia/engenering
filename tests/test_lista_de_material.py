@@ -375,7 +375,8 @@ def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
     # O segundo arquivo, o esqueleto, e o cabeçalho dos dois (ver o contrato na leitura do modelo).
     assert '"CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);"' in macro
     assert (
-        '"X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)"' in macro
+        '"X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3);"'
+        in macro
     )
     assert "_esqueleto.csv" in macro
     for chave in ("MACRO;", "PECA;", "CONFIGURACAO;", "DATA;"):
@@ -392,6 +393,8 @@ def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
         "GetEdges",  # os centros das arestas circulares: tubo redondo não tem vértice
         "CircleParams",
         "GetBodies2",  # os corpos fora da lista de corte
+        "GetLoops",  # o contorno das chapas (v5)
+        "GetCoEdges",
         "Scripting.Dictionary",
     ):
         assert chamada in macro, chamada
@@ -564,3 +567,34 @@ def test_lista_sem_coluna_de_material_nao_avisa_material():
         b"QTD;DESCRICAO;COMPRIMENTO\n1;W 200 x 35,9 (H);1000\n", "x.csv"
     )
     assert not any("material na peça" in a for a in avisos)
+
+
+def test_mesmo_nome_com_perfil_antigo_numa_peca_fica_o_do_nome():
+    """C8x13.75 adotado como U 8" x 17,10 pelas peças retas; o banzo com cortes e a seção do
+    U 8" x 20,50 (maior que a do 17,10) não muda."""
+
+    def linha(item, qtd, comprimento, area_cm2, angulos):
+        volume = area_cm2 * comprimento / 10
+        massa = volume * 7.85 / 1000
+        return (
+            f'{item};{qtd};"C8x13.75";"{comprimento} mm";"C8x13.75<{item}>";'
+            f'"{volume:.1f}".replace(".", ",");"{massa:.3f}";"";"{angulos[0]}";"{angulos[1]}"'
+        )
+
+    linhas = [
+        "ITEM;QTD.;DESCRICAO;COMPRIMENTO;NOME NA LISTA DE CORTE;VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg);CAIXA (mm);ÂNGULO1;ÂNGULO2"
+    ]
+    for item, qtd, comprimento, area, angulos in (
+        (1, 4, 1800, 21.8, ("0°", "0°")),
+        (2, 1, 3913, 24.0, ("56°", "0°")),
+    ):
+        volume = area * comprimento / 10
+        massa = volume * 7.85 / 1000
+        linhas.append(
+            f'{item};{qtd};"C8x13.75";"{comprimento} mm";"C8x13.75<{item}>";'
+            + f'"{volume:.1f}";"{massa:.3f}";"";"{angulos[0]}";"{angulos[1]}"'.replace(".", ",")
+        )
+    itens, avisos = lm.ler_lista_de_corte("\r\n".join(linhas).encode("cp1252"), "x.csv")
+    assert [i.descricao for i in itens] == ['U 8" x 17,10', 'U 8" x 20,50']
+    assert "seção maior" in itens[1].observacao
+    assert any("menos 1 item(ns) com a seção maior" in a for a in avisos)

@@ -2211,8 +2211,9 @@ elif modulo == "Esforços do modelo":
            que mudou entre os estudos, 2ª ordem global (B₂). Os vermelhos invalidam a análise:
            corrija no SolidWorks e importe de novo.
         6. Na **tabela das barras**, use **Aplicar as sugestões** (preenche só o vazio: tipo,
-           perfil do modelo, eixo forte e comprimentos), confira e veja o **pior caso de cada
-           barra**.
+           perfil do modelo, eixo forte e os comprimentos de flambagem pelos travamentos do
+           esqueleto — onde outras barras se ligam a cada uma, em cada direção), confira e veja o
+           **pior caso de cada barra**.
         7. Em **Parâmetros da verificação**, informe por tipo de barra o aço, os comprimentos de
            flambagem Lx e Ly, o Lb, o Cb e o B₂ (da página Contraventamento).
         8. Leia a **Verificação das barras** (atendem, não atendem, sem dados), abra o cálculo
@@ -2268,7 +2269,9 @@ elif modulo == "Cargas do esqueleto":
         "No SolidWorks modele **só o esqueleto**: pilares, vigas e contraventamento. O que existe na "
         "obra mas não está no modelo — piso, guarda-corpo, escadas, equipamentos, tubulações, "
         "ligações — e a sobrecarga viram **cargas características nas barras**, caso a caso, e vão "
-        "para o Plano de cargas, de onde sai a planilha para aplicar no SolidWorks."
+        "para o Plano de cargas, de onde sai a planilha para aplicar no SolidWorks. Com o "
+        "esqueleto da macro do SolidWorks, a seção de cima da página leva a carga do piso direto "
+        "às vigas que apoiam cada chapa do modelo (área de influência), em kN/m por viga."
     )
     mostrar_tabela_campos(
         [

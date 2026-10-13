@@ -15,11 +15,13 @@ import pytest
 
 from core import base_tecnica as bt
 from core import cargas_esqueleto as ce
+from core import cargas_pelo_modelo as cpm
 from core import esforcos_modelo as em
 from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
 from core import placa_base_pilares as pb
 from core import plano_de_cargas as pc
+from core import travamentos as tv
 from core.project_store import ProjetoPersistenciaErro, importar_carteira, importar_projeto
 from tests import dados_solidworks as sw
 from tests.test_lista_de_material import CSV_DA_MACRO, CSV_DA_MACRO_COM_GEOMETRIA
@@ -84,6 +86,20 @@ def test_esqueleto_estragado_so_da_geometria_invalida(semente):
         _bytes_aleatorios(gerador),
         _estragar(sw.csv_esqueleto(), gerador),
         _estragar(sw.csv_esqueleto(decimal="."), gerador),
+        _estragar(
+            sw.csv_esqueleto(
+                formas={"Canal c C8X13.75(1)[2]": "CHAPA"},
+                contornos={
+                    "Canal c C8X13.75(1)[2]": [(0, 4000, 0), (6000, 4000, 0), (6000, 4000, 900)]
+                },
+                aberturas={
+                    "Canal c C8X13.75(1)[2]": [
+                        [(100, 4000, 100), (200, 4000, 100), (200, 4000, 200)]
+                    ]
+                },
+            ),
+            gerador,
+        ),
     ]
     for conteudo in candidatos:
         ld.tipo_do_arquivo(conteudo)  # reconhecer nunca quebra
@@ -94,6 +110,9 @@ def test_esqueleto_estragado_so_da_geometria_invalida(semente):
         dados = em.EsforcosDoModelo()
         ld.ler_barras(dados, g)
         ld.pontas_soltas_pela_geometria(g, "Y")
+        for corpo in g.corpos:
+            tv.comprimentos(g, corpo, "Viga", "Y")
+        cpm.distribuir(g, {"SC": 5.0}, "Y")
         assert ld.de_dicionario(json.loads(json.dumps(ld.para_dicionario(g)))).corpos
 
 

@@ -176,6 +176,15 @@ CORPOS = {
 }
 
 
+def _campo(texto: str) -> str:
+    """Como a macro escreve (Campo): entre aspas, com as aspas de dentro dobradas."""
+    return '"' + texto.replace('"', '""') + '"'
+
+
+def _texto_do_poligono(pontos, texto) -> str:
+    return " | ".join(" ".join(texto(v) for v in ponto) for ponto in pontos)
+
+
 def csv_esqueleto(
     *,
     corpos: dict | None = None,
@@ -184,29 +193,44 @@ def csv_esqueleto(
     decimal: str = ",",
     volumes_cm3: dict | None = None,
     formas: dict | None = None,
+    versao: str = "v5",
     versao_antiga: bool = False,
+    direcoes: dict | None = None,
+    contornos: dict | None = None,
+    aberturas: dict | None = None,
     linhas_extras: tuple[str, ...] = (),
 ) -> bytes:
-    """O ``<peça>_esqueleto.csv`` da macro v4 (cp1252; ``Format "0.0"``; mm e cm³): o cabeçalho
-    (macro, peça, configuração, data), a forma e as medidas da seção de cada corpo.
-    ``versao_antiga`` grava o formato da v3 (sem cabeçalho, forma nem seção)."""
+    """O ``<peça>_esqueleto.csv`` da macro (cp1252; ``Format "0.0"``; mm e cm³).
+
+    v5 (padrão): cabeçalho (macro, peça, configuração, data), forma, medidas e direção da seção
+    (a medida maior: a alma) e, nas chapas, o contorno e as aberturas (``contornos`` e
+    ``aberturas``: nome → pontos em mm). ``versao="v4"``: sem direção nem contorno.
+    ``versao_antiga`` (v3): sem cabeçalho, forma nem seção.
+    """
 
     def texto(valor: float) -> str:
         return f"{valor:.1f}".replace(".", decimal)
 
     if versao_antiga:
+        versao = "v3"
+    colunas = (
+        "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);X2 (mm);Y2 (mm);Z2 (mm);"
+        "COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)"
+    )
+    if versao == "v3":
         linhas = [
             "CORPO;ITEM DA LISTA;DESCRICAO;X1 (mm);Y1 (mm);Z1 (mm);X2 (mm);Y2 (mm);Z2 (mm);"
             "COMPRIMENTO (mm);VOLUME (cm3)"
         ]
     else:
+        if versao == "v5":
+            colunas += ";DIRECAO A X;DIRECAO A Y;DIRECAO A Z;CONTORNO (mm);ABERTURAS (mm)"
         linhas = [
-            'MACRO;"Mecanica Toolkit - exportar_lista_de_corte v4"',
+            f'MACRO;"Mecanica Toolkit - exportar_lista_de_corte {versao}"',
             'PECA;"portico.SLDPRT"',
             'CONFIGURACAO;"Padrão"',
             'DATA;"2026-10-12 18:30"',
-            "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);X2 (mm);Y2 (mm);Z2 (mm);"
-            "COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)",
+            colunas,
         ]
     for nome, (item, descricao, p1, p2, perfil) in (corpos or CORPOS).items():
         comprimento = sum((b - a) ** 2 for a, b in zip(p1, p2, strict=True)) ** 0.5
@@ -215,15 +239,29 @@ def csv_esqueleto(
         volume = (volumes_cm3 or {}).get(nome, volume)
         pontas = ";".join(texto(v) for v in (*p1, *p2))
         cauda = texto(volume) if com_volume else ""
-        if versao_antiga:
-            linhas.append(f'"{nome}";"{item}";"{descricao}";{pontas};{texto(comprimento)};{cauda}')
-        else:
-            forma = (formas or {}).get(nome, "BARRA")
-            medidas = f"{texto(secao.altura_mm)};{texto(secao.largura_mm)}"
+        if versao == "v3":
             linhas.append(
-                f'"{nome}";"{item}";"{descricao}";{forma};{pontas};{texto(comprimento)};'
-                f"{medidas};{cauda}"
+                f"{_campo(nome)};{_campo(item)};{_campo(descricao)};{pontas};"
+                f"{texto(comprimento)};{cauda}"
             )
+            continue
+        forma = (formas or {}).get(nome, "BARRA")
+        medidas = f"{texto(secao.altura_mm)};{texto(secao.largura_mm)}"
+        linha = (
+            f"{_campo(nome)};{_campo(item)};{_campo(descricao)};{forma};{pontas};"
+            f"{texto(comprimento)};{medidas};{cauda}"
+        )
+        if versao == "v5":
+            # A alma: na horizontal (X) num pilar, na vertical (Y) numa barra deitada.
+            vertical = abs(p2[1] - p1[1]) >= 0.97 * comprimento if comprimento else False
+            direcao = (direcoes or {}).get(nome, (1.0, 0.0, 0.0) if vertical else (0.0, 1.0, 0.0))
+            componentes = ";".join(f"{v:.4f}".replace(".", decimal) for v in direcao)
+            contorno = _texto_do_poligono((contornos or {}).get(nome, ()), texto)
+            furos = " || ".join(
+                _texto_do_poligono(abertura, texto) for abertura in (aberturas or {}).get(nome, ())
+            )
+            linha += f';{componentes};"{contorno}";"{furos}"'
+        linhas.append(linha)
     linhas.extend(linhas_extras)
     return "\r\n".join(linhas).encode("cp1252")
 

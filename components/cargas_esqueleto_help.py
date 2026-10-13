@@ -84,6 +84,50 @@ AJUDA: dict[str, str] = {
         "EO, IM e a temperatura), além de pôr o acréscimo de ligações na gravidade do PP."
     ),
     "btn_csv": "As cargas de todos os casos em CSV (abre no Excel).",
+    "sec_modelo": (
+        "Com o esqueleto da macro do SolidWorks, a carga do piso (sobrecarga e outras cargas por "
+        "área) vai direto para as vigas do seu modelo: cada pedaço de chapa vai para a viga mais "
+        "perto que a apoia (área de influência). O resultado é a carga em kN/m de cada viga, caso a "
+        "caso, para aplicar no Simulation — e a conferência das reações passa a fechar."
+    ),
+    "arquivo_esqueleto": (
+        "O …_esqueleto.csv que a macro do SolidWorks grava na pasta da peça. A macro v5 grava "
+        "também o contorno de cada chapa (recortes e aberturas); com a v4, só as chapas "
+        "retangulares recebem a carga."
+    ),
+    "btn_gravar_esqueleto": (
+        "Grava o esqueleto no projeto ativo; ele também serve na página Esforços do modelo."
+    ),
+    "btn_macro_modelo": (
+        "Baixa a macro do SolidWorks. Com a peça soldada aberta: Ferramentas › Macro › Nova, cole "
+        "o texto e tecle F5. Ela grava a lista de corte e o esqueleto na pasta da peça."
+    ),
+    "cargas_por_area": (
+        "Cada caso com carga por área (kN/m²), na projeção horizontal — como a NBR 6120 dá a "
+        "sobrecarga. Vêm do plano de cargas (ou da base técnica); mude aqui se quiser. O peso das "
+        "chapas não entra: ele já está no modelo (gravidade do PP)."
+    ),
+    "res_chapas": (
+        "As chapas de piso do esqueleto (até 60° com a horizontal: piso, patamar, escada). "
+        "Desmarque a que não recebe a carga. “Medida por”: contorno (macro v5, com recortes) ou "
+        "retângulo (chapa que enche a caixa)."
+    ),
+    "res_modelo": (
+        "A área de chapa que recebeu carga (projeção horizontal), quantas vigas a recebem e o "
+        "total de cada caso nas vigas."
+    ),
+    "caso_modelo": "Qual caso mostrar na tabela das vigas.",
+    "res_vigas_modelo": (
+        "A carga de cada viga no caso: kN/m uniforme na viga inteira (o total dividido pelo "
+        "comprimento), o total, o trecho em que a chapa encosta e de que chapas vem. Aplique no "
+        "Simulation no estudo do caso, com o valor característico."
+    ),
+    "btn_enviar_modelo": (
+        "Grava no plano de cargas, para cada caso, uma carga distribuída por viga (substitui as "
+        "linhas do caso). A conferência das reações da página Esforços do modelo passa a "
+        "comparar com elas."
+    ),
+    "btn_csv_modelo": "As cargas de todas as vigas, caso a caso, em CSV (abre no Excel).",
     "reg_registrar": (
         "Grava o cálculo no projeto ativo: o memorial ganha o capítulo das ações sobre o esqueleto."
     ),

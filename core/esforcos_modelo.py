@@ -526,7 +526,18 @@ def caso_sugerido(estudo: str, codigos: Iterable[str]) -> str | None:
         )
         if achado:
             return achado
+    # Sem o código no nome, pelo assunto: "Apenas Gravidade", "Peso próprio" → PP; "Sobrecarga" → SC.
+    normal = _sem_acento(estudo).casefold()
+    for palavras, codigo in _ASSUNTOS:
+        if codigo.casefold() in disponiveis and any(p in normal for p in palavras):
+            return disponiveis[codigo.casefold()]
     return None
+
+
+_ASSUNTOS = (
+    (("gravidade", "peso proprio", "self weight", "selfweight", "dead load"), "PP"),
+    (("sobrecarga", "live load"), "SC"),
+)
 
 
 def _catalogo() -> dict[str, float]:
@@ -559,6 +570,22 @@ def perfil_do_nome(nome: str) -> str | None:
     """
     catalogo = _catalogo()
     texto = nome.replace(",", ".")
+    # Nome brasileiro: altura em polegadas com aspas e massa em kg/m (U 8" x 17,1; W 8" x 31,3).
+    m = re.search(r'\b(U|I|W|HP)\s*(\d+)\s*(?:"|\'\'|pol)\s*[xX×]\s*([\d.]+)', texto)
+    if m:
+        from core import section_catalog as sc
+
+        prefixo, altura, massa = m.group(1), float(m.group(2)) * 25.4, float(m.group(3))
+        candidatos = {
+            n: p.massa_kg_m
+            for n, p in sc.listar_perfis().items()
+            if n.startswith(f"{prefixo} ") and abs(p.altura_mm - altura) <= 15
+        }
+        if candidatos:
+            escolhido = min(candidatos, key=lambda n: abs(candidatos[n] - massa))
+            if abs(candidatos[escolhido] - massa) <= 0.10 * massa:
+                return escolhido
+        return None
     m = re.search(r"\bC(\d+)\s*[xX]\s*([\d.]+)", texto)
     if m:
         massa = float(m.group(2)) * 1.48816

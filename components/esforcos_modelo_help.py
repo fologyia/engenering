@@ -67,9 +67,10 @@ AJUDA: dict[str, str] = {
     ),
     "btn_aplicar_sugestoes": (
         "Preenche a tabela das barras com o que o programa entendeu: tipo, perfil (só se estiver "
-        "no catálogo), eixo forte e os comprimentos de flambagem iniciais iguais ao comprimento "
-        "da barra. Só preenche o que está vazio; nada que você escolheu é trocado. Depois confira "
-        "e reduza o Lb das vigas travadas pelo piso."
+        "no catálogo), eixo forte e os comprimentos de flambagem pelos travamentos do esqueleto "
+        "(onde outras barras se ligam a cada uma, em cada direção; K = 1, balanço K = 2,1). Só "
+        "preenche o que está vazio; nada que você escolheu é trocado. A chapa de piso presa à "
+        "mesa superior não entra no Lb sugerido: confira a fixação antes de reduzir."
     ),
     "sec_envoltoria": (
         "Para cada barra, o pior de todas as combinações do plano de cargas, ponto a ponto: a "

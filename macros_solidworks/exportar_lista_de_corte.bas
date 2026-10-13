@@ -8,8 +8,10 @@
 ' Saem dois arquivos na pasta da peca:
 ' - <peca>_lista_de_corte.csv: envie na pagina "Lista de material" do Mecanica Toolkit;
 ' - <peca>_esqueleto.csv: cada corpo com a linha de centro (mm), a forma (barra, chapa ou bloco),
-'   as medidas e o volume; envie na pagina "Esforcos do modelo" junto com os CSV do Simulation (o
-'   programa reconhece pilares, vigas e contraventamentos, os comprimentos e os perfis).
+'   as medidas, a direcao da medida maior da secao (a alma) e o volume; nas chapas, o contorno da
+'   face maior e as aberturas. Envie na pagina "Esforcos do modelo" junto com os CSV do
+'   Simulation (pilares, vigas e contraventamentos, comprimentos de flambagem, perfis) e use em
+'   "Cargas do esqueleto" (a carga do piso distribuida pelas vigas que apoiam cada chapa).
 '
 ' Robustez: se algo der errado, a macro diz em que etapa parou e por que (arquivo aberto no Excel,
 ' pasta sem permissao...), fecha os arquivos e nao mexe na peca. Um corpo cuja geometria nao pode
@@ -17,7 +19,7 @@
 ' sempre com virgula decimal, qualquer que seja a configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v4"
+Const VERSAO_DA_MACRO As String = "v5"
 Const DENSIDADE_ACO As Double = 7850#
 
 Dim nomes() As String
@@ -136,7 +138,8 @@ Sub main()
     Open caminhoEsqueleto For Output As #arquivoEsqueleto
     Cabecalho arquivoEsqueleto, peca, configuracao, quando
     Print #arquivoEsqueleto, "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);" & _
-        "X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)"
+        "X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3);" & _
+        "DIRECAO A X;DIRECAO A Y;DIRECAO A Z;CONTORNO (mm);ABERTURAS (mm)"
 
     ' 5) Um item por linha na lista de corte; um corpo por linha no esqueleto.
     Dim vistos As Object
@@ -144,7 +147,7 @@ Sub main()
     Dim valor As String, resolvido As String, comprimento As String, descricao As String
     Dim vCorpos As Variant, vMassa As Variant, swCorpo As SldWorks.Body2
     Dim volume As Double, corpos As Long, k As Long, caixa As String
-    Dim g(8) As Double, forma As String
+    Dim g(11) As Double, forma As String
     Dim totalCorpos As Long, barras As Long, chapas As Long, blocos As Long
     For i = 1 To pastas.Count
         Set swSub = pastas(i)
@@ -183,7 +186,7 @@ Sub main()
                     corpos = corpos + 1
                 End If
                 If Geometria(swCorpo, vMassa, g, forma) Then
-                    EscreverCorpo swCorpo.Name, swSub.Name, descricao, forma, g, vMassa
+                    EscreverCorpo swCorpo, swSub.Name, descricao, forma, g, vMassa
                     totalCorpos = totalCorpos + 1
                     Contar forma, barras, chapas, blocos
                     ' Caixa de uma peca nas direcoes do proprio corpo (chapa inclinada tambem).
@@ -228,7 +231,7 @@ Sub main()
             If Not vistos.Exists(swCorpo.Name) Then
                 vMassa = Massa(swCorpo)
                 If Geometria(swCorpo, vMassa, g, forma) Then
-                    EscreverCorpo swCorpo.Name, "", "fora da lista de corte", forma, g, vMassa
+                    EscreverCorpo swCorpo, "", "fora da lista de corte", forma, g, vMassa
                     totalCorpos = totalCorpos + 1
                     foraDaLista = foraDaLista + 1
                     Contar forma, barras, chapas, blocos
@@ -306,18 +309,125 @@ Sub Cabecalho(ByVal numeroDoArquivo As Integer, peca As String, configuracao As 
     Print #numeroDoArquivo, "DATA;" & Campo(quando)
 End Sub
 
-Sub EscreverCorpo(nomeDoCorpo As String, item As String, descricao As String, forma As String, _
+Sub EscreverCorpo(swCorpo As SldWorks.Body2, item As String, descricao As String, forma As String, _
     g() As Double, vMassa As Variant)
-    Dim volumeTexto As String
+    Dim volumeTexto As String, contorno As String, aberturas As String
     volumeTexto = ""
     If IsArray(vMassa) Then volumeTexto = Num(vMassa(3) * 1000000#, "0.0")
-    Print #arquivoEsqueleto, Campo(nomeDoCorpo) & ";" & Campo(item) & ";" & Campo(descricao) & ";" & _
+    contorno = ""
+    aberturas = ""
+    If forma = "CHAPA" Then
+        If Not ContornoDaChapa(swCorpo, contorno, aberturas) Then
+            contorno = ""
+            aberturas = ""
+        End If
+    End If
+    Print #arquivoEsqueleto, Campo(swCorpo.Name) & ";" & Campo(item) & ";" & Campo(descricao) & ";" & _
         forma & ";" & _
         Num(g(0) * 1000#, "0.0") & ";" & Num(g(1) * 1000#, "0.0") & ";" & Num(g(2) * 1000#, "0.0") & ";" & _
         Num(g(3) * 1000#, "0.0") & ";" & Num(g(4) * 1000#, "0.0") & ";" & Num(g(5) * 1000#, "0.0") & ";" & _
         Num(g(6) * 1000#, "0.0") & ";" & Num(g(7) * 1000#, "0.0") & ";" & Num(g(8) * 1000#, "0.0") & ";" & _
-        volumeTexto
+        volumeTexto & ";" & _
+        Num(g(9), "0.0000") & ";" & Num(g(10), "0.0000") & ";" & Num(g(11), "0.0000") & ";" & _
+        Campo(contorno) & ";" & Campo(aberturas)
 End Sub
+
+Function ContornoDaChapa(swCorpo As SldWorks.Body2, contorno As String, aberturas As String) As Boolean
+    ' O contorno da face plana maior da chapa (o laco externo) e as aberturas (os lacos internos),
+    ' em mm: "x y z | x y z | ...", aberturas separadas por "||".
+    Dim vFaces As Variant, k As Long, swFace As SldWorks.Face2, area As Double, maior As Double
+    Dim swMaior As SldWorks.Face2, swSuperficie As SldWorks.Surface
+    Dim vLacos As Variant, swLaco As SldWorks.Loop2, texto As String
+    On Error GoTo Falhou
+    ContornoDaChapa = False
+    contorno = ""
+    aberturas = ""
+    maior = 0
+    vFaces = swCorpo.GetFaces
+    If Not IsArray(vFaces) Then Exit Function
+    For k = 0 To UBound(vFaces)
+        Set swFace = vFaces(k)
+        Set swSuperficie = swFace.GetSurface
+        If Not swSuperficie Is Nothing Then
+            If swSuperficie.IsPlane Then
+                area = swFace.GetArea
+                If area > maior Then
+                    maior = area
+                    Set swMaior = swFace
+                End If
+            End If
+        End If
+    Next k
+    If swMaior Is Nothing Then Exit Function
+    vLacos = swMaior.GetLoops
+    If Not IsArray(vLacos) Then Exit Function
+    For k = 0 To UBound(vLacos)
+        Set swLaco = vLacos(k)
+        texto = PontosDoLaco(swLaco)
+        If texto <> "" Then
+            If swLaco.IsOuter Then
+                contorno = texto
+            Else
+                If aberturas <> "" Then aberturas = aberturas & " || "
+                aberturas = aberturas & texto
+            End If
+        End If
+    Next k
+    ContornoDaChapa = (contorno <> "")
+    Exit Function
+Falhou:
+    ContornoDaChapa = False
+End Function
+
+Function PontosDoLaco(swLaco As SldWorks.Loop2) As String
+    ' Os pontos de um laco, na ordem das co-arestas; um furo redondo (um trecho so, fechado) sai
+    ' com 12 pontos no circulo.
+    Dim vCoArestas As Variant, k As Long, texto As String
+    Dim swCo As SldWorks.CoEdge, vParams As Variant, swCurva As SldWorks.Curve, vCirculo As Variant
+    Dim rx As Double, ry As Double, rz As Double, sx As Double, sy As Double, sz As Double
+    Dim angulo As Double
+    PontosDoLaco = ""
+    vCoArestas = swLaco.GetCoEdges
+    If Not IsArray(vCoArestas) Then Exit Function
+    If UBound(vCoArestas) = 0 Then
+        Set swCo = vCoArestas(0)
+        Set swCurva = swCo.GetEdge.GetCurve
+        vParams = swCo.GetCurveParams
+        If Not swCurva Is Nothing And IsArray(vParams) Then
+            If swCurva.IsCircle Then
+                vCirculo = swCurva.CircleParams
+                rx = vParams(0) - vCirculo(0)
+                ry = vParams(1) - vCirculo(1)
+                rz = vParams(2) - vCirculo(2)
+                sx = vCirculo(4) * rz - vCirculo(5) * ry
+                sy = vCirculo(5) * rx - vCirculo(3) * rz
+                sz = vCirculo(3) * ry - vCirculo(4) * rx
+                For k = 0 To 11
+                    angulo = k * 3.14159265358979 / 6#
+                    If texto <> "" Then texto = texto & " | "
+                    texto = texto & Ponto(vCirculo(0) + rx * Cos(angulo) + sx * Sin(angulo), _
+                        vCirculo(1) + ry * Cos(angulo) + sy * Sin(angulo), _
+                        vCirculo(2) + rz * Cos(angulo) + sz * Sin(angulo))
+                Next k
+                PontosDoLaco = texto
+                Exit Function
+            End If
+        End If
+    End If
+    For k = 0 To UBound(vCoArestas)
+        Set swCo = vCoArestas(k)
+        vParams = swCo.GetCurveParams
+        If IsArray(vParams) Then
+            If texto <> "" Then texto = texto & " | "
+            texto = texto & Ponto(vParams(0), vParams(1), vParams(2))
+        End If
+    Next k
+    PontosDoLaco = texto
+End Function
+
+Function Ponto(ByVal x As Double, ByVal y As Double, ByVal z As Double) As String
+    Ponto = Num(x * 1000#, "0.0") & " " & Num(y * 1000#, "0.0") & " " & Num(z * 1000#, "0.0")
+End Function
 
 Sub Contar(forma As String, barras As Long, chapas As Long, blocos As Long)
     Select Case forma
@@ -340,7 +450,7 @@ End Sub
 Function Geometria(swCorpo As SldWorks.Body2, vMassa As Variant, g() As Double, forma As String) As Boolean
     ' A linha de centro e as medidas do corpo, nas direcoes do proprio corpo (m):
     ' g(0..2) uma ponta, g(3..5) a outra, g(6) comprimento, g(7) e g(8) as medidas da secao
-    ' (a maior e a menor). As direcoes sao as principais da nuvem de pontos do corpo (vertices e
+    ' (a maior e a menor), g(9..11) a direcao da medida maior (unitaria). As direcoes sao as principais da nuvem de pontos do corpo (vertices e
     ' centros das arestas circulares: um tubo redondo nao tem vertice); as medidas, os pontos
     ' extremos do corpo nessas direcoes; a linha de centro passa pelo centro de massa.
     Dim px() As Double, py() As Double, pz() As Double, n As Long, k As Long
@@ -439,6 +549,10 @@ Function Geometria(swCorpo As SldWorks.Body2, vMassa As Variant, g() As Double, 
     g(6) = medida(eixo)
     g(7) = medida(segunda)
     g(8) = medida(terceira)
+    ' A direcao da medida maior da secao (a alma de um I ou de um U).
+    g(9) = v(0, segunda)
+    g(10) = v(1, segunda)
+    g(11) = v(2, segunda)
     ' Chapa: muito fina para a largura (piso, gusset, chapa de base); barra: comprida para a secao.
     If g(8) <= 0.1 * g(7) And g(6) < 6# * g(7) Then
         forma = "CHAPA"

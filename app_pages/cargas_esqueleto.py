@@ -13,6 +13,10 @@ from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import cargas_esqueleto as ce
+from core import cargas_pelo_modelo as cpm
+from core import esforcos_modelo as em
+from core import leitura_do_modelo as ld
+from core import lista_de_material as lm
 from core import plano_de_cargas as pc
 from core.project_store import obter_projeto_ativo
 
@@ -47,6 +51,240 @@ inicial = salva or ce.EntradaEsqueleto(
 )
 versao = int(st.session_state.get("ce_versao", 0))
 problemas: list[str] = []
+
+# ============================================================ pelo esqueleto do modelo
+with st.container(border=True), secao_protegida("Cargas do piso pelo esqueleto do modelo"):
+    st.subheader("Cargas do piso pelo esqueleto do modelo", help=AJUDA["sec_modelo"])
+    geometria = ld.geometria_do_projeto(projeto)
+    esforcos = em.esforcos_do_projeto(projeto)
+    enviado = st.file_uploader(
+        "Esqueleto do modelo (…_esqueleto.csv da macro)",
+        type=["csv"],
+        key=f"ce_esqueleto_{versao}",
+        help=AJUDA["arquivo_esqueleto"],
+    )
+    if enviado is not None:
+        try:
+            novo_esqueleto = ld.ler_esqueleto(enviado.getvalue(), enviado.name)
+        except ld.GeometriaInvalida as erro:
+            st.error(f"{enviado.name}: {erro}", icon=":material/error:")
+        else:
+            st.success(
+                f"{novo_esqueleto.arquivo}: {len(novo_esqueleto.corpos)} corpos"
+                + (f" ({novo_esqueleto.origem})" if novo_esqueleto.origem else "")
+                + ".",
+                icon=":material/account_tree:",
+            )
+            for aviso in novo_esqueleto.avisos:
+                st.warning(aviso, icon=":material/warning:")
+            if st.button(
+                "Gravar o esqueleto no projeto",
+                type="primary",
+                icon=":material/save:",
+                key="ce_gravar_esqueleto",
+                help=AJUDA["btn_gravar_esqueleto"],
+            ) and gravar_campos_do_projeto(
+                {"geometria_do_modelo": ld.para_dicionario(novo_esqueleto)},
+                "Esqueleto do modelo gravado",
+            ):
+                st.session_state["ce_versao"] = versao + 1
+                st.rerun()
+    if not geometria.corpos:
+        st.caption(
+            ":material/account_tree: Sem o esqueleto do modelo ainda. Rode a macro do SolidWorks e "
+            "envie o …_esqueleto.csv aqui: a carga do piso vai para as vigas que apoiam cada "
+            "chapa, pela área de influência. Sem o modelo, use as seções abaixo (eixos e níveis)."
+        )
+        st.download_button(
+            "Macro do SolidWorks",
+            data=lm.macro_da_lista_de_corte(),
+            file_name="exportar_lista_de_corte.bas",
+            mime="text/plain",
+            icon=":material/code:",
+            key="ce_macro",
+            help=AJUDA["btn_macro_modelo"],
+        )
+    else:
+        st.caption(
+            f":material/account_tree: Esqueleto: {geometria.arquivo}"
+            + (f" — {geometria.origem}" if geometria.origem else "")
+        )
+        chapas_do_piso, _ = cpm.chapas_do_piso(geometria, esforcos.eixo_vertical)
+        plano_atual = pc.plano_do_projeto(projeto)
+        por_area = cpm.cargas_por_area_do_plano(plano_atual) or {
+            "SC": float(base.sobrecarga_kN_m2) if base else 5.0
+        }
+        st.caption("Cargas por área (kN/m², na projeção horizontal)", help=AJUDA["cargas_por_area"])
+        tabela_por_area = st.data_editor(
+            pd.DataFrame([{"Caso": c, "kN/m²": v} for c, v in por_area.items()]),
+            num_rows="dynamic",
+            hide_index=True,
+            width="stretch",
+            key=f"ce_modelo_cargas_{versao}",
+            column_config={
+                "Caso": st.column_config.SelectboxColumn(
+                    options=list(
+                        dict.fromkeys([*plano_atual.codigos, *(c.codigo for c in pc.CODIGOS)])
+                    )
+                ),
+                "kN/m²": st.column_config.NumberColumn(min_value=0.0, format="%.2f"),
+            },
+        )
+        cargas_por_area = {
+            str(linha["Caso"]): float(linha["kN/m²"])
+            for linha in tabela_por_area.to_dict("records")
+            if linha.get("Caso") and not pd.isna(linha.get("kN/m²")) and linha.get("kN/m²")
+        }
+        st.caption("Chapas de piso do esqueleto", help=AJUDA["res_chapas"])
+        tabela_chapas = st.data_editor(
+            pd.DataFrame(
+                [
+                    {
+                        "Recebe a carga": True,
+                        "Chapa": c.nome,
+                        "Área (m²)": c.area_m2,
+                        "Inclinação (°)": c.inclinacao_graus,
+                        "Medida por": c.fonte,
+                        "Vigas embaixo": len(cpm.vigas_que_apoiam(geometria, c)),
+                    }
+                    for c in chapas_do_piso
+                ],
+                columns=[
+                    "Recebe a carga",
+                    "Chapa",
+                    "Área (m²)",
+                    "Inclinação (°)",
+                    "Medida por",
+                    "Vigas embaixo",
+                ],
+            ),
+            hide_index=True,
+            width="stretch",
+            key=f"ce_modelo_chapas_{versao}",
+            disabled=["Chapa", "Área (m²)", "Inclinação (°)", "Medida por", "Vigas embaixo"],
+            column_config={
+                "Área (m²)": st.column_config.NumberColumn(format="%.2f"),
+                "Inclinação (°)": st.column_config.NumberColumn(format="%.0f"),
+            },
+        )
+        escolhidas = [
+            str(linha["Chapa"])
+            for linha in tabela_chapas.to_dict("records")
+            if bool(linha.get("Recebe a carga"))
+        ]
+        distribuicao = cpm.distribuir(
+            geometria, cargas_por_area, esforcos.eixo_vertical, chapas_escolhidas=escolhidas
+        )
+        for aviso in distribuicao.avisos:
+            st.warning(aviso, icon=":material/warning:")
+        nomes_no_simulation = {
+            corpo.nome: barra
+            for barra, corpo in ld.correspondencia(
+                geometria, esforcos.nomes_dos_membros, esforcos
+            ).corpos.items()
+        }
+        if distribuicao.cargas:
+            colunas = st.columns(2 + len(distribuicao.casos))
+            colunas[0].metric(
+                "Área carregada",
+                f"{distribuicao.area_distribuida_m2:.2f} m²".replace(".", ","),
+                help=AJUDA["res_modelo"],
+            )
+            colunas[1].metric(
+                "Vigas carregadas",
+                len({c.viga for c in distribuicao.cargas}),
+                help=AJUDA["res_modelo"],
+            )
+            for coluna, caso in zip(colunas[2:], distribuicao.casos, strict=False):
+                coluna.metric(
+                    f"{caso} no piso",
+                    f"{distribuicao.total(caso):.1f} kN".replace(".", ","),
+                    help=AJUDA["res_modelo"],
+                )
+            caso_do_piso = st.selectbox(
+                "Caso", list(distribuicao.casos), key="ce_modelo_caso", help=AJUDA["caso_modelo"]
+            )
+            st.subheader(f"Cargas nas vigas — {caso_do_piso}", help=AJUDA["res_vigas_modelo"])
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Viga (corpo no SolidWorks)": c.viga,
+                            "Viga no Simulation": nomes_no_simulation.get(c.viga, "—"),
+                            "kN/m": c.kN_m,
+                            "Total (kN)": c.total_kN,
+                            "Trecho carregado (m)": c.trecho_m,
+                            "Comprimento (m)": c.comprimento_m,
+                            "Chapas": ", ".join(c.chapas),
+                        }
+                        for c in distribuicao.do_caso(caso_do_piso)
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "kN/m": st.column_config.NumberColumn(format="%.3f"),
+                    "Total (kN)": st.column_config.NumberColumn(format="%.2f"),
+                    "Trecho carregado (m)": st.column_config.NumberColumn(format="%.2f"),
+                    "Comprimento (m)": st.column_config.NumberColumn(format="%.2f"),
+                },
+            )
+            st.caption(
+                ":material/check_circle: Conferência: "
+                + f"{distribuicao.total(caso_do_piso):.2f} kN nas vigas = ".replace(".", ",")
+                + f"{cargas_por_area.get(caso_do_piso, 0.0):.2f} kN/m² × ".replace(".", ",")
+                + f"{distribuicao.area_distribuida_m2:.3f}".replace(".", ",")
+                + " m² projetados."
+            )
+            de_outra_origem = [
+                caso
+                for caso in distribuicao.casos
+                if (acao := plano_atual.acao(caso)) is not None
+                and acao.cargas
+                and acao.origem != cpm.ORIGEM
+            ]
+            if de_outra_origem:
+                st.warning(
+                    f"No plano de cargas, {', '.join(de_outra_origem)} já tem cargas de outra "
+                    "origem: ao enviar, elas são substituídas pelas cargas nas vigas.",
+                    icon=":material/warning:",
+                )
+            colunas = st.columns(2)
+            if colunas[0].button(
+                "Enviar ao plano de cargas",
+                type="primary",
+                icon=":material/send:",
+                key="ce_modelo_enviar",
+                help=AJUDA["btn_enviar_modelo"],
+                width="stretch",
+            ) and gravar_campos_do_projeto(
+                {
+                    "plano_de_cargas": pc.para_dicionario(
+                        cpm.aplicar_no_plano(
+                            distribuicao, plano_atual, cargas_por_area, nomes_no_simulation
+                        )
+                    )
+                },
+                "Cargas do piso pelo esqueleto enviadas ao plano de cargas",
+            ):
+                st.session_state["ce_versao"] = versao + 1
+                st.rerun()
+            colunas[1].download_button(
+                "Cargas nas vigas (CSV)",
+                data=cpm.csv_das_cargas(distribuicao, nomes_no_simulation),
+                file_name=f"cargas_do_piso_{projeto.get('codigo') or 'projeto'}.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                key="ce_modelo_csv",
+                help=AJUDA["btn_csv_modelo"],
+                width="stretch",
+            )
+        elif not chapas_do_piso:
+            st.info(
+                "O esqueleto não tem chapa de piso (forma CHAPA, até 60° com a horizontal) que dê "
+                "para distribuir: use as seções abaixo (eixos e níveis).",
+                icon=":material/info:",
+            )
 
 # ============================================================ 1. eixos e níveis
 with st.container(border=True), secao_protegida("1. Eixos e níveis"):

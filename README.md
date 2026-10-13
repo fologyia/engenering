@@ -365,7 +365,9 @@ comprimento e o perfil da seção real do modelo; barra a barra, pontas soltas, 
 rígidas e malha grossa; no conjunto, estudo majorado ou com outras cargas no PP (contra o aço do
 esqueleto), gravidade esquecida num estudo duplicado, casos repetidos ou sem carga, modelo ou malha
 que mudou entre os estudos, eixo vertical trocado, unidade errada e a 2ª ordem global (B₂). O botão
-"Aplicar as sugestões" preenche a tabela das barras só onde está vazia.
+"Aplicar as sugestões" preenche a tabela das barras só onde está vazia — inclusive Lx, Ly e Lb pelos
+travamentos do esqueleto (`core/travamentos.py`: onde outras barras se ligam a cada uma, em cada
+direção; K = 1 com o B₂, balanço K = 2,1).
 **Verificação de todas as barras** (`core/verificacao_barras.py`) pela NBR 8800 com os esforços de
 todas as combinações ELU em todos os pontos, multiplicados pelo B₂ do tipo: varredura rápida da
 interação e verificação completa dos pontos críticos pelo motor da Flambagem de colunas (todos os
@@ -410,6 +412,9 @@ tabelas). Usa os mesmos campos do Contraventamento de estruturas abertas.
 
 ### Cargas do esqueleto
 
+Com o esqueleto da macro (v5: contorno das chapas), a carga do piso vai direto para as vigas do
+modelo pela área de influência de cada chapa (`core/cargas_pelo_modelo.py`), caso a caso, em kN/m por
+viga, e vai ao Plano de cargas. Sem o modelo ainda, pela grade de eixos e níveis:
 No SolidWorks modela-se só o esqueleto (pilares, vigas e contraventamento); a página transforma o
 que não está no modelo em cargas características nas barras, caso a caso
 (`core/cargas_esqueleto.py`; detalhes em `docs/cargas_do_esqueleto.md`): piso e sobrecarga por

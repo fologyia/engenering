@@ -76,6 +76,8 @@ files = [
     "core/viga_de_piso.py",
     "core/placa_base_pilares.py",
     "core/leitura_do_modelo.py",
+    "core/travamentos.py",
+    "core/cargas_pelo_modelo.py",
     "core/lista_de_material.py",
     "core/diagnostico.py",
     "core/cargas_esqueleto.py",

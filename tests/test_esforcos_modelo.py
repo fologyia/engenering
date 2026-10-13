@@ -337,3 +337,18 @@ def test_tabela_e_csv_da_envoltoria():
     assert pilar[3] == pytest.approx(-52.6, abs=0.05) and pilar[5] == ""
     conteudo = em.csv_da_envoltoria(dados, r).decode("utf-8-sig")
     assert conteudo.splitlines()[0].split(";") == list(em.COLUNAS_ENVOLTORIA)
+
+
+@pytest.mark.parametrize(
+    ("estudo", "caso"),
+    [
+        ("Apenas Gravidade", "PP"),
+        ("Peso próprio", "PP"),
+        ("Sobrecarga do piso", "SC"),
+        ("W0 vento", "W0"),  # o código no nome vem primeiro
+        ("Análise estática 1", None),
+    ],
+)
+def test_caso_sugerido_pelo_assunto_do_estudo(estudo, caso):
+    assert em.caso_sugerido(estudo, ["PP", "SC", "W0"]) == caso
+    assert em.caso_sugerido("Apenas Gravidade", ["SC"]) is None  # PP fora do plano: não sugere

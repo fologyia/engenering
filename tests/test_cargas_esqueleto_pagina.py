@@ -92,3 +92,45 @@ def test_guia_tem_o_capitulo_com_o_exemplo_que_o_nucleo_calcula(banco_isolado):
     esperado = next(c.value for c in t.caption if "Resultado esperado" in c.value)
     assert f"SC total {ce.resumo_do_caso(r, 'SC'):.1f}".replace(".", ",") in esperado
     assert "2 vigas secundárias em cada vão" in esperado
+
+
+def test_sem_o_esqueleto_do_modelo_oferece_a_macro(banco_com_projeto):
+    t = abrir()
+    assert any("Sem o esqueleto do modelo ainda" in c.value for c in t.caption)
+    assert "Cargas do piso pelo esqueleto do modelo" in [s.value for s in t.subheader]
+
+
+def test_cargas_do_piso_pelo_esqueleto_vao_ao_plano(banco_com_projeto):
+    from core import cargas_pelo_modelo as cpm
+    from core import leitura_do_modelo as ld
+    from tests.test_cargas_pelo_modelo import piso_6x3
+
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(piso_6x3())
+    projeto["plano_de_cargas"] = pc.para_dicionario(
+        pc.com_acao(
+            pc.PlanoDeCargas(),
+            pc.nova_acao("SC", cargas=[pc.CargaDoModelo("Piso", 5.0, "kN/m²", "Z (vertical)")]),
+        )
+    )
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    sem_ajuda = {
+        (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
+    } - {("text_input", "Nome do novo projeto")}
+    assert not sem_ajuda, sorted(sem_ajuda)
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["SC no piso"] == "90,0 kN" and metricas["Vigas carregadas"] == "3"
+    assert "Cargas nas vigas — SC" in [s.value for s in t.subheader]
+    vigas = next(d.value for d in t.dataframe if "Viga (corpo no SolidWorks)" in d.value.columns)
+    assert sorted(vigas["Viga (corpo no SolidWorks)"]) == ["V0", "V1", "V2"]
+    assert any(
+        c.value.endswith("Conferência: 90,00 kN nas vigas = 5,00 kN/m² × 18,000 m² projetados.")
+        for c in t.caption
+    )
+    assert any("SC já tem cargas de outra origem" in w.value for w in t.warning)
+    t.button(key="ce_modelo_enviar").click().run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    sc = pc.plano_do_projeto(obter_projeto_ativo()).acao("SC")
+    assert sc.origem == cpm.ORIGEM and {c.unidade for c in sc.cargas} == {"kN/m"}
+    assert len(sc.cargas) == 3

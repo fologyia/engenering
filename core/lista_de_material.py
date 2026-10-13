@@ -225,7 +225,8 @@ def perfil_conhecido(descricao: str) -> PerfilConhecido | None:
     nome = (
         texto
         if texto in perfis or texto in ct.CATALOGO_CANTONEIRAS
-        else em.perfil_do_nome(_sem_fracoes(texto))
+        # Primeiro como está (o nome brasileiro U 8"x17,1 precisa das aspas), depois sem frações.
+        else em.perfil_do_nome(texto) or em.perfil_do_nome(_sem_fracoes(texto))
     )
     if nome in perfis:
         p = perfis[nome]
@@ -708,8 +709,19 @@ def _conferir_secoes(
             continue
         candidato = _mesma_secao(familia, area_modelo, altura) if retas else None
         cm2 = f"{_n(area_modelo / 100, 1)} cm²"
-        for indice, _, _ in pecas:
-            if candidato is not None:
+        secao_candidato = _secao_do_catalogo(candidato) if candidato is not None else None
+        mantidos = 0
+        for indice, area_peca, _ in pecas:
+            if candidato is not None and secao_candidato is not None:
+                if area_peca > secao_candidato[0] * (1 + TOLERANCIA_SECAO_RETA):
+                    # Peça mais pesada que o adotado: é outro perfil com o mesmo nome no SolidWorks
+                    # (um membro que ficou com o perfil antigo) — fica o do nome.
+                    mantidos += 1
+                    itens[indice] = replace(
+                        itens[indice],
+                        observacao=f"seção maior que a do {candidato}: fica o {nome_catalogo}",
+                    )
+                    continue
                 itens[indice] = replace(
                     itens[indice],
                     descricao=candidato,
@@ -723,7 +735,14 @@ def _conferir_secoes(
                     "geometria",
                 )
         if candidato is not None:
-            adotados.append(f"{nome_solidworks} → {candidato} ({cm2} no modelo)")
+            adotados.append(
+                f"{nome_solidworks} → {candidato} ({cm2} no modelo)"
+                + (
+                    f", menos {mantidos} item(ns) com a seção maior, que fica(m) {nome_catalogo}"
+                    if mantidos
+                    else ""
+                )
+            )
         else:
             divergentes.append(
                 f"{nome_solidworks} ({cm2} no modelo; {nome_catalogo} tem "

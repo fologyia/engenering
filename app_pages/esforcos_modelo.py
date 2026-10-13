@@ -146,9 +146,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         except em.ArquivoInvalido as erro:
             st.error(f"{enviado.name}: {erro}", icon=":material/error:")
     if geometria_nova is not None:
-        ligadas = sum(
-            ld.corpo_da_viga(geometria_nova, b) is not None for b in dados.nomes_dos_membros
-        )
+        ligadas = len(ld.correspondencia(geometria_nova, dados.nomes_dos_membros, dados).corpos)
         st.success(
             f"{geometria_nova.arquivo}: esqueleto com {_corpos_e_formas(geometria_nova)}"
             + (f" ({geometria_nova.origem})" if geometria_nova.origem else "")
@@ -376,6 +374,7 @@ with st.container(border=True), secao_protegida("4. Barras do modelo"):
                 "Perfil sugerido": (leitura.perfil_sugerido if leitura else "") or "—",
                 "Comprimento (m)": leitura.comprimento_m if leitura else None,
                 "Pontas": " / ".join(leitura.pontas) if leitura else "—",
+                "Lx / Ly / Lb sugeridos (m)": ld.comprimentos_em_texto(leitura) if leitura else "—",
                 "Perfil": cfg.perfil if cfg.perfil in catalogo else "",
                 "Tipo": cfg.tipo,
                 "Eixo forte": cfg.eixo_forte,
@@ -400,6 +399,7 @@ with st.container(border=True), secao_protegida("4. Barras do modelo"):
             "Perfil sugerido",
             "Comprimento (m)",
             "Pontas",
+            "Lx / Ly / Lb sugeridos (m)",
             "|N| máx. (kN)",
             "|M1| máx. (kN·m)",
             "|M2| máx. (kN·m)",

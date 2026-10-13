@@ -28,6 +28,7 @@ Sem Streamlit.
 from __future__ import annotations
 
 import math
+import re
 import statistics
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
@@ -68,7 +69,7 @@ class GeometriaInvalida(ValueError):
 # ---------------------------------------------------------------------------------------------
 FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO = "BARRA", "CHAPA", "BLOCO"
 FORMAS = (FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO)
-VERSAO_ATUAL_DA_MACRO = "v4"
+VERSAO_ATUAL_DA_MACRO = "v5"
 COORDENADA_ABSURDA_M = 10_000.0  # 10 km: o arquivo não está em mm
 #: Linhas de cabeçalho da macro (antes da linha das colunas) → campo da geometria.
 _METADADOS = {
@@ -94,6 +95,11 @@ class CorpoDoModelo:
     volume_m3: float | None = None
     forma: str = ""  # BARRA, CHAPA ou BLOCO (macro v4); vazio nas versões antigas
     secao_mm: tuple[float, float] | None = None  # as duas medidas da seção (maior, menor)
+    #: Direção da medida maior da seção (a alma de um I ou de um U), unitária (macro v5).
+    direcao_secao: tuple[float, float, float] | None = None
+    #: Chapa: o contorno da face maior (m) e as aberturas dela (macro v5).
+    contorno: tuple[tuple[float, float, float], ...] = ()
+    aberturas: tuple[tuple[tuple[float, float, float], ...], ...] = ()
 
     @property
     def vetor(self) -> tuple[float, float, float]:
@@ -249,6 +255,8 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
     c_item, c_desc, c_forma = opcional("item"), opcional("descri"), opcional("forma")
     c_secao = (opcional("secao a"), opcional("secao b"))
     c_vol = opcional("volume")
+    c_direcao = (opcional("direcao a x"), opcional("direcao a y"), opcional("direcao a z"))
+    c_contorno, c_aberturas = opcional("contorno"), opcional("aberturas")
     obrigatorias = max([c_corpo, c_comp, *c_coord])
 
     def celula(linha: list[str], j: int | None) -> str:
@@ -286,6 +294,14 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
         forma = celula(linha, c_forma).upper()
         medidas = [m * 1e3 for j in c_secao if (m := _em_metros(celula(linha, j))) and m > 0]
         secao = (max(medidas), min(medidas)) if len(medidas) == 2 else None
+        componentes = [lm.numero_da_celula(celula(linha, j), "")[0] for j in c_direcao]
+        direcao = _direcao(componentes)
+        contorno = _poligono(celula(linha, c_contorno))
+        aberturas = tuple(
+            poligono
+            for trecho in celula(linha, c_aberturas).split("||")
+            if len(poligono := _poligono(trecho)) >= 3
+        )
         corpos.append(
             CorpoDoModelo(
                 nome=nome,
@@ -297,6 +313,9 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
                 volume_m3=volume,
                 forma=forma if forma in FORMAS else "",
                 secao_mm=secao,
+                direcao_secao=direcao,
+                contorno=contorno if len(contorno) >= 3 else (),
+                aberturas=aberturas,
             )
         )
     if not corpos:
@@ -305,6 +324,13 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
     avisos: list[str] = []
     if not versao or c_forma is None:
         avisos.append(MACRO_ANTIGA)
+    elif versao == "v4":
+        avisos.append(
+            "Esqueleto da macro v4: lê tudo, mas sem a orientação das seções (nos pilares, "
+            "Lx = Ly = o maior trecho, a favor da segurança) e sem o contorno das chapas (só as "
+            "chapas retangulares recebem as cargas do piso). Rode a macro v5 (botão “Macro do "
+            "SolidWorks”) para ter os dois."
+        )
     elif versao != VERSAO_ATUAL_DA_MACRO:
         avisos.append(
             f"Gerado pela macro {versao}; o programa espera a {VERSAO_ATUAL_DA_MACRO}: baixe a "
@@ -341,6 +367,63 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
             "foi recortado ou tem outra seção. O Simulation calcula com a seção do perfil e a "
             "lista de material pesa pelo volume: confira esses corpos no SolidWorks."
         )
+    por_item: dict[str, dict[str, list[str]]] = {}
+    perfis_lidos = _perfis_dos_corpos(corpos)
+    for c in corpos:
+        if c.e_barra and c.area_mm2 and c.descricao:
+            perfil, _ = perfis_lidos.get(c.nome, ("", ""))
+            if perfil:
+                por_item.setdefault(c.descricao, {}).setdefault(perfil, []).append(c.nome)
+    misturados = []
+    for descricao, perfis in por_item.items():
+        if len(perfis) > 1:
+            maioria = max(perfis, key=lambda k: len(perfis[k]))
+            outros = "; ".join(
+                f"{len(nomes)} com o {perfil} ({_lista(sorted(nomes), 3)})"
+                for perfil, nomes in perfis.items()
+                if perfil != maioria
+            )
+            misturados.append(
+                f"“{descricao}”: {len(perfis[maioria])} corpo(s) com a seção do {maioria}, {outros}"
+            )
+    if misturados:
+        avisos.append(
+            f"O mesmo item da lista de corte com perfis diferentes — {_lista(misturados, 3)}. "
+            "Se for engano (um membro que ficou com o perfil antigo), troque no SolidWorks; o "
+            "Simulation calcula cada um com a seção dele."
+        )
+    pelo_nome: dict[str, list[CorpoDoModelo]] = {}
+    for c in corpos:
+        if c.e_barra and c.area_mm2:
+            pelo_nome.setdefault(_prefixo_e_indice(c.nome)[0], []).append(c)
+    nomes_errados = []
+    for prefixo, grupo in pelo_nome.items():
+        do_nome = em.perfil_do_nome(prefixo)
+        if not do_nome:
+            continue
+        do_catalogo = lm._secao_do_catalogo(do_nome)
+        area = max(c.area_mm2 or 0.0 for c in grupo)
+        if do_catalogo is None or abs(area - do_catalogo[0]) <= 0.05 * do_catalogo[0]:
+            continue
+        desenhado = next(
+            (
+                conhecido.nome
+                for texto in (grupo[0].descricao, grupo[0].item.split("<")[0])
+                if texto and (conhecido := lm.perfil_conhecido(texto)) is not None
+            ),
+            "",
+        )
+        nomes_errados.append(
+            f"“{prefixo}” ({len(grupo)} corpo(s)): o nome diz {do_nome} ({_n(do_catalogo[0] / 100, 1)} "
+            f"cm²), a seção desenhada tem {_n(area / 100, 1)} cm²"
+            + (f" ({desenhado})" if desenhado else "")
+        )
+    if nomes_errados:
+        avisos.append(
+            f"Nome do membro diferente da seção desenhada: {_lista(nomes_errados, 3)}. O Simulation "
+            "calcula com a seção desenhada: troque o perfil no SolidWorks para o do nome (ou corrija "
+            "o nome), para o modelo, a lista de material e a verificação serem o mesmo perfil."
+        )
     if sem_volume and sem_volume < len(corpos):
         avisos.append(
             f"{sem_volume} corpo(s) sem volume: o peso próprio não é conferido pelo esqueleto."
@@ -376,6 +459,9 @@ def para_dicionario(g: GeometriaDoModelo) -> dict[str, Any]:
                 c.volume_m3,
                 c.forma,
                 *(c.secao_mm or (None, None)),
+                list(c.direcao_secao) if c.direcao_secao else None,
+                [[round(v, 4) for v in ponto] for ponto in c.contorno],
+                [[[round(v, 4) for v in ponto] for ponto in abertura] for abertura in c.aberturas],
             ]
             for c in g.corpos
         ],
@@ -390,6 +476,40 @@ def _numero(valor: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return numero if math.isfinite(numero) else None
+
+
+def _direcao(componentes: Sequence[float | None]) -> tuple[float, float, float] | None:
+    """Vetor unitário a partir de três números; ``None`` se faltar algum ou for nulo."""
+    if len(componentes) != 3 or any(c is None or not math.isfinite(c) for c in componentes):
+        return None
+    x, y, z = (float(c or 0.0) for c in componentes)
+    norma = math.sqrt(x * x + y * y + z * z)
+    return (x / norma, y / norma, z / norma) if norma > 1e-9 else None
+
+
+def _poligono(texto: str) -> tuple[tuple[float, float, float], ...]:
+    """ "x y z | x y z | …" (mm, da macro) → pontos em m; ponto fora do formato é pulado."""
+    pontos = []
+    for trecho in texto.split("|"):
+        partes = trecho.split()
+        if len(partes) != 3:
+            continue
+        valores = [_em_metros(p) for p in partes]
+        if all(v is not None for v in valores):
+            pontos.append((valores[0] or 0.0, valores[1] or 0.0, valores[2] or 0.0))
+    return tuple(pontos)
+
+
+def _pontos_gravados(valor: Any) -> tuple[tuple[float, float, float], ...]:
+    if not isinstance(valor, list | tuple):
+        return ()
+    pontos = []
+    for ponto in valor:
+        if isinstance(ponto, list | tuple) and len(ponto) == 3:
+            numeros = [_numero(v) for v in ponto]
+            if all(n is not None for n in numeros):
+                pontos.append((numeros[0] or 0.0, numeros[1] or 0.0, numeros[2] or 0.0))
+    return tuple(pontos)
 
 
 def _texto(valor: Any) -> str:
@@ -413,6 +533,18 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
         forma = _texto(linha[11]).upper() if len(linha) > 11 else ""
         medidas = [m for v in linha[12:14] if (m := _numero(v)) and m > 0]
         secao = (max(medidas), min(medidas)) if len(medidas) == 2 else None
+        gravada = linha[14] if len(linha) > 14 else None
+        direcao = (
+            _direcao([_numero(v) for v in gravada])
+            if isinstance(gravada, list | tuple) and len(gravada) == 3
+            else None
+        )
+        contorno = _pontos_gravados(linha[15]) if len(linha) > 15 else ()
+        aberturas = (
+            tuple(a for item in linha[16] if len(a := _pontos_gravados(item)) >= 3)
+            if len(linha) > 16 and isinstance(linha[16], list | tuple)
+            else ()
+        )
         corpos.append(
             CorpoDoModelo(
                 str(linha[0]),
@@ -424,6 +556,9 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
                 volume if volume and volume > 0 else None,
                 forma if forma in FORMAS else "",
                 secao,
+                direcao,
+                contorno if len(contorno) >= 3 else (),
+                aberturas,
             )
         )
     avisos = dados.get("avisos")
@@ -462,6 +597,104 @@ def corpo_da_viga(g: GeometriaDoModelo, nome_da_viga: str) -> CorpoDoModelo | No
         return exato
     chave = _chave(alvo)
     return next((c for c in g.corpos if _chave(c.nome) == chave), None)
+
+
+def _prefixo_e_indice(nome_do_corpo: str) -> tuple[str, str]:
+    """'U 8"x17,1 - Plataforma[12]' → ('U 8"x17,1 - Plataforma', '12'); sem índice, (nome, '')."""
+    m = re.match(r"^(.*?)\[(\d+)\]\s*$", nome_do_corpo.strip())
+    return (m.group(1).strip(), m.group(2)) if m else (nome_do_corpo.strip(), "")
+
+
+@dataclass(frozen=True)
+class Correspondencia:
+    """Que corpo do esqueleto é cada viga do Simulation, e quais foram casadas por renomeação."""
+
+    corpos: Mapping[str, CorpoDoModelo]
+    renomeados: Mapping[str, str]  # prefixo antigo (no Simulation) → prefixo novo (no esqueleto)
+
+    @property
+    def pela_renomeacao(self) -> int:
+        return sum(
+            1
+            for viga in self.corpos
+            if _prefixo_e_indice(nome_do_corpo(viga))[0] in self.renomeados
+        )
+
+
+def correspondencia(
+    g: GeometriaDoModelo,
+    nomes_das_vigas: Iterable[str],
+    dados: em.EsforcosDoModelo | None = None,
+) -> Correspondencia:
+    """Cada viga do Simulation no seu corpo do esqueleto.
+
+    Primeiro pelo nome. As que sobram são de corpos renomeados depois do estudo (o Simulation
+    guarda o nome de quando a malha foi feita): o membro estrutural renomeado mantém a numeração
+    ``[n]`` dos corpos, então cada grupo antigo ("Canal c C8X13.75(1)") vai para o grupo novo
+    ("U 8"x17,1 - Plataforma") que tem os mesmos números, o perfil do item da lista de corte no
+    nome antigo e — com o caso PP — a mesma inclinação que o peso próprio mostra. Um grupo novo
+    serve a um só grupo antigo; na dúvida (pontuação ≤ 0), fica sem corpo.
+    """
+    nomes = list(nomes_das_vigas)
+    mapa: dict[str, CorpoDoModelo] = {}
+    for viga in nomes:
+        corpo = corpo_da_viga(g, viga) if g.corpos else None
+        if corpo is not None:
+            mapa[viga] = corpo
+    usados = {c.nome for c in mapa.values()}
+    antigos: dict[str, dict[str, str]] = {}
+    for viga in nomes:
+        if viga not in mapa:
+            prefixo, indice = _prefixo_e_indice(nome_do_corpo(viga))
+            if indice:
+                antigos.setdefault(prefixo, {})[indice] = viga
+    novos: dict[str, dict[str, CorpoDoModelo]] = {}
+    for corpo in g.corpos:
+        if corpo.nome not in usados and corpo.forma != FORMA_CHAPA:
+            prefixo, indice = _prefixo_e_indice(corpo.nome)
+            if indice:
+                novos.setdefault(prefixo, {})[indice] = corpo
+    if not antigos or not novos:
+        return Correspondencia(mapa, {})
+    eixo = dados.eixo_vertical if dados is not None else "Y"
+    angulos = (
+        {
+            viga: inclinacao_pelo_peso(dados, viga)
+            for grupo in antigos.values()
+            for viga in grupo.values()
+        }
+        if dados is not None
+        else {}
+    )
+
+    def pontos(antigo: str, novo: str) -> float:
+        comuns = set(antigos[antigo]) & set(novos[novo])
+        if not comuns:
+            return -math.inf
+        total = 0.0
+        for indice in comuns:
+            viga, corpo = antigos[antigo][indice], novos[novo][indice]
+            total += 1.0
+            perfil = _chave(corpo.descricao or corpo.item.split("<")[0])
+            if perfil and perfil in _chave(antigo):
+                total += 1.0
+            angulo = angulos.get(viga)
+            if angulo is not None:
+                diferenca = abs(angulo - _angulo_do_corpo(corpo, eixo))
+                total += 2.0 if diferenca <= DIFERENCA_DE_INCLINACAO else -3.0
+        return total - 0.5 * len(set(antigos[antigo]) ^ set(novos[novo]))
+
+    pares = sorted(
+        ((pontos(a, n), a, n) for a in antigos for n in novos), key=lambda x: x[0], reverse=True
+    )
+    renomeados: dict[str, str] = {}
+    for valor, antigo, novo in pares:
+        if valor <= 0 or antigo in renomeados or novo in renomeados.values():
+            continue
+        renomeados[antigo] = novo
+        for indice in set(antigos[antigo]) & set(novos[novo]):
+            mapa[antigos[antigo][indice]] = novos[novo][indice]
+    return Correspondencia(mapa, renomeados)
 
 
 def _indice_vertical(eixo_vertical: str) -> int:
@@ -551,6 +784,11 @@ class LeituraDaBarra:
     pontas: tuple[str, str]
     eixo_forte: str
     avisos: tuple[str, ...] = ()
+    #: Comprimentos de flambagem sugeridos pelos travamentos do esqueleto (:mod:`core.travamentos`).
+    lx_m: float | None = None
+    ly_m: float | None = None
+    lb_m: float | None = None
+    motivo_dos_comprimentos: str = ""
 
     @property
     def tem_ponta_solta(self) -> bool:
@@ -751,28 +989,154 @@ def cabe_na_secao(nome: str, secao_mm: tuple[float, float] | None) -> bool:
     return math.hypot(*dimensoes) >= 0.95 * maior and min(dimensoes) <= 1.05 * maior
 
 
+def _familia(nome: str) -> dict[str, float]:
+    """Os perfis da mesma família do catálogo (nome → área, mm²)."""
+    secao = lm._secao_do_catalogo(nome)
+    if secao is None:
+        return {}
+    familia = secao[1]
+    if familia == "Cantoneira":
+        return {n: c.area_mm2 for n, c in ct.CATALOGO_CANTONEIRAS.items()}
+    return {n: p.area_mm2 for n, p in sc.listar_perfis().items() if p.familia == familia}
+
+
+def _cabe_na_caixa(nome: str, secao_mm: tuple[float, float] | None) -> bool:
+    """A seção do perfil cabe na caixa medida? Nenhuma peça, cortada ou não, tem a caixa menor que a
+    própria seção (I, U, W e H: a caixa nas direções da seção é altura × aba). A cantoneira é
+    medida nos eixos principais (a caixa não é aba × aba): não entra nesta conferência."""
+    dimensoes = _dimensoes(nome)
+    if secao_mm is None or dimensoes is None or nome in ct.CATALOGO_CANTONEIRAS:
+        return True
+    return max(dimensoes) <= secao_mm[0] * 1.025 and min(dimensoes) <= secao_mm[1] * 1.025
+
+
+def _caixa_bate(nome: str, secao_mm: tuple[float, float] | None) -> bool:
+    """A seção medida (maior, menor) é a altura e a largura do perfil (± 2,5 %)?"""
+    dimensoes = _dimensoes(nome)
+    if secao_mm is None or dimensoes is None:
+        return False
+    maior, menor = max(dimensoes), min(dimensoes)
+    return abs(secao_mm[0] - maior) <= 0.025 * maior and abs(secao_mm[1] - menor) <= 0.025 * menor
+
+
+@dataclass(frozen=True)
+class _Opcoes:
+    base: str  # o perfil que o item da lista de corte indica
+    texto_base: str
+    pelo_nome: str  # o que o nome do corpo indica (U 8"x17,1)
+    area: float | None
+    opcoes: Mapping[str, float]  # perfis da família → área
+    candidatos: tuple[str, ...]  # os que a área e as medidas permitem
+    exatos: tuple[str, ...]  # peça reta: a caixa e a área batem com o perfil
+
+
+def _opcoes(corpo: CorpoDoModelo) -> _Opcoes:
+    base = texto_base = ""
+    for texto in (corpo.descricao, corpo.item.split("<")[0]):
+        conhecido = lm.perfil_conhecido(texto) if texto else None
+        if conhecido is not None:
+            base, texto_base = conhecido.nome, texto
+            break
+    pelo_nome = em.perfil_do_nome(_prefixo_e_indice(corpo.nome)[0]) or ""
+    area = corpo.area_mm2
+    if not base or not area:
+        return _Opcoes(base, texto_base, pelo_nome, area, {}, (), ())
+    opcoes = _familia(base)
+    altura_m = (corpo.secao_mm[0] if corpo.secao_mm else 300.0) / 1e3
+    perda = min(0.6, 2 * altura_m / corpo.comprimento_m) if corpo.comprimento_m > 0 else 0.6
+    # A caixa só acompanha a seção numa barra comprida (no toco muito cortado, os eixos giram).
+    caixa_confiavel = corpo.forma != FORMA_BLOCO
+    candidatos = tuple(
+        n
+        for n, a in opcoes.items()
+        if a * (1 - perda) <= area <= a * 1.03
+        and cabe_na_secao(n, corpo.secao_mm)
+        and (not caixa_confiavel or _cabe_na_caixa(n, corpo.secao_mm))
+    )
+    # Peça reta tem a caixa exata da seção e a área do perfil (a caixa sozinha engana: um 17,1
+    # cortado a 45° pode ter a aba de 59,5 mm do 20,5).
+    exatos = tuple(
+        n
+        for n in candidatos
+        if _caixa_bate(n, corpo.secao_mm) and abs(area - opcoes[n]) <= 0.03 * opcoes[n]
+    )
+    return _Opcoes(base, texto_base, pelo_nome, area, opcoes, candidatos, exatos)
+
+
+def perfil_do_corpo(corpo: CorpoDoModelo, do_membro: str = "") -> tuple[str, str]:
+    """O perfil do catálogo que o corpo é, e de onde saiu.
+
+    A área da seção (volume ÷ comprimento) só pode ser menor que a do perfil — o corte nas pontas
+    tira volume, no máximo duas alturas de seção sobre o comprimento (até 60 %) —, o perfil tem de
+    caber na seção medida e, numa barra comprida, a caixa não pode ser menor que a seção. Entre os
+    perfis da família que passam, nesta ordem: o da peça reta (caixa e área exatas), o das peças
+    retas do mesmo membro (``do_membro``, :func:`perfis_do_esqueleto`), o que o nome do corpo
+    indica (U 8"x17,1), o do item da lista de corte; sem nenhum, o mais leve que cobre a área.
+    """
+    o = _opcoes(corpo)
+    if not o.base:
+        return (o.pelo_nome, "nome do corpo no SolidWorks") if o.pelo_nome else ("", "")
+    origem = f"lista de corte ({o.texto_base})"
+    if not o.area:
+        return o.base, origem + _secao_no_modelo(corpo)
+    area = o.area
+    cm2 = f"{_n(area / 100, 1)} cm²"
+    if not o.candidatos:
+        return o.base, (
+            f"{origem}; a seção do modelo ({cm2}) não confere com a do {o.base} nem com outro "
+            "perfil da família" + _secao_no_modelo(corpo)
+        )
+    if o.exatos:
+        escolhido = next(
+            (n for n in (o.pelo_nome, o.base) if n in o.exatos),
+            min(o.exatos, key=lambda n: abs(o.opcoes[n] - area)),
+        )
+        por = "peça reta: a caixa e a área da seção são as do perfil"
+    elif do_membro in o.candidatos:
+        escolhido, por = do_membro, "as peças retas do mesmo membro"
+    elif o.pelo_nome in o.candidatos:
+        escolhido, por = o.pelo_nome, "o nome do corpo"
+    elif o.base in o.candidatos:
+        escolhido, por = o.base, ""
+    else:
+        escolhido = min(o.candidatos, key=lambda n: o.opcoes[n])
+        por = "a área da seção"
+    if escolhido == o.base and por in ("", "peça reta: a caixa e a área da seção são as do perfil"):
+        return o.base, origem + _secao_no_modelo(corpo)
+    return escolhido, f"{origem}; {escolhido} por {por} ({cm2})" + _secao_no_modelo(corpo)
+
+
+def perfis_do_esqueleto(g: GeometriaDoModelo) -> dict[str, tuple[str, str]]:
+    """O perfil de cada corpo, com a evidência do membro: as peças retas de um membro (o mesmo nome
+    antes do [n]) dizem o perfil dele, e as peças cortadas do mesmo membro seguem, se couberem."""
+    return _perfis_dos_corpos(g.corpos)
+
+
+def _perfis_dos_corpos(corpos: Sequence[CorpoDoModelo]) -> dict[str, tuple[str, str]]:
+    votos: dict[str, dict[str, int]] = {}
+    for corpo in corpos:
+        if corpo.forma == FORMA_CHAPA:
+            continue
+        o = _opcoes(corpo)
+        if len(o.exatos) == 1:
+            membro = _prefixo_e_indice(corpo.nome)[0]
+            votos.setdefault(membro, {})
+            votos[membro][o.exatos[0]] = votos[membro].get(o.exatos[0], 0) + 1
+    do_membro = {m: max(v, key=lambda k: v[k]) for m, v in votos.items()}
+    return {
+        corpo.nome: perfil_do_corpo(corpo, do_membro.get(_prefixo_e_indice(corpo.nome)[0], ""))
+        for corpo in corpos
+        if corpo.forma != FORMA_CHAPA
+    }
+
+
 def _perfil(
-    barra: str, corpo: CorpoDoModelo | None, area_do_perfil: float | None = None
+    barra: str, corpo: CorpoDoModelo | None, perfis: Mapping[str, tuple[str, str]] | None = None
 ) -> tuple[str, str]:
     if corpo is not None:
-        for texto in (corpo.descricao, corpo.item.split("<")[0]):
-            conhecido = lm.perfil_conhecido(texto) if texto else None
-            if conhecido is not None:
-                nome = conhecido.nome
-                area = area_do_perfil or corpo.area_mm2
-                if area:
-                    adotado, motivo = lm.secao_pela_area(nome, area)
-                    if adotado != nome and not cabe_na_secao(adotado, corpo.secao_mm):
-                        return nome, (
-                            f"lista de corte ({texto}); a área pelo volume lembra o {adotado}, mas "
-                            "a seção medida no modelo não cabe nele (corte nas pontas tira volume)"
-                            + _secao_no_modelo(corpo)
-                        )
-                    if motivo:
-                        return adotado, (
-                            f"lista de corte ({texto}); {motivo}" + _secao_no_modelo(corpo)
-                        )
-                return nome, f"lista de corte ({texto})" + _secao_no_modelo(corpo)
+        perfil, origem = (perfis or {}).get(corpo.nome) or perfil_do_corpo(corpo)
+        if perfil:
+            return perfil, origem
     pelo_nome = em.perfil_do_nome(barra)
     if pelo_nome:
         return pelo_nome, "nome da viga no SolidWorks"
@@ -784,12 +1148,15 @@ def ler_barras(
     geometria: GeometriaDoModelo | None = None,
     plano: pc.PlanoDeCargas | None = None,
 ) -> list[LeituraDaBarra]:
+    from core import travamentos as tv  # importa este módulo: só aqui, sem ciclo na carga
+
     g = geometria or GeometriaDoModelo()
     soltas_geo = pontas_soltas_pela_geometria(g, dados.eixo_vertical) if g.corpos else {}
-    areas = areas_por_perfil(g)
+    perfis = perfis_do_esqueleto(g) if g.corpos else {}
     leituras = []
+    corpos = correspondencia(g, dados.nomes_dos_membros, dados).corpos if g.corpos else {}
     for barra in dados.nomes_dos_membros:
-        corpo = corpo_da_viga(g, barra) if g.corpos else None
+        corpo = corpos.get(barra)
         avisos: list[str] = []
         pelo_peso = inclinacao_pelo_peso(dados, barra)
         if corpo is not None and corpo.forma == FORMA_BLOCO and pelo_peso is not None:
@@ -809,9 +1176,7 @@ def ler_barras(
                 )
         else:
             tipo, motivo = tipo_pelos_esforcos(dados, barra, plano)
-        perfil, origem = _perfil(
-            barra, corpo, areas.get(_chave_do_perfil(corpo)) if corpo is not None else None
-        )
+        perfil, origem = _perfil(barra, corpo, perfis)
         elementos = _elementos(dados, barra)
         pontas = classificar_pontas(dados, barra)
         if PONTA_SOLTA in pontas:
@@ -838,6 +1203,14 @@ def ler_barras(
                 "— refine a malha (número par de elementos ou 7 ou mais)"
             )
         eixo_forte = em.eixo_forte_sugerido(_pontos(dados, barra))
+        sugeridos = (
+            tv.comprimentos(g, corpo, tipo, dados.eixo_vertical) if corpo is not None else None
+        )
+        if sugeridos is not None and sugeridos.balanco:
+            avisos.append(
+                "ponta livre (nada encosta nela e não é apoio): balanço, comprimento de "
+                "flambagem com K = 2,1 — confira se é mesmo um balanço ou se falta a junta"
+            )
         leituras.append(
             LeituraDaBarra(
                 barra=barra,
@@ -851,6 +1224,10 @@ def ler_barras(
                 pontas=pontas,
                 eixo_forte=eixo_forte,
                 avisos=tuple(avisos),
+                lx_m=sugeridos.lx_m if sugeridos else None,
+                ly_m=sugeridos.ly_m if sugeridos else None,
+                lb_m=sugeridos.lb_m if sugeridos else None,
+                motivo_dos_comprimentos=sugeridos.motivo if sugeridos else "",
             )
         )
     return leituras
@@ -862,7 +1239,8 @@ def aplicar_sugestoes(
     """Preenche a tabela das barras só onde está vazia; devolve os dados e quantas barras mudaram.
 
     Tipo, perfil (só do catálogo), eixo forte (só quando o tipo também era vazio) e os comprimentos
-    de flambagem iniciais = comprimento da barra (K = 1; reduza o Lb da viga travada pelo piso).
+    de flambagem: os dos travamentos do esqueleto (:mod:`core.travamentos`) ou, sem eles, o
+    comprimento da barra (K = 1).
     O perfil que entrou sozinho pelo nome da viga (na importação) não é escolha de ninguém: com o
     esqueleto, ele dá lugar ao perfil do modelo (lista de corte conferida pela área da seção), que
     é a seção que a análise usou.
@@ -886,9 +1264,9 @@ def aplicar_sugestoes(
             tipo=tipo if tipo in em.TIPOS_DE_BARRA else atual.tipo,
             perfil=perfil,
             eixo_forte=leitura.eixo_forte if atual.tipo == "—" else atual.eixo_forte,
-            lx_m=atual.lx_m or comprimento,
-            ly_m=atual.ly_m or comprimento,
-            lb_m=atual.lb_m or comprimento,
+            lx_m=atual.lx_m or leitura.lx_m or comprimento,
+            ly_m=atual.ly_m or leitura.ly_m or comprimento,
+            lb_m=atual.lb_m or leitura.lb_m or comprimento,
         )
         if novo != atual:
             mudaram += 1
@@ -1140,12 +1518,15 @@ def diagnosticar(
                 )
 
     # O caminho do peso no PP: o que chega ao longo das barras (peso delas e cargas por metro) e o
-    # que chega pelos nós (chapas, sólidos, forças concentradas). Com o esqueleto, barra a barra.
-    if peso is not None and peso > 0.01:
+    # que chega pelos nós (chapas, sólidos, forças concentradas). Com o esqueleto, barra a barra
+    # (não precisa das reações: a carga ao longo de cada barra sai das forças da viga).
+    if pp is not None:
         ao_longo = 0.0
         a_mais: list[str] = []
         barras_a_mais: list[str] = []
         carga_da_barra: dict[str, float] = {}
+        conferidas, com_pp = 0, 0
+        proprio_total = carga_conferida = 0.0
         for lb in leituras:
             variacao = variacao_no_pp(dados, lb.barra)
             if variacao is None:
@@ -1153,6 +1534,7 @@ def diagnosticar(
             carga = math.hypot(*variacao)
             ao_longo += carga
             carga_da_barra[lb.barra] = carga
+            com_pp += 1
             corpo = lb.corpo
             if corpo is None or not corpo.volume_m3 or corpo.comprimento_m <= 0:
                 continue
@@ -1165,6 +1547,9 @@ def diagnosticar(
                 * plano.fator_peso_proprio
             )
             por_metro = carga / corpo.comprimento_m
+            conferidas += 1
+            proprio_total += proprio * corpo.comprimento_m
+            carga_conferida += carga
             if por_metro > 1.15 * proprio + 0.05:
                 barras_a_mais.append(lb.barra)
                 a_mais.append(
@@ -1180,6 +1565,16 @@ def diagnosticar(
                     "essas cargas para os estudos dos casos delas (SC, EQ, PE…), com os valores "
                     "característicos.",
                     tuple(barras_a_mais),
+                )
+            )
+        elif conferidas and conferidas >= 0.8 * com_pp:
+            achados.append(
+                Achado(
+                    pc.NIVEL_OK,
+                    "PP só com a gravidade nas barras",
+                    f"Em {conferidas} barra(s), o PP leva ao longo delas {_n(carga_conferida)} kN "
+                    f"e o aço delas pesa {_n(proprio_total)} kN (volume do esqueleto × 7 850 "
+                    "kg/m³): nenhuma carga a mais por metro no estudo PP.",
                 )
             )
         elif peso_da_estrutura_kN and ao_longo > (
@@ -1200,8 +1595,8 @@ def diagnosticar(
                     tuple(maiores),
                 )
             )
-        pelos_nos = peso - ao_longo
-        if ao_longo > 0 and pelos_nos > 0.05 * peso:
+        pelos_nos = (peso or 0.0) - ao_longo
+        if peso is not None and peso > 0.01 and ao_longo > 0 and pelos_nos > 0.05 * peso:
             achados.append(
                 Achado(
                     em.NIVEL_INFO,
@@ -1373,6 +1768,23 @@ def diagnosticar(
                 tuple(divergentes),
             )
         )
+
+    # Corpos renomeados depois do estudo: casados pela numeração e pela inclinação.
+    if g.corpos:
+        casamento = correspondencia(g, todas, dados)
+        if casamento.renomeados:
+            mapa_texto = "; ".join(f"“{a}” → “{n}”" for a, n in casamento.renomeados.items())
+            achados.append(
+                Achado(
+                    pc.NIVEL_ATENCAO,
+                    "Corpos renomeados depois do estudo",
+                    f"{casamento.pela_renomeacao} viga(s) do Simulation têm o nome antigo do corpo; "
+                    f"o programa casou pela numeração [n] de cada membro, pelo perfil e pela "
+                    f"inclinação do peso próprio: {mapa_texto}. Confira; para não depender disso, "
+                    "refaça a malha dos estudos (os nomes novos passam ao Simulation) ou gere o "
+                    "esqueleto com os nomes do estudo.",
+                )
+            )
 
     # Esqueleto: barras sem corpo.
     if g.corpos:
@@ -1614,7 +2026,18 @@ COLUNAS_LEITURA = (
     "Elementos",
     "Pontas",
     "Observação",
+    "Lx / Ly / Lb (m)",
+    "Comprimentos de flambagem",
 )
+
+
+def comprimentos_em_texto(lb: LeituraDaBarra) -> str:
+    """ "3,09 / 3,09 / 3,09" (m) ou "—" sem sugestão."""
+    if lb.lx_m is None and lb.ly_m is None and lb.lb_m is None:
+        return "—"
+    return " / ".join(
+        "—" if v is None else f"{v:.2f}".replace(".", ",") for v in (lb.lx_m, lb.ly_m, lb.lb_m)
+    )
 
 
 def linhas_da_leitura(leituras: Sequence[LeituraDaBarra]) -> list[list[object]]:
@@ -1629,6 +2052,8 @@ def linhas_da_leitura(leituras: Sequence[LeituraDaBarra]) -> list[list[object]]:
             lb.elementos,
             " / ".join(lb.pontas),
             "; ".join(lb.avisos),
+            comprimentos_em_texto(lb),
+            lb.motivo_dos_comprimentos,
         ]
         for lb in leituras
     ]
