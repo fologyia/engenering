@@ -147,48 +147,69 @@ def para_dicionario(base: BaseTecnica) -> dict[str, Any]:
     return asdict(base)
 
 
+def _numero_na_faixa(valor: Any, minimo: float, maximo: float) -> float | None:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) and minimo <= numero <= maximo else None
+
+
 def de_dicionario(dados: Mapping[str, Any] | None) -> BaseTecnica | None:
-    """A base gravada no projeto, ou ``None`` se o projeto ainda não tem uma."""
+    """A base gravada no projeto, ou ``None`` se o projeto ainda não tem uma.
+
+    Campo a campo: o que estiver fora do formato ou fora das opções (projeto antigo, editado à
+    mão, corrompido) volta ao valor inicial do critério — a página nunca recebe uma opção que não
+    existe. O que a página grava sempre passou por :func:`validar`, então nada válido se perde.
+    """
     if not isinstance(dados, Mapping) or not dados:
         return None
-    padrao = base_do_cliente(str(dados.get("cliente") or CLIENTE_NENHUM))
+    cliente = str(dados.get("cliente") or CLIENTE_NENHUM)
+    padrao = base_do_cliente(cliente if cliente in CLIENTES else CLIENTE_NENHUM)
     bruto = dados.get("vento")
     vento_dados: Mapping[str, Any] = bruto if isinstance(bruto, Mapping) else {}
+    v = padrao.vento
+    v0 = _numero_na_faixa(vento_dados.get("v0_m_s"), 10.0, 70.0)
+    s1 = _numero_na_faixa(vento_dados.get("s1"), 0.5, 2.0)
+    categoria = str(vento_dados.get("categoria", v.categoria))
+    grupo = str(vento_dados.get("grupo_s3", v.grupo_s3))
+    s3_gravado = vento_dados.get("s3_cliente", v.s3_cliente)
+    s3 = None if s3_gravado is None else _numero_na_faixa(s3_gravado, 0.5, 1.5) or v.s3_cliente
     vento = replace(
-        padrao.vento,
-        **{
-            k: vento_dados[k]
-            for k in ("v0_m_s", "s1", "categoria", "grupo_s3", "s3_cliente")
-            if k in vento_dados
-        },
+        v,
+        v0_m_s=v0 if v0 is not None else v.v0_m_s,
+        s1=s1 if s1 is not None else v.s1,
+        categoria=categoria if categoria in vb.CATEGORIAS_RUGOSIDADE else v.categoria,
+        grupo_s3=grupo if grupo in OPCOES_S3 else v.grupo_s3,
+        s3_cliente=s3,
     )
-    vento = replace(
-        vento,
-        v0_m_s=float(vento.v0_m_s),
-        s1=float(vento.s1),
-        categoria=str(vento.categoria),
-        grupo_s3=str(vento.grupo_s3),
-        s3_cliente=None if vento.s3_cliente is None else float(vento.s3_cliente),
+    tipo = str(dados.get("tipo_de_estrutura", padrao.tipo_de_estrutura))
+    classe = str(dados.get("classe_de_agressividade", padrao.classe_de_agressividade))
+    sobrecarga = _numero_na_faixa(dados.get("sobrecarga_kN_m2"), 0.0, 1e4)
+    vida_gravada = dados.get("vida_util_anos", padrao.vida_util_anos)
+    vida = (
+        None
+        if vida_gravada in (None, "")
+        else _numero_na_faixa(vida_gravada, 1.0, 500.0) or padrao.vida_util_anos
     )
-    campos = {
-        k: dados[k]
-        for k in (
-            "local",
-            "tipo_de_estrutura",
-            "sobrecarga_local",
-            "sobrecarga_kN_m2",
-            "classe_de_agressividade",
-            "vida_util_anos",
-            "observacoes",
-            "atualizado_em",
-        )
-        if k in dados
-    }
-    base = replace(padrao, vento=vento, **campos)
+
+    def texto(chave: str, inicial: str) -> str:
+        valor = dados.get(chave, inicial)
+        return valor if isinstance(valor, str) else inicial
+
     return replace(
-        base,
-        sobrecarga_kN_m2=float(base.sobrecarga_kN_m2),
-        vida_util_anos=None if base.vida_util_anos in (None, "") else float(base.vida_util_anos),
+        padrao,
+        vento=vento,
+        local=texto("local", padrao.local),
+        tipo_de_estrutura=tipo if tipo in TIPOS_DE_ESTRUTURA else padrao.tipo_de_estrutura,
+        sobrecarga_local=texto("sobrecarga_local", padrao.sobrecarga_local),
+        sobrecarga_kN_m2=sobrecarga if sobrecarga is not None else padrao.sobrecarga_kN_m2,
+        classe_de_agressividade=classe
+        if classe in CLASSES_DE_AGRESSIVIDADE
+        else padrao.classe_de_agressividade,
+        vida_util_anos=vida,
+        observacoes=texto("observacoes", padrao.observacoes),
+        atualizado_em=texto("atualizado_em", padrao.atualizado_em),
     )
 
 

@@ -68,6 +68,49 @@ def test_pagina_abre_com_projeto_ativo(banco_com_projeto, pagina):
     assert not teste.exception, f"{pagina}: {[str(e.value) for e in teste.exception]}"
 
 
+#: Campos dos módulos novos gravados fora do formato: projeto antigo, editado à mão ou corrompido.
+CAMPOS_CORROMPIDOS = {
+    "plano_de_cargas": {
+        "acoes": [{"codigo": "PP", "cargas": "x"}, 7, {"cargas": [{"valor": "?"}]}]
+    },
+    "base_tecnica": {"criterio": 5, "v0": "abc", "s3": [], "tipo_de_estrutura": {"x": 1}},
+    "esforcos_do_modelo": {
+        "casos": {"PP": {"membros": {"V1": [[1, 2, "a"], "x"]}, "reacoes": {"modelo": [1, "b"]}}},
+        "membros": [1, 2],
+        "parametros": "nada",
+        "eixo_vertical": "W",
+        "norma": "inventada",
+        "placa": {"espessura_mm": "grossa", "diametro": 9},
+    },
+    "lista_de_material": {"itens": [{"quantidade": "muitas"}, 3], "acrescimo_pct": "x"},
+    "cargas_do_esqueleto": {
+        "eixos_x_m": ["a", 3],
+        "niveis": [{"cota_m": "alto", "vigas_paralelas_a": "Q"}, 4],
+        "escadas": [{"nivel": 9, "borda": "?"}],
+        "equipamentos": "nenhum",
+    },
+    "geometria_do_modelo": {"corpos": [["a", None, 3], "lixo", [1] * 12], "arquivo": 7},
+    "registros_tecnicos": [
+        5,
+        "texto",
+        {"modulo_id": 3, "titulo": None},
+        {"modulo_id": "viga_de_piso", "resultados": "x", "entradas": [1, 2], "status": 7},
+    ],
+}
+
+
+@pytest.mark.parametrize("pagina", PAGINAS)
+def test_pagina_abre_com_dados_do_projeto_corrompidos(banco_com_projeto, pagina):
+    """Os testes levantam as falhas (conftest): aqui nenhuma página pode quebrar com dado estranho."""
+    from core.project_store import obter_projeto_ativo, salvar_projeto
+
+    projeto = obter_projeto_ativo()
+    projeto.update(CAMPOS_CORROMPIDOS)
+    salvar_projeto(projeto, motivo="teste de dados corrompidos")
+    teste = _abrir(pagina)
+    assert not teste.exception, f"{pagina}: {[str(e.value) for e in teste.exception]}"
+
+
 def _cores_literais_de_selos(caminho: Path) -> list[tuple[int, str]]:
     """Cores escritas como texto em ``cabecalho_pagina(cor=...)`` e ``st.badge(color=...)``."""
     argumento_da_chamada = {"cabecalho_pagina": "cor", "badge": "color"}

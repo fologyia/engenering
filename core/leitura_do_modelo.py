@@ -1,0 +1,1634 @@
+"""Leitura do modelo: o que o programa entende dos arquivos do SolidWorks e o que parece errado.
+
+Os arquivos do SolidWorks dizem números; aqui eles viram entendimento:
+
+* **Esqueleto** (macro ``exportar_lista_de_corte.bas`` → ``<peça>_esqueleto.csv``): cada corpo com
+  as pontas da linha de centro, o comprimento, o item da lista de corte e o volume. Com ele cada
+  viga do Simulation ("Viga-12(<corpo>)") ganha posição: vertical é pilar, horizontal é viga,
+  inclinada é contraventamento; o comprimento vira o comprimento de flambagem inicial; o item da
+  lista de corte (conferido pela área real da seção) dá o perfil — inclusive das barras
+  "Aparar/Estender", cujo nome não diz o perfil.
+* **Barra a barra, pelos esforços**: as pontas soltas (todos os esforços nulos — junta que faltou
+  no SolidWorks), articuladas (sem momento) ou rígidas; barras sem esforço em caso nenhum; a malha
+  grossa que deixa o máximo do meio do vão entre dois nós; o comportamento (só força normal: barra
+  articulada ou contraventamento; normal que cresce com o peso próprio: barra não horizontal).
+* **O conjunto** (:func:`diagnosticar`): estudo duplicado do PP que ficou com a gravidade, dois
+  casos com o mesmo resultado, estudo sem carga, modelo que mudou entre os estudos, malha diferente
+  entre os estudos, eixo vertical trocado, valores fora de escala (unidade), barras sem corpo no
+  esqueleto.
+* **Na hora de enviar** (:func:`avisos_da_importacao`): o mesmo caso em dois arquivos, nome do
+  estudo que não bate com o caso escolhido, reações de outro estudo.
+
+As **sugestões** (:func:`aplicar_sugestoes`) preenchem a tabela das barras só onde ela está vazia:
+nada do que foi escolhido à mão é trocado.
+
+Sem Streamlit.
+"""
+
+from __future__ import annotations
+
+import math
+import statistics
+import unicodedata
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
+from datetime import datetime
+from typing import Any
+
+from core import cantoneiras as ct
+from core import esforcos_modelo as em
+from core import lista_de_material as lm
+from core import plano_de_cargas as pc
+from core import section_catalog as sc
+
+TIPO_ESQUELETO = "Esqueleto do modelo"
+TIPO_LISTA_DE_CORTE = "Lista de corte"
+PONTA_SOLTA = "solta"
+PONTA_ARTICULADA = "articulada"
+PONTA_RIGIDA = "rígida"
+PONTA_SEM_ESFORCO = "sem esforço"
+TIPO_PILAR, TIPO_VIGA, TIPO_CONTRAVENTAMENTO = "Pilar", "Viga", "Contraventamento"
+VERTICAL_MINIMO = 0.97  # cosseno com a vertical para ser pilar (~14°)
+HORIZONTAL_MAXIMO = 0.03  # seno com a horizontal para ser viga ou barra do piso
+ALINHADO_MINIMO = 0.985  # em planta, alinhada a um eixo (~10°)
+TOLERANCIA_LIGACAO_M = 0.30  # ponta a esta distância de outra barra está ligada a ela
+VALOR_ABSURDO = 1e5  # kN ou kN·m: acima disso, quase certamente unidade errada
+ANGULO_PILAR = 76.0  # graus com a horizontal (= 14° do prumo): pilar
+ANGULO_HORIZONTAL = 2.0  # graus: horizontal
+SINAL_MINIMO_KN = 0.02  # ΔN + ΔV do peso próprio abaixo disso: sem sinal para a inclinação
+DIFERENCA_DE_INCLINACAO = 10.0  # graus entre o esqueleto e o PP: o corpo não é o da viga
+
+
+class GeometriaInvalida(ValueError):
+    """Arquivo do esqueleto que o programa não lê; a mensagem diz o que fazer."""
+
+
+# ---------------------------------------------------------------------------------------------
+# Esqueleto do modelo
+# ---------------------------------------------------------------------------------------------
+FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO = "BARRA", "CHAPA", "BLOCO"
+FORMAS = (FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO)
+VERSAO_ATUAL_DA_MACRO = "v4"
+COORDENADA_ABSURDA_M = 10_000.0  # 10 km: o arquivo não está em mm
+#: Linhas de cabeçalho da macro (antes da linha das colunas) → campo da geometria.
+_METADADOS = {
+    "macro": "versao_da_macro",
+    "peca": "peca",
+    "configuracao": "configuracao",
+    "data": "gerado_em",
+}
+MACRO_ANTIGA = (
+    "Arquivo de uma versão antiga da macro: baixe a macro nova (botão “Macro do SolidWorks”) e "
+    "gere de novo — ela lê tubos redondos e chapas inclinadas e diz a forma de cada corpo."
+)
+
+
+@dataclass(frozen=True)
+class CorpoDoModelo:
+    nome: str  # o corpo no SolidWorks: o que vai entre parênteses no nome da viga do Simulation
+    item: str  # o item da lista de corte (ex.: "C8x13.75<1>")
+    descricao: str  # o perfil do item
+    inicio: tuple[float, float, float]  # m, nos eixos do modelo
+    fim: tuple[float, float, float]
+    comprimento_m: float
+    volume_m3: float | None = None
+    forma: str = ""  # BARRA, CHAPA ou BLOCO (macro v4); vazio nas versões antigas
+    secao_mm: tuple[float, float] | None = None  # as duas medidas da seção (maior, menor)
+
+    @property
+    def vetor(self) -> tuple[float, float, float]:
+        return (
+            self.fim[0] - self.inicio[0],
+            self.fim[1] - self.inicio[1],
+            self.fim[2] - self.inicio[2],
+        )
+
+    @property
+    def area_mm2(self) -> float | None:
+        if not self.volume_m3 or self.comprimento_m <= 0:
+            return None
+        return self.volume_m3 / self.comprimento_m * 1e6
+
+    @property
+    def e_barra(self) -> bool:
+        """Barra (ou forma não informada, nas versões antigas da macro)."""
+        return self.forma in ("", FORMA_BARRA)
+
+
+@dataclass(frozen=True)
+class GeometriaDoModelo:
+    corpos: tuple[CorpoDoModelo, ...] = ()
+    arquivo: str = ""
+    importado_em: str = ""
+    peca: str = ""
+    configuracao: str = ""
+    gerado_em: str = ""
+    versao_da_macro: str = ""
+    avisos: tuple[str, ...] = ()
+
+    def corpo(self, nome: str) -> CorpoDoModelo | None:
+        return next((c for c in self.corpos if c.nome == nome), None)
+
+    @property
+    def origem(self) -> str:
+        """De onde veio: "portico.SLDPRT, configuração Padrão, gerado em 2026-10-12 18:30"."""
+        partes = [
+            self.peca,
+            f"configuração {self.configuracao}" if self.configuracao else "",
+            f"gerado em {self.gerado_em}" if self.gerado_em else "",
+        ]
+        return ", ".join(p for p in partes if p)
+
+    @property
+    def formas(self) -> dict[str, int]:
+        contagem = {forma: 0 for forma in FORMAS}
+        for c in self.corpos:
+            if c.forma in contagem:
+                contagem[c.forma] += 1
+        return contagem
+
+
+def _sem_acento(texto: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
+    ).lower()
+
+
+def tipo_do_arquivo(conteudo: bytes) -> str | None:
+    """Reconhece os arquivos da macro pelo cabeçalho: o esqueleto ou a lista de corte."""
+    try:
+        linhas = lm._celulas_do_arquivo(conteudo, "x.csv")
+    except Exception:  # noqa: BLE001 — não reconhecer não é erro
+        return None
+    for linha in linhas[:20]:
+        nomes = {_sem_acento(c).strip() for c in linha}
+        if "corpo" in nomes and any(n.startswith("x1") for n in nomes):
+            return TIPO_ESQUELETO
+        if any(n.startswith("qtd") for n in nomes) and any(n.startswith("descri") for n in nomes):
+            return TIPO_LISTA_DE_CORTE
+    return None
+
+
+def _em_metros(texto: str) -> float | None:
+    valor, _ = lm.numero_da_celula(texto, "mm")
+    return None if valor is None or not math.isfinite(valor) else valor / 1000.0
+
+
+def ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
+    """O ``<peça>_esqueleto.csv`` da macro: um corpo por linha, coordenadas em mm.
+
+    Só sai :class:`GeometriaInvalida` (um ``ValueError``) com uma mensagem para quem usa: um trecho
+    inesperado do arquivo vira essa mensagem e uma ocorrência no diagnóstico (com
+    ``MECANICA_TOOLKIT_ERROS=levantar``, a falha original sobe). O que dá para ler com ressalva
+    (versão antiga da macro, linhas puladas, corpos repetidos, coordenadas fora de escala) vira
+    aviso em :attr:`GeometriaDoModelo.avisos`.
+    """
+    try:
+        return _ler_esqueleto(conteudo, nome_arquivo)
+    except GeometriaInvalida:
+        raise
+    except Exception as erro:
+        from core import diagnostico as dg
+
+        if dg.levantar_erros():
+            raise
+        ocorrencia = dg.ocorrencia_de_falha("Esforços do modelo › leitura do esqueleto", erro)
+        dg.gravar(ocorrencia)
+        raise GeometriaInvalida(
+            f"{nome_arquivo} tem um trecho fora do formato esperado e não foi lido "
+            f"(ref. {ocorrencia.referencia}). Gere o arquivo de novo pela macro do SolidWorks."
+        ) from erro
+
+
+def _versao(texto: str) -> str:
+    """A versão no fim da linha MACRO (… exportar_lista_de_corte v4 → v4); vazio sem ela."""
+    for palavra in reversed(texto.split()):
+        if len(palavra) > 1 and palavra[0] in "vV" and palavra[1:].replace(".", "").isdigit():
+            return palavra.lower()
+    return ""
+
+
+def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
+    try:
+        linhas = lm._celulas_do_arquivo(conteudo, nome_arquivo)
+    except ValueError as erro:
+        raise GeometriaInvalida(str(erro)) from erro
+    if not linhas:
+        raise GeometriaInvalida("O arquivo do esqueleto está vazio.")
+    metadados: dict[str, str] = {}
+    cabecalho_i = None
+    for i, linha in enumerate(linhas[:20]):
+        nomes_da_linha = [_sem_acento(c).strip() for c in linha]
+        if "corpo" in nomes_da_linha and any(n.startswith("x1") for n in nomes_da_linha):
+            cabecalho_i = i
+            break
+        if len(linha) >= 2 and nomes_da_linha[0] in _METADADOS:
+            metadados[_METADADOS[nomes_da_linha[0]]] = str(linha[1]).strip()
+    if cabecalho_i is None:
+        raise GeometriaInvalida(
+            "Não achei a linha das colunas do esqueleto (CORPO, X1…Z2, COMPRIMENTO): gere o "
+            "arquivo de novo pela macro do SolidWorks."
+        )
+    cabecalho = [_sem_acento(c).strip() for c in linhas[cabecalho_i]]
+
+    def opcional(prefixo: str) -> int | None:
+        return next((j for j, nome in enumerate(cabecalho) if nome.startswith(prefixo)), None)
+
+    def coluna(prefixo: str) -> int:
+        j = opcional(prefixo)
+        if j is None:
+            raise GeometriaInvalida(
+                f"O arquivo não tem a coluna {prefixo.upper()}: gere-o de novo pela macro do "
+                "SolidWorks (versão com o esqueleto)."
+            )
+        return j
+
+    c_corpo = coluna("corpo")
+    c_coord = [coluna(p) for p in ("x1", "y1", "z1", "x2", "y2", "z2")]
+    c_comp = coluna("compr")
+    c_item, c_desc, c_forma = opcional("item"), opcional("descri"), opcional("forma")
+    c_secao = (opcional("secao a"), opcional("secao b"))
+    c_vol = opcional("volume")
+    obrigatorias = max([c_corpo, c_comp, *c_coord])
+
+    def celula(linha: list[str], j: int | None) -> str:
+        return str(linha[j]).strip() if j is not None and j < len(linha) else ""
+
+    corpos: list[CorpoDoModelo] = []
+    vistos: set[str] = set()
+    repetidos: list[str] = []
+    pulados = fora_de_escala = sem_volume = 0
+    for linha in linhas[cabecalho_i + 1 :]:
+        if not any(str(c).strip() for c in linha):
+            continue
+        nome = celula(linha, c_corpo)
+        if len(linha) <= obrigatorias or not nome:
+            pulados += 1
+            continue
+        coords = [_em_metros(linha[j]) for j in c_coord]
+        comprimento = _em_metros(linha[c_comp])
+        if any(v is None for v in coords) or comprimento is None or comprimento <= 0:
+            pulados += 1
+            continue
+        if nome in vistos:
+            repetidos.append(nome)
+            continue
+        vistos.add(nome)
+        x1, y1, z1, x2, y2, z2 = (v or 0.0 for v in coords)
+        if max(abs(v or 0.0) for v in coords) > COORDENADA_ABSURDA_M:
+            fora_de_escala += 1
+        volume = None
+        if c_vol is not None:
+            cm3, _ = lm.numero_da_celula(celula(linha, c_vol))
+            volume = cm3 / 1e6 if cm3 and math.isfinite(cm3) and cm3 > 0 else None
+        if volume is None:
+            sem_volume += 1
+        forma = celula(linha, c_forma).upper()
+        medidas = [m * 1e3 for j in c_secao if (m := _em_metros(celula(linha, j))) and m > 0]
+        secao = (max(medidas), min(medidas)) if len(medidas) == 2 else None
+        corpos.append(
+            CorpoDoModelo(
+                nome=nome,
+                item=celula(linha, c_item),
+                descricao=celula(linha, c_desc),
+                inicio=(x1, y1, z1),
+                fim=(x2, y2, z2),
+                comprimento_m=comprimento,
+                volume_m3=volume,
+                forma=forma if forma in FORMAS else "",
+                secao_mm=secao,
+            )
+        )
+    if not corpos:
+        raise GeometriaInvalida("Nenhum corpo com coordenadas foi lido do arquivo do esqueleto.")
+    versao = _versao(metadados.get("versao_da_macro", ""))
+    avisos: list[str] = []
+    if not versao or c_forma is None:
+        avisos.append(MACRO_ANTIGA)
+    elif versao != VERSAO_ATUAL_DA_MACRO:
+        avisos.append(
+            f"Gerado pela macro {versao}; o programa espera a {VERSAO_ATUAL_DA_MACRO}: baixe a "
+            "macro nova (botão “Macro do SolidWorks”) e gere de novo."
+        )
+    if pulados:
+        avisos.append(
+            f"{pulados} linha(s) sem coordenadas ou sem comprimento foram puladas (corpo que a "
+            "macro não conseguiu medir?)."
+        )
+    if repetidos:
+        avisos.append(
+            f"{len(repetidos)} corpo(s) repetido(s) no arquivo — ficou o primeiro: "
+            f"{_lista(sorted(set(repetidos)))}."
+        )
+    if fora_de_escala:
+        avisos.append(
+            f"{fora_de_escala} corpo(s) com coordenadas acima de 10 km: o arquivo não está em mm? "
+            "Gere de novo pela macro."
+        )
+    grupos: dict[str, list[float]] = {}
+    for c in corpos:
+        # Só peças longas (≥ 10 vezes a seção): o corte das pontas pouco muda o volume.
+        if c.e_barra and c.area_mm2 and c.secao_mm and c.comprimento_m * 1e3 >= 10 * c.secao_mm[0]:
+            grupos.setdefault(c.descricao or c.item.split("<")[0], []).append(c.area_mm2)
+    diferentes = [
+        f"{nome} ({_n(min(a) / 100, 1)} a {_n(max(a) / 100, 1)} cm²)"
+        for nome, a in grupos.items()
+        if len(a) > 1 and max(a) > 1.3 * min(a)
+    ]
+    if diferentes:
+        avisos.append(
+            f"Mesmo perfil com volumes por metro diferentes: {_lista(diferentes, 4)} — algum corpo "
+            "foi recortado ou tem outra seção. O Simulation calcula com a seção do perfil e a "
+            "lista de material pesa pelo volume: confira esses corpos no SolidWorks."
+        )
+    if sem_volume and sem_volume < len(corpos):
+        avisos.append(
+            f"{sem_volume} corpo(s) sem volume: o peso próprio não é conferido pelo esqueleto."
+        )
+    return GeometriaDoModelo(
+        corpos=tuple(corpos),
+        arquivo=nome_arquivo,
+        importado_em=datetime.now().isoformat(timespec="seconds"),
+        peca=metadados.get("peca", ""),
+        configuracao=metadados.get("configuracao", ""),
+        gerado_em=metadados.get("gerado_em", ""),
+        versao_da_macro=versao,
+        avisos=tuple(avisos),
+    )
+
+
+def para_dicionario(g: GeometriaDoModelo) -> dict[str, Any]:
+    return {
+        "arquivo": g.arquivo,
+        "importado_em": g.importado_em,
+        "peca": g.peca,
+        "configuracao": g.configuracao,
+        "gerado_em": g.gerado_em,
+        "versao_da_macro": g.versao_da_macro,
+        "avisos": list(g.avisos),
+        "corpos": [
+            [
+                c.nome,
+                c.item,
+                c.descricao,
+                *(round(v, 4) for v in (*c.inicio, *c.fim)),
+                round(c.comprimento_m, 4),
+                c.volume_m3,
+                c.forma,
+                *(c.secao_mm or (None, None)),
+            ]
+            for c in g.corpos
+        ],
+    }
+
+
+def _numero(valor: Any) -> float | None:
+    if isinstance(valor, bool):
+        return None
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) else None
+
+
+def _texto(valor: Any) -> str:
+    return valor.strip() if isinstance(valor, str) else ""
+
+
+def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
+    """Lê o esqueleto gravado no projeto; linhas fora do formato são puladas."""
+    if not isinstance(dados, Mapping):
+        return GeometriaDoModelo()
+    corpos = []
+    linhas = dados.get("corpos")
+    for linha in linhas if isinstance(linhas, list | tuple) else ():
+        if not isinstance(linha, list | tuple) or len(linha) < 10:
+            continue
+        numeros = [_numero(v) for v in linha[3:10]]
+        if any(n is None for n in numeros) or not numeros[6] or (numeros[6] or 0) <= 0:
+            continue
+        x1, y1, z1, x2, y2, z2, comprimento = (n or 0.0 for n in numeros)
+        volume = _numero(linha[10]) if len(linha) > 10 else None
+        forma = _texto(linha[11]).upper() if len(linha) > 11 else ""
+        medidas = [m for v in linha[12:14] if (m := _numero(v)) and m > 0]
+        secao = (max(medidas), min(medidas)) if len(medidas) == 2 else None
+        corpos.append(
+            CorpoDoModelo(
+                str(linha[0]),
+                str(linha[1]),
+                str(linha[2]),
+                (x1, y1, z1),
+                (x2, y2, z2),
+                comprimento,
+                volume if volume and volume > 0 else None,
+                forma if forma in FORMAS else "",
+                secao,
+            )
+        )
+    avisos = dados.get("avisos")
+    return GeometriaDoModelo(
+        corpos=tuple(corpos),
+        arquivo=_texto(dados.get("arquivo")),
+        importado_em=_texto(dados.get("importado_em")),
+        peca=_texto(dados.get("peca")),
+        configuracao=_texto(dados.get("configuracao")),
+        gerado_em=_texto(dados.get("gerado_em")),
+        versao_da_macro=_texto(dados.get("versao_da_macro")),
+        avisos=tuple(a for a in avisos if isinstance(a, str)) if isinstance(avisos, list) else (),
+    )
+
+
+def geometria_do_projeto(projeto: Mapping[str, Any] | None) -> GeometriaDoModelo:
+    if not isinstance(projeto, Mapping):
+        return GeometriaDoModelo()
+    return de_dicionario(projeto.get("geometria_do_modelo"))
+
+
+def nome_do_corpo(nome_da_viga: str) -> str:
+    """'Viga-2(Canal c C8X13.75(1)[2])' → 'Canal c C8X13.75(1)[2]' (o corpo no SolidWorks)."""
+    inicio, fim = nome_da_viga.find("("), nome_da_viga.rfind(")")
+    return nome_da_viga[inicio + 1 : fim].strip() if 0 <= inicio < fim else nome_da_viga.strip()
+
+
+def _chave(nome: str) -> str:
+    return "".join(_sem_acento(nome).split())
+
+
+def corpo_da_viga(g: GeometriaDoModelo, nome_da_viga: str) -> CorpoDoModelo | None:
+    alvo = nome_do_corpo(nome_da_viga)
+    exato = g.corpo(alvo)
+    if exato is not None:
+        return exato
+    chave = _chave(alvo)
+    return next((c for c in g.corpos if _chave(c.nome) == chave), None)
+
+
+def _indice_vertical(eixo_vertical: str) -> int:
+    return 1 if eixo_vertical == "Y" else 2
+
+
+def tipo_pela_geometria(corpo: CorpoDoModelo, eixo_vertical: str) -> tuple[str, str]:
+    vetor = corpo.vetor
+    comprimento = math.hypot(*vetor)
+    if comprimento <= 0:
+        return "—", "comprimento nulo no esqueleto"
+    iv = _indice_vertical(eixo_vertical)
+    vertical = abs(vetor[iv]) / comprimento
+    if vertical >= VERTICAL_MINIMO:
+        return TIPO_PILAR, "vertical no modelo"
+    if vertical <= HORIZONTAL_MAXIMO:
+        horizontais = [vetor[i] for i in range(3) if i != iv]
+        if max(abs(h) for h in horizontais) / math.hypot(*horizontais) >= ALINHADO_MINIMO:
+            return TIPO_VIGA, "horizontal no modelo"
+        return TIPO_CONTRAVENTAMENTO, "horizontal e diagonal em planta (contraventamento do piso)"
+    angulo = math.degrees(math.asin(vertical))
+    return TIPO_CONTRAVENTAMENTO, f"inclinada {angulo:.0f}° com a horizontal"
+
+
+def _angulo_do_corpo(corpo: CorpoDoModelo, eixo_vertical: str) -> float:
+    """Graus com a horizontal."""
+    vetor = corpo.vetor
+    comprimento = math.hypot(*vetor)
+    if comprimento <= 0:
+        return 0.0
+    return math.degrees(
+        math.asin(min(1.0, abs(vetor[_indice_vertical(eixo_vertical)]) / comprimento))
+    )
+
+
+def _distancia_ponto_segmento(p: Sequence[float], a: Sequence[float], b: Sequence[float]) -> float:
+    ab = [b[i] - a[i] for i in range(3)]
+    ap = [p[i] - a[i] for i in range(3)]
+    comprimento2 = sum(v * v for v in ab)
+    t = (
+        0.0
+        if comprimento2 == 0
+        else max(0.0, min(1.0, sum(ap[i] * ab[i] for i in range(3)) / comprimento2))
+    )
+    return math.dist(p, [a[i] + t * ab[i] for i in range(3)])
+
+
+def pontas_soltas_pela_geometria(
+    g: GeometriaDoModelo, eixo_vertical: str, nomes: Iterable[str] | None = None
+) -> dict[str, list[str]]:
+    """Corpo → pontas ("início", "fim") que não tocam outra barra nem estão no apoio (o mais baixo)."""
+    if not g.corpos:
+        return {}
+    iv = _indice_vertical(eixo_vertical)
+    piso = min(min(c.inicio[iv], c.fim[iv]) for c in g.corpos)
+    escolhidos = set(nomes) if nomes is not None else None
+    soltas: dict[str, list[str]] = {}
+    for corpo in g.corpos:
+        if not corpo.e_barra or (escolhidos is not None and corpo.nome not in escolhidos):
+            continue  # chapa e bloco não têm "ponta solta"
+        for rotulo, ponta in (("início", corpo.inicio), ("fim", corpo.fim)):
+            if abs(ponta[iv] - piso) <= TOLERANCIA_LIGACAO_M:
+                continue  # apoio
+            ligada = any(
+                _distancia_ponto_segmento(ponta, outro.inicio, outro.fim) <= TOLERANCIA_LIGACAO_M
+                for outro in g.corpos
+                if outro is not corpo
+            )
+            if not ligada:
+                soltas.setdefault(corpo.nome, []).append(rotulo)
+    return soltas
+
+
+# ---------------------------------------------------------------------------------------------
+# Barra a barra
+# ---------------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class LeituraDaBarra:
+    barra: str
+    corpo: CorpoDoModelo | None
+    tipo_sugerido: str
+    motivo_do_tipo: str
+    perfil_sugerido: str
+    origem_do_perfil: str
+    comprimento_m: float | None
+    elementos: int
+    pontas: tuple[str, str]
+    eixo_forte: str
+    avisos: tuple[str, ...] = ()
+
+    @property
+    def tem_ponta_solta(self) -> bool:
+        return PONTA_SOLTA in self.pontas
+
+
+def _pontos(dados: em.EsforcosDoModelo, barra: str) -> list[em.PontoDeEsforco]:
+    return [p for caso in dados.casos.values() for p in caso.membros.get(barra, ())]
+
+
+def classificar_pontas(dados: em.EsforcosDoModelo, barra: str) -> tuple[str, str]:
+    """Cada ponta (a primeira e a última da lista do SolidWorks), olhando todos os casos."""
+    todos = _pontos(dados, barra)
+    escala_f = max((max(abs(p.n), abs(p.v1), abs(p.v2)) for p in todos), default=0.0)
+    escala_m = max((max(abs(p.m1), abs(p.m2), abs(p.t)) for p in todos), default=0.0)
+    if escala_f < 1e-6 and escala_m < 1e-6:
+        return PONTA_SEM_ESFORCO, PONTA_SEM_ESFORCO
+    limite_f = max(0.01, 1e-3 * escala_f)
+    limite_m_solta = max(0.01, 1e-3 * escala_m)
+    limite_m_articulada = max(0.01, 0.02 * escala_m)
+    resultado = []
+    for indice in (0, -1):
+        forcas = momentos = 0.0
+        for caso in dados.casos.values():
+            pontos = caso.membros.get(barra, ())
+            if not pontos:
+                continue
+            p = pontos[indice]
+            forcas = max(forcas, abs(p.n), abs(p.v1), abs(p.v2))
+            momentos = max(momentos, abs(p.m1), abs(p.m2), abs(p.t))
+        if forcas <= limite_f and momentos <= limite_m_solta:
+            resultado.append(PONTA_SOLTA)
+        elif momentos <= limite_m_articulada:
+            resultado.append(PONTA_ARTICULADA)
+        else:
+            resultado.append(PONTA_RIGIDA)
+    return resultado[0], resultado[1]
+
+
+def _casos_verticais(
+    dados: em.EsforcosDoModelo, plano: pc.PlanoDeCargas | None
+) -> list[em.CasoImportado]:
+    """Os casos só com carga vertical (o PP sempre; os outros, pelo plano de cargas)."""
+    verticais = []
+    for caso in dados.casos.values():
+        acao = plano.acao(caso.codigo) if plano is not None else None
+        if caso.codigo == "PP" or (acao is not None and acao.cargas and em._so_vertical(acao)):
+            verticais.append(caso)
+    return verticais
+
+
+def variacao_no_pp(dados: em.EsforcosDoModelo, barra: str) -> tuple[float, float] | None:
+    """O que o peso próprio faz *dentro* de cada elemento da barra no caso PP: (ΔN, ΔV) somados.
+
+    Dentro de um elemento só uma carga distribuída ao longo da barra muda a normal e a cortante
+    (as barras que chegam nos nós mudam os esforços *entre* elementos, não dentro deles). No PP
+    essa carga é o peso próprio: a parte ao longo do eixo muda N, a parte transversal muda V.
+    Somados na barra, ``hypot(ΔN, ΔV)`` é a carga distribuída total e ``atan2(ΔN, ΔV)`` a
+    inclinação da barra com a horizontal. ``None`` sem caso PP ou sem a barra nele.
+    """
+    pp = dados.casos.get("PP")
+    pontos = pp.membros.get(barra) if pp is not None else None
+    if not pontos:
+        return None
+    por_elemento: dict[str, dict[str, em.PontoDeEsforco]] = {}
+    for p in pontos:
+        por_elemento.setdefault(p.elemento, {})[p.fim] = p
+    delta_n = delta_v = 0.0
+    for pontas in por_elemento.values():
+        if "1" in pontas and "2" in pontas:
+            a, b = pontas["1"], pontas["2"]
+            delta_n += abs(b.n - a.n)
+            delta_v += math.hypot(b.v1 - a.v1, b.v2 - a.v2)
+    return delta_n, delta_v
+
+
+def inclinacao_pelo_peso(dados: em.EsforcosDoModelo, barra: str) -> float | None:
+    """A inclinação da barra com a horizontal (graus) pelo peso próprio no PP; ``None`` sem sinal."""
+    variacao = variacao_no_pp(dados, barra)
+    if variacao is None or sum(variacao) < SINAL_MINIMO_KN:
+        return None
+    return math.degrees(math.atan2(*variacao))
+
+
+def _flexao_domina(dados: em.EsforcosDoModelo, barra: str) -> bool:
+    """Cortante acima de 10 % da normal (em todos os casos): a barra trabalha fletida."""
+    todos = _pontos(dados, barra)
+    normal = max((abs(p.n) for p in todos), default=0.0)
+    cortante = max((math.hypot(p.v1, p.v2) for p in todos), default=0.0)
+    return cortante > max(0.05, 0.10 * normal)
+
+
+def _tipo_inclinada(
+    dados: em.EsforcosDoModelo, barra: str, angulo: float, fonte: str
+) -> tuple[str, str]:
+    if _flexao_domina(dados, barra):
+        return (
+            TIPO_VIGA,
+            f"inclinada {angulo:.0f}° {fonte} e fletida (banzo de escada, viga inclinada)",
+        )
+    return TIPO_CONTRAVENTAMENTO, f"inclinada {angulo:.0f}° {fonte}, força normal dominante"
+
+
+def tipo_pelos_esforcos(
+    dados: em.EsforcosDoModelo, barra: str, plano: pc.PlanoDeCargas | None = None
+) -> tuple[str, str]:
+    """Pelo comportamento, quando não há o esqueleto.
+
+    Primeiro pelo peso próprio (:func:`inclinacao_pelo_peso`): vertical é pilar, horizontal é viga
+    (ou contraventamento do piso, se só trabalha à força normal), inclinada é contraventamento ou
+    viga inclinada, conforme a flexão. Sem esse sinal (PP sem peso próprio nas barras): só força
+    normal → contraventamento; sob carga só vertical (PP, SC…), o pilar fica comprimido com N
+    muito maior que V e a viga, o contrário.
+    """
+    todos = _pontos(dados, barra)
+    normal = max((abs(p.n) for p in todos), default=0.0)
+    cortante = max((math.hypot(p.v1, p.v2) for p in todos), default=0.0)
+    momento = max((max(abs(p.m1), abs(p.m2)) for p in todos), default=0.0)
+    if normal < 0.01 and momento < 0.01:
+        return "—", ""
+    so_normal = momento <= 0.02 * normal and cortante <= 0.05 * normal
+    angulo = inclinacao_pelo_peso(dados, barra)
+    if angulo is not None:
+        if angulo >= ANGULO_PILAR:
+            return TIPO_PILAR, (
+                "vertical: no PP a normal varia dentro dos elementos e a cortante não (peso "
+                "próprio ao longo do eixo)"
+            )
+        if angulo <= ANGULO_HORIZONTAL:
+            if so_normal:
+                return TIPO_CONTRAVENTAMENTO, "horizontal e só com força normal"
+            return TIPO_VIGA, "horizontal: no PP a normal não varia dentro dos elementos"
+        return _tipo_inclinada(dados, barra, angulo, "(pelo peso próprio)")
+    if so_normal:
+        return TIPO_CONTRAVENTAMENTO, "trabalha só à força normal (barra articulada)"
+    verticais = [p for caso in _casos_verticais(dados, plano) for p in caso.membros.get(barra, ())]
+    if verticais:
+        n_vertical = max(abs(p.n) for p in verticais)
+        v_vertical = max(math.hypot(p.v1, p.v2) for p in verticais)
+        comprimida = min(p.n for p in verticais) < 0
+        if comprimida and n_vertical > 2 * v_vertical:
+            return TIPO_PILAR, "sob carga vertical, comprimida com N muito maior que V"
+        if v_vertical > 2 * n_vertical:
+            return TIPO_VIGA, "sob carga vertical, fletida com pouca força normal"
+    return "—", ""
+
+
+def _elementos(dados: em.EsforcosDoModelo, barra: str) -> int:
+    for caso in dados.casos.values():
+        pontos = caso.membros.get(barra)
+        if pontos:
+            return len({p.elemento for p in pontos})
+    return 0
+
+
+def _secao_no_modelo(corpo: CorpoDoModelo) -> str:
+    if corpo.secao_mm is None:
+        return ""
+    return f"; seção de {corpo.secao_mm[0]:.0f} × {corpo.secao_mm[1]:.0f} mm no modelo"
+
+
+def _chave_do_perfil(corpo: CorpoDoModelo) -> str:
+    return corpo.descricao or corpo.item.split("<")[0]
+
+
+def areas_por_perfil(g: GeometriaDoModelo) -> dict[str, float]:
+    """A maior área de seção (volume ÷ comprimento) entre as barras de mesmo perfil.
+
+    Corte inclinado na ponta só tira volume: a peça mais reta do grupo dá a área verdadeira — o
+    mesmo critério da Lista de material. Sem isso, um U 8" em meia-esquadria "vira" um U 6".
+    """
+    areas: dict[str, float] = {}
+    for c in g.corpos:
+        if c.e_barra and c.area_mm2:
+            chave = _chave_do_perfil(c)
+            areas[chave] = max(areas.get(chave, 0.0), c.area_mm2)
+    return areas
+
+
+def _dimensoes(nome: str) -> tuple[float, float] | None:
+    """(altura, largura) do perfil do catálogo ou da cantoneira, em mm."""
+    perfis = sc.listar_perfis()
+    if nome in perfis:
+        return perfis[nome].altura_mm, perfis[nome].largura_mm
+    if nome in ct.CATALOGO_CANTONEIRAS:
+        aba = ct.CATALOGO_CANTONEIRAS[nome].b_mm
+        return aba, aba
+    return None
+
+
+def cabe_na_secao(nome: str, secao_mm: tuple[float, float] | None) -> bool:
+    """O perfil pode ser o corpo medido? A maior medida da seção do corpo (nas direções do próprio
+    corpo) não passa da diagonal do perfil, nem o perfil é mais estreito que ela."""
+    dimensoes = _dimensoes(nome)
+    if secao_mm is None or dimensoes is None:
+        return True
+    maior = secao_mm[0]
+    return math.hypot(*dimensoes) >= 0.95 * maior and min(dimensoes) <= 1.05 * maior
+
+
+def _perfil(
+    barra: str, corpo: CorpoDoModelo | None, area_do_perfil: float | None = None
+) -> tuple[str, str]:
+    if corpo is not None:
+        for texto in (corpo.descricao, corpo.item.split("<")[0]):
+            conhecido = lm.perfil_conhecido(texto) if texto else None
+            if conhecido is not None:
+                nome = conhecido.nome
+                area = area_do_perfil or corpo.area_mm2
+                if area:
+                    adotado, motivo = lm.secao_pela_area(nome, area)
+                    if adotado != nome and not cabe_na_secao(adotado, corpo.secao_mm):
+                        return nome, (
+                            f"lista de corte ({texto}); a área pelo volume lembra o {adotado}, mas "
+                            "a seção medida no modelo não cabe nele (corte nas pontas tira volume)"
+                            + _secao_no_modelo(corpo)
+                        )
+                    if motivo:
+                        return adotado, (
+                            f"lista de corte ({texto}); {motivo}" + _secao_no_modelo(corpo)
+                        )
+                return nome, f"lista de corte ({texto})" + _secao_no_modelo(corpo)
+    pelo_nome = em.perfil_do_nome(barra)
+    if pelo_nome:
+        return pelo_nome, "nome da viga no SolidWorks"
+    return "", ""
+
+
+def ler_barras(
+    dados: em.EsforcosDoModelo,
+    geometria: GeometriaDoModelo | None = None,
+    plano: pc.PlanoDeCargas | None = None,
+) -> list[LeituraDaBarra]:
+    g = geometria or GeometriaDoModelo()
+    soltas_geo = pontas_soltas_pela_geometria(g, dados.eixo_vertical) if g.corpos else {}
+    areas = areas_por_perfil(g)
+    leituras = []
+    for barra in dados.nomes_dos_membros:
+        corpo = corpo_da_viga(g, barra) if g.corpos else None
+        avisos: list[str] = []
+        pelo_peso = inclinacao_pelo_peso(dados, barra)
+        if corpo is not None and corpo.forma == FORMA_BLOCO and pelo_peso is not None:
+            # Peça curta: a maior medida pode ser a da seção, não a do eixo.
+            tipo, motivo = tipo_pelos_esforcos(dados, barra, plano)
+            motivo = f"{motivo} (peça curta no esqueleto: a direção vem do peso próprio)"
+        elif corpo is not None:
+            tipo, motivo = tipo_pela_geometria(corpo, dados.eixo_vertical)
+            pela_geometria = _angulo_do_corpo(corpo, dados.eixo_vertical)
+            if tipo == TIPO_CONTRAVENTAMENTO and motivo.startswith("inclinada"):
+                tipo, motivo = _tipo_inclinada(dados, barra, pela_geometria, "no modelo")
+            if pelo_peso is not None and abs(pelo_peso - pela_geometria) > DIFERENCA_DE_INCLINACAO:
+                avisos.append(
+                    f"no esqueleto a barra está a {pela_geometria:.0f}° da horizontal, e pelo peso "
+                    f"próprio no PP a {pelo_peso:.0f}°: o corpo não é o desta viga (esqueleto de "
+                    "outra versão) ou a gravidade do PP não está na vertical"
+                )
+        else:
+            tipo, motivo = tipo_pelos_esforcos(dados, barra, plano)
+        perfil, origem = _perfil(
+            barra, corpo, areas.get(_chave_do_perfil(corpo)) if corpo is not None else None
+        )
+        elementos = _elementos(dados, barra)
+        pontas = classificar_pontas(dados, barra)
+        if PONTA_SOLTA in pontas:
+            onde = (
+                "nas duas pontas"
+                if pontas == (PONTA_SOLTA, PONTA_SOLTA)
+                else ("no início" if pontas[0] == PONTA_SOLTA else "no fim")
+            )
+            avisos.append(
+                f"ponta solta {onde}: nenhum esforço em caso nenhum — falta a junta no SolidWorks "
+                "(ou é um balanço de propósito)"
+            )
+        if corpo is not None and corpo.nome in soltas_geo and PONTA_SOLTA not in pontas:
+            avisos.append(
+                f"no esqueleto, a ponta {' e '.join(soltas_geo[corpo.nome])} não encosta em outra "
+                "barra nem no apoio"
+            )
+        if pontas == (PONTA_SEM_ESFORCO, PONTA_SEM_ESFORCO):
+            avisos.append("sem esforço em caso nenhum: barra solta ou fora do caminho das cargas")
+        if tipo == TIPO_VIGA and elementos and elementos % 2 == 1 and elementos < 7:
+            avisos.append(
+                f"malha de {elementos} elemento(s): sem nó no meio do vão, o momento máximo de "
+                f"uma carga distribuída pode ficar até {100 / elementos**2:.0f} % abaixo do real "
+                "— refine a malha (número par de elementos ou 7 ou mais)"
+            )
+        eixo_forte = em.eixo_forte_sugerido(_pontos(dados, barra))
+        leituras.append(
+            LeituraDaBarra(
+                barra=barra,
+                corpo=corpo,
+                tipo_sugerido=tipo,
+                motivo_do_tipo=motivo,
+                perfil_sugerido=perfil,
+                origem_do_perfil=origem,
+                comprimento_m=corpo.comprimento_m if corpo is not None else None,
+                elementos=elementos,
+                pontas=pontas,
+                eixo_forte=eixo_forte,
+                avisos=tuple(avisos),
+            )
+        )
+    return leituras
+
+
+def aplicar_sugestoes(
+    dados: em.EsforcosDoModelo, leituras: Sequence[LeituraDaBarra]
+) -> tuple[em.EsforcosDoModelo, int]:
+    """Preenche a tabela das barras só onde está vazia; devolve os dados e quantas barras mudaram.
+
+    Tipo, perfil (só do catálogo), eixo forte (só quando o tipo também era vazio) e os comprimentos
+    de flambagem iniciais = comprimento da barra (K = 1; reduza o Lb da viga travada pelo piso).
+    O perfil que entrou sozinho pelo nome da viga (na importação) não é escolha de ninguém: com o
+    esqueleto, ele dá lugar ao perfil do modelo (lista de corte conferida pela área da seção), que
+    é a seção que a análise usou.
+    """
+    catalogo = set(em._catalogo())
+    novos: dict[str, em.ConfiguracaoDoMembro] = {}
+    mudaram = 0
+    for leitura in leituras:
+        atual = dados.membros.get(leitura.barra, em.ConfiguracaoDoMembro())
+        tipo = atual.tipo if atual.tipo != "—" else leitura.tipo_sugerido
+        do_modelo = leitura.perfil_sugerido if leitura.perfil_sugerido in catalogo else ""
+        so_pelo_nome = (
+            leitura.corpo is not None
+            and bool(do_modelo)
+            and atual.perfil == (em.perfil_do_nome(leitura.barra) or "")
+        )
+        perfil = do_modelo if so_pelo_nome else (atual.perfil or do_modelo)
+        comprimento = leitura.comprimento_m
+        novo = replace(
+            atual,
+            tipo=tipo if tipo in em.TIPOS_DE_BARRA else atual.tipo,
+            perfil=perfil,
+            eixo_forte=leitura.eixo_forte if atual.tipo == "—" else atual.eixo_forte,
+            lx_m=atual.lx_m or comprimento,
+            ly_m=atual.ly_m or comprimento,
+            lb_m=atual.lb_m or comprimento,
+        )
+        if novo != atual:
+            mudaram += 1
+            novos[leitura.barra] = novo
+    return (em.com_membros(dados, novos) if novos else dados), mudaram
+
+
+# ---------------------------------------------------------------------------------------------
+# O conjunto
+# ---------------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Achado:
+    nivel: str  # pc.NIVEL_ERRO, pc.NIVEL_ATENCAO, em.NIVEL_INFO ou pc.NIVEL_OK
+    titulo: str
+    texto: str
+    barras: tuple[str, ...] = ()
+
+
+ORDEM_DOS_NIVEIS = {pc.NIVEL_ERRO: 0, pc.NIVEL_ATENCAO: 1, em.NIVEL_INFO: 2, pc.NIVEL_OK: 3}
+
+
+def _n(valor: float, casas: int = 2) -> str:
+    return f"{valor:.{casas}f}".replace(".", ",")
+
+
+def _lista(nomes: Sequence[str], limite: int = 6) -> str:
+    texto = ", ".join(nomes[:limite])
+    return texto + (f" e mais {len(nomes) - limite}" if len(nomes) > limite else "")
+
+
+def peso_dos_corpos_kN(corpos: Iterable[CorpoDoModelo]) -> float | None:
+    """O aço dos corpos pelo volume da macro (7 850 kg/m³); ``None`` se faltar o volume de algum."""
+    lista = list(corpos)
+    if not lista or any(c.volume_m3 is None for c in lista):
+        return None
+    return sum(c.volume_m3 or 0.0 for c in lista) * lm.DENSIDADE_ACO * lm.G / 1e3
+
+
+def peso_do_esqueleto_kN(g: GeometriaDoModelo | None) -> float | None:
+    """O que a gravidade do modelo deveria dar no PP, pelos volumes de todos os corpos."""
+    return peso_dos_corpos_kN(g.corpos) if g is not None else None
+
+
+def _mesmo_papel(escolhido: str, sugerido: str) -> bool:
+    articuladas = {TIPO_CONTRAVENTAMENTO, "Diagonal"}
+    return escolhido == sugerido or (escolhido in articuladas and sugerido in articuladas)
+
+
+def _vertical(dados: em.EsforcosDoModelo, caso: em.CasoImportado) -> float | None:
+    if caso.reacoes is None:
+        return None
+    return em.para_o_plano(caso.reacoes.modelo, dados.eixo_vertical)[2]
+
+
+def _iguais(a: em.CasoImportado, b: em.CasoImportado) -> bool:
+    if a.reacoes is None or b.reacoes is None:
+        return False
+    if any(
+        abs(x - y) > 1e-6 * max(1.0, abs(x))
+        for x, y in zip(a.reacoes.modelo, b.reacoes.modelo, strict=True)
+    ):
+        return False
+    if all(abs(v) < 1e-9 for v in a.reacoes.modelo):
+        return False  # dois casos sem carga já viram outro achado
+    for barra, pontos in list(a.membros.items())[:20]:
+        outros = b.membros.get(barra)
+        if outros is None or len(outros) != len(pontos):
+            return False
+        if any(
+            abs(x - y) > 1e-6 * max(1.0, abs(x))
+            for p, q in zip(pontos, outros, strict=True)
+            for x, y in zip(p.vetor(), q.vetor(), strict=True)
+        ):
+            return False
+    return True
+
+
+def diagnosticar(
+    dados: em.EsforcosDoModelo,
+    plano: pc.PlanoDeCargas,
+    geometria: GeometriaDoModelo | None = None,
+    leituras: Sequence[LeituraDaBarra] | None = None,
+    *,
+    peso_da_estrutura_kN: float | None = None,
+) -> list[Achado]:
+    """Os achados sobre o conjunto dos casos importados, do mais grave ao informativo.
+
+    ``peso_da_estrutura_kN`` (da Lista de material) serve quando o esqueleto não diz o peso de
+    cada barra: a carga que o PP leva ao longo das barras não pode passar do aço todo.
+    """
+    if not dados.casos:
+        return []
+    leituras = list(leituras) if leituras is not None else ler_barras(dados, geometria, plano)
+    g = geometria or GeometriaDoModelo()
+    achados: list[Achado] = []
+    casos = list(dados.casos.values())
+
+    # Valores fora de escala: unidade errada no SolidWorks ou no arquivo.
+    absurdos = sorted(
+        {
+            barra
+            for caso in casos
+            for barra, pontos in caso.membros.items()
+            if any(abs(v) > VALOR_ABSURDO for p in pontos for v in p.vetor())
+        }
+    )
+    if absurdos:
+        achados.append(
+            Achado(
+                pc.NIVEL_ERRO,
+                "Valores fora de escala",
+                f"Esforços acima de {VALOR_ABSURDO:,.0f} kN ou kN·m em {_lista(absurdos)}: confira "
+                "a unidade do SolidWorks (N × kN, mm × m) e o arquivo.".replace(",", "."),
+                tuple(absurdos),
+            )
+        )
+
+    # Eixo vertical: no PP só há gravidade, a reação tem de ser vertical.
+    pp = dados.casos.get("PP")
+    if pp is not None and pp.reacoes is not None:
+        componentes = [abs(v) for v in pp.reacoes.modelo]
+        total = math.hypot(*componentes)
+        dominante = componentes.index(max(componentes))
+        vertical = _indice_vertical(dados.eixo_vertical)
+        if total > 0.01 and dominante != vertical and componentes[dominante] > 0.9 * total:
+            eixo = "XYZ"[dominante]
+            achados.append(
+                Achado(
+                    pc.NIVEL_ERRO,
+                    "Eixo vertical trocado",
+                    f"O peso do PP aparece em {eixo}, mas a página está com {dados.eixo_vertical} "
+                    f"para cima: troque o eixo vertical no passo 1 para {eixo}.",
+                )
+            )
+
+    # Casos sem carga e casos repetidos.
+    for caso in casos:
+        sem_reacao = caso.reacoes is not None and all(abs(v) < 1e-6 for v in caso.reacoes.modelo)
+        sem_forca = all(
+            abs(v) < 1e-9 for pontos in caso.membros.values() for p in pontos for v in p.vetor()
+        )
+        if sem_reacao and sem_forca:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ERRO,
+                    f"{caso.codigo}: estudo sem carga",
+                    f"O estudo {caso.estudo or caso.codigo} não tem reação nem esforço: as cargas "
+                    "do caso não foram aplicadas (ou o estudo não foi rodado de novo).",
+                )
+            )
+    for i, a in enumerate(casos):
+        for b in casos[i + 1 :]:
+            if _iguais(a, b):
+                achados.append(
+                    Achado(
+                        pc.NIVEL_ERRO,
+                        f"{a.codigo} e {b.codigo} têm o mesmo resultado",
+                        f"Os dois casos dão as mesmas reações e os mesmos esforços: o mesmo arquivo "
+                        f"foi enviado duas vezes ou o estudo {b.codigo} foi duplicado sem trocar "
+                        "as cargas.",
+                    )
+                )
+
+    # Gravidade que ficou num estudo duplicado do PP.
+    peso = _vertical(dados, pp) if pp is not None else None
+    if peso is not None and peso > 0.5:
+        for caso in casos:
+            if caso.codigo == "PP" or caso.reacoes is None:
+                continue
+            acao = plano.acao(caso.codigo)
+            esperado = em.total_esperado(acao) if acao is not None else None
+            if esperado is None and acao is not None and acao.cargas:
+                continue  # carga por área ou distribuída sem comprimento: não dá para separar
+            esperado_vertical = -esperado[2] if esperado is not None else 0.0
+            reacao_vertical = _vertical(dados, caso) or 0.0
+            sobra = reacao_vertical - esperado_vertical
+            if abs(sobra - peso) <= 0.03 * peso:
+                achados.append(
+                    Achado(
+                        pc.NIVEL_ERRO,
+                        f"{caso.codigo}: ficou com a gravidade",
+                        f"A reação vertical do {caso.codigo} tem {_n(sobra)} kN a mais do que as "
+                        f"cargas do plano — é o peso da estrutura ({_n(peso)} kN no PP). O estudo "
+                        "foi duplicado do PP sem excluir a gravidade: exclua-a e rode de novo.",
+                    )
+                )
+
+    # Peso próprio contra o aço do esqueleto: entre o das barras do estudo e o de todos os corpos.
+    if g.corpos and peso is not None and peso > 0.01:
+        fator = plano.fator_peso_proprio
+        todos = peso_do_esqueleto_kN(g)
+        corpos_do_estudo = {lb.corpo.nome: lb.corpo for lb in leituras if lb.corpo is not None}
+        das_barras = peso_dos_corpos_kN(corpos_do_estudo.values())
+        if todos is not None and das_barras is not None:
+            maximo, minimo = todos * fator, das_barras * fator
+            ligacoes = f", × {_n(fator)} de ligações não modeladas" if fator > 1 else ""
+            faixa = (
+                f"{_n(maximo)} kN"
+                if maximo - minimo < 0.01
+                else f"entre {_n(minimo)} kN (só as barras do estudo) e {_n(maximo)} kN (todos "
+                "os corpos)"
+            )
+            if peso > (1 + em.TOLERANCIA_PESO) * maximo:
+                razao = peso / maximo
+                gama = em.coeficiente_aparente(razao)
+                texto = (
+                    f"O PP dá {_n(peso)} kN de reação vertical, e o aço de todos os corpos do "
+                    f"esqueleto pesa {_n(maximo)} kN (volume × 7 850 kg/m³{ligacoes})"
+                )
+                if gama is not None:
+                    texto += (
+                        f": {_n(razao)} vez — o estudo PP parece majorado (γ ≈ {_n(gama)}). "
+                        f"{em.ESTUDO_MAJORADO}"
+                    )
+                else:
+                    texto += (
+                        f": {_n(razao, 1)} vezes. O estudo PP leva só a gravidade — sobrecarga, "
+                        "equipamentos e o que não está modelado vão nos estudos deles (SC, EQ, "
+                        "PE…), com as cargas características. Confira também a densidade dos "
+                        "materiais (7 850 kg/m³) e a gravidade (9,81 m/s²)."
+                    )
+                achados.append(Achado(pc.NIVEL_ERRO, "PP mais pesado que a estrutura", texto))
+            elif peso < (1 - em.TOLERANCIA_PESO) * minimo:
+                achados.append(
+                    Achado(
+                        pc.NIVEL_ATENCAO,
+                        "PP mais leve que o aço das barras",
+                        f"O PP dá {_n(peso)} kN de reação vertical, e só o aço das "
+                        f"{len(corpos_do_estudo)} barras do estudo pesa {_n(minimo)} kN "
+                        f"(volume × 7 850 kg/m³{ligacoes}): há corpo sem material, com material "
+                        "que não é aço (o alumínio pesa um terço) ou com densidade diferente de "
+                        "7 850 kg/m³"
+                        + (
+                            f", ou a gravidade do PP ficou sem o fator das ligações "
+                            f"(9,81 × {_n(fator)})."
+                            if fator > 1
+                            else "."
+                        ),
+                    )
+                )
+            else:
+                achados.append(
+                    Achado(
+                        pc.NIVEL_OK,
+                        "Peso próprio confere com o esqueleto",
+                        f"PP: {_n(peso)} kN de reação vertical; aço do esqueleto {faixa}"
+                        f"{ligacoes}.",
+                    )
+                )
+
+    # O caminho do peso no PP: o que chega ao longo das barras (peso delas e cargas por metro) e o
+    # que chega pelos nós (chapas, sólidos, forças concentradas). Com o esqueleto, barra a barra.
+    if peso is not None and peso > 0.01:
+        ao_longo = 0.0
+        a_mais: list[str] = []
+        barras_a_mais: list[str] = []
+        carga_da_barra: dict[str, float] = {}
+        for lb in leituras:
+            variacao = variacao_no_pp(dados, lb.barra)
+            if variacao is None:
+                continue
+            carga = math.hypot(*variacao)
+            ao_longo += carga
+            carga_da_barra[lb.barra] = carga
+            corpo = lb.corpo
+            if corpo is None or not corpo.volume_m3 or corpo.comprimento_m <= 0:
+                continue
+            proprio = (
+                corpo.volume_m3
+                * lm.DENSIDADE_ACO
+                * lm.G
+                / 1e3
+                / corpo.comprimento_m
+                * plano.fator_peso_proprio
+            )
+            por_metro = carga / corpo.comprimento_m
+            if por_metro > 1.15 * proprio + 0.05:
+                barras_a_mais.append(lb.barra)
+                a_mais.append(
+                    f"{lb.barra} ({_n(por_metro)} kN/m; o peso dela é {_n(proprio)} kN/m)"
+                )
+        if a_mais:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ERRO,
+                    "Carga além do peso próprio no PP",
+                    f"{_lista(a_mais, 4)}: ao longo dessas barras o PP leva mais que o peso delas "
+                    "— há carga por metro aplicada no estudo PP. O PP leva só a gravidade: mova "
+                    "essas cargas para os estudos dos casos delas (SC, EQ, PE…), com os valores "
+                    "característicos.",
+                    tuple(barras_a_mais),
+                )
+            )
+        elif peso_da_estrutura_kN and ao_longo > (
+            1.15 * peso_da_estrutura_kN * plano.fator_peso_proprio + 0.1
+        ):
+            maiores = sorted(carga_da_barra, key=carga_da_barra.__getitem__, reverse=True)[:5]
+            achados.append(
+                Achado(
+                    pc.NIVEL_ERRO,
+                    "Carga além do peso próprio no PP",
+                    f"Ao longo das barras o PP leva {_n(ao_longo)} kN, e o aço da estrutura "
+                    f"inteira pesa {_n(peso_da_estrutura_kN)} kN (Lista de material): há carga "
+                    "por metro aplicada no estudo PP. As barras que mais recebem: "
+                    + ", ".join(f"{b} ({_n(carga_da_barra[b])} kN)" for b in maiores)
+                    + ". O PP leva só a gravidade: mova essas cargas para os estudos dos casos "
+                    "delas (SC, EQ, PE…), com os valores característicos. Com o esqueleto da "
+                    "macro, o programa aponta barra a barra.",
+                    tuple(maiores),
+                )
+            )
+        pelos_nos = peso - ao_longo
+        if ao_longo > 0 and pelos_nos > 0.05 * peso:
+            achados.append(
+                Achado(
+                    em.NIVEL_INFO,
+                    "Caminho do peso no PP",
+                    f"Dos {_n(peso)} kN do PP, {_n(ao_longo)} kN chegam distribuídos ao longo das "
+                    f"barras (o peso delas e cargas por metro) e {_n(pelos_nos)} kN pelos nós "
+                    "(chapas, sólidos, forças concentradas). Se o modelo é só o esqueleto, quase "
+                    "tudo deveria vir ao longo das barras.",
+                )
+            )
+
+    # Modelo que mudou entre os estudos e malhas diferentes.
+    todas = dados.nomes_dos_membros
+    for caso in casos:
+        faltam = [b for b in todas if b not in caso.membros]
+        if faltam and caso.membros:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ERRO,
+                    f"{caso.codigo}: faltam barras",
+                    f"O {caso.codigo} não tem {_lista(faltam)}: o modelo mudou entre os estudos. "
+                    "Rode todos os estudos com o mesmo modelo.",
+                    tuple(faltam),
+                )
+            )
+    malha_diferente = sorted(
+        barra
+        for barra in todas
+        if len(
+            {tuple(p.chave for p in caso.membros[barra]) for caso in casos if barra in caso.membros}
+        )
+        > 1
+    )
+    if malha_diferente:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Malha diferente entre os estudos",
+                f"{_lista(malha_diferente)}: a numeração dos elementos muda de um estudo para "
+                "outro, e as combinações deixam de ser ponto a ponto. Duplique o estudo PP para "
+                "os outros casos, sem refazer a malha.",
+                tuple(malha_diferente),
+            )
+        )
+
+    # Barra a barra.
+    soltas = [lb.barra for lb in leituras if lb.tem_ponta_solta]
+    if soltas:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Pontas soltas",
+                f"{_lista(soltas)}: uma ponta sem nenhum esforço em caso nenhum. Quase sempre é a "
+                "junta que faltou entre as vigas no SolidWorks (Juntas › Calcular de novo, ou "
+                "estender e aparar até encostar) — confira, a não ser que seja um balanço.",
+                tuple(soltas),
+            )
+        )
+    paradas = [lb.barra for lb in leituras if lb.pontas == (PONTA_SEM_ESFORCO, PONTA_SEM_ESFORCO)]
+    if paradas:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Barras sem esforço",
+                f"{_lista(paradas)}: nenhum esforço em caso nenhum. Barra solta ou fora do caminho "
+                "das cargas — confira as juntas.",
+                tuple(paradas),
+            )
+        )
+    grossas = [lb.barra for lb in leituras if any("malha de" in a for a in lb.avisos)]
+    if grossas:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Malha grossa nas vigas",
+                f"{_lista(grossas)}: número ímpar e pequeno de elementos, sem nó no meio do vão — "
+                "o momento máximo pode ficar de fora. Refine a malha das vigas.",
+                tuple(grossas),
+            )
+        )
+    tipos = {
+        lb.barra: (dados.membros.get(lb.barra, em.ConfiguracaoDoMembro()).tipo, lb.tipo_sugerido)
+        for lb in leituras
+    }
+    trocados = [
+        lb.barra
+        for lb in leituras
+        if lb.corpo is not None
+        and tipos[lb.barra][0] not in ("—", "Outro")
+        and lb.tipo_sugerido != "—"
+        and not _mesmo_papel(*tipos[lb.barra])
+    ]
+    if trocados:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Tipo diferente da posição no modelo",
+                f"{_lista(trocados)}: o tipo escolhido na tabela não é o da posição da barra no "
+                "esqueleto (vertical = pilar, horizontal = viga, inclinada = contraventamento). "
+                "Os parâmetros da verificação (comprimentos, Cb, aço, B₂) saem do tipo da tabela.",
+                tuple(trocados),
+            )
+        )
+    pilares = [lb.barra for lb in leituras if TIPO_PILAR in tipos[lb.barra]]
+    if pilares and dados.parametros_do_tipo(TIPO_PILAR).b2 <= 1.0:
+        contraventada = any(
+            TIPO_CONTRAVENTAMENTO in par or "Diagonal" in par for par in tipos.values()
+        )
+        achados.append(
+            Achado(
+                em.NIVEL_INFO if contraventada else pc.NIVEL_ATENCAO,
+                "Segunda ordem global (B₂)",
+                "O estudo do SolidWorks é linear (1ª ordem) e o B₂ dos pilares está em 1,00. "
+                + (
+                    "Com contraventamento, isso só vale se a estrutura for de pequena "
+                    "deslocabilidade"
+                    if contraventada
+                    else "Sem contraventamento, o pórtico costuma ser de média ou grande "
+                    "deslocabilidade e os momentos de 2ª ordem não podem ser desprezados"
+                )
+                + ": classifique a estrutura na página Contraventamento e informe o B₂ na "
+                "tabela de parâmetros (passo 6). Considere também as imperfeições iniciais "
+                "(força nocional de 0,3 % das cargas gravitacionais de cálculo).",
+                tuple(pilares),
+            )
+        )
+    rigidas = [
+        lb.barra
+        for lb in leituras
+        if TIPO_VIGA in tipos[lb.barra] and lb.pontas == (PONTA_RIGIDA, PONTA_RIGIDA)
+    ]
+    if rigidas:
+        achados.append(
+            Achado(
+                em.NIVEL_INFO,
+                "Vigas engastadas nas pontas",
+                f"{len(rigidas)} viga(s) com momento nas duas pontas ({_lista(rigidas, 4)}): no "
+                "SolidWorks as juntas das vigas são rígidas. Se a ligação real só transmite "
+                "cortante (cantoneiras, chapa de alma), articule essas pontas no modelo — senão o "
+                "momento no meio do vão sai menor que o real e a ligação recebe um momento que ela "
+                "não tem. Num pórtico sem contraventamento é o contrário: a ligação rígida é o que "
+                "dá a estabilidade lateral e tem de ser detalhada para o momento.",
+                tuple(rigidas),
+            )
+        )
+    escolhidos = {
+        lb.barra: dados.membros[lb.barra].perfil
+        for lb in leituras
+        if lb.barra in dados.membros and dados.membros[lb.barra].perfil
+    }
+    divergentes = [
+        lb.barra
+        for lb in leituras
+        if lb.perfil_sugerido
+        and lb.corpo is not None
+        and escolhidos.get(lb.barra)
+        and escolhidos[lb.barra] != lb.perfil_sugerido
+    ]
+    if divergentes:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Perfil diferente do modelo",
+                f"{_lista(divergentes)}: o perfil da tabela não é a seção do modelo (lista de "
+                "corte conferida pela área). Os esforços saíram da seção do modelo e a verificação "
+                "usa a da tabela: se o perfil da tabela veio só do nome da viga, “Aplicar as "
+                "sugestões” troca pelo do modelo; se foi escolhido de propósito, troque o perfil "
+                "no SolidWorks e rode os estudos de novo.",
+                tuple(divergentes),
+            )
+        )
+
+    # Esqueleto: barras sem corpo.
+    if g.corpos:
+        sem_corpo = [lb.barra for lb in leituras if lb.corpo is None]
+        if sem_corpo:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ATENCAO,
+                    "Barras fora do esqueleto",
+                    f"{_lista(sem_corpo)}: não achei o corpo no arquivo do esqueleto — ele é de "
+                    "outra versão do modelo? Gere os dois arquivos de novo.",
+                    tuple(sem_corpo),
+                )
+            )
+    if not [a for a in achados if a.nivel in (pc.NIVEL_ERRO, pc.NIVEL_ATENCAO)]:
+        achados.append(
+            Achado(
+                pc.NIVEL_OK,
+                "Nada de estranho",
+                f"{len(casos)} caso(s), {len(todas)} barras: os casos são diferentes entre si, "
+                "têm carga, usam o mesmo modelo e a mesma malha, e nenhuma barra ficou solta.",
+            )
+        )
+    return sorted(achados, key=lambda a: ORDEM_DOS_NIVEIS.get(a.nivel, 9))
+
+
+def resumo_das_barras(leituras: Sequence[LeituraDaBarra]) -> dict[str, int]:
+    resumo = {TIPO_PILAR: 0, TIPO_VIGA: 0, TIPO_CONTRAVENTAMENTO: 0, "—": 0}
+    for lb in leituras:
+        resumo[lb.tipo_sugerido if lb.tipo_sugerido in resumo else "—"] += 1
+    return resumo
+
+
+# ---------------------------------------------------------------------------------------------
+# Na hora de enviar
+# ---------------------------------------------------------------------------------------------
+def avisos_da_importacao(
+    escolhas: Sequence[tuple[em.ArquivoLido, str]], codigos: Iterable[str]
+) -> list[Achado]:
+    """O que não fecha entre os arquivos enviados e os casos escolhidos para eles."""
+    achados: list[Achado] = []
+    lista_codigos = list(codigos)
+    forcas: dict[str, list[em.ArquivoLido]] = {}
+    reacoes: dict[str, list[em.ArquivoLido]] = {}
+    for arquivo, caso in escolhas:
+        if not caso:
+            continue
+        destino = forcas if arquivo.tipo == em.TIPO_VIGAS else reacoes
+        if arquivo.tipo in (em.TIPO_VIGAS, em.TIPO_REACOES):
+            destino.setdefault(caso, []).append(arquivo)
+        sugerido = em.caso_sugerido(arquivo.estudo, lista_codigos) if arquivo.estudo else None
+        if sugerido and sugerido != caso:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ATENCAO,
+                    f"{arquivo.nome_arquivo}: estudo {arquivo.estudo}",
+                    f"O estudo se chama {arquivo.estudo} (caso {sugerido}), mas foi escolhido o caso "
+                    f"{caso}. Confira.",
+                )
+            )
+    for caso, arquivos in forcas.items():
+        if len(arquivos) > 1:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ERRO,
+                    f"{caso}: dois arquivos de forças",
+                    f"{', '.join(a.nome_arquivo for a in arquivos)} foram escolhidos para o mesmo "
+                    "caso: só o último ficaria. Escolha o caso certo de cada um.",
+                )
+            )
+        if caso not in reacoes:
+            achados.append(
+                Achado(
+                    em.NIVEL_INFO,
+                    f"{caso}: sem o arquivo de reações",
+                    f"Sem as reações do {caso} (Listar forças resultantes), o equilíbrio do caso "
+                    "não é conferido.",
+                )
+            )
+    for caso, arquivos in reacoes.items():
+        if len(arquivos) > 1:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ERRO,
+                    f"{caso}: dois arquivos de reações",
+                    f"{', '.join(a.nome_arquivo for a in arquivos)} foram escolhidos para o mesmo "
+                    "caso.",
+                )
+            )
+        if caso in forcas:
+            estudos = {forcas[caso][-1].estudo, arquivos[-1].estudo} - {""}
+            if len(estudos) > 1:
+                achados.append(
+                    Achado(
+                        pc.NIVEL_ATENCAO,
+                        f"{caso}: forças e reações de estudos diferentes",
+                        f"As forças são do estudo {forcas[caso][-1].estudo} e as reações do "
+                        f"{arquivos[-1].estudo}. Confira se são do mesmo estudo.",
+                    )
+                )
+    return sorted(achados, key=lambda a: ORDEM_DOS_NIVEIS.get(a.nivel, 9))
+
+
+# ---------------------------------------------------------------------------------------------
+# Tensões da viga: a seção que o Simulation usou
+# ---------------------------------------------------------------------------------------------
+ESCOAMENTO_A36_MPA = 250.0
+TOLERANCIA_SECAO_SIMULATION = 0.05
+
+
+def area_no_simulation(
+    forcas: Mapping[str, Sequence[em.PontoDeEsforco]],
+    tensoes: Mapping[str, Sequence[em.TensaoDaViga]],
+) -> dict[str, float]:
+    """A área (mm²) que o Simulation usou em cada barra: força normal ÷ tensão axial, ponta a ponta
+    (mesmo elemento e mesma ponta nos dois arquivos do mesmo estudo); a mediana da barra."""
+    areas: dict[str, float] = {}
+    for barra, pontos in tensoes.items():
+        forca = {(p.elemento, p.fim): p for p in forcas.get(barra, ())}
+        valores = [
+            abs(f.n) * 1e3 / abs(t.axial)
+            for t in pontos
+            if (f := forca.get((t.elemento, t.fim))) is not None
+            and abs(t.axial) >= 0.1
+            and abs(f.n) >= 0.05
+        ]
+        if valores:
+            areas[barra] = statistics.median(valores)
+    return areas
+
+
+def conferir_tensoes(
+    lidos: Sequence[em.ArquivoLido],
+    dados: em.EsforcosDoModelo,
+    geometria: GeometriaDoModelo | None = None,
+) -> list[Achado]:
+    """O que os "Listar tensões da viga" enviados dizem: a maior tensão (só referência — a NBR 8800
+    verifica pelos esforços) e, com as forças do mesmo estudo, se a seção que o Simulation usou em
+    cada barra é a do perfil da tabela (ou o sugerido pelo modelo)."""
+    achados: list[Achado] = []
+    for arquivo in lidos:
+        if arquivo.tipo != em.TIPO_TENSOES_VIGA or not arquivo.tensoes_da_viga:
+            continue
+        estudo = arquivo.estudo or arquivo.nome_arquivo
+        barra, maior = max(
+            (
+                (nome, max(abs(t.pior) for t in pontos))
+                for nome, pontos in arquivo.tensoes_da_viga.items()
+            ),
+            key=lambda par: par[1],
+        )
+        texto = (
+            f"Maior tensão normal (pior cenário: axial + flexão) de {_n(maior, 1)} MPa, em {barra}. "
+            "É só referência: a verificação da NBR 8800 é pelos esforços (flambagem, flambagem "
+            "lateral, interação)."
+        )
+        nivel = em.NIVEL_INFO
+        if maior > ESCOAMENTO_A36_MPA:
+            nivel = pc.NIVEL_ATENCAO
+            texto += " Passa do escoamento do A36 (250 MPa): essa barra não vai atender."
+        achados.append(Achado(nivel, f"{estudo}: tensões da viga", texto, (barra,)))
+        enviado = next(
+            (
+                a
+                for a in lidos
+                if a.tipo == em.TIPO_VIGAS and a.estudo == arquivo.estudo and a.membros
+            ),
+            None,
+        )
+        caso = next((c for c in dados.casos.values() if c.estudo == arquivo.estudo), None)
+        if enviado is not None:
+            # As forças vieram junto: a leitura (perfil sugerido pelo esqueleto) sai delas.
+            fonte = em.com_caso(
+                em.EsforcosDoModelo(eixo_vertical=dados.eixo_vertical),
+                em.caso_do_arquivo(enviado, arquivo.estudo or "?"),
+            )
+            forcas: Mapping[str, Sequence[em.PontoDeEsforco]] | None = enviado.membros
+        else:
+            fonte = dados
+            forcas = caso.membros if caso is not None else None
+        if forcas is None:
+            achados.append(
+                Achado(
+                    em.NIVEL_INFO,
+                    f"{estudo}: seção do Simulation",
+                    "Envie também o “Listar forças da viga” do mesmo estudo: com as duas listas o "
+                    "programa confere a seção que o Simulation usou em cada barra.",
+                )
+            )
+            continue
+        leituras = {lb.barra: lb for lb in ler_barras(fonte, geometria)}
+        diferentes: list[str] = []
+        barras_diferentes: list[str] = []
+        conferidas = 0
+        for nome, area in sorted(area_no_simulation(forcas, arquivo.tensoes_da_viga).items()):
+            escolhido = dados.membros[nome].perfil if nome in dados.membros else ""
+            sugerido = leituras[nome].perfil_sugerido if nome in leituras else ""
+            perfil = escolhido or sugerido or em.perfil_do_nome(nome) or ""
+            catalogo = lm._secao_do_catalogo(perfil) if perfil else None
+            if catalogo is None:
+                continue
+            conferidas += 1
+            if abs(area - catalogo[0]) / catalogo[0] > TOLERANCIA_SECAO_SIMULATION:
+                barras_diferentes.append(nome)
+                diferentes.append(
+                    f"{nome} ({_n(area / 100, 1)} cm² no Simulation; {perfil}: "
+                    f"{_n(catalogo[0] / 100, 1)} cm²)"
+                )
+        if diferentes:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ATENCAO,
+                    f"{estudo}: seção do Simulation diferente do perfil",
+                    f"{_lista(diferentes, 4)}: a área que o Simulation usou (força normal ÷ tensão "
+                    "axial) não é a do perfil. Os esforços saíram da seção do modelo: acerte o "
+                    "perfil no SolidWorks ou na tabela das barras, para os dois serem o mesmo.",
+                    tuple(barras_diferentes),
+                )
+            )
+        elif conferidas:
+            achados.append(
+                Achado(
+                    pc.NIVEL_OK,
+                    f"{estudo}: seção do Simulation confere",
+                    f"Em {conferidas} barra(s), a área que o Simulation usou (força normal ÷ tensão "
+                    "axial) é a do perfil.",
+                )
+            )
+    return sorted(achados, key=lambda a: ORDEM_DOS_NIVEIS.get(a.nivel, 9))
+
+
+COLUNAS_LEITURA = (
+    "Barra",
+    "Tipo sugerido",
+    "Por quê",
+    "Perfil sugerido",
+    "De onde",
+    "Comprimento (m)",
+    "Elementos",
+    "Pontas",
+    "Observação",
+)
+
+
+def linhas_da_leitura(leituras: Sequence[LeituraDaBarra]) -> list[list[object]]:
+    return [
+        [
+            lb.barra,
+            lb.tipo_sugerido,
+            lb.motivo_do_tipo,
+            lb.perfil_sugerido or "—",
+            lb.origem_do_perfil or "—",
+            "" if lb.comprimento_m is None else lb.comprimento_m,
+            lb.elementos,
+            " / ".join(lb.pontas),
+            "; ".join(lb.avisos),
+        ]
+        for lb in leituras
+    ]

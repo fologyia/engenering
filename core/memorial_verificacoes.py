@@ -682,6 +682,17 @@ ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
         ("norma", "Norma", "sempre"),
         ("criterio_do_cliente", "Critério do cliente", "se_preenchido"),
     ),
+    "cargas_esqueleto": (
+        ("obra", "Obra", "se_preenchido"),
+        ("eixos_x_m", "Eixos em X (m)", "sempre"),
+        ("eixos_y_m", "Eixos em Y (m)", "sempre"),
+        ("niveis", "Níveis de piso", "sempre"),
+        ("guarda_corpo_kN_m", "Guarda-corpo e rodapé (kN/m)", "sempre"),
+        ("acrescimo_de_ligacoes_pct", "Acréscimo de ligações, chapas e parafusos (%)", "sempre"),
+        ("escadas", "Escadas", "se_preenchido"),
+        ("equipamentos", "Equipamentos", "se_preenchido"),
+        ("temperatura", "Variação de temperatura", "se_preenchido"),
+    ),
     "esforcos_modelo": (
         ("obra", "Obra", "se_preenchido"),
         ("casos_do_modelo", "Casos importados do modelo", "sempre"),

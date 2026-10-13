@@ -35,6 +35,7 @@ com :class:`ProjetoConflitoErro` e a tela precisa recarregar.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -396,8 +397,16 @@ def novo_projeto_documento(
 
 
 def _validar_documento(projeto: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(projeto, Mapping):
+        raise ProjetoPersistenciaErro(
+            "Arquivo de projeto invalido: o projeto nao e um objeto JSON."
+        )
     documento = _json_seguro(dict(projeto))
-    if int(documento.get("schema_version", 0)) != VERSAO_ESQUEMA:
+    try:
+        versao = int(documento.get("schema_version", 0))
+    except (TypeError, ValueError):
+        versao = -1
+    if versao != VERSAO_ESQUEMA:
         raise ProjetoPersistenciaErro(
             f"Versao de projeto nao suportada: {documento.get('schema_version')}."
         )
@@ -422,9 +431,72 @@ def _validar_documento(projeto: Mapping[str, Any]) -> dict[str, Any]:
     ):
         if not isinstance(documento.get(campo, []), list):
             raise ProjetoPersistenciaErro(f"O campo '{campo}' deve ser uma lista.")
+        if campo in documento:
+            # Só objetos: um item estranho (número, texto) de um projeto antigo, editado à mão ou
+            # corrompido derrubaria toda página que lê a lista.
+            documento[campo] = [item for item in documento[campo] if isinstance(item, dict)]
     if not isinstance(documento.get("base_projeto", {}), dict):
         raise ProjetoPersistenciaErro("O campo 'base_projeto' deve ser um objeto.")
+    if "registros_tecnicos" in documento:
+        documento["registros_tecnicos"] = [
+            _normalizar_tipos_do_registro(r) for r in documento["registros_tecnicos"]
+        ]
     return documento
+
+
+#: Campos do registro técnico por tipo (``core.technical_records.criar_registro_tecnico``).
+_TEXTOS_DO_REGISTRO = (
+    "id",
+    "criado_em",
+    "atualizado_em",
+    "modulo",
+    "modulo_id",
+    "metodo_versao",
+    "titulo",
+    "status",
+    "resumo",
+    "metodo",
+    "conclusao",
+    "responsavel",
+)
+_OBJETOS_DO_REGISTRO = ("entradas", "resultados", "incertezas")
+_LISTAS_DO_REGISTRO = (
+    "premissas",
+    "equacoes",
+    "criterios",
+    "alertas",
+    "referencias",
+    "casos_carga_ids",
+    "componentes_ids",
+    "materiais_ids",
+)
+
+
+def _normalizar_tipos_do_registro(registro: dict[str, Any]) -> dict[str, Any]:
+    """Cada campo conhecido com o tipo certo; num registro íntegro não muda nada (nem o hash).
+
+    Num registro corrompido o hash deixa de bater e a validação o marca — mas nenhuma página quebra
+    ao lê-lo.
+    """
+    for campo in _TEXTOS_DO_REGISTRO:
+        if campo in registro and not isinstance(registro[campo], str):
+            registro[campo] = "" if registro[campo] is None else str(registro[campo])
+    for campo in _OBJETOS_DO_REGISTRO:
+        if campo in registro and not isinstance(registro[campo], dict):
+            registro[campo] = {}
+    for campo in _LISTAS_DO_REGISTRO:
+        if campo in registro and not isinstance(registro[campo], list):
+            registro[campo] = []
+    # Campos que as páginas leem com colchetes: o registro íntegro sempre os tem.
+    for campo, padrao in (("titulo", ""), ("status", "Pendente"), ("modulo", "")):
+        registro.setdefault(campo, padrao)
+    registro.setdefault("entradas", {})
+    registro.setdefault("resultados", {})
+    if not registro.get("id"):
+        # Estável: o mesmo conteúdo dá o mesmo id a cada leitura.
+        conteudo = json.dumps(registro, ensure_ascii=False, sort_keys=True, default=str)
+        registro["id"] = "registro-" + hashlib.sha1(conteudo.encode("utf-8")).hexdigest()[:12]
+    return registro
 
 
 def _sem_token(documento: Mapping[str, Any]) -> dict[str, Any]:

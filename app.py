@@ -9,6 +9,7 @@ renovar_modulos_desatualizados()
 from components.acesso_ui import acesso_na_lateral, exigir_acesso
 from components.armazenamento_ui import preparar_armazenamento, situacao_na_lateral
 from components.project_tools import sincronizar_projeto_ativo
+from components.robustez import executar_pagina, iniciar_execucao, secao_protegida
 from core.technical_modules import listar_modulos, obter_modulo
 
 st.set_page_config(
@@ -21,14 +22,19 @@ st.logo(
     size="large",
     icon_image="assets/logo_mark.svg",
 )
+# Falhas inesperadas não aparecem na tela: viram um aviso discreto no fim da página, com uma
+# referência, e o detalhe vai para o arquivo de diagnóstico (components/robustez.py).
+iniciar_execucao()
 
 # Com a senha de acesso definida (core/acesso.py), nada abaixo roda antes de ela ser digitada.
 exigir_acesso()
 st.session_state.setdefault("projeto_assistente_etapa", 1)
 # Antes de qualquer leitura do banco: segredos do espelho no GitHub e restauração do que o disco
 # da hospedagem perdeu num reinício.
-preparar_armazenamento()
-sincronizar_projeto_ativo()
+with secao_protegida("armazenamento"):
+    preparar_armazenamento()
+with secao_protegida("projeto ativo"):
+    sincronizar_projeto_ativo()
 
 
 def pagina_modulo(modulo_id: str) -> st.Page:
@@ -74,6 +80,11 @@ pagina = st.navigation(
                 "app_pages/base_tecnica.py",
                 title="Base técnica do projeto",
                 icon=":material/tune:",
+            ),
+            st.Page(
+                "app_pages/cargas_esqueleto.py",
+                title="Cargas do esqueleto",
+                icon=":material/grid_view:",
             ),
             st.Page(
                 "app_pages/plano_cargas.py",
@@ -150,9 +161,10 @@ pagina = st.navigation(
     expanded=True,
 )
 
-situacao_na_lateral()
-acesso_na_lateral()
-pagina.run()
+with secao_protegida("lateral"):
+    situacao_na_lateral()
+    acesso_na_lateral()
+executar_pagina(pagina)
 
 with st.sidebar:
     st.caption("Projetos industriais • análise • rastreabilidade")

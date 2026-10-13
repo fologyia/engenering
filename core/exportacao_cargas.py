@@ -231,22 +231,31 @@ def linhas_de_carga(
     vetor: tuple[float, float, float] | None
     for acao in plano.acoes:
         if acao.codigo == "PP" and not acao.cargas:
-            vetor = para_os_eixos((0.0, 0.0, -GRAVIDADE_M_S2), eixos)
+            fator = plano.fator_peso_proprio
+            gravidade = GRAVIDADE_M_S2 * fator
+            vetor = para_os_eixos((0.0, 0.0, -gravidade), eixos)
             sw, robot = EQUIVALENTES[TIPO_GRAVIDADE]
+            observacao = "Confira a densidade do aço no material do modelo (7850 kg/m³)."
+            if fator > 1:
+                observacao = (
+                    f"9,81 × {fator:.2f}".replace(".", ",")
+                    + ": o acréscimo é o peso das ligações, chapas e parafusos que não estão no "
+                    "modelo. " + observacao
+                )
             linhas.append(
                 LinhaDeCarga(
                     acao.codigo,
                     acao.nome,
                     TIPO_GRAVIDADE,
                     "Toda a estrutura (peso das peças do modelo)",
-                    GRAVIDADE_M_S2,
+                    gravidade,
                     "m/s²",
                     1,
                     *vetor,
                     sentido(vetor, eixos),
-                    sw,
+                    sw.replace("9,81 m/s²", f"{gravidade:.2f} m/s²".replace(".", ",")),
                     robot,
-                    "Confira a densidade do aço no material do modelo (7850 kg/m³).",
+                    observacao,
                 )
             )
             continue
@@ -381,8 +390,19 @@ def csv_lista(plano: pc.PlanoDeCargas, estados: Sequence[str]) -> bytes:
 # Leia-me e planilha Excel
 # ---------------------------------------------------------------------------------------------
 def texto_leia_me(
-    sistema: SistemaDeUnidades, eixos: str, *, titulo: str = "", anglo: bool = False
+    sistema: SistemaDeUnidades,
+    eixos: str,
+    *,
+    titulo: str = "",
+    anglo: bool = False,
+    fator_peso_proprio: float = 1.0,
 ) -> list[str]:
+    gravidade = f"{GRAVIDADE_M_S2 * fator_peso_proprio:.2f} m/s²".replace(".", ",")
+    if fator_peso_proprio > 1:
+        gravidade += (
+            f" = 9,81 × {fator_peso_proprio:.2f}".replace(".", ",")
+            + ", com as ligações, chapas e parafusos que não estão no modelo"
+        )
     vertical = eixo_vertical(eixos)
     linhas = [
         f"Plano de cargas — {titulo}" if titulo else "Plano de cargas",
@@ -406,7 +426,7 @@ def texto_leia_me(
         "cargas CARACTERÍSTICAS: nunca majore no SolidWorks — os coeficientes estão nas "
         "combinações, que o programa monta na página Esforços do modelo.",
         "1. Estudo PP: material (aço A36 ou A572 Gr 50: 200 GPa, 7850 kg/m³), juntas das vigas, "
-        "fixações nas bases, malha e SÓ a Gravidade (9,81 m/s² para baixo). Rode.",
+        f"fixações nas bases, malha e SÓ a Gravidade ({gravidade}, para baixo). Rode.",
         "2. Botão direito na aba do estudo PP › Duplicar, com o nome do próximo caso (SC, PE, EQ, "
         "W0, W90, W180, W270, T+ como T+, T− como T-). No estudo novo, exclua a Gravidade e aplique "
         "só as cargas desse caso da aba Cargas (colunas Tipo da carga e No SolidWorks; Fx, Fy e Fz "
@@ -483,7 +503,9 @@ def xlsx_do_plano(
     leia = livro.active
     assert leia is not None
     leia.title = "Leia-me"
-    for texto in texto_leia_me(sistema, eixos, titulo=titulo, anglo=anglo):
+    for texto in texto_leia_me(
+        sistema, eixos, titulo=titulo, anglo=anglo, fator_peso_proprio=plano.fator_peso_proprio
+    ):
         leia.append([texto])
         if texto.isupper() or texto.startswith("Plano de cargas"):
             leia.cell(row=leia.max_row, column=1).font = Font(bold=True)

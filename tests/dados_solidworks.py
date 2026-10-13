@@ -9,6 +9,7 @@ reações saem como "Listar forças resultantes", com Y vertical.
 
 from __future__ import annotations
 
+import math
 from functools import cache
 
 from core import section_catalog as sc
@@ -85,6 +86,53 @@ def csv_forcas_da_viga(caso: str, *, estudo: str | None = None, ids: dict | None
     return "\r\n".join(linhas).encode("cp1252")
 
 
+def csv_tensoes_da_viga(
+    caso: str,
+    *,
+    estudo: str | None = None,
+    fator_da_area: float = 1.0,
+    com_pior: bool = True,
+    unidade: str = "N/m^2",
+) -> bytes:
+    """O "Listar tensões da viga" do caso: σ = N/A e M/W de cada ponta (compressão negativa),
+    com a mesma numeração de elementos do "Listar forças da viga". ``fator_da_area`` simula um
+    Simulation que usou outra seção."""
+    r = resolver(caso)
+    por_id = {e["elemento"]: e for e in r.esforcos_elementos}
+    pilar = sc.obter_perfil("W 200 x 35,9 (H)")
+    viga = sc.obter_perfil("W 310 x 32,7")
+    escala = {"N/m^2": 1e6, "MPa": 1.0, "N/mm^2": 1.0}[unidade]
+    colunas = ["Axial", "Direção de curvatura1", "Direção de curvatura2", "Torcional"]
+    if com_pior:
+        colunas.append("Pior cenário")
+    linhas = [
+        "sep=;",
+        "19:57; segunda-feira; outubro 12; 2026",
+        f"Nome do estudo:{estudo or caso}",
+        "",
+        "Nome da viga  ;Elemento  ;Fim  ;" + ";".join(f"{c} ({unidade})  " for c in colunas),
+    ]
+    for nome, lista in BARRAS.items():
+        perfil = viga if "C8" in nome else pilar
+        area = perfil.area_mm2 * fator_da_area
+        modulo = perfil.ix_mm4 / (perfil.altura_mm / 2)
+        linhas.append(f"{nome}  ;" + "  ;" * (len(colunas) + 1))
+        for ident, _, _ in lista:
+            e = por_id[ident]
+            for fim, n, m in (("1", -e["Ni_N"], -e["Mi_Nmm"]), ("2", e["Nj_N"], e["Mj_Nmm"])):
+                axial, flexao = n / area * escala, m / modulo * escala
+                valores = [axial, 0.0, flexao, 0.0]
+                if com_pior:
+                    valores.append(abs(axial) + abs(flexao))
+                rotulo = f"{30000 + ident}" if fim == "1" else ""
+                linhas.append(
+                    f"  ;{rotulo}  ;{fim}  ;"
+                    + ";".join(f"{v:.4e}".replace(".", ",") + "  " for v in valores)
+                )
+    linhas.append("  ;" * (len(colunas) + 3))
+    return "\r\n".join(linhas).encode("cp1252")
+
+
 def csv_reacoes(caso: str, *, extra_z_N: float = 0.0) -> bytes:
     r = resolver(caso)
     rx = sum(float(x["rx_N"]) for x in r.reacoes_nodais)
@@ -111,6 +159,82 @@ def csv_reacoes(caso: str, *, extra_z_N: float = 0.0) -> bytes:
         "Resultante:  ;0  ;0",
     ]
     return "\r\n".join(linhas).encode("cp1252")
+
+
+#: Corpo de cada barra no esqueleto da macro: item da lista de corte, descrição, pontas (mm) e o
+#: perfil de onde sai o volume.
+CORPOS = {
+    "Aparar/Estender12[1]": ("W8x31<1>", "W8x31", (0, 0, 0), (0, H, 0), "W 200 x 35,9 (H)"),
+    "Canal c C8X13.75(1)[2]": (
+        "W 310 x 32,7<2>",
+        "W 310 x 32,7",
+        (0, H, 0),
+        (L, H, 0),
+        "W 310 x 32,7",
+    ),
+    "Aparar/Estender12[2]": ("W8x31<1>", "W8x31", (L, 0, 0), (L, H, 0), "W 200 x 35,9 (H)"),
+}
+
+
+def csv_esqueleto(
+    *,
+    corpos: dict | None = None,
+    escala_do_volume: float = 1.0,
+    com_volume: bool = True,
+    decimal: str = ",",
+    volumes_cm3: dict | None = None,
+    formas: dict | None = None,
+    versao_antiga: bool = False,
+    linhas_extras: tuple[str, ...] = (),
+) -> bytes:
+    """O ``<peça>_esqueleto.csv`` da macro v4 (cp1252; ``Format "0.0"``; mm e cm³): o cabeçalho
+    (macro, peça, configuração, data), a forma e as medidas da seção de cada corpo.
+    ``versao_antiga`` grava o formato da v3 (sem cabeçalho, forma nem seção)."""
+
+    def texto(valor: float) -> str:
+        return f"{valor:.1f}".replace(".", decimal)
+
+    if versao_antiga:
+        linhas = [
+            "CORPO;ITEM DA LISTA;DESCRICAO;X1 (mm);Y1 (mm);Z1 (mm);X2 (mm);Y2 (mm);Z2 (mm);"
+            "COMPRIMENTO (mm);VOLUME (cm3)"
+        ]
+    else:
+        linhas = [
+            'MACRO;"Mecanica Toolkit - exportar_lista_de_corte v4"',
+            'PECA;"portico.SLDPRT"',
+            'CONFIGURACAO;"Padrão"',
+            'DATA;"2026-10-12 18:30"',
+            "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);X2 (mm);Y2 (mm);Z2 (mm);"
+            "COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)",
+        ]
+    for nome, (item, descricao, p1, p2, perfil) in (corpos or CORPOS).items():
+        comprimento = sum((b - a) ** 2 for a, b in zip(p1, p2, strict=True)) ** 0.5
+        secao = sc.obter_perfil(perfil)
+        volume = secao.area_mm2 * comprimento / 1000 * escala_do_volume
+        volume = (volumes_cm3 or {}).get(nome, volume)
+        pontas = ";".join(texto(v) for v in (*p1, *p2))
+        cauda = texto(volume) if com_volume else ""
+        if versao_antiga:
+            linhas.append(f'"{nome}";"{item}";"{descricao}";{pontas};{texto(comprimento)};{cauda}')
+        else:
+            forma = (formas or {}).get(nome, "BARRA")
+            medidas = f"{texto(secao.altura_mm)};{texto(secao.largura_mm)}"
+            linhas.append(
+                f'"{nome}";"{item}";"{descricao}";{forma};{pontas};{texto(comprimento)};'
+                f"{medidas};{cauda}"
+            )
+    linhas.extend(linhas_extras)
+    return "\r\n".join(linhas).encode("cp1252")
+
+
+def peso_do_esqueleto_kN(escala_do_volume: float = 1.0) -> float:
+    """O aço dos três corpos (7 850 kg/m³), para escolher a escala que faz o PP bater."""
+    volume_m3 = sum(
+        sc.obter_perfil(perfil).area_mm2 * math.dist(p1, p2) / 1e9
+        for _, _, p1, p2, perfil in CORPOS.values()
+    )
+    return volume_m3 * escala_do_volume * 7850.0 * 9.80665 / 1e3
 
 
 def csv_tensoes() -> bytes:

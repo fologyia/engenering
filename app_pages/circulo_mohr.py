@@ -11,6 +11,7 @@ from components.project_tools import (
     construir_registro_tecnico,
     id_registro_existente,
 )
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import mohr_analysis as mohr
 
@@ -1123,7 +1124,7 @@ else:
         tipo="secondary",
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Precisa interpretar estes resultados?"):
     st.subheader("Precisa interpretar estes resultados?")
     st.markdown(
         "O **Guia geral** explica tensões principais, cisalhamento máximo, "

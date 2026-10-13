@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import section_catalog as catalogo
 from core import steel_sections as secoes
@@ -33,7 +34,7 @@ def tabela_do_catalogo() -> pd.DataFrame:
 completo = tabela_do_catalogo()
 resumo = catalogo.resumo_do_catalogo()
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. O que já está disponível"):
     st.subheader("1. O que já está disponível")
     metricas = st.columns(min(len(resumo) + 1, 4))
     metricas[0].metric("Perfis no catálogo", len(completo), border=True)
@@ -79,7 +80,7 @@ with st.container(border=True):
 # 2. Cadastrar ou editar
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Cadastrar ou editar um perfil"):
     st.subheader("2. Cadastrar ou editar um perfil")
 
     editaveis = sorted(completo.loc[completo["editavel"], "nome"])
@@ -198,7 +199,7 @@ with st.container(border=True):
 # 3. Excluir
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Excluir um perfil cadastrado"):
     st.subheader("3. Excluir um perfil cadastrado")
     if not editaveis:
         st.caption(
@@ -242,7 +243,7 @@ with st.container(border=True):
 # 4. Importar em lote
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Importar uma tabela de bitolas"):
     st.subheader("4. Importar uma tabela de bitolas")
     st.markdown(
         "Cole uma tabela (do Excel, de um catálogo ou de um CSV) para cadastrar "

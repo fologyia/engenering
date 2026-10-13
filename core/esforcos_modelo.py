@@ -41,6 +41,7 @@ from core import plano_de_cargas as pc
 TIPO_VIGAS = "Forças da viga"
 TIPO_REACOES = "Forças de reação"
 TIPO_TENSOES = "Tensões"
+TIPO_TENSOES_VIGA = "Tensões da viga"
 TIPO_DESCONHECIDO = "Desconhecido"
 
 NIVEL_INFO = "info"
@@ -108,6 +109,20 @@ class PontoDeEsforco:
 
 
 @dataclass(frozen=True)
+class TensaoDaViga:
+    """Tensões normais numa ponta de um elemento (MPa; compressão negativa), do "Listar tensões
+    da viga": axial, flexão nas duas direções, torção e o pior cenário (axial + flexão)."""
+
+    elemento: str
+    fim: str
+    axial: float
+    flexao1: float
+    flexao2: float
+    torcao: float
+    pior: float
+
+
+@dataclass(frozen=True)
 class Reacoes:
     """Soma das reações (kN e kN·m) nos eixos do modelo."""
 
@@ -127,6 +142,7 @@ class ArquivoLido:
     reacoes: Reacoes | None = None
     tensao_maxima_MPa: float | None = None
     avisos: tuple[str, ...] = ()
+    tensoes_da_viga: Mapping[str, tuple[TensaoDaViga, ...]] = field(default_factory=dict)
 
 
 def _sem_acento(texto: str) -> str:
@@ -145,10 +161,13 @@ def _unidade(cabecalho: str) -> str:
 
 
 def _decodificar(conteudo: bytes) -> str:
-    try:
-        return conteudo.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        return conteudo.decode("cp1252")
+    """UTF-8 ou a codificação do Windows; o latin-1 lê qualquer byte (o resto do leitor decide)."""
+    for codificacao in ("utf-8-sig", "cp1252"):
+        try:
+            return conteudo.decode(codificacao)
+        except UnicodeDecodeError:
+            continue
+    return conteudo.decode("latin-1")
 
 
 def numero(texto: str, *, decimal_virgula: bool = True) -> float | None:
@@ -184,7 +203,29 @@ def _estudo_e_data(linhas: Sequence[str]) -> tuple[str, str]:
 
 
 def ler_arquivo(conteudo: bytes, nome_arquivo: str = "") -> ArquivoLido:
-    """Reconhece e lê um CSV do SolidWorks (forças da viga, reações ou tensões)."""
+    """Reconhece e lê um CSV do SolidWorks (forças da viga, reações ou tensões).
+
+    Só sai :class:`ArquivoInvalido`: um trecho inesperado do arquivo vira essa mensagem e uma
+    ocorrência no diagnóstico (com ``MECANICA_TOOLKIT_ERROS=levantar``, a falha original sobe).
+    """
+    try:
+        return _ler_arquivo(conteudo, nome_arquivo)
+    except ArquivoInvalido:
+        raise
+    except Exception as erro:
+        from core import diagnostico as dg
+
+        if dg.levantar_erros():
+            raise
+        ocorrencia = dg.ocorrencia_de_falha("Esforços do modelo › leitura do arquivo", erro)
+        dg.gravar(ocorrencia)
+        raise ArquivoInvalido(
+            f"{nome_arquivo or 'O arquivo'} tem um trecho fora do formato do SolidWorks e não foi "
+            f"lido (ref. {ocorrencia.referencia}). Exporte de novo pelo SolidWorks, sem editar."
+        ) from erro
+
+
+def _ler_arquivo(conteudo: bytes, nome_arquivo: str) -> ArquivoLido:
     texto = _decodificar(conteudo)
     linhas = texto.splitlines()
     if not linhas:
@@ -196,7 +237,22 @@ def ler_arquivo(conteudo: bytes, nome_arquivo: str = "") -> ArquivoLido:
     normal_todo = _normal(texto[:3000])
     for indice, linha in enumerate(linhas[:30]):
         campos = [c.strip() for c in linha.split(sep)]
-        if any(_normal(c).startswith("axial") for c in campos):
+        axial = next((c for c in campos if _normal(c).startswith("axial")), None)
+        if axial is not None and _unidade(axial) in _TENSAO_PARA_MPA:
+            # "Listar tensões da viga": o mesmo cabeçalho, mas em tensão (N/m², MPa, psi…).
+            tensoes, avisos = _ler_tensoes_da_viga(linhas[indice:], sep, decimal_virgula)
+            maior = max((abs(t.pior) for pontos in tensoes.values() for t in pontos), default=None)
+            return ArquivoLido(
+                TIPO_TENSOES_VIGA,
+                nome_arquivo,
+                estudo,
+                data,
+                assinatura,
+                tensao_maxima_MPa=maior,
+                avisos=avisos,
+                tensoes_da_viga=tensoes,
+            )
+        if axial is not None:
             membros, avisos = _ler_vigas(linhas[indice:], sep, decimal_virgula)
             return ArquivoLido(
                 TIPO_VIGAS, nome_arquivo, estudo, data, assinatura, membros, avisos=avisos
@@ -298,6 +354,106 @@ def _ler_vigas(
     if not membros:
         raise ArquivoInvalido("O arquivo de forças da viga não tem nenhuma viga com resultados.")
     return {m: tuple(p) for m, p in membros.items()}, tuple(avisos)
+
+
+_TENSAO_PARA_MPA = {
+    "n/m^2": 1e-6,
+    "n/m2": 1e-6,
+    "pa": 1e-6,
+    "kpa": 1e-3,
+    "mpa": 1.0,
+    "n/mm^2": 1.0,
+    "n/mm2": 1.0,
+    "psi": 6.894757e-3,
+    "ksi": 6.894757,
+    "kgf/cm^2": 0.0980665,
+    "kgf/cm2": 0.0980665,
+}
+_COLUNAS_TENSAO = {
+    "nome": _COLUNAS["nome"],
+    "elemento": _COLUNAS["elemento"],
+    "fim": _COLUNAS["fim"],
+    "axial": ("axial",),
+    "flexao1": ("direcaodecurvatura1", "bendingdir1", "bending1", "flexao1", "curvatura1"),
+    "flexao2": ("direcaodecurvatura2", "bendingdir2", "bending2", "flexao2", "curvatura2"),
+    "torcao": ("torcional", "torsional", "torcao", "torsion"),
+    "pior": ("piorcenario", "worstcase", "upperbound", "limitesuperior"),
+}
+
+
+def _ler_tensoes_da_viga(
+    linhas: Sequence[str], sep: str, decimal_virgula: bool
+) -> tuple[dict[str, tuple[TensaoDaViga, ...]], tuple[str, ...]]:
+    """O "Listar tensões da viga" do Simulation: as tensões nas pontas de cada elemento (MPa).
+
+    As duas pontas já vêm com o sinal da tensão (compressão negativa): nada de inverter, ao
+    contrário das forças. Sem a coluna do pior cenário, ela é a soma axial + flexões.
+    """
+    cabecalho = [c.strip() for c in linhas[0].split(sep)]
+    posicao: dict[str, int] = {}
+    fatores: dict[str, float] = {}
+    for i, titulo in enumerate(cabecalho):
+        chave = re.sub(r"\(.*?\)", "", _normal(titulo))
+        for nome, prefixos in _COLUNAS_TENSAO.items():
+            if nome not in posicao and chave.startswith(prefixos):
+                posicao[nome] = i
+                if nome not in ("nome", "elemento", "fim"):
+                    fatores[nome] = _TENSAO_PARA_MPA.get(_unidade(titulo), 1e-6)
+                break
+    faltam = [n for n in ("nome", "fim", "axial") if n not in posicao]
+    if faltam:
+        raise ArquivoInvalido(f"Faltam colunas no arquivo de tensões da viga: {', '.join(faltam)}.")
+    tensoes: dict[str, list[TensaoDaViga]] = {}
+    avisos: list[str] = []
+    atual: str | None = None
+    elemento = ""
+    contador = 0
+    for linha in linhas[1:]:
+        campos = [c.strip() for c in linha.split(sep)]
+        if len(campos) <= max(posicao.values()):
+            continue
+        nome = campos[posicao["nome"]]
+        if nome and not campos[posicao["fim"]]:
+            atual = nome
+            tensoes.setdefault(atual, [])
+            continue
+        if atual is None:
+            continue
+        if posicao.get("elemento") is not None and campos[posicao["elemento"]]:
+            elemento = campos[posicao["elemento"]]
+        fim = campos[posicao["fim"]]
+        if not fim:
+            continue
+        valores: dict[str, float] = {}
+        for chave in ("axial", "flexao1", "flexao2", "torcao", "pior"):
+            if chave in posicao:
+                v = numero(campos[posicao[chave]], decimal_virgula=decimal_virgula)
+                if v is None or not math.isfinite(v):
+                    break
+                valores[chave] = v * fatores[chave]
+        else:
+            contador += 1
+            axial = valores["axial"]
+            f1, f2 = valores.get("flexao1", 0.0), valores.get("flexao2", 0.0)
+            tensoes[atual].append(
+                TensaoDaViga(
+                    elemento or str(contador),
+                    fim,
+                    axial,
+                    f1,
+                    f2,
+                    valores.get("torcao", 0.0),
+                    valores.get("pior", abs(axial) + abs(f1) + abs(f2)),
+                )
+            )
+            continue
+        avisos.append(f"{atual}: linha sem número ignorada ({linha.strip()[:60]}).")
+    for m in [m for m, pontos in tensoes.items() if not pontos]:
+        avisos.append(f"{m}: viga sem resultados no arquivo.")
+        tensoes.pop(m)
+    if not tensoes:
+        raise ArquivoInvalido("O arquivo de tensões da viga não tem nenhuma viga com resultados.")
+    return {m: tuple(t) for m, t in tensoes.items()}, tuple(avisos)
 
 
 def _ler_reacoes(linhas: Sequence[str], sep: str, decimal_virgula: bool) -> Reacoes:
@@ -647,10 +803,39 @@ def para_dicionario(dados: EsforcosDoModelo) -> dict[str, Any]:
     }
 
 
-def _tripla(valor: Any) -> tuple[float, float, float] | None:
-    if not isinstance(valor, Sequence) or len(valor) != 3:
+def _mapa(valor: Any) -> Mapping[Any, Any]:
+    """O valor gravado, se for um dicionário; senão, vazio (projeto antigo ou corrompido)."""
+    return valor if isinstance(valor, Mapping) else {}
+
+
+def _sequencia(valor: Any) -> Sequence[Any]:
+    return valor if isinstance(valor, list | tuple) else ()
+
+
+def _finito(valor: Any) -> float | None:
+    try:
+        numero_ = float(valor)
+    except (TypeError, ValueError):
         return None
-    return (float(valor[0]), float(valor[1]), float(valor[2]))
+    return numero_ if math.isfinite(numero_) else None
+
+
+def _tripla(valor: Any) -> tuple[float, float, float] | None:
+    numeros = [_finito(v) for v in _sequencia(valor)]
+    if len(numeros) != 3 or any(n is None for n in numeros):
+        return None
+    return (numeros[0] or 0.0, numeros[1] or 0.0, numeros[2] or 0.0)
+
+
+def _ponto_gravado(valor: Any) -> PontoDeEsforco | None:
+    """[elemento, fim, N, V1, V2, M1, M2, T] → ponto; fora do formato, ``None``."""
+    campos = _sequencia(valor)
+    if len(campos) < 8:
+        return None
+    numeros = [_finito(v) for v in campos[2:8]]
+    if any(n is None for n in numeros):
+        return None
+    return PontoDeEsforco(str(campos[0]), str(campos[1]), *(n or 0.0 for n in numeros))
 
 
 def _comprimento(valor: Any) -> float | None:
@@ -662,27 +847,27 @@ def _comprimento(valor: Any) -> float | None:
 
 
 def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
+    """Lê o que está gravado no projeto; o que estiver fora do formato volta ao padrão."""
     if not isinstance(dados, Mapping):
         return EsforcosDoModelo()
     casos: dict[str, CasoImportado] = {}
-    for codigo, c in (dados.get("casos") or {}).items():
+    for codigo, c in _mapa(dados.get("casos")).items():
         if not isinstance(c, Mapping):
             continue
         r = c.get("reacoes")
         reacoes = None
-        if isinstance(r, Mapping) and _tripla(r.get("modelo")) is not None:
+        modelo = _tripla(r.get("modelo")) if isinstance(r, Mapping) else None
+        if isinstance(r, Mapping) and modelo is not None:
             reacoes = Reacoes(
-                modelo=_tripla(r["modelo"]),  # type: ignore[arg-type]
+                modelo=modelo,
                 selecao=_tripla(r.get("selecao")),
                 momento_modelo=_tripla(r.get("momento_modelo")),
             )
         membros = {
             str(nome): tuple(
-                PontoDeEsforco(str(p[0]), str(p[1]), *(float(v) for v in p[2:8]))
-                for p in pontos
-                if isinstance(p, Sequence) and len(p) >= 8
+                ponto for p in _sequencia(pontos) if (ponto := _ponto_gravado(p)) is not None
             )
-            for nome, pontos in (c.get("membros") or {}).items()
+            for nome, pontos in _mapa(c.get("membros")).items()
         }
         casos[str(codigo)] = CasoImportado(
             codigo=str(codigo),
@@ -709,7 +894,7 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
             if str(m.get("base") or BASE_AUTOMATICA) in BASES
             else BASE_AUTOMATICA,
         )
-        for nome, m in (dados.get("membros") or {}).items()
+        for nome, m in _mapa(dados.get("membros")).items()
         if isinstance(m, Mapping)
     }
     parametros = {
@@ -721,15 +906,19 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
             cb=_comprimento(t.get("cb")) or 1.0,
             b2=_comprimento(t.get("b2")) or 1.0,
         )
-        for tipo, t in (dados.get("parametros") or {}).items()
+        for tipo, t in _mapa(dados.get("parametros")).items()
         if isinstance(t, Mapping)
     }
+    from core.column_buckling import NORMAS
+
+    eixo = str(dados.get("eixo_vertical") or "Y")
+    norma = str(dados.get("norma") or NORMA_PADRAO)
     return EsforcosDoModelo(
         casos,
         membros_cfg,
-        str(dados.get("eixo_vertical") or "Y"),
+        eixo if eixo in ("Y", "Z") else "Y",
         parametros,
-        str(dados.get("norma") or NORMA_PADRAO),
+        norma if norma in NORMAS else NORMA_PADRAO,
         dict(dados["placa"]) if isinstance(dados.get("placa"), Mapping) else {},
     )
 
@@ -764,18 +953,26 @@ def _so_vertical(acao: pc.Acao) -> bool:
 
 
 def total_esperado(acao: pc.Acao) -> tuple[float, float, float] | None:
-    """Soma das forças concentradas (kN) da ação, nos eixos do plano; ``None`` se não houver."""
+    """Resultante (kN) das forças da ação nos eixos do plano; ``None`` se não houver.
+
+    Entram as forças concentradas e as distribuídas em barra que dizem o comprimento (as que a
+    página Cargas do esqueleto gera): valor × comprimento × quantidade.
+    """
     soma = [0.0, 0.0, 0.0]
     achou = False
     for c in acao.cargas:
-        if c.unidade != "kN":
+        if c.unidade == "kN":
+            multiplicador = float(c.quantidade)
+        elif c.unidade == "kN/m" and c.comprimento_m > 0:
+            multiplicador = c.quantidade * c.comprimento_m
+        else:
             continue
         vetor = ex.componentes_no_programa(c)
         if vetor is None:
             continue
         achou = True
         for i in range(3):
-            soma[i] += vetor[i] * c.quantidade
+            soma[i] += vetor[i] * multiplicador
     return (soma[0], soma[1], soma[2]) if achou else None
 
 
@@ -839,11 +1036,14 @@ def conferir_reacoes(
     plano: pc.PlanoDeCargas,
     *,
     peso_da_estrutura_kN: float | None = None,
+    peso_conferido_no_esqueleto: bool = False,
 ) -> list[pc.ItemDeConferencia]:
     """O modelo recebeu a carga do plano? Compara a soma das reações com as cargas, caso a caso.
 
     Com ``peso_da_estrutura_kN`` (da Lista de material), o caso PP é conferido contra o peso da
-    estrutura; forças do plano recebidas γ vezes denunciam um estudo majorado.
+    estrutura; forças do plano recebidas γ vezes denunciam um estudo majorado. Com
+    ``peso_conferido_no_esqueleto``, o peso é conferido pelo esqueleto do modelo (leitura do
+    modelo) e aqui não se pede a Lista de material.
     """
     itens: list[pc.ItemDeConferencia] = []
     for codigo, caso in dados.casos.items():
@@ -944,13 +1144,21 @@ def conferir_reacoes(
                     f"PP: peso do modelo = {_n(rz)} kN ({_n(rz / 9.81 * 1000, 0)} kg)."
                     + (
                         " Monte a Lista de material para conferir com o peso da estrutura."
-                        if not peso_da_estrutura_kN
+                        if not peso_da_estrutura_kN and not peso_conferido_no_esqueleto
                         else ""
                     ),
                 )
             )
             if peso_da_estrutura_kN:
-                itens.append(conferir_peso_proprio(rz, peso_da_estrutura_kN))
+                fator = plano.fator_peso_proprio
+                itens.append(
+                    conferir_peso_proprio(
+                        rz,
+                        peso_da_estrutura_kN * fator,
+                        "pela Lista de material"
+                        + (f", × {_n(fator)} de ligações não modeladas" if fator > 1 else ""),
+                    )
+                )
     faltam = [c for c in plano.codigos if c not in dados.casos]
     if dados.casos and faltam:
         itens.append(
@@ -1035,7 +1243,7 @@ def preparar_combinacoes(
     importados = tuple(c for c in plano.codigos if c in dados.casos)
     if not importados:
         return None
-    plano_filtrado = pc.PlanoDeCargas(tuple(a for a in plano.acoes if a.codigo in importados))
+    plano_filtrado = replace(plano, acoes=tuple(a for a in plano.acoes if a.codigo in importados))
     lista = pc.combinacoes(plano_filtrado, estados)
     return PreparoDasCombinacoes(
         importados,

@@ -87,6 +87,20 @@ def _registrar_padrao() -> None:
             provedor_relatorio="carregamentos",
         ),
         ModuloTecnico(
+            id="cargas_esqueleto",
+            titulo="Cargas do esqueleto",
+            versao="1.0",
+            pagina="app_pages/cargas_esqueleto.py",
+            grupo_navegacao="Gestão industrial",
+            ordem=12,
+            icone=":material/grid_view:",
+            descricao=(
+                "O que não está no modelo do esqueleto (piso, guarda-corpo, escadas, equipamentos, "
+                "tubulações, ligações, sobrecarga) como cargas características nas barras."
+            ),
+            aliases=("Cargas para o modelo", "Cargas do piso e acessórios"),
+        ),
+        ModuloTecnico(
             id="esforcos_modelo",
             titulo="Esforços do modelo",
             versao="1.0",

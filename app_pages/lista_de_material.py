@@ -8,6 +8,7 @@ import streamlit as st
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import gravar_campo_do_projeto, mapa_do_projeto
 from components.lista_de_material_help import AJUDA
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import esforcos_modelo as em
 from core import lista_de_material as lm
@@ -59,7 +60,7 @@ def _kg(valor: float) -> str:
 
 
 # ============================================================ 1. importar
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. Importar a lista de corte do SolidWorks"):
     st.subheader("1. Importar a lista de corte do SolidWorks", help=AJUDA["sec_importar"])
     colunas = st.columns([3, 1])
     colunas[0].caption(
@@ -129,7 +130,7 @@ with st.container(border=True):
                 st.rerun()
 
 # ============================================================ 2. itens
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Itens da lista"):
     st.subheader(f"2. Itens da lista ({len(lista.itens)})", help=AJUDA["sec_itens"])
     editada = st.data_editor(
         pd.DataFrame(lm.tabela_editavel(lista), columns=list(lm.COLUNAS_EDITAVEIS)),
@@ -233,7 +234,7 @@ with st.container(border=True):
 
 # ============================================================ 3. resumo
 resumo = lm.resumir(atual)
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Resumo"):
     st.subheader("3. Resumo", help=AJUDA["sec_resumo"])
     colunas = st.columns(4)
     colunas[0].metric(
@@ -291,13 +292,14 @@ with st.container(border=True):
         )
 
 # ============================================================ 4. conferência
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Conferência com o peso próprio do modelo"):
     st.subheader("4. Conferência com o peso próprio do modelo", help=AJUDA["sec_conferencia"])
-    for item in lm.conferir_com_o_modelo(resumo, dados):
+    fator = pc.plano_do_projeto(projeto).fator_peso_proprio
+    for item in lm.conferir_com_o_modelo(resumo, dados, fator_peso_proprio=fator):
         MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])
 
 # ============================================================ 5. exportar
-with st.container(border=True):
+with st.container(border=True), secao_protegida("5. Exportar"):
     st.subheader("5. Exportar", help=AJUDA["sec_exportar"])
     colunas = st.columns(2)
     colunas[0].download_button(

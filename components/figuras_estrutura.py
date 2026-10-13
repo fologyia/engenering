@@ -12,6 +12,7 @@ import math
 from collections.abc import Sequence
 from xml.sax.saxutils import escape
 
+from core import cargas_esqueleto as ce
 from core import contraventamento_ligacao as lig
 from core import contraventamento_plataforma as cp
 from core import contraventamento_ufm as ufm
@@ -984,3 +985,142 @@ def svg_placa_de_base(
         _texto(cx + 6, base - 10, "eixo forte", tamanho=10, ancora="start", cor=COR_COMPRESSAO),
     ]
     return _svg(470, base + 56, corpo, "Placa de base do pilar em planta")
+
+
+def svg_planta_do_esqueleto(r: ce.ResultadoEsqueleto, nivel: int, caso: str) -> str:
+    """Planta de um nível: eixos, vigas, secundárias, guarda-corpo e a carga do caso em cada viga.
+
+    X para a direita e Y para cima, como na planta do programa. Viga com carga do caso em
+    laranja, com o valor (kN/m) no meio; sem carga, em cinza. As setas mostram o vão do piso.
+    """
+    e = r.entrada
+    xs, ys = e.eixos_x_m, e.eixos_y_m
+    nx, ny = ce.nomes_dos_eixos(e)
+    n = e.niveis[nivel - 1]
+    vao_x, vao_y = xs[-1] - xs[0], ys[-1] - ys[0]
+    escala = min(560.0 / vao_x, 300.0 / vao_y)
+    esquerda, topo = 70.0, 70.0
+    largura, altura = vao_x * escala, vao_y * escala
+
+    def px(x: float) -> float:
+        return esquerda + (x - xs[0]) * escala
+
+    def py(y: float) -> float:
+        return topo + (ys[-1] - y) * escala
+
+    cargas = {c.barra: c.valor_kN_m for c in ce.por_barra(r) if c.caso == caso}
+    corpo: list[str] = []
+    # Eixos (tracejados, com o nome no círculo).
+    for i, x in enumerate(xs):
+        corpo.append(
+            _linha(
+                px(x),
+                topo - 28,
+                px(x),
+                topo + altura + 12,
+                cor="#c3c8cf",
+                largura=0.8,
+                tracejado="6 4",
+            )
+        )
+        corpo.append(
+            f'<circle cx="{px(x):.1f}" cy="{topo - 40:.1f}" r="11" fill="#ffffff" stroke="{COR_ESTRUTURA}"/>'
+        )
+        corpo.append(_texto(px(x), topo - 40, nx[i], tamanho=11, peso="bold"))
+    for j, y in enumerate(ys):
+        corpo.append(
+            _linha(
+                esquerda - 28,
+                py(y),
+                esquerda + largura + 12,
+                py(y),
+                cor="#c3c8cf",
+                largura=0.8,
+                tracejado="6 4",
+            )
+        )
+        corpo.append(
+            f'<circle cx="{esquerda - 40:.1f}" cy="{py(y):.1f}" r="11" fill="#ffffff" stroke="{COR_ESTRUTURA}"/>'
+        )
+        corpo.append(_texto(esquerda - 40, py(y), ny[j], tamanho=11, peso="bold"))
+    # Guarda-corpo: faixa laranja por fora das bordas que o têm.
+    afastamento = 7.0
+    bordas = {
+        ce.BORDA_X_MENOS: (esquerda - afastamento, topo, esquerda - afastamento, topo + altura),
+        ce.BORDA_X_MAIS: (
+            esquerda + largura + afastamento,
+            topo,
+            esquerda + largura + afastamento,
+            topo + altura,
+        ),
+        ce.BORDA_Y_MENOS: (
+            esquerda,
+            topo + altura + afastamento,
+            esquerda + largura,
+            topo + altura + afastamento,
+        ),
+        ce.BORDA_Y_MAIS: (esquerda, topo - afastamento, esquerda + largura, topo - afastamento),
+    }
+    for borda in n.bordas_com_guarda_corpo:
+        corpo.append(_linha(*bordas[borda], cor=COR_VENTO, largura=3, tracejado="10 4"))
+    # Vigas do nível.
+    for b in r.barras:
+        if b.nivel != nivel or b.tipo == ce.TIPO_PILAR:
+            continue
+        x1, y1, x2, y2 = px(b.inicio[0]), py(b.inicio[1]), px(b.fim[0]), py(b.fim[1])
+        valor = cargas.get(b.nome)
+        cor = COR_VENTO if valor else COR_DESPREZADA
+        espessura = 4.0 if b.tipo == ce.TIPO_VIGA else 2.2
+        corpo.append(_linha(x1, y1, x2, y2, cor=cor, largura=espessura))
+        if valor:
+            meio_x, meio_y = (x1 + x2) / 2, (y1 + y2) / 2
+            vertical = abs(x2 - x1) < abs(y2 - y1)
+            corpo.append(
+                _texto(
+                    meio_x + (9 if vertical else 0),
+                    meio_y - (0 if vertical else 8),
+                    f"{valor:.2f}".replace(".", ","),
+                    tamanho=9.5,
+                    cor=COR_TEXTO,
+                    giro=-90 if vertical else 0,
+                )
+            )
+    # Pilares nos cruzamentos.
+    for x in xs:
+        for y in ys:
+            corpo.append(
+                f'<rect x="{px(x) - 5:.1f}" y="{py(y) - 5:.1f}" width="10" height="10" '
+                f'fill="{COR_CONTRAVENTADO}"/>'
+            )
+    # Vão do piso: seta dupla no primeiro painel, perpendicular às vigas que recebem o piso.
+    if n.vigas_paralelas_a == ce.DIRECAO_X:
+        cx = px(xs[0]) + 0.25 * (px(xs[1]) - px(xs[0]))  # fora do meio, onde ficam os valores
+        corpo.append(_seta(cx, py(ys[0]) - 4, cx, py(ys[1]) + 4, cor=COR_TRACAO, largura=1.3))
+        corpo.append(_seta(cx, py(ys[1]) + 4, cx, py(ys[0]) - 4, cor=COR_TRACAO, largura=1.3))
+    else:
+        cy = py(ys[0]) + 0.25 * (py(ys[1]) - py(ys[0]))
+        corpo.append(_seta(px(xs[0]) + 4, cy, px(xs[1]) - 4, cy, cor=COR_TRACAO, largura=1.3))
+        corpo.append(_seta(px(xs[1]) - 4, cy, px(xs[0]) + 4, cy, cor=COR_TRACAO, largura=1.3))
+    base = topo + altura + 34
+    corpo.append(
+        _texto(
+            esquerda,
+            base,
+            f"Nível {nivel} ({'+' if n.cota_m >= 0 else ''}{n.cota_m:.2f} m) — caso {caso}, "
+            "kN/m em cada viga".replace(".", ","),
+            tamanho=12,
+            ancora="start",
+            peso="bold",
+        )
+    )
+    corpo += _legenda(
+        esquerda,
+        base + 20,
+        [
+            (COR_VENTO, "", f"viga com carga do caso {caso}"),
+            (COR_DESPREZADA, "", "sem carga deste caso"),
+            (COR_VENTO, "10 4", "guarda-corpo"),
+            (COR_TRACAO, "", "vão do piso"),
+        ],
+    )
+    return _svg(max(esquerda + largura + 40, 640.0), base + 36, corpo, f"Planta do nível {nivel}")

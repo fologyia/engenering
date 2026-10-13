@@ -224,7 +224,9 @@ def test_csv_da_macro_do_solidworks():
         ("Placa base", 1, 0.0),
     ]
     assert itens[4].tipo == lm.TIPO_CHAPA and [i.marca for i in itens] == ["1", "2", "3", "4", "5"]
-    assert not avisos
+    # Só o material: três itens da peça estão com "Material <não especificado>".
+    (aviso,) = avisos
+    assert aviso.startswith("3 item(ns) sem material na peça")
 
 
 #: A macro com as colunas da geometria; itens vazios (0 corpos, LENGTH sem resolver), itens com
@@ -370,6 +372,14 @@ def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
     assert "\r\n" in macro and "\n" not in macro.replace("\r\n", "")
     assert '"ITEM;QTD.;DESCRICAO;COMPRIMENTO;NOME NA LISTA DE CORTE;"' in macro
     assert '"VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg);CAIXA (mm)"' in macro
+    # O segundo arquivo, o esqueleto, e o cabeçalho dos dois (ver o contrato na leitura do modelo).
+    assert '"CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);"' in macro
+    assert (
+        '"X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)"' in macro
+    )
+    assert "_esqueleto.csv" in macro
+    for chave in ("MACRO;", "PECA;", "CONFIGURACAO;", "DATA;"):
+        assert f'Print #numeroDoArquivo, "{chave}"' in macro, chave
     for chamada in (
         "UpdateCutList",
         "GetBodyCount",
@@ -378,8 +388,42 @@ def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
         "GetBodies",
         "GetMassProperties",
         "GetExtremePoint",
+        "GetVertices",
+        "GetEdges",  # os centros das arestas circulares: tubo redondo não tem vértice
+        "CircleParams",
+        "GetBodies2",  # os corpos fora da lista de corte
+        "Scripting.Dictionary",
     ):
         assert chamada in macro, chamada
+
+
+def test_macro_robusta_trata_erros_e_nao_depende_do_windows():
+    macro = lm.macro_da_lista_de_corte().decode("ascii")
+    # Erro em qualquer etapa: mensagem com a etapa e os arquivos fechados; arquivo preso de uma
+    # execução interrompida é fechado no começo.
+    assert "On Error GoTo Falha" in macro and "\r\nFalha:\r\n" in macro
+    assert macro.count("    Close\r\n") >= 2
+    assert "Case 52, 53, 55, 70, 75, 76" in macro  # arquivo aberto no Excel, pasta sem permissão
+    # Um corpo que falha não derruba os outros.
+    assert "On Error GoTo Falhou" in macro and "AnotarProblema" in macro
+    # Números com vírgula decimal em qualquer configuração regional.
+    assert 'Num = Replace(Format(valor, formato), ".", ",")' in macro
+    assert "Format(p(" not in macro and "Format(volume" not in macro
+    # Nenhum Format de número fora da função Num (só a data).
+    formatos = [linha for linha in macro.splitlines() if "Format(" in linha]
+    assert all("Num = Replace" in f or "Format(Now" in f for f in formatos), formatos
+    # Peça sem lista de corte: ainda sai o esqueleto.
+    assert "nao e de soldagens): saiu so o esqueleto" in macro
+    # Estrutura do VBA equilibrada.
+    linhas = [linha.strip() for linha in macro.splitlines()]
+    blocos_if = [linha for linha in linhas if linha.startswith("If ") and linha.endswith(" Then")]
+    assert len(blocos_if) == linhas.count("End If")
+    assert sum(linha.startswith("For ") for linha in linhas) == sum(
+        linha.startswith("Next") for linha in linhas
+    )
+    assert sum(linha.startswith(("Sub ", "Function ")) for linha in linhas) == linhas.count(
+        "End Sub"
+    ) + linhas.count("End Function")
 
 
 def test_lista_de_corte_sem_cabecalho_ou_arquivo_ruim():
@@ -476,3 +520,47 @@ def test_excel_e_csv_da_lista():
     assert len(list(livro["Itens"].values)) == 3
     texto = lm.csv_da_lista(r).decode("utf-8-sig")
     assert texto.splitlines()[0].split(";") == list(lm.COLUNAS)
+
+
+def test_lista_de_corte_da_macro_v4_com_cabecalho():
+    """A v4 grava peça, configuração, data e versão antes das colunas: os itens não mudam."""
+    cabecalho = (
+        'MACRO;"Mecanica Toolkit - exportar_lista_de_corte v4"\r\nPECA;"portico.SLDPRT"\r\n'
+        'CONFIGURACAO;"Padrão"\r\nDATA;"2026-10-12 18:30"\r\n'
+    ).encode("cp1252")
+    com, avisos_com = lm.ler_lista_de_corte(cabecalho + CSV_DA_MACRO_COM_GEOMETRIA, "v4.csv")
+    sem, avisos_sem = lm.ler_lista_de_corte(CSV_DA_MACRO_COM_GEOMETRIA, "v3.csv")
+    assert com == sem and avisos_com == avisos_sem
+    from core import leitura_do_modelo as ld
+
+    assert ld.tipo_do_arquivo(cabecalho + CSV_DA_MACRO_COM_GEOMETRIA) == ld.TIPO_LISTA_DE_CORTE
+
+
+@pytest.mark.parametrize(
+    ("materiais", "trechos"),
+    [
+        (
+            ["Material <não especificado>", "Material <não especificado>"],
+            ["2 item(ns) sem material"],
+        ),
+        (["ASTM A36 Aço", "ASTM A572 Grau 50"], []),
+        (["Liga de alumínio 6061", "ASTM A36 Aço"], ["não é aço: Liga de alumínio 6061"]),
+        (["", "ASTM A36 Aço"], ["1 item(ns) sem material"]),
+    ],
+)
+def test_material_da_lista_de_corte(materiais, trechos):
+    linhas = ["QTD.;DESCRICAO;COMPRIMENTO;MATERIAL"] + [
+        f"1;W 200 x 35,9 (H);1000 mm;{m}" for m in materiais
+    ]
+    _, avisos = lm.ler_lista_de_corte("\r\n".join(linhas).encode("cp1252"), "x.csv")
+    sobre_material = [a for a in avisos if "material" in a.lower() and "aço" in a.lower()]
+    assert len(sobre_material) == len(trechos)
+    for trecho in trechos:
+        assert any(trecho in a for a in sobre_material), (trecho, avisos)
+
+
+def test_lista_sem_coluna_de_material_nao_avisa_material():
+    _, avisos = lm.ler_lista_de_corte(
+        b"QTD;DESCRICAO;COMPRIMENTO\n1;W 200 x 35,9 (H);1000\n", "x.csv"
+    )
+    assert not any("material na peça" in a for a in avisos)

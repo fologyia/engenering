@@ -17,6 +17,7 @@ from components.project_tools import (
     sincronizar_projeto_ativo,
     tratar_conflito_de_gravacao,
 )
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina
 from core.load_cases import (
     CHAVES_CARGA,
@@ -108,7 +109,7 @@ aba_casos, aba_combinacoes, aba_envelope = st.tabs(
     ["1. Casos de carga", "2. Combinações", "3. Envelope e registro"]
 )
 
-with aba_casos:
+with aba_casos, secao_protegida("casos"):
     st.markdown("#### Registro permanente dos casos")
     st.write(
         "Cada linha representa um cenário físico completo. Não divida forças simultâneas do mesmo cenário em casos diferentes apenas para obter máximos maiores."
@@ -217,7 +218,7 @@ with aba_casos:
             st.success("Casos de carga gravados no projeto permanente.")
             st.rerun()
 
-with aba_combinacoes:
+with aba_combinacoes, secao_protegida("combinacoes"):
     st.markdown("#### Combinações com fatores explícitos")
     if not casos:
         st.info("Salve ao menos um caso de carga antes de montar combinações.")
@@ -377,7 +378,7 @@ with aba_combinacoes:
                 _salvar(projeto, "Exclusão de combinação de carga")
                 st.rerun()
 
-with aba_envelope:
+with aba_envelope, secao_protegida("envelope"):
     st.markdown("#### Envelope rastreável")
     incluir_isolados = st.toggle(
         "Incluir também os casos isolados",

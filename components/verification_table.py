@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.robustez import conferir_valores
 from core.verificacao import COLUNAS_TABELA, Verificacao, tabela_verificacoes
 
 COR_STATUS = {
@@ -45,10 +46,30 @@ def _chaves_estilo(estilo: Any) -> Any:
 
 
 def _celula(valor: Any, formato: str) -> str:
-    """Número formatado, ou “—” quando não há valor (o Streamlit mostraria “None”)."""
+    """Número formatado, “—” sem valor (o Streamlit mostraria “None”) e “∞” no infinito."""
     if valor is None or (isinstance(valor, float) and math.isnan(valor)):
         return "—"
+    if isinstance(valor, float) and math.isinf(valor):
+        return "∞" if valor > 0 else "−∞"
     return formato.format(valor)
+
+
+def conferir_linhas(verificacoes: Sequence[Verificacao]) -> bool:
+    """Anota, sem mostrar, NaN em qualquer número e infinito no solicitante ou no resistente.
+
+    O aproveitamento infinito é legítimo (resistência nula: a linha reprova) e não conta.
+    """
+    valores = {
+        f"{indice + 1}. {v.nome}": {
+            "solicitante": v.solicitante,
+            "resistente": v.resistente,
+            "aproveitamento": None
+            if v.aproveitamento is not None and math.isinf(v.aproveitamento)
+            else v.aproveitamento,
+        }
+        for indice, v in enumerate(verificacoes)
+    }
+    return conferir_valores("tabela de verificações", valores)
 
 
 def estilizar(tabela: pd.DataFrame, formatos: dict[str, str]) -> Any:
@@ -66,6 +87,7 @@ def estilizar(tabela: pd.DataFrame, formatos: dict[str, str]) -> Any:
 
 def mostrar_tabela_verificacoes(verificacoes: Sequence[Verificacao]) -> pd.DataFrame:
     """Tabela de oito colunas, com a coluna Status colorida. Devolve o DataFrame cru."""
+    conferir_linhas(verificacoes)
     tabela = pd.DataFrame(tabela_verificacoes(verificacoes), columns=list(COLUNAS_TABELA))
     estilo = estilizar(
         tabela, {"Solicitante": "{:.2f}", "Resistente": "{:.2f}", "Aproveitamento": "{:.0f}"}

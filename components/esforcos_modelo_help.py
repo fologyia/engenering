@@ -10,8 +10,12 @@ AJUDA: dict[str, str] = {
         "caso de carga, com o código no nome (PP, SC, W0…)."
     ),
     "arquivos": (
-        "Pode enviar vários de uma vez: forças da viga e reações de cada estudo. O programa "
-        "reconhece o tipo, lê o nome do estudo e sugere o caso."
+        "Pode enviar vários de uma vez: forças da viga e reações de cada estudo, e o "
+        "…_esqueleto.csv da macro do SolidWorks. O programa reconhece cada arquivo, lê o nome do "
+        "estudo e sugere o caso; o esqueleto diz onde fica cada barra (pilar, viga, "
+        "contraventamento), o comprimento e o perfil. O “Listar tensões da viga”, junto com as "
+        "forças do mesmo estudo, mostra a maior tensão e confere a seção que o Simulation usou "
+        "em cada barra (não vai para o projeto)."
     ),
     "eixo_vertical": (
         "O eixo vertical do modelo: no SolidWorks costuma ser o Y. Serve para separar a reação "
@@ -43,6 +47,30 @@ AJUDA: dict[str, str] = {
         "forte. Fica gravado no projeto."
     ),
     "btn_gravar_barras": "Grava a tabela das barras no projeto ativo.",
+    "sec_leitura": (
+        "O programa olha o modelo como um engenheiro olharia: onde está cada barra (pelo "
+        "esqueleto), como ela trabalha (só força normal, flexão, compressão crescendo com o peso), "
+        "se alguma ponta ficou solta, se a malha é grossa, se dois estudos deram o mesmo "
+        "resultado, se o estudo do PP ficou com outra carga ou se a gravidade foi esquecida em "
+        "outro caso. Leia os avisos de cima para baixo: os vermelhos invalidam a análise."
+    ),
+    "res_leitura": (
+        "Quantas barras o programa reconheceu como pilar, viga ou contraventamento (pela posição "
+        "no esqueleto ou, sem ele, pela inclinação que o peso próprio mostra no estudo PP) e "
+        "quantas têm uma ponta sem esforço nenhum — quase sempre uma junta que faltou no "
+        "SolidWorks."
+    ),
+    "btn_macro_esqueleto": (
+        "Baixa a macro do SolidWorks. Com a peça soldada aberta: Ferramentas → Macro → Executar. "
+        "Ela grava a lista de corte (vai na página Lista de material) e o …_esqueleto.csv "
+        "(envie aqui no passo 1)."
+    ),
+    "btn_aplicar_sugestoes": (
+        "Preenche a tabela das barras com o que o programa entendeu: tipo, perfil (só se estiver "
+        "no catálogo), eixo forte e os comprimentos de flambagem iniciais iguais ao comprimento "
+        "da barra. Só preenche o que está vazio; nada que você escolheu é trocado. Depois confira "
+        "e reduza o Lb das vigas travadas pelo piso."
+    ),
     "sec_envoltoria": (
         "Para cada barra, o pior de todas as combinações do plano de cargas, ponto a ponto: a "
         "maior compressão, a maior tração, o maior momento forte (com o N da mesma combinação e "

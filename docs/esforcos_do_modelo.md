@@ -14,6 +14,7 @@ Com o estudo resolvido, botão direito em **Resultados**:
 | Listar forças da viga | Para cada viga, as forças nas duas pontas (Fim 1 e Fim 2) de cada elemento da malha: axial, cisalhamentos 1 e 2, momentos 1 e 2, torque | Esforços ao longo de toda a barra (inclusive o meio do vão) |
 | Listar forças resultantes | Soma das reações X, Y, Z (seleção e modelo inteiro) e dos momentos | Conferência do equilíbrio; com uma base selecionada de cada vez, as reações de cada apoio |
 | Listar tensão | Os nós de maior tensão de von Mises | Só referência (as verificações usam forças) |
+| Listar tensões da viga | Para cada viga, as tensões nas pontas de cada elemento: axial, flexão nas direções 1 e 2, torção e o pior cenário (N/m²) | A maior tensão (referência) e a seção que o Simulation usou em cada barra (`conferir_tensoes`) |
 
 * **Um estudo por caso de carga**, com o código do plano no nome do estudo (`PP`, `SC`, `W0`…): o
   arquivo traz "Nome do estudo" e o programa sugere o caso (`caso_sugerido`).
@@ -59,6 +60,133 @@ Para cada caso importado, nos eixos do plano (Z para cima; o Y do SolidWorks é 
   programa; com o estudo majorado a verificação majoraria duas vezes e o quadro das fundações, que
   pede cargas sem majorar (Anglo 5.9), sairia errado. Não há modo de importar estudo combinado.
 * Casos do plano ainda sem esforços e casos importados fora do plano são avisados.
+
+## Leitura do modelo (`core/leitura_do_modelo.py`)
+
+Os arquivos dizem números; a leitura do modelo diz o que eles significam e o que parece errado.
+Aparece na página em "O que o programa entendeu do modelo" (passo 3), nas colunas sugeridas da
+tabela das barras (passo 4) e nos avisos da hora de enviar (passo 1).
+
+**Esqueleto do modelo.** A macro do SolidWorks (`macros_solidworks/exportar_lista_de_corte.bas`)
+grava, além da lista de corte, o `<peça>_esqueleto.csv`: quatro linhas de cabeçalho (MACRO com a
+versão, PECA, CONFIGURACAO, DATA) e um corpo por linha, com o item da lista de corte, a descrição, a
+**forma** (BARRA, CHAPA ou BLOCO), as pontas da linha de centro (X1…Z2, mm, nos eixos da peça), o
+comprimento, as duas medidas da seção (SECAO A e B, mm) e o volume (cm³). Como a macro (v4) mede:
+as direções principais da nuvem de pontos do corpo (vértices e centros das arestas circulares — um
+tubo redondo não tem vértice), pelo método de Jacobi; as medidas, pelos pontos extremos do corpo
+nessas direções (caixa orientada: uma chapa inclinada sai com comprimento × largura × espessura); a
+linha de centro passa pelo centro de massa. Conferido com corpos sintéticos (perfil I inclinado em
+3D, U em diagonal de planta com o centroide fora do meio, tubo redondo inclinado, chapa a 37°,
+cantoneira com meia-esquadria): pontas certas a menos de 2 mm. Chapa é o corpo muito fino para a
+largura (≤ 10 %, até 6 vezes mais comprido que largo); barra, o que tem pelo menos 2 vezes a maior
+medida da seção. Os números saem sempre com vírgula decimal, qualquer que seja a configuração
+regional do Windows. A macro trata os erros (diz a etapa e o motivo — arquivo aberto no Excel, pasta
+sem permissão —, fecha os arquivos, inclusive os de uma execução interrompida), deixa de fora e
+lista no fim um corpo cuja geometria não pode ser lida, exporta os corpos fora da lista de corte e,
+numa peça que não é de soldagens, ainda grava o esqueleto.
+
+A leitura (`ler_esqueleto`) acha a linha das colunas depois do cabeçalho, e o que dá para ler com
+ressalva vira aviso, não erro: arquivo de versão antiga da macro (sem a forma: lê e pede a nova),
+versão diferente da esperada, linhas sem coordenadas puladas, corpo repetido (fica o primeiro),
+coordenadas acima de 10 km (não está em mm?), corpos sem volume. Chapas e blocos não entram na
+procura de pontas soltas; o perfil sugerido diz a seção medida no modelo. A página mostra a peça, a
+configuração, a data e as formas. Envia-se no passo 1 junto com os CSV do Simulation (`tipo_do_arquivo`
+reconhece pelo cabeçalho; a lista de corte enviada aqui é recusada com a orientação de ir à Lista
+de material, e o esqueleto enviado lá, o contrário). A viga do Simulation `Viga-12(<corpo>)` acha o
+seu corpo pelo nome entre parênteses (`corpo_da_viga`, com espaços e acentos tolerados). Com ele:
+
+* **Tipo pela posição** (`tipo_pela_geometria`): até ~14° do prumo é pilar; horizontal alinhada a
+  um eixo em planta (~10°) é viga; horizontal diagonal em planta é contraventamento do piso;
+  inclinada é contraventamento — ou viga inclinada (banzo de escada) se a cortante passa de 10 % da
+  normal.
+* **Esqueleto × peso próprio**: a inclinação do corpo tem de bater (± 10°) com a que o PP mostra
+  (abaixo); se não bate, o corpo não é o da viga (esqueleto de outra versão) ou a gravidade não está
+  na vertical.
+* **Comprimento** de cada barra → comprimentos de flambagem iniciais (K = 1).
+* **Perfil do modelo** (`_perfil`): a descrição ou o item da lista de corte, conferido pela área
+  real da seção (volume ÷ comprimento, `lm.secao_pela_area`) — "W8x31" com a seção do W 200 × 35,9
+  vira o W 200 × 35,9. Vale também para as barras "Aparar/Estender", cujo nome não diz o perfil.
+* **Pontas que não encostam** (`pontas_soltas_pela_geometria`): ponta a mais de 0,30 m de qualquer
+  outra barra e fora do nível mais baixo (apoio).
+* **Peso próprio**: a reação do PP tem de ficar entre o aço das barras do estudo e o de todos os
+  corpos (volume × 7 850 kg/m³, × o fator das ligações não modeladas do plano), a ± 5 %. Acima é
+  erro (γ vezes: estudo majorado; mais: o PP levou outras cargas); abaixo é aviso (corpo sem
+  material, alumínio, densidade errada, ou a gravidade do PP sem o fator das ligações). Com o
+  esqueleto, esta conferência substitui a da Lista de material.
+
+**Barra a barra, pelos esforços** (`ler_barras`, com ou sem esqueleto):
+
+* **Pontas** (`classificar_pontas`, primeira e última da lista em todos os casos): **solta** (força
+  e momento ≈ 0 em todos os casos — a junta que faltou, ou um balanço), **articulada** (momento até
+  2 % do máximo da barra), **rígida**, ou **sem esforço** (a barra inteira).
+* **Inclinação pelo peso próprio** (`variacao_no_pp`, `inclinacao_pelo_peso`): dentro de um
+  elemento só uma carga distribuída ao longo da barra muda N e V — as barras que chegam nos nós
+  mudam os esforços *entre* elementos, não dentro deles. No PP essa carga é o peso próprio: a parte
+  ao longo do eixo muda N, a transversal muda V. Somando os ΔN e ΔV dos elementos, `atan2(ΔN, ΔV)`
+  é a inclinação da barra com a horizontal e `hypot(ΔN, ΔV)` a carga distribuída total. No modelo
+  real conferido: pilares 90°, vigas 0°, diagonais 45°, banzos da escada 34° a 37°. (A regra antiga,
+  "normal que muda ao longo da barra = pilar", chamava de pilar as vigas de piso de um pórtico 3D,
+  cuja normal muda onde chegam as secundárias.)
+* **Tipo sem o esqueleto** (`tipo_pelos_esforcos`): pela inclinação do peso próprio — ≥ 76° pilar;
+  ≤ 2° viga (contraventamento do piso se só trabalha à força normal); entre os dois,
+  contraventamento ou viga inclinada, conforme a flexão. Sem esse sinal (PP sem peso nas barras):
+  só força normal → contraventamento; nos casos só verticais, comprimida com N > 2 V → pilar,
+  V > 2 N → viga; senão fica "—".
+* **Malha grossa**: viga com número ímpar e pequeno (< 7) de elementos não tem nó no meio do vão; o
+  momento de uma carga distribuída pode sair até 100/n² % abaixo do real.
+
+**O conjunto** (`diagnosticar`, do mais grave ao informativo): valores fora de escala (> 10⁵ kN ou
+kN·m: unidade); eixo vertical trocado (o peso do PP aparece em outro eixo); estudo sem carga; dois
+casos com o mesmo resultado (arquivo repetido ou estudo duplicado sem trocar as cargas); estudo que
+ficou com a gravidade (reação vertical − cargas do plano = o peso do PP, ± 3 %); barras que faltam
+num caso (o modelo mudou); malha diferente entre os estudos; peso próprio × esqueleto; **carga além
+do peso próprio no PP** (com o esqueleto: a carga distribuída que o PP mostra em cada barra, em
+kN/m, contra o peso dela pelo volume × o fator das ligações — acima de 15 % + 0,05 kN/m é erro: há
+carga por metro no estudo PP; sem o esqueleto, com a Lista de material: a carga que o PP leva ao
+longo de todas as barras não pode passar do aço inteiro, e o aviso aponta as barras que mais
+recebem); **caminho do peso no PP** (informação: quanto do PP chega ao longo
+das barras e quanto pelos nós — chapas, sólidos, forças concentradas; num esqueleto puro, quase
+tudo vem ao longo das barras); pontas
+soltas; barras sem esforço; malha grossa; tipo da tabela diferente da posição no esqueleto
+(contraventamento e diagonal são o mesmo papel); **segunda ordem global**: o estudo do SolidWorks é
+linear, de 1ª ordem — com pilares e B₂ = 1,00, aviso (sem contraventamento: o pórtico costuma ser de
+média ou grande deslocabilidade) ou informação (com contraventamento: só vale para pequena
+deslocabilidade), com o lembrete das imperfeições iniciais (força nocional de 0,3 %); vigas
+engastadas nas duas pontas (informação: as juntas do SolidWorks são rígidas — articule se a ligação
+real só transmite cortante; num pórtico sem contraventamento é ela que dá a estabilidade e tem de
+ser detalhada como rígida); perfil da tabela diferente da seção do modelo (os esforços saíram da
+seção do modelo); barras sem corpo no esqueleto (esqueleto de outra versão). Sem nada disso, "Nada
+de estranho".
+
+**Na hora de enviar** (`avisos_da_importacao`): dois arquivos de forças ou de reações no mesmo caso
+são **erro e bloqueiam a gravação**; nome do estudo que indica outro caso, forças e reações de
+estudos diferentes são aviso; forças sem as reações, informação.
+
+**Perfis com corte e peças curtas.** A área pelo volume encolhe com o corte em meia-esquadria (um
+U 8" cortado "parecia" um U 6"). Por isso a área de cada perfil é a maior entre os corpos de mesmo
+nome (a peça mais reta — `areas_por_perfil`, o critério da Lista de material), e um perfil adotado
+pela área é recusado se não cabe na seção medida pela macro (`cabe_na_secao`: a diagonal do perfil
+tem de alcançar a maior medida da seção do corpo — um L 2" não chega aos 91,8 mm de um L 2½" medido
+nos eixos principais). Numa peça curta (BLOCO), a maior medida pode ser a da seção: a direção vem do
+peso próprio. Perfil de mesmo nome com volume por metro diferente (peças longas, ± 30 %) vira aviso
+do esqueleto: corpo recortado ou com outra seção.
+
+**Tensões da viga** (`em.TIPO_TENSOES_VIGA`, `conferir_tensoes`). O "Listar tensões da viga" tem o
+mesmo cabeçalho do "Listar forças da viga", mas em tensão (N/m², MPa, psi…) — reconhecido pela
+unidade da coluna Axial; as tensões das duas pontas já vêm com o sinal (compressão negativa), sem
+inverter. Não vai para o projeto: mostra a maior tensão normal (pior cenário) como referência
+(acima de 250 MPa, aviso de que a barra não vai atender) e, com as forças do mesmo estudo (enviadas
+junto ou já no projeto), a área que o Simulation usou em cada barra = |N| ÷ |σ axial|, ponta a ponta
+(`area_no_simulation`, a mediana). Comparada com o perfil da tabela (ou o sugerido pelo esqueleto):
+mais de 5 % de diferença é aviso. No modelo real, a seção nominal apareceu em todas as barras (U 8":
+25,9 cm²; pilares: 40,4 cm² do W 200 x 31,3), menos numa peça de 340 mm com cortes a 53°/37°, em
+que o Simulation tomou 14,8 cm² — a seção errada.
+
+**Sugestões** (`aplicar_sugestoes`, botão "Aplicar as sugestões"): preenchem só o que está vazio —
+tipo, perfil (só se estiver no catálogo), eixo forte (quando o tipo também era vazio), Lx = Ly = Lb =
+comprimento. O perfil que entrou sozinho pelo nome da viga na importação dá lugar ao do modelo
+(com o esqueleto). Nada escolhido à mão é trocado. O esqueleto fica em
+`projeto["geometria_do_modelo"]` (lido de forma tolerante: linhas fora do formato são puladas).
 
 ## Pior caso de cada barra (`envoltoria`)
 
@@ -141,6 +269,6 @@ linha tracionada (vazio = N/2 − 50 mm).
 
 ## Testes
 
-`tests/test_esforcos_modelo.py` (leitura com arquivos no formato do SolidWorks gerados por
+`tests/test_leitura_do_modelo.py` (esqueleto, tipo pela posição e pelos esforços, pontas, malha, cada achado do diagnóstico, avisos do envio, sugestões, gravado corrompido), `tests/test_esforcos_modelo.py` (leitura com arquivos no formato do SolidWorks gerados por
 `tests/dados_solidworks.py` a partir do pórtico do mini exemplo, conferência, envoltória ponto a
 ponto contra a conta à mão, malhas diferentes), `tests/test_verificacao_barras.py` (pilar contra a página Flambagem de colunas, B₂, pendências, tirante, cantoneira, registro e memorial) `tests/test_quadro_fundacoes.py`, `tests/test_placa_base_pilares.py` (conta à mão do Design Guide 1, momento grande, critério Anglo, placa pequena, pendências, eixo fraco, ida e volta pelo projeto, registro e desenho) e `tests/test_esforcos_modelo_pagina.py`.

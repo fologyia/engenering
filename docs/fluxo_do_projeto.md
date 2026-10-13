@@ -8,7 +8,7 @@ técnica, o Plano de cargas e o Guia mostram esse caminho com o que o projeto at
 | Etapa | Página | O que sai |
 | --- | --- | --- |
 | 1. Base técnica | **Base técnica do projeto** | critério do cliente, vento do local, tipo de estrutura (limite do deslocamento), sobrecarga, agressividade, vida útil |
-| 2. Ações | **Vento em estruturas abertas**, **Vento nas estruturas**, pesos | forças características por nível, por pórtico e em cada nó; CSV |
+| 2. Ações | **Cargas do esqueleto** (o que não está no modelo), **Vento em estruturas abertas**, **Vento nas estruturas** | cargas características nas barras do esqueleto (piso, sobrecarga, guarda-corpo, escadas, equipamentos, tubulações, ligações); forças do vento por nível, por pórtico e em cada nó; CSV |
 | 3. Plano de cargas | **Plano de cargas** | ações com código padrão, cargas para o modelo, combinações ELU e ELS numeradas; CSV |
 | 4. Verificações | **Esforços do modelo** (resultados do SolidWorks, placas de base), Vigas de piso, Contraventamento, Ligação, Estruturas de aço, Flambagem, Parafusos, Degrau | conferência das reações, pior caso de cada barra, tabelas de verificação com a norma e o item de cada linha; registro no projeto |
 | 5. Memorial | **Central de relatórios** | Word e PDF com os cálculos registrados (o plano de cargas não entra: o memorial é o molde dos cálculos) |

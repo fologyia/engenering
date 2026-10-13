@@ -9,16 +9,23 @@ import pandas as pd
 import streamlit as st
 
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
-from components.base_tecnica_ui import base_ativa, gravar_campo_do_projeto, mapa_do_projeto
+from components.base_tecnica_ui import (
+    base_ativa,
+    gravar_campo_do_projeto,
+    gravar_campos_do_projeto,
+    mapa_do_projeto,
+)
 from components.esforcos_modelo_help import AJUDA
 from components.figuras_estrutura import svg_placa_de_base
 from components.project_tools import botao_registrar_calculo
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
 from core import cantoneiras as ct
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
 from core import esforcos_modelo as em
+from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
 from core import load_combinations as comb
 from core import placa_base_pilares as pb
@@ -73,8 +80,31 @@ if not plano.acoes:
     )
 codigos = list(dict.fromkeys([*plano.codigos, *(c.codigo for c in pc.CODIGOS)]))
 
+
+def _corpos_e_formas(g: ld.GeometriaDoModelo) -> str:
+    """Ex.: 14 corpos (10 barras, 3 chapas, 1 bloco); as formas só com a macro v4."""
+    formas = g.formas
+    if not any(formas.values()):
+        return f"{len(g.corpos)} corpos"
+    return (
+        f"{len(g.corpos)} corpos ({formas[ld.FORMA_BARRA]} barras, {formas[ld.FORMA_CHAPA]} "
+        f"chapas, {formas[ld.FORMA_BLOCO]} blocos)"
+    )
+
+
+def _conteudo(a: em.ArquivoLido) -> str:
+    if a.tipo == em.TIPO_VIGAS:
+        return f"{len(a.membros)} barras"
+    if a.tipo == em.TIPO_REACOES:
+        return "soma das reações"
+    maior = f"{a.tensao_maxima_MPa or 0:.1f}".replace(".", ",")
+    if a.tipo == em.TIPO_TENSOES_VIGA:
+        return f"{len(a.tensoes_da_viga)} barras, maior tensão {maior} MPa"
+    return f"maior von Mises {maior} MPa"
+
+
 # ============================================================ 1. arquivos
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidWorks"):
     st.subheader("1. Enviar os arquivos do SolidWorks", help=AJUDA["sec_arquivos"])
     versao = int(st.session_state.get("em_versao", 0))
     eixo = st.radio(
@@ -94,11 +124,45 @@ with st.container(border=True):
         help=AJUDA["arquivos"],
     )
     lidos: list[em.ArquivoLido] = []
+    geometria_nova: ld.GeometriaDoModelo | None = None
     for enviado in enviados or []:
+        conteudo = enviado.getvalue()
+        tipo_da_macro = ld.tipo_do_arquivo(conteudo)
+        if tipo_da_macro == ld.TIPO_ESQUELETO:
+            try:
+                geometria_nova = ld.ler_esqueleto(conteudo, enviado.name)
+            except ld.GeometriaInvalida as erro:
+                st.error(f"{enviado.name}: {erro}", icon=":material/error:")
+            continue
+        if tipo_da_macro == ld.TIPO_LISTA_DE_CORTE:
+            st.info(
+                f"{enviado.name} é a lista de corte da macro: envie-a na página **Lista de "
+                "material**. Aqui vão o …_esqueleto.csv e os CSV do Simulation.",
+                icon=":material/inventory_2:",
+            )
+            continue
         try:
-            lidos.append(em.ler_arquivo(enviado.getvalue(), enviado.name))
+            lidos.append(em.ler_arquivo(conteudo, enviado.name))
         except em.ArquivoInvalido as erro:
             st.error(f"{enviado.name}: {erro}", icon=":material/error:")
+    if geometria_nova is not None:
+        ligadas = sum(
+            ld.corpo_da_viga(geometria_nova, b) is not None for b in dados.nomes_dos_membros
+        )
+        st.success(
+            f"{geometria_nova.arquivo}: esqueleto com {_corpos_e_formas(geometria_nova)}"
+            + (f" ({geometria_nova.origem})" if geometria_nova.origem else "")
+            + (
+                f" — {ligadas} das {len(dados.nomes_dos_membros)} barras já importadas acharam "
+                "o corpo."
+                if dados.nomes_dos_membros
+                else "."
+            ),
+            icon=":material/account_tree:",
+        )
+        for aviso in geometria_nova.avisos:
+            st.warning(f"{geometria_nova.arquivo}: {aviso}", icon=":material/warning:")
+    escolhas: list[tuple[em.ArquivoLido, str]] = []
     if lidos:
         st.subheader("O que foi reconhecido", help=AJUDA["res_arquivos"])
         tabela = st.data_editor(
@@ -108,15 +172,7 @@ with st.container(border=True):
                         "Arquivo": a.nome_arquivo,
                         "Tipo": a.tipo,
                         "Estudo": a.estudo,
-                        "Conteúdo": (
-                            f"{len(a.membros)} barras"
-                            if a.tipo == em.TIPO_VIGAS
-                            else "soma das reações"
-                            if a.tipo == em.TIPO_REACOES
-                            else f"maior von Mises {a.tensao_maxima_MPa or 0:.1f} MPa".replace(
-                                ".", ","
-                            )
-                        ),
+                        "Conteúdo": _conteudo(a),
                         "Caso": em.caso_sugerido(a.estudo, codigos) or "",
                     }
                     for a in lidos
@@ -132,6 +188,8 @@ with st.container(border=True):
                 )
             },
         )
+        casos_por_arquivo = dict(zip(tabela["Arquivo"], tabela["Caso"], strict=True))
+        escolhas = [(a, str(casos_por_arquivo.get(a.nome_arquivo) or "")) for a in lidos]
         for a in lidos:
             for aviso in a.avisos:
                 st.warning(f"{a.nome_arquivo}: {aviso}", icon=":material/warning:")
@@ -141,36 +199,51 @@ with st.container(border=True):
                     f"{a.tensao_maxima_MPa:.1f} MPa".replace(".", ","),
                     help=AJUDA["res_tensao"],
                 )
-        if st.button(
-            "Gravar no projeto",
-            type="primary",
-            icon=":material/save:",
-            key="em_gravar_arquivos",
-            help=AJUDA["btn_gravar_arquivos"],
+    avisos_envio = ld.avisos_da_importacao(escolhas, codigos)
+    if any(a.tipo == em.TIPO_TENSOES_VIGA for a in lidos):
+        avisos_envio = [
+            *avisos_envio,
+            *ld.conferir_tensoes(lidos, dados, geometria_nova or ld.geometria_do_projeto(projeto)),
+        ]
+    for achado in avisos_envio:
+        MOSTRAR.get(achado.nivel, st.success)(
+            f"**{achado.titulo}** — {achado.texto}", icon=ICONES[achado.nivel]
+        )
+    bloqueado = any(a.nivel == pc.NIVEL_ERRO for a in avisos_envio)
+    if (lidos or geometria_nova is not None) and st.button(
+        "Gravar no projeto",
+        type="primary",
+        icon=":material/save:",
+        key="em_gravar_arquivos",
+        help=AJUDA["btn_gravar_arquivos"],
+        disabled=bloqueado,
+    ):
+        novos = replace(dados, eixo_vertical=eixo)
+        problemas: list[str] = []
+        for a, caso in sorted(escolhas, key=lambda x: x[0].tipo != em.TIPO_VIGAS):
+            if a.tipo in (em.TIPO_TENSOES, em.TIPO_TENSOES_VIGA):
+                continue  # só referência: não vão para o projeto
+            if not caso:
+                problemas.append(f"{a.nome_arquivo}: escolha o caso.")
+                continue
+            try:
+                if a.tipo == em.TIPO_VIGAS:
+                    novos = em.com_caso(novos, em.caso_do_arquivo(a, caso))
+                elif a.reacoes is not None:
+                    novos = em.com_reacoes(novos, caso, a.reacoes, a.nome_arquivo)
+            except em.ArquivoInvalido as erro:
+                problemas.append(f"{a.nome_arquivo}: {erro}")
+        for problema in problemas:
+            st.error(problema, icon=":material/error:")
+        campos: dict[str, object] = {"esforcos_do_modelo": em.para_dicionario(novos)}
+        if geometria_nova is not None:
+            campos["geometria_do_modelo"] = ld.para_dicionario(geometria_nova)
+        if not problemas and gravar_campos_do_projeto(
+            campos, "Esforços do modelo importados do SolidWorks"
         ):
-            novos = replace(dados, eixo_vertical=eixo)
-            problemas: list[str] = []
-            casos_por_arquivo = dict(zip(tabela["Arquivo"], tabela["Caso"], strict=True))
-            for a in sorted(lidos, key=lambda x: x.tipo != em.TIPO_VIGAS):
-                caso = str(casos_por_arquivo.get(a.nome_arquivo) or "")
-                if a.tipo == em.TIPO_TENSOES:
-                    continue
-                if not caso:
-                    problemas.append(f"{a.nome_arquivo}: escolha o caso.")
-                    continue
-                try:
-                    if a.tipo == em.TIPO_VIGAS:
-                        novos = em.com_caso(novos, em.caso_do_arquivo(a, caso))
-                    elif a.reacoes is not None:
-                        novos = em.com_reacoes(novos, caso, a.reacoes, a.nome_arquivo)
-                except em.ArquivoInvalido as erro:
-                    problemas.append(f"{a.nome_arquivo}: {erro}")
-            for problema in problemas:
-                st.error(problema, icon=":material/error:")
-            if not problemas and gravar(novos, "Esforços do modelo importados do SolidWorks"):
-                st.session_state["em_versao"] = versao + 1
-                st.rerun()
-    elif eixo != dados.eixo_vertical and dados.casos:
+            st.session_state["em_versao"] = versao + 1
+            st.rerun()
+    elif not lidos and geometria_nova is None and eixo != dados.eixo_vertical and dados.casos:
         if gravar(replace(dados, eixo_vertical=eixo), "Eixo vertical do modelo"):
             st.rerun()
 
@@ -181,8 +254,12 @@ if not dados.casos:
     )
     st.stop()
 
+geometria = ld.geometria_do_projeto(projeto)
+leituras = ld.ler_barras(dados, geometria, plano)
+leitura_da_barra = {lb.barra: lb for lb in leituras}
+
 # ============================================================ 2. casos
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Casos importados"):
     st.subheader(f"2. Casos importados ({len(dados.casos)})", help=AJUDA["sec_casos"])
     st.dataframe(
         pd.DataFrame(
@@ -216,24 +293,89 @@ with st.container(border=True):
         st.rerun()
 
 # ============================================================ 3. conferência
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Conferência das reações"):
     st.subheader("3. Conferência das reações", help=AJUDA["sec_conferencia"])
-    peso_da_estrutura = lm.peso_da_estrutura_kN(lm.resumir(lm.lista_do_projeto(projeto)))
-    for item in em.conferir_reacoes(dados, plano, peso_da_estrutura_kN=peso_da_estrutura):
+    # Com o volume de cada corpo no esqueleto, o PP é conferido lá (entre as barras do estudo e
+    # todos os corpos); sem ele, contra o peso da Lista de material.
+    no_esqueleto = ld.peso_do_esqueleto_kN(geometria) is not None
+    peso_da_lista = lm.peso_da_estrutura_kN(lm.resumir(lm.lista_do_projeto(projeto)))
+    peso_da_estrutura = None if no_esqueleto else peso_da_lista
+    for item in em.conferir_reacoes(
+        dados,
+        plano,
+        peso_da_estrutura_kN=peso_da_estrutura,
+        peso_conferido_no_esqueleto=no_esqueleto,
+    ):
         MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])
+    st.subheader("O que o programa entendeu do modelo", help=AJUDA["sec_leitura"])
+    contagem = ld.resumo_das_barras(leituras)
+    colunas = st.columns(5)
+    colunas[0].metric("Barras", len(leituras), help=AJUDA["res_leitura"])
+    colunas[1].metric("Pilares", contagem[ld.TIPO_PILAR], help=AJUDA["res_leitura"])
+    colunas[2].metric("Vigas", contagem[ld.TIPO_VIGA], help=AJUDA["res_leitura"])
+    colunas[3].metric(
+        "Contraventamentos", contagem[ld.TIPO_CONTRAVENTAMENTO], help=AJUDA["res_leitura"]
+    )
+    colunas[4].metric(
+        "Pontas soltas", sum(lb.tem_ponta_solta for lb in leituras), help=AJUDA["res_leitura"]
+    )
+    if geometria.corpos:
+        com_corpo = sum(lb.corpo is not None for lb in leituras)
+        st.caption(
+            f":material/account_tree: Esqueleto: {geometria.arquivo} — "
+            f"{_corpos_e_formas(geometria)}"
+            + (f", {geometria.origem}" if geometria.origem else "")
+            + f"; {com_corpo} das {len(leituras)} barras com o corpo achado — tipo, "
+            "comprimento e perfil vêm dele."
+        )
+        for aviso in geometria.avisos:
+            st.warning(f"Esqueleto: {aviso}", icon=":material/warning:")
+    else:
+        st.caption(
+            ":material/account_tree: Sem o esqueleto do modelo, o tipo de cada barra sai só do "
+            "comportamento nos esforços. Rode a macro do SolidWorks (botão abaixo) e envie o "
+            "…_esqueleto.csv no passo 1: o programa passa a reconhecer pilares, vigas e "
+            "contraventamentos pela posição, os comprimentos e os perfis de cada barra."
+        )
+        st.download_button(
+            "Macro do SolidWorks",
+            data=lm.macro_da_lista_de_corte(),
+            file_name="exportar_lista_de_corte.bas",
+            mime="text/plain",
+            icon=":material/code:",
+            key="em_macro",
+            help=AJUDA["btn_macro_esqueleto"],
+        )
+    for achado in ld.diagnosticar(
+        dados, plano, geometria, leituras, peso_da_estrutura_kN=peso_da_lista
+    ):
+        MOSTRAR.get(achado.nivel, st.success)(
+            f"**{achado.titulo}** — {achado.texto}", icon=ICONES[achado.nivel]
+        )
+    with st.expander("Leitura barra a barra"):
+        st.dataframe(
+            pd.DataFrame(ld.linhas_da_leitura(leituras), columns=list(ld.COLUNAS_LEITURA)),
+            hide_index=True,
+            width="stretch",
+            column_config={"Comprimento (m)": st.column_config.NumberColumn(format="%.2f")},
+        )
 
 # ============================================================ 4. barras
 catalogo = ["", *sc.listar_perfis(), *ct.CATALOGO_CANTONEIRAS]
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Barras do modelo"):
     st.subheader(f"4. Barras do modelo ({len(dados.nomes_dos_membros)})", help=AJUDA["sec_barras"])
     linhas_barras = []
     for nome in dados.nomes_dos_membros:
         cfg = dados.membros.get(nome, em.ConfiguracaoDoMembro())
         pontos = [p for c in dados.casos.values() for p in c.membros.get(nome, ())]
+        leitura = leitura_da_barra.get(nome)
         linhas_barras.append(
             {
                 "Barra": nome,
-                "Perfil no nome": em.perfil_do_nome(nome) or "—",
+                "Tipo sugerido": leitura.tipo_sugerido if leitura else "—",
+                "Perfil sugerido": (leitura.perfil_sugerido if leitura else "") or "—",
+                "Comprimento (m)": leitura.comprimento_m if leitura else None,
+                "Pontas": " / ".join(leitura.pontas) if leitura else "—",
                 "Perfil": cfg.perfil if cfg.perfil in catalogo else "",
                 "Tipo": cfg.tipo,
                 "Eixo forte": cfg.eixo_forte,
@@ -254,7 +396,10 @@ with st.container(border=True):
         key=f"em_barras_{versao}",
         disabled=[
             "Barra",
-            "Perfil no nome",
+            "Tipo sugerido",
+            "Perfil sugerido",
+            "Comprimento (m)",
+            "Pontas",
             "|N| máx. (kN)",
             "|M1| máx. (kN·m)",
             "|M2| máx. (kN·m)",
@@ -290,9 +435,22 @@ with st.container(border=True):
         },
     )
     st.caption(
-        "Valores característicos (de todos os casos importados, sem coeficientes). Os perfis lidos "
-        "do nome vêm preenchidos; os das barras “Aparar/Estender” você escolhe uma vez."
+        "Valores característicos (de todos os casos importados, sem coeficientes). As colunas "
+        "sugeridas vêm do esqueleto do modelo e do comportamento de cada barra; o botão "
+        "“Aplicar as sugestões” preenche só o que está vazio."
     )
+    if st.button(
+        "Aplicar as sugestões",
+        icon=":material/auto_fix_high:",
+        key="em_aplicar_sugestoes",
+        help=AJUDA["btn_aplicar_sugestoes"],
+    ):
+        sugerido, mudaram = ld.aplicar_sugestoes(dados, leituras)
+        if not mudaram:
+            st.info("Nada a preencher: a tabela já está completa.", icon=":material/check:")
+        elif gravar(sugerido, f"Esforços do modelo: sugestões em {mudaram} barra(s)"):
+            st.session_state["em_versao"] = versao + 1
+            st.rerun()
     if st.button(
         "Gravar a tabela das barras",
         icon=":material/save:",
@@ -322,7 +480,7 @@ with st.container(border=True):
             st.rerun()
 
 # ============================================================ 5. envoltória
-with st.container(border=True):
+with st.container(border=True), secao_protegida("5. Pior caso de cada barra"):
     st.subheader("5. Pior caso de cada barra", help=AJUDA["sec_envoltoria"])
     colunas = st.columns([3, 1])
     estados = colunas[0].multiselect(
@@ -371,7 +529,7 @@ with st.container(border=True):
         )
 
 # ============================================================ 6. parâmetros
-with st.container(border=True):
+with st.container(border=True), secao_protegida("6. Parâmetros da verificação"):
     st.subheader("6. Parâmetros da verificação", help=AJUDA["sec_parametros"])
     normas = list(cbk.NORMAS)
     norma = st.selectbox(
@@ -455,7 +613,7 @@ with st.container(border=True):
             st.rerun()
 
 # ============================================================ 7. verificação
-with st.container(border=True):
+with st.container(border=True), secao_protegida("7. Verificação das barras"):
     st.subheader("7. Verificação das barras", help=AJUDA["sec_verificacao"])
     resultados, avisos_verificacao = vb.verificar_barras(dados, plano, estados)
     for aviso in avisos_verificacao:
@@ -520,7 +678,7 @@ with st.container(border=True):
     )
 
 # ============================================================ 8. fundações
-with st.container(border=True):
+with st.container(border=True), secao_protegida("8. Quadro de cargas para as fundações"):
     st.subheader("8. Quadro de cargas para as fundações", help=AJUDA["sec_fundacoes"])
     quadro = qf.montar_quadro(dados)
     for item in quadro.conferencia:
@@ -604,7 +762,7 @@ with st.container(border=True):
         )
 
 # ============================================================ 9. placas de base
-with st.container(border=True):
+with st.container(border=True), secao_protegida("9. Placas de base dos pilares"):
     st.subheader("9. Placas de base dos pilares", help=AJUDA["sec_placas"])
     if not quadro.pilares:
         st.info(

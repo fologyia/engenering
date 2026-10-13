@@ -14,8 +14,10 @@ AJUDA: dict[str, str] = {
     "btn_macro": (
         "Baixa a macro que exporta a lista de corte da peça aberta para CSV, sem desenho nem "
         "tabela. Abra o arquivo no Bloco de Notas, copie tudo e, no SolidWorks, use Ferramentas › "
-        "Macro › Nova (dê um nome e salve), apague o texto do editor, cole e tecle F5. O CSV sai "
-        "na pasta da peça; das próximas vezes, Ferramentas › Macro › Executar."
+        "Macro › Nova (dê um nome e salve), apague o texto do editor, cole e tecle F5. Saem dois "
+        "CSV na pasta da peça: a lista de corte (envie aqui) e o esqueleto (envie em Esforços do "
+        "modelo). Se algo der errado, a macro diz em que etapa e por quê — por exemplo, o CSV "
+        "aberto no Excel. Das próximas vezes, Ferramentas › Macro › Executar."
     ),
     "unidade": (
         "Unidade dos comprimentos que vêm sem unidade no arquivo. O SolidWorks costuma exportar em "

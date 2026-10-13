@@ -226,3 +226,71 @@ def test_placas_sem_pilar_marcado_explicam_o_que_fazer(banco_com_projeto):
     t = abrir()
     assert not t.exception
     assert any("verificar as placas" in i.value for i in t.info)
+
+
+def test_o_que_o_programa_entendeu_sem_o_esqueleto(banco_com_projeto):
+    gravar_no_projeto(importar("PP", "SC", "W0", "W180"))
+    t = abrir()
+    assert not sem_ajuda(t), sorted(sem_ajuda(t))
+    assert "O que o programa entendeu do modelo" in [s.value for s in t.subheader]
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Pilares"] == "2" and metricas["Vigas"] == "1"
+    assert metricas["Pontas soltas"] == "0"
+    assert any("Sem o esqueleto do modelo" in c.value for c in t.caption)
+    assert t.get("download_button")  # a macro, para gerar o esqueleto
+    assert any("Segunda ordem global" in w.value for w in t.warning)
+    barras = next(d.value for d in t.dataframe if "Tipo sugerido" in d.value.columns)
+    assert list(barras["Tipo sugerido"]) == ["Pilar", "Viga", "Pilar"]
+
+
+def test_com_o_esqueleto_confere_o_peso_e_aplica_as_sugestoes(banco_com_projeto):
+    from core import leitura_do_modelo as ld
+    from tests.test_leitura_do_modelo import geometria
+
+    gravar_no_projeto(importar("PP", "SC", "W0", "W180"))
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(geometria())
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    assert not sem_ajuda(t), sorted(sem_ajuda(t))
+    assert any("3 das 3 barras com o corpo achado" in c.value for c in t.caption)
+    # O PP do exemplo (9 kN) é quase o dobro do aço dos três corpos (4,8 kN).
+    assert any("PP mais pesado que a estrutura" in e.value for e in t.error)
+    assert not any("Monte a Lista de material" in i.value for i in t.info)
+    t.button(key="em_aplicar_sugestoes").click().run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    salvo = em.esforcos_do_projeto(obter_projeto_ativo())
+    pilar = salvo.membros[PILAR]
+    assert (pilar.tipo, pilar.perfil, pilar.lx_m) == ("Pilar", "W 200 x 35,9 (H)", 4.0)
+    t.button(key="em_aplicar_sugestoes").click().run()
+    assert any("Nada a preencher" in i.value for i in t.info)
+
+
+def test_esqueleto_corrompido_no_projeto_nao_quebra_a_pagina(banco_com_projeto):
+    gravar_no_projeto(importar("PP"))
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = {"corpos": [["a", None, 3], "lixo"], "arquivo": 7}
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    assert any("Sem o esqueleto do modelo" in c.value for c in t.caption)
+
+
+def test_esqueleto_mostra_a_origem_as_formas_e_os_avisos(banco_com_projeto):
+    from core import leitura_do_modelo as ld
+    from tests.test_leitura_do_modelo import geometria
+
+    gravar_no_projeto(importar("PP"))
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(geometria())
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    legenda = next(c.value for c in t.caption if "Esqueleto:" in c.value)
+    assert "3 corpos (3 barras, 0 chapas, 0 blocos)" in legenda
+    assert "portico.SLDPRT, configuração Padrão, gerado em 2026-10-12 18:30" in legenda
+    assert not any("versão antiga" in w.value for w in t.warning)
+    # Esqueleto da macro antiga: lê e avisa para atualizar.
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(geometria(versao_antiga=True))
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    assert any("versão antiga da macro" in w.value for w in t.warning)

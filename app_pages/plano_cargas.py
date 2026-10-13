@@ -13,6 +13,7 @@ from components.base_tecnica_ui import (
     mapa_do_projeto,
 )
 from components.figuras_estrutura import svg_convencao_de_eixos
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import base_tecnica as bt
 from core import criterio_anglo as ca
@@ -57,7 +58,7 @@ ICONES = {
 }
 
 # ============================================================ conferência
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Conferência do plano"):
     st.subheader("Conferência do plano", help=AJUDA["sec_conferencia"])
     for item in pc.conferir_plano(plano, anglo=anglo):
         mostrar = {pc.NIVEL_ERRO: st.error, pc.NIVEL_ATENCAO: st.warning}.get(
@@ -66,7 +67,7 @@ with st.container(border=True):
         mostrar(item.texto, icon=ICONES[item.nivel])
 
 # ============================================================ ações
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Ações"):
     st.subheader(f"Ações ({len(plano.acoes)})", help=AJUDA["sec_plano"])
     if plano.acoes:
         linhas = []
@@ -205,7 +206,7 @@ with st.container(border=True):
             st.rerun()
 
 # ============================================================ adicionar ou editar
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Adicionar ou editar uma ação"):
     st.subheader("Adicionar ou editar uma ação", help=AJUDA["sec_adicionar"])
     codigos = [c.codigo for c in pc.CODIGOS]
     codigo = st.selectbox(
@@ -336,7 +337,7 @@ if not plano.acoes:
     st.stop()
 
 # ============================================================ combinações
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Combinações"):
     st.subheader("Combinações", help=AJUDA["res_combinacoes"])
     estados = st.multiselect(
         "Estados-limite",
@@ -420,7 +421,7 @@ with st.container(border=True):
         st.caption(f"{ca.LEGENDA_COMBINACOES} {ca.QUADRO_DE_CARGAS_FUNDACOES}")
 
 # ============================================================ exportar para o modelo
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Exportar para o modelo"):
     st.subheader("Exportar para o modelo", help=AJUDA["sec_modelo"])
     colunas = st.columns(2)
     nome_sistema = colunas[0].selectbox(
@@ -530,6 +531,8 @@ with st.container(border=True):
         st.markdown(
             "\n".join(
                 f"**{t.capitalize()}**" if t.isupper() else (f"- {t}" if t else "")
-                for t in ex.texto_leia_me(sistema, eixos, anglo=anglo)[3:]
+                for t in ex.texto_leia_me(
+                    sistema, eixos, anglo=anglo, fator_peso_proprio=plano.fator_peso_proprio
+                )[3:]
             )
         )

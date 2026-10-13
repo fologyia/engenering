@@ -9,6 +9,7 @@ from components.project_tools import (
     construir_registro_tecnico,
     id_registro_existente,
 )
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import beam_analysis as vigas
 from core import beam_script as escrita
@@ -142,7 +143,7 @@ materiais_projeto = list((projeto_ativo or {}).get("materiais_projeto", []))
 # 1. Entrada do modelo
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. Modelo da barra"):
     st.subheader("1. Modelo da barra")
     modo = st.segmented_control(
         "Como você prefere informar o modelo?",
@@ -721,7 +722,7 @@ for aviso in resultado.avisos:
 # 2. Esquema do modelo
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Esquema do modelo"):
     st.subheader("2. Esquema do modelo")
     camadas = [
         alt.Chart(pd.DataFrame({"x": [0.0, comprimento_m], "y": [0.0, 0.0]}))
@@ -902,7 +903,7 @@ if envoltoria is not None:
         icon=":material/rule:",
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Reações de apoio"):
     st.subheader("3. Reações de apoio")
     st.dataframe(pd.DataFrame(vigas.resumo_reacoes(resultado)), hide_index=True, width="stretch")
     residuos = vigas.conferir_equilibrio(resultado)
@@ -919,7 +920,7 @@ with st.container(border=True):
         )
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Valores extremos"):
     st.subheader("4. Valores extremos")
     primeira = st.columns(4)
     primeira[0].metric(
@@ -1079,7 +1080,7 @@ def diagrama(coluna: str, titulo: str, cor: str, *, inverter: bool = False, altu
     return (area + linha + zero + tooltip).properties(height=altura).interactive()
 
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("5. Diagramas"):
     st.subheader("5. Diagramas")
     inverter_momento = st.checkbox(
         "Desenhar o momento fletor do lado tracionado (convenção de estruturas)",
@@ -1344,7 +1345,7 @@ fronteira_modelo(
 # 6. Registro e comparação
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("6. Registrar no projeto"):
     st.subheader("6. Registrar no projeto")
 
     if material.escoamento_MPa and resultado.fator_seguranca_escoamento is not None:
@@ -1523,7 +1524,7 @@ with st.container(border=True):
 # 7. Levar a seção adiante
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("7. Levar uma seção para o próximo módulo"):
     st.subheader("7. Levar uma seção para o próximo módulo")
     st.caption(
         "A barra resolvida já contém σ e τ de cada seção. Em vez de anotar e "
@@ -1654,7 +1655,7 @@ with st.container(border=True):
         enviar_para_fadiga(amplitudes)
 
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Precisa de ajuda para montar o modelo?"):
     st.subheader("Precisa de ajuda para montar o modelo?")
     st.markdown(
         "O **Guia geral** traz a tabela de comandos, a leitura de cada diagrama "

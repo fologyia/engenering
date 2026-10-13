@@ -18,6 +18,7 @@ from components.project_tools import (
     sincronizar_projeto_ativo,
     tratar_conflito_de_gravacao,
 )
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina
 from core.armazenamento import texto_de_confirmacao
 from core.checklist_templates import (
@@ -474,7 +475,7 @@ abas = st.tabs(
 )
 
 # ============================================================== Visão geral
-with abas[0]:
+with abas[0], secao_protegida("aba 1"):
     col_a, col_b = st.columns([3, 2])
     with col_a:
         st.subheader(projeto["nome"])
@@ -578,7 +579,7 @@ with abas[0]:
     st.info(validacao["aviso"], icon=":material/info:")
 
 # ============================================================ Dados e base
-with abas[1]:
+with abas[1], secao_protegida("aba 2"):
     estado = estado_de_preenchimento(projeto)
     faltando = pendencias_de_preenchimento(projeto)
     bloqueios = [item for item in faltando if item["severidade"] == "Bloqueio"]
@@ -824,7 +825,7 @@ with abas[1]:
             st.rerun()
 
 # =============================================================== Critérios
-with abas[2]:
+with abas[2], secao_protegida("aba 3"):
     criterios_salvos = projeto.get("criterios_projeto")
     criterios = normalizar_criterios_projeto(
         criterios_salvos if isinstance(criterios_salvos, Mapping) else None
@@ -1001,7 +1002,7 @@ with abas[2]:
         st.rerun()
 
 # ============================================================ Escopo físico
-with abas[3]:
+with abas[3], secao_protegida("aba 4"):
     st.caption(
         "Cadastre equipamentos, linhas, estruturas, suportes, pontos críticos "
         "ou sistemas — não apenas elementos de máquinas."
@@ -1098,7 +1099,7 @@ with abas[3]:
         st.rerun()
 
 # ================================================================== Normas
-with abas[4]:
+with abas[4], secao_protegida("aba 5"):
     st.caption(
         "Registre a referência aplicável e marque 'Conferida' somente após "
         "verificar o documento-fonte e sua edição."
@@ -1180,7 +1181,7 @@ with abas[4]:
         st.rerun()
 
 # ============================================================== Documentos
-with abas[5]:
+with abas[5], secao_protegida("aba 6"):
     st.caption(
         "Lista controlada dos documentos de entrada: desenhos, folhas de dados, certificados, "
         "memoriais anteriores e especificações. A validação cobra a revisão de cada um e avisa "
@@ -1271,7 +1272,7 @@ with abas[5]:
         st.rerun()
 
 # ======================================================= Registros técnicos
-with abas[6]:
+with abas[6], secao_protegida("aba 7"):
     registros = projeto["registros_tecnicos"]
     if registros:
         linhas_registros = resumir_registros(projeto)
@@ -1484,7 +1485,7 @@ with abas[6]:
             st.error(f"Revise os campos JSON: {erro}")
 
 # =============================================================== Checklist
-with abas[7]:
+with abas[7], secao_protegida("aba 8"):
     resumo_check = resumo_checklist(projeto["checklist"])
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Itens", resumo_check["total"])
@@ -1659,7 +1660,7 @@ with abas[7]:
         st.rerun()
 
 # ======================================================= Fluxo e revisões
-with abas[8]:
+with abas[8], secao_protegida("aba 9"):
     st.subheader("Situação e fluxo de trabalho")
     st.caption(
         f"Situação atual: **{situacao_atual(projeto)}** — {DESCRICOES.get(situacao_atual(projeto), '')} "
@@ -1866,7 +1867,7 @@ with abas[8]:
         st.caption("Ainda não há eventos registrados para este projeto.")
 
 # =========================================================== Administração
-with abas[9]:
+with abas[9], secao_protegida("aba 10"):
     st.subheader("Duplicação, arquivamento e exclusão")
     nome_copia = st.text_input("Nome da cópia", value=f"{projeto['nome']} - cópia")
     if st.button("Duplicar projeto", icon=":material/content_copy:"):

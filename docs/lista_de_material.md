@@ -62,6 +62,21 @@ desenho pode sair vazia. Por isso a página oferece a **macro do SolidWorks**
   chapa de compra; a massa líquida fica na geometria); o nome PLACA/CHAPA também usa a caixa;
 * o resto fora do catálogo (perfil de outra biblioteca, bloco) entra com a **massa da geometria** —
   como perfil, se tiver comprimento, ou como "Outro";
+* grava também o `<peça>_esqueleto.csv` — a forma (barra, chapa, bloco), a linha de centro, o
+  comprimento, as medidas da seção e o volume de cada corpo, pelas direções principais do corpo e os
+  pontos extremos (`Body2.GetVertices`, `GetEdges`/`CircleParams` para os tubos redondos,
+  `GetExtremePoint`) — que vai na página **Esforços do modelo** (leitura do modelo:
+  tipo de cada barra pela posição, perfil e comprimento; ver `docs/esforcos_do_modelo.md`). Enviado
+  aqui por engano, é recusado com essa orientação;
+* **v4, robusta**: os dois arquivos começam com a peça, a configuração, a data e a versão da macro
+  (a leitura pula essas linhas); a CAIXA (mm) sai nas direções do próprio corpo (chapa inclinada com
+  as medidas certas); números sempre com vírgula decimal (antes, num Windows em inglês, "12.345 kg"
+  podia ser lido como 12 345); erros tratados com a etapa e o motivo (arquivo aberto no Excel, pasta
+  sem permissão), arquivos fechados, corpo sem geometria listado no fim sem parar os outros; peça
+  sem lista de corte ainda grava o esqueleto;
+* **material**: a coluna MATERIAL da lista de corte é conferida — item sem material (“Material <não
+  especificado>”) ou com material que não é aço (alumínio, plástico, madeira…) vira aviso: atribua o
+  aço às soldagens (normalmente ASTM A36 ou A572 Gr 50); o Simulation e a massa dependem dele;
 * texto ASCII, para colar no editor sem problema de acento: Ferramentas › Macro › Nova (nome e
   salvar), apagar o texto do editor, colar e F5; depois, Ferramentas › Macro › Executar.
 

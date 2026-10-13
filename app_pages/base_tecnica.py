@@ -9,6 +9,7 @@ import streamlit as st
 from components.base_tecnica_help import AJUDA
 from components.base_tecnica_ui import gravar_base, mapa_do_projeto
 from components.figuras_estrutura import svg_limite_de_deslocamento
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import base_tecnica as bt
 from core import criterio_anglo as ca
@@ -295,7 +296,7 @@ abas = st.tabs(
         "Conflitos",
     ]
 )
-with abas[0]:
+with abas[0], secao_protegida("aba 1"):
     st.dataframe(
         pd.DataFrame(
             [{"Local": s.local, "kN/m²": s.valor_kN_m2, "Nota": s.nota} for s in ca.SOBRECARGAS]
@@ -304,7 +305,7 @@ with abas[0]:
         width="stretch",
     )
     st.caption("Item 5.2, Tabela 2 — valores mínimos, quando o projeto mecânico não indicar outro.")
-with abas[1]:
+with abas[1], secao_protegida("aba 2"):
     linhas = [
         {"Tabela": d.tabela, "Elemento": d.descricao, "Limite": d.texto}
         for d in (*ca.DESLOCAMENTOS_VERTICAIS, *ca.DESLOCAMENTOS_HORIZONTAIS)
@@ -315,7 +316,7 @@ with abas[1]:
         "Valem também as notas da Tabela C.1 da NBR 8800; recomendações mais rigorosas dos "
         "fabricantes prevalecem."
     )
-with abas[2]:
+with abas[2], secao_protegida("aba 3"):
     st.dataframe(
         pd.DataFrame(
             [{"Elemento": k, "Mínimo (mm)": v} for k, v in ca.ESPESSURAS_MINIMAS_MM.items()]
@@ -346,7 +347,7 @@ with abas[2]:
         width="stretch",
     )
     st.caption("Item 8.7 — a arruela não é soldada na placa de base.")
-with abas[3]:
+with abas[3], secao_protegida("aba 4"):
     st.markdown(
         f"""
 - Ligações principais (vigas, colunas, contraventamentos): **{ca.PARAFUSO_PRINCIPAL}** (9.1).
@@ -373,10 +374,10 @@ with abas[3]:
         hide_index=True,
     )
     st.caption("Item 9.2.1, Tabela 6.")
-with abas[4]:
+with abas[4], secao_protegida("aba 5"):
     st.markdown("\n".join(f"{i}. {c}" for i, c in enumerate(ca.COMBINACOES_MINIMAS, start=1)))
     st.caption(f"Item 5.9 — {ca.LEGENDA_COMBINACOES} {ca.QUADRO_DE_CARGAS_FUNDACOES}")
-with abas[5]:
+with abas[5], secao_protegida("aba 6"):
     st.dataframe(
         pd.DataFrame([{"Caso": a, "Impacto mínimo": b} for a, b in ca.IMPACTOS]),
         hide_index=True,
@@ -396,7 +397,7 @@ with abas[5]:
 - Chutes, calhas e tanques: considerar entupimento com o material de maior peso específico (5.11).
 """.replace("%", " %")
     )
-with abas[6]:
+with abas[6], secao_protegida("aba 7"):
     colunas = st.columns(3)
     ne = colunas[0].number_input(
         "Frequência da estrutura Ne (Hz)",
@@ -447,7 +448,7 @@ with abas[6]:
         + " Item 5.7: preferível 1,25·Nm < Ne < 1,5·Nm; se não couber, 0,575·Nm < Ne < 0,8·Nm "
         "ou Ne < 0,425·Nm."
     )
-with abas[7]:
+with abas[7], secao_protegida("aba 8"):
     st.markdown(
         f"""
 - Espelho de {ca.ESPELHO_MIN_MM:g} a {ca.ESPELHO_MAX_MM:g} mm; passo pela fórmula de Blondel
@@ -466,13 +467,13 @@ with abas[7]:
     st.page_link(
         "app_pages/degrau_escada.py", label="Degrau de escada em grade", icon=":material/stairs:"
     )
-with abas[8]:
+with abas[8], secao_protegida("aba 9"):
     st.dataframe(
         pd.DataFrame([{"Uso": a, "Material": b} for a, b in ca.MATERIAIS]),
         hide_index=True,
         width="stretch",
     )
     st.caption("Item 4.5, Tabela 1. Filtragem e Porto: Tabela 7 e proteção do item 12.")
-with abas[9]:
+with abas[9], secao_protegida("aba 10"):
     for texto in ca.CONFLITOS:
         st.warning(texto, icon=":material/balance:")

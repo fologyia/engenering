@@ -347,7 +347,11 @@ def resumir(lista: ListaDeMaterial) -> ResumoDaLista:
 # Conferência com o peso próprio do modelo
 # ---------------------------------------------------------------------------------------------
 def conferir_com_o_modelo(
-    resumo: ResumoDaLista, dados: em.EsforcosDoModelo, *, caso: str = CASO_PP
+    resumo: ResumoDaLista,
+    dados: em.EsforcosDoModelo,
+    *,
+    caso: str = CASO_PP,
+    fator_peso_proprio: float = 1.0,
 ) -> list[pc.ItemDeConferencia]:
     """O peso dos itens (sem o acréscimo) contra a reação vertical do caso PP do modelo."""
     importado = dados.casos.get(caso)
@@ -371,7 +375,9 @@ def conferir_com_o_modelo(
     )
     peso = peso_da_estrutura_kN(resumo)
     assert peso is not None  # a massa dos itens é positiva
-    return [em.conferir_peso_proprio(vertical, peso, origem)]
+    if fator_peso_proprio > 1:
+        origem += f", × {_n(fator_peso_proprio, 2)} de ligações não modeladas"
+    return [em.conferir_peso_proprio(vertical, peso * fator_peso_proprio, origem)]
 
 
 def peso_da_estrutura_kN(resumo: ResumoDaLista) -> float | None:
@@ -419,9 +425,15 @@ def para_dicionario(lista: ListaDeMaterial) -> dict[str, Any]:
 
 
 def de_dicionario(dados: Mapping[str, Any] | None) -> ListaDeMaterial:
+    """Lê a lista gravada no projeto; o que estiver fora do formato volta ao padrão."""
     if not isinstance(dados, Mapping):
         return ListaDeMaterial()
-    itens = tuple(item_de_dicionario(i) for i in dados.get("itens") or () if isinstance(i, Mapping))
+    gravados = dados.get("itens")
+    itens = tuple(
+        item_de_dicionario(i)
+        for i in (gravados if isinstance(gravados, list | tuple) else ())
+        if isinstance(i, Mapping)
+    )
     barra = _float(dados.get("comprimento_barra_m"), BARRA_PADRAO_M)
     return ListaDeMaterial(
         itens=itens,
@@ -497,13 +509,17 @@ TOLERANCIA_ADOCAO = 0.02
 _CHAPA = re.compile(r"^\s*(chapa|placa|pl\b|ch\b|plate)", re.IGNORECASE)
 
 
+class ListaDeCorteInvalida(ValueError):
+    """Arquivo que não dá para ler como lista de corte; a mensagem diz o que fazer."""
+
+
 class _PontoEVirgula(csv.excel):
     delimiter = ";"
 
 
 def _celulas_do_arquivo(conteudo: bytes, nome_arquivo: str) -> list[list[str]]:
     if nome_arquivo.lower().endswith(".xls"):
-        raise ValueError(
+        raise ListaDeCorteInvalida(
             f"{nome_arquivo} está no formato antigo do Excel (.xls), que o programa não lê: salve a "
             "tabela do SolidWorks como CSV ou abra o arquivo no Excel e salve como .xlsx."
         )
@@ -513,7 +529,9 @@ def _celulas_do_arquivo(conteudo: bytes, nome_arquivo: str) -> list[list[str]]:
         try:
             livro = load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
         except Exception as erro:  # arquivo corrompido ou que não é Excel
-            raise ValueError(f"Não consegui abrir o Excel {nome_arquivo}: {erro}") from erro
+            raise ListaDeCorteInvalida(
+                f"Não consegui abrir {nome_arquivo} como Excel: salve-o de novo como .xlsx ou CSV."
+            ) from erro
         folha = livro.worksheets[0]
         return [
             ["" if c is None else str(c) for c in linha]
@@ -532,7 +550,13 @@ def _celulas_do_arquivo(conteudo: bytes, nome_arquivo: str) -> list[list[str]]:
         dialeto: Any = csv.Sniffer().sniff(amostra, delimiters=";,\t")
     except csv.Error:
         dialeto = _PontoEVirgula
-    return [list(linha) for linha in csv.reader(io.StringIO(texto), dialeto)]
+    try:
+        return [list(linha) for linha in csv.reader(io.StringIO(texto), dialeto)]
+    except csv.Error as erro:
+        raise ListaDeCorteInvalida(
+            f"{nome_arquivo} não é um CSV legível (caractere ou aspas fora do lugar): gere o CSV "
+            "de novo pela macro do SolidWorks."
+        ) from erro
 
 
 _MILHAR = re.compile(r"\d{1,3}(\.\d{3})+")
@@ -634,6 +658,28 @@ def _mesma_secao(familia: str, area: float, altura: float) -> str | None:
     return min(perto)[2] if perto else None
 
 
+def secao_pela_area(nome_catalogo: str, area_mm2: float) -> tuple[str, str]:
+    """O perfil a usar dada a área real da seção (peça de corte reto) e o motivo, se mudou.
+
+    Até 3 % da área do perfil do nome: é ele. Fora disso, o perfil da mesma família com a mesma
+    área (± 2 %), se houver; senão, o do nome com o aviso de que a seção não confere.
+    """
+    dados = _secao_do_catalogo(nome_catalogo)
+    if dados is None or area_mm2 <= 0:
+        return nome_catalogo, ""
+    area_catalogo, familia, altura = dados
+    if abs(area_mm2 - area_catalogo) / area_catalogo <= TOLERANCIA_SECAO_RETA:
+        return nome_catalogo, ""
+    candidato = _mesma_secao(familia, area_mm2, altura)
+    cm2 = f"{_n(area_mm2 / 100, 1)} cm²"
+    if candidato is not None:
+        return candidato, f"a seção do modelo ({cm2}) é a do {candidato}"
+    return nome_catalogo, (
+        f"a seção do modelo ({cm2}) não confere com a do {nome_catalogo} "
+        f"({_n(area_catalogo / 100, 1)} cm²) nem com outro perfil do catálogo"
+    )
+
+
 def _conferir_secoes(
     itens: list[ItemDaLista], secoes: Mapping[str, Sequence[tuple[int, float, bool]]]
 ) -> tuple[list[str], list[str]]:
@@ -696,7 +742,32 @@ def _leitor_de_celulas(linha: Sequence[str]) -> Any:
 def ler_lista_de_corte(
     conteudo: bytes, nome_arquivo: str, *, unidade: str = "mm"
 ) -> tuple[list[ItemDaLista], list[str]]:
-    """Itens da lista de corte e os avisos (colunas não achadas, linhas puladas, perfis estranhos)."""
+    """Itens da lista de corte e os avisos (colunas não achadas, linhas puladas, perfis estranhos).
+
+    Só sai :class:`ListaDeCorteInvalida` (um ``ValueError``) com uma mensagem para quem usa: um trecho inesperado do arquivo vira
+    essa mensagem e uma ocorrência no diagnóstico (com ``MECANICA_TOOLKIT_ERROS=levantar``, a
+    falha original sobe).
+    """
+    try:
+        return _ler_lista_de_corte(conteudo, nome_arquivo, unidade)
+    except ListaDeCorteInvalida:
+        raise
+    except Exception as erro:
+        from core import diagnostico as dg
+
+        if dg.levantar_erros():
+            raise
+        ocorrencia = dg.ocorrencia_de_falha("Lista de material › leitura do arquivo", erro)
+        dg.gravar(ocorrencia)
+        raise ListaDeCorteInvalida(
+            f"{nome_arquivo} tem um trecho fora do formato esperado e não foi lido "
+            f"(ref. {ocorrencia.referencia}). Gere o CSV de novo pela macro do SolidWorks."
+        ) from erro
+
+
+def _ler_lista_de_corte(
+    conteudo: bytes, nome_arquivo: str, unidade: str
+) -> tuple[list[ItemDaLista], list[str]]:
     linhas = _celulas_do_arquivo(conteudo, nome_arquivo)
     cabecalho_i = None
     for i, linha in enumerate(linhas[:30]):
@@ -707,6 +778,14 @@ def ler_lista_de_corte(
             cabecalho_i = i
             break
     if cabecalho_i is None:
+        for linha in linhas[:20]:
+            nomes_lidos = {_sem_acento(c).strip() for c in linha}
+            if "corpo" in nomes_lidos and any(n.startswith("x1") for n in nomes_lidos):
+                raise ListaDeCorteInvalida(
+                    f"{nome_arquivo} é o esqueleto do modelo (pontas de cada barra), não a "
+                    "lista de corte: envie-o na página Esforços do modelo. Aqui vai o outro "
+                    "arquivo da macro, o da lista de corte."
+                )
         return [], [
             "Não achei o cabeçalho: a lista precisa das colunas de quantidade (QTD.) e de "
             "descrição (DESCRIÇÃO), e de preferência a de comprimento."
@@ -734,6 +813,8 @@ def ler_lista_de_corte(
     c_caixa = coluna(_COLUNA_CAIXA)
     c_angulo1 = coluna(_COLUNA_ANGULO1)
     c_angulo2 = coluna(_COLUNA_ANGULO2)
+    c_material = next((j for j, n in enumerate(nomes) if n == "material"), None)
+    materiais: list[str] = []
     itens: list[ItemDaLista] = []
     estranhos: list[str] = []
     pela_geometria: list[str] = []
@@ -754,6 +835,8 @@ def ler_lista_de_corte(
             comprimento_m = _em_metros(valor, lida) if valor else 0.0
         geometria, _ = numero_da_celula(celula(c_geometria))
         massa_geometria = geometria if geometria and geometria > 0 else None
+        if c_material is not None:
+            materiais.append(celula(c_material))
         base = ItemDaLista(
             marca=celula(c_marca),
             descricao=descricao,
@@ -844,7 +927,49 @@ def ler_lista_de_corte(
         )
     if not itens:
         avisos.append("Nenhuma linha com quantidade e descrição foi lida.")
+    avisos.extend(_avisos_de_material(materiais))
     return itens, avisos
+
+
+_NAO_ACO = (
+    "alumin",
+    "6061",
+    "6063",
+    "5052",
+    "plastic",
+    "nylon",
+    "madeira",
+    "wood",
+    "concret",
+    "cobre",
+    "copper",
+    "bronze",
+    "latao",
+    "brass",
+)
+
+
+def _avisos_de_material(materiais: Sequence[str]) -> list[str]:
+    """Material da propriedade MATERIAL da lista de corte: sem material ou que não é aço."""
+    sem = sum(
+        1
+        for m in materiais
+        if not m.strip() or "especificad" in _sem_acento(m) or "specified" in m.lower()
+    )
+    estranhos = sorted({m.strip() for m in materiais if any(t in _sem_acento(m) for t in _NAO_ACO)})
+    avisos = []
+    if sem:
+        avisos.append(
+            f"{sem} item(ns) sem material na peça (“Material <não especificado>”): atribua o aço às "
+            "soldagens no SolidWorks (normalmente ASTM A36 ou A572 Gr 50) — o Simulation, a massa "
+            "e o memorial dependem dele."
+        )
+    if estranhos:
+        avisos.append(
+            f"Material que não é aço: {', '.join(estranhos)}. A lista usa 7 850 kg/m³ e as "
+            "verificações são de aço: troque o material ou o perfil no SolidWorks."
+        )
+    return avisos
 
 
 # ---------------------------------------------------------------------------------------------

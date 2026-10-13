@@ -20,7 +20,14 @@ from pathlib import Path
 import pytest
 from github_falso import GitHubFalso
 
-from core import acesso, armazenamento, atualizacao_de_codigo, espelho_remoto, project_store
+from core import (
+    acesso,
+    armazenamento,
+    atualizacao_de_codigo,
+    diagnostico,
+    espelho_remoto,
+    project_store,
+)
 from core.espelho_remoto import ConfiguracaoGitHub, EspelhoGitHub
 from core.project_records import superar_registro
 from core.project_store import (
@@ -49,6 +56,14 @@ def _banco_da_sessao_isolado(tmp_path_factory):
         # reimportado calcula o banco padrão por ela — e nunca cai no banco real do usuário.
         ambiente.setenv(project_store.VARIAVEL_BANCO, str(banco))
         ambiente.setattr(project_store, "BANCO_PADRAO", banco)
+        # Nos testes a falha sobe: a contenção da interface (components/robustez.py) não pode
+        # esconder um erro de um teste. Os testes da própria contenção desligam isto.
+        ambiente.setenv(diagnostico.VARIAVEL_MODO, "levantar")
+        # O config.toml esconde o detalhe dos erros de quem usa; nos testes a mensagem é o que
+        # explica a falha (a variável de ambiente só vale pela linha de comando do Streamlit).
+        from streamlit import config as config_do_streamlit
+
+        config_do_streamlit.set_option("client.showErrorDetails", "full")
         yield banco
 
 

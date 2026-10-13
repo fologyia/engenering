@@ -67,3 +67,8 @@ borderColor = "#214A65"
 primaryColor = "#62C7EE"
 dataframeHeaderBackgroundColor = "#163F5C"
 dataframeBorderColor = "#28536D"
+
+[client]
+# Nada técnico na tela: as falhas são contidas pela interface (components/robustez.py) e o detalhe
+# vai para o arquivo de diagnóstico. Para depurar: STREAMLIT_CLIENT_SHOW_ERROR_DETAILS=full.
+showErrorDetails = "none"

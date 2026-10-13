@@ -7,6 +7,7 @@ import streamlit as st
 from components.base_tecnica_ui import base_ativa, legenda_da_base
 from components.figuras_estrutura import svg_viga_de_piso
 from components.project_tools import botao_registrar_calculo
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
 from components.viga_de_piso_help import AJUDA
@@ -46,7 +47,7 @@ _sessao("vp_perfil", vp.EntradaVigaDePiso().perfil)
 _sessao("vp_sc", float(base.sobrecarga_kN_m2) if base else 5.0)
 _sessao("vp_anglo", bool(base and base.anglo))
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. Perfil"):
     st.subheader("1. Perfil", help=AJUDA["sec_perfil"])
     colunas = st.columns([2, 1, 2])
     perfil = colunas[0].selectbox(
@@ -64,7 +65,7 @@ with st.container(border=True):
         "Tipo", list(vp.TIPOS), key="vp_tipo", persist_state="session", help=AJUDA["tipo"]
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Vão e faixa de piso"):
     st.subheader("2. Vão e faixa de piso", help=AJUDA["sec_geometria"])
     colunas = st.columns(3)
     vao = colunas[0].number_input(
@@ -106,7 +107,7 @@ with st.container(border=True):
             help=AJUDA["lb"],
         )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Cargas (características)"):
     st.subheader("3. Cargas (características)", help=AJUDA["sec_cargas"])
     colunas = st.columns(4)
     pe = colunas[0].number_input(
@@ -153,7 +154,7 @@ with st.container(border=True):
         help=AJUDA["concentrada"],
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Critério"):
     st.subheader("4. Critério", help=AJUDA["sec_criterio"])
     colunas = st.columns(2)
     anglo = colunas[0].toggle(
@@ -232,7 +233,7 @@ st.subheader("Verificações", help=AJUDA["res_verificacoes"])
 mostrar_tabela_verificacoes(list(resultado.verificacoes))
 
 mais_leve = vp.perfil_mais_leve(entrada)
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Perfil mais leve que atende"):
     st.subheader("Perfil mais leve que atende", help=AJUDA["res_mais_leve"])
     if mais_leve is None:
         st.warning(
@@ -265,7 +266,7 @@ st.download_button(
     key="vp_csv",
     help=AJUDA["btn_csv"],
 )
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Registrar no projeto"):
     st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
     botao_registrar_calculo(
         vp.registro_viga(resultado),

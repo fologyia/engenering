@@ -5,6 +5,7 @@ import streamlit as st
 
 from components.bolted_help import AJUDA
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
+from components.robustez import secao_protegida
 from components.structural_bolted_ui import mostrar_ligacao_estrutural
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from components.verification_table import mostrar_tabela_verificacoes
@@ -92,7 +93,7 @@ st.warning(
     icon=":material/engineering:",
 )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. Parafuso e padrão da junta"):
     st.subheader("1. Parafuso e padrão da junta", help=AJUDA["sec_mec_1"])
     selecao = st.columns(3)
     with selecao[0]:
@@ -265,7 +266,7 @@ with st.container(border=True):
             icon=":material/warning:",
         )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Pré-carga, torque e rigidez"):
     st.subheader("2. Pré-carga, torque e rigidez", help=AJUDA["sec_mec_2"])
     metodo = st.segmented_control(
         "Condição de instalação",
@@ -348,7 +349,7 @@ with st.container(border=True):
         r"\Delta F_b=C\,P,\quad C=\frac{k_b}{k_b+k_m}"
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Carregamentos de serviço"):
     st.subheader("3. Carregamentos de serviço", help=AJUDA["sec_mec_3"])
     st.caption(
         "A carga axial positiva abre a junta. O momento de tombamento distribui "
@@ -463,7 +464,7 @@ with st.container(border=True):
         help=AJUDA["mec_rosca_plano"],
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Atrito e verificações da chapa"):
     st.subheader("4. Atrito e verificações da chapa", help=AJUDA["sec_mec_4"])
     junta = st.columns(3)
     with junta[0]:
@@ -603,7 +604,7 @@ except ValueError as erro:
 
 st.header("Resultados do projeto")
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Aperto especificado"):
     st.subheader("Aperto especificado", help=AJUDA["mec_aperto"])
     with st.container(horizontal=True):
         st.metric(
@@ -638,7 +639,7 @@ with st.container(border=True):
         "revestimento, reutilização e ferramenta podem alterar muito a pré-carga."
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Parafuso crítico"):
     st.subheader("Parafuso crítico", help=AJUDA["mec_critico"])
     with st.container(horizontal=True):
         st.metric(
@@ -684,7 +685,7 @@ coordenadas_tabela = (
     else parafusos.coordenadas_circulares(int(numero_parafusos), raio)
 )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Distribuição entre os parafusos"):
     st.subheader("Distribuição entre os parafusos", help=AJUDA["mec_distribuicao"])
     linhas = []
     for indice, ((x_mm, y_mm), axial, cisalhamento) in enumerate(
@@ -728,7 +729,7 @@ with st.container(border=True):
 
 fadiga_resultado = None
 fadiga_entradas: dict[str, float] = {}
-with st.container(border=True):
+with st.container(border=True), secao_protegida("5. Verificação opcional de fadiga axial"):
     st.subheader("5. Verificação opcional de fadiga axial", help=AJUDA["sec_mec_5"])
     analisar_fadiga = st.toggle(
         "Ativar análise de fadiga",
@@ -893,7 +894,7 @@ with st.container(border=True):
 diagnostico = parafusos.diagnostico_junta(
     resultado, rosca, classe, rigidez, fator_minimo, fadiga_resultado
 )
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Diagnóstico de cada modo de falha"):
     st.subheader("Diagnóstico de cada modo de falha", help=AJUDA["mec_diagnostico"])
     st.caption(
         "Solicitante, resistente, aproveitamento (= 1/n), status, fórmula e fonte de cada "
@@ -923,7 +924,7 @@ fronteira_modelo(
     ]
 )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("6. Registrar no projeto"):
     st.subheader("6. Registrar no projeto", help=AJUDA["reg_registrar"])
     fatores_criticos = [valor for _, valor in criterios if math.isfinite(valor)]
     if fadiga_resultado is not None and math.isfinite(fadiga_resultado.fator_goodman):
@@ -1056,7 +1057,7 @@ with st.container(border=True):
         rotulo="Registrar junta parafusada no projeto ativo",
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Precisa de ajuda para preencher ou interpretar?"):
     st.subheader("Precisa de ajuda para preencher ou interpretar?")
     st.markdown(
         "O **Guia geral** mostra a origem de cada entrada, um exemplo completo "

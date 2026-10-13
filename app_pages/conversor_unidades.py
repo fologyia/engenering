@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import streamlit as st
 
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import unit_converter as unidades
 
@@ -55,7 +56,7 @@ def inverter_unidades(chave_origem: str, chave_destino: str) -> None:
     st.session_state[chave_destino] = origem_atual
 
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("Conversão"):
     st.subheader("Conversão")
     categoria = st.selectbox(
         "Grandeza",

@@ -8,6 +8,7 @@ from typing import Any
 
 import streamlit as st
 
+from components.robustez import conferir_valores
 from core.armazenamento import texto_de_confirmacao
 from core.project_store import (
     CAMPO_GRAVACAO,
@@ -317,7 +318,16 @@ def botao_registrar_calculo(
     Com ``identificar_peca`` (padrão), pergunta antes qual peça o cálculo
     verifica; desligue em registros que não pertencem a uma peça específica,
     como combinações de ações ou cadastros de casos de carga.
+
+    Um registro com NaN ou infinito não é gravado: a conferência anota a ocorrência (sem mostrar
+    o detalhe) e a página diz, numa linha, que o cálculo não pode ser registrado.
     """
+    if not conferir_valores("registro no projeto", registro):
+        st.caption(
+            ":material/block: Este cálculo tem um resultado que não é um número (entrada fora do "
+            "domínio do cálculo) e não pode ser registrado — confira os dados de entrada."
+        )
+        return False
     projeto = projeto_ativo_persistente()
     nome_peca, componente_id, cadastrar_novo = "", None, False
     if identificar_peca:

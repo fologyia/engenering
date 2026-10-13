@@ -1,37 +1,65 @@
-' Mecanica Toolkit - exporta a lista de corte (soldagens) da peca aberta para CSV.
+' Mecanica Toolkit - exporta a lista de corte (soldagens) e o esqueleto da peca aberta para CSV.
 '
 ' Le direto da arvore da peca: nao precisa de desenho nem de tabela.
 ' Uso (uma vez): com a peca aberta, Ferramentas > Macro > Nova..., de um nome e salve; no editor
 ' que abrir, apague tudo, cole este texto inteiro e tecle F5.
 ' Das proximas vezes: Ferramentas > Macro > Executar... e escolha a macro salva.
 '
-' O CSV sai na pasta da peca, com o nome <peca>_lista_de_corte.csv. Envie-o na pagina
-' "Lista de material" do Mecanica Toolkit.
+' Saem dois arquivos na pasta da peca:
+' - <peca>_lista_de_corte.csv: envie na pagina "Lista de material" do Mecanica Toolkit;
+' - <peca>_esqueleto.csv: cada corpo com a linha de centro (mm), a forma (barra, chapa ou bloco),
+'   as medidas e o volume; envie na pagina "Esforcos do modelo" junto com os CSV do Simulation (o
+'   programa reconhece pilares, vigas e contraventamentos, os comprimentos e os perfis).
+'
+' Robustez: se algo der errado, a macro diz em que etapa parou e por que (arquivo aberto no Excel,
+' pasta sem permissao...), fecha os arquivos e nao mexe na peca. Um corpo cuja geometria nao pode
+' ser lida fica de fora e e listado no aviso final; os outros saem normalmente. Os numeros saem
+' sempre com virgula decimal, qualquer que seja a configuracao regional do Windows.
 Option Explicit
+
+Const VERSAO_DA_MACRO As String = "v4"
+Const DENSIDADE_ACO As Double = 7850#
 
 Dim nomes() As String
 Dim totalNomes As Long
+Dim etapa As String
+Dim arquivo As Integer
+Dim arquivoEsqueleto As Integer
+Dim problemas As String
+Dim totalProblemas As Long
 
 Sub main()
     Dim swApp As SldWorks.SldWorks
     Dim swModel As SldWorks.ModelDoc2
+    On Error GoTo Falha
+    ' Um arquivo que ficou aberto numa execucao interrompida trava a proxima: fecha tudo antes.
+    Close
+    arquivo = 0
+    arquivoEsqueleto = 0
+    problemas = ""
+    totalProblemas = 0
+
+    etapa = "abrir a peca"
     Set swApp = Application.SldWorks
     Set swModel = swApp.ActiveDoc
     If swModel Is Nothing Then
-        MsgBox "Abra a peca (o arquivo da estrutura) antes de rodar a macro."
+        MsgBox "Abra a peca (o arquivo da estrutura) antes de rodar a macro.", vbExclamation
         Exit Sub
     End If
     If swModel.GetType <> swDocPART Then
-        MsgBox "A macro le a lista de corte de uma PECA. Abra o arquivo da peca, nao o desenho nem a montagem."
+        MsgBox "A macro le a lista de corte de uma PECA. Abra o arquivo da peca, nao o desenho nem a montagem.", vbExclamation
         Exit Sub
     End If
     If swModel.GetPathName = "" Then
-        MsgBox "Salve a peca antes: o CSV sai na mesma pasta dela."
+        MsgBox "Salve a peca antes: os CSV saem na mesma pasta dela.", vbExclamation
         Exit Sub
     End If
+
+    etapa = "reconstruir a peca"
     swModel.ForceRebuild3 False
 
     ' 1) Atualiza a lista de corte e junta os itens (pastas da lista de corte).
+    etapa = "ler a lista de corte"
     Dim pastas As New Collection
     Dim swFeat As SldWorks.Feature
     Dim swSub As SldWorks.Feature
@@ -51,12 +79,9 @@ Sub main()
         End If
         Set swFeat = swFeat.GetNextFeature
     Loop
-    If pastas.Count = 0 Then
-        MsgBox "Nenhum item de lista de corte encontrado. A peca precisa ser de soldagens (membros estruturais)."
-        Exit Sub
-    End If
 
     ' 2) Todas as propriedades que aparecem em algum item viram colunas.
+    etapa = "ler as propriedades da lista de corte"
     Dim i As Long, j As Long
     Dim swProps As SldWorks.CustomPropertyManager
     Dim vNomes As Variant
@@ -84,25 +109,46 @@ Sub main()
         Case Else: unidade = ""
     End Select
 
-    ' 4) Grava o CSV (separador ponto e virgula).
-    Dim caminho As String
-    caminho = Left(swModel.GetPathName, InStrRev(swModel.GetPathName, ".") - 1) & "_lista_de_corte.csv"
-    Dim arquivo As Integer
-    arquivo = FreeFile
-    Open caminho For Output As #arquivo
-    Dim linha As String
-    linha = "ITEM;QTD.;DESCRICAO;COMPRIMENTO;NOME NA LISTA DE CORTE;" & _
-        "VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg);CAIXA (mm)"
-    For j = 0 To totalNomes - 1
-        linha = linha & ";" & Campo(nomes(j))
-    Next j
-    Print #arquivo, linha
+    ' 4) Cabecalho dos dois arquivos: peca, configuracao, data e versao da macro.
+    Dim base As String, peca As String, configuracao As String, quando As String
+    base = Left(swModel.GetPathName, InStrRev(swModel.GetPathName, ".") - 1)
+    peca = Mid(swModel.GetPathName, InStrRev(swModel.GetPathName, "\") + 1)
+    configuracao = NomeDaConfiguracao(swModel)
+    quando = Format(Now, "yyyy-mm-dd hh:nn")
 
+    Dim caminho As String, caminhoEsqueleto As String, linha As String
+    caminho = base & "_lista_de_corte.csv"
+    caminhoEsqueleto = base & "_esqueleto.csv"
+    If pastas.Count > 0 Then
+        etapa = "gravar " & caminho
+        arquivo = FreeFile
+        Open caminho For Output As #arquivo
+        Cabecalho arquivo, peca, configuracao, quando
+        linha = "ITEM;QTD.;DESCRICAO;COMPRIMENTO;NOME NA LISTA DE CORTE;" & _
+            "VOLUME POR PECA (cm3);MASSA DO ACO POR PECA (kg);CAIXA (mm)"
+        For j = 0 To totalNomes - 1
+            linha = linha & ";" & Campo(nomes(j))
+        Next j
+        Print #arquivo, linha
+    End If
+    etapa = "gravar " & caminhoEsqueleto
+    arquivoEsqueleto = FreeFile
+    Open caminhoEsqueleto For Output As #arquivoEsqueleto
+    Cabecalho arquivoEsqueleto, peca, configuracao, quando
+    Print #arquivoEsqueleto, "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);" & _
+        "X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)"
+
+    ' 5) Um item por linha na lista de corte; um corpo por linha no esqueleto.
+    Dim vistos As Object
+    Set vistos = CreateObject("Scripting.Dictionary")
     Dim valor As String, resolvido As String, comprimento As String, descricao As String
     Dim vCorpos As Variant, vMassa As Variant, swCorpo As SldWorks.Body2
     Dim volume As Double, corpos As Long, k As Long, caixa As String
+    Dim g(8) As Double, forma As String
+    Dim totalCorpos As Long, barras As Long, chapas As Long, blocos As Long
     For i = 1 To pastas.Count
         Set swSub = pastas(i)
+        etapa = "ler o item " & swSub.Name & " da lista de corte"
         Set swPasta = swSub.GetSpecificFeature2
         Set swProps = swSub.CustomPropertyManager
         comprimento = ""
@@ -125,29 +171,42 @@ Sub main()
         ' Volume medio de uma peca, pela geometria (m3); a massa e a do aco, 7850 kg/m3.
         volume = 0
         corpos = 0
+        caixa = ""
         vCorpos = swPasta.GetBodies
         If IsArray(vCorpos) Then
             For k = 0 To UBound(vCorpos)
                 Set swCorpo = vCorpos(k)
-                vMassa = swCorpo.GetMassProperties(7850#)
+                vistos(swCorpo.Name) = True
+                vMassa = Massa(swCorpo)
                 If IsArray(vMassa) Then
                     volume = volume + vMassa(3)
                     corpos = corpos + 1
                 End If
+                If Geometria(swCorpo, vMassa, g, forma) Then
+                    EscreverCorpo swCorpo.Name, swSub.Name, descricao, forma, g, vMassa
+                    totalCorpos = totalCorpos + 1
+                    Contar forma, barras, chapas, blocos
+                    ' Caixa de uma peca nas direcoes do proprio corpo (chapa inclinada tambem).
+                    If caixa = "" Then
+                        caixa = Num(g(6) * 1000#, "0.0") & " x " & _
+                            Num(g(7) * 1000#, "0.0") & " x " & Num(g(8) * 1000#, "0.0")
+                    End If
+                Else
+                    AnotarProblema swCorpo.Name
+                End If
             Next k
+            If caixa = "" Then
+                ' Sem a geometria: a caixa nos eixos da peca.
+                Set swCorpo = vCorpos(0)
+                caixa = Num(Extensao(swCorpo, 1, 0, 0), "0.0") & " x " & _
+                    Num(Extensao(swCorpo, 0, 1, 0), "0.0") & " x " & _
+                    Num(Extensao(swCorpo, 0, 0, 1), "0.0")
+            End If
         End If
         If corpos > 0 Then volume = volume / corpos
-        ' Caixa justa de uma peca nos eixos da peca (mm): pelas chapas, comprimento x largura x espessura.
-        caixa = ""
-        If IsArray(vCorpos) Then
-            Set swCorpo = vCorpos(0)
-            caixa = Format(Extensao(swCorpo, 1, 0, 0), "0.0") & " x " & _
-                Format(Extensao(swCorpo, 0, 1, 0), "0.0") & " x " & _
-                Format(Extensao(swCorpo, 0, 0, 1), "0.0")
-        End If
         linha = i & ";" & swPasta.GetBodyCount & ";" & Campo(descricao) & ";" & _
             Campo(comprimento) & ";" & Campo(swSub.Name) & ";" & _
-            Campo(Format(volume * 1000000#, "0.0")) & ";" & Campo(Format(volume * 7850#, "0.000")) & _
+            Campo(Num(volume * 1000000#, "0.0")) & ";" & Campo(Num(volume * DENSIDADE_ACO, "0.000")) & _
             ";" & Campo(caixa)
         For j = 0 To totalNomes - 1
             valor = ""
@@ -157,9 +216,312 @@ Sub main()
         Next j
         Print #arquivo, linha
     Next i
-    Close #arquivo
-    MsgBox pastas.Count & " itens da lista de corte exportados para:" & vbCrLf & caminho
+
+    ' 6) Corpos fora de qualquer lista de corte (peca que nao e de soldagens, corpo solto).
+    etapa = "ler os corpos fora da lista de corte"
+    Dim swPart As SldWorks.PartDoc, vTodos As Variant, foraDaLista As Long
+    Set swPart = swModel
+    vTodos = swPart.GetBodies2(swSolidBody, False)
+    If IsArray(vTodos) Then
+        For k = 0 To UBound(vTodos)
+            Set swCorpo = vTodos(k)
+            If Not vistos.Exists(swCorpo.Name) Then
+                vMassa = Massa(swCorpo)
+                If Geometria(swCorpo, vMassa, g, forma) Then
+                    EscreverCorpo swCorpo.Name, "", "fora da lista de corte", forma, g, vMassa
+                    totalCorpos = totalCorpos + 1
+                    foraDaLista = foraDaLista + 1
+                    Contar forma, barras, chapas, blocos
+                Else
+                    AnotarProblema swCorpo.Name
+                End If
+            End If
+        Next k
+    End If
+
+    etapa = "fechar os arquivos"
+    If arquivo <> 0 Then Close #arquivo
+    arquivo = 0
+    Close #arquivoEsqueleto
+    arquivoEsqueleto = 0
+
+    ' 7) Resumo.
+    Dim texto As String
+    If pastas.Count > 0 Then
+        texto = pastas.Count & " itens da lista de corte exportados para:" & vbCrLf & caminho & vbCrLf & vbCrLf
+    Else
+        texto = "A peca nao tem lista de corte (nao e de soldagens): saiu so o esqueleto." & vbCrLf & vbCrLf
+    End If
+    texto = texto & totalCorpos & " corpos do esqueleto (" & barras & " barras, " & chapas & _
+        " chapas, " & blocos & " blocos) exportados para:" & vbCrLf & caminhoEsqueleto
+    If foraDaLista > 0 Then
+        texto = texto & vbCrLf & vbCrLf & foraDaLista & " corpo(s) fora da lista de corte entraram no esqueleto."
+    End If
+    If totalProblemas > 0 Then
+        texto = texto & vbCrLf & vbCrLf & "ATENCAO: " & totalProblemas & _
+            " corpo(s) sem geometria legivel ficaram fora do esqueleto: " & problemas
+        MsgBox texto, vbExclamation
+    Else
+        MsgBox texto, vbInformation
+    End If
+    Exit Sub
+
+Falha:
+    Dim numero As Long, descricaoDoErro As String
+    numero = Err.Number
+    descricaoDoErro = Err.Description
+    On Error Resume Next
+    Close
+    Select Case numero
+        Case 52, 53, 55, 70, 75, 76
+            MsgBox "Nao consegui " & etapa & "." & vbCrLf & vbCrLf & _
+                "O arquivo esta aberto em outro programa (feche-o no Excel) ou a pasta nao permite " & _
+                "gravar (OneDrive sincronizando, pasta somente leitura). Feche, espere e rode a " & _
+                "macro de novo." & vbCrLf & vbCrLf & "Erro " & numero & ": " & descricaoDoErro, vbExclamation
+        Case Else
+            MsgBox "A macro parou ao " & etapa & "." & vbCrLf & vbCrLf & "Erro " & numero & ": " & _
+                descricaoDoErro & vbCrLf & vbCrLf & "A peca nao foi alterada. Se repetir, mande esta " & _
+                "mensagem junto com o arquivo da peca.", vbExclamation
+    End Select
 End Sub
+
+Function NomeDaConfiguracao(swModel As SldWorks.ModelDoc2) As String
+    ' So informativo: se a API falhar, o arquivo sai sem o nome.
+    On Error Resume Next
+    NomeDaConfiguracao = ""
+    NomeDaConfiguracao = swModel.ConfigurationManager.ActiveConfiguration.Name
+End Function
+
+Function Massa(swCorpo As SldWorks.Body2) As Variant
+    ' Centro de massa (0 a 2) e volume (3, m3) do corpo; Empty se a API falhar.
+    On Error Resume Next
+    Massa = Empty
+    Massa = swCorpo.GetMassProperties(DENSIDADE_ACO)
+End Function
+
+Sub Cabecalho(ByVal numeroDoArquivo As Integer, peca As String, configuracao As String, quando As String)
+    Print #numeroDoArquivo, "MACRO;" & Campo("Mecanica Toolkit - exportar_lista_de_corte " & VERSAO_DA_MACRO)
+    Print #numeroDoArquivo, "PECA;" & Campo(peca)
+    Print #numeroDoArquivo, "CONFIGURACAO;" & Campo(configuracao)
+    Print #numeroDoArquivo, "DATA;" & Campo(quando)
+End Sub
+
+Sub EscreverCorpo(nomeDoCorpo As String, item As String, descricao As String, forma As String, _
+    g() As Double, vMassa As Variant)
+    Dim volumeTexto As String
+    volumeTexto = ""
+    If IsArray(vMassa) Then volumeTexto = Num(vMassa(3) * 1000000#, "0.0")
+    Print #arquivoEsqueleto, Campo(nomeDoCorpo) & ";" & Campo(item) & ";" & Campo(descricao) & ";" & _
+        forma & ";" & _
+        Num(g(0) * 1000#, "0.0") & ";" & Num(g(1) * 1000#, "0.0") & ";" & Num(g(2) * 1000#, "0.0") & ";" & _
+        Num(g(3) * 1000#, "0.0") & ";" & Num(g(4) * 1000#, "0.0") & ";" & Num(g(5) * 1000#, "0.0") & ";" & _
+        Num(g(6) * 1000#, "0.0") & ";" & Num(g(7) * 1000#, "0.0") & ";" & Num(g(8) * 1000#, "0.0") & ";" & _
+        volumeTexto
+End Sub
+
+Sub Contar(forma As String, barras As Long, chapas As Long, blocos As Long)
+    Select Case forma
+        Case "BARRA": barras = barras + 1
+        Case "CHAPA": chapas = chapas + 1
+        Case Else: blocos = blocos + 1
+    End Select
+End Sub
+
+Sub AnotarProblema(nomeDoCorpo As String)
+    totalProblemas = totalProblemas + 1
+    If totalProblemas <= 10 Then
+        If problemas <> "" Then problemas = problemas & ", "
+        problemas = problemas & nomeDoCorpo
+    ElseIf totalProblemas = 11 Then
+        problemas = problemas & "..."
+    End If
+End Sub
+
+Function Geometria(swCorpo As SldWorks.Body2, vMassa As Variant, g() As Double, forma As String) As Boolean
+    ' A linha de centro e as medidas do corpo, nas direcoes do proprio corpo (m):
+    ' g(0..2) uma ponta, g(3..5) a outra, g(6) comprimento, g(7) e g(8) as medidas da secao
+    ' (a maior e a menor). As direcoes sao as principais da nuvem de pontos do corpo (vertices e
+    ' centros das arestas circulares: um tubo redondo nao tem vertice); as medidas, os pontos
+    ' extremos do corpo nessas direcoes; a linha de centro passa pelo centro de massa.
+    Dim px() As Double, py() As Double, pz() As Double, n As Long, k As Long
+    Dim vVertices As Variant, swVertice As SldWorks.Vertex, vPonto As Variant
+    Dim vArestas As Variant, swAresta As SldWorks.Edge, swCurva As SldWorks.Curve, vCirculo As Variant
+    On Error GoTo Falhou
+    Geometria = False
+    forma = ""
+    n = 0
+    ReDim px(31)
+    ReDim py(31)
+    ReDim pz(31)
+    vVertices = swCorpo.GetVertices
+    If IsArray(vVertices) Then
+        For k = 0 To UBound(vVertices)
+            Set swVertice = vVertices(k)
+            vPonto = swVertice.GetPoint
+            AcrescentarPonto px, py, pz, n, vPonto(0), vPonto(1), vPonto(2)
+        Next k
+    End If
+    vArestas = swCorpo.GetEdges
+    If IsArray(vArestas) Then
+        For k = 0 To UBound(vArestas)
+            Set swAresta = vArestas(k)
+            Set swCurva = swAresta.GetCurve
+            If Not swCurva Is Nothing Then
+                If swCurva.IsCircle Then
+                    vCirculo = swCurva.CircleParams
+                    If IsArray(vCirculo) Then
+                        AcrescentarPonto px, py, pz, n, vCirculo(0), vCirculo(1), vCirculo(2)
+                    End If
+                End If
+            End If
+        Next k
+    End If
+    If n < 2 Then Exit Function
+
+    ' Centro: o de massa (fica na linha de centro de uma barra); sem ele, a media dos pontos.
+    Dim cx As Double, cy As Double, cz As Double
+    For k = 0 To n - 1
+        cx = cx + px(k)
+        cy = cy + py(k)
+        cz = cz + pz(k)
+    Next k
+    cx = cx / n
+    cy = cy / n
+    cz = cz / n
+    Dim a(2, 2) As Double, dx As Double, dy As Double, dz As Double
+    For k = 0 To n - 1
+        dx = px(k) - cx
+        dy = py(k) - cy
+        dz = pz(k) - cz
+        a(0, 0) = a(0, 0) + dx * dx
+        a(0, 1) = a(0, 1) + dx * dy
+        a(0, 2) = a(0, 2) + dx * dz
+        a(1, 1) = a(1, 1) + dy * dy
+        a(1, 2) = a(1, 2) + dy * dz
+        a(2, 2) = a(2, 2) + dz * dz
+    Next k
+    a(1, 0) = a(0, 1)
+    a(2, 0) = a(0, 2)
+    a(2, 1) = a(1, 2)
+    If IsArray(vMassa) Then
+        cx = vMassa(0)
+        cy = vMassa(1)
+        cz = vMassa(2)
+    End If
+    Dim v(2, 2) As Double
+    Jacobi a, v
+
+    ' Medidas nas tres direcoes principais; a maior e o eixo da barra.
+    Dim tMenos(2) As Double, tMais(2) As Double, medida(2) As Double
+    For k = 0 To 2
+        tMais(k) = Extremo(swCorpo, v(0, k), v(1, k), v(2, k), cx, cy, cz)
+        tMenos(k) = -Extremo(swCorpo, -v(0, k), -v(1, k), -v(2, k), cx, cy, cz)
+        medida(k) = tMais(k) - tMenos(k)
+    Next k
+    Dim eixo As Long, segunda As Long, terceira As Long
+    eixo = 0
+    If medida(1) > medida(eixo) Then eixo = 1
+    If medida(2) > medida(eixo) Then eixo = 2
+    segunda = (eixo + 1) Mod 3
+    terceira = (eixo + 2) Mod 3
+    If medida(terceira) > medida(segunda) Then
+        k = segunda
+        segunda = terceira
+        terceira = k
+    End If
+    If medida(eixo) <= 0 Then Exit Function
+    g(0) = cx + tMenos(eixo) * v(0, eixo)
+    g(1) = cy + tMenos(eixo) * v(1, eixo)
+    g(2) = cz + tMenos(eixo) * v(2, eixo)
+    g(3) = cx + tMais(eixo) * v(0, eixo)
+    g(4) = cy + tMais(eixo) * v(1, eixo)
+    g(5) = cz + tMais(eixo) * v(2, eixo)
+    g(6) = medida(eixo)
+    g(7) = medida(segunda)
+    g(8) = medida(terceira)
+    ' Chapa: muito fina para a largura (piso, gusset, chapa de base); barra: comprida para a secao.
+    If g(8) <= 0.1 * g(7) And g(6) < 6# * g(7) Then
+        forma = "CHAPA"
+    ElseIf g(6) >= 2# * g(7) Then
+        forma = "BARRA"
+    ElseIf g(8) <= 0.25 * g(7) Then
+        forma = "CHAPA"
+    Else
+        forma = "BLOCO"
+    End If
+    Geometria = True
+    Exit Function
+Falhou:
+    Geometria = False
+End Function
+
+Sub AcrescentarPonto(px() As Double, py() As Double, pz() As Double, n As Long, _
+    ByVal x As Double, ByVal y As Double, ByVal z As Double)
+    If n > UBound(px) Then
+        ReDim Preserve px(2 * n + 1)
+        ReDim Preserve py(2 * n + 1)
+        ReDim Preserve pz(2 * n + 1)
+    End If
+    px(n) = x
+    py(n) = y
+    pz(n) = z
+    n = n + 1
+End Sub
+
+Sub Jacobi(a() As Double, v() As Double)
+    ' Autovetores da matriz simetrica 3 x 3 (colunas de v), pelo metodo de Jacobi.
+    Dim i As Long, j As Long, k As Long, p As Long, q As Long, varredura As Long
+    Dim fora As Double, escala As Double, theta As Double, t As Double, c As Double, s As Double
+    Dim x As Double, y As Double
+    For i = 0 To 2
+        For j = 0 To 2
+            v(i, j) = 0#
+        Next j
+        v(i, i) = 1#
+    Next i
+    For varredura = 1 To 50
+        fora = a(0, 1) * a(0, 1) + a(0, 2) * a(0, 2) + a(1, 2) * a(1, 2)
+        escala = a(0, 0) * a(0, 0) + a(1, 1) * a(1, 1) + a(2, 2) * a(2, 2) + fora
+        If fora <= 1E-24 * escala Then Exit Sub
+        For p = 0 To 1
+            For q = p + 1 To 2
+                If Abs(a(p, q)) > 1E-15 * (Abs(a(p, p)) + Abs(a(q, q))) Then
+                    theta = (a(q, q) - a(p, p)) / (2# * a(p, q))
+                    t = 1# / (Abs(theta) + Sqr(theta * theta + 1#))
+                    If theta < 0 Then t = -t
+                    c = 1# / Sqr(t * t + 1#)
+                    s = t * c
+                    For k = 0 To 2
+                        x = a(k, p)
+                        y = a(k, q)
+                        a(k, p) = c * x - s * y
+                        a(k, q) = s * x + c * y
+                    Next k
+                    For k = 0 To 2
+                        x = a(p, k)
+                        y = a(q, k)
+                        a(p, k) = c * x - s * y
+                        a(q, k) = s * x + c * y
+                    Next k
+                    For k = 0 To 2
+                        x = v(k, p)
+                        y = v(k, q)
+                        v(k, p) = c * x - s * y
+                        v(k, q) = s * x + c * y
+                    Next k
+                End If
+            Next q
+        Next p
+    Next varredura
+End Sub
+
+Function Extremo(swCorpo As SldWorks.Body2, ByVal ex As Double, ByVal ey As Double, ByVal ez As Double, _
+    ByVal cx As Double, ByVal cy As Double, ByVal cz As Double) As Double
+    ' Quanto o corpo vai alem do centro na direcao (ex, ey, ez), em m.
+    Dim x As Double, y As Double, z As Double
+    swCorpo.GetExtremePoint ex, ey, ez, x, y, z
+    Extremo = (x - cx) * ex + (y - cy) * ey + (z - cz) * ez
+End Function
 
 Sub Juntar(pastas As Collection, swFeat As SldWorks.Feature)
     Dim k As Long
@@ -197,6 +559,11 @@ End Function
 
 Function NomeGenerico(nome As String) As Boolean
     NomeGenerico = (LCase(nome) Like "item da lista de corte*") Or (LCase(nome) Like "cut-list-item*")
+End Function
+
+Function Num(ByVal valor As Double, formato As String) As String
+    ' Virgula decimal sempre (o formato "0.0" nao tem separador de milhar em nenhum Windows).
+    Num = Replace(Format(valor, formato), ".", ",")
 End Function
 
 Function Campo(texto As String) As String

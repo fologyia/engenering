@@ -7,7 +7,7 @@ As que geram ações gravam no plano com :func:`gravar_acoes_no_plano`.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 import streamlit as st
@@ -59,6 +59,11 @@ def botao_recarregar_da_base(chaves: Iterable[str], *, key: str, ajuda: str) -> 
 
 def gravar_campo_do_projeto(campo: str, valor: Any, motivo: str) -> bool:
     """Grava ``projeto[campo] = valor`` no projeto ativo (lido na hora, para não perder nada)."""
+    return gravar_campos_do_projeto({campo: valor}, motivo)
+
+
+def gravar_campos_do_projeto(campos: Mapping[str, Any], motivo: str) -> bool:
+    """Grava vários campos do projeto ativo numa gravação só (uma revisão, nada pela metade)."""
     projeto = obter_projeto_ativo()
     if projeto is None:
         st.warning(
@@ -66,7 +71,7 @@ def gravar_campo_do_projeto(campo: str, valor: Any, motivo: str) -> bool:
             icon=":material/folder_off:",
         )
         return False
-    projeto[campo] = valor
+    projeto.update(campos)
     with tratar_conflito_de_gravacao():
         salvo = salvar_projeto(projeto, motivo=motivo)
     registrar_gravacao_vista(salvo)

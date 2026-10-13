@@ -73,6 +73,7 @@ opcoes = [
     "Painel industrial",
     "Projetos permanentes",
     "Base técnica do projeto",
+    "Cargas do esqueleto",
     "Plano de cargas",
     "Esforços do modelo",
     "Lista de material",
@@ -2194,23 +2195,32 @@ elif modulo == "Esforços do modelo":
            programa. O estudo PP leva **só a gravidade**. Duplique o estudo PP para os outros
            casos (excluindo a gravidade) para manter a **mesma malha** em todos (os esforços são
            combinados elemento a elemento).
-        2. Em cada estudo, salve **Listar forças da viga** e **Listar forças resultantes**.
-        3. Envie os arquivos de uma vez, confira o caso de cada um e grave.
+        2. Em cada estudo, salve **Listar forças da viga** e **Listar forças resultantes**. Com
+           a peça aberta, rode também a **macro do SolidWorks** (botão na página): ela grava o
+           **…_esqueleto.csv**, com a posição, o comprimento e o volume de cada barra.
+        3. Envie os arquivos de uma vez (os do Simulation e o esqueleto), confira o caso de cada
+           um e grave. O mesmo caso em dois arquivos bloqueia a gravação.
         4. Leia a **conferência das reações**: num caso só vertical, a reação horizontal precisa
            dar quase zero; as forças concentradas do plano precisam bater com as reações; o PP
-           precisa dar o peso da estrutura (com a **Lista de material** montada). Reações γ vezes
-           a carga (1,25; 1,4; 1,5…) denunciam estudo majorado: refaça com as cargas
-           características.
-        5. Preencha a **tabela das barras** (perfil, tipo, eixo forte) e veja o **pior caso de cada
+           precisa dar o peso da estrutura (pelo esqueleto ou pela **Lista de material**).
+           Reações γ vezes a carga (1,25; 1,4; 1,5…) denunciam estudo majorado: refaça com as
+           cargas características.
+        5. Leia **o que o programa entendeu do modelo**: pilares, vigas e contraventamentos
+           reconhecidos e os avisos — ponta solta (junta que faltou), malha grossa, dois casos
+           iguais, gravidade esquecida num estudo duplicado, PP com carga a mais, malha ou modelo
+           que mudou entre os estudos, 2ª ordem global (B₂). Os vermelhos invalidam a análise:
+           corrija no SolidWorks e importe de novo.
+        6. Na **tabela das barras**, use **Aplicar as sugestões** (preenche só o vazio: tipo,
+           perfil do modelo, eixo forte e comprimentos), confira e veja o **pior caso de cada
            barra**.
-        6. Em **Parâmetros da verificação**, informe por tipo de barra o aço, os comprimentos de
+        7. Em **Parâmetros da verificação**, informe por tipo de barra o aço, os comprimentos de
            flambagem Lx e Ly, o Lb, o Cb e o B₂ (da página Contraventamento).
-        7. Leia a **Verificação das barras** (atendem, não atendem, sem dados), abra o cálculo
+        8. Leia a **Verificação das barras** (atendem, não atendem, sem dados), abra o cálculo
            completo de qualquer barra e **registre** no projeto: o memorial ganha o capítulo.
-        8. Marque os **pilares** (tipo Pilar) e veja o **quadro de cargas para as fundações**:
+        9. Marque os **pilares** (tipo Pilar) e veja o **quadro de cargas para as fundações**:
            a base de cada pilar, caso a caso, sem combinar nem majorar (critério Anglo 5.9), com
            Excel, CSV e registro.
-        9. Em **Placas de base dos pilares**, informe a placa padrão (N, B, espessura, f_ck e os
+        10. Em **Placas de base dos pilares**, informe a placa padrão (N, B, espessura, f_ck e os
            chumbadores) e grave: o programa combina os esforços da base de cada pilar e verifica
            a placa e os chumbadores pelo Design Guide 1 do AISC, com as exigências da Anglo
            (placa ≥ 16 mm, chumbador ≥ 5/8" e o furo, a arruela e o graute do item 8.7).
@@ -2248,6 +2258,88 @@ elif modulo == "Esforços do modelo":
             """
         )
     link_modulo("app_pages/esforcos_modelo.py", "Abrir Esforços do modelo")
+
+
+elif modulo == "Cargas do esqueleto":
+    from core import cargas_esqueleto as _ce
+
+    st.header("Cargas do esqueleto")
+    st.markdown(
+        "No SolidWorks modele **só o esqueleto**: pilares, vigas e contraventamento. O que existe na "
+        "obra mas não está no modelo — piso, guarda-corpo, escadas, equipamentos, tubulações, "
+        "ligações — e a sobrecarga viram **cargas características nas barras**, caso a caso, e vão "
+        "para o Plano de cargas, de onde sai a planilha para aplicar no SolidWorks."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Eixos", "Posição dos eixos 1, 2, 3… em X e A, B, C… em Y (m)", "Planta de locação"],
+            [
+                "Níveis",
+                "Cota, em que vigas o piso apoia, vão máximo do piso, piso e sobrecarga (kN/m²)",
+                "Planta, catálogo da grade, base técnica",
+            ],
+            ["Guarda-corpo", "Bordas que têm e o peso por metro com o rodapé", "Arranjo"],
+            ["Ligações", "Acréscimo no peso próprio (5 a 10 %)", "Prática da empresa"],
+            [
+                "Escadas, equipamentos, tubulações",
+                "Onde chegam ou passam, pesos, apoios e impacto (critério Anglo 5.3)",
+                "Arranjo e fornecedores",
+            ],
+        ]
+    )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Informe os eixos e os níveis. O programa põe as **vigas secundárias** que o vão do piso
+           pede — elas também vão no esqueleto do SolidWorks.
+        2. Informe o que não está no modelo: guarda-corpo, acréscimo de ligações, escadas,
+           equipamentos e tubulações.
+        3. Confira a planta de cada nível, as cargas de cada barra e a **conferência** (a soma do
+           que foi aplicado precisa bater com o que entrou).
+        4. Use **Gravar e enviar ao plano**: os casos PE, SC, EQ, EO e IM (e a temperatura) vão
+           para o Plano de cargas, e o PP passa a usar a gravidade × (1 + acréscimo).
+        5. No Plano de cargas, exporte a planilha e aplique no SolidWorks — um estudo por caso,
+           com as cargas características.
+        """
+    )
+    _r = _ce.calcular(_ce.EntradaEsqueleto())
+    _sc = {c.barra: c.valor_kN_m for c in _ce.por_barra(_r) if c.caso == "SC"}
+    _secundarias = len({b.nome.split(" · ")[1] for b in _r.barras if b.tipo == _ce.TIPO_SECUNDARIA})
+
+    def _virgula(valor: float, casas: int = 1) -> str:
+        return f"{valor:.{casas}f}".replace(".", ",")
+
+    mostrar_exemplo(
+        [
+            ["Eixos", "X: 0; 6; 12 m (1, 2, 3) · Y: 0; 3 m (A, B)"],
+            ["Nível", "+3,00 m, piso nas vigas paralelas a X, vão máximo 1,20 m"],
+            ["Cargas", "piso 0,30 kN/m²; sobrecarga 5,0 kN/m²; guarda-corpo 0,25 kN/m"],
+        ],
+        f"Resultado esperado: {_secundarias} vigas secundárias em cada vão, a 1,00 m; "
+        "sobrecarga de "
+        f"{_virgula(_sc['N1 · secundária A–B nº 1 · 1–2'])} kN/m em cada secundária e "
+        f"{_virgula(_sc['N1 · eixo A · 1–2'])} kN/m nas vigas dos eixos A e B; SC total "
+        f"{_virgula(_ce.resumo_do_caso(_r, 'SC'))} kN (5,0 × 36 m²) e PE "
+        f"{_virgula(_ce.resumo_do_caso(_r, 'PE'))} kN (piso 10,8 + guarda-corpo 7,5).",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Largura de influência:** cada viga em que o piso apoia recebe a carga por área ×
+              metade da distância às vizinhas de cada lado; as vigas perpendiculares recebem as
+              reações pelo próprio modelo.
+            - **Guarda-corpo:** só o peso entra no esqueleto; a força horizontal de 1 kN/m no topo
+              é verificação local do guarda-corpo.
+            - **Escadas:** o apoio de cima leva metade do peso e da sobrecarga, em duas forças (as
+              longarinas); o de baixo vai direto à fundação.
+            - **Ligações:** não se modelam — entram multiplicando a gravidade do caso PP; a
+              conferência do peso próprio em Esforços do modelo já considera esse fator.
+            - **Conferência:** as larguras de influência fecham a largura do piso por construção;
+              a importação dos esforços depois confere as reações do modelo contra estas cargas.
+            """
+        )
+    link_modulo("app_pages/cargas_esqueleto.py", "Abrir Cargas do esqueleto")
 
 
 elif modulo == "Lista de material":

@@ -156,10 +156,22 @@ class CargaDoModelo:
     #: Em quantos pontos iguais a carga vai (os nós pilar–viga de um pórtico, por exemplo): o
     #: total da linha é valor × quantidade.
     quantidade: int = 1
+    #: Comprimento de cada barra numa carga distribuída (kN/m), quando se conhece: a resultante da
+    #: linha passa a ser valor × comprimento × quantidade (a conferência das reações usa).
+    comprimento_m: float = 0.0
 
     @property
     def total(self) -> float:
         return self.valor * self.quantidade
+
+    @property
+    def resultante(self) -> float | None:
+        """kN que a linha leva ao modelo; ``None`` quando não dá para saber (kN/m sem comprimento)."""
+        if self.unidade == "kN":
+            return self.valor * self.quantidade
+        if self.unidade == "kN/m" and self.comprimento_m > 0:
+            return self.valor * self.comprimento_m * self.quantidade
+        return None
 
 
 @dataclass(frozen=True)
@@ -180,10 +192,17 @@ class Acao:
         return comb.categoria_nbr(self.categoria).tipo
 
 
+#: Faixa aceita para o fator do peso próprio (ligações, chapas e parafusos não modelados).
+FATOR_PESO_PROPRIO_MAXIMO = 1.30
+
+
 @dataclass(frozen=True)
 class PlanoDeCargas:
     acoes: tuple[Acao, ...] = ()
     atualizado_em: str = ""
+    #: O peso próprio do modelo vem da gravidade sobre as peças modeladas; o que não está no
+    #: modelo (ligações, chapas, parafusos) entra multiplicando a gravidade (Cargas do esqueleto).
+    fator_peso_proprio: float = 1.0
 
     def acao(self, codigo: str) -> Acao | None:
         return next((a for a in self.acoes if a.codigo == codigo), None)
@@ -245,6 +264,8 @@ def validar_acao(a: Acao) -> list[str]:
             erros.append(f"{a.codigo}: unidade desconhecida ({c.unidade!r}).")
         if c.quantidade < 1:
             erros.append(f"{a.codigo}: a quantidade de {c.elemento!r} precisa ser 1 ou mais.")
+        if not (math.isfinite(c.comprimento_m) and c.comprimento_m >= 0):
+            erros.append(f"{a.codigo}: comprimento inválido em {c.elemento!r}.")
     return erros
 
 
@@ -256,44 +277,84 @@ def com_acao(plano: PlanoDeCargas, acao: Acao) -> PlanoDeCargas:
     outras = [a for a in plano.acoes if a.codigo != acao.codigo]
     ordem = {c.codigo: i for i, c in enumerate(CODIGOS)}
     acoes = sorted([*outras, acao], key=lambda a: (ordem.get(a.codigo, len(ordem)), a.codigo))
-    return PlanoDeCargas(tuple(acoes), agora())
+    return replace(plano, acoes=tuple(acoes), atualizado_em=agora())
 
 
 def sem_acao(plano: PlanoDeCargas, codigo: str) -> PlanoDeCargas:
-    return PlanoDeCargas(tuple(a for a in plano.acoes if a.codigo != codigo), agora())
+    return replace(
+        plano, acoes=tuple(a for a in plano.acoes if a.codigo != codigo), atualizado_em=agora()
+    )
+
+
+def com_fator_peso_proprio(plano: PlanoDeCargas, fator: float) -> PlanoDeCargas:
+    if not (math.isfinite(fator) and 1.0 <= fator <= FATOR_PESO_PROPRIO_MAXIMO):
+        raise PlanoInvalido(
+            f"O fator do peso próprio precisa estar entre 1,00 e {FATOR_PESO_PROPRIO_MAXIMO:.2f}."
+        )
+    return replace(plano, fator_peso_proprio=fator, atualizado_em=agora())
 
 
 # ---------------------------------------------------------------------------------------------
 # Leitura e gravação no projeto
 # ---------------------------------------------------------------------------------------------
 def para_dicionario(plano: PlanoDeCargas) -> dict[str, Any]:
-    return {"acoes": [asdict(a) for a in plano.acoes], "atualizado_em": plano.atualizado_em}
+    return {
+        "acoes": [asdict(a) for a in plano.acoes],
+        "atualizado_em": plano.atualizado_em,
+        "fator_peso_proprio": plano.fator_peso_proprio,
+    }
+
+
+def _lista_gravada(valor: Any) -> list[Any] | tuple[Any, ...]:
+    return valor if isinstance(valor, list | tuple) else []
+
+
+def _numero_gravado(valor: Any, padrao: float) -> float:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return padrao
+    return numero if math.isfinite(numero) else padrao
+
+
+def _categoria_gravada(valor: Any, codigo: str) -> str:
+    """A categoria da NBR 8800 gravada; desconhecida, a padrão do código (ou sobrecarga)."""
+    rotulos = {c.rotulo for c in comb.CATEGORIAS_NBR8800}
+    if isinstance(valor, str) and valor in rotulos:
+        return valor
+    if codigo in CODIGOS_POR_NOME:
+        return CODIGOS_POR_NOME[codigo].categoria
+    return CATEGORIA_SC
 
 
 def de_dicionario(dados: Mapping[str, Any] | None) -> PlanoDeCargas:
+    """Lê o plano gravado no projeto; o que estiver fora do formato volta ao padrão."""
     if not isinstance(dados, Mapping):
         return PlanoDeCargas()
     acoes = []
-    for item in dados.get("acoes") or []:
-        if not isinstance(item, Mapping):
-            continue
+    for item in _lista_gravada(dados.get("acoes")):
+        codigo = str(item.get("codigo") or "").strip() if isinstance(item, Mapping) else ""
+        if not codigo:
+            continue  # uma ação sem código não entra nas combinações nem no modelo
         cargas = tuple(
             CargaDoModelo(
                 elemento=str(c.get("elemento") or ""),
-                valor=float(c.get("valor") or 0.0),
+                valor=_numero_gravado(c.get("valor"), 0.0),
                 unidade=str(c.get("unidade") or "kN"),
                 direcao=str(c.get("direcao") or "—"),
                 observacao=str(c.get("observacao") or ""),
-                quantidade=max(1, int(c.get("quantidade") or 1)),
+                quantidade=max(1, int(_numero_gravado(c.get("quantidade"), 1.0))),
+                comprimento_m=max(0.0, _numero_gravado(c.get("comprimento_m"), 0.0)),
             )
-            for c in item.get("cargas") or []
+            for c in _lista_gravada(item.get("cargas"))
             if isinstance(c, Mapping)
         )
         acoes.append(
             Acao(
-                codigo=str(item.get("codigo") or ""),
-                nome=str(item.get("nome") or ""),
-                categoria=str(item.get("categoria") or CATEGORIA_SC),
+                codigo=codigo,
+                nome=str(item.get("nome") or "").strip()
+                or (CODIGOS_POR_NOME[codigo].nome if codigo in CODIGOS_POR_NOME else codigo),
+                categoria=_categoria_gravada(item.get("categoria"), codigo),
                 grupo=str(item.get("grupo") or ""),
                 origem=str(item.get("origem") or "Informada"),
                 registro_id=str(item.get("registro_id") or ""),
@@ -303,7 +364,12 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> PlanoDeCargas:
                 atualizado_em=str(item.get("atualizado_em") or ""),
             )
         )
-    return PlanoDeCargas(tuple(acoes), str(dados.get("atualizado_em") or ""))
+    fator = _numero_gravado(dados.get("fator_peso_proprio"), 1.0)
+    return PlanoDeCargas(
+        tuple(acoes),
+        str(dados.get("atualizado_em") or ""),
+        fator if 1.0 <= fator <= FATOR_PESO_PROPRIO_MAXIMO else 1.0,
+    )
 
 
 def plano_do_projeto(projeto: Mapping[str, Any] | None) -> PlanoDeCargas:

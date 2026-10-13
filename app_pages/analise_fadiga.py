@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import fatigue as fat
 from core import fatigue_report, memorial_word
@@ -81,7 +82,7 @@ except (FileNotFoundError, ValueError) as erro:
     st.error(f"Não foi possível carregar a base de materiais: {erro}", icon=":material/error:")
     st.stop()
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. Material de referência"):
     st.subheader("1. Material de referência")
     material_esquerda, material_direita = st.columns([1, 1])
     with material_esquerda:
@@ -156,7 +157,7 @@ if Sy > Sut:
     st.stop()
 Se_linha, vida_infinita = fat.se_linha(Sut, material)
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Fator de carregamento"):
     st.subheader("2. Fator de carregamento")
     carga_controle, carga_referencia = st.columns([0.8, 1.2])
     with carga_controle:
@@ -196,7 +197,7 @@ with st.container(border=True):
         )
         st.caption("Norton: PDF p. 356, Eq. 6.7a. Shigley: PDF p. 302, Eq. 6-26.")
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Fator de tamanho"):
     st.subheader("3. Fator de tamanho")
     tamanho_controle, tamanho_grafico = st.columns([0.95, 1.05])
     diametro_maximo = 10_000.0 if modelo == "norton" else 254.0
@@ -487,7 +488,7 @@ with st.container(border=True):
         st.caption(
             "As linhas tracejadas indicam as mudancas de trecho da correlacao. Para Norton, d > 250 mm usa 0,600."
         )
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Fator de acabamento superficial"):
     st.subheader("4. Fator de acabamento superficial")
     superficie_controle, superficie_grafico = st.columns([0.8, 1.2])
     with superficie_controle:
@@ -650,7 +651,7 @@ with st.container(border=True):
             "O ponto preto é o valor efetivamente usado no cálculo."
         )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("5. Fator de temperatura"):
     st.subheader("5. Fator de temperatura")
     temperatura_controle, temperatura_grafico = st.columns([0.8, 1.2])
     with temperatura_controle:
@@ -849,7 +850,7 @@ with st.container(border=True):
             "Passe o cursor sobre a curva para conferir °C, °F e Ctemp."
         )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("6. Fator de confiabilidade"):
     st.subheader("6. Fator de confiabilidade")
     confiabilidade_controle, confiabilidade_tabela = st.columns([0.8, 1.2])
     with confiabilidade_controle:
@@ -886,7 +887,7 @@ with st.container(border=True):
             "Norton, PDF p. 361, Tabela 6-4; "
             "Shigley, PDF p. 305, Tabela 6-5."
         )
-with st.container(border=True):
+with st.container(border=True), secao_protegida("7. Resultado da equação de Marin"):
     st.subheader("7. Resultado da equação de Marin")
     fatores = {
         "Carregamento": Ccarreg,
@@ -944,7 +945,7 @@ with st.container(border=True):
     )
     st.altair_chart(grafico_impacto, width="stretch")
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("8. Concentração e sensibilidade ao entalhe"):
     st.subheader("8. Concentração e sensibilidade ao entalhe")
     st.caption(
         "Escolha se a tensão alternada é nominal sem entalhe, corrigida "
@@ -1106,7 +1107,7 @@ with st.container(border=True):
             "separadamente na seção seguinte."
         )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("9. Segurança por Goodman e Soderberg"):
     st.subheader("9. Segurança por Goodman e Soderberg")
     st.caption(
         "Carregamento proporcional com tensão média de tração. Para tensão "
@@ -1275,7 +1276,7 @@ with st.container(border=True):
         "Eqs. 6.15 e 6.16. Shigley: PDF pp. 318–319, Eqs. 6-44 e 6-45."
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("10. Curva S–N e estimativa de vida"):
     st.subheader("10. Curva S–N e estimativa de vida")
     N1 = 1.0e3
     N2 = 1.0e6 if vida_infinita else 5.0e8
@@ -1444,7 +1445,7 @@ if not vida_infinita:
         icon=":material/warning:",
     )
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("11. Resumo do problema e memória de cálculo"):
     st.subheader("11. Resumo do problema e memória de cálculo")
     st.caption(
         "Tabela consolidada das entradas, hipóteses, fatores e resultados "

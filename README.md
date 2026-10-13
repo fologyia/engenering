@@ -358,6 +358,14 @@ cargas (caso vertical sem reação horizontal, forças concentradas equilibradas
 combina os casos **ponto a ponto** para achar o pior de cada barra (compressão, tração, momento
 forte com o N junto, momento fraco, cortante, torque). Perfil lido do nome da viga quando o
 SolidWorks diz qual é; tabela das barras com perfil, tipo e eixo forte gravada no projeto.
+
+A **leitura do modelo** (`core/leitura_do_modelo.py`) diz o que o programa entendeu: com o
+`<peça>_esqueleto.csv` da macro, o tipo de cada barra pela posição (pilar, viga, contraventamento), o
+comprimento e o perfil da seção real do modelo; barra a barra, pontas soltas, articuladas ou
+rígidas e malha grossa; no conjunto, estudo majorado ou com outras cargas no PP (contra o aço do
+esqueleto), gravidade esquecida num estudo duplicado, casos repetidos ou sem carga, modelo ou malha
+que mudou entre os estudos, eixo vertical trocado, unidade errada e a 2ª ordem global (B₂). O botão
+"Aplicar as sugestões" preenche a tabela das barras só onde está vazia.
 **Verificação de todas as barras** (`core/verificacao_barras.py`) pela NBR 8800 com os esforços de
 todas as combinações ELU em todos os pontos, multiplicados pelo B₂ do tipo: varredura rápida da
 interação e verificação completa dos pontos críticos pelo motor da Flambagem de colunas (todos os
@@ -399,6 +407,18 @@ pórtico**, **em cada nó** pilar–viga e **carga por metro** em pilares, vigas
 dos pórticos com as forças; CSV (ponto e vírgula, vírgula decimal); envio de W0, W90, W180 e W270 ao
 **plano de cargas**; registro com capítulo próprio no memorial (resultado, entradas, método e as
 tabelas). Usa os mesmos campos do Contraventamento de estruturas abertas.
+
+### Cargas do esqueleto
+
+No SolidWorks modela-se só o esqueleto (pilares, vigas e contraventamento); a página transforma o
+que não está no modelo em cargas características nas barras, caso a caso
+(`core/cargas_esqueleto.py`; detalhes em `docs/cargas_do_esqueleto.md`): piso e sobrecarga por
+largura de influência nas vigas em que o piso apoia (com as vigas secundárias que o vão do piso
+pede), guarda-corpo nas bordas, tubulações por eixo, escadas e equipamentos em forças nos apoios
+(impacto do critério Anglo 5.3), temperatura ±10 °C e as ligações não modeladas multiplicando a
+gravidade do PP. Planta de cada nível com a carga de cada viga, conferência (o aplicado bate com o
+que entrou), envio ao Plano de cargas com os comprimentos (a conferência das reações do modelo fecha
+contra estas cargas), CSV e registro no memorial.
 
 ### Base técnica do projeto e Plano de cargas
 
@@ -682,6 +702,16 @@ mypy
 pytest -q
 ```
 
+## Robustez e diagnóstico
+
+Nada técnico aparece na tela (`docs/robustez.md`): uma falha inesperada fica contida na seção ou na
+página e vira uma linha discreta no fim da página com uma referência curta e estável ("ref. 3F2A9C");
+o detalhe (traceback) vai para `diagnostico/ocorrencias.jsonl`, ao lado do banco de projetos. Arquivos
+enviados e dados gravados fora do formato viram mensagem ou valor padrão, nunca uma tela de erro; NaN
+e infinito são conferidos em silêncio e não são gravados. Os testes rodam com
+`MECANICA_TOOLKIT_ERROS=levantar`, para nenhuma falha passar escondida, e incluem entradas aleatórias
+e estragadas e a abertura de todas as páginas com dados do projeto corrompidos.
+
 ## Estrutura
 
 ```text
@@ -698,6 +728,7 @@ mecanica_toolkit/
 │   ├── painel_industrial.py
 │   ├── gestao_projetos.py
 │   ├── base_tecnica.py
+│   ├── cargas_esqueleto.py
 │   ├── plano_cargas.py
 │   ├── esforcos_modelo.py
 │   ├── lista_de_material.py
@@ -729,6 +760,8 @@ mecanica_toolkit/
 │   ├── plano_de_cargas.py
 │   ├── exportacao_cargas.py
 │   ├── esforcos_modelo.py
+│   ├── cargas_esqueleto.py
+│   ├── diagnostico.py
 │   ├── verificacao_barras.py
 │   ├── quadro_fundacoes.py
 │   ├── placa_base_pilares.py

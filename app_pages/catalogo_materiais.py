@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import material_catalog as catalogo
 
@@ -31,7 +32,7 @@ criterios = catalogo.criterios_carregados()
 # 1. O que está disponível
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("1. Materiais disponíveis"):
     st.subheader("1. Materiais disponíveis")
     metricas = st.columns(min(len(resumo) + 1, 4))
     metricas[0].metric("Materiais no catálogo", len(completo), border=True)
@@ -121,7 +122,7 @@ with st.container(border=True):
 # 2. Cadastrar ou editar
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("2. Cadastrar ou editar um material"):
     st.subheader("2. Cadastrar ou editar um material")
 
     editaveis = sorted(completo.loc[completo["editavel"], "nome"])
@@ -279,7 +280,7 @@ with st.container(border=True):
 # 3. Excluir
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("3. Excluir um material cadastrado"):
     st.subheader("3. Excluir um material cadastrado")
     if not editaveis:
         st.caption(
@@ -322,7 +323,7 @@ with st.container(border=True):
 # 4. Importar em lote
 # ---------------------------------------------------------------------------
 
-with st.container(border=True):
+with st.container(border=True), secao_protegida("4. Importar uma tabela de materiais"):
     st.subheader("4. Importar uma tabela de materiais")
     st.markdown(
         "Cole a tabela de materiais de um critério de projeto ou de um catálogo. "
