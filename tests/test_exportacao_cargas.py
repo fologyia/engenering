@@ -198,13 +198,15 @@ def test_planilha_excel_tem_as_cinco_abas():
         "Leia-me",
         "Ações",
         "Cargas",
+        "Casos de carga (SolidWorks)",
+        "Cargas do estudo",
         "Combinações",
         "Combinações (lista)",
     ]
     leia = " ".join(str(c.value) for c in livro["Leia-me"]["A"] if c.value)
     assert "NO SOLIDWORKS SIMULATION" in leia and "Plataforma P1" in leia and "5.9" in leia
     assert "Um estudo estático por caso" in leia and "nunca majore no SolidWorks" in leia
-    assert "Gerenciador de casos" not in leia
+    assert "GERENCIADOR DE CASOS DE CARGA" in leia and "código do caso no nome" in leia
     cargas = list(livro["Cargas"].values)
     assert cargas[0] == ex.COLUNAS_CARGAS
     assert len(cargas) == 1 + len(ex.linhas_de_carga(plano, ex.UNIDADES_N_MM, ex.EIXO_Y_PARA_CIMA))
@@ -298,3 +300,60 @@ def test_vento_com_carga_vertical_pede_conferencia():
 def test_simbolos(codigo, unidade, direcao, esperado):
     acao = pc.nova_acao(codigo, cargas=[pc.CargaDoModelo("e", 1.0, unidade, direcao)])
     assert pc.simbolo(acao) == esperado
+
+
+# ------------------------------------------------------------------ gerenciador de casos de carga
+def test_cenario_de_carga_como_a_tela_do_solidworks():
+    plano = plano_completo()
+    plano = pc.com_acao(
+        plano, pc.nova_acao("T−", cargas=[pc.CargaDoModelo("Toda a estrutura", -10, "°C", "—")])
+    )
+    c = ex.cenario_de_carga(plano, ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA, comb.ESTADOS_PADRAO)
+    nomes = [carga.nome for carga in c.cargas]
+    assert nomes == ["Gravidade-1", "Pressão-1", "Força-1", "Força-2", "Temperatura-1"]
+    gravidade, pressao, forca_x, forca_y, temperatura = c.cargas
+    assert gravidade.referencia == "−Y (para baixo)" and gravidade.valor_ao_criar == 9.81
+    assert pressao.referencia == "normal à face" and pressao.valor_ao_criar == 5000.0
+    # O vento em X: W0 e W180 são a mesma carga, criada em +X, com sinais opostos.
+    assert forca_x.referencia == "+X" and forca_x.valor_ao_criar == 2000.0
+    # O Y da planta é o −Z do SolidWorks: W90 cria a carga em −Z.
+    assert forca_y.referencia == "−Z" and forca_y.valor_ao_criar == 3000.0
+    cabecalho, linhas = ex.tabela_do_cenario(c)
+    assert cabecalho[0] == "Caso de carga primário" and len(cabecalho) == 6
+    tabela = {linha[0]: linha[1:] for linha in linhas}
+    assert tabela["PP"] == ["9,81", "Suprimir", "Suprimir", "Suprimir", "Suprimir"]
+    assert tabela["SC"][1] == "5000"
+    assert tabela["W0"][2] == "2000" and tabela["W180"][2] == "-2000"
+    assert tabela["W90"][3] == "3000" and tabela["W270"][3] == "-3000"
+    assert tabela["T-"][4] == "-10"  # o código vai com hífen, como se digita no SolidWorks
+    assert all(e.count('"') % 2 == 0 for _, e in c.combinacoes)
+    assert any('"T-"' in e for _, e in c.combinacoes)
+    assert all("−" not in e for _, e in c.combinacoes)
+
+
+def test_forca_em_varios_pontos_e_valor_por_item():
+    plano = pc.com_acao(
+        pc.PlanoDeCargas(),
+        pc.nova_acao(
+            "EQ", cargas=[pc.CargaDoModelo("Apoios do tanque", 12.5, "kN", "Z (vertical)", "", 4)]
+        ),
+    )
+    (carga,) = ex.cenario_de_carga(plano, ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA, []).cargas
+    assert carga.referencia == "−Y (para baixo)" and carga.valor_ao_criar == 12500.0
+    assert "4 pontos: valor por item" in carga.observacao
+
+
+def test_csv_do_cenario_traz_as_combinacoes_embaixo():
+    c = ex.cenario_de_carga(
+        plano_completo(), ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA, comb.ESTADOS_PADRAO
+    )
+    texto = ex.csv_do_cenario(c).decode("utf-8-sig")
+    assert texto.splitlines()[0].startswith("Caso de carga primário;Gravidade-1:")
+    assert "Suprimir" in texto and "Combinações de casos de carga (para ver no SolidWorks)" in texto
+    linhas = list(csv.reader(io.StringIO(texto), delimiter=";"))
+    assert any(len(linha) == 2 and '*"PP"' in linha[1] for linha in linhas)
+
+
+def test_plano_sem_cargas_nao_tem_cenario():
+    c = ex.cenario_de_carga(pc.PlanoDeCargas(), ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA, [])
+    assert c.cargas == () and ex.tabela_do_cenario(c)[1] == []

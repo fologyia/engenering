@@ -352,3 +352,16 @@ def test_tabela_e_csv_da_envoltoria():
 def test_caso_sugerido_pelo_assunto_do_estudo(estudo, caso):
     assert em.caso_sugerido(estudo, ["PP", "SC", "W0"]) == caso
     assert em.caso_sugerido("Apenas Gravidade", ["SC"]) is None  # PP fora do plano: não sugere
+
+
+def test_caso_de_carga_do_cabecalho_ou_do_nome_do_arquivo():
+    """No gerenciador de casos de carga, todos os casos saem do mesmo estudo."""
+    base = sw.csv_forcas_da_viga("W0", estudo="Análise estática 1").decode("cp1252")
+    com_caso = base.replace("Nome do estudo:", "Caso de carga: W0\r\nNome do estudo:", 1)
+    a = em.ler_arquivo(com_caso.encode("cp1252"), "forcas.csv")
+    assert a.caso_de_carga == "W0" and a.tipo == em.TIPO_VIGAS
+    assert em.caso_do_arquivo_sugerido(a, ["PP", "SC", "W0"]) == "W0"
+    sem = em.ler_arquivo(base.encode("cp1252"), "SC-forcas.csv")
+    assert sem.caso_de_carga == "" and em.caso_do_arquivo_sugerido(sem, ["PP", "SC", "W0"]) == "SC"
+    anonimo = em.ler_arquivo(base.encode("cp1252"), "Análise estática 1-Força-1.csv")
+    assert em.caso_do_arquivo_sugerido(anonimo, ["PP", "SC", "W0"]) is None

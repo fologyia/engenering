@@ -143,6 +143,8 @@ class ArquivoLido:
     tensao_maxima_MPa: float | None = None
     avisos: tuple[str, ...] = ()
     tensoes_da_viga: Mapping[str, tuple[TensaoDaViga, ...]] = field(default_factory=dict)
+    #: O caso de carga (gerenciador de casos de carga do SolidWorks), se o arquivo disser.
+    caso_de_carga: str = ""
 
 
 def _sem_acento(texto: str) -> str:
@@ -190,6 +192,32 @@ def _separador(linhas: Sequence[str]) -> str:
     return ";" if amostra.count(";") >= amostra.count(",") else ","
 
 
+def _caso_de_carga(linhas: Sequence[str]) -> str:
+    """O caso de carga escrito no cabeçalho ("Caso de carga: SC", "Load case: W0"), se houver."""
+    for linha in linhas[:12]:
+        texto = linha.strip().strip(";").strip()
+        normal = _normal(texto)
+        if normal.startswith(("casodecarga", "loadcase", "cenariodecarga", "combinacao")) and (
+            ":" in texto
+        ):
+            return texto.split(":", 1)[1].strip(" ;")
+    return ""
+
+
+def caso_do_arquivo_sugerido(arquivo: ArquivoLido, codigos: Iterable[str]) -> str | None:
+    """O caso de um arquivo: pelo caso de carga do cabeçalho, pelo nome do estudo ou pelo nome do
+    arquivo (no gerenciador de casos de carga, todos os casos saem do mesmo estudo)."""
+    lista = list(codigos)
+    for texto in (arquivo.caso_de_carga, arquivo.estudo):
+        if texto and (caso := caso_sugerido(texto, lista)):
+            return caso
+    nome = arquivo.nome_arquivo.rsplit(".", 1)[0]
+    for pedaco in (nome.replace(arquivo.estudo, " ") if arquivo.estudo else nome, nome):
+        if caso := caso_sugerido(pedaco, lista):
+            return caso
+    return None
+
+
 def _estudo_e_data(linhas: Sequence[str]) -> tuple[str, str]:
     estudo, data = "", ""
     for linha in linhas[:8]:
@@ -209,7 +237,8 @@ def ler_arquivo(conteudo: bytes, nome_arquivo: str = "") -> ArquivoLido:
     ocorrência no diagnóstico (com ``MECANICA_TOOLKIT_ERROS=levantar``, a falha original sobe).
     """
     try:
-        return _ler_arquivo(conteudo, nome_arquivo)
+        lido = _ler_arquivo(conteudo, nome_arquivo)
+        return replace(lido, caso_de_carga=_caso_de_carga(_decodificar(conteudo).splitlines()))
     except ArquivoInvalido:
         raise
     except Exception as erro:

@@ -370,7 +370,15 @@ def test_exportacao_mostra_as_cargas_nas_unidades_e_eixos_escolhidos(banco_com_p
     assert w90["Fz"] == -3000.0
     chaves = {b.key for b in t.get("download_button")}
     assert {"pc_xlsx", "pc_csv_cargas", "pc_csv_matriz", "pc_csv_lista", "pc_csv_acoes"} <= chaves
+    assert "pc_csv_cenario" in chaves
     assert "Convenção de eixos e sinais" in [s.value for s in t.subheader]
+    # O gerenciador de casos de carga do SolidWorks: uma linha por caso, "Suprimir" onde não há.
+    assert any(
+        s.value.startswith("Gerenciador de casos de carga do SolidWorks") for s in t.subheader
+    )
+    cenario = next(d.value for d in t.dataframe if "Caso de carga primário" in d.value.columns)
+    pp = cenario[cenario["Caso de carga primário"] == "PP"].iloc[0]
+    assert pp.iloc[1] == "9,81" and set(pp.iloc[2:]) == {"Suprimir"}
 
 
 def test_combinacoes_em_matriz_ou_expressoes(banco_com_projeto):

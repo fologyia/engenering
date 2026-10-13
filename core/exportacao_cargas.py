@@ -387,6 +387,223 @@ def csv_lista(plano: pc.PlanoDeCargas, estados: Sequence[str]) -> bytes:
 
 
 # ---------------------------------------------------------------------------------------------
+# Gerenciador de casos de carga do SolidWorks (vista de cenário de carga)
+# ---------------------------------------------------------------------------------------------
+#: O nome que o SolidWorks dá a cada tipo de carga (Força-1, Pressão-1…), na ordem em que é criada.
+NOME_NO_SOLIDWORKS = {
+    TIPO_GRAVIDADE: "Gravidade",
+    TIPO_NODAL: "Força",
+    TIPO_LINHA: "Força",
+    TIPO_AREA: "Pressão",
+    TIPO_MOMENTO: "Torque",
+    TIPO_TEMPERATURA: "Temperatura",
+}
+SUPRIMIR = "Suprimir"
+
+
+def nome_no_solidworks(codigo: str) -> str:
+    """O código do caso como se digita no SolidWorks: o "−" do programa vira hífen (T− → T-)."""
+    return codigo.replace("−", "-")
+
+
+@dataclass(frozen=True)
+class CargaDoEstudo:
+    """Uma carga criada uma vez no estudo e ligada ou suprimida em cada caso primário."""
+
+    numero: int
+    nome: str  # como o SolidWorks vai chamar, se criada nesta ordem (Força-2)
+    tipo: str
+    onde: str
+    referencia: str  # o sentido em que a carga é criada ("−Y (para baixo)", "+X", "normal à face")
+    unidade: str
+    valor_ao_criar: float  # o do primeiro caso que usa a carga
+    comando: str
+    observacao: str
+
+    @property
+    def titulo(self) -> str:
+        return f"{self.nome}: {self.onde} — {self.referencia} ({self.unidade})"
+
+
+@dataclass(frozen=True)
+class CenarioDeCarga:
+    cargas: tuple[CargaDoEstudo, ...]
+    casos: tuple[tuple[str, str], ...]  # (código, nome) dos casos primários
+    valores: dict[tuple[str, int], float]  # (caso, carga) → valor no sentido de referência
+    combinacoes: tuple[tuple[str, str], ...]  # (nome, expressão para o SolidWorks)
+
+    def celula(self, caso: str, numero: int) -> str:
+        valor = self.valores.get((caso, numero))
+        if valor is None:
+            return SUPRIMIR
+        return f"{valor:.6g}".replace(".", ",")
+
+
+def _sentido_no_eixo(eixo: str, sinal: float, eixos: str) -> str:
+    texto = f"{'−' if sinal < 0 else '+'}{eixo}"
+    if eixo == eixo_vertical(eixos):
+        texto += " (para baixo)" if sinal < 0 else " (para cima)"
+    return texto
+
+
+def cenario_de_carga(
+    plano: pc.PlanoDeCargas, sistema: SistemaDeUnidades, eixos: str, estados: Sequence[str]
+) -> CenarioDeCarga:
+    """O plano no arranjo do gerenciador de casos de carga do SolidWorks.
+
+    Cada carga do estudo é criada uma vez (a gravidade, cada força ou carga distribuída num lugar e
+    num eixo, cada pressão, cada temperatura) e cada caso primário diz o valor dela — no sentido em
+    que foi criada — ou "Suprimir". O W0 e o W180 na mesma barra são a mesma carga em X, com sinais
+    opostos. As combinações vêm junto, para ver no SolidWorks; o programa importa os casos
+    primários (característicos) e combina ele mesmo.
+    """
+    linhas = linhas_de_carga(plano, sistema, eixos)
+    chaves: dict[tuple[object, ...], dict[str, object]] = {}
+    valores_por_chave: dict[tuple[object, ...], dict[str, float]] = {}
+    for linha in linhas:
+        vetor = (linha.fx, linha.fy, linha.fz)
+        if linha.tipo == TIPO_GRAVIDADE:
+            eixo = eixo_vertical(eixos)
+            indice = "XYZ".index(eixo)
+            chave: tuple[object, ...] = (TIPO_GRAVIDADE,)
+            componente = float(vetor[indice] or 0.0)
+            unidade = "m/s²"
+        elif linha.tipo in (TIPO_AREA, TIPO_TEMPERATURA) or None in vetor:
+            eixo = "normal à face" if linha.tipo == TIPO_AREA else "ΔT"
+            chave = (linha.tipo, linha.elemento)
+            componente = linha.valor
+            unidade = linha.unidade
+        else:
+            componentes = [float(v or 0.0) for v in vetor]
+            indice = max(range(3), key=lambda i: abs(componentes[i]))
+            obliqua = sum(abs(c) > 1e-9 for c in componentes) > 1
+            eixo = "XYZ"[indice]
+            chave = (linha.tipo, linha.elemento, eixo if not obliqua else linha.sentido)
+            componente = componentes[indice] if not obliqua else linha.valor
+            if obliqua:
+                eixo = linha.sentido
+            unidade = linha.unidade
+        if chave not in chaves:
+            chaves[chave] = {
+                "tipo": linha.tipo,
+                "onde": linha.elemento,
+                "eixo": eixo,
+                "unidade": unidade,
+                "comando": linha.solidworks,
+                "observacao": linha.observacao,
+                "quantidade": linha.quantidade,
+            }
+            valores_por_chave[chave] = {}
+        valores = valores_por_chave[chave]
+        valores[linha.caso] = valores.get(linha.caso, 0.0) + componente
+    contagem: dict[str, int] = {}
+    cargas: list[CargaDoEstudo] = []
+    valores_finais: dict[tuple[str, int], float] = {}
+    for numero, (chave, dados) in enumerate(chaves.items(), 1):
+        tipo = str(dados["tipo"])
+        base = NOME_NO_SOLIDWORKS.get(tipo, "Carga")
+        contagem[base] = contagem.get(base, 0) + 1
+        valores = valores_por_chave[chave]
+        primeiro = next((v for v in valores.values() if abs(v) > 1e-12), 1.0)
+        sinal = -1.0 if primeiro < 0 else 1.0
+        eixo = str(dados["eixo"])
+        if eixo in ("X", "Y", "Z"):
+            referencia = _sentido_no_eixo(eixo, sinal, eixos)
+        else:
+            referencia = eixo
+            sinal = 1.0
+        observacao = str(dados["observacao"])
+        if int(str(dados["quantidade"])) > 1:
+            observacao = "; ".join(
+                filter(None, (f"{dados['quantidade']} pontos: valor por item", observacao))
+            )
+        cargas.append(
+            CargaDoEstudo(
+                numero=numero,
+                nome=f"{base}-{contagem[base]}",
+                tipo=tipo,
+                onde=str(dados["onde"]),
+                referencia=referencia,
+                unidade=str(dados["unidade"]),
+                valor_ao_criar=round(abs(primeiro) if eixo in ("X", "Y", "Z") else primeiro, 3),
+                comando=str(dados["comando"]),
+                observacao=observacao,
+            )
+        )
+        for caso, valor in valores.items():
+            valores_finais[(caso, numero)] = valor * sinal
+    lista = pc.combinacoes(plano, estados)
+    combinacoes = tuple(
+        (
+            nome_da_combinacao(c, len(lista)),
+            " + ".join(
+                f'{fator:g}*"{nome_no_solidworks(codigo)}"'
+                for codigo in plano.codigos
+                if abs(fator := float(c.fatores.get(codigo, 0.0))) > 1e-12
+            ),
+        )
+        for c in lista
+    )
+    return CenarioDeCarga(
+        cargas=tuple(cargas),
+        casos=tuple((a.codigo, a.nome) for a in plano.acoes),
+        valores=valores_finais,
+        combinacoes=combinacoes,
+    )
+
+
+def tabela_do_cenario(c: CenarioDeCarga) -> tuple[list[str], list[list[str]]]:
+    """Cabeçalho e linhas como na tela: o caso primário e, em cada carga, o valor ou "Suprimir"."""
+    cabecalho = ["Caso de carga primário", *(carga.titulo for carga in c.cargas)]
+    linhas = [
+        [nome_no_solidworks(codigo), *(c.celula(codigo, carga.numero) for carga in c.cargas)]
+        for codigo, _ in c.casos
+    ]
+    return cabecalho, linhas
+
+
+COLUNAS_CARGAS_DO_ESTUDO = (
+    "Nº",
+    "Nome no SolidWorks",
+    "Tipo",
+    "Onde aplicar",
+    "Sentido em que é criada",
+    "Valor ao criar",
+    "Unidade",
+    "No SolidWorks",
+    "Observação",
+)
+
+
+def linhas_das_cargas_do_estudo(c: CenarioDeCarga) -> list[list[object]]:
+    return [
+        [
+            carga.numero,
+            carga.nome,
+            carga.tipo,
+            carga.onde,
+            carga.referencia,
+            carga.valor_ao_criar,
+            carga.unidade,
+            carga.comando,
+            carga.observacao,
+        ]
+        for carga in c.cargas
+    ]
+
+
+def csv_do_cenario(c: CenarioDeCarga) -> bytes:
+    """A tabela do gerenciador de casos de carga e, embaixo, as combinações."""
+    cabecalho, linhas = tabela_do_cenario(c)
+    linhas_csv: list[list[object]] = [list(linha) for linha in linhas]
+    if c.combinacoes:
+        linhas_csv.append([])
+        linhas_csv.append(["Combinações de casos de carga (para ver no SolidWorks)", "Expressão"])
+        linhas_csv.extend([nome, expressao] for nome, expressao in c.combinacoes)
+    return pc._csv(cabecalho, linhas_csv)
+
+
+# ---------------------------------------------------------------------------------------------
 # Leia-me e planilha Excel
 # ---------------------------------------------------------------------------------------------
 def texto_leia_me(
@@ -440,6 +657,21 @@ def texto_leia_me(
         "5. Mudou a geometria? Refaça todos os estudos. Um estudo com as combinações (aba "
         "Combinações) serve só para olhar tensões e deslocamentos no SolidWorks — não entra na "
         "importação.",
+        "",
+        "OU NUM ESTUDO SÓ: GERENCIADOR DE CASOS DE CARGA",
+        "1. No estudo, crie cada carga uma vez, na ordem da aba Cargas do estudo (assim os nomes "
+        "Gravidade-1, Força-1, Pressão-1… batem com a planilha), onde a aba diz e no sentido em que "
+        "ela diz, com o valor ao criar.",
+        "2. Abra o Gerenciador de casos de carga e crie um caso primário por linha da aba Casos de "
+        "carga (SolidWorks), com o código do caso (PP, SC, W0…): em cada carga, o valor da "
+        "planilha (o sinal é no sentido em que a carga foi criada) ou Suprimir. As fixações ficam "
+        "ativas em todos os casos. Os valores são CARACTERÍSTICOS.",
+        "3. Rode. Na Vista de resultados, para cada caso primário: Listar forças da viga e Listar "
+        "forças resultantes, salvando cada CSV com o código do caso no nome (SC-forcas.csv, "
+        "SC-reacoes.csv) — todos saem do mesmo estudo, e é pelo nome do arquivo que o programa "
+        "reconhece o caso.",
+        "4. As combinações do gerenciador (embaixo da aba) são só para olhar no SolidWorks: o "
+        "programa importa os casos primários e faz as combinações da NBR 8800.",
         "",
         "NO ROBOT STRUCTURAL ANALYSIS",
         "1. Crie os casos de carga com os códigos da aba Cargas (natureza: permanente, "
@@ -557,6 +789,23 @@ def xlsx_do_plano(
         [_linha_csv(linha) for linha in linhas_de_carga(plano, sistema, eixos)],
         fixar="E2",
     )
+    cenario = cenario_de_carga(plano, sistema, eixos, estados)
+    if cenario.cargas:
+        cabecalho_cenario, linhas_cenario = tabela_do_cenario(cenario)
+        linhas_com_combinacoes: list[list[object]] = [list(linha) for linha in linhas_cenario]
+        if cenario.combinacoes:
+            linhas_com_combinacoes.append([])
+            linhas_com_combinacoes.append(
+                ["Combinações de casos de carga (só para ver no SolidWorks)", "Expressão"]
+            )
+            linhas_com_combinacoes.extend([n, e] for n, e in cenario.combinacoes)
+        aba("Casos de carga (SolidWorks)", cabecalho_cenario, linhas_com_combinacoes, fixar="B2")
+        aba(
+            "Cargas do estudo",
+            COLUNAS_CARGAS_DO_ESTUDO,
+            linhas_das_cargas_do_estudo(cenario),
+            fixar="C2",
+        )
     cabecalho, linhas = matriz_de_combinacoes(plano, estados)
     aba(
         "Combinações",

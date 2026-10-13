@@ -1835,7 +1835,7 @@ def avisos_da_importacao(
         destino = forcas if arquivo.tipo == em.TIPO_VIGAS else reacoes
         if arquivo.tipo in (em.TIPO_VIGAS, em.TIPO_REACOES):
             destino.setdefault(caso, []).append(arquivo)
-        sugerido = em.caso_sugerido(arquivo.estudo, lista_codigos) if arquivo.estudo else None
+        sugerido = em.caso_do_arquivo_sugerido(arquivo, lista_codigos)
         if sugerido and sugerido != caso:
             achados.append(
                 Achado(

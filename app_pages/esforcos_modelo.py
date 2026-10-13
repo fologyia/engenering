@@ -171,7 +171,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
                         "Tipo": a.tipo,
                         "Estudo": a.estudo,
                         "Conteúdo": _conteudo(a),
-                        "Caso": em.caso_sugerido(a.estudo, codigos) or "",
+                        "Caso": em.caso_do_arquivo_sugerido(a, codigos) or "",
                     }
                     for a in lidos
                 ]

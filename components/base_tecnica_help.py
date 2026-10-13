@@ -158,4 +158,16 @@ AJUDA: dict[str, str] = {
         "Uma linha por ação de cada combinação (combinação, caso, fator): o formato que SAP2000, "
         "ETABS e STAAD importam."
     ),
+    "res_cenario": (
+        "O arranjo da tela do gerenciador de casos de carga do SolidWorks (vista de cenário de "
+        "carga): cada carga é criada uma vez no estudo e cada caso primário (PP, SC, W0…) diz o "
+        "valor dela ou “Suprimir”. Crie as cargas na ordem da aba “Cargas do estudo” da planilha "
+        "(os nomes Força-1, Pressão-1… batem) e preencha a tabela. Os valores são característicos; "
+        "as combinações do SolidWorks são só para ver — o programa importa os casos primários."
+    ),
+    "btn_csv_cenario": (
+        "A tabela do gerenciador de casos de carga em CSV (abre no Excel), com as combinações "
+        "embaixo. A planilha completa (Excel) traz também a aba “Cargas do estudo”, com onde e em "
+        "que sentido criar cada carga."
+    ),
 }

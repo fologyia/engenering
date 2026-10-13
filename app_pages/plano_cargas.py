@@ -488,6 +488,27 @@ with st.container(border=True), secao_protegida("Exportar para o modelo"):
         key="pc_xlsx",
         help=AJUDA["btn_xlsx"],
     )
+    cenario = ex.cenario_de_carga(plano, sistema, eixos, estados_exportados)
+    if cenario.cargas:
+        st.subheader(
+            f"Gerenciador de casos de carga do SolidWorks ({len(cenario.cargas)} cargas)",
+            help=AJUDA["res_cenario"],
+        )
+        cabecalho_cenario, linhas_cenario = ex.tabela_do_cenario(cenario)
+        st.dataframe(
+            pd.DataFrame(linhas_cenario, columns=cabecalho_cenario),
+            hide_index=True,
+            width="stretch",
+        )
+        st.download_button(
+            "Casos de carga do SolidWorks (CSV)",
+            data=ex.csv_do_cenario(cenario),
+            file_name=f"plano_de_cargas_casos_de_carga_{codigo_projeto}.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            key="pc_csv_cenario",
+            help=AJUDA["btn_csv_cenario"],
+        )
     colunas = st.columns(4)
     for coluna, (rotulo, dados, arquivo, chave, ajuda) in zip(
         colunas,
