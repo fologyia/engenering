@@ -18,6 +18,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 from core import base_tecnica as bt
 from core import criterio_anglo as ca
 from core import exportacao_cargas as ex
+from core import gerenciador_solidworks as gs
 from core import load_combinations as comb
 from core import plano_de_cargas as pc
 from core.memorial_verificacoes import decimal_ptbr
@@ -420,6 +421,67 @@ with st.container(border=True), secao_protegida("Combinações"):
         )
         st.caption(f"{ca.LEGENDA_COMBINACOES} {ca.QUADRO_DE_CARGAS_FUNDACOES}")
 
+
+def _conferir_gerenciador(
+    conteudo: bytes,
+    nome: str,
+    plano: pc.PlanoDeCargas,
+    eixos: str,
+    estados: list[str],
+) -> None:
+    """Liga as cargas do arquivo salvo pelo SolidWorks às do plano e devolve o arquivo preenchido."""
+    try:
+        lido = gs.ler(conteudo)
+    except ValueError as erro:
+        st.error(str(erro), icon=":material/error:")
+        return
+    resultado = gs.preencher(lido, plano, eixos, estados)
+    st.subheader(
+        f"Cargas do estudo × plano ({resultado.ligadas} de {len(resultado.ligacoes)} ligadas)",
+        help=AJUDA["res_ligacoes"],
+    )
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Carga no SolidWorks": ligacao.carga_sw,
+                    "Carga do plano": ligacao.carga_plano or "—",
+                    "Componente que recebe o valor": ligacao.componente or "—",
+                    "Situação": ligacao.situacao,
+                }
+                for ligacao in resultado.ligacoes
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+    )
+    if resultado.avisos:
+        st.warning("\n".join(f"- {aviso}" for aviso in resultado.avisos), icon=":material/warning:")
+    if resultado.diferencas:
+        st.subheader(
+            f"O que muda nos casos que já estavam no SolidWorks ({len(resultado.diferencas)})",
+            help=AJUDA["res_diferencas"],
+        )
+        st.dataframe(
+            pd.DataFrame(
+                resultado.diferencas,
+                columns=["Caso", "Carga › componente", "No SolidWorks", "No arquivo preenchido"],
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+    st.download_button(
+        "Arquivo preenchido para o SolidWorks (CSV)",
+        data=gs.csv_do_gerenciador(resultado.arquivo),
+        file_name=f"{nome.rsplit('.', 1)[0]}-preenchido.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        type="primary",
+        key="pc_csv_gerenciador_preenchido",
+        help=AJUDA["btn_csv_preenchido"],
+    )
+
+
 # ============================================================ exportar para o modelo
 with st.container(border=True), secao_protegida("Exportar para o modelo"):
     st.subheader("Exportar para o modelo", help=AJUDA["sec_modelo"])
@@ -500,15 +562,28 @@ with st.container(border=True), secao_protegida("Exportar para o modelo"):
             hide_index=True,
             width="stretch",
         )
+        arquivo_sw, avisos_sw = gs.do_plano(plano, eixos, estados_exportados)
         st.download_button(
-            "Casos de carga do SolidWorks (CSV)",
-            data=ex.csv_do_cenario(cenario),
-            file_name=f"plano_de_cargas_casos_de_carga_{codigo_projeto}.csv",
+            "Gerenciador de casos de carga (CSV do SolidWorks)",
+            data=gs.csv_do_gerenciador(arquivo_sw),
+            file_name=f"gerenciador_de_casos_de_carga_{codigo_projeto}.csv",
             mime="text/csv",
             icon=":material/download:",
             key="pc_csv_cenario",
             help=AJUDA["btn_csv_cenario"],
         )
+        for aviso in avisos_sw:
+            st.caption(f":material/warning: {aviso}")
+        enviado = st.file_uploader(
+            "Conferir e preencher o arquivo salvo pelo gerenciador do SolidWorks",
+            type=["csv"],
+            key="pc_gerenciador_sw",
+            help=AJUDA["up_gerenciador"],
+        )
+        if enviado is not None:
+            _conferir_gerenciador(
+                enviado.getvalue(), enviado.name, plano, eixos, estados_exportados
+            )
     colunas = st.columns(4)
     for coluna, (rotulo, dados, arquivo, chave, ajuda) in zip(
         colunas,

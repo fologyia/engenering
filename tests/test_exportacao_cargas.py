@@ -312,19 +312,23 @@ def test_cenario_de_carga_como_a_tela_do_solidworks():
     nomes = [carga.nome for carga in c.cargas]
     assert nomes == ["Gravidade-1", "Pressão-1", "Força-1", "Força-2", "Temperatura-1"]
     gravidade, pressao, forca_x, forca_y, temperatura = c.cargas
-    assert gravidade.referencia == "−Y (para baixo)" and gravidade.valor_ao_criar == 9.81
+    assert gravidade.referencia == "Plano superior › Normal ao plano (+Y, para cima)"
+    assert gravidade.valor_ao_criar == -9.81
     assert pressao.referencia == "normal à face" and pressao.valor_ao_criar == 5000.0
-    # O vento em X: W0 e W180 são a mesma carga, criada em +X, com sinais opostos.
-    assert forca_x.referencia == "+X" and forca_x.valor_ao_criar == 2000.0
-    # O Y da planta é o −Z do SolidWorks: W90 cria a carga em −Z.
-    assert forca_y.referencia == "−Z" and forca_y.valor_ao_criar == 3000.0
+    # O vento em X: W0 e W180 são a mesma carga, no Plano direito, com sinais opostos.
+    assert forca_x.referencia == "Plano direito › Normal ao plano (+X)"
+    assert forca_x.valor_ao_criar == 2000.0
+    # O Y da planta é o −Z do SolidWorks: o W90 é −3000 no Plano frontal.
+    assert forca_y.referencia == "Plano frontal › Normal ao plano (+Z)"
+    assert forca_y.valor_ao_criar == -3000.0
+    assert "face de cima" in pressao.observacao and "ΔT" in temperatura.observacao
     cabecalho, linhas = ex.tabela_do_cenario(c)
     assert cabecalho[0] == "Caso de carga primário" and len(cabecalho) == 6
     tabela = {linha[0]: linha[1:] for linha in linhas}
-    assert tabela["PP"] == ["9,81", "Suprimir", "Suprimir", "Suprimir", "Suprimir"]
+    assert tabela["PP"] == ["-9,81", "Suprimir", "Suprimir", "Suprimir", "Suprimir"]
     assert tabela["SC"][1] == "5000"
     assert tabela["W0"][2] == "2000" and tabela["W180"][2] == "-2000"
-    assert tabela["W90"][3] == "3000" and tabela["W270"][3] == "-3000"
+    assert tabela["W90"][3] == "-3000" and tabela["W270"][3] == "3000"
     assert tabela["T-"][4] == "-10"  # o código vai com hífen, como se digita no SolidWorks
     assert all(e.count('"') % 2 == 0 for _, e in c.combinacoes)
     assert any('"T-"' in e for _, e in c.combinacoes)
@@ -339,19 +343,9 @@ def test_forca_em_varios_pontos_e_valor_por_item():
         ),
     )
     (carga,) = ex.cenario_de_carga(plano, ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA, []).cargas
-    assert carga.referencia == "−Y (para baixo)" and carga.valor_ao_criar == 12500.0
+    assert carga.referencia == "Plano superior › Normal ao plano (+Y, para cima)"
+    assert carga.valor_ao_criar == -12500.0
     assert "4 pontos: valor por item" in carga.observacao
-
-
-def test_csv_do_cenario_traz_as_combinacoes_embaixo():
-    c = ex.cenario_de_carga(
-        plano_completo(), ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA, comb.ESTADOS_PADRAO
-    )
-    texto = ex.csv_do_cenario(c).decode("utf-8-sig")
-    assert texto.splitlines()[0].startswith("Caso de carga primário;Gravidade-1:")
-    assert "Suprimir" in texto and "Combinações de casos de carga (para ver no SolidWorks)" in texto
-    linhas = list(csv.reader(io.StringIO(texto), delimiter=";"))
-    assert any(len(linha) == 2 and '*"PP"' in linha[1] for linha in linhas)
 
 
 def test_plano_sem_cargas_nao_tem_cenario():

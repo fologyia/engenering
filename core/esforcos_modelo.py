@@ -259,6 +259,13 @@ def _ler_arquivo(conteudo: bytes, nome_arquivo: str) -> ArquivoLido:
     linhas = texto.splitlines()
     if not linhas:
         raise ArquivoInvalido("O arquivo está vazio.")
+    if _normal(texto.lstrip().split("\n", 1)[0]).startswith(("tipodecarga", "loadtype")):
+        raise ArquivoInvalido(
+            f"{nome_arquivo or 'Este arquivo'} é o do gerenciador de casos de carga (as cargas do "
+            "estudo, não os resultados): ele vai na página Plano de cargas › Exportar para o "
+            "modelo, para conferir e preencher. Aqui entram os resultados de cada caso: Listar "
+            "forças da viga e Listar forças resultantes."
+        )
     assinatura = hashlib.sha256(conteudo).hexdigest()
     sep = _separador(linhas)
     decimal_virgula = sep == ";"

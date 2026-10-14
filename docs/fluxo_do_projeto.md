@@ -109,11 +109,27 @@ cargas que vão para o modelo.
 * **Gerenciador de casos de carga do SolidWorks** (`cenario_de_carga`): o arranjo da vista de
   cenário de carga — uma coluna por carga do estudo (a gravidade, cada força ou carga distribuída
   num lugar e num eixo, cada pressão, cada temperatura), uma linha por caso primário, e em cada
-  célula o valor do caso no sentido em que a carga foi criada ou "Suprimir". O W0 e o W180 na mesma
-  barra são a mesma carga em X, com sinais opostos; o Y da planta é o −Z do SolidWorks. As colunas
-  têm o nome que o SolidWorks dá (Gravidade-1, Força-1, Pressão-1…) se as cargas forem criadas na
-  ordem da aba "Cargas do estudo" (onde aplicar, sentido, valor ao criar). Os códigos vão com hífen
+  célula o valor do caso ou "Suprimir". A gravidade e as forças são criadas com o plano de
+  referência do eixo (Plano superior = Y, Plano direito = X, Plano frontal = Z) e o valor com sinal
+  em "Normal ao plano": a gravidade é −9,81 com o Y para cima, o W0 e o W180 na mesma barra são a
+  mesma carga em X (+2000 e −2000), e o Y da planta é o −Z do SolidWorks. As colunas têm o nome que
+  o SolidWorks dá (Gravidade-1, Força-1, Pressão-1…) se as cargas forem criadas na ordem da aba
+  "Cargas do estudo"; o momento na junta da viga é componente da Força. Os códigos vão com hífen
   (T− → T-). As combinações vêm embaixo, só para ver no SolidWorks.
+* **Arquivo do gerenciador** (`core/gerenciador_solidworks.py`): o CSV que o gerenciador salva e
+  carrega ("Salvar os dados em um arquivo .csv externo" / "Carregar os dados de entrada…"):
+  linhas Tipo de carga (3 força, 4 gravidade, 1 pressão), Nome da carga, Valor de (a componente:
+  a força tem seis — três de força e três de momento —, a gravidade três, a pressão uma) e Valores
+  originais (com a unidade); depois um caso por linha (valor sem unidade, ponto decimal, ou
+  Suprimir) e as combinações (`C01-ELU, 1.25*"PP" + 1.5*"SC"`). cp1252, vírgula, CRLF, sem aspas:
+  lido e gravado de novo, o arquivo do SolidWorks sai byte a byte igual. `do_plano` monta o arquivo
+  do plano, em N e m; `preencher` pega o arquivo salvo pelo SolidWorks, liga cada carga do estudo
+  à do plano (pelo nome Força-1…, ou pelo código do caso que só ela usa, como PP e SC), confere o
+  valor e o sinal com que ela foi criada (gravidade de 10,5 contra 9,81 do plano: aviso e o valor
+  do plano; sinal oposto: troca o sinal e pede para conferir a seta), suprime a carga que o plano
+  não tem, aponta a que falta e devolve o arquivo com o cabeçalho do SolidWorks e os casos do
+  plano. A temperatura fica como está no SolidWorks: lá a carga é a temperatura aplicada
+  (referência do estudo + ΔT). Caso sem nenhuma carga no estudo fica de fora do arquivo.
 * **Planilha Excel** com as abas Leia-me (passo a passo no SolidWorks — um estudo por caso ou um
   estudo só com o gerenciador de casos de carga —, no Robot e em outros programas), Ações, Cargas,
   Casos de carga (SolidWorks), Cargas do estudo, Combinações e Combinações (lista); os mesmos dados
@@ -122,11 +138,12 @@ cargas que vão para o modelo.
 ### Passo a passo no SolidWorks Simulation
 
 1. Estudo estático com o material do aço (200 GPa, 7850 kg/m³).
-2. Cada carga da aba **Cargas do estudo** criada uma vez, na ordem da aba, onde e no sentido que
-   ela diz.
-3. No **Gerenciador de casos de carga**, um caso primário por linha da aba **Casos de carga
-   (SolidWorks)** (PP, SC, W0…), com o valor de cada carga ou Suprimir; as fixações ficam ativas em
-   todos. Valores característicos.
+2. Cada carga da aba **Cargas do estudo** criada uma vez, na ordem da aba, com o plano de
+   referência e o valor com sinal em "Normal ao plano".
+3. No **Gerenciador de casos de carga**, "Carregar os dados de entrada de um arquivo .csv externo"
+   com o arquivo da página Plano de cargas — ou, mais seguro, "Salvar os dados em um arquivo .csv
+   externo", enviar na página (Conferir e preencher) e carregar o arquivo preenchido. As fixações
+   ficam ativas em todos os casos. Valores característicos.
 4. Para cada caso primário, Listar forças da viga e Listar forças resultantes, com o código do caso
    no nome do arquivo (todos saem do mesmo estudo: é pelo nome do arquivo, ou pelo caso de carga no
    cabeçalho, que a página Esforços do modelo reconhece o caso — `caso_do_arquivo_sugerido`).

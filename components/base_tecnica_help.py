@@ -149,7 +149,8 @@ AJUDA: dict[str, str] = {
     ),
     "btn_xlsx": (
         "Planilha com as abas Leia-me (passo a passo no SolidWorks, no Robot e em outros "
-        "programas), Ações, Cargas, Combinações (matriz) e Combinações (lista)."
+        "programas), Ações, Cargas, Casos de carga (SolidWorks), Cargas do estudo, Combinações "
+        "(matriz) e Combinações (lista)."
     ),
     "btn_csv_acoes": "Ações com categoria, γ e ψ.",
     "btn_csv_cargas": "Cargas de cada caso nas unidades e eixos escolhidos, com F_x, F_y e F_z.",
@@ -162,12 +163,34 @@ AJUDA: dict[str, str] = {
         "O arranjo da tela do gerenciador de casos de carga do SolidWorks (vista de cenário de "
         "carga): cada carga é criada uma vez no estudo e cada caso primário (PP, SC, W0…) diz o "
         "valor dela ou “Suprimir”. Crie as cargas na ordem da aba “Cargas do estudo” da planilha "
-        "(os nomes Força-1, Pressão-1… batem) e preencha a tabela. Os valores são característicos; "
-        "as combinações do SolidWorks são só para ver — o programa importa os casos primários."
+        "(os nomes Gravidade-1, Força-1, Pressão-1… batem), com o plano de referência e o valor "
+        "com sinal em “Normal ao plano”. Os valores são característicos; as combinações do "
+        "SolidWorks são só para ver — o programa importa os casos primários."
     ),
     "btn_csv_cenario": (
-        "A tabela do gerenciador de casos de carga em CSV (abre no Excel), com as combinações "
-        "embaixo. A planilha completa (Excel) traz também a aba “Cargas do estudo”, com onde e em "
-        "que sentido criar cada carga."
+        "O arquivo no formato do gerenciador do SolidWorks (vírgula, ponto decimal, em N e m), "
+        "para “Carregar os dados de entrada de um arquivo .csv externo”: os casos primários do "
+        "plano, com o valor de cada carga ou Suprimir, e as combinações embaixo. Vale para as "
+        "cargas criadas como diz a aba “Cargas do estudo”."
+    ),
+    "up_gerenciador": (
+        "O mais seguro: no gerenciador do SolidWorks, “Salvar os dados em um arquivo .csv "
+        "externo” e envie aqui. O programa liga cada carga do estudo à do plano (pelo nome Força-1… "
+        "ou pelo código do caso, como PP e SC), confere o valor e o sentido com que ela foi "
+        "criada, e devolve o mesmo arquivo com os casos e as combinações do plano para carregar "
+        "no SolidWorks."
+    ),
+    "res_ligacoes": (
+        "Cada carga do estudo no SolidWorks, a carga do plano que ela recebe e a componente que "
+        "leva o valor. Carga que o plano não tem fica suprimida em todos os casos; carga do plano "
+        "que o estudo não tem aparece nos avisos."
+    ),
+    "res_diferencas": (
+        "Nos casos que já existiam no SolidWorks com o mesmo nome (PP, SC…), o que estava lá e o "
+        "que o arquivo preenchido leva — o plano de cargas é o que vale."
+    ),
+    "btn_csv_preenchido": (
+        "O arquivo do SolidWorks com os casos primários e as combinações do plano. No "
+        "gerenciador: “Carregar os dados de entrada de um arquivo .csv externo”."
     ),
 }

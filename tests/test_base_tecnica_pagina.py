@@ -378,7 +378,7 @@ def test_exportacao_mostra_as_cargas_nas_unidades_e_eixos_escolhidos(banco_com_p
     )
     cenario = next(d.value for d in t.dataframe if "Caso de carga primário" in d.value.columns)
     pp = cenario[cenario["Caso de carga primário"] == "PP"].iloc[0]
-    assert pp.iloc[1] == "9,81" and set(pp.iloc[2:]) == {"Suprimir"}
+    assert pp.iloc[1] == "-9,81" and set(pp.iloc[2:]) == {"Suprimir"}
 
 
 def test_combinacoes_em_matriz_ou_expressoes(banco_com_projeto):
