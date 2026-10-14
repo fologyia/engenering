@@ -93,7 +93,8 @@ EQUIVALENTES: dict[str, tuple[str, str]] = {
         "Carga nodal — força",
     ),
     TIPO_LINHA: (
-        "Cargas externas › Força na viga, opção distribuída (por unidade de comprimento)",
+        "Cargas externas › Força nas vigas, marcando “por unidade de comprimento” (N/m) — sem "
+        "essa opção o SolidWorks põe o valor inteiro em cada viga selecionada (“por item”)",
         "Carga uniforme em barras",
     ),
     TIPO_AREA: (

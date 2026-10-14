@@ -444,15 +444,29 @@ def combinacoes(
     *,
     especial_curta_duracao: bool = False,
 ) -> list[LinhaDeCombinacao]:
-    """Todas as combinações explícitas, numeradas (o número serve de nome no modelo)."""
+    """Todas as combinações explícitas, numeradas (o número serve de nome no modelo).
+
+    Combinações iguais saem uma vez só: no ELS frequente e no quase permanente o vento entra com
+    ψ2 = 0, e "sobrecarga principal com W0", "…com W90"… dariam a mesma soma quatro vezes.
+    """
     if not plano.acoes:
         return []
     lista = comb.gerar_combinacoes(
         acoes_para_combinar(plano), estados, especial_curta_duracao=especial_curta_duracao
     )
+    unicas = []
+    vistas: set[tuple[str, frozenset[tuple[str, float]]]] = set()
+    for c in lista:
+        chave = (
+            c.estado_limite,
+            frozenset((k, round(v, 9)) for k, v in c.fatores.items() if abs(v) > 1e-12),
+        )
+        if chave not in vistas:
+            vistas.add(chave)
+            unicas.append(c)
     return [
         LinhaDeCombinacao(i, c.nome, c.estado_limite, c.expressao, dict(c.fatores))
-        for i, c in enumerate(lista, start=1)
+        for i, c in enumerate(unicas, start=1)
     ]
 
 

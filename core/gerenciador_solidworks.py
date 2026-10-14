@@ -37,10 +37,28 @@ import csv
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from core import esforcos_modelo as em
 from core import exportacao_cargas as ex
 from core import plano_de_cargas as pc
+
+MACRO_DOS_CASOS = (
+    Path(__file__).resolve().parent.parent / "macros_solidworks" / "exportar_casos_de_carga.bas"
+)
+
+
+def macro_dos_casos_de_carga() -> bytes:
+    """A macro do SolidWorks que exporta os resultados de cada caso primário do gerenciador.
+
+    Para cada caso: ``<estudo>-<caso>-forcas.csv`` (o formato do "Listar forças da viga", elemento
+    a elemento) e ``<estudo>-<caso>-reacoes.csv`` (o do "Listar forças resultantes"), com
+    "Caso de carga: <caso>" no cabeçalho — o que :func:`core.esforcos_modelo.ler_arquivo` lê —, e o
+    quadro dos sensores da Vista de resultados. Texto ASCII com CRLF, para colar no editor do VBA.
+    """
+    texto = MACRO_DOS_CASOS.read_text(encoding="ascii")
+    return texto.replace("\r\n", "\n").replace("\n", "\r\n").encode("ascii")
+
 
 ROTULOS = ("Tipo de carga", "Nome da carga:", "Valor de:", "Valores originais/iniciais:")
 ROTULO_COMBINACOES = "Combinações de casos de carga"
@@ -505,6 +523,21 @@ def _ligar(
     ]
     if not candidatas:
         unidades = sorted({c.unidade for c in colunas if c.unidade})
+        por_item = esperada == POR_METRO and any(
+            c.valor_original not in (None, 0.0) and grandeza(c.unidade) == FORCA for c in colunas
+        )
+        if por_item:
+            return (
+                None,
+                1.0,
+                "criada em N (“por item”), o plano tem carga por metro",
+                [
+                    f"{carga.nome}: no SolidWorks a força nas vigas foi criada em N — “por item”, o "
+                    "valor vai inteiro em cada viga selecionada. Para a carga distribuída do plano "
+                    f"({_br(carga.valor_ao_criar)} {carga.unidade}), marque “por unidade de "
+                    "comprimento” e salve o arquivo do gerenciador de novo."
+                ],
+            )
         return (
             None,
             1.0,

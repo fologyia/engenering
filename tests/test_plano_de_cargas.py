@@ -135,3 +135,20 @@ def test_linhas_para_o_editor_de_combinacoes_da_barra():
 def test_resumo():
     assert pc.resumo_do_plano(pc.PlanoDeCargas()) == "Plano de cargas vazio."
     assert pc.resumo_do_plano(plano_com("PP", "SC")) == "2 ação(ões): PP, SC"
+
+
+def test_combinacoes_iguais_saem_uma_vez_so():
+    """No ELS frequente e no quase permanente o vento entra com ψ2 = 0: sem repetir a soma."""
+    plano = pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("PP"))
+    plano = pc.com_acao(
+        plano, pc.nova_acao("SC", cargas=[pc.CargaDoModelo("Piso", 5.0, "kN/m²", "Z (vertical)")])
+    )
+    for acao in pc.acoes_de_vento("t", {"X": [pc.CargaDoModelo("P1", 1.5, "kN", "X")]}):
+        plano = pc.com_acao(plano, acao)
+    lista = pc.combinacoes(plano, comb.ESTADOS_PADRAO)
+    chaves = [
+        (c.estado_limite, frozenset((k, v) for k, v in c.fatores.items() if v)) for c in lista
+    ]
+    assert len(chaves) == len(set(chaves))
+    assert [c.numero for c in lista] == list(range(1, len(lista) + 1))
+    assert sum(c.estado_limite == comb.ELS_QUASE_PERMANENTE for c in lista) == 1

@@ -47,7 +47,19 @@ que se digita numa aparece na outra. O cálculo é o do capítulo 8 da NBR 6123:
   As diagonais ficam de fora (o vento nelas já está na força nos nós).
 * **Desenho** dos pórticos vistos de lado com as forças por nível.
 * **CSV** com ponto e vírgula e vírgula decimal (abre direto no Excel): nós (com a base) e barras.
-* **Enviar ao plano de cargas** — grava W0, W90, W180 e W270 (as de 180° e 270° com o sinal trocado).
+* **Vento simplificado** (`cargas_simplificadas`) — para estruturas simples: uma carga por nível,
+  o total do nível (estrutura e guarda-corpo) dividido pelas linhas de pilares que vão na direção do
+  vento e pelo comprimento delas, aplicado **ao longo do eixo** dessas vigas. É a carga dos nós
+  espalhada na linha: cada pórtico divide a força igualmente entre os pilares, então cada linha
+  recebe `F/linhas` — e deslizar uma força ao longo da linha de ação não muda o equilíbrio. A cota,
+  a divisão entre as linhas contraventadas, o momento na base e a torção da planta ficam iguais, e
+  a viga não ganha a flexão lateral que teria uma viga perpendicular ao vento (o teste trava a
+  soma por linha). Só as vigas das linhas de pilares; os equipamentos continuam como força no
+  centro deles; a faixa da base vai à fundação. No SolidWorks: uma Força por nível, nas vigas,
+  "por unidade de comprimento" (N/m).
+* **Enviar ao plano de cargas** — grava W0, W90, W180 e W270 (as de 180° e 270° com o sinal
+  trocado), na forma escolhida: simplificada (padrão) ou nos nós, para casos mais complicados. A
+  mesma escolha está no Contraventamento de estruturas abertas.
 * **Registrar** — o memorial traz o capítulo de cálculo com as três tabelas (níveis, pórticos, nós).
 
 ### No SolidWorks (Simulation)
@@ -144,11 +156,24 @@ cargas que vão para o modelo.
    com o arquivo da página Plano de cargas — ou, mais seguro, "Salvar os dados em um arquivo .csv
    externo", enviar na página (Conferir e preencher) e carregar o arquivo preenchido. As fixações
    ficam ativas em todos os casos. Valores característicos.
-4. Para cada caso primário, Listar forças da viga e Listar forças resultantes, com o código do caso
-   no nome do arquivo (todos saem do mesmo estudo: é pelo nome do arquivo, ou pelo caso de carga no
-   cabeçalho, que a página Esforços do modelo reconhece o caso — `caso_do_arquivo_sugerido`).
-5. As combinações do gerenciador servem só para olhar no SolidWorks: o programa importa os casos
-   primários e combina pela NBR 8800.
+4. Os resultados de cada caso primário: a macro `macros_solidworks/exportar_casos_de_carga.bas`
+   (botão na página Esforços do modelo) passa caso por caso pelo gerenciador
+   (`LoadResultsOfPrimaryLoadCase`) e grava `<estudo>-<caso>-forcas.csv` (formato do "Listar forças
+   da viga", elemento a elemento, por `GetBeamForcesForEntities`) e `<estudo>-<caso>-reacoes.csv`
+   (formato do "Listar forças resultantes", por `GetReactionForcesAndMomentsWithSelections`), com
+   "Caso de carga: <caso>" no cabeçalho, e o quadro dos sensores da Vista de resultados em cada caso
+   e combinação. Sem a macro: Listar forças da viga e Listar forças resultantes à mão, com o código
+   do caso no nome do arquivo (`caso_do_arquivo_sugerido`). A leitura descobre sozinha se o arquivo
+   traz a força na ponta (o "Listar") ou já o esforço interno: no mesmo elemento, o axial e o torque
+   das duas pontas têm de sair iguais.
+5. Força em vigas: no SolidWorks ela é "por item" (o valor inteiro em cada viga selecionada) se não
+   se marcar "por unidade de comprimento". O preenchimento do gerenciador avisa quando a carga do
+   plano é por metro e a do estudo foi criada em N.
+6. As combinações do gerenciador servem só para olhar no SolidWorks: o programa importa os casos
+   primários e combina pela NBR 8800. Combinações iguais saem uma vez só (`pc.combinacoes`): no ELS
+   frequente e no quase permanente o vento entra com ψ2 = 0.
+7. Reação zero em um caso = modelo sem fixação (o SolidWorks rodou com mola macia ou alívio
+   inercial): a conferência das reações acusa erro e os esforços daquele caso não valem.
 
 ## 4 e 5. Verificações e memorial
 

@@ -7,7 +7,15 @@ AJUDA: dict[str, str] = {
         "No SolidWorks Simulation, com o estudo resolvido, clique com o botão direito em "
         "Resultados: “Listar forças da viga” (todas as vigas) e “Listar forças resultantes” "
         "(força de reação, modelo inteiro). Salve cada lista como CSV e envie aqui. Um estudo por "
-        "caso de carga, com o código no nome (PP, SC, W0…)."
+        "caso de carga, com o código no nome (PP, SC, W0…). Com o gerenciador de casos de carga, "
+        "a macro abaixo grava os dois arquivos de todos os casos de uma vez."
+    ),
+    "btn_macro_casos": (
+        "Baixa a macro que tira os resultados do gerenciador de casos de carga sem passar pelo "
+        "relatório. Com a peça aberta e a aba do estudo selecionada (depois de Executar no "
+        "gerenciador): Ferramentas → Macro → Executar. Ela grava, na pasta da peça, as forças das "
+        "vigas e as reações de cada caso primário (o caso vai no cabeçalho) e o quadro dos "
+        "sensores da Vista de resultados. Envie os de forças e de reações aqui, todos juntos."
     ),
     "arquivos": (
         "Pode enviar vários de uma vez: forças da viga e reações de cada estudo, e o "

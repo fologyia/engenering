@@ -91,6 +91,41 @@ def test_acoes_para_o_plano_levam_os_nos_e_o_equipamento(dois_pisos):
     assert plano.codigos == ("W0", "W90", "W180", "W270")
 
 
+@pytest.mark.parametrize("direcao", ["X", "Y"])
+def test_vento_simplificado_e_a_carga_dos_nos_espalhada_nas_linhas(dois_pisos, direcao):
+    g, r = dois_pisos
+    d = r.direcao(direcao)
+    simples = va.cargas_simplificadas(g, d)
+    assert [c.nivel for c in simples] == [n.nivel for n in d.niveis]
+    linhas = g.vaos_y + 1 if direcao == "X" else g.vaos_x + 1
+    comprimento = g.comprimento_x_m if direcao == "X" else g.largura_y_m
+    for c, nivel in zip(simples, d.niveis, strict=True):
+        assert c.total_kN == pytest.approx(nivel.estrutura_kN + nivel.guarda_corpo_kN)
+        assert (c.linhas, c.comprimento_m) == (linhas, comprimento)
+        assert c.q_kN_m * c.linhas * c.comprimento_m == pytest.approx(c.total_kN)
+        # Cada linha de pilares recebe o mesmo que recebia nos nós: a soma das parcelas de cada
+        # pilar dela, em todos os pórticos daquele nível.
+        nos = [n for n in va.cargas_nodais(d) if n.nivel == nivel.nivel]
+        assert c.total_kN / c.linhas == pytest.approx(sum(n.por_pilar_kN for n in nos))
+
+
+def test_vento_simplificado_vai_ao_plano_em_kN_por_metro(dois_pisos):
+    _, r = dois_pisos
+    nos = var.acoes_para_o_plano(r)
+    simples = var.acoes_para_o_plano(r, forma=var.FORMA_SIMPLIFICADA)
+    for antes, depois in zip(nos, simples, strict=True):
+        assert antes.codigo == depois.codigo
+        total = sum(c.resultante or 0.0 for c in depois.cargas)
+        assert total == pytest.approx(sum(c.resultante or 0.0 for c in antes.cargas))
+    w0, _, w180, _ = simples
+    distribuidas = [c for c in w0.cargas if c.unidade == "kN/m"]
+    assert len(distribuidas) == len(r.x.niveis)  # uma carga por nível
+    assert all(c.comprimento_m > 0 and c.quantidade == 2 for c in distribuidas)
+    assert all("ao longo do eixo" in c.elemento for c in distribuidas)
+    assert any(c.observacao == "equipamento" for c in w0.cargas)  # o equipamento continua
+    assert w180.cargas[0].valor == pytest.approx(-w0.cargas[0].valor)
+
+
 def test_csv_dos_nos_e_das_barras(dois_pisos):
     g, r = dois_pisos
     nos = list(csv.reader(io.StringIO(var.csv_nos_nos(r).decode("utf-8-sig")), delimiter=";"))

@@ -96,6 +96,7 @@ def test_projeto_sem_casos_explica_o_que_exportar(banco_com_projeto):
     t = abrir()
     assert any("Nenhum caso importado" in c.value for c in t.caption)
     assert not sem_ajuda(t), sorted(sem_ajuda(t))
+    assert "em_macro_casos" in {b.key for b in t.get("download_button")}
 
 
 @pytest.mark.parametrize("estado", [{}, {"em_estados": ["ELU normal", "ELS rara"]}])

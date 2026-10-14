@@ -21,6 +21,11 @@ MODULO_TITULO = "Vento em estruturas abertas"
 LARGURA_UTIL_DXA = 9360
 ORIGEM = "Vento em estruturas abertas (NBR 6123:2023, cap. 8)"
 
+#: Como o vento vai para o modelo: uma carga por nível nas vigas na direção do vento, ou nos nós.
+FORMA_SIMPLIFICADA = "Simplificada: uma carga por nível, nas vigas na direção do vento"
+FORMA_NOS = "Nos nós de cada pórtico e nível"
+FORMAS = (FORMA_SIMPLIFICADA, FORMA_NOS)
+
 REFERENCIAS = [
     "ABNT NBR 6123:2023 — Forças devidas ao vento em edificações: 4.2, 5 (S₁, S₂, S₃), 7.2.4 e "
     "capítulo 8 (8.3 reticulados planos isolados, Figura 12; 8.4 reticulados múltiplos, Figura 14; "
@@ -181,21 +186,53 @@ def tabelas_para_memorial(r: va.ResultadoVentoAberto) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------------------------
 # Plano de cargas
 # ---------------------------------------------------------------------------------------------
-def cargas_para_o_plano(r: va.ResultadoVentoAberto, direcao: str) -> list[pc.CargaDoModelo]:
-    """Forças nos nós por pilar (pórtico e nível) e os equipamentos, na direção +X ou +Y."""
-    d = r.direcao(direcao)
-    cargas = [
+def cargas_simplificadas_para_o_plano(
+    r: va.ResultadoVentoAberto, direcao: str
+) -> list[pc.CargaDoModelo]:
+    """Uma carga distribuída por nível, ao longo das vigas das linhas de pilares na direção do
+    vento (:func:`va.cargas_simplificadas`)."""
+    perpendicular = "Y" if direcao == "X" else "X"
+    return [
         pc.CargaDoModelo(
-            elemento=f"Pórtico P{c.portico} (posição {_n(c.coordenada_m)} m), nível {c.nivel} "
-            f"(z = {_n(c.cota_m)} m) — cada um dos {c.pilares} nós pilar–viga",
-            valor=c.por_pilar_kN,
-            unidade="kN",
+            elemento=f"Nível {c.nivel} (z = {_n(c.cota_m)} m) — vigas das {c.linhas} linhas de "
+            f"pilares na direção {direcao} (cada linha com {_n(c.comprimento_m)} m), carga ao "
+            "longo do eixo",
+            valor=c.q_kN_m,
+            unidade="kN/m",
             direcao=direcao,
-            observacao=f"total do pórtico {_n(c.total_kN)} kN",
-            quantidade=max(1, c.pilares),
+            observacao=(
+                f"total do nível {_n(c.total_kN)} kN = {c.linhas} × {_n(c.comprimento_m)} m × "
+                f"{_n(c.q_kN_m, 3)} kN/m; só nas vigas das linhas de pilares (as vigas "
+                f"secundárias e as da direção {perpendicular} ficam sem)"
+            ),
+            quantidade=c.linhas,
+            comprimento_m=c.comprimento_m,
         )
-        for c in va.cargas_nodais(d)
+        for c in va.cargas_simplificadas(r.geometria, r.direcao(direcao))
     ]
+
+
+def cargas_para_o_plano(
+    r: va.ResultadoVentoAberto, direcao: str, forma: str = FORMA_NOS
+) -> list[pc.CargaDoModelo]:
+    """As cargas do vento na direção +X ou +Y: nos nós por pilar (pórtico e nível) ou, na forma
+    simplificada, uma por nível nas vigas na direção do vento; os equipamentos sempre no centro."""
+    d = r.direcao(direcao)
+    if forma == FORMA_SIMPLIFICADA:
+        cargas = cargas_simplificadas_para_o_plano(r, direcao)
+    else:
+        cargas = [
+            pc.CargaDoModelo(
+                elemento=f"Pórtico P{c.portico} (posição {_n(c.coordenada_m)} m), nível {c.nivel} "
+                f"(z = {_n(c.cota_m)} m) — cada um dos {c.pilares} nós pilar–viga",
+                valor=c.por_pilar_kN,
+                unidade="kN",
+                direcao=direcao,
+                observacao=f"total do pórtico {_n(c.total_kN)} kN",
+                quantidade=max(1, c.pilares),
+            )
+            for c in va.cargas_nodais(d)
+        ]
     for nivel in d.equipamentos_por_nivel:
         for nome, forca, cota in nivel:
             cargas.append(
@@ -210,14 +247,16 @@ def cargas_para_o_plano(r: va.ResultadoVentoAberto, direcao: str) -> list[pc.Car
     return cargas
 
 
-def acoes_para_o_plano(r: va.ResultadoVentoAberto, registro_id: str = "") -> list[pc.Acao]:
+def acoes_para_o_plano(
+    r: va.ResultadoVentoAberto, registro_id: str = "", forma: str = FORMA_NOS
+) -> list[pc.Acao]:
     resumos = {
         "X": f"{_n(r.x.total_kN, 1)} kN em X; base {_n(r.x.momento_na_base_kNm, 1)} kN·m",
         "Y": f"{_n(r.y.total_kN, 1)} kN em Y; base {_n(r.y.momento_na_base_kNm, 1)} kN·m",
     }
     return pc.acoes_de_vento(
         ORIGEM,
-        {"X": cargas_para_o_plano(r, "X"), "Y": cargas_para_o_plano(r, "Y")},
+        {"X": cargas_para_o_plano(r, "X", forma), "Y": cargas_para_o_plano(r, "Y", forma)},
         resumo_por_direcao=resumos,
         registro_id=registro_id,
     )

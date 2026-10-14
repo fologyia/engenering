@@ -20,6 +20,7 @@ from core import base_tecnica as bt
 from core import contraventamento_plataforma as cp
 from core import criterio_anglo as ca
 from core import plano_de_cargas as pc
+from core import vento_aberto_registro as var
 from core import vento_estrutura_aberta as va
 from core import vento_nbr6123 as vb
 from core.project_store import obter_projeto_ativo, salvar_projeto
@@ -253,6 +254,21 @@ def test_vento_aberto_vai_ao_plano_e_ao_registro(banco_com_projeto):
         if r["modulo_id"] == "vento_estrutura_aberta"
     ]
     assert len(achados) == 1 and achados[0]["entradas"]["tag"] == "PL-3"
+
+
+def test_vento_aberto_simplificado_ou_nos_nos(banco_com_projeto):
+    t = abrir(VENTO)
+    assert t.radio(key="va_forma").value == var.FORMA_SIMPLIFICADA
+    assert any(s.value.startswith("Vento simplificado") for s in t.subheader)
+    t.button(key="va_para_plano").click().run()
+    assert not t.exception
+    w0 = pc.plano_do_projeto(obter_projeto_ativo()).acao("W0")
+    assert w0 is not None and any(c.unidade == "kN/m" for c in w0.cargas)
+    t.radio(key="va_forma").set_value(var.FORMA_NOS).run()
+    assert not any(s.value.startswith("Vento simplificado") for s in t.subheader)
+    t.button(key="va_para_plano").click().run()
+    w0 = pc.plano_do_projeto(obter_projeto_ativo()).acao("W0")
+    assert w0 is not None and all(c.unidade == "kN" for c in w0.cargas)
 
 
 # ------------------------------------------------------------------ outras páginas leem a base

@@ -365,3 +365,68 @@ def test_caso_de_carga_do_cabecalho_ou_do_nome_do_arquivo():
     assert sem.caso_de_carga == "" and em.caso_do_arquivo_sugerido(sem, ["PP", "SC", "W0"]) == "SC"
     anonimo = em.ler_arquivo(base.encode("cp1252"), "Análise estática 1-Força-1.csv")
     assert em.caso_do_arquivo_sugerido(anonimo, ["PP", "SC", "W0"]) is None
+
+
+def test_reacao_zero_e_modelo_sem_fixacao():
+    """Sem fixação, o SolidWorks roda com mola macia: reação zero e esforços sem sentido."""
+    dados = importar("PP", "W0", com_reacoes=False)
+    for caso in ("PP", "W0"):
+        nula = em.Reacoes(modelo=(0.0, 0.0, 1e-33))
+        dados = em.com_reacoes(dados, caso, nula, f"{caso}-reacao.csv")
+    r = niveis(em.conferir_reacoes(dados, plano_do_portico()))
+    assert "PP: as reações somam zero" in r[pc.NIVEL_ERRO]
+    assert "W0: as reações somam zero" in r[pc.NIVEL_ERRO]
+    assert "mola macia" in r[pc.NIVEL_ERRO] and pc.NIVEL_OK not in r
+
+
+def _arquivo_da_macro(convencao_interna: bool) -> bytes:
+    """O "-forcas.csv" que a macro exportar_casos_de_carga grava: N interno de −10 kN em três
+    elementos (na convenção do "Listar forças da viga", o fim 1 traz a força na ponta)."""
+    linhas = [
+        "sep=;",
+        "14:05; 13/10/2026",
+        "Nome do estudo:Análise estática",
+        "Caso de carga: SC",
+        "Macro: Mecanica Toolkit - exportar_casos_de_carga v1",
+        "",
+        "Nome da viga;Elemento;Fim;Axial (N);Cisalhamento1 (N);Cisalhamento2 (N);"
+        "Momento 1 (N.m);Momento 2 (N.m);Torque (N.m)",
+        'Viga-1(U8"x17,1[5]);;;;;;;;',
+    ]
+    fim1 = "-10000" if convencao_interna else "10000"
+    for elemento in (101, 102, 103):
+        linhas.append(f";{elemento};1;{fim1};250,5;0;0;-1200;0")
+        linhas.append(";;2;-10000;-250,5;0;0;1450,25;0")
+    return "\r\n".join(linhas).encode("cp1252")
+
+
+@pytest.mark.parametrize("convencao_interna", [False, True])
+def test_arquivo_da_macro_dos_casos_de_carga(convencao_interna):
+    a = em.ler_arquivo(_arquivo_da_macro(convencao_interna), "Análise estática-SC-forcas.csv")
+    assert a.tipo == em.TIPO_VIGAS and a.caso_de_carga == "SC"
+    assert a.estudo == "Análise estática"
+    assert em.caso_do_arquivo_sugerido(a, ["PP", "SC", "W0"]) == "SC"
+    (pontos,) = a.membros.values()
+    assert len(pontos) == 6 and all(p.n == pytest.approx(-10.0) for p in pontos)
+    assert any("esforço interno" in aviso for aviso in a.avisos) is convencao_interna
+
+
+def test_reacoes_da_macro():
+    linhas = [
+        "sep=;",
+        "14:05; 13/10/2026",
+        "Nome do estudo:Análise estática",
+        "Caso de carga: PP",
+        "Macro: Mecanica Toolkit - exportar_casos_de_carga v1",
+        "",
+        "Forca de reacao (N)",
+        "",
+        "Componente;Selecao;Modelo inteiro",
+        "Soma X:;-0,5;-0,5",
+        "Soma Y:;13950,25;13950,25",
+        "Soma Z:;0;0",
+        "Resultante:;13950,25;13950,25",
+    ]
+    a = em.ler_arquivo("\r\n".join(linhas).encode("cp1252"), "Análise estática-PP-reacoes.csv")
+    assert a.tipo == em.TIPO_REACOES and a.caso_de_carga == "PP"
+    assert a.reacoes is not None and a.reacoes.modelo[1] == pytest.approx(13.95025)

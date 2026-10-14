@@ -226,9 +226,11 @@ AJUDA: dict[str, str] = {
         "lança no modelo (SolidWorks, Robot) como carga nodal. Valores característicos."
     ),
     "btn_plano": (
-        "Grava W0, W90, W180 e W270 no plano de cargas do projeto, com as forças nos nós. Se já "
-        "existirem, são substituídas."
+        "Grava W0, W90, W180 e W270 no plano de cargas do projeto, na forma escolhida acima. Se "
+        "já existirem, são substituídas."
     ),
+    "forma": "**Simplificada** (para estruturas simples): uma carga por nível, distribuída ao longo das vigas das linhas de pilares que vão na direção do vento — no SolidWorks, uma Força só por nível, selecionando essas vigas, com a direção ao longo delas. É a mesma carga dos nós espalhada na linha: a cota, a divisão entre as linhas contraventadas e o momento na base não mudam, e a viga não ganha flexão lateral. **Nos nós**: a força de cada pórtico em cada nível, nó a nó (para casos mais complicados).",
+    "res_simplificada": "A carga de cada nível: o total do nível (estrutura e guarda-corpo) dividido pelas linhas de pilares na direção do vento e pelo comprimento delas. Selecione só as vigas dessas linhas (todos os trechos), não as secundárias. Os equipamentos continuam como força no centro deles.",
     "reg_registrar": (
         "Grava este cálculo no projeto ativo: entradas, tabelas e verificações. O memorial passa "
         "a trazer o contraventamento."

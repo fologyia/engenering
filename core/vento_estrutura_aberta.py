@@ -716,6 +716,52 @@ def cargas_nodais(r: VentoNaDirecao, *, incluir_base: bool = False) -> list[Carg
 
 
 @dataclass(frozen=True)
+class CargaSimplificada:
+    """O vento de um nível como uma carga só, distribuída nas vigas que vão na direção do vento."""
+
+    direcao: str
+    nivel: int
+    cota_m: float
+    total_kN: float  # estrutura + guarda-corpo do nível (os equipamentos ficam à parte)
+    linhas: int  # linhas de pilares na direção do vento
+    comprimento_m: float  # de cada linha: a planta na direção do vento
+
+    @property
+    def q_kN_m(self) -> float:
+        return self.total_kN / (self.linhas * self.comprimento_m)
+
+
+def cargas_simplificadas(g: GeometriaAberta, r: VentoNaDirecao) -> list[CargaSimplificada]:
+    """Uma carga por nível: a força do nível dividida pelas vigas das linhas de pilares que vão na
+    direção do vento, ao longo do eixo delas.
+
+    É a mesma carga dos nós, espalhada ao longo da linha: cada pórtico divide a sua força igualmente
+    entre os pilares, então cada linha de pilares na direção do vento recebe ``F/linhas`` — e
+    deslizar uma força ao longo da própria linha de ação não muda nada no equilíbrio. A cota e a
+    posição em planta de cada parcela ficam as mesmas: o momento na base, a divisão entre as linhas
+    contraventadas e a torção da planta não mudam. Na direção do vento a carga corre ao longo do
+    eixo da viga (força axial), sem a flexão lateral que ela teria numa viga perpendicular ao vento.
+    A faixa da base vai direto à fundação e os equipamentos continuam como força no centro deles.
+    """
+    if r.direcao == "X":
+        linhas, comprimento = g.vaos_y + 1, g.comprimento_x_m
+    else:
+        linhas, comprimento = g.vaos_x + 1, g.largura_y_m
+    return [
+        CargaSimplificada(
+            r.direcao,
+            nivel.nivel,
+            nivel.cota_m,
+            nivel.estrutura_kN + nivel.guarda_corpo_kN,
+            linhas,
+            comprimento,
+        )
+        for nivel in r.niveis
+        if nivel.estrutura_kN + nivel.guarda_corpo_kN > 0 and comprimento > 0
+    ]
+
+
+@dataclass(frozen=True)
 class CargaDistribuida:
     direcao: str
     portico: int

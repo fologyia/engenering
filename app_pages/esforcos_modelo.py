@@ -25,6 +25,7 @@ from core import cantoneiras as ct
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
 from core import esforcos_modelo as em
+from core import gerenciador_solidworks as gs
 from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
 from core import load_combinations as comb
@@ -122,6 +123,15 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         accept_multiple_files=True,
         key=f"em_arquivos_{versao}",
         help=AJUDA["arquivos"],
+    )
+    st.download_button(
+        "Macro: exportar os casos do gerenciador de casos de carga",
+        data=gs.macro_dos_casos_de_carga(),
+        file_name="exportar_casos_de_carga.bas",
+        mime="text/plain",
+        icon=":material/code:",
+        key="em_macro_casos",
+        help=AJUDA["btn_macro_casos"],
     )
     lidos: list[em.ArquivoLido] = []
     geometria_nova: ld.GeometriaDoModelo | None = None

@@ -199,3 +199,44 @@ def test_temperatura_fica_como_esta_no_solidworks():
     assert casos["T+"] == ("Suprimir", "Suprimir", "Suprimir", "45")
     assert "T-" not in casos  # o T− ainda não foi preenchido no SolidWorks
     assert any("temperatura aplicada" in a for a in resultado.avisos)
+
+
+def test_forca_por_item_numa_carga_por_metro_do_plano():
+    """No SolidWorks, a força nas vigas sem "por unidade de comprimento" vai inteira em cada viga."""
+    plano = pc.com_acao(
+        pc.PlanoDeCargas(),
+        pc.nova_acao(
+            "PE",
+            cargas=[pc.CargaDoModelo("Vigas de borda", 0.3, "kN/m", "Z (vertical)", "", 2, 6.0)],
+        ),
+    )
+    (carga,) = ex.cenario_de_carga(plano, ex.UNIDADES_N_M, Y, []).cargas
+    assert carga.unidade == "N/m" and carga.valor_ao_criar == -300.0
+    assert "por unidade de comprimento" in carga.comando
+    linhas = [
+        "Tipo de carga,3,3,3,3,3,3",
+        "Nome da carga:,PE,PE,PE,PE,PE,PE",
+        "Valor de:,Ao longo da face dir 1,Ao longo da face dir 2,Normal ao plano,"
+        "Ao longo da face dir 1,Ao longo da face dir 2,Normal ao plano",
+        "Valores originais/iniciais:,Suprimir (N),Suprimir (N),-4500 N,Suprimir (N.m),"
+        "Suprimir (N.m),Suprimir (N.m)",
+    ]
+    resultado = gs.preencher(gs.ler("\r\n".join(linhas).encode("cp1252")), plano, Y, [])
+    assert "por item" in resultado.ligacoes[0].situacao
+    assert any("por unidade de comprimento" in a for a in resultado.avisos)
+
+
+def test_macro_dos_casos_de_carga():
+    texto = gs.macro_dos_casos_de_carga()
+    assert texto.decode("ascii") and b"\r\n" in texto and b"\n" not in texto.replace(b"\r\n", b"")
+    for trecho in (
+        b"GetAllPrimaryLoadCaseNames",
+        b"LoadResultsOfPrimaryLoadCase",
+        b"GetBeamForcesForEntities",
+        b"GetReactionForcesAndMomentsWithSelections",
+        b"GetSensorResultValueForLoadCaseCombination",
+        b"Caso de carga: ",
+        b"Nome da viga;Elemento;Fim;Axial (N)",
+        b"Forca de reacao (N)",
+    ):
+        assert trecho in texto, trecho

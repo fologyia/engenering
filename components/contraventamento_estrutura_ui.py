@@ -905,6 +905,46 @@ def _aba_desenhos(r: cp.ResultadoContraventamento) -> None:
     st.altair_chart(grafico_do_cortante(list(r.andares)), width="stretch")
 
 
+def _metros(valor: float) -> str:
+    return f"{valor:.2f}".replace(".", ",")
+
+
+def mostrar_vento_simplificado(
+    geometria: va.GeometriaAberta, resultado: va.ResultadoVentoAberto, *, ajuda: str
+) -> None:
+    """A carga de cada nível na forma simplificada, nas duas direções."""
+    st.subheader("Vento simplificado: uma carga por nível", help=ajuda)
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Direção": f"+{c.direcao} (W0)" if c.direcao == "X" else f"+{c.direcao} (W90)",
+                    "Nível": c.nivel,
+                    "Cota (m)": c.cota_m,
+                    "Total do nível (kN)": c.total_kN,
+                    "Vigas na direção do vento": f"{c.linhas} linhas × {_metros(c.comprimento_m)} m",
+                    "q (kN/m)": c.q_kN_m,
+                    "q (N/m)": c.q_kN_m * 1e3,
+                }
+                for d in (resultado.x, resultado.y)
+                for c in va.cargas_simplificadas(geometria, d)
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Cota (m)": st.column_config.NumberColumn(format="%.2f"),
+            "Total do nível (kN)": st.column_config.NumberColumn(format="%.2f"),
+            "q (kN/m)": st.column_config.NumberColumn(format="%.3f"),
+            "q (N/m)": st.column_config.NumberColumn(format="%.1f"),
+        },
+    )
+    st.caption(
+        "W180 e W270 são as mesmas cargas com o sinal trocado. A faixa da base (meio primeiro "
+        "andar) vai direto à fundação e os equipamentos ficam como força no centro deles."
+    )
+
+
 def _aba_vento(r: cp.ResultadoContraventamento) -> None:
     tabelas = reg.tabelas_para_memorial(r)
     st.subheader("Vento por nível", help=AJUDA["res_vento_niveis"])
@@ -912,13 +952,22 @@ def _aba_vento(r: cp.ResultadoContraventamento) -> None:
     st.subheader("Forças nos nós de cada pórtico (para o modelo)", help=AJUDA["res_nos"])
     nos = var.tabelas_para_memorial(r.vento)[2]
     _tabela(nos)
+    forma = st.radio(
+        "Como aplicar o vento no modelo",
+        var.FORMAS,
+        key=_chave("forma_do_vento"),
+        help=AJUDA["forma"],
+    )
+    if forma == var.FORMA_SIMPLIFICADA:
+        mostrar_vento_simplificado(r.vento.geometria, r.vento, ajuda=AJUDA["res_simplificada"])
     if st.button(
         "Enviar o vento ao plano de cargas (W0, W90, W180, W270)",
         icon=":material/table_chart:",
         key=_chave("vento_para_plano"),
         help=AJUDA["btn_plano"],
     ) and gravar_acoes_no_plano(
-        var.acoes_para_o_plano(r.vento), origem="Contraventamento de estruturas abertas"
+        var.acoes_para_o_plano(r.vento, forma=forma),
+        origem="Contraventamento de estruturas abertas",
     ):
         st.success("Vento gravado no plano de cargas do projeto.", icon=":material/check_circle:")
     st.caption(" · ".join(r.vento.vento_no_topo.memoria))

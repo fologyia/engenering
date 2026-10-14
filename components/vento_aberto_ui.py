@@ -51,9 +51,11 @@ AJUDA: dict[str, str] = {
     "btn_csv_nos": "Forças nos nós por pórtico e nível, nas duas direções.",
     "btn_csv_barras": "Carga por metro em pilares, vigas e guarda-corpos de cada pórtico.",
     "btn_plano": (
-        "Grava W0, W90, W180 e W270 no plano de cargas do projeto, com a força em cada nó: as "
+        "Grava W0, W90, W180 e W270 no plano de cargas do projeto, na forma escolhida acima: as "
         "combinações saem de lá. Se já existirem, são substituídas."
     ),
+    "forma": "**Simplificada** (para estruturas simples): uma carga por nível, distribuída ao longo das vigas das linhas de pilares que vão na direção do vento — no SolidWorks, uma Força só por nível, selecionando essas vigas, com a direção ao longo delas. É a mesma carga dos nós espalhada na linha: a cota, a divisão entre as linhas contraventadas e o momento na base não mudam, e a viga não ganha flexão lateral. **Nos nós**: a força de cada pórtico em cada nível, nó a nó (para casos mais complicados).",
+    "res_simplificada": "A carga de cada nível: o total do nível (estrutura e guarda-corpo) dividido pelas linhas de pilares na direção do vento e pelo comprimento delas. Selecione só as vigas dessas linhas (todos os trechos), não as secundárias. Os equipamentos continuam como força no centro deles.",
     "reg_registrar": "Grava o cálculo no projeto ativo: o memorial passa a trazer as três tabelas.",
     "direcao": "Qual direção do vento mostrar.",
 }
@@ -190,6 +192,14 @@ def mostrar_vento_em_estrutura_aberta() -> None:
 
     with st.container(border=True):
         st.subheader("Exportar e levar ao projeto", help=AJUDA["res_exportar"])
+        forma = st.radio(
+            "Como aplicar o vento no modelo",
+            var.FORMAS,
+            key="va_forma",
+            help=AJUDA["forma"],
+        )
+        if forma == var.FORMA_SIMPLIFICADA:
+            ce.mostrar_vento_simplificado(geometria, resultado, ajuda=AJUDA["res_simplificada"])
         colunas = st.columns(3)
         colunas[0].download_button(
             "Forças nos nós (CSV)",
@@ -218,7 +228,7 @@ def mostrar_vento_em_estrutura_aberta() -> None:
             help=AJUDA["btn_plano"],
             width="stretch",
         ) and gravar_acoes_no_plano(
-            var.acoes_para_o_plano(resultado), origem="Vento em estruturas abertas"
+            var.acoes_para_o_plano(resultado, forma=forma), origem="Vento em estruturas abertas"
         ):
             st.success(
                 "W0, W90, W180 e W270 gravados no plano de cargas.", icon=":material/check_circle:"

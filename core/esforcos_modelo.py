@@ -389,7 +389,44 @@ def _ler_vigas(
         membros.pop(m)
     if not membros:
         raise ArquivoInvalido("O arquivo de forças da viga não tem nenhuma viga com resultados.")
+    if _ja_era_esforco_interno(membros):
+        membros = {
+            m: [_sinal_trocado(p) if p.fim == "1" else p for p in pontos]
+            for m, pontos in membros.items()
+        }
+        avisos.append(
+            "O arquivo já traz o esforço interno (as duas pontas de cada elemento com o mesmo "
+            "sinal), não a força na ponta do “Listar forças da viga”: lido nessa convenção."
+        )
     return {m: tuple(p) for m, p in membros.items()}, tuple(avisos)
+
+
+def _sinal_trocado(p: PontoDeEsforco) -> PontoDeEsforco:
+    return PontoDeEsforco(p.elemento, p.fim, -p.n, -p.v1, -p.v2, -p.m1, -p.m2, -p.t)
+
+
+def _ja_era_esforco_interno(membros: Mapping[str, Sequence[PontoDeEsforco]]) -> bool:
+    """Depois da troca de sinal do fim 1, o axial e o torque das duas pontas de um elemento são
+    iguais (nenhum elemento tem carga axial ou torção distribuída que conte). Se na maioria saem
+    opostos, o arquivo não era de força na ponta: já trazia o esforço interno."""
+    iguais = opostos = 0
+    for pontos in membros.values():
+        por_elemento: dict[str, dict[str, PontoDeEsforco]] = {}
+        for p in pontos:
+            por_elemento.setdefault(p.elemento, {})[p.fim] = p
+        for pontas in por_elemento.values():
+            a, b = pontas.get("1"), pontas.get("2")
+            if a is None or b is None:
+                continue
+            for x, y in ((a.n, b.n), (a.t, b.t)):
+                maior = max(abs(x), abs(y))
+                if maior < 1e-3:
+                    continue
+                if abs(x - y) <= 0.05 * maior:
+                    iguais += 1
+                elif abs(x + y) <= 0.05 * maior:
+                    opostos += 1
+    return opostos >= 3 and opostos > 2 * iguais
 
 
 _TENSAO_PARA_MPA = {
@@ -1094,6 +1131,10 @@ def conferir_peso_proprio(
     )
 
 
+#: Abaixo disto a soma das reações é zero: o modelo rodou sem fixação (mola macia, alívio inercial).
+REACAO_NULA_kN = 1e-3
+
+
 def conferir_reacoes(
     dados: EsforcosDoModelo,
     plano: pc.PlanoDeCargas,
@@ -1121,6 +1162,18 @@ def conferir_reacoes(
             continue
         rx, ry, rz = para_o_plano(caso.reacoes.modelo, dados.eixo_vertical)
         horizontal = math.hypot(rx, ry)
+        if math.hypot(rx, ry, rz) < REACAO_NULA_kN:
+            itens.append(
+                pc.ItemDeConferencia(
+                    pc.NIVEL_ERRO,
+                    f"{codigo}: as reações somam zero — o modelo está sem fixação e o SolidWorks "
+                    "rodou com mola macia ou alívio inercial (deslocamentos enormes, esforços sem "
+                    "sentido): os resultados deste caso não valem. Ponha as fixações nas bases "
+                    "(Geometria fixa nas juntas dos pilares) e desligue a mola macia e o alívio "
+                    "inercial nas propriedades do estudo.",
+                )
+            )
+            continue
         acao = plano.acao(codigo)
         if acao is None:
             itens.append(
