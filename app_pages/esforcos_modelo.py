@@ -144,6 +144,14 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
             except ld.GeometriaInvalida as erro:
                 st.error(f"{enviado.name}: {erro}", icon=":material/error:")
             continue
+        if gs.e_quadro_dos_sensores(conteudo):
+            st.info(
+                f"{enviado.name} é o quadro dos sensores do gerenciador (o que a Vista de "
+                "resultados mostra): fica só para consulta. A verificação usa os arquivos "
+                "-forcas e -reacoes de cada caso.",
+                icon=":material/table_view:",
+            )
+            continue
         if tipo_da_macro == ld.TIPO_LISTA_DE_CORTE:
             st.info(
                 f"{enviado.name} é a lista de corte da macro: envie-a na página **Lista de "

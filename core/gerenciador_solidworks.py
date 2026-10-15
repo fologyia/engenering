@@ -60,6 +60,13 @@ def macro_dos_casos_de_carga() -> bytes:
     return texto.replace("\r\n", "\n").replace("\n", "\r\n").encode("ascii")
 
 
+def e_quadro_dos_sensores(conteudo: bytes) -> bool:
+    """O ``<estudo>-gerenciador-resultados.csv`` da macro: o quadro dos sensores da Vista de
+    resultados (só para consulta — a verificação usa os ``-forcas`` e ``-reacoes``)."""
+    texto = em._normal(em._decodificar(conteudo[:600]))
+    return "quadrodavistaderesultados" in texto
+
+
 ROTULOS = ("Tipo de carga", "Nome da carga:", "Valor de:", "Valores originais/iniciais:")
 ROTULO_COMBINACOES = "Combinações de casos de carga"
 SUPRIMIR = ex.SUPRIMIR

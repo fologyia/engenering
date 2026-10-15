@@ -240,3 +240,19 @@ def test_macro_dos_casos_de_carga():
         b"Forca de reacao (N)",
     ):
         assert trecho in texto, trecho
+
+
+def test_quadro_dos_sensores_da_macro_e_reconhecido():
+    quadro = "\r\n".join(
+        [
+            "sep=;",
+            "Nome do estudo:Análise estática",
+            "Quadro da Vista de resultados do gerenciador de casos de carga - valores como a API "
+            "do SOLIDWORKS devolve",
+            "",
+            "Caso;Tipo;Deslocamento2;Tensão da viga2",
+            "PP;caso primario;-1,903000E+00;3,782000E+01",
+        ]
+    ).encode("cp1252")
+    assert gs.e_quadro_dos_sensores(quadro)
+    assert not gs.e_quadro_dos_sensores(DO_SOLIDWORKS)

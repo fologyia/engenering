@@ -2,11 +2,13 @@
 ' SOLIDWORKS Simulation para CSV: o que a Vista de resultados mostra, sem passar pelo relatorio.
 '
 ' Uso (uma vez): com a peca aberta e a aba do estudo do gerenciador selecionada, Ferramentas >
-' Macro > Nova..., de um nome e salve; no editor que abrir, apague tudo, cole este texto inteiro e
-' tecle F5. Das proximas vezes: Ferramentas > Macro > Executar... e escolha a macro salva.
+' Macro > Nova..., de um nome e salve; no editor que abrir, apague tudo e cole este texto inteiro.
+' Ainda no editor: Ferramentas > Referencias... e marque "SOLIDWORKS Simulation <ano> type
+' library" (sem ela o editor acusa "Tipo definido pelo usuario nao definido"). Salve e tecle F5.
+' Das proximas vezes: Ferramentas > Macro > Executar... e escolha a macro salva (a referencia fica
+' gravada nela).
 ' Antes de rodar, Executar no gerenciador: a macro so le os resultados ja calculados (nao roda o
-' estudo e nao muda nada nele). Nao precisa marcar referencia nenhuma no editor: o Simulation e
-' chamado pelo nome.
+' estudo e nao muda nada nele).
 '
 ' Saem, na pasta da peca, para cada caso primario (PP, SC, W0...):
 ' - <estudo>-<caso>-forcas.csv: os esforcos de cada viga, elemento a elemento, no formato do
@@ -24,7 +26,7 @@
 ' qualquer que seja a configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v2"
+Const VERSAO_DA_MACRO As String = "v3"
 Const PECA As Long = 1          ' swDocPART
 Const CORPO_SOLIDO As Long = 0  ' swSolidBody
 Const UNIDADES_SI As Long = 0   ' swsUnitSI: N e N.m
@@ -35,16 +37,19 @@ Dim arquivo As Integer
 Dim problemas As String
 Dim totalProblemas As Long
 Dim ultimaFalha As String
+Dim falhasDoGerenciador As String
 
 Sub main()
     Dim swApp As SldWorks.SldWorks
     Dim swModel As SldWorks.ModelDoc2
     Dim swPeca As SldWorks.PartDoc
-    Dim suplementoDoSimulation As Object
-    Dim gerenteDeEstudos As Object
-    Dim estudo As Object
-    Dim gerenciador As Object
-    Dim resultados As Object
+    Dim suplementoDoSimulation As CosmosWorksLib.CwAddincallback
+    Dim simulation As CosmosWorksLib.COSMOSWORKS
+    Dim documentoDoSimulation As CosmosWorksLib.CWModelDoc
+    Dim gerenteDeEstudos As CosmosWorksLib.CWStudyManager
+    Dim estudo As CosmosWorksLib.CWStudy
+    Dim gerenciador As CosmosWorksLib.CWLoadCaseManager
+    Dim resultados As CosmosWorksLib.CWResults
     Dim corpos As Object
     Dim listaDeCorpos As Variant
     Dim corpo As Variant
@@ -72,6 +77,7 @@ Sub main()
     problemas = ""
     totalProblemas = 0
     ultimaFalha = ""
+    falhasDoGerenciador = ""
 
     etapa = "abrir a peca"
     Set swApp = Application.SldWorks
@@ -98,7 +104,13 @@ Sub main()
         MsgBox "Ligue o suplemento SOLIDWORKS Simulation (Ferramentas > Suplementos) e rode de novo.", vbExclamation
         Exit Sub
     End If
-    Set gerenteDeEstudos = suplementoDoSimulation.CosmosWorks.ActiveDoc.StudyManager
+    Set simulation = suplementoDoSimulation.COSMOSWORKS
+    Set documentoDoSimulation = simulation.ActiveDoc
+    If documentoDoSimulation Is Nothing Then
+        MsgBox "O Simulation nao achou a peca ativa: clique na peca e rode de novo.", vbExclamation
+        Exit Sub
+    End If
+    Set gerenteDeEstudos = documentoDoSimulation.StudyManager
     Set estudo = gerenteDeEstudos.GetStudy(gerenteDeEstudos.ActiveStudy)
     If estudo Is Nothing Then
         MsgBox "Selecione a aba do estudo do gerenciador de casos de carga e rode de novo.", vbExclamation
@@ -164,7 +176,7 @@ Sub main()
         caso = CStr(casos(i))
         etapa = "carregar os resultados do caso " & caso
         If Not CarregarCaso(gerenciador, caso) Then
-            Problema caso & " (sem resultados: Executar no gerenciador antes)"
+            Problema caso & " (" & ultimaFalha & ")"
         Else
             Set resultados = estudo.Results
             If resultados Is Nothing Then
@@ -286,6 +298,9 @@ Sub main()
     If casosExportados = 0 And ultimaFalha <> "" Then
         texto = texto & vbCrLf & vbCrLf & "Nenhuma viga deu esforcos. Ultima falha: " & ultimaFalha
     End If
+    If casosExportados = 0 And falhasDoGerenciador <> "" Then
+        texto = texto & vbCrLf & vbCrLf & "No gerenciador: " & falhasDoGerenciador
+    End If
     texto = texto & vbCrLf & vbCrLf & "Envie os arquivos -forcas e -reacoes na pagina Esforcos do modelo."
     If totalProblemas > 0 Then
         texto = texto & vbCrLf & vbCrLf & "ATENCAO: " & totalProblemas & " item(ns) ficaram de fora: " & problemas
@@ -314,7 +329,7 @@ Falha:
     End Select
 End Sub
 
-Function Suplemento(swApp As SldWorks.SldWorks) As Object
+Function Suplemento(swApp As SldWorks.SldWorks) As CosmosWorksLib.CwAddincallback
     ' O objeto do Simulation: o nome mudou entre as versoes do SOLIDWORKS.
     On Error Resume Next
     Set Suplemento = Nothing
@@ -322,18 +337,27 @@ Function Suplemento(swApp As SldWorks.SldWorks) As Object
     If Suplemento Is Nothing Then Set Suplemento = swApp.GetAddInObject("CosmosWorks.CosmosWorks")
 End Function
 
-Sub Tentar(gerenciador As Object, acao As String)
-    ' Abre o gerenciador e a Vista de resultados como o exemplo da API; se a versao nao tiver, segue.
+Sub Tentar(gerenciador As CosmosWorksLib.CWLoadCaseManager, acao As String)
+    ' Abre o gerenciador e a Vista de resultados como o exemplo da API; se falhar, anota e segue.
+    Dim ok As Boolean
     On Error Resume Next
+    ok = True
     If acao = "abrir" Then
-        gerenciador.OpenLoadCaseManager
+        ok = gerenciador.OpenLoadCaseManager()
     Else
-        gerenciador.ShowResultsViewTab
+        ok = gerenciador.ShowResultsViewTab()
+    End If
+    If Err.Number <> 0 Then
+        falhasDoGerenciador = falhasDoGerenciador & IIf(acao = "abrir", "OpenLoadCaseManager", _
+            "ShowResultsViewTab") & ": erro " & Err.Number & " (" & Err.Description & "); "
+    ElseIf Not ok Then
+        falhasDoGerenciador = falhasDoGerenciador & IIf(acao = "abrir", "OpenLoadCaseManager", _
+            "ShowResultsViewTab") & " devolveu Falso; "
     End If
     Err.Clear
 End Sub
 
-Function NomesDoGerenciador(gerenciador As Object, qual As String) As Variant
+Function NomesDoGerenciador(gerenciador As CosmosWorksLib.CWLoadCaseManager, qual As String) As Variant
     On Error Resume Next
     NomesDoGerenciador = Empty
     If qual = "combinacoes" Then
@@ -343,17 +367,23 @@ Function NomesDoGerenciador(gerenciador As Object, qual As String) As Variant
     End If
 End Function
 
-Function CarregarCaso(gerenciador As Object, caso As String) As Boolean
+Function CarregarCaso(gerenciador As CosmosWorksLib.CWLoadCaseManager, caso As String) As Boolean
     On Error Resume Next
     CarregarCaso = False
     CarregarCaso = gerenciador.LoadResultsOfPrimaryLoadCase(caso)
-    If Err.Number <> 0 Then CarregarCaso = False
+    If Err.Number <> 0 Then
+        ultimaFalha = "LoadResultsOfPrimaryLoadCase: erro " & Err.Number & " (" & Err.Description & ")"
+        CarregarCaso = False
+    ElseIf Not CarregarCaso Then
+        ultimaFalha = "LoadResultsOfPrimaryLoadCase devolveu Falso: Executar no gerenciador antes"
+    End If
 End Function
 
-Function LerVigasDoEstudo(estudo As Object, corpos As Object, nomes() As String, _
+Function LerVigasDoEstudo(estudo As CosmosWorksLib.CWStudy, corpos As Object, nomes() As String, _
     corposDasVigas() As Object, vigas() As Object, motivo As String) As Long
     ' A lista de vigas do Simulation; 0 (e o motivo) se alguma chamada nao responder.
-    Dim gerente As Object, viga As Object, total As Long, i As Long, erro As Long, passo As String
+    Dim gerente As CosmosWorksLib.CWBeamManager, viga As CosmosWorksLib.CWBeamBody
+    Dim total As Long, i As Long, erro As Long, passo As String
     On Error GoTo Falhou
     LerVigasDoEstudo = 0
     passo = "BeamManager"
@@ -406,7 +436,8 @@ Function CorpoDaViga(nome As String, corpos As Object) As Object
     End If
 End Function
 
-Function EsforcosDaViga(resultados As Object, corpo As Object, viga As Object, valores() As Variant) As Boolean
+Function EsforcosDaViga(resultados As CosmosWorksLib.CWResults, corpo As Object, viga As Object, _
+    valores() As Variant) As Boolean
     ' As seis listas (axial, cisalhamento 1 e 2, momento 1 e 2, torque): elemento, fim 1, fim 2...
     ' Tenta com o corpo da peca (como no exemplo da API) e, se nao der, com a viga do estudo.
     EsforcosDaViga = False
@@ -419,7 +450,7 @@ Function EsforcosDaViga(resultados As Object, corpo As Object, viga As Object, v
     If Not viga Is Nothing Then EsforcosDaViga = SeisListas(resultados, viga, valores)
 End Function
 
-Function SeisListas(resultados As Object, alvo As Object, valores() As Variant) As Boolean
+Function SeisListas(resultados As CosmosWorksLib.CWResults, alvo As Object, valores() As Variant) As Boolean
     Dim selecao(0) As Object, entidades As Variant, k As Long, erro As Long
     On Error GoTo Falhou
     SeisListas = False
@@ -444,7 +475,7 @@ Falhou:
     SeisListas = False
 End Function
 
-Function ReacoesDoModelo(resultados As Object, soma As Variant) As Boolean
+Function ReacoesDoModelo(resultados As CosmosWorksLib.CWResults, soma As Variant) As Boolean
     ' A soma das reacoes do modelo inteiro (posicoes 8 a 15 do segundo retorno).
     Dim cada As Variant, nos As Variant, vazio As Variant, erro As Long
     On Error Resume Next
@@ -466,7 +497,8 @@ Function ReacoesDoModelo(resultados As Object, soma As Variant) As Boolean
     ReacoesDoModelo = (UBound(soma) - LBound(soma) + 1 >= 16)
 End Function
 
-Function LinhaDoQuadro(gerenciador As Object, sensores As Variant, nome As String, primario As Boolean) As String
+Function LinhaDoQuadro(gerenciador As CosmosWorksLib.CWLoadCaseManager, sensores As Variant, _
+    nome As String, primario As Boolean) As String
     Dim k As Long, valor As Double, ok As Boolean, linha As String
     On Error Resume Next
     linha = nome & ";" & IIf(primario, "caso primario", "combinacao")

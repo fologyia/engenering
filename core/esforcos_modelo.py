@@ -1184,6 +1184,27 @@ def conferir_reacoes(
             )
             continue
         if _so_vertical(acao):
+            total = math.hypot(rx, ry, rz)
+            if abs(rz) < 0.01 * total:
+                # A reação de um caso só vertical está toda num eixo horizontal: o eixo vertical
+                # escolhido não é o do modelo (ou a carga foi aplicada no eixo errado).
+                modelo = caso.reacoes.modelo
+                eixo = "XYZ"[max(range(3), key=lambda i: abs(modelo[i]))]
+                troca = (
+                    f"Se o modelo tem o {eixo} para cima, troque “Eixo vertical do modelo” no "
+                    "passo 1; se não, "
+                    if eixo in ("Y", "Z")
+                    else "No SolidWorks a vertical é Y ou Z: "
+                )
+                itens.append(
+                    pc.ItemDeConferencia(
+                        pc.NIVEL_ERRO,
+                        f"{codigo}: a reação ({_n(total)} kN) está toda no eixo {eixo} do modelo, "
+                        f"e o eixo vertical escolhido é o {dados.eixo_vertical}. {troca}a "
+                        "gravidade ou a carga foi aplicada no eixo errado.",
+                    )
+                )
+                continue
             if rz < 0:
                 itens.append(
                     pc.ItemDeConferencia(

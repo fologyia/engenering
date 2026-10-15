@@ -162,7 +162,11 @@ cargas que vão para o modelo.
    da viga", elemento a elemento, por `GetBeamForcesForEntities`) e `<estudo>-<caso>-reacoes.csv`
    (formato do "Listar forças resultantes", por `GetReactionForcesAndMomentsWithSelections`), com
    "Caso de carga: <caso>" no cabeçalho, e o quadro dos sensores da Vista de resultados em cada caso
-   e combinação. Sem a macro: Listar forças da viga e Listar forças resultantes à mão, com o código
+   e combinação. A macro precisa da referência "SOLIDWORKS Simulation <ano> type library"
+   marcada no editor do VBA (Ferramentas → Referências): sem ela, chamando o Simulation pelo nome,
+   o `BeamBodyName` e o `LoadResultsOfPrimaryLoadCase` não responderam (erro 438) no SolidWorks do
+   usuário. O quadro dos sensores, se for enviado na página, é reconhecido e fica só para
+   consulta (`gs.e_quadro_dos_sensores`). Sem a macro: Listar forças da viga e Listar forças resultantes à mão, com o código
    do caso no nome do arquivo (`caso_do_arquivo_sugerido`). A leitura descobre sozinha se o arquivo
    traz a força na ponta (o "Listar") ou já o esforço interno: no mesmo elemento, o axial e o torque
    das duas pontas têm de sair iguais.

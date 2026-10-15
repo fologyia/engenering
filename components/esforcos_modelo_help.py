@@ -12,8 +12,10 @@ AJUDA: dict[str, str] = {
     ),
     "btn_macro_casos": (
         "Baixa a macro que tira os resultados do gerenciador de casos de carga sem passar pelo "
-        "relatório. Com a peça aberta e a aba do estudo selecionada (depois de Executar no "
-        "gerenciador): Ferramentas → Macro → Executar. Ela grava, na pasta da peça, as forças das "
+        "relatório. Na primeira vez, no editor de macros do SolidWorks: Ferramentas → Referências "
+        "→ marque “SOLIDWORKS Simulation <ano> type library”. Com a peça aberta e a aba do estudo "
+        "selecionada (depois de Executar no gerenciador): Ferramentas → Macro → Executar. Ela "
+        "grava, na pasta da peça, as forças das "
         "vigas e as reações de cada caso primário (o caso vai no cabeçalho) e o quadro dos "
         "sensores da Vista de resultados. Envie os de forças e de reações aqui, todos juntos."
     ),

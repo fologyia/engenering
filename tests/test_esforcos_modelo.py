@@ -430,3 +430,14 @@ def test_reacoes_da_macro():
     a = em.ler_arquivo("\r\n".join(linhas).encode("cp1252"), "Análise estática-PP-reacoes.csv")
     assert a.tipo == em.TIPO_REACOES and a.caso_de_carga == "PP"
     assert a.reacoes is not None and a.reacoes.modelo[1] == pytest.approx(13.95025)
+
+
+def test_reacao_toda_num_eixo_horizontal_aponta_o_eixo_vertical_errado():
+    """Modelo com o Z para cima lido como Y para cima: o PP reage todo em Z."""
+    dados = importar("PP", com_reacoes=False)
+    assert dados.eixo_vertical == "Y"
+    dados = em.com_reacoes(dados, "PP", em.Reacoes(modelo=(0.0, 0.0, 11.56)), "PP-reacao.csv")
+    r = niveis(em.conferir_reacoes(dados, plano_do_portico()))
+    assert "PP: a reação (11,56 kN) está toda no eixo Z do modelo" in r[pc.NIVEL_ERRO]
+    assert "troque “Eixo vertical do modelo”" in r[pc.NIVEL_ERRO]
+    assert "horizontais" not in r.get(pc.NIVEL_ATENCAO, "")
