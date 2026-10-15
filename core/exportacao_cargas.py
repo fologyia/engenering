@@ -636,6 +636,23 @@ def linhas_das_cargas_do_estudo(c: CenarioDeCarga) -> list[list[object]]:
 # ---------------------------------------------------------------------------------------------
 # Leia-me e planilha Excel
 # ---------------------------------------------------------------------------------------------
+#: Como nomear as coisas no SolidWorks para o programa reconhecer tudo sozinho (Leia-me da
+#: planilha e página Esforços do modelo).
+CONVENCAO_DE_NOMES: tuple[str, ...] = (
+    "Casos primários do gerenciador: exatamente os códigos do plano — PP, PE, SC, EQ, W0, W90, "
+    "W180, W270 (T+ e T- se houver temperatura). É por eles que cada arquivo casa com o plano.",
+    "Cargas do estudo: o caso e a direção — PP (gravidade), PE guarda-corpo, SC piso, e o vento "
+    "por eixo e sinal: W +X, W -X, W +Y, W -Y (o W0 usa a W +X, o W180 a W -X, o W90 a W +Y e o "
+    "W270 a W -Y). Não use só “+Y” ou “-Y”: é assim que os ventos se trocam.",
+    "Arquivos do “Listar forças da viga”: <caso>-forcas.csv (PP-forcas.csv, W90-forcas.csv); "
+    "pode ter o estudo antes (Análise 3-PP-forcas.csv). Os da macro já saem assim.",
+    'Membros da soldagem: o perfil real e a função — W200x31,3 - Pilar, U8"x17,1 - Viga, '
+    'L3"x1/4" - Mão francesa. O programa compara o nome com a seção desenhada.',
+    "Não renomeie corpos depois de rodar o estudo; se renomear, refaça a malha.",
+    "Uma pasta por estudo, com a peça, o …_esqueleto.csv e todos os CSV: envie tudo junto.",
+)
+
+
 def texto_leia_me(
     sistema: SistemaDeUnidades,
     eixos: str,
@@ -712,6 +729,9 @@ def texto_leia_me(
         "reconhece o caso.",
         "6. As combinações do gerenciador são só para olhar no SolidWorks: o programa importa os "
         "casos primários e faz as combinações da NBR 8800.",
+        "",
+        "NOMES NO SOLIDWORKS (para o programa reconhecer tudo sozinho)",
+        *(f"- {item}" for item in CONVENCAO_DE_NOMES),
         "",
         "NO ROBOT STRUCTURAL ANALYSIS",
         "1. Crie os casos de carga com os códigos da aba Cargas (natureza: permanente, "

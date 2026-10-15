@@ -25,6 +25,7 @@ from core import cantoneiras as ct
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
 from core import esforcos_modelo as em
+from core import exportacao_cargas as ex
 from core import gerenciador_solidworks as gs
 from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
@@ -133,6 +134,8 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         key="em_macro_casos",
         help=AJUDA["btn_macro_casos"],
     )
+    with st.expander("Como nomear no SolidWorks para o programa reconhecer tudo"):
+        st.markdown("\n".join(f"- {item}" for item in ex.CONVENCAO_DE_NOMES))
     lidos: list[em.ArquivoLido] = []
     geometria_nova: ld.GeometriaDoModelo | None = None
     for enviado in enviados or []:

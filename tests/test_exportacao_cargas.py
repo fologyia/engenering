@@ -351,3 +351,8 @@ def test_forca_em_varios_pontos_e_valor_por_item():
 def test_plano_sem_cargas_nao_tem_cenario():
     c = ex.cenario_de_carga(pc.PlanoDeCargas(), ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA, [])
     assert c.cargas == () and ex.tabela_do_cenario(c)[1] == []
+
+
+def test_leia_me_traz_a_convencao_de_nomes():
+    leia = "\\n".join(ex.texto_leia_me(ex.UNIDADES_N_M, ex.EIXO_Y_PARA_CIMA))
+    assert "NOMES NO SOLIDWORKS" in leia and "W +X" in leia and "PP-forcas.csv" in leia
