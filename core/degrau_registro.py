@@ -43,7 +43,7 @@ AVISOS_FIXOS = (
 )
 
 NAO_FAZ = (
-    "Longarina, patamar e ligações da longarina.",
+    "Patamar e ligações da longarina; a longarina sai só na aba Longarina (lance maior, biapoiada) e não entra no registro.",
     "Guarda-corpo: o programa só confere as dimensões informadas.",
     "Pressão de contato do parafuso na chapa lateral: o catálogo não informa a espessura.",
 )

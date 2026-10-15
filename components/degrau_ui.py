@@ -19,9 +19,12 @@ import streamlit as st
 from components.degrau_help import AJUDA
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
-from components.verification_table import COR_STATUS
+from components.verification_table import COR_STATUS, mostrar_tabela_verificacoes
 from core import degrau_escada as de
 from core import degrau_registro as reg
+from core import longarina_escada as le
+from core import section_catalog as sc
+from core.contraventamento_barras import ACOS
 from core.degrau_relatorio import gerar_pdf_degrau
 
 OPCOES_SELECAO = {de.SELECAO_AUTOMATICA: "Automática", de.SELECAO_MANUAL: "Manual"}
@@ -31,6 +34,7 @@ OPCOES_LIGACAO = [de.QUALQUER, *de.LIGACOES]
 COR_ADOTADO = "background-color: rgba(250, 204, 21, 0.38)"
 COR_SIM = "background-color: rgba(34, 197, 94, 0.28)"
 COR_NAO = "background-color: rgba(239, 68, 68, 0.20)"
+FAMILIAS_DA_LONGARINA = ("U (canal laminado)", "W (mesa larga)", "I duplamente simétrico")
 
 
 def _pt(valor: float, casas: int = 2) -> str:
@@ -599,6 +603,100 @@ def formulario_cargas() -> DadosCargas:
     )  # fmt: skip
 
 
+def formulario_longarina() -> le.EntradaLongarina | None:
+    """A longarina (opcional): perfil, aço, distância horizontal entre apoios e guarda-corpo."""
+    with st.container(border=True):
+        st.subheader("7. Longarina", help=AJUDA["sec_7"])
+        ligada = st.toggle(
+            "Calcular a longarina",
+            key="dg_longarina",
+            persist_state="session",
+            help=AJUDA["longarina"],
+        )
+        if not ligada:
+            return None
+        perfis = [n for n, p in sc.listar_perfis().items() if p.familia in FAMILIAS_DA_LONGARINA]
+        linha = st.columns(4)
+        perfil = _selecao(
+            "Perfil da longarina",
+            "dg_lg_perfil",
+            perfis,
+            AJUDA["lg_perfil"],
+            alvo=linha[0],
+            padrao=le.EntradaLongarina().perfil,
+        )
+        aco = _selecao(
+            "Aço", "dg_lg_aco", list(ACOS), AJUDA["lg_aco"], alvo=linha[1], padrao="ASTM A36"
+        )
+        vao = _opcional(
+            "Distância horizontal entre apoios (m)",
+            "dg_lg_vao",
+            AJUDA["lg_vao"],
+            minimo=0.1,
+            passo=0.1,
+            alvo=linha[2],
+        )
+        gc = _numero(
+            "Guarda-corpo (kN/m)",
+            "dg_lg_gc",
+            0.40,
+            AJUDA["lg_gc"],
+            passo=0.05,
+            formato="%.2f",
+            alvo=linha[3],
+        )
+    return le.EntradaLongarina(perfil=perfil, aco=aco, vao_horizontal_m=vao, guarda_corpo_kN_m=gc)
+
+
+def _aba_longarina(r: de.ResultadoEscada, entrada: le.EntradaLongarina) -> None:
+    try:
+        lg = le.calcular_longarina(r, entrada)
+    except (le.LongarinaInvalida, ValueError) as erro:
+        st.error(f"Não foi possível calcular a longarina: {erro}", icon=":material/error:")
+        return
+    st.subheader(f"Longarina {lg.entrada.perfil}", help=AJUDA["res_longarina"])
+    linha = st.columns(4)
+    linha[0].metric(
+        "Vão horizontal / inclinado (m)",
+        f"{_pt(lg.vao_horizontal_m, 2)} / {_pt(lg.vao_inclinado_m, 2)}",
+        help=AJUDA["res_lg_vao"],
+    )
+    linha[0].caption(
+        ("informado" if lg.vao_informado else "projeção do lance maior")
+        + f" · α = {_pt(lg.alfa_graus, 1)}°"
+    )
+    linha[1].metric(
+        "Deslocamento vertical (mm)",
+        f"{_pt(lg.deslocamento_vertical_mm, 2)}",
+        help=AJUDA["res_lg_desloc"],
+    )
+    linha[1].caption(
+        f"perpendicular {_pt(lg.flecha_perpendicular_mm, 2)} mm; limite L/350 = "
+        f"{_pt(lg.limite_flecha_mm, 1)} mm; só a sobrecarga "
+        f"{_pt(lg.deslocamento_vertical_sc_mm, 2)} mm"
+    )
+    linha[2].metric(
+        "M_Sd / M_Rd (kN·m)",
+        f"{_pt(lg.viga.momento_sd_kNm, 2)} / {_pt(lg.viga.momento_rd_kNm, 2)}",
+        help=AJUDA["res_lg_momento"],
+    )
+    linha[2].caption(f"aproveitamento {100 * lg.aproveitamento_maximo:.0f} % · {lg.status}")
+    linha[3].metric(
+        "Reação vertical em cada apoio (kN)",
+        _pt(lg.reacao_vertical_kN, 2),
+        help=AJUDA["res_lg_reacao"],
+    )
+    linha[3].caption(f"característica; normal ao longo da barra {_pt(lg.normal_kN, 2)} kN")
+    st.caption(
+        f"Cargas por longarina (verticais, por metro horizontal): sobrecarga "
+        f"{_pt(lg.carga_sc_kN_m, 3)} kN/m, degraus {_pt(lg.carga_degraus_kN_m, 3)} kN/m; "
+        f"guarda-corpo {_pt(lg.carga_gc_kN_m, 2)} kN/m e peso próprio "
+        f"{_pt(lg.viga.peso_proprio_kN_m, 3)} kN/m ao longo da barra. Destravada a cada degrau: "
+        f"L_b = {_pt(lg.lb_m, 3)} m."
+    )
+    mostrar_tabela_verificacoes(list(lg.verificacoes))
+
+
 def montar_entrada(
     enq: DadosEnquadramento, geo: DadosGeometria, deg: DadosDegrau, car: DadosCargas
 ) -> de.EntradaDegrau:
@@ -701,6 +799,12 @@ def _resumo(r: de.ResultadoEscada) -> None:
         linha3[0].caption(g.faixa.mensagem)
         linha3[1].metric("Status geral", r.status, help=AJUDA["res_status"])
         linha3[1].caption(de.texto_da_contagem(r.contagem))
+        linha3[2].metric(
+            "Deslocamento do degrau (mm)",
+            f"{_pt(a.delta_d_mm, 2)} / {_pt(a.delta_iso_mm, 2)}",
+            help=AJUDA["res_desloc_degrau"],
+        )
+        linha3[2].caption("carga distribuída / carga concentrada da ISO")
     for aviso in r.avisos:
         st.warning(aviso, icon=":material/warning:")
 
@@ -891,6 +995,7 @@ def mostrar_degrau_de_escada() -> None:
     geo = formulario_geometria()
     deg = formulario_degrau()
     car = formulario_cargas()
+    longarina = formulario_longarina()
     entrada = montar_entrada(enq, geo, deg, car)
     erros = de.validar_entrada(entrada)
     if erros:
@@ -904,14 +1009,20 @@ def mostrar_degrau_de_escada() -> None:
         st.stop()
     st.header("Resultados")
     _resumo(resultado)
-    aba_verificacoes, aba_memorial, aba_catalogo, aba_requisicao = st.tabs(
-        [
-            "Verificações",
-            "Memorial do modelo adotado",
-            "Os 64 modelos",
-            "Requisição e exportação",
-        ]
-    )
+    nomes_das_abas = [
+        "Verificações",
+        "Memorial do modelo adotado",
+        "Os 64 modelos",
+        "Requisição e exportação",
+    ]
+    if longarina is not None:
+        nomes_das_abas.insert(1, "Longarina")
+    abas = st.tabs(nomes_das_abas)
+    if longarina is not None:
+        with abas[1]:
+            _aba_longarina(resultado, longarina)
+        abas = [abas[0], *abas[2:]]
+    aba_verificacoes, aba_memorial, aba_catalogo, aba_requisicao = abas
     with aba_verificacoes:
         _aba_verificacoes(resultado)
     with aba_memorial:

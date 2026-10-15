@@ -313,4 +313,32 @@ AJUDA: dict[str, str] = {
     "col_aproveitamento": "Valor ÷ resistência, em %. Só as verificações de resistência têm; acima de 100 % reprova.",
     "col_status": "OK atende · NÃO OK reprova · ALERTA ressalva ou conflito · INFO informação · N/A não se aplica.",
     "col_observacao": "Como o valor foi calculado, com os números deste caso, e o que fazer quando não atende.",
+    "sec_7": (
+        "A longarina do lance maior: viga biapoiada inclinada que recebe metade de cada degrau, "
+        "a sobrecarga sobre metade da largura, o guarda-corpo e o peso próprio. Verificada como "
+        "viga de piso (NBR 8800 e critério Anglo), destravada a cada degrau."
+    ),
+    "longarina": "Liga o cálculo da longarina e a aba Longarina nos resultados.",
+    "lg_perfil": "O perfil das longarinas (as duas iguais).",
+    "lg_aco": "O aço do perfil da longarina.",
+    "lg_vao": (
+        "A distância horizontal entre os apoios da longarina (do pé ao patamar ou à plataforma). "
+        "Vazio: o programa usa a projeção horizontal do lance maior."
+    ),
+    "lg_gc": "Peso do guarda-corpo preso na longarina, por metro (40 kg/m ≈ 0,39 kN/m).",
+    "res_longarina": (
+        "Esforços, deslocamentos e as verificações da longarina pela NBR 8800 (flexão com FLT, "
+        "FLM e FLA, cortante e flecha L/350)."
+    ),
+    "res_lg_vao": "Vão horizontal entre apoios e o comprimento inclinado da longarina (L_h / cos α).",
+    "res_lg_desloc": (
+        "Deslocamento vertical no meio do vão sob as cargas de serviço (o DY do SolidWorks): a "
+        "flecha perpendicular à barra dividida por cos α."
+    ),
+    "res_lg_momento": "Momento de cálculo (ELU) e momento resistente da longarina.",
+    "res_lg_reacao": "Reação vertical característica em cada apoio da longarina, para a ligação.",
+    "res_desloc_degrau": (
+        "Flecha do degrau no meio do vão: com a carga distribuída de cálculo de serviço e com a "
+        "carga concentrada da ISO 14122."
+    ),
 }

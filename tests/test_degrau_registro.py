@@ -135,7 +135,7 @@ def test_alertas_levam_o_que_nao_passou_e_os_avisos_fixos():
     alertas = " ".join(registro(parafuso='1/2"')["alertas"])
     assert "Parafuso A307" in alertas
     assert "carga-base" in alertas and "chapa xadrez" in alertas
-    assert "Não faz: Longarina" in alertas
+    assert "Não faz: Patamar e ligações da longarina" in alertas
     assert "inoxidável" in alertas  # aviso fixo: vale para qualquer material
     inox = " ".join(registro(material="AISI 304", acabamento="passivado")["alertas"])
     assert "inoxidável" in inox

@@ -210,3 +210,17 @@ def test_larguras_que_nao_fecham_a_pagina_sao_ajustadas():
         saida = larguras_na_pagina(larguras, colunas)
         assert len(saida) == colunas and sum(saida) == CONTENT_WIDTH_DXA and min(saida) > 0
     assert larguras_na_pagina([1000, 2000, 3000], 3)[2] == 4680
+
+
+def test_tabela_com_larguras_que_nao_fecham_a_pagina_sai_no_word():
+    """As larguras são aplicadas duas vezes na tabela: as duas usam as ajustadas."""
+    from docx import Document
+
+    from core.memorial_word import CONTENT_WIDTH_DXA, _add_data_table
+
+    documento = Document()
+    tabela = _add_data_table(
+        documento, ["A", "B", "C"], [["1", "2", "3"], ["4", "5", "6"]], [1000, 2000, 3000]
+    )
+    larguras = [int(c.width.twips) for c in tabela.columns]
+    assert sum(larguras) == CONTENT_WIDTH_DXA

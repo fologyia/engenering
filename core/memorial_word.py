@@ -353,7 +353,8 @@ def _add_data_table(
     vazio: str = "-",
 ) -> Any:
     table = document.add_table(rows=1, cols=len(headers))
-    _apply_table_geometry(table, larguras_na_pagina(widths_dxa, len(headers)))
+    widths_dxa = larguras_na_pagina(widths_dxa, len(headers))
+    _apply_table_geometry(table, widths_dxa)
     _set_table_borders(table)
     _repeat_header(table.rows[0])
     for idx, header in enumerate(headers):

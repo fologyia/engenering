@@ -363,3 +363,11 @@ def test_guia_tem_o_capitulo_do_degrau_com_exemplo_calculado_pelo_nucleo(banco_i
     assert f"{exemplo.geometria.n} espelhos de 180 mm e piso de 270 mm" in textos
     assert exemplo.adotado.modelo.nome in textos
     assert "35 OK · 0 NÃO OK · 2 ALERTA · 0 N/A" in textos
+
+
+def test_longarina_na_pagina(banco_isolado):
+    t = abrir(banco_isolado, dg_longarina=True)
+    assert "Longarina" in [aba.label for aba in t.tabs]
+    assert metrica(t, "Deslocamento vertical (mm)")
+    assert metrica(t, "Deslocamento do degrau (mm)")
+    assert not sem_ajuda(t), sorted(sem_ajuda(t))
