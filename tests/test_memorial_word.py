@@ -201,3 +201,12 @@ class MemorialWordTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_larguras_que_nao_fecham_a_pagina_sao_ajustadas():
+    from core.memorial_word import CONTENT_WIDTH_DXA, larguras_na_pagina
+
+    for larguras, colunas in (([1000, 2000, 3000], 3), ([0.2, 0.3, 0.5], 3), ([100], 3), ([], 2)):
+        saida = larguras_na_pagina(larguras, colunas)
+        assert len(saida) == colunas and sum(saida) == CONTENT_WIDTH_DXA and min(saida) > 0
+    assert larguras_na_pagina([1000, 2000, 3000], 3)[2] == 4680

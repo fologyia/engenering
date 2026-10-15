@@ -325,6 +325,21 @@ def _write_cell(
         _set_run_font(run, size=max(size - 1.2, 6.0), color=MUTED, bold=False)
 
 
+def larguras_na_pagina(larguras: Sequence[Any], colunas: int) -> list[int]:
+    """As larguras de um registro (pesos, frações ou DXA que não fecham a página) ajustadas para
+    somar a largura útil: um registro antigo ou feito à mão não derruba o memorial."""
+    try:
+        pesos = [max(float(x), 0.0) for x in larguras]
+    except (TypeError, ValueError):
+        pesos = []
+    if len(pesos) != colunas or sum(pesos) <= 0 or any(x <= 0 for x in pesos):
+        pesos = [1.0] * max(colunas, 1)
+    total = sum(pesos)
+    saida = [max(1, round(CONTENT_WIDTH_DXA * x / total)) for x in pesos]
+    saida[-1] += CONTENT_WIDTH_DXA - sum(saida)
+    return saida
+
+
 def _add_data_table(
     document: Document,
     headers: Sequence[str],
@@ -338,7 +353,7 @@ def _add_data_table(
     vazio: str = "-",
 ) -> Any:
     table = document.add_table(rows=1, cols=len(headers))
-    _apply_table_geometry(table, widths_dxa)
+    _apply_table_geometry(table, larguras_na_pagina(widths_dxa, len(headers)))
     _set_table_borders(table)
     _repeat_header(table.rows[0])
     for idx, header in enumerate(headers):

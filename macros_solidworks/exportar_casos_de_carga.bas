@@ -25,6 +25,9 @@
 ' etapa levou. Os esforcos sao lidos viga a viga: pedir todas as vigas numa chamada so fechou o
 ' SOLIDWORKS (v4 e v5), e parar o redesenho da tela com um comando em andamento travou o
 ' Simulation ao carregar cada caso (v4). Nao volte a fazer nenhum dos dois.
+' Cada viga e SELECIONADA no modelo antes de pedir os esforcos, e o objeto selecionado vai para a
+' API (como no exemplo "Get Forces and Stresses for Selected Beams"): passando o corpo direto, o
+' Simulation devolvia os esforcos de uma viga so para todas (v3 a v6).
 '
 ' Robustez: se algo der errado, a macro diz em que etapa parou e por que (arquivo aberto no Excel,
 ' pasta sem permissao...) e fecha os arquivos. Uma viga ou um caso sem resultados fica de fora e e
@@ -33,7 +36,7 @@
 ' configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v6"
+Const VERSAO_DA_MACRO As String = "v7"
 Const PECA As Long = 1          ' swDocPART
 Const CORPO_SOLIDO As Long = 0  ' swSolidBody
 Const UNIDADES_SI As Long = 0   ' swsUnitSI: N e N.m
@@ -45,6 +48,7 @@ Dim problemas As String
 Dim totalProblemas As Long
 Dim ultimaFalha As String
 Dim falhasDoGerenciador As String
+Dim modelo As SldWorks.ModelDoc2
 
 Sub main()
     Dim swApp As SldWorks.SldWorks
@@ -105,6 +109,7 @@ Sub main()
         Exit Sub
     End If
     Set swPeca = swModel
+    Set modelo = swModel
     pasta = Left(swModel.GetPathName, InStrRev(swModel.GetPathName, "\"))
     quando = Format(Now, "hh:nn") & "; " & Format(Now, "dd/mm/yyyy")
 
@@ -255,6 +260,10 @@ Sub main()
             End If
         End If
     Next i
+
+    On Error Resume Next
+    modelo.ClearSelection2 True
+    On Error GoTo Falha
 
     ' O quadro da Vista de resultados: cada sensor em cada caso e em cada combinacao.
     If TemItens(sensores) Then
@@ -448,7 +457,7 @@ Function UmaLista(resultados As CosmosWorksLib.CWResults, alvo As Object, compon
     Dim selecao(0) As Object, entidades As Variant, erro As Long
     On Error GoTo Falhou
     UmaLista = False
-    Set selecao(0) = alvo
+    Set selecao(0) = Selecionada(alvo)
     entidades = selecao
     erro = 0
     lista = Empty
@@ -462,6 +471,22 @@ Function UmaLista(resultados As CosmosWorksLib.CWResults, alvo As Object, compon
 Falhou:
     ultimaFalha = "GetBeamForcesForEntities: erro " & Err.Number & " (" & Err.Description & ")"
     UmaLista = False
+End Function
+
+Function Selecionada(alvo As Object) As Object
+    ' Seleciona o corpo no modelo e devolve o objeto que a selecao entrega - e esse que a API
+    ' reconhece como a viga. Se nao der para selecionar, vai o proprio alvo.
+    Dim corpo As SldWorks.Body2, objeto As Object
+    On Error Resume Next
+    Set Selecionada = alvo
+    If modelo Is Nothing Or Not TypeOf alvo Is SldWorks.Body2 Then Exit Function
+    Set corpo = alvo
+    modelo.ClearSelection2 True
+    If corpo.Select2(False, Nothing) Then
+        Set objeto = modelo.SelectionManager.GetSelectedObject6(1, -1)
+        If Not objeto Is Nothing Then Set Selecionada = objeto
+    End If
+    Err.Clear
 End Function
 
 Function AlvoDaViga(resultados As CosmosWorksLib.CWResults, corpo As Object, viga As Object, _

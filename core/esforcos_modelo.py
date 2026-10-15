@@ -389,6 +389,15 @@ def _ler_vigas(
         membros.pop(m)
     if not membros:
         raise ArquivoInvalido("O arquivo de forças da viga não tem nenhuma viga com resultados.")
+    if len(membros) >= 3:
+        assinaturas = {tuple(p.vetor() for p in pontos) for pontos in membros.values()}
+        if len(assinaturas) == 1:
+            raise ArquivoInvalido(
+                f"As {len(membros)} vigas do arquivo têm exatamente os mesmos esforços: o arquivo "
+                "repetiu os números de uma viga só (as macros exportar_casos_de_carga até a v6 "
+                "faziam isso). Gere de novo com a macro v7, ou com “Listar forças da viga” no "
+                "SolidWorks."
+            )
     if _ja_era_esforco_interno(membros):
         membros = {
             m: [_sinal_trocado(p) if p.fim == "1" else p for p in pontos]

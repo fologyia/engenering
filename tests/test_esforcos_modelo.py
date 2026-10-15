@@ -450,3 +450,21 @@ def test_reacao_em_outro_eixo_nao_e_estudo_majorado():
     r = niveis(em.conferir_reacoes(dados, plano_do_portico()))
     assert "majorado" not in r.get(pc.NIVEL_ERRO, "") + r.get(pc.NIVEL_ATENCAO, "")
     assert "Falta ou sobra carga" in r[pc.NIVEL_ATENCAO]
+
+
+def test_arquivo_com_todas_as_vigas_iguais_e_recusado():
+    """As macros até a v6 repetiam os esforços de uma viga só em todas: o programa recusa."""
+    linhas = ["sep=;", "Nome do estudo:E", "", sw_cabecalho()]
+    for i in range(1, 4):
+        linhas.append(f"Viga-{i}(U8[{i}]);;;;;;;;")
+        linhas.append(";1;1;10;1;0;0;-2;0")
+        linhas.append(";;2;-10;-1;0;0;3;0")
+    with pytest.raises(em.ArquivoInvalido, match="mesmos esforços"):
+        em.ler_arquivo("\r\n".join(linhas).encode("cp1252"), "x-forcas.csv")
+
+
+def sw_cabecalho() -> str:
+    return (
+        "Nome da viga;Elemento;Fim;Axial (N);Cisalhamento1 (N);Cisalhamento2 (N);"
+        "Momento 1 (N.m);Momento 2 (N.m);Torque (N.m)"
+    )

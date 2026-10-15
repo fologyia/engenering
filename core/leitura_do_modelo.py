@@ -1582,7 +1582,29 @@ def diagnosticar(
                 a_mais.append(
                     f"{lb.barra} ({_n(por_metro)} kN/m; o peso dela é {_n(proprio)} kN/m)"
                 )
-        if a_mais:
+        apoiados = [c for c in g.corpos if c.forma in ("CHAPA", "BLOCO") and c.volume_m3]
+        aco_todo = (
+            sum(c.volume_m3 or 0.0 for c in g.corpos)
+            * lm.DENSIDADE_ACO
+            * lm.G
+            / 1e3
+            * plano.fator_peso_proprio
+        )
+        if a_mais and apoiados and peso is not None and peso <= 1.15 * aco_todo + 0.1:
+            # O PP total bate com o aço de todos os corpos: o que passa do peso das barras é o
+            # peso das chapas e blocos apoiados nelas, não carga posta no estudo PP.
+            achados.append(
+                Achado(
+                    em.NIVEL_INFO,
+                    "Peso das chapas sobre as barras no PP",
+                    f"{_lista(a_mais, 4)}: ao longo dessas barras o PP leva mais que o peso delas, "
+                    f"mas o PP inteiro ({_n(peso)} kN) bate com o aço de todos os corpos "
+                    f"({_n(aco_todo)} kN, com {len(apoiados)} chapa(s)/bloco(s)): é o peso das "
+                    "chapas apoiadas nelas, não carga a mais no estudo PP.",
+                    tuple(barras_a_mais),
+                )
+            )
+        elif a_mais:
             achados.append(
                 Achado(
                     pc.NIVEL_ERRO,
