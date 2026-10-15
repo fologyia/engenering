@@ -240,6 +240,12 @@ def test_macro_dos_casos_de_carga():
         b"Forca de reacao (N)",
     ):
         assert trecho in texto, trecho
+    # Parar o redesenho e avisar de um comando em andamento trava o Simulation ao carregar cada
+    # caso (macro v4, no SolidWorks do usuário).
+    assert b"CommandInProgress =" not in texto and b"EnableGraphicsUpdate =" not in texto
+    # Pedir os esforços de todas as vigas numa chamada só fechou o SolidWorks (v4 e v5): uma
+    # chamada só, a de uma viga por vez (selecao(0)).
+    assert texto.count(b"GetBeamForcesForEntities(") == 1 and b"Dim selecao(0) As Object" in texto
 
 
 def test_quadro_dos_sensores_da_macro_e_reconhecido():
