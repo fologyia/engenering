@@ -455,7 +455,7 @@ def linhas_da_tabela(resultados: Sequence[ResultadoDaBarra]) -> list[list[object
             "" if r.n_rd is None else r.n_rd,
             "" if r.mx_rd is None else r.mx_rd,
             "" if r.my_rd is None else r.my_rd,
-            r.governante or r.motivo,
+            "; ".join(filter(None, (r.governante or r.motivo, reprovacoes(r)))),
         ]
         for r in resultados
     ]
@@ -478,6 +478,19 @@ def resumo(resultados: Sequence[ResultadoDaBarra]) -> dict[str, Any]:
     }
 
 
+def reprovacoes(r: ResultadoDaBarra) -> str:
+    """As verificações que reprovaram a barra, quando não é só a interação N + M (que o
+    aproveitamento já mostra): esbeltez, limites, ligação…"""
+    if r.status != "NÃO OK":
+        return ""
+    nomes = [
+        v.nome + (f" ({v.formula})" if v.formula else "")
+        for v in r.linhas
+        if v.status == "NÃO OK" and v.nome != r.governante
+    ]
+    return "reprova em: " + "; ".join(nomes) if nomes else ""
+
+
 def _linha_do_registro(r: ResultadoDaBarra) -> Verificacao:
     if r.status == STATUS_PENDENTE:
         return Verificacao(
@@ -496,7 +509,8 @@ def _linha_do_registro(r: ResultadoDaBarra) -> Verificacao:
         "—",
         f"{REFERENCIA_INTERACAO}; NBR 8800 5.3 e 5.4",
         f"{r.combinacao}, {r.ponto}: N = {_n(r.n)} kN; M forte = {_n(r.m_forte)} kN·m; M fraco = "
-        f"{_n(r.m_fraco)} kN·m; governa: {r.governante}",
+        f"{_n(r.m_fraco)} kN·m; governa: {r.governante}"
+        + (f"; {reprovacoes(r)}" if reprovacoes(r) else ""),
         status=r.status,
         aproveitamento=r.aproveitamento,
     )

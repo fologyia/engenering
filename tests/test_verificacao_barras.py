@@ -174,3 +174,29 @@ def test_parametros_vao_e_voltam_pelo_projeto():
     assert volta.parametros_do_tipo("Pilar") == dados.parametros_do_tipo("Pilar")
     assert volta.norma == "NBR8800_2008"
     assert volta.membros[VIGA].lb_m == 1.5
+
+
+def test_barra_reprovada_por_outra_verificacao_diz_qual():
+    """Aproveitamento de 24,7 % e "não atende": a linha diz o que reprovou (ex.: esbeltez)."""
+    from core.verificacao import Verificacao
+
+    linhas = (
+        Verificacao("Interação N + Mx + My (uma única equação)", 0.247, 1.0, "-", "NBR 8800"),
+        Verificacao(
+            "Esbeltez λ ≤ 200",
+            None,
+            None,
+            "-",
+            "NBR 8800 5.3.4",
+            "λ = 227",
+            status="NÃO OK",
+            tipo="limite",
+        ),
+    )
+    r = vb.ResultadoDaBarra(
+        "Viga-16", 'U 8" x 17,10', "Viga", "NÃO OK", 0.247,
+        governante="Interação N + Mx + My (uma única equação)", linhas=linhas,
+    )  # fmt: skip
+    assert vb.reprovacoes(r) == "reprova em: Esbeltez λ ≤ 200 (λ = 227)"
+    assert "reprova em: Esbeltez" in vb.linhas_da_tabela([r])[0][-1]
+    assert vb.reprovacoes(replace(r, status="OK")) == ""

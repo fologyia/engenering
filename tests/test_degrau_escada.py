@@ -693,7 +693,8 @@ def test_controle_interno_confere_o_adotado_com_a_tabela():
         ({"parafuso": '1/2"'}, 30, NAO_OK),
         ({"parafuso": '1/2"'}, 31, OK),
         ({"n_parafusos_por_lado": 1}, 32, NAO_OK),
-        ({"gc_superior_mm": 1300.0}, 34, NAO_OK),  # a NR limita a 1200 mm
+        ({"gc_superior_mm": 1300.0}, 34, "INFO"),  # Anglo prevalece: a faixa da NR é informação
+        ({"gc_superior_mm": 1250.0}, 34, NAO_OK),  # nem NR nem Anglo
         ({"gc_superior_mm": 1300.0}, 35, OK),
         ({"gc_superior_mm": 1100.0}, 34, OK),
         ({"gc_intermediario_mm": 650.0}, 36, NAO_OK),
@@ -854,3 +855,18 @@ def test_peso_cresce_com_a_barra_e_com_a_espessura():
 def test_resultado_nao_depende_da_ordem_de_chamada():
     assert calcular().adotado.u_max == calcular().adotado.u_max
     assert calcular().especificacao == calcular().especificacao
+
+
+def test_guarda_corpo_do_criterio_anglo_nao_reprova_na_faixa_da_nr():
+    """1300 mm (Anglo 10.2) fica acima da faixa da NR: informação, não reprovação."""
+    from dataclasses import replace as trocar
+
+    r = de.calcular_escada(trocar(de.EntradaDegrau(), gc_superior_mm=1300.0))
+    nr, anglo = r.verificacoes[33], r.verificacoes[34]
+    assert nr.nome.startswith("34. Guarda-corpo – travessão superior")
+    assert nr.status == "INFO" and "critério Anglo 10.2" in nr.formula
+    assert anglo.nome.startswith("35.") and anglo.status == "OK"
+    # Abaixo do Anglo continua valendo a faixa da NR.
+    r2 = de.calcular_escada(trocar(de.EntradaDegrau(), gc_superior_mm=1250.0))
+    nr2 = r2.verificacoes[33]
+    assert nr2.status == "NÃO OK"

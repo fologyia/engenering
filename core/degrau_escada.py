@@ -1669,14 +1669,29 @@ def montar_verificacoes(
     )
 
     # ------------------------------------------------------------------ guarda-corpo
-    # 34. Travessão superior
+    # 34. Travessão superior. Com o critério Anglo (≥ 1300 mm, item 35) o travessão fica acima da
+    # faixa da NR: o critério do cliente prevalece e a linha vira informação (o conflito fica
+    # registrado no memorial, sem reprovar).
     ref34 = "NR-22 22.6.5 c); NR-12 Anexo III 7 c)"
+    faixa_nr = f"{numero_pt(K['gc_min'], 0)} ≤ {numero_pt(e.gc_superior_mm, 0)} ≤ {numero_pt(K['gc_max'], 0)} mm"
+    if _ge(e.gc_superior_mm, K["A_gc"]):
+        status34 = "INFO"
+        texto34 = (
+            f"{numero_pt(e.gc_superior_mm, 0)} mm, acima da faixa da NR ({numero_pt(K['gc_min'], 0)} "
+            f"a {numero_pt(K['gc_max'], 0)} mm): adotado o critério Anglo 10.2 (≥ "
+            f"{numero_pt(K['A_gc'], 0)} mm), que prevalece neste projeto."
+        )
+    else:
+        status34 = _status(
+            _ge(e.gc_superior_mm, K["gc_min"]) and _le(e.gc_superior_mm, K["gc_max"])
+        )
+        texto34 = faixa_nr
     linhas.append(
         _linha(
             "Guarda-corpo – travessão superior entre 1100 e 1200 mm",
             ref34,
-            _status(_ge(e.gc_superior_mm, K["gc_min"]) and _le(e.gc_superior_mm, K["gc_max"])),
-            f"{numero_pt(K['gc_min'], 0)} ≤ {numero_pt(e.gc_superior_mm, 0)} ≤ {numero_pt(K['gc_max'], 0)} mm",
+            status34,
+            texto34,
             unidade="mm",
             valor=e.gc_superior_mm,
         )

@@ -11,6 +11,7 @@ substituições, para o memorial nunca deixar de sair.
 from __future__ import annotations
 
 import functools
+import unicodedata
 from dataclasses import dataclass
 
 # (nome de registro, arquivo regular, arquivo negrito). Os nomes soltos são
@@ -104,6 +105,44 @@ _SUBSTITUICOES_ASCII = {
     "⁴": "^4",
     "–": "-",
     "—": "-",
+    "≈": "~",
+    "≠": "!=",
+    "≅": "~=",
+    "φ": "phi",
+    "ϕ": "phi",
+    "η": "eta",
+    "ψ": "psi",
+    "π": "pi",
+    "μ": "u",
+    "ε": "eps",
+    "ρ": "rho",
+    "β": "beta",
+    "δ": "delta",
+    "ω": "omega",
+    "κ": "kappa",
+    "χ": "chi",
+    "ξ": "xi",
+    "ζ": "zeta",
+    "Φ": "Phi",
+    "Ψ": "Psi",
+    "Ω": "Omega",
+    "Λ": "Lambda",
+    "ℓ": "l",
+    "′": "'",
+    "″": '"',
+    "∑": "SUM",
+    "∂": "d",
+    "∫": "int",
+    "⇒": "=>",
+    "↔": "<->",
+    "⁰": "^0",
+    "¹": "^1",
+    "⁵": "^5",
+    "⁶": "^6",
+    "⁷": "^7",
+    "⁸": "^8",
+    "⁹": "^9",
+    "⁻": "^-",
 }
 
 
@@ -117,4 +156,21 @@ def texto_para_fonte(texto: str, fonte: FontePdf) -> str:
         return texto
     for original, substituto in _SUBSTITUICOES_ASCII.items():
         texto = texto.replace(original, substituto)
-    return texto
+    return "".join(_na_helvetica(c) for c in texto)
+
+
+def _na_helvetica(caractere: str) -> str:
+    """O que a Helvetica (WinAnsi, cp1252) não tem vira a forma simples: os índices ₀…₉ viram
+    0…9 (S₁ → S1) e o resto, a decomposição ou "?" — nunca o quadradinho de glifo ausente."""
+    try:
+        caractere.encode("cp1252")
+        return caractere
+    except UnicodeEncodeError:
+        pass
+    simples = unicodedata.normalize("NFKD", caractere)
+    simples = "".join(c for c in simples if not unicodedata.combining(c))
+    try:
+        simples.encode("cp1252")
+        return simples or "?"
+    except UnicodeEncodeError:
+        return "?"

@@ -94,7 +94,8 @@ def test_registro_traz_as_38_verificacoes_com_norma_e_status():
     [
         ({}, "ALERTA", "Atenção"),
         ({"parafuso": '1/2"'}, "NÃO OK", "Não atende"),
-        ({"gc_superior_mm": 1300.0}, "NÃO OK", "Não atende"),  # a NR limita a 1200 mm
+        ({"gc_superior_mm": 1300.0}, "ALERTA", "Atenção"),  # Anglo: a faixa da NR vira informação
+        ({"gc_superior_mm": 1250.0}, "NÃO OK", "Não atende"),  # nem NR nem Anglo
     ],
 )
 def test_status_do_registro_segue_o_status_geral(alteracoes, status_geral, status_registro):
