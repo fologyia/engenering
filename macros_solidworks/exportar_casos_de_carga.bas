@@ -25,9 +25,12 @@
 ' etapa levou. Os esforcos sao lidos viga a viga: pedir todas as vigas numa chamada so fechou o
 ' SOLIDWORKS (v4 e v5), e parar o redesenho da tela com um comando em andamento travou o
 ' Simulation ao carregar cada caso (v4). Nao volte a fazer nenhum dos dois.
-' Cada viga e SELECIONADA no modelo antes de pedir os esforcos, e o objeto selecionado vai para a
-' API (como no exemplo "Get Forces and Stresses for Selected Beams"): passando o corpo direto, o
-' Simulation devolvia os esforcos de uma viga so para todas (v3 a v6).
+' Ate a v7 o Simulation devolveu os esforcos de uma viga so para todas. A v8 testa, no primeiro
+' caso, tres jeitos de indicar a viga (o corpo selecionado, o corpo direto, a viga do estudo) com
+' duas vigas diferentes e fica com o primeiro que der numeros diferentes. Se nenhum der (o
+' SOLIDWORKS do usuario: os dois primeiros repetem uma viga so e o terceiro da o codigo 6), a
+' macro nao grava os -forcas, so as reacoes e o quadro; os esforcos das vigas saem pelo "Listar
+' forcas da viga" de cada caso, que o programa le do mesmo jeito.
 '
 ' Robustez: se algo der errado, a macro diz em que etapa parou e por que (arquivo aberto no Excel,
 ' pasta sem permissao...) e fecha os arquivos. Uma viga ou um caso sem resultados fica de fora e e
@@ -36,7 +39,7 @@
 ' configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v7"
+Const VERSAO_DA_MACRO As String = "v9"
 Const PECA As Long = 1          ' swDocPART
 Const CORPO_SOLIDO As Long = 0  ' swSolidBody
 Const UNIDADES_SI As Long = 0   ' swsUnitSI: N e N.m
@@ -49,6 +52,7 @@ Dim totalProblemas As Long
 Dim ultimaFalha As String
 Dim falhasDoGerenciador As String
 Dim modelo As SldWorks.ModelDoc2
+Dim jeito As Long  ' 0 a descobrir; 1 corpo selecionado; 2 corpo direto; 3 viga do estudo; -1 nenhum
 
 Sub main()
     Dim swApp As SldWorks.SldWorks
@@ -91,6 +95,7 @@ Sub main()
     totalProblemas = 0
     ultimaFalha = ""
     falhasDoGerenciador = ""
+    jeito = 0
     inicio = Timer
 
     etapa = "abrir a peca"
@@ -203,6 +208,12 @@ Sub main()
                 Problema caso & " (sem resultados: Executar no gerenciador antes)"
             Else
                 marca = Timer
+                If jeito = 0 Then
+                    etapa = "descobrir como o Simulation reconhece cada viga"
+                    jeito = DescobrirJeito(resultados, corposDasVigas, vigasDoEstudo, totalDeVigas)
+                    If jeito = 0 Then jeito = -1  ' a API nao separa as vigas: so reacoes e quadro
+                End If
+                If jeito > 0 Then
                 etapa = "gravar as forcas das vigas do caso " & caso
                 caminho = pasta & NomeDeArquivo(nomeDoEstudo & "-" & caso & "-forcas") & ".csv"
                 arquivo = FreeFile
@@ -240,6 +251,7 @@ Sub main()
                 jaClassificou = True
                 Close #arquivo
                 arquivo = 0
+                End If
                 tVigas = tVigas + (Timer - marca)
 
                 etapa = "gravar as reacoes do caso " & caso
@@ -256,7 +268,7 @@ Sub main()
                     Problema caso & " (sem as reacoes: " & ultimaFalha & ")"
                 End If
                 tReacoes = tReacoes + (Timer - marca)
-                If vigasExportadas > 0 Then casosExportados = casosExportados + 1
+                If vigasExportadas > 0 Or jeito < 0 Then casosExportados = casosExportados + 1
             End If
         End If
     Next i
@@ -315,6 +327,13 @@ Sub main()
     texto = texto & vbCrLf & vbCrLf & "Tempo: " & Segundos(Timer - inicio) & " (carregar os casos " & _
         Segundos(tCarregar) & "; esforcos das vigas " & Segundos(tVigas) & "; reacoes " & _
         Segundos(tReacoes) & "; quadro " & Segundos(tQuadro) & ")."
+    If jeito < 0 Then
+        texto = texto & vbCrLf & vbCrLf & "ESFORCOS DAS VIGAS: o Simulation desta versao devolve os mesmos " & _
+            "esforcos para todas as vigas pela API, entao a macro nao gravou os -forcas (" & ultimaFalha & _
+            "). Em cada caso: Vista de resultados, clique no caso, Resultados > Listar forcas da viga " & _
+            "(todas as vigas) > Salvar, com o codigo do caso no nome (PP-forcas.csv). O programa le esses " & _
+            "arquivos junto com os -reacoes desta macro."
+    End If
     texto = texto & vbCrLf & vbCrLf & "Envie os arquivos -forcas e -reacoes na pagina Esforcos do modelo."
     If totalProblemas > 0 Then
         texto = texto & vbCrLf & vbCrLf & "ATENCAO: " & totalProblemas & " item(ns) ficaram de fora: " & problemas
@@ -457,7 +476,11 @@ Function UmaLista(resultados As CosmosWorksLib.CWResults, alvo As Object, compon
     Dim selecao(0) As Object, entidades As Variant, erro As Long
     On Error GoTo Falhou
     UmaLista = False
-    Set selecao(0) = Selecionada(alvo)
+    If jeito = 1 Then
+        Set selecao(0) = Selecionada(alvo)
+    Else
+        Set selecao(0) = alvo
+    End If
     entidades = selecao
     erro = 0
     lista = Empty
@@ -494,13 +517,67 @@ Function AlvoDaViga(resultados As CosmosWorksLib.CWResults, corpo As Object, vig
     ' Os seis esforcos da viga pelo corpo da peca (como no exemplo da API) ou, se nao der, pela
     ' viga do estudo; alvo fica com a entidade que respondeu, para os casos seguintes.
     Set alvo = Nothing
-    If Not corpo Is Nothing Then
+    If jeito = 3 Then
+        If Not viga Is Nothing Then
+            If SeisListas(resultados, viga, valores) Then Set alvo = viga
+        End If
+    ElseIf Not corpo Is Nothing Then
         If SeisListas(resultados, corpo, valores) Then Set alvo = corpo
     End If
-    If alvo Is Nothing And Not viga Is Nothing Then
-        If SeisListas(resultados, viga, valores) Then Set alvo = viga
-    End If
     AlvoDaViga = Not alvo Is Nothing
+End Function
+
+Function DescobrirJeito(resultados As CosmosWorksLib.CWResults, corpos() As Object, vigas() As Object, _
+    total As Long) As Long
+    ' Com duas vigas diferentes, o primeiro jeito de indicar a viga que da esforcos diferentes.
+    Dim a As Long, b As Long, j As Long, tentativa As Long
+    Dim listaA As Variant, listaB As Variant, alvoA As Object, alvoB As Object
+    DescobrirJeito = 0
+    a = -1
+    b = -1
+    For j = 0 To total - 1
+        If Not corpos(j) Is Nothing Or Not vigas(j) Is Nothing Then
+            If a < 0 Then
+                a = j
+            ElseIf b < 0 Then
+                b = j
+            End If
+        End If
+    Next j
+    If a < 0 Or b < 0 Then
+        DescobrirJeito = 2  ' uma viga so: nao ha o que comparar
+        Exit Function
+    End If
+    For tentativa = 1 To 3
+        jeito = tentativa
+        If tentativa = 3 Then
+            Set alvoA = vigas(a)
+            Set alvoB = vigas(b)
+        Else
+            Set alvoA = corpos(a)
+            Set alvoB = corpos(b)
+        End If
+        If Not alvoA Is Nothing And Not alvoB Is Nothing Then
+            If UmaLista(resultados, alvoA, 0, listaA) And UmaLista(resultados, alvoB, 0, listaB) Then
+                If Diferentes(listaA, listaB) Then
+                    DescobrirJeito = tentativa
+                    Exit Function
+                End If
+                ultimaFalha = "jeito " & tentativa & ": as duas vigas deram os mesmos esforcos"
+            End If
+        End If
+    Next tentativa
+    jeito = 0
+End Function
+
+Function Diferentes(a As Variant, b As Variant) As Boolean
+    Dim k As Long
+    Diferentes = True
+    If UBound(a) - LBound(a) <> UBound(b) - LBound(b) Then Exit Function
+    For k = 0 To UBound(a) - LBound(a)
+        If Abs(CDbl(a(LBound(a) + k)) - CDbl(b(LBound(b) + k))) > 0.000001 Then Exit Function
+    Next k
+    Diferentes = False
 End Function
 
 Function SeisListas(resultados As CosmosWorksLib.CWResults, alvo As Object, valores() As Variant) As Boolean

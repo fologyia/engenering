@@ -15,9 +15,11 @@ AJUDA: dict[str, str] = {
         "relatório. Na primeira vez, no editor de macros do SolidWorks: Ferramentas → Referências "
         "→ marque “SOLIDWORKS Simulation <ano> type library”. Com a peça aberta e a aba do estudo "
         "selecionada (depois de Executar no gerenciador): Ferramentas → Macro → Executar. Ela "
-        "grava, na pasta da peça, as forças das "
-        "vigas e as reações de cada caso primário (o caso vai no cabeçalho) e o quadro dos "
-        "sensores da Vista de resultados. Envie os de forças e de reações aqui, todos juntos."
+        "grava, na pasta da peça, as reações de "
+        "cada caso primário (o caso vai no cabeçalho) e o quadro dos sensores da Vista de "
+        "resultados. As forças das vigas, quando a API do Simulation não separa as vigas (o aviso "
+        "final diz), saem do “Listar forças da viga” de cada caso, com o código no nome do "
+        "arquivo. Envie tudo aqui, junto."
     ),
     "arquivos": (
         "Pode enviar vários de uma vez: forças da viga e reações de cada estudo, e o "
