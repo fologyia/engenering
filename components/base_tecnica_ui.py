@@ -166,6 +166,11 @@ def mapa_do_projeto(ajuda: str) -> None:
                     color="green" if feita else "gray",
                 )
                 st.page_link(pagina, label="Abrir", icon=icone)
+        st.page_link(
+            "app_pages/roteiro_projeto.py",
+            label="Roteiro passo a passo (com o SolidWorks e os arquivos de cada passo)",
+            icon=":material/format_list_numbered:",
+        )
 
 
 def gravar_acoes_no_plano(acoes: Sequence[pc.Acao], *, origem: str) -> bool:

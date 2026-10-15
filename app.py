@@ -67,6 +67,11 @@ pagina = st.navigation(
         ],
         "Gestão industrial": [
             st.Page(
+                "app_pages/roteiro_projeto.py",
+                title="Roteiro do projeto",
+                icon=":material/format_list_numbered:",
+            ),
+            st.Page(
                 "app_pages/painel_industrial.py",
                 title="Painel industrial",
                 icon=":material/dashboard:",
