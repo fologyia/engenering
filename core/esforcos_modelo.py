@@ -1249,7 +1249,14 @@ def conferir_reacoes(
                     f"{_n(esperado[2])}) kN em X, Y e Z, e as reações ({_n(rx)}; {_n(ry)}; "
                     f"{_n(rz)}) kN — diferença de {_n(residuo)} kN."
                 )
-                gama = coeficiente_aparente(math.hypot(rx, ry, rz) / referencia)
+                # Majorado só se a reação é a força do plano, no mesmo sentido, γ vezes maior.
+                paralela = (
+                    -(rx * esperado[0] + ry * esperado[1] + rz * esperado[2])
+                    >= 0.99 * math.hypot(rx, ry, rz) * referencia
+                )
+                gama = (
+                    coeficiente_aparente(math.hypot(rx, ry, rz) / referencia) if paralela else None
+                )
                 if gama is not None:
                     itens.append(
                         pc.ItemDeConferencia(

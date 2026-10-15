@@ -441,3 +441,12 @@ def test_reacao_toda_num_eixo_horizontal_aponta_o_eixo_vertical_errado():
     assert "PP: a reação (11,56 kN) está toda no eixo Z do modelo" in r[pc.NIVEL_ERRO]
     assert "troque “Eixo vertical do modelo”" in r[pc.NIVEL_ERRO]
     assert "horizontais" not in r.get(pc.NIVEL_ATENCAO, "")
+
+
+def test_reacao_em_outro_eixo_nao_e_estudo_majorado():
+    """W0 do plano em X, reação 1,4 vez maior mas em Y: carga no eixo errado, não majorada."""
+    dados = importar("W0", com_reacoes=False)
+    dados = em.com_reacoes(dados, "W0", em.Reacoes(modelo=(0.0, 0.0, 8.0 * 1.4)), "W0.csv")
+    r = niveis(em.conferir_reacoes(dados, plano_do_portico()))
+    assert "majorado" not in r.get(pc.NIVEL_ERRO, "") + r.get(pc.NIVEL_ATENCAO, "")
+    assert "Falta ou sobra carga" in r[pc.NIVEL_ATENCAO]

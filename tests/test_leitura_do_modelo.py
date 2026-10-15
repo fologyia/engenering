@@ -1202,3 +1202,18 @@ def test_pecas_cortadas_seguem_as_retas_do_mesmo_membro():
         volumes_cm3={'U 8"x17,1 - Escada[7]': cortada},
     )
     assert ld.perfis_do_esqueleto(so)['U 8"x17,1 - Escada[7]'][0] == 'U 8" x 17,10'
+
+
+def test_esqueleto_de_outro_modelo_nao_e_usado():
+    """Esqueleto de outra peça: menos da metade das barras acha o corpo — o programa ignora."""
+    texto = sw.csv_esqueleto().decode("cp1252")
+    for antigo in ("Aparar/Estender12[", "Canal c C8X13.75(1)["):
+        texto = texto.replace(antigo, "Outra peca[7")  # outro nome e outra numeração
+    outro = ld.ler_esqueleto(texto.encode("cp1252"), "outra_esqueleto.csv")
+    dados = importar("PP", "SC")
+    assert not ld.esqueleto_de_outro_modelo(geometria(), dados)
+    assert ld.esqueleto_de_outro_modelo(outro, dados)
+    assert all(lb.corpo is None for lb in ld.ler_barras(dados, outro))
+    achados = ld.diagnosticar(dados, plano_do_portico(), outro)
+    assert achados[0].titulo == "Esqueleto de outro modelo" and achados[0].nivel == pc.NIVEL_ERRO
+    assert not any(a.titulo == "Barras fora do esqueleto" for a in achados)

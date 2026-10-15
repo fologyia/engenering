@@ -1143,6 +1143,16 @@ def _perfil(
     return "", ""
 
 
+def esqueleto_de_outro_modelo(g: GeometriaDoModelo, dados: em.EsforcosDoModelo) -> bool:
+    """Menos da metade das barras do Simulation acha o corpo no esqueleto: ele é de outra peça (ou
+    de outra versão) e as deduções pela geometria — tipo, perfil, peso, bases — sairiam erradas."""
+    nomes = list(dados.nomes_dos_membros)
+    if not g.corpos or len(nomes) < 2:
+        return False
+    achadas = len(correspondencia(g, nomes, dados).corpos)
+    return achadas < 0.5 * len(nomes)
+
+
 def ler_barras(
     dados: em.EsforcosDoModelo,
     geometria: GeometriaDoModelo | None = None,
@@ -1151,6 +1161,8 @@ def ler_barras(
     from core import travamentos as tv  # importa este módulo: só aqui, sem ciclo na carga
 
     g = geometria or GeometriaDoModelo()
+    if esqueleto_de_outro_modelo(g, dados):
+        g = GeometriaDoModelo()
     soltas_geo = pontas_soltas_pela_geometria(g, dados.eixo_vertical) if g.corpos else {}
     perfis = perfis_do_esqueleto(g) if g.corpos else {}
     leituras = []
@@ -1362,6 +1374,21 @@ def diagnosticar(
     leituras = list(leituras) if leituras is not None else ler_barras(dados, geometria, plano)
     g = geometria or GeometriaDoModelo()
     achados: list[Achado] = []
+    if esqueleto_de_outro_modelo(g, dados):
+        achadas = len(correspondencia(g, dados.nomes_dos_membros, dados).corpos)
+        achados.append(
+            Achado(
+                pc.NIVEL_ERRO,
+                "Esqueleto de outro modelo",
+                f"Só {achadas} das {len(dados.nomes_dos_membros)} barras do Simulation acham o "
+                f"corpo no esqueleto ({g.arquivo}"
+                + (f", {g.origem}" if g.origem else "")
+                + "): ele é de outra peça ou de outra versão. O programa não usa esse esqueleto "
+                "— tipo, perfil, peso e bases das barras saem só dos esforços. Rode a macro da "
+                "lista de corte na peça do estudo e envie o …_esqueleto.csv dela.",
+            )
+        )
+        g = GeometriaDoModelo()
     casos = list(dados.casos.values())
 
     # Valores fora de escala: unidade errada no SolidWorks ou no arquivo.
