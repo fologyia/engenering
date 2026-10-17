@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from io import BytesIO
 
 import pytest
@@ -18,6 +19,8 @@ from pypdf import PdfReader
 
 from core import degrau_escada as de
 from core import degrau_registro as reg
+from core import escada_lances as el
+from core import longarina_escada as le
 from core import pdf_fonts
 from core.degrau_relatorio import gerar_pdf_degrau
 from core.project_report import (
@@ -26,6 +29,7 @@ from core.project_report import (
     montar_modelo_relatorio,
 )
 from core.project_store import novo_projeto_documento
+from core.record_charts import imagens_do_registro
 from core.technical_records import avaliar_contrato_registro, identificar_peca_registro
 
 PALAVRAS_PROIBIDAS = ("Não informado", "bloqueio", "Snapshot", "Apêndice")
@@ -136,7 +140,7 @@ def test_alertas_levam_o_que_nao_passou_e_os_avisos_fixos():
     alertas = " ".join(registro(parafuso='1/2"')["alertas"])
     assert "Parafuso A307" in alertas
     assert "carga-base" in alertas and "chapa xadrez" in alertas
-    assert "Não faz: Patamar e ligações da longarina" in alertas
+    assert "Não faz: Ligações da longarina" in alertas
     assert "inoxidável" in alertas  # aviso fixo: vale para qualquer material
     inox = " ".join(registro(material="AISI 304", acabamento="passivado")["alertas"])
     assert "inoxidável" in inox
@@ -349,3 +353,63 @@ def test_pdf_de_um_caso_que_nao_atende_mostra_nao_ok():
     conteudo = gerar_pdf_degrau(resultado(P_kN=12.0), {})
     texto = texto_pdf(conteudo)
     assert "NÃO OK" in texto and "NENHUM modelo" in texto
+
+
+# ------------------------------------------------------------------ escada com patamares e longarina
+def registro_completo() -> dict:
+    r = resultado(H_mm=5400)
+    esc = el.montar_escada(
+        r, [el.PatamarInformado(1500, 1200, 1000), el.PatamarInformado(3700, 800, None, True)]
+    )
+    r = el.aplicar_na_escada(r, esc)
+    lg = le.calcular_longarina(r, le.EntradaLongarina(trecho_topo_m=0.3), esc)
+    return reg.registro_degrau(
+        r,
+        contexto={"obra": "Obra X", "tag": "ESC-01"},
+        responsavel="Eng. Y",
+        escada=esc,
+        longarina=lg,
+    )
+
+
+def test_registro_leva_a_escada_a_longarina_e_o_que_redesenha_as_figuras():
+    registro = registro_completo()
+    json.dumps(registro)  # o banco grava JSON
+    resultados = registro["resultados"]
+    nomes = [v["verificação"] for v in resultados["verificações"]]
+    assert "Lance 2: altura ≤ 3000 mm" in nomes and "Patamar 1: comprimento ≥ 600 mm" in nomes
+    assert "Altura do lance maior ≤ altura máxima por lance" not in nomes
+    assert any(n.startswith("Longarina do lance 2 (inclinada) — Flecha") for n in nomes)
+    assert not any("N_ex" in n for n in nomes)  # as informativas do motor ficam só na página
+    tabelas = resultados["tabelas_memorial"]
+    legendas = " ".join(t["legenda"] for t in tabelas)
+    assert "Lances da escada" in legendas and "Patamares" in legendas
+    assert "reações nos apoios" in legendas and "cargas características" in legendas
+    assert all(sum(t["larguras"]) == reg.LARGURA_UTIL_DXA for t in tabelas)
+    assert "em 3 lance(s) (8, 13 e 9 espelhos" in resultados["destaque_memorial"]
+    assert 'Longarina U 8" x 17,10' in resultados["destaque_memorial"]
+    assert registro["entradas"]["longarina_perfil"] == 'U 8" x 17,10'
+    assert registro["entradas"]["longarina_trecho_horizontal_no_topo_m"] == 0.3
+    imagens, aviso = imagens_do_registro(json.loads(json.dumps(registro)), {})
+    assert aviso == "" and len(imagens) == 1 + 3 * 7  # esquemático + 7 figuras por longarina
+    assert imagens[0]["titulo"].startswith("Esquemático da escada")
+    assert imagens[-1]["titulo"].endswith("ELS (G + Q)")
+
+
+def test_figura_gravada_estragada_nao_derruba_o_memorial():
+    registro = registro_completo()
+    registro["resultados"]["figuras_portico"][0]["modelo"] = {"nos": "estragado"}
+    imagens, aviso = imagens_do_registro(registro, {})
+    assert imagens == [] and aviso.startswith("Gráfico omitido")
+
+
+def test_memorial_word_e_pdf_com_escada_e_longarina():
+    projeto = projeto_com(registro_completo())
+    conteudo = gerar_relatorio_industrial_word(projeto)
+    assert len(Document(BytesIO(conteudo)).inline_shapes) >= 22
+    word = texto_word(conteudo)
+    pdf = texto_pdf(gerar_relatorio_industrial_pdf(projeto))
+    for texto in (word, pdf):
+        assert "Longarina do lance 2" in texto
+        for proibido in PALAVRAS_PROIBIDAS:
+            assert proibido not in texto, proibido

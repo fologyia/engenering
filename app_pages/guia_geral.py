@@ -1880,8 +1880,12 @@ elif modulo == "Degrau de escada em grade":
         "divide a escada em lances, avalia os **64 modelos** e adota o mais leve que atende; "
         "dimensiona o degrau (flexão com flambagem lateral, cisalhamento, flechas, reações e "
         "parafusos A307) e fecha em **38 verificações** com o item da norma em cada uma — "
-        "NR-12 (Anexo III), NR-22, Critério Anglo, NBR 8800, NBR 6120 e ISO 14122-3. Não "
-        "dimensiona a longarina, o patamar nem o guarda-corpo (só confere as medidas dele)."
+        "NR-12 (Anexo III), NR-22, Critério Anglo, NBR 8800, NBR 6120 e ISO 14122-3. Aceita "
+        "patamares com altura, comprimento e largura próprios (e escada em U), desenha o "
+        "**esquemático** com o ângulo de cada lance e, ligada a seção 7, calcula as "
+        "**longarinas** pelo núcleo de pórtico plano (inclinadas ou dobradas, com os apoios "
+        "escolhidos) com os diagramas como no Ftool. Não dimensiona as ligações da longarina, a "
+        "estrutura do patamar nem o guarda-corpo (só confere as medidas dele)."
     )
     mostrar_tabela_campos(
         [
@@ -1994,8 +1998,8 @@ elif modulo == "Degrau de escada em grade":
             """
         )
     st.warning(
-        "Fora do escopo: longarina, patamar e ligações da longarina; guarda-corpo (só as "
-        "dimensões são conferidas); pressão de contato do parafuso na chapa lateral (o catálogo "
+        "Fora do escopo: ligações da longarina e a estrutura do patamar (vigas e pilares: as "
+        "reações da longarina saem nas tabelas); guarda-corpo (só as dimensões são conferidas); pressão de contato do parafuso na chapa lateral (o catálogo "
         "não informa a espessura). O item da NBR 6120 da carga de 2,5 kN deve ser conferido na "
         "edição 2019, e o inox está fora do escopo da NBR 8800.",
         icon=":material/warning:",

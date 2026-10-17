@@ -454,11 +454,17 @@ AA-BR-DPST-DR-0001, a NBR 8800:2008, a NBR 6120 e a ISO 14122-3 (`core/degrau_es
   cisalhamento, flechas (Anglo L/300 e ISO 14122-3), reação na longarina e parafusos A307;
 - **38 verificações** com a norma e o item em cada uma, contagem `OK · NÃO OK · ALERTA · N/A`, bloco
   fixo de **conflitos entre normas** e texto pronto para a requisição de compra;
+- **patamares** com altura, comprimento e largura próprios (e escada em U) e o **esquemático** da
+  escada em vista lateral, com o ângulo de cada lance;
+- **longarinas** (uma por lance) pelo núcleo de pórtico plano: inclinadas ou dobradas, com pino, rolete
+  ou engaste, verificadas pela NBR 8800 e pelo Anglo, com os diagramas como no Ftool (modelo, reações,
+  N, V, M, tensão e deformada) na página e no memorial;
 - CSV das verificações e dos 64 modelos, relatório em PDF e **registro no projeto** (o memorial traz o
-  resultado, o que passou, as tabelas e o que não passou).
+  resultado, o que passou, as tabelas, as figuras e o que não passou).
 
 Entrada impossível (desnível ou comprimento nulo, altura por lance menor que um espelho, `C ≤ b`…) vira
-erro claro: nada é corrigido em silêncio. Não dimensiona longarina, patamar nem guarda-corpo.
+erro claro: nada é corrigido em silêncio. Não dimensiona as ligações da longarina, a estrutura do
+patamar nem o guarda-corpo.
 
 ### Contraventamento de estruturas abertas
 

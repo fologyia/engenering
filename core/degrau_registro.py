@@ -3,7 +3,10 @@
 Monta, a partir de :class:`core.degrau_escada.ResultadoEscada`, o registro que a página grava no
 projeto: as entradas, a tabela de verificações (o memorial a mostra como "o que passou / o que não
 passou", com o item da norma em cada linha), as tabelas de geometria, de dimensionamento do modelo
-adotado e do catálogo, e o texto de destaque. Sem Streamlit.
+adotado e do catálogo, e o texto de destaque. Com a escada de patamares informados
+(:mod:`core.escada_lances`) e a longarina (:mod:`core.longarina_escada`), leva também as
+verificações delas, as tabelas de lances, cargas, esforços e reações e o que o memorial precisa
+para redesenhar o esquemático da escada e os diagramas da longarina (estilo Ftool). Sem Streamlit.
 """
 
 from __future__ import annotations
@@ -15,8 +18,17 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from core import degrau_escada as de
+from core import escada_lances as el
+from core import longarina_escada as le
+from core import portico_plano as pp
 from core.technical_records import criar_registro_tecnico
-from core.verificacao import STATUS_REGISTRO, linhas_para_registro, numero_json
+from core.verificacao import (
+    STATUS_REGISTRO,
+    Verificacao,
+    linhas_para_registro,
+    numero_json,
+    status_geral,
+)
 
 MODULO_ID = "degrau_escada"
 MODULO_TITULO = "Degrau de escada em grade"
@@ -43,7 +55,8 @@ AVISOS_FIXOS = (
 )
 
 NAO_FAZ = (
-    "Patamar e ligações da longarina; a longarina sai só na aba Longarina (lance maior, biapoiada) e não entra no registro.",
+    "Ligações da longarina (pé e topo) e a estrutura do patamar (vigas e pilares): as reações da "
+    "longarina saem nas tabelas para esses cálculos.",
     "Guarda-corpo: o programa só confere as dimensões informadas.",
     "Pressão de contato do parafuso na chapa lateral: o catálogo não informa a espessura.",
 )
@@ -424,9 +437,99 @@ def tabelas_para_memorial(r: de.ResultadoEscada) -> list[dict[str, Any]]:
     ]
 
 
+def tabelas_da_escada(esc: el.EscadaComPatamares) -> list[dict[str, Any]]:
+    tabelas = [
+        {
+            "legenda": "Lances da escada: níveis, espelhos, piso, inclinação, projeção e largura.",
+            "cabecalhos": list(el.CABECALHO_LANCES),
+            "linhas": el.linhas_dos_lances(esc),
+            "larguras": _larguras([8, 22, 10, 10, 10, 10, 15, 15]),
+            "fonte": 7.4,
+        }
+    ]
+    if esc.patamares:
+        tabelas.append(
+            {
+                "legenda": "Patamares: nível, comprimento, largura e o sentido do lance seguinte.",
+                "cabecalhos": list(el.CABECALHO_PATAMARES),
+                "linhas": el.linhas_dos_patamares(esc),
+                "larguras": _larguras([12, 30, 18, 16, 24]),
+                "fonte": 7.4,
+            }
+        )
+    return tabelas
+
+
+def tabelas_da_longarina(lg: le.LongarinaDoLance, perfil: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "legenda": f"{lg.titulo} ({perfil}): cargas características por longarina.",
+            "cabecalhos": ["Carga", "Valor", "Un.", "Origem"],
+            "linhas": le.linhas_das_cargas(lg),
+            "larguras": _larguras([34, 16, 16, 34]),
+            "fonte": 7.2,
+        },
+        {
+            "legenda": (
+                f"{lg.titulo}: esforços de cálculo (ELU) e flecha (ELS) por trecho; aproveitamento "
+                "= maior razão solicitante/resistente do trecho."
+            ),
+            "cabecalhos": list(le.CABECALHO_TRECHOS),
+            "linhas": le.linhas_dos_trechos(lg),
+            "larguras": _larguras([10, 8, 9, 15, 10, 11, 15, 11, 11]),
+            "fonte": 7.0,
+        },
+        {
+            "legenda": (
+                f"{lg.titulo}: reações nos apoios (forças dos apoios na longarina; x para a "
+                "direita, y para cima) por caso — para as ligações e a estrutura que recebe a escada."
+            ),
+            "cabecalhos": list(le.CABECALHO_REACOES),
+            "linhas": le.linhas_das_reacoes(lg),
+            "larguras": _larguras([12, 28, 20, 20, 20]),
+            "fonte": 7.2,
+        },
+    ]
+
+
+def figuras_da_longarina(lg: le.LongarinaDoLance) -> dict[str, Any]:
+    """O que o memorial precisa para redesenhar os diagramas (ver core.record_charts)."""
+    return {
+        "titulo": lg.titulo,
+        "caso": f"ELU ({_n(lg.gamma_g)}·G + {_n(lg.gamma_q)}·Q)",
+        "modelo": pp.para_dicionario(lg.porticos[le.ELU]),
+        "modelo_deformada": pp.para_dicionario(lg.porticos[le.ELS]),
+        "caso_deformada": "ELS (G + Q)",
+    }
+
+
+def texto_da_longarina(res: le.ResultadoLongarina) -> str:
+    lg = res.governante
+    return (
+        f"Longarina {res.entrada.perfil} ({res.entrada.aco}), apoios: pé {res.entrada.apoio_pe}, "
+        f"topo {res.entrada.apoio_topo}: {res.status}; maior aproveitamento "
+        f"{_n(100 * res.aproveitamento_maximo, 1)} % ({lg.titulo.lower()})."
+    )
+
+
 # ---------------------------------------------------------------------------------------------
 # Registro
 # ---------------------------------------------------------------------------------------------
+def _entradas_da_longarina(e: le.EntradaLongarina) -> dict[str, Any]:
+    return {
+        "longarina_perfil": e.perfil,
+        "longarina_aco": e.aco,
+        "longarina_apoio_no_pe": le.APOIOS[e.apoio_pe],
+        "longarina_apoio_no_topo": le.APOIOS[e.apoio_topo],
+        "longarina_trecho_horizontal_no_pe_m": e.trecho_pe_m or None,
+        "longarina_trecho_horizontal_no_topo_m": e.trecho_topo_m or None,
+        "longarina_distancia_horizontal_m": e.vao_horizontal_m,
+        "longarina_guarda_corpo_kN_m": e.guarda_corpo_kN_m,
+        "longarina_piso_do_patamar_kN_m2": e.piso_patamar_kN_m2,
+        "longarina_comprimento_destravado_m": e.lb_m,
+    }
+
+
 def _entradas(r: de.ResultadoEscada, contexto: Mapping[str, Any] | None) -> dict[str, Any]:
     e = r.entrada
     entradas: dict[str, Any] = {
@@ -493,20 +596,43 @@ def texto_de_destaque(r: de.ResultadoEscada) -> str:
 
 
 def registro_degrau(
-    r: de.ResultadoEscada, *, contexto: Mapping[str, Any] | None = None, responsavel: str = ""
+    r: de.ResultadoEscada,
+    *,
+    contexto: Mapping[str, Any] | None = None,
+    responsavel: str = "",
+    escada: el.EscadaComPatamares | None = None,
+    longarina: le.ResultadoLongarina | None = None,
 ) -> dict[str, Any]:
-    """Registro técnico v2 do degrau (um cálculo = um registro)."""
+    """Registro técnico v2 do degrau (um cálculo = um registro).
+
+    ``escada`` (com patamares informados) já deve estar aplicada em ``r``
+    (:func:`core.escada_lances.aplicar_na_escada`); ``longarina`` acrescenta as verificações, as
+    tabelas e os diagramas das longarinas.
+    """
     e, g, ln, a = r.entrada, r.geometria, r.lances, r.adotado
-    verificacoes = list(r.verificacoes)
-    geral = r.status
+    verificacoes: list[Verificacao] = list(r.verificacoes)
+    tabelas_longarina: list[dict[str, Any]] = []
+    if longarina is not None:
+        verificacoes.extend(longarina.decisivas)
+        for lg in longarina.longarinas:
+            tabelas_longarina.extend(tabelas_da_longarina(lg, longarina.entrada.perfil))
+    geral = status_geral(verificacoes)
     destaque = texto_de_destaque(r)
+    if escada is not None and not escada.automatica:
+        destaque = destaque.replace(f"em {ln.texto}", f"em {el.texto_dos_lances(escada)}")
+    if longarina is not None:
+        destaque += " " + texto_da_longarina(longarina)
     tag = str((contexto or {}).get("tag") or "").strip()
     resultados: dict[str, Any] = {
         "status_geral": geral,
         "verificações": linhas_para_registro(verificacoes),
-        "utilizacao_maxima": _finito(r.aproveitamento_maximo),
+        "utilizacao_maxima": _finito(
+            max(r.aproveitamento_maximo, longarina.aproveitamento_maximo if longarina else 0.0)
+        ),
         "destaque_memorial": destaque,
-        "tabelas_memorial": tabelas_para_memorial(r),
+        "tabelas_memorial": tabelas_para_memorial(r)
+        + (tabelas_da_escada(escada) if escada is not None else [])
+        + tabelas_longarina,
         "modelo_adotado": a.modelo.nome,
         "número_de_espelhos": g.n,
         "espelho_h_mm": _finito(g.h_mm, 3),
@@ -520,7 +646,22 @@ def registro_degrau(
         "peso_unitário_kg": _finito(r.peso_unitario_kg, 3),
         "peso_total_kg": _finito(r.peso_total_kg, 2),
     }
+    if escada is not None:
+        resultados["esquematico_escada"] = el.para_dicionario(escada)
+        if not escada.automatica:
+            resultados["distribuição_dos_lances"] = el.texto_dos_lances(escada)
+            minimo, maximo = escada.extensao_mm
+            resultados["projeção_horizontal_total_mm"] = _finito(maximo - minimo, 1)
+    if longarina is not None:
+        resultados["figuras_portico"] = [figuras_da_longarina(lg) for lg in longarina.longarinas]
     alertas = [f"{v.nome}: {v.formula}" for v in verificacoes if v.status in ("NÃO OK", "ALERTA")]
+    if longarina is not None:
+        alertas = [
+            f"{v.nome}: {v.formula}" for v in verificacoes if v.status in ("NÃO OK", "ALERTA")
+        ]
+        alertas.extend(longarina.avisos)
+    if escada is not None:
+        alertas.extend(escada.avisos)
     alertas.extend(r.avisos)
     alertas.extend(AVISOS_FIXOS)
     alertas.extend(f"Não faz: {item}" for item in NAO_FAZ)
@@ -538,7 +679,18 @@ def registro_degrau(
             f"{_n(g.h_mm, 1)} mm, piso {_n(g.b_mm, 0)} mm, C = {_n(g.C_mm, 0)} mm, L = "
             f"{_n(e.L_mm, 0)} mm; {de.texto_da_contagem(r.contagem)}."
         ),
-        entradas=_entradas(r, contexto),
+        entradas={
+            **_entradas(r, contexto),
+            **(
+                {
+                    chave: valor
+                    for chave, valor in _entradas_da_longarina(longarina.entrada).items()
+                    if valor is not None
+                }
+                if longarina is not None
+                else {}
+            ),
+        },
         resultados=resultados,
         metodo=(
             "Geometria da escada pelo requisito legal (NR-12 Anexo III ou NR-22), pelo Critério "
@@ -546,6 +698,14 @@ def registro_degrau(
             "(C ≤ 300 mm), nessa ordem de prioridade; degrau biapoiado nas chapas laterais, com "
             "flexão (flambagem lateral com torção, NBR 8800 Tab. G.1), cisalhamento, flechas e "
             "parafusos A307; 64 modelos avaliados e o mais leve que atende é adotado."
+            + (
+                " Longarinas pelo núcleo de pórtico plano do programa (rigidez direta, barras "
+                "inclinadas e dobradas, apoios escolhidos), ELU γg·G + γq·Q e ELS G + Q, e "
+                "verificadas pelo motor das barras (NBR 8800 5.5.1.2, flambagem, FLT/FLM/FLA, "
+                "cortante, critério Anglo) e pela flecha L/350."
+                if longarina is not None
+                else ""
+            )
         ),
         premissas=[
             "Vão do degrau = L, biapoiado nas chapas laterais; as barras de ligação travam o "
@@ -557,6 +717,19 @@ def registro_degrau(
             "A chapa xadrez do bocel não entra na distribuição da carga (a favor da segurança).",
             "Peso da grade: barras portantes e barras de ligação de lado adotado, mais 20 % "
             "(Selmec nota 4); é estimativa.",
+            *(
+                [
+                    "Longarina: duas por lance, cada uma com metade da largura do degrau; a linha "
+                    "da longarina é a dos bocéis (n·b na horizontal, desnível do lance na vertical).",
+                    "Cargas da longarina: sobrecarga e degraus por metro horizontal; guarda-corpo "
+                    "e peso próprio por metro de barra; no patamar, o piso e a sobrecarga com a "
+                    "largura do patamar.",
+                    "Longarina travada a cada degrau (L_y = L_b = distância entre degraus ao "
+                    "longo da barra), salvo comprimento informado; L_x = comprimento do trecho.",
+                ]
+                if longarina is not None
+                else []
+            ),
         ],
         equacoes=[
             "n_bb = int((C − t)/p) + 1; n_ef = mín(n_bb; int(b_c/p) + 1)",
@@ -569,6 +742,17 @@ def registro_degrau(
             "δ = 5·(g + q)·C·L⁴/(384·E·n_bb·I) ≤ L/300; δ_ISO = P·L³/(48·E·n_ef·I) ≤ "
             "mín(L/300; 6 mm)",
             "F_v,Rd = 0,40·A_b·f_ub/γa2",
+            *(
+                [
+                    "Longarina: K·u = F (pórtico plano); N, V e M por estática ao longo de cada "
+                    "barra; flecha pela integração de M/EI em relação à reta entre as pontas",
+                    "N_Sd/N_Rd + 8/9·(M_Sd/M_Rd) ≤ 1 (N_Sd/N_Rd ≥ 0,2); N_Sd/(2·N_Rd) + "
+                    "M_Sd/M_Rd ≤ 1 (abaixo de 0,2) — NBR 8800 5.5.1.2",
+                    "δ (G + Q) ≤ L/350",
+                ]
+                if longarina is not None
+                else []
+            ),
         ],
         criterios=[
             "Espelho, piso, largura, lances, patamar e inclinação: NR-12 Anexo III (itens 11 e 12) "

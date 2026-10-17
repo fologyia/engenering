@@ -10,8 +10,9 @@ Módulo puro, sem Streamlit. Unidades internas: mm, MPa e N; as saídas de esfor
 kN/m², kg e graus. A fonte das fórmulas e dos valores de aceite é a planilha validada
 ``Degrau_Escada_Grade_NR12_Anglo_Selmec.xlsx`` (ver ``docs/degrau_escada.md``).
 
-Não faz: patamar e ligações da longarina (a longarina do lance maior está em :mod:`core.longarina_escada`); guarda-corpo (só confere as dimensões); a
-pressão de contato do parafuso na chapa lateral (o catálogo não informa a espessura).
+Não faz: ligações da longarina e estrutura do patamar (lances e patamares em
+:mod:`core.escada_lances`; longarinas em :mod:`core.longarina_escada`); guarda-corpo (só confere as
+dimensões); a pressão de contato do parafuso na chapa lateral (o catálogo não informa a espessura).
 
 Nada é "corrigido em silêncio": entrada impossível levanta :class:`EntradaInvalida` com a causa.
 """

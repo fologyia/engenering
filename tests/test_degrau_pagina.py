@@ -284,7 +284,7 @@ def test_seleção_manual_reprova_o_modelo_que_nao_atende(banco_isolado):
 def test_avisos_fixos_e_conflitos_aparecem_sempre(banco_isolado):
     t = abrir(banco_isolado)
     avisos = " ".join(w.value for w in t.warning)
-    assert "O que esta página não faz" in avisos and "Longarina" in avisos
+    assert "O que esta página não faz" in avisos and "longarina" in avisos.lower()
     assert "NR-22 (espelho de 180 a 200 mm)" in avisos  # conflitos entre normas
     assert "Conferir antes de emitir" in avisos and "carga-base" in avisos
     assert "inoxidável" in avisos  # os avisos são fixos: o do inox vale para qualquer material
@@ -332,7 +332,9 @@ def test_registrar_grava_o_calculo_com_as_38_verificacoes_e_as_tabelas(banco_com
     assert registro["entradas"]["desnivel_H_mm"] == 3600.0
     assert registro["resultados"]["status_geral"] == "ALERTA"
     assert len(registro["resultados"]["verificações"]) == 38
-    assert len(registro["resultados"]["tabelas_memorial"]) == 4
+    # as 4 do degrau, mais os lances e os patamares da escada (com o esquemático para o memorial)
+    assert len(registro["resultados"]["tabelas_memorial"]) == 6
+    assert registro["resultados"]["esquematico_escada"]["lances"]
     assert registro["resultados"]["modelo_adotado"] == "DS-A4-35/3"
     assert registro["status"] == "Atenção"
     assert "DS-A4-35/3" in registro["titulo"]

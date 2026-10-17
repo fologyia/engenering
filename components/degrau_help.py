@@ -314,29 +314,97 @@ AJUDA: dict[str, str] = {
     "col_status": "OK atende · NÃO OK reprova · ALERTA ressalva ou conflito · INFO informação · N/A não se aplica.",
     "col_observacao": "Como o valor foi calculado, com os números deste caso, e o que fazer quando não atende.",
     "sec_7": (
-        "A longarina do lance maior: viga biapoiada inclinada que recebe metade de cada degrau, "
-        "a sobrecarga sobre metade da largura, o guarda-corpo e o peso próprio. Verificada como "
-        "viga de piso (NBR 8800 e critério Anglo), destravada a cada degrau."
+        "As longarinas da escada, uma por lance (lances iguais saem juntos), calculadas pelo núcleo "
+        "de pórtico plano do programa: trecho inclinado e, se quiser, trechos horizontais no pé e "
+        "no topo (a longarina dobrada), com os apoios que você escolher. Cada longarina recebe "
+        "metade de cada degrau, a sobrecarga sobre metade da largura, o guarda-corpo e o peso "
+        "próprio; sai com os diagramas (como no Ftool) e as verificações da NBR 8800 e do Anglo."
     ),
-    "longarina": "Liga o cálculo da longarina e a aba Longarina nos resultados.",
-    "lg_perfil": "O perfil das longarinas (as duas iguais).",
+    "longarina": "Liga o cálculo das longarinas e a aba Longarina nos resultados.",
+    "lg_perfil": "O perfil das longarinas (as duas de cada lance iguais).",
     "lg_aco": "O aço do perfil da longarina.",
     "lg_vao": (
-        "A distância horizontal entre os apoios da longarina (do pé ao patamar ou à plataforma). "
-        "Vazio: o programa usa a projeção horizontal do lance maior."
+        "A distância horizontal do trecho inclinado da longarina, do pé ao topo. Vazio: o "
+        "programa usa a linha dos bocéis, nº de espelhos × piso. Vale para o lance mais longo."
     ),
     "lg_gc": "Peso do guarda-corpo preso na longarina, por metro (40 kg/m ≈ 0,39 kN/m).",
+    "lg_piso": (
+        "Peso do piso do patamar por m² (grade de piso ≈ 0,30 a 0,45 kN/m²). Só entra nos "
+        "trechos horizontais da longarina, com metade da largura do patamar."
+    ),
+    "lg_apoio_pe": (
+        "Como a longarina se prende embaixo. **Pino**: segura na vertical e na horizontal "
+        "(parafusada na base ou na viga). **Rolete**: só na vertical, desliza na horizontal "
+        "(furo oblongo). **Engaste**: base soldada ou rígida, segura também o giro."
+    ),
+    "lg_apoio_topo": (
+        "Como a longarina se prende em cima (na viga do patamar ou da plataforma). Pino nas "
+        "duas pontas numa longarina dobrada cria empuxo horizontal; rolete em cima aumenta o "
+        "momento no vão. Escolha o que o detalhe da ligação realmente faz."
+    ),
+    "lg_trecho_pe": (
+        "Comprimento do trecho horizontal da longarina no pé, em m (0 = sem trecho). Use quando "
+        "a longarina continua reta no piso ou no patamar de baixo antes de subir."
+    ),
+    "lg_trecho_topo": (
+        "Comprimento do trecho horizontal da longarina no topo, em m (0 = sem trecho). Use quando "
+        "a longarina dobra e continua sob o patamar ou a plataforma até o apoio."
+    ),
+    "lg_lb": (
+        "Distância entre travamentos laterais da longarina, em m. Vazio: a distância entre "
+        "degraus ao longo da barra (cada degrau trava a longarina)."
+    ),
     "res_longarina": (
-        "Esforços, deslocamentos e as verificações da longarina pela NBR 8800 (flexão com FLT, "
-        "FLM e FLA, cortante e flecha L/350)."
+        "Esforços, deslocamentos e as verificações da longarina pela NBR 8800 (esforço normal com "
+        "flexão, flambagem, FLT, FLM, FLA, cortante e flecha L/350) e pelo critério Anglo."
     ),
-    "res_lg_vao": "Vão horizontal entre apoios e o comprimento inclinado da longarina (L_h / cos α).",
+    "res_lg_escolha": "Qual longarina mostrar: cada uma tem a geometria do seu lance.",
+    "res_lg_vao": "Distância horizontal e comprimento do trecho inclinado da longarina.",
     "res_lg_desloc": (
-        "Deslocamento vertical no meio do vão sob as cargas de serviço (o DY do SolidWorks): a "
-        "flecha perpendicular à barra dividida por cos α."
+        "Maior deslocamento vertical da longarina sob as cargas de serviço (G + Q): é o DY que o "
+        "SolidWorks mostraria."
     ),
-    "res_lg_momento": "Momento de cálculo (ELU) e momento resistente da longarina.",
-    "res_lg_reacao": "Reação vertical característica em cada apoio da longarina, para a ligação.",
+    "res_lg_momento": "Maior momento de cálculo (ELU) na longarina e o momento resistente do trecho.",
+    "res_lg_reacao": (
+        "Maior reação vertical de cálculo (ELU) num apoio da longarina, para a ligação. A tabela "
+        "traz as reações de G, Q, serviço e cálculo em cada apoio."
+    ),
+    "res_lg_figuras": (
+        "Os diagramas como no Ftool, desenhados sobre a longarina: modelo com cargas, reações, "
+        "esforço normal, cortante, momento (do lado tracionado), tensão e a deformada ampliada."
+    ),
+    "res_lg_cargas": "As cargas características que cada longarina recebe e de onde vêm.",
+    "res_lg_trechos": "Esforços de cálculo, flecha e a situação de cada trecho da longarina.",
+    "res_lg_reacoes": (
+        "Reações nos apoios (força que o apoio faz na longarina; x para a direita, y para cima) "
+        "em cada caso: G permanente, Q sobrecarga, ELS e ELU."
+    ),
+    # ------------------------------------------------------------------ lances e patamares
+    "sec_patamares": (
+        "Os patamares da sua escada: altura, comprimento e largura de cada um e se o lance "
+        "seguinte volta (escada em U). Vazio: o programa divide a escada em lances iguais."
+    ),
+    "patamares_tabela": (
+        "Uma linha por patamar intermediário. Altura = nível do piso do patamar a partir do piso "
+        "de partida, em mm. Largura vazia = a largura da escada."
+    ),
+    "pat_altura": "Nível do piso do patamar a partir do piso de partida, em mm.",
+    "pat_comprimento": "Comprimento do patamar no sentido de quem anda, em mm (mínimo 600).",
+    "pat_largura": "Largura do patamar, em mm. Vazio = a largura da escada.",
+    "pat_volta": "Marque se o lance depois deste patamar volta no sentido contrário (escada em U).",
+    "pat_ajustar": (
+        "Leva a altura de cada patamar para o múltiplo do espelho mais próximo, para todos os "
+        "degraus da escada terem a mesma altura (passo regular). Desligado: cada lance tem o seu "
+        "espelho, com alerta."
+    ),
+    "pat_em_u": (
+        "Sem patamares na tabela: cada lance volta no sentido contrário (escada em U). Com "
+        "patamares na tabela, vale a coluna de cada um."
+    ),
+    "res_escada": (
+        "Vista lateral da escada com os degraus de cada lance, a longarina, o ângulo de cada "
+        "lance, os patamares e os níveis."
+    ),
     "res_desloc_degrau": (
         "Flecha do degrau no meio do vão: com a carga distribuída de cálculo de serviço e com a "
         "carga concentrada da ISO 14122."

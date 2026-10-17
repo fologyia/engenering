@@ -597,6 +597,41 @@ def imagens_flambagem(
     ]
 
 
+def imagens_gravadas(resultados: Mapping[str, Any]) -> list[Any]:
+    """Figuras que qualquer módulo pode gravar no registro, redesenhadas aqui.
+
+    * ``esquematico_escada`` — a vista lateral da escada (:mod:`core.escada_lances`);
+    * ``figuras_portico`` — lista de ``{"titulo", "caso", "modelo", "modelo_deformada",
+      "caso_deformada"}``: o modelo do núcleo de pórtico plano (:mod:`core.portico_plano`) é
+      resolvido de novo e sai com estrutura, reações, N, V, M, tensão e deformada (Ftool).
+    """
+    from core import escada_lances as el
+    from core import portico_figuras as pf
+    from core import portico_plano as pp
+
+    figuras: list[Any] = []
+    esquematico = resultados.get("esquematico_escada")
+    if isinstance(esquematico, Mapping):
+        figuras.append(el.figura_esquematico(*el.geometria_do_dicionario(esquematico)))
+    porticos = resultados.get("figuras_portico")
+    for item in porticos if isinstance(porticos, list) else []:
+        if not isinstance(item, Mapping) or not isinstance(item.get("modelo"), Mapping):
+            continue
+        principal = pp.resolver(pp.de_dicionario(item["modelo"]))
+        servico = item.get("modelo_deformada")
+        deformada = pp.resolver(pp.de_dicionario(servico)) if isinstance(servico, Mapping) else None
+        figuras.extend(
+            pf.figuras_do_portico(
+                principal,
+                prefixo=str(item.get("titulo") or ""),
+                caso=str(item.get("caso") or ""),
+                deformada=deformada,
+                caso_deformada=str(item.get("caso_deformada") or ""),
+            )
+        )
+    return figuras
+
+
 def imagens_do_registro(
     registro: Mapping[str, Any], projeto: Mapping[str, Any]
 ) -> tuple[list[dict[str, Any]], str]:
@@ -621,6 +656,9 @@ def imagens_do_registro(
         elif modulo_id == "flambagem_colunas":
             desenhos = imagens_flambagem(entradas, resultados)
         else:
+            desenhos = []
+        desenhos = [*desenhos, *imagens_gravadas(resultados)]
+        if not desenhos:
             return [], ""
     except Exception as erro:  # noqa: BLE001 - o memorial não pode cair por causa de um gráfico
         return [], f"Gráfico omitido: {erro}"

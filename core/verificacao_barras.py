@@ -354,6 +354,64 @@ def _verificar_cantoneira(
     )
 
 
+@dataclass(frozen=True)
+class EsforcoNoPonto:
+    """Esforços de cálculo num ponto da barra, vindos de outro cálculo (kN e kN·m)."""
+
+    combinacao: str
+    ponto: str
+    n: float  # tração positiva
+    m_forte: float
+    v: float
+    m_fraco: float = 0.0
+    t: float = 0.0
+
+
+def verificar_barra_com_esforcos(
+    membro: str,
+    perfil: str,
+    aco: str,
+    esforcos: Sequence[EsforcoNoPonto],
+    *,
+    lx_m: float,
+    ly_m: float,
+    lb_m: float,
+    cb: float = 1.0,
+    norma: str = em.NORMA_PADRAO,
+    tipo: str = "—",
+) -> ResultadoDaBarra:
+    """A mesma verificação das barras do modelo, com os esforços de outro cálculo do programa.
+
+    É a porta de entrada do núcleo de pórtico plano (:mod:`core.portico_plano`): longarina de
+    escada, vigas inclinadas e pórticos simples passam pelo mesmo motor (NBR 8800 5.5.1.2, todos
+    os modos de flambagem, FLT/FLM/FLA, cortante e o critério Anglo). Sem torção informada, a
+    linha informativa da torção sai da tabela.
+    """
+    if not esforcos:
+        raise ValueError("Sem esforços para verificar a barra.")
+    if aco not in ACOS:
+        raise ValueError(f"Aço desconhecido: {aco!r}.")
+    if min(lx_m, ly_m, lb_m) <= 0:
+        raise ValueError("Os comprimentos de flambagem e o destravado precisam ser positivos.")
+    cfg = em.ConfiguracaoDoMembro(perfil=perfil, tipo=tipo)
+    triplas = [
+        _Tripla(e.combinacao, e.ponto, e.n, e.m_forte, e.m_fraco, abs(e.v), e.t) for e in esforcos
+    ]
+    fy = ACOS[aco][0]
+    if perfil in ct.CATALOGO_CANTONEIRAS:
+        resultado = _verificar_cantoneira(membro, cfg, triplas, fy, max(lx_m, ly_m) * 1e3)
+    else:
+        resultado = _verificar_perfil(
+            membro, cfg, triplas, fy, lx_m * 1e3, ly_m * 1e3, lb_m * 1e3, cb, norma
+        )
+    if all(abs(e.t) < 1e-12 for e in esforcos):
+        resultado = replace(
+            resultado,
+            linhas=tuple(v for v in resultado.linhas if v.nome != "Torção (informativo)"),
+        )
+    return resultado
+
+
 def estados_ultimos(estados: Sequence[str]) -> list[str]:
     ultimos = [e for e in estados if e in comb.COMBINACOES_ULTIMAS]
     return ultimos or [comb.ELU_NORMAL]

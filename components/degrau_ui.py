@@ -9,6 +9,7 @@ nada é corrigido em silêncio.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -22,7 +23,10 @@ from components.ui import fronteira_modelo
 from components.verification_table import COR_STATUS, mostrar_tabela_verificacoes
 from core import degrau_escada as de
 from core import degrau_registro as reg
+from core import escada_lances as el
 from core import longarina_escada as le
+from core import portico_figuras as pf
+from core import portico_plano as pp
 from core import section_catalog as sc
 from core.contraventamento_barras import ACOS
 from core.degrau_relatorio import gerar_pdf_degrau
@@ -603,8 +607,93 @@ def formulario_cargas() -> DadosCargas:
     )  # fmt: skip
 
 
+@dataclass(frozen=True)
+class DadosPatamares:
+    patamares: tuple[el.PatamarInformado, ...]
+    ajustar: bool
+    em_u: bool
+
+
+COLUNAS_PATAMARES = {
+    "altura": "Altura do patamar (mm)",
+    "comprimento": "Comprimento (mm)",
+    "largura": "Largura (mm)",
+    "volta": "Lance seguinte volta (U)",
+}
+
+
+def formulario_patamares() -> DadosPatamares:
+    """Os patamares que o projeto pedir (vazio = divisão automática em lances iguais)."""
+    with st.container(border=True):
+        st.subheader("Lances e patamares", help=AJUDA["sec_patamares"])
+        vazia = pd.DataFrame(
+            {
+                COLUNAS_PATAMARES["altura"]: pd.Series(dtype="float"),
+                COLUNAS_PATAMARES["comprimento"]: pd.Series(dtype="float"),
+                COLUNAS_PATAMARES["largura"]: pd.Series(dtype="float"),
+                COLUNAS_PATAMARES["volta"]: pd.Series(dtype="bool"),
+            }
+        )
+        st.caption(AJUDA["patamares_tabela"])
+        editada = st.data_editor(
+            vazia,
+            num_rows="dynamic",
+            hide_index=True,
+            key="dg_patamares",
+            width="stretch",
+            column_config={
+                COLUNAS_PATAMARES["altura"]: st.column_config.NumberColumn(
+                    min_value=0.0, step=10.0, help=AJUDA["pat_altura"]
+                ),
+                COLUNAS_PATAMARES["comprimento"]: st.column_config.NumberColumn(
+                    min_value=0.0, step=50.0, help=AJUDA["pat_comprimento"]
+                ),
+                COLUNAS_PATAMARES["largura"]: st.column_config.NumberColumn(
+                    min_value=0.0, step=50.0, help=AJUDA["pat_largura"]
+                ),
+                COLUNAS_PATAMARES["volta"]: st.column_config.CheckboxColumn(
+                    default=False, help=AJUDA["pat_volta"]
+                ),
+            },
+        )
+        linha = st.columns(2)
+        ajustar = linha[0].toggle(
+            "Ajustar a altura dos patamares ao espelho",
+            value=True,
+            key="dg_pat_ajustar",
+            persist_state="session",
+            help=AJUDA["pat_ajustar"],
+        )
+        em_u = linha[1].toggle(
+            "Lances em U (sem patamares na tabela)",
+            value=False,
+            key="dg_pat_em_u",
+            persist_state="session",
+            help=AJUDA["pat_em_u"],
+        )
+    patamares = []
+    for _, linha_tabela in editada.iterrows():
+        altura = linha_tabela.get(COLUNAS_PATAMARES["altura"])
+        if altura is None or pd.isna(altura):
+            continue
+        comprimento = linha_tabela.get(COLUNAS_PATAMARES["comprimento"])
+        largura = linha_tabela.get(COLUNAS_PATAMARES["largura"])
+        volta = linha_tabela.get(COLUNAS_PATAMARES["volta"])
+        patamares.append(
+            el.PatamarInformado(
+                altura_mm=float(altura),
+                comprimento_mm=0.0
+                if comprimento is None or pd.isna(comprimento)
+                else float(comprimento),
+                largura_mm=None if largura is None or pd.isna(largura) else float(largura),
+                volta=bool(volta) if volta is not None and not pd.isna(volta) else False,
+            )
+        )
+    return DadosPatamares(tuple(patamares), bool(ajustar), bool(em_u))
+
+
 def formulario_longarina() -> le.EntradaLongarina | None:
-    """A longarina (opcional): perfil, aço, distância horizontal entre apoios e guarda-corpo."""
+    """As longarinas (opcional): perfil, aço, apoios, trechos horizontais e cargas."""
     with st.container(border=True):
         st.subheader("7. Longarina", help=AJUDA["sec_7"])
         ligada = st.toggle(
@@ -615,6 +704,7 @@ def formulario_longarina() -> le.EntradaLongarina | None:
         )
         if not ligada:
             return None
+        padrao = le.EntradaLongarina()
         perfis = [n for n, p in sc.listar_perfis().items() if p.familia in FAMILIAS_DA_LONGARINA]
         linha = st.columns(4)
         perfil = _selecao(
@@ -623,76 +713,217 @@ def formulario_longarina() -> le.EntradaLongarina | None:
             perfis,
             AJUDA["lg_perfil"],
             alvo=linha[0],
-            padrao=le.EntradaLongarina().perfil,
+            padrao=padrao.perfil,
         )
         aco = _selecao(
             "Aço", "dg_lg_aco", list(ACOS), AJUDA["lg_aco"], alvo=linha[1], padrao="ASTM A36"
         )
-        vao = _opcional(
-            "Distância horizontal entre apoios (m)",
-            "dg_lg_vao",
-            AJUDA["lg_vao"],
-            minimo=0.1,
-            passo=0.1,
-            alvo=linha[2],
-        )
         gc = _numero(
             "Guarda-corpo (kN/m)",
             "dg_lg_gc",
-            0.40,
+            padrao.guarda_corpo_kN_m,
             AJUDA["lg_gc"],
+            passo=0.05,
+            formato="%.2f",
+            alvo=linha[2],
+        )
+        piso = _numero(
+            "Piso do patamar (kN/m²)",
+            "dg_lg_piso",
+            padrao.piso_patamar_kN_m2,
+            AJUDA["lg_piso"],
             passo=0.05,
             formato="%.2f",
             alvo=linha[3],
         )
-    return le.EntradaLongarina(perfil=perfil, aco=aco, vao_horizontal_m=vao, guarda_corpo_kN_m=gc)
+        linha = st.columns(4)
+        apoio_pe = _selecao(
+            "Apoio no pé",
+            "dg_lg_apoio_pe",
+            list(le.APOIOS),
+            AJUDA["lg_apoio_pe"],
+            formatar=le.APOIOS.get,
+            alvo=linha[0],
+            padrao=padrao.apoio_pe,
+        )
+        apoio_topo = _selecao(
+            "Apoio no topo",
+            "dg_lg_apoio_topo",
+            list(le.APOIOS),
+            AJUDA["lg_apoio_topo"],
+            formatar=le.APOIOS.get,
+            alvo=linha[1],
+            padrao=padrao.apoio_topo,
+        )
+        trecho_pe = _numero(
+            "Trecho horizontal no pé (m)",
+            "dg_lg_trecho_pe",
+            0.0,
+            AJUDA["lg_trecho_pe"],
+            passo=0.05,
+            formato="%.2f",
+            alvo=linha[2],
+        )
+        trecho_topo = _numero(
+            "Trecho horizontal no topo (m)",
+            "dg_lg_trecho_topo",
+            0.0,
+            AJUDA["lg_trecho_topo"],
+            passo=0.05,
+            formato="%.2f",
+            alvo=linha[3],
+        )
+        linha = st.columns(4)
+        vao = _opcional(
+            "Distância horizontal do trecho inclinado (m)",
+            "dg_lg_vao",
+            AJUDA["lg_vao"],
+            minimo=0.1,
+            passo=0.1,
+            alvo=linha[0],
+        )
+        lb = _opcional(
+            "Comprimento destravado (m)",
+            "dg_lg_lb",
+            AJUDA["lg_lb"],
+            minimo=0.05,
+            passo=0.05,
+            alvo=linha[1],
+        )
+    return le.EntradaLongarina(
+        perfil=perfil,
+        aco=aco,
+        vao_horizontal_m=vao,
+        guarda_corpo_kN_m=gc,
+        trecho_pe_m=trecho_pe,
+        trecho_topo_m=trecho_topo,
+        apoio_pe=apoio_pe,
+        apoio_topo=apoio_topo,
+        piso_patamar_kN_m2=piso,
+        lb_m=lb,
+    )
 
 
-def _aba_longarina(r: de.ResultadoEscada, entrada: le.EntradaLongarina) -> None:
-    try:
-        lg = le.calcular_longarina(r, entrada)
-    except (le.LongarinaInvalida, ValueError) as erro:
-        st.error(f"Não foi possível calcular a longarina: {erro}", icon=":material/error:")
-        return
-    st.subheader(f"Longarina {lg.entrada.perfil}", help=AJUDA["res_longarina"])
+@st.cache_data(max_entries=24, show_spinner=False)
+def _figuras_da_longarina(
+    modelo_json: str, servico_json: str, titulo: str, caso: str
+) -> list[tuple[str, str, bytes]]:
+    """As figuras de uma longarina (guardadas: redesenhar a cada clique deixaria a página lenta)."""
+    principal = pp.resolver(pp.de_dicionario(json.loads(modelo_json)))
+    servico = pp.resolver(pp.de_dicionario(json.loads(servico_json)))
+    return [
+        (f.titulo, f.legenda, f.png)
+        for f in pf.figuras_do_portico(
+            principal, prefixo=titulo, caso=caso, deformada=servico, caso_deformada=le.ELS
+        )
+    ]
+
+
+@st.cache_data(max_entries=24, show_spinner=False)
+def _figura_da_escada(dados_json: str) -> tuple[str, bytes]:
+    figura = el.figura_esquematico(*el.geometria_do_dicionario(json.loads(dados_json)))
+    return figura.legenda, figura.png
+
+
+def _aba_escada(escada: el.EscadaComPatamares) -> None:
+    st.subheader("Esquemático da escada", help=AJUDA["res_escada"])
+    legenda, png = _figura_da_escada(json.dumps(el.para_dicionario(escada), sort_keys=True))
+    st.image(png, caption=legenda, width="stretch")
+    st.dataframe(
+        pd.DataFrame(el.linhas_dos_lances(escada), columns=el.CABECALHO_LANCES),
+        hide_index=True,
+        width="stretch",
+    )
+    if escada.patamares:
+        st.dataframe(
+            pd.DataFrame(el.linhas_dos_patamares(escada), columns=el.CABECALHO_PATAMARES),
+            hide_index=True,
+            width="stretch",
+        )
+    for aviso in escada.avisos:
+        st.warning(aviso, icon=":material/warning:")
+
+
+def _aba_longarina(resultado: le.ResultadoLongarina) -> None:
+    st.subheader(
+        f"Longarina {resultado.entrada.perfil} — {resultado.status}", help=AJUDA["res_longarina"]
+    )
+    for aviso in resultado.avisos:
+        st.info(aviso, icon=":material/info:")
+    titulos = [lg.titulo for lg in resultado.longarinas]
+    escolhida = resultado.governante
+    if len(titulos) > 1:
+        nome = _selecao(
+            "Longarina",
+            "dg_lg_escolhida",
+            titulos,
+            AJUDA["res_lg_escolha"],
+            padrao=resultado.governante.titulo,
+        )
+        escolhida = resultado.longarinas[titulos.index(nome)]
+    lg = escolhida
+    inclinado = next(t for t in lg.trechos if t.barra == le.TRECHO_INCLINADO)
+    rb = lg.elu.barra(le.TRECHO_INCLINADO)
     linha = st.columns(4)
     linha[0].metric(
-        "Vão horizontal / inclinado (m)",
+        "Horizontal / inclinado (m)",
         f"{_pt(lg.vao_horizontal_m, 2)} / {_pt(lg.vao_inclinado_m, 2)}",
         help=AJUDA["res_lg_vao"],
     )
     linha[0].caption(
-        ("informado" if lg.vao_informado else "projeção do lance maior")
+        ("informada" if lg.vao_informado else "linha dos bocéis, n·b")
         + f" · α = {_pt(lg.alfa_graus, 1)}°"
     )
-    linha[1].metric(
-        "Deslocamento vertical (mm)",
-        f"{_pt(lg.deslocamento_vertical_mm, 2)}",
-        help=AJUDA["res_lg_desloc"],
-    )
+    maior_dy = max(t.deslocamento_vertical_mm for t in lg.trechos)
+    linha[1].metric("Deslocamento vertical (mm)", _pt(maior_dy, 2), help=AJUDA["res_lg_desloc"])
     linha[1].caption(
-        f"perpendicular {_pt(lg.flecha_perpendicular_mm, 2)} mm; limite L/350 = "
-        f"{_pt(lg.limite_flecha_mm, 1)} mm; só a sobrecarga "
-        f"{_pt(lg.deslocamento_vertical_sc_mm, 2)} mm"
+        f"flecha {_pt(abs(inclinado.flecha_mm), 2)} mm ≤ L/350 = "
+        f"{_pt(inclinado.limite_flecha_mm, 1)} mm (trecho inclinado)"
     )
+    m_rd = inclinado.resultado.mx_rd
     linha[2].metric(
         "M_Sd / M_Rd (kN·m)",
-        f"{_pt(lg.viga.momento_sd_kNm, 2)} / {_pt(lg.viga.momento_rd_kNm, 2)}",
+        f"{_pt(abs(rb.m_max.m), 2)} / {_pt(m_rd, 2) if m_rd else '—'}",
         help=AJUDA["res_lg_momento"],
     )
     linha[2].caption(f"aproveitamento {100 * lg.aproveitamento_maximo:.0f} % · {lg.status}")
-    linha[3].metric(
-        "Reação vertical em cada apoio (kN)",
-        _pt(lg.reacao_vertical_kN, 2),
-        help=AJUDA["res_lg_reacao"],
+    ry = max(abs(r.ry) for r in lg.reacoes(le.ELU))
+    linha[3].metric("Maior reação vertical ELU (kN)", _pt(ry, 2), help=AJUDA["res_lg_reacao"])
+    rx = max(abs(r.rx) for r in lg.reacoes(le.ELU))
+    linha[3].caption(
+        f"empuxo horizontal ELU {_pt(rx, 2)} kN" if rx > 0.005 else "sem empuxo horizontal"
     )
-    linha[3].caption(f"característica; normal ao longo da barra {_pt(lg.normal_kN, 2)} kN")
-    st.caption(
-        f"Cargas por longarina (verticais, por metro horizontal): sobrecarga "
-        f"{_pt(lg.carga_sc_kN_m, 3)} kN/m, degraus {_pt(lg.carga_degraus_kN_m, 3)} kN/m; "
-        f"guarda-corpo {_pt(lg.carga_gc_kN_m, 2)} kN/m e peso próprio "
-        f"{_pt(lg.viga.peso_proprio_kN_m, 3)} kN/m ao longo da barra. Destravada a cada degrau: "
-        f"L_b = {_pt(lg.lb_m, 3)} m."
+
+    st.subheader("Diagramas", help=AJUDA["res_lg_figuras"])
+    figuras = _figuras_da_longarina(
+        json.dumps(pp.para_dicionario(lg.porticos[le.ELU]), sort_keys=True),
+        json.dumps(pp.para_dicionario(lg.porticos[le.ELS]), sort_keys=True),
+        lg.titulo,
+        f"ELU ({_pt(lg.gamma_g)}·G + {_pt(lg.gamma_q)}·Q)",
+    )
+    tensao = ["Tensão"] if len(figuras) == 7 else []
+    nomes = ["Modelo", "Reações", "Normal", "Cortante", "Momento", *tensao, "Deformada"]
+    for aba, (_titulo, legenda, png) in zip(st.tabs(nomes), figuras, strict=True):
+        with aba:
+            st.image(png, caption=legenda, width="stretch")
+
+    st.subheader("Cargas por longarina", help=AJUDA["res_lg_cargas"])
+    st.dataframe(
+        pd.DataFrame(le.linhas_das_cargas(lg), columns=["Carga", "Valor", "Unidade", "Origem"]),
+        hide_index=True,
+        width="stretch",
+    )
+    st.subheader("Trechos", help=AJUDA["res_lg_trechos"])
+    st.dataframe(
+        pd.DataFrame(le.linhas_dos_trechos(lg), columns=le.CABECALHO_TRECHOS),
+        hide_index=True,
+        width="stretch",
+    )
+    st.subheader("Reações", help=AJUDA["res_lg_reacoes"])
+    st.dataframe(
+        pd.DataFrame(le.linhas_das_reacoes(lg), columns=le.CABECALHO_REACOES),
+        hide_index=True,
+        width="stretch",
     )
     mostrar_tabela_verificacoes(list(lg.verificacoes))
 
@@ -971,13 +1202,24 @@ def _blocos_fixos(r: de.ResultadoEscada) -> None:
     fronteira_modelo(list(reg.AVISOS_FIXOS), titulo="Conferir antes de emitir")
 
 
-def _registrar(r: de.ResultadoEscada, ident: Identificacao) -> None:
+def _registrar(
+    r: de.ResultadoEscada,
+    ident: Identificacao,
+    escada: el.EscadaComPatamares,
+    longarina: le.ResultadoLongarina | None,
+) -> None:
     contexto: dict[str, Any] = {"data_do_calculo": ident.data.isoformat()}
     if ident.obra:
         contexto["obra"] = ident.obra
     if ident.tag:
         contexto["tag"] = ident.tag
-    registro = reg.registro_degrau(r, contexto=contexto, responsavel=ident.responsavel)
+    registro = reg.registro_degrau(
+        r,
+        contexto=contexto,
+        responsavel=ident.responsavel,
+        escada=escada,
+        longarina=longarina,
+    )
     with st.container(border=True):
         st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
         botao_registrar_calculo(
@@ -993,6 +1235,7 @@ def mostrar_degrau_de_escada() -> None:
     ident = formulario_identificacao()
     enq = formulario_enquadramento()
     geo = formulario_geometria()
+    patamares = formulario_patamares()
     deg = formulario_degrau()
     car = formulario_cargas()
     longarina = formulario_longarina()
@@ -1007,10 +1250,29 @@ def mostrar_degrau_de_escada() -> None:
     except de.EntradaInvalida as erro:
         st.error(f"Não foi possível calcular: {erro}", icon=":material/error:")
         st.stop()
+    try:
+        escada = el.montar_escada(
+            resultado,
+            patamares.patamares,
+            ajustar_ao_espelho=patamares.ajustar,
+            lances_em_u=patamares.em_u,
+        )
+    except de.EntradaInvalida as erro:
+        st.error(f"Não foi possível montar os patamares: {erro}", icon=":material/error:")
+        st.stop()
+    resultado = el.aplicar_na_escada(resultado, escada)
+    calculo_longarina: le.ResultadoLongarina | None = None
+    erro_longarina = ""
+    if longarina is not None:
+        try:
+            calculo_longarina = le.calcular_longarina(resultado, longarina, escada)
+        except le.LongarinaInvalida as erro:
+            erro_longarina = str(erro)
     st.header("Resultados")
     _resumo(resultado)
     nomes_das_abas = [
         "Verificações",
+        "Escada",
         "Memorial do modelo adotado",
         "Os 64 modelos",
         "Requisição e exportação",
@@ -1020,9 +1282,17 @@ def mostrar_degrau_de_escada() -> None:
     abas = st.tabs(nomes_das_abas)
     if longarina is not None:
         with abas[1]:
-            _aba_longarina(resultado, longarina)
+            if calculo_longarina is not None:
+                _aba_longarina(calculo_longarina)
+            else:
+                st.error(
+                    f"Não foi possível calcular a longarina: {erro_longarina}",
+                    icon=":material/error:",
+                )
         abas = [abas[0], *abas[2:]]
-    aba_verificacoes, aba_memorial, aba_catalogo, aba_requisicao = abas
+    aba_verificacoes, aba_escada, aba_memorial, aba_catalogo, aba_requisicao = abas
+    with aba_escada:
+        _aba_escada(escada)
     with aba_verificacoes:
         _aba_verificacoes(resultado)
     with aba_memorial:
@@ -1032,4 +1302,4 @@ def mostrar_degrau_de_escada() -> None:
     with aba_requisicao:
         _aba_requisicao(resultado, ident)
     _blocos_fixos(resultado)
-    _registrar(resultado, ident)
+    _registrar(resultado, ident, escada, calculo_longarina)

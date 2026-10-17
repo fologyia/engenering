@@ -77,7 +77,7 @@ _FONTES_SISTEMA = (
 
 
 @functools.cache
-def _fonte(tamanho: int) -> ImageFont.ImageFont:
+def _fonte(tamanho: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Fonte escalável, com acentos e letras gregas quando o sistema tiver.
 
     A fonte embutida do Pillow não desenha "ã", "σ" ou "λ" — sai um
@@ -281,7 +281,7 @@ def renderizar_diagrama(
         font=fonte_eixo,
     )
 
-    final = imagem.resize((largura_px, altura_px), Image.LANCZOS)
+    final = imagem.resize((largura_px, altura_px), Image.Resampling.LANCZOS)
     buffer = io.BytesIO()
     final.save(buffer, format="PNG", optimize=True)
     return ImagemDiagrama(

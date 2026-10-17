@@ -24,8 +24,26 @@ ao cálculo e à largura recomendada pelo fabricante (ou o que o usuário escolh
 degrau (flexão com flambagem lateral por torção, cisalhamento, flechas, reações e parafusos A307);
 mostra **38 verificações** com o item da norma em cada uma e gera o texto da requisição.
 
-**Não faz:** longarina, patamar e ligações da longarina; guarda-corpo (só confere as medidas); a
-pressão de contato do parafuso na chapa lateral (o catálogo não informa a espessura).
+**Lances e patamares** (`core/escada_lances.py`): sem patamares informados, vale a divisão automática;
+com eles, cada patamar tem altura, comprimento, largura e o sentido do lance seguinte (escada em U).
+A altura pedida vai para o múltiplo do espelho mais próximo (passo regular), salvo se o ajuste for
+desligado — então cada lance tem o seu espelho, com alerta. As linhas de lance e patamar do degrau dão
+lugar às de cada lance e patamar informados. O **esquemático** (vista lateral) mostra os degraus, a
+linha da longarina, o ângulo de cada lance, os patamares e os níveis, na página e no memorial.
+
+**Longarina** (`core/longarina_escada.py`, seção 7): uma por lance (lances iguais saem juntos), pelo
+núcleo de pórtico plano (`core/portico_plano.py`): trecho inclinado pela linha dos bocéis (`n·b` na
+horizontal) e trechos horizontais opcionais no pé e no topo (longarina dobrada), com pino, rolete ou
+engaste em cada ponta. Cargas por longarina: sobrecarga e degraus por metro horizontal; guarda-corpo e
+peso próprio por metro de barra; no patamar, piso e sobrecarga com a largura do patamar. ELU
+`γg·G + γq·Q` e ELS `G + Q`; verificação pelo motor das barras (NBR 8800 5.5.1.2, flambagem,
+FLT/FLM/FLA, cortante, Anglo) e flecha `L/350`. Os diagramas (modelo, reações, N, V, M, tensão e
+deformada, como no Ftool) saem na página e no memorial (`core/portico_figuras.py`). Numa longarina
+reta com pino nas duas pontas não há empuxo horizontal; dobrada, há.
+
+**Não faz:** ligações da longarina e a estrutura do patamar (as reações saem nas tabelas);
+guarda-corpo (só confere as medidas); a pressão de contato do parafuso na chapa lateral (o catálogo
+não informa a espessura).
 
 ## Geometria (seção 5.1 a 5.5)
 
