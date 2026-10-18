@@ -178,7 +178,7 @@ AJUDA: dict[str, str] = {
     ),
     "P": (
         "**Carga concentrada** no meio do vão, junto ao bocel, em kN (ELU). Padrão 2,50 (NBR "
-        "6120, degraus isolados; o item 2.2.1.7 é da edição 1980, confira o da edição 2019). "
+        "6120:2019, Tabela 10, nota t; era o 2.2.1.7 da edição de 1980). "
         "Não se soma à distribuída."
     ),
     "P_iso": (

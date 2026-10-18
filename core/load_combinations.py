@@ -142,7 +142,7 @@ CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
         1.35,
         1.25,
         1.15,
-        "NBR 8800 Tab. 1",
+        "NBR 8800:2008 Tab. 1 (na de 2024 é 1,30: use a categoria de 2024)",
     ),
     _permanente(
         "Elementos construtivos industrializados com adições in loco",
@@ -188,6 +188,20 @@ CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
         1.15,
         1.10,
         "Projeto NBR 8800:2024, Tab. 1",
+    ),
+    _permanente(
+        "Elementos construtivos industrializados (NBR 8800:2024: grades, pisos, guarda-corpos)",
+        1.30,
+        1.20,
+        1.15,
+        "NBR 8800:2024, Tab. 1 (na coluna das pré-moldadas; era 1,35 em 2008)",
+    ),
+    _variavel(
+        "Temperatura gerada por equipamentos (NBR 8800:2024)",
+        1.50,
+        1.30,
+        (0.6, 0.5, 0.3),
+        "NBR 8800:2024, Tab. 1 e 2",
     ),
     _variavel(
         "Sobrecarga de cobertura (Projeto NBR 8800:2024)",

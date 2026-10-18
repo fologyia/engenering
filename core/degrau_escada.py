@@ -1526,7 +1526,7 @@ def montar_verificacoes(
     linhas.append(
         _uso(
             "Flexão – carga concentrada junto ao bocel (ELU)",
-            "NBR 6120 (degraus isolados); NBR 8800:2008 5.4.2",
+            "NBR 6120:2019 Tab. 10, nota t; NBR 8800:2008 5.4.2",
             r.M_sd_c_kNm,
             r.n_ef * r.MRd_kNm,
             "kN·m",

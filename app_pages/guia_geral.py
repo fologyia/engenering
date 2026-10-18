@@ -1999,8 +1999,8 @@ elif modulo == "Degrau de escada em grade":
     st.warning(
         "Fora do escopo: ligações da longarina e a estrutura do patamar (vigas e pilares: as "
         "reações da longarina saem nas tabelas); guarda-corpo (só as dimensões são conferidas); pressão de contato do parafuso na chapa lateral (o catálogo "
-        "não informa a espessura). O item da NBR 6120 da carga de 2,5 kN deve ser conferido na "
-        "edição 2019, e o inox está fora do escopo da NBR 8800.",
+        "não informa a espessura). A carga de 2,5 kN do degrau isolado é a da NBR 6120:2019 "
+        "(Tabela 10, nota t), e o inox está fora do escopo da NBR 8800.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/degrau_escada.py", "Abrir Degrau de escada em grade")

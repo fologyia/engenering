@@ -69,7 +69,7 @@ def test_textos_de_ajuda_sao_curtos_e_sem_marcas_de_rascunho():
         ("modelo_manual", ("DS-A4-35/3",)),
         ("lado_barra", ("só", "peso")),
         ("parafuso", ("5/8", "11/16")),
-        ("P", ("6120", "2019")),
+        ("P", ("6120:2019", "Tabela 10", "nota t")),
         ("b_c", ("Simplificação", "n_ef")),
         ("cb", ("conservador", "FLT")),
         ("gc_sup", ("1.100", "1.200", "1.300")),

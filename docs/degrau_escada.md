@@ -113,7 +113,8 @@ patamar); 17 a 29, o degrau e o material; 30 a 33, a fixação; 34 a 38, a confe
 
 ## Pontos a conferir
 
-* O item da NBR 6120 da carga de 2,5 kN (2.2.1.7 é da edição 1980; conferir o da edição 2019).
+* A carga de 2,5 kN do degrau isolado é a da NBR 6120:2019, Tabela 10 (escadas e passarelas, nota t): posição mais desfavorável, sem somar a distribuída — a mesma regra do item
+  2.2.1.7 da edição de 1980.
 * A numeração dos itens da NR-22 (22.6.5, 22.9.3, 22.10) segue a especificação do projeto.
 * Aço inoxidável está fora do escopo da NBR 8800: `fy` e `E` do inox são indicativos.
 * Conferir os desenhos-padrão Anglo AA-BR-DPST-ES-0001 a 0004 (Anglo 8.4 e 10.2).

@@ -50,7 +50,9 @@ AVISOS_FIXOS = (
     "A chapa xadrez do bocel não foi considerada na distribuição da carga (a favor da segurança).",
     "O peso é uma estimativa (barra de ligação com lado adotado, mais 20 % do catálogo).",
     "Conferir os desenhos-padrão Anglo AA-BR-DPST-ES-0001 a 0004 (Anglo 8.4 e 10.2).",
-    "Item da NBR 6120 da carga de 2,5 kN a conferir na edição 2019 (o 2.2.1.7 é da edição 1980).",
+    "Carga de 2,5 kN do degrau isolado pela NBR 6120:2019, Tabela 10 (escadas e passarelas, "
+    "nota t): na posição mais desfavorável e sem somar a distribuída — a mesma "
+    "regra do item 2.2.1.7 da edição de 1980.",
     "Aço inoxidável está fora do escopo da NBR 8800: os valores de fy e E são indicativos.",
 )
 
