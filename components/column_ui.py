@@ -1315,6 +1315,25 @@ def _resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
         st.markdown(f"**Verificação que governa:** {resultado.governante}")
 
 
+def _curva(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
+    """A mesma curva de flambagem do memorial (core.record_charts), com a coluna marcada."""
+    from core.record_charts import imagens_flambagem
+
+    if resultado.compressao is None:
+        return
+    registro = cb.registro_coluna(entrada, resultado)
+    try:
+        figuras = imagens_flambagem(registro["entradas"], registro["resultados"])
+    except (KeyError, TypeError, ValueError):
+        return
+    if not figuras:
+        return
+    with st.container(border=True):
+        st.subheader("Curva de flambagem", help=AJUDA["res_curva"])
+        for figura in figuras:
+            st.image(figura.png, caption=figura.legenda, width="stretch")
+
+
 def _tabela(resultado: cb.ResultadoColuna) -> None:
     with st.container(border=True):
         st.subheader("Tabela de verificações", help=AJUDA["res_tabela"])
@@ -1583,6 +1602,7 @@ def mostrar_flambagem_colunas() -> None:
         st.warning(aviso, icon=":material/warning:")
 
     _resumo(entrada, resultado)
+    _curva(entrada, resultado)
     _tabela(resultado)
     _paredes(entrada, resultado)
     _comparar_normas(entrada)

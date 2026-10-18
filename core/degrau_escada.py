@@ -393,9 +393,9 @@ def faixa_espelho(
 ) -> FaixaEspelho:
     """Escolhe o nível (1 a 4) e o nº de espelhos automático, na ordem de prioridade da 5.1.
 
-    ``alvo_acima_do_catalogo`` (ângulo alvo do projeto): o alvo passa à frente da preferência do
-    catálogo (h ≥ 175 mm); a norma legal e o Anglo continuam acima dele. O nível sai 1 se o
-    espelho escolhido ainda couber no catálogo, senão 2 (fora do catálogo).
+    ``alvo_acima_do_catalogo`` (ângulo alvo do projeto): o alvo passa à frente do Anglo e do
+    catálogo; só a faixa legal (NR-12/NR-22) limita o espelho. O nível sai 1, 2 ou 3 conforme o
+    espelho escolhido ainda caiba no catálogo, no Anglo ou só na norma legal.
     """
     hL_min, hL_max = faixa_legal_espelho(enquadramento, espelho_fechado)
     # h mínimo para o degrau caber no catálogo: C ≤ 300 com C ≥ b + 20 e 2h + b ≥ 630 → h ≥ 175.
@@ -407,7 +407,7 @@ def faixa_espelho(
     )
     nivel = 4
     for indice, (h_min, h_max) in enumerate(niveis, start=1):
-        if alvo_acima_do_catalogo and indice == 1:
+        if alvo_acima_do_catalogo and indice < 3:
             continue
         if _nivel_viavel(H_mm, h_min, h_max):
             nivel = indice
@@ -420,7 +420,7 @@ def faixa_espelho(
         h_min_n, h_max_n = hL_min, hL_max
         n_lo = max(1, _ceil(H_mm / hL_max))
         n_hi = n_lo
-    if nivel == 3:
+    if nivel == 3 and not alvo_acima_do_catalogo:
         if hL_min >= 180:
             h_alvo_ef = hL_min
         elif hL_max <= 160:
@@ -430,9 +430,14 @@ def faixa_espelho(
     else:
         h_alvo_ef = h_alvo_mm
     n_auto = max(1, int(min(max(_arredonda(H_mm / h_alvo_ef), n_lo), n_hi)))
-    if alvo_acima_do_catalogo and nivel == 2 and _ge(H_mm / n_auto, niveis[0][0]):
-        nivel = 1  # o espelho do alvo ainda cabe no catálogo
-        h_min_n, h_max_n = niveis[0]
+    if alvo_acima_do_catalogo and nivel == 3:
+        h_auto = H_mm / n_auto
+        for indice in (1, 2):  # o espelho do alvo ainda cabe no catálogo ou no Anglo?
+            h_min_i, h_max_i = niveis[indice - 1]
+            if _ge(h_auto, h_min_i) and _le(h_auto, h_max_i):
+                nivel = indice
+                h_min_n, h_max_n = h_min_i, h_max_i
+                break
     return FaixaEspelho(
         hL_min=hL_min,
         hL_max=hL_max,
@@ -469,11 +474,23 @@ def faixa_piso_legal(h_mm: float, enquadramento: str, espelho_fechado: bool) -> 
 
 
 def piso_b(
-    h_mm: float, enquadramento: str, espelho_fechado: bool, b_imposto_mm: float | None
+    h_mm: float,
+    enquadramento: str,
+    espelho_fechado: bool,
+    b_imposto_mm: float | None,
+    angulo_alvo_graus: float | None = None,
 ) -> float:
-    """Piso do degrau: o imposto, ou o menor múltiplo de 5 mm que cumpre Anglo e a norma legal."""
+    """Piso do degrau: o imposto, ou o menor múltiplo de 5 mm que cumpre Anglo e a norma legal.
+
+    Com ângulo alvo, o piso sai do ângulo (b = h/tan α, múltiplo de 5 mm) dentro da faixa legal;
+    o Blondel do Anglo (630–640 mm) deixa de mandar e só é verificado.
+    """
     if b_imposto_mm is not None:
         return float(b_imposto_mm)
+    if angulo_alvo_graus is not None:
+        bN_min, bN_max = faixa_piso_legal(h_mm, enquadramento, espelho_fechado)
+        b = round(h_mm / math.tan(math.radians(angulo_alvo_graus)) / 5) * 5
+        return float(min(max(b, _ceil(bN_min / 5) * 5), bN_max))
     bA_min = K["A_bl_min"] - 2 * h_mm
     bA_max = K["A_bl_max"] - 2 * h_mm
     bN_min, bN_max = faixa_piso_legal(h_mm, enquadramento, espelho_fechado)
@@ -1814,8 +1831,8 @@ def verificacao_do_angulo(e: EntradaDegrau, geo: Geometria) -> VerificacaoDegrau
         )
     if not ok:
         texto += (
-            ": a diferença passa de 1°. Com Blondel 630–640 mm o Anglo só permite cerca de "
-            "29,9° a 33,8° (espelho 160 a 180 mm); fora disso, imponha o piso b ou revise o alvo."
+            ": a diferença passa de 1°. O nº inteiro de espelhos e as faixas legais de espelho e "
+            "piso (NR-12/NR-22) não deixam chegar mais perto; revise o alvo ou imponha o piso b."
         )
     return VerificacaoDegrau(
         nome="Ângulo alvo do projeto",
@@ -1841,7 +1858,7 @@ def geometria_da_escada(e: EntradaDegrau) -> Geometria:
     )
     n = escolher_n(faixa, e.n_imposto)
     h = e.H_mm / n
-    b = piso_b(h, e.enquadramento, e.espelho_fechado, e.b_imposto_mm)
+    b = piso_b(h, e.enquadramento, e.espelho_fechado, e.b_imposto_mm, e.angulo_alvo_graus)
     if not b > 0:
         raise EntradaInvalida(
             f"O piso b resultou em {numero_pt(b)} mm (não positivo): o espelho h = {numero_pt(h)} mm é alto "

@@ -440,6 +440,10 @@ AJUDA: dict[str, str] = {
         "N/(2·N_Rd) + Mx/MxRd + My/MyRd se N/N_Rd < 0,2). Os dois momentos entram **na mesma** "
         "conta, não em duas separadas."
     ),
+    "res_curva": (
+        "A curva da norma (tensão resistente × esbeltez KL/r) com a sua coluna marcada: onde ela "
+        "cai na curva, o limite de esbeltez e a tensão que atua. É a mesma figura do memorial."
+    ),
     "res_tabela": (
         "Cada linha é uma verificação, do esforço aos limites da norma. Passe o mouse no "
         "título de cada coluna para saber o que ela mostra. Linhas “INFO” só apresentam valores "

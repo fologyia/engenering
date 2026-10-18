@@ -891,16 +891,33 @@ def test_angulo_alvo_passa_a_frente_do_catalogo_mas_nao_da_norma():
     )
     trinta = de.calcular_escada(de.EntradaDegrau(angulo_alvo_graus=30.0))
     g = trinta.geometria
-    assert g.n == 21 and g.alfa_graus == pytest.approx(30.59, abs=0.01)
+    assert g.n == 21 and g.alfa_graus == pytest.approx(30.16, abs=0.01)
     assert g.faixa.nivel == 2  # Anglo atendido, fora do catálogo (C > 300 mm)
     linha = next(v for v in trinta.verificacoes if v.nome == "Ângulo alvo do projeto")
     assert linha.status == "OK" and "C = " in linha.formula
     no_catalogo = de.calcular_escada(de.EntradaDegrau(angulo_alvo_graus=33.5))
     assert no_catalogo.geometria.faixa.nivel == 1
-    impossivel = de.calcular_escada(de.EntradaDegrau(angulo_alvo_graus=45.0))
-    linha = next(v for v in impossivel.verificacoes if v.nome == "Ângulo alvo do projeto")
-    assert linha.status == "ALERTA" and "passa de 1°" in linha.formula
-    assert impossivel.geometria.h_mm <= 180.0 + 1e-9  # o Anglo continua acima do alvo
+
+
+@pytest.mark.parametrize("enquadramento", [de.NR12, de.NR22])
+@pytest.mark.parametrize("alvo", [21.0, 25.0, 30.0, 35.0, 40.0, 44.0, 49.0])
+def test_angulo_alvo_e_atingido_de_20_a_50_graus(enquadramento, alvo):
+    if enquadramento == de.NR12 and alvo > 45:
+        pytest.skip("a NR-12 só vai até 45°")
+    r = de.calcular_escada(
+        de.EntradaDegrau(H_mm=3600.0, enquadramento=enquadramento, angulo_alvo_graus=alvo)
+    )
+    linha = next(v for v in r.verificacoes if v.nome == "Ângulo alvo do projeto")
+    assert linha.status == "OK", linha.formula
+    faixa = next(v for v in r.verificacoes if "Inclinação α – faixa legal" in v.nome)
+    assert faixa.status == "OK"
+
+
+def test_angulo_alvo_acima_da_nr12_reprova_a_inclinacao():
+    r = de.calcular_escada(de.EntradaDegrau(H_mm=3600.0, angulo_alvo_graus=50.0))
+    assert r.geometria.alfa_graus == pytest.approx(50.0, abs=1.0)  # o alvo é atendido…
+    faixa = next(v for v in r.verificacoes if "Inclinação α – faixa legal" in v.nome)
+    assert faixa.status == "NÃO OK"  # …mas a NR-12 não aceita, e o programa diz
 
 
 def test_angulo_alvo_invalido():

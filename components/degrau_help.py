@@ -75,10 +75,13 @@ AJUDA: dict[str, str] = {
         "programa define o número de espelhos."
     ),
     "angulo_alvo": (
-        "Inclinação que você quer para a escada deste projeto, em graus. Vazio: vale o espelho "
-        "alvo. Informado, o programa acha o espelho que dá esse ângulo pela fórmula de Blondel "
-        "(2h + b = 635 mm) — ou pelo piso imposto — e mostra o ângulo obtido; mais de 1° de "
-        "diferença vira alerta. Com o Anglo, só cabe de 30° a 34° mais ou menos."
+        "Inclinação que você quer para a escada deste projeto, de 20° a 50°. Vazio: vale o "
+        "espelho alvo. Informado, o ângulo manda: o programa escolhe o nº de espelhos e calcula o "
+        "piso b = h ÷ tan α, respeitando só os limites legais de espelho e piso. A NR-12 aceita "
+        "mais de 20° e menos de 45°; a NR-22, mais de 20° e menos de 50° — fora disso a "
+        "verificação da inclinação reprova. O Blondel do Anglo (630–640 mm) só fecha perto de "
+        "30° a 34°; fora disso ele aparece reprovado, para você decidir. Mais de 1° entre o "
+        "pedido e o obtido vira alerta."
     ),
     "h_alvo": (
         "Altura de espelho que você gostaria de ter (em mm). O programa a usa como referência, "

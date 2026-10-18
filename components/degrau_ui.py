@@ -86,11 +86,13 @@ def _opcional(
     passo: float,
     inteiro: bool = False,
     alvo: Any = st,
+    maximo: float | None = None,
 ) -> float | int | None:
     """Campo que pode ficar vazio (vazio = o programa escolhe)."""
     valor = alvo.number_input(
         rotulo,
         min_value=int(minimo) if inteiro else float(minimo),
+        max_value=maximo,
         value=None,
         step=int(passo) if inteiro else float(passo),
         placeholder="automático",
@@ -298,14 +300,15 @@ def formulario_geometria() -> DadosGeometria:
             "Ângulo alvo da escada (°)",
             "dg_angulo_alvo",
             AJUDA["angulo_alvo"],
-            minimo=1.0,
+            minimo=20.0,
+            maximo=50.0,
             passo=0.5,
             alvo=linha3[2],
         )
         if angulo_alvo is not None:
             linha3[2].caption(
-                f"espelho alvo pelo ângulo: {_pt(de.espelho_do_angulo(float(angulo_alvo), b_imposto), 1)} mm "
-                "(o “Espelho alvo” acima fica sem efeito)"
+                "o ângulo manda no espelho e no piso (b = h ÷ tan α); o “Espelho alvo” acima fica "
+                "sem efeito"
             )
         altura_max = _opcional(
             "Altura máxima por lance imposta (mm)",
