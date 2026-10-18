@@ -115,6 +115,21 @@ def _registrar_padrao() -> None:
             aliases=("Esforços do SolidWorks", "Verificação das barras do modelo"),
         ),
         ModuloTecnico(
+            id="modelo_3d",
+            titulo="Modelo em 3D",
+            versao="1.0",
+            pagina="app_pages/modelo_3d.py",
+            grupo_navegacao="Modelo SolidWorks",
+            ordem=30,
+            icone=":material/deployed_code:",
+            descricao=(
+                "O esqueleto do SolidWorks em 3D com o perfil real das barras, chapas, escadas e "
+                "guarda-corpos (detalhados ou como casca translúcida), cargas, apoios e reações; a "
+                "vista registrada vai ao memorial."
+            ),
+            aliases=("Modelo 3D", "Vista 3D", "Visualização 3D"),
+        ),
+        ModuloTecnico(
             id="analise_estatica",
             titulo="Análise estática",
             versao="1.1",

@@ -34,6 +34,8 @@ from core import plano_de_cargas as pc
 from core import travamentos as tv
 
 ORIGEM = "Esqueleto do modelo"
+#: Linhas do peso do guarda-corpo nas bordas (core.guarda_corpo_do_modelo): o envio do piso as mantém.
+MARCA_GUARDA_CORPO = "Guarda-corpo nas bordas"
 VERTICAL = "Z (vertical)"  # valor positivo = para baixo (como em Cargas do esqueleto)
 COS_PISO = 0.5  # chapa até 60° com a horizontal é piso (degrau, rampa, escada)
 COS_PARALELA = 0.1  # viga quase paralela ao plano da chapa
@@ -529,7 +531,8 @@ def aplicar_no_plano(
     cargas_por_area: Mapping[str, float],
     nomes_no_simulation: Mapping[str, str] | None = None,
 ) -> pc.PlanoDeCargas:
-    """O plano com as cargas de cada caso nas vigas (as outras linhas do caso saem)."""
+    """O plano com as cargas de cada caso nas vigas (as outras linhas do caso saem, menos o peso
+    do guarda-corpo nas bordas, que tem envio próprio)."""
     for caso, q in cargas_por_area.items():
         linhas = cargas_do_caso(d, caso, nomes_no_simulation)
         if not linhas:
@@ -542,11 +545,17 @@ def aplicar_no_plano(
         if anterior is None:
             acao = pc.nova_acao(caso, origem=ORIGEM, resumo=resumo, cargas=linhas)
         else:
+            do_guarda_corpo = [
+                c for c in anterior.cargas if c.observacao.startswith(MARCA_GUARDA_CORPO)
+            ]
+            if do_guarda_corpo and MARCA_GUARDA_CORPO in anterior.resumo:
+                inicio = anterior.resumo.index(MARCA_GUARDA_CORPO)
+                resumo += " | " + anterior.resumo[inicio:]
             acao = replace(
                 anterior,
                 origem=ORIGEM,
                 resumo=resumo,
-                cargas=tuple(linhas),
+                cargas=tuple([*linhas, *do_guarda_corpo]),
                 atualizado_em=pc.agora(),
             )
         plano = pc.com_acao(plano, acao)

@@ -57,6 +57,10 @@ plano inclui a meia largura das barras; teste `test_grade_regular_da_o_mesmo_que
   (Tabelas 27 e 28, base apoiada: ℓ/d dobra), com o q do topo; vai como força total (kN) na barra
   mais próxima do centro da base (no SolidWorks: Força › Por item na viga).
 
+Com o esqueleto, a tabela de elementos já abre com um guarda-corpo em cada borda livre do piso,
+na viga que o apoia (`core/guarda_corpo_do_modelo.py`; os trechos, a altura e o φ se ajustam em
+Cargas do esqueleto). No guarda-corpo de escada o q é o da ponta de cima.
+
 ## Saídas
 
 - Resumo por direção (barras, elementos, F_x, F_y, tombamento, torção em torno do centro da planta).

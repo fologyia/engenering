@@ -126,3 +126,11 @@ verificações: **Resultado**, dados de entrada, método e premissas, **O que pa
 as quatro tabelas (geometria, dimensionamento do modelo adotado, modelos que atendem e texto da
 requisição) e, no fim, **o que não passou** e o que conferir antes de emitir. A página ainda exporta as
 38 verificações e os 64 modelos em CSV e o relatório completo em PDF.
+
+
+## Escada em 3D
+
+A aba "Escada em 3D" monta a escada (`core/cena_escada.py`) com a visualização escolhida —
+**escada detalhada** (degraus, longarinas com o perfil, patamares, guarda-corpo e apoios) ou **casca
+translúcida** (o volume) — e a vista (isométrica, superior, frontal, lateral e giro). O mesmo modo e a
+mesma vista vão ao PDF (2.1) e ao memorial (`escada_3d`).

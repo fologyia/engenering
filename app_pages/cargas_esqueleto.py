@@ -286,6 +286,25 @@ with st.container(border=True), secao_protegida("Cargas do piso pelo esqueleto d
                 icon=":material/info:",
             )
 
+# ============================================================ guarda-corpo nas bordas
+if geometria.corpos:
+    from components.guarda_corpo_ui import mostrar_guarda_corpo_do_modelo
+
+    if mostrar_guarda_corpo_do_modelo(
+        projeto,
+        geometria,
+        esforcos.eixo_vertical,
+        {
+            corpo.nome: barra
+            for barra, corpo in ld.correspondencia(
+                geometria, esforcos.nomes_dos_membros, esforcos
+            ).corpos.items()
+        },
+        pc.plano_do_projeto(projeto),
+    ):
+        st.session_state["ce_versao"] = versao + 1
+        st.rerun()
+
 # ============================================================ 1. eixos e níveis
 with st.container(border=True), secao_protegida("1. Eixos e níveis"):
     st.subheader("1. Eixos e níveis", help=AJUDA["sec_eixos"])

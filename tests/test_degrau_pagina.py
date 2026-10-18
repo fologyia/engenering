@@ -373,3 +373,10 @@ def test_longarina_na_pagina(banco_isolado):
     assert metrica(t, "Deslocamento vertical (mm)")
     assert metrica(t, "Deslocamento do degrau (mm)")
     assert not sem_ajuda(t), sorted(sem_ajuda(t))
+
+
+def test_escada_em_3d_detalhada_ou_casca(banco_isolado):
+    for modo in ("Escada detalhada", "Casca translúcida"):
+        teste = abrir(banco_isolado, dg_3d_modo=modo, dg_3d_vista="Lateral", dg_3d_giro=30)
+        assert "Escada em 3D" in [s.value for s in teste.subheader]
+        assert any(c.value.startswith(f"{modo} — é assim que a escada sai") for c in teste.caption)

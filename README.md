@@ -429,11 +429,25 @@ assimetria), o vento é calculado em cada barra do esqueleto do modelo, pela ár
 (C_a = 2,0, sem proteção); guarda-corpos, escadas, painéis e equipamentos vão para as barras que os
 apoiam. Desenhos em 3D, planta e "o que o vento vê"; W0 a W315 no plano de cargas; memorial.
 
+### Modelo em 3D
+
+Núcleo de cena 3D (`core/cena_3d.py`, detalhes em `docs/modelo_3d.md`): o esqueleto do SolidWorks
+com o perfil real de cada barra (seção do catálogo varrida na linha de centro, alma como a macro leu),
+chapas e guarda-corpos; cargas de um caso do plano (pentes e setas), apoios (engastado/articulado
+pelas bases) e reações verticais do quadro das fundações; cor por tipo, perfil, vento, esforço
+normal ou aproveitamento; vistas isométrica, superior, frontal e lateral com giro; SVG nas páginas
+e PNG para o memorial. Página Modelo SolidWorks › Modelo em 3D; o 3D do vento barra a barra usa o
+mesmo núcleo.
+
 ### Cargas do esqueleto
 
 Com o esqueleto da macro (v5: contorno das chapas), a carga do piso vai direto para as vigas do
 modelo pela área de influência de cada chapa (`core/cargas_pelo_modelo.py`), caso a caso, em kN/m por
-viga, e vai ao Plano de cargas. Sem o modelo ainda, pela grade de eixos e níveis:
+viga, e vai ao Plano de cargas. O **guarda-corpo nas bordas** (`core/guarda_corpo_do_modelo.py`) sai
+do mesmo esqueleto: as bordas livres do piso (sem outro piso do lado de fora), a viga de borda de
+cada trecho, o acesso da escada (onde o lance encosta, ou pelas longarinas) e as bordas sem viga; o
+peso vai ao PE e os trechos viram guarda-corpos no vento barra a barra. Sem o modelo ainda, pela
+grade de eixos e níveis:
 No SolidWorks modela-se só o esqueleto (pilares, vigas e contraventamento); a página transforma o
 que não está no modelo em cargas características nas barras, caso a caso
 (`core/cargas_esqueleto.py`; detalhes em `docs/cargas_do_esqueleto.md`): piso e sobrecarga por

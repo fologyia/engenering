@@ -698,7 +698,10 @@ def _forca_do_elemento(
 ) -> ForcaNoElemento:
     w = vento(angulo)
     base = el.ponto_1[2] if el.ponto_2 is None else min(el.ponto_1[2], el.ponto_2[2])
-    topo = base + el.altura_m
+    # q do ponto mais alto do elemento (no guarda-corpo de escada, o da ponta de cima).
+    topo = (
+        el.ponto_1[2] if el.ponto_2 is None else max(el.ponto_1[2], el.ponto_2[2])
+    ) + el.altura_m
     local = pressao(topo - terreno)
     q = local.q_N_m2 / 1e3
     phi: float | None = None

@@ -47,6 +47,7 @@ def gerar_pdf_degrau(
     *,
     escada: el.EscadaComPatamares | None = None,
     longarina: le.ResultadoLongarina | None = None,
+    escada_3d: Mapping[str, Any] | None = None,
 ) -> bytes:
     """PDF (A4 em paisagem) do cálculo. ``identificacao``: obra, tag, responsavel e data.
 
@@ -327,6 +328,17 @@ def gerar_pdf_degrau(
         historia.append(
             figura(esquema.png, esquema.largura_px, esquema.altura_px, esquema.legenda, 230)
         )
+        if escada_3d is not None:
+            from core import cena_escada as cesc
+            from core.record_charts import imagem_da_cena
+
+            modo = str(escada_3d.get("modo") or cesc.MODO_DETALHADO).lower()
+            tres_d = imagem_da_cena(
+                cesc.cena_do_registro(escada_3d), escada_3d, f"Escada em 3D ({modo})."
+            )
+            historia.append(
+                figura(tres_d.png, tres_d.largura_px, tres_d.altura_px, tres_d.legenda, 200)
+            )
         historia.append(
             tabela(
                 list(el.CABECALHO_LANCES),

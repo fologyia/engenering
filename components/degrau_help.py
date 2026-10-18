@@ -83,6 +83,17 @@ AJUDA: dict[str, str] = {
         "30° a 34°; fora disso ele aparece reprovado, para você decidir. Mais de 1° entre o "
         "pedido e o obtido vira alerta."
     ),
+    "res_escada_3d": (
+        "A escada montada em 3D: lances, degraus, longarinas, patamares, guarda-corpo e os apoios "
+        "das pontas. A visualização escolhida aqui é a que sai no relatório e no memorial."
+    ),
+    "modo_3d": (
+        "Escada detalhada: cada degrau, as longarinas com o perfil e o guarda-corpo de verdade. "
+        "Casca translúcida: o lance como uma tampa e o guarda-corpo como painéis translúcidos — o "
+        "volume da escada, que ajuda a ver o conjunto e fica limpo no relatório."
+    ),
+    "vista_3d": "De onde olhar a escada: isométrica, de cima, de frente ou de lado.",
+    "giro_3d": "Gira a vista em torno do eixo vertical, de 15° em 15°.",
     "h_alvo": (
         "Altura de espelho que você gostaria de ter (em mm). O programa a usa como referência, "
         "mas respeita a faixa da norma e o número inteiro de espelhos. O Anglo aceita 160 a "

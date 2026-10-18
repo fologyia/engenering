@@ -2286,6 +2286,12 @@ elif modulo == "Cargas do esqueleto":
                 "Planta, catálogo da grade, base técnica",
             ],
             ["Guarda-corpo", "Bordas que têm e o peso por metro com o rodapé", "Arranjo"],
+            [
+                "Guarda-corpo pelo modelo",
+                "Com o esqueleto: o programa acha as bordas livres do piso e a viga de cada uma; "
+                "você só confere e desmarca o que não tem",
+                "Esqueleto da macro (chapas de piso)",
+            ],
             ["Ligações", "Acréscimo no peso próprio (5 a 10 %)", "Prática da empresa"],
             [
                 "Escadas, equipamentos, tubulações",

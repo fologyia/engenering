@@ -19,6 +19,7 @@ import streamlit as st
 
 from components.degrau_help import AJUDA
 from components.project_tools import botao_registrar_calculo
+from components.robustez import secao_protegida
 from components.ui import fronteira_modelo
 from components.verification_table import COR_STATUS, mostrar_tabela_verificacoes
 from core import degrau_escada as de
@@ -842,6 +843,64 @@ def _figura_da_escada(dados_json: str) -> tuple[str, bytes]:
     return figura.legenda, figura.png
 
 
+APOIO_NO_3D = {le.PINO: "articulado", le.ROLETE: "articulado", le.ENGASTE: "engastado"}
+
+
+def _aba_escada_3d(
+    r: de.ResultadoEscada,
+    escada: el.EscadaComPatamares,
+    longarina: le.EntradaLongarina | None,
+) -> dict[str, Any]:
+    """A escada em 3D, com a escolha detalhada / casca translúcida; devolve o que vai ao PDF e ao
+    memorial (o mesmo modo e a mesma vista)."""
+    from components.cena_3d_svg import svg_da_cena
+    from core import cena_3d as c3
+    from core import cena_do_modelo as cm
+    from core import cena_escada as cesc
+
+    st.subheader("Escada em 3D", help=AJUDA["res_escada_3d"])
+    colunas = st.columns([2, 3, 2])
+    modo = (
+        colunas[0].segmented_control(
+            "Visualização",
+            list(cesc.MODOS),
+            default=cesc.MODO_DETALHADO,
+            key="dg_3d_modo",
+            help=AJUDA["modo_3d"],
+        )
+        or cesc.MODO_DETALHADO
+    )
+    vista = colunas[1].segmented_control(
+        "Vista", list(c3.VISTAS), default=c3.VISTA_ISOMETRICA, key="dg_3d_vista",
+        help=AJUDA["vista_3d"],
+    ) or c3.VISTA_ISOMETRICA  # fmt: skip
+    giro = colunas[2].select_slider(
+        "Girar (°)", options=list(range(-180, 181, 15)), value=0, key="dg_3d_giro",
+        help=AJUDA["giro_3d"],
+    )  # fmt: skip
+    perfil = longarina.perfil if longarina is not None else 'U 8" x 17,10'
+    dados = cesc.para_o_registro(
+        escada,
+        modo=str(modo),
+        secao_da_longarina=cm.secao_do_perfil(perfil),
+        altura_do_guarda_corpo_m=r.entrada.gc_superior_mm / 1000.0,
+        apoio_pe=APOIO_NO_3D.get(longarina.apoio_pe, "articulado") if longarina else "articulado",
+        apoio_topo=APOIO_NO_3D.get(longarina.apoio_topo, "articulado")
+        if longarina
+        else "articulado",
+    )
+    azimute, elevacao = c3.VISTAS[str(vista)]
+    dados["azimute"] = azimute + float(giro)
+    dados["elevacao"] = elevacao
+    desenho = c3.projetar(cesc.cena_do_registro(dados), azimute=dados["azimute"], elevacao=elevacao)
+    st.image(svg_da_cena(desenho), width="stretch")
+    st.caption(
+        f"{str(modo)} — é assim que a escada sai no relatório em PDF e no memorial. Longarina "
+        f"{perfil}, guarda-corpo de {_pt(r.entrada.gc_superior_mm, 0)} mm."
+    )
+    return dados
+
+
 def _aba_escada(escada: el.EscadaComPatamares) -> None:
     st.subheader("Esquemático da escada", help=AJUDA["res_escada"])
     legenda, png = _figura_da_escada(json.dumps(el.para_dicionario(escada), sort_keys=True))
@@ -1152,6 +1211,7 @@ def _aba_requisicao(
     ident: Identificacao,
     escada: el.EscadaComPatamares | None = None,
     longarina: le.ResultadoLongarina | None = None,
+    escada_3d: dict[str, Any] | None = None,
 ) -> None:
     st.subheader("Texto para a requisição", help=AJUDA["res_requisicao"])
     st.code(r.especificacao, language=None, wrap_lines=True)
@@ -1184,7 +1244,7 @@ def _aba_requisicao(
         key="dg_baixar_catalogo",
         help=AJUDA["btn_csv_catalogo"],
     )
-    _botao_pdf(botoes[2], r, ident, escada, longarina)
+    _botao_pdf(botoes[2], r, ident, escada, longarina, escada_3d)
 
 
 def _pdf_bytes(
@@ -1192,6 +1252,7 @@ def _pdf_bytes(
     ident: Identificacao,
     escada: el.EscadaComPatamares | None = None,
     longarina: le.ResultadoLongarina | None = None,
+    escada_3d: dict[str, Any] | None = None,
 ) -> bytes:
     return gerar_pdf_degrau(
         r,
@@ -1203,6 +1264,7 @@ def _pdf_bytes(
         },
         escada=escada,
         longarina=longarina,
+        escada_3d=escada_3d,
     )
 
 
@@ -1212,6 +1274,7 @@ def _botao_pdf(
     ident: Identificacao,
     escada: el.EscadaComPatamares | None = None,
     longarina: le.ResultadoLongarina | None = None,
+    escada_3d: dict[str, Any] | None = None,
 ) -> None:
     """Botão do PDF: o arquivo só é gerado no clique (``data`` aceita uma função)."""
     opcoes: dict[str, Any] = {
@@ -1224,11 +1287,13 @@ def _botao_pdf(
     }
     try:
         alvo.download_button(
-            "Relatório em PDF", data=lambda: _pdf_bytes(r, ident, escada, longarina), **opcoes
+            "Relatório em PDF",
+            data=lambda: _pdf_bytes(r, ident, escada, longarina, escada_3d),
+            **opcoes,
         )
     except Exception:  # noqa: BLE001 - Streamlit sem download adiado: gera já, como os CSV
         alvo.download_button(
-            "Relatório em PDF", data=_pdf_bytes(r, ident, escada, longarina), **opcoes
+            "Relatório em PDF", data=_pdf_bytes(r, ident, escada, longarina, escada_3d), **opcoes
         )
 
 
@@ -1247,6 +1312,7 @@ def _registrar(
     ident: Identificacao,
     escada: el.EscadaComPatamares,
     longarina: le.ResultadoLongarina | None,
+    escada_3d: dict[str, Any] | None = None,
 ) -> None:
     contexto: dict[str, Any] = {"data_do_calculo": ident.data.isoformat()}
     if ident.obra:
@@ -1259,6 +1325,7 @@ def _registrar(
         responsavel=ident.responsavel,
         escada=escada,
         longarina=longarina,
+        escada_3d=escada_3d,
     )
     with st.container(border=True):
         st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
@@ -1313,6 +1380,7 @@ def mostrar_degrau_de_escada() -> None:
     nomes_das_abas = [
         "Verificações",
         "Escada",
+        "Escada em 3D",
         "Memorial do modelo adotado",
         "Os 64 modelos",
         "Requisição e exportação",
@@ -1330,9 +1398,12 @@ def mostrar_degrau_de_escada() -> None:
                     icon=":material/error:",
                 )
         abas = [abas[0], *abas[2:]]
-    aba_verificacoes, aba_escada, aba_memorial, aba_catalogo, aba_requisicao = abas
+    aba_verificacoes, aba_escada, aba_3d, aba_memorial, aba_catalogo, aba_requisicao = abas
     with aba_escada:
         _aba_escada(escada)
+    escada_3d: dict[str, Any] | None = None
+    with aba_3d, secao_protegida("Escada em 3D"):
+        escada_3d = _aba_escada_3d(resultado, escada, longarina)
     with aba_verificacoes:
         _aba_verificacoes(resultado)
     with aba_memorial:
@@ -1340,6 +1411,6 @@ def mostrar_degrau_de_escada() -> None:
     with aba_catalogo:
         _aba_catalogo(resultado)
     with aba_requisicao:
-        _aba_requisicao(resultado, ident, escada, calculo_longarina)
+        _aba_requisicao(resultado, ident, escada, calculo_longarina, escada_3d)
     _blocos_fixos(resultado)
-    _registrar(resultado, ident, escada, calculo_longarina)
+    _registrar(resultado, ident, escada, calculo_longarina, escada_3d)

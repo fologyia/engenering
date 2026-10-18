@@ -11,6 +11,9 @@ import math
 from collections.abc import Sequence
 
 from components import desenho_svg as d
+from components.cena_3d_svg import svg_da_cena
+from core import cena_3d as c3
+from core import cena_do_modelo as cm
 from core import vento_por_barras as vpb
 
 Ponto = tuple[float, float, float]
@@ -100,198 +103,118 @@ def _rotulo_curto(nome: str, limite: int = 22) -> str:
 # ---------------------------------------------------------------------------------------------
 # 3D
 # ---------------------------------------------------------------------------------------------
-def svg_vento_3d(
+def cena_do_vento(
     r: vpb.ResultadoPorBarras,
     angulo: int,
     *,
     quantos_rotulos: int = 5,
-    eixos_do_modelo: str = "",
-) -> str:
-    """A estrutura vista de cima e de barlavento, cada barra na cor da sua carga (kN/m), com setas
-    para onde o vento empurra e a seta grande do vento."""
+    eixo_vertical: str = "Y",
+) -> c3.Cena:
+    """A cena 3D do vento numa direção: cada barra com o perfil de verdade, na cor da carga, com o
+    pente das barras mais carregadas, os elementos e a seta grande do vento."""
     direcao = r.direcao(angulo)
-    largura, altura = 900.0, 600.0
-    camera = d.Camera(angulo - 120.0, 26.0)
-    x0, x1, y0, y1, z0, z1 = _limites(r)
-    margem = max(0.6, 0.12 * max(x1 - x0, y1 - y0))
-    chao = [
-        (x0 - margem, y0 - margem, z0),
-        (x1 + margem, y0 - margem, z0),
-        (x1 + margem, y1 + margem, z0),
-        (x0 - margem, y1 + margem, z0),
-    ]
     w = vpb.vento(angulo)
-    centro = ((x0 + x1) / 2, (y0 + y1) / 2)
-    extensao = max(x1 - x0, y1 - y0, 1.0)
-    z_seta = z0 + ALTURA_DA_SETA_DE_VENTO * (z1 - z0)
-    recuo = abs(w[0]) * (x1 - x0) / 2 + abs(w[1]) * (y1 - y0) / 2 + margem
-    inicio_seta = (
-        centro[0] - w[0] * (recuo + 0.75 * extensao),
-        centro[1] - w[1] * (recuo + 0.75 * extensao),
-        z_seta,
-    )
-    fim_seta = (centro[0] - w[0] * (recuo + 0.08), centro[1] - w[1] * (recuo + 0.08), z_seta)
-    pontos_3d: list[Ponto] = [*chao, inicio_seta, fim_seta]
-    for b in r.entrada.barras:
-        pontos_3d.extend((b.inicio, b.fim))
-    for el in r.entrada.elementos:
-        for face in _cantos_do_elemento(el):
-            pontos_3d.extend(face)
-    enq = d.Enquadramento([camera.tela(p) for p in pontos_3d], (40, 70, largura - 40, altura - 70))
-
-    def t(p: Sequence[float]) -> tuple[float, float]:
-        return enq(camera.tela(p))
-
-    corpo: list[str] = [
-        d.poligono([t(p) for p in chao], preenchimento="#eef1f5", contorno="#d5dae1", largura=1)
-    ]
-    # grade do chão a cada metro (no máximo 30 linhas por lado)
-    passo = max(1.0, math.ceil(max(x1 - x0, y1 - y0) / 30))
-    gx = math.ceil((x0 - margem) / passo) * passo
-    while gx <= x1 + margem:
-        corpo.append(
-            d.linha(
-                *t((gx, y0 - margem, z0)), *t((gx, y1 + margem, z0)), cor="#dde2e8", largura=0.6
-            )
-        )
-        gx += passo
-    gy = math.ceil((y0 - margem) / passo) * passo
-    while gy <= y1 + margem:
-        corpo.append(
-            d.linha(
-                *t((x0 - margem, gy, z0)), *t((x1 + margem, gy, z0)), cor="#dde2e8", largura=0.6
-            )
-        )
-        gy += passo
-    # pé de cada pilar no chão (ajuda a ler a profundidade)
-    for b in r.entrada.barras:
-        u = vpb._unitario(b.vetor)
-        if u is not None and abs(u[2]) > 0.95:
-            pe = min((b.inicio, b.fim), key=lambda p: p[2])
-            px, py = t((pe[0], pe[1], z0))
-            corpo.append(
-                f'<ellipse cx="{px:.1f}" cy="{py:.1f}" rx="9" ry="4" fill="#c9cfd8" '
-                f'fill-opacity="0.8"/>'
-            )
     maior = _maior_carga(direcao)
-    itens: list[tuple[float, str]] = []
-    nomes_dos_elementos: list[tuple[tuple[float, float], str]] = []
-    rotulos = d.Rotulos((10, 60, largura - 10, altura - 60))
+    forcas = {f.barra: f for f in direcao.barras}
+    mais_carregadas = {
+        f.barra
+        for f in sorted(direcao.barras, key=lambda f: -f.forca_kN)[:quantos_rotulos]
+        if f.forca_kN > 1e-9
+    }
+    barras: list[c3.BarraCena] = []
+    distribuidas: list[c3.CargaDistribuidaCena] = []
     for b in r.entrada.barras:
-        f = direcao.da_barra(b.nome)
-        fracao = (f.kN_m / maior) if f else 0.0
-        meio = b.meio
-        if f is None or f.forca_kN <= 1e-9:
-            desenho = d.linha(*t(b.inicio), *t(b.fim), cor=d.COR_ESTRUTURA_CLARA, largura=1.6)
-        else:
-            cor = d.cor_da_escala(0.15 + 0.85 * fracao)
-            desenho = d.linha(
-                *t(b.inicio), *t(b.fim), cor="#4a3527", largura=4.6 + 3 * fracao, opacidade=0.35
-            ) + d.linha(*t(b.inicio), *t(b.fim), cor=cor, largura=3.2 + 3 * fracao)
-            if fracao >= 0.2:
-                comprimento = 0.10 * extensao * (0.4 + 0.6 * fracao)
-                ponta = (meio[0] + w[0] * comprimento, meio[1] + w[1] * comprimento, meio[2])
-                desenho += d.seta(
-                    *t(meio), *t(ponta), cor=d.COR_VENTO_ESCURO, largura=1.6, cabeca=7
-                )
-        itens.append((camera.profundidade(meio), desenho))
+        f = forcas.get(b.nome)
+        fracao = (f.kN_m / maior) if f is not None and f.forca_kN > 1e-9 else 0.0
+        cor = d.cor_da_escala(0.15 + 0.85 * fracao) if fracao > 0 else d.COR_ESTRUTURA_CLARA
+        rotulo = (
+            f"{_rotulo_curto(b.nome)}: {d.n(f.kN_m, 3)} kN/m"
+            if f is not None and b.nome in mais_carregadas
+            else ""
+        )
+        barras.append(
+            c3.BarraCena(
+                b.nome,
+                b.inicio,
+                b.fim,
+                cm.secao_do_perfil(b.perfil, (b.maior_m * 1000, b.menor_m * 1000)),
+                b.direcao_maior,
+                cor,
+                rotulo,
+            )
+        )
+        if f is not None and fracao >= 0.2:
+            distribuidas.append(
+                c3.CargaDistribuidaCena(
+                    b.inicio, b.fim, (f.fx_kN_m, f.fy_kN_m, 0.0), "", d.COR_VENTO_ESCURO
+                )  # fmt: skip
+            )
+    paineis: list[c3.PainelCena] = []
+    textos: list[c3.TextoCena] = []
     for el in r.entrada.elementos:
-        cor = d.COR_PAINEL if el.em_linha else "#9aa7b8"
         faces = _cantos_do_elemento(el)
-        desenho = "".join(
-            d.poligono(
-                [t(p) for p in face],
-                preenchimento=cor,
-                contorno="#4f6b91",
-                largura=0.8,
-                opacidade=0.22 if el.em_linha else 0.35,
+        if el.tipo == vpb.TIPO_CILINDRO:
+            base = el.ponto_1
+            barras.append(
+                c3.BarraCena(
+                    el.nome,
+                    base,
+                    (base[0], base[1], base[2] + el.altura_m),
+                    c3.Secao(c3.FORMA_TUBO_CIRCULAR, el.largura_x_m, el.largura_x_m),
+                    None,
+                    "#9aa7b8",
+                )  # fmt: skip
             )
-            for face in faces
-        )
-        if el.em_linha:
-            a, b_, c, _ = faces[0]
-            # montantes e corrimão (sugere guarda-corpo/escada)
-            for k in range(1, 6):
-                s = k / 6
-                pb = (a[0] + (b_[0] - a[0]) * s, a[1] + (b_[1] - a[1]) * s, a[2])
-                pt = (pb[0], pb[1], c[2])
-                desenho += d.linha(*t(pb), *t(pt), cor="#4f6b91", largura=0.8, opacidade=0.7)
-        face_de_cima = faces[0] if el.em_linha else faces[1]
-        centro_el = tuple(sum(p[k] for p in face_de_cima) / len(face_de_cima) for k in range(3))
-        if el.em_linha:
-            centro_el = (centro_el[0], centro_el[1], centro_el[2] + el.altura_m / 4)
-        itens.append((camera.profundidade(centro_el), desenho))
-        nomes_dos_elementos.append((t(centro_el), el.nome))
-    for _, desenho in sorted(itens, key=lambda item: item[0]):
-        corpo.append(desenho)
-    # seta do vento
-    (sx, sy), (ex, ey) = t(inicio_seta), t(fim_seta)
-    corpo.append(d.seta_de_vento(sx, sy, ex, ey, espessura=16))
-    titulo_seta = _titulo_da_direcao(angulo)
-    corpo.append(
-        d.etiqueta(
-            *rotulos.lugar(sx, sy - 30, titulo_seta, 11.5),
-            titulo_seta,
-            tamanho=11.5,
-            cor=d.COR_VENTO_ESCURO,
-            peso="bold",
-        )
+        else:
+            for face in faces:
+                paineis.append(c3.PainelCena(el.nome, tuple(face), d.COR_PAINEL,
+                                             0.22 if el.em_linha else 0.35))  # fmt: skip
+        topo = faces[0] if el.em_linha else faces[1]
+        centro = tuple(sum(p[k] for p in topo) / len(topo) for k in range(3))
+        textos.append(c3.TextoCena(centro, _rotulo_curto(el.nome, 18), "#2f4a6d"))  # type: ignore[arg-type]
+    x0, x1, y0, y1, z0, z1 = _limites(r)
+    centro_planta = ((x0 + x1) / 2, (y0 + y1) / 2)
+    recuo = abs(w[0]) * (x1 - x0) / 2 + abs(w[1]) * (y1 - y0) / 2 + 0.1 * max(x1 - x0, y1 - y0, 1)
+    ponta = (
+        centro_planta[0] - w[0] * recuo,
+        centro_planta[1] - w[1] * recuo,
+        z0 + ALTURA_DA_SETA_DE_VENTO * (z1 - z0),
     )
-    for (x, y), nome in nomes_dos_elementos:
-        rotulo = _rotulo_curto(nome, 18)
-        corpo.append(
-            d.etiqueta(*rotulos.lugar(x, y, rotulo, 9.5), rotulo, tamanho=9.5, cor="#2f4a6d")
-        )
-    # rótulos das barras mais carregadas
-    for f in sorted(direcao.barras, key=lambda f: -f.forca_kN)[:quantos_rotulos]:
-        if f.forca_kN <= 1e-9:
-            continue
-        b = next(b for b in r.entrada.barras if b.nome == f.barra)
-        x, y = t(b.meio)
-        rotulo = f"{_rotulo_curto(f.barra)}: {d.n(f.kN_m, 3)} kN/m"
-        lx, ly = rotulos.lugar(x, y - 16, rotulo, 10)
-        if abs(ly - (y - 16)) > 1:
-            corpo.append(d.linha(x, y, lx, ly, cor=d.COR_VENTO_ESCURO, largura=0.7, opacidade=0.6))
-        corpo.append(d.etiqueta(lx, ly, rotulo, tamanho=10, cor=d.COR_VENTO_ESCURO))
-    # eixos da planta
-    origem = (64.0, altura - 46.0)
-    for eixo, vetor in (("X", (1.0, 0.0, 0.0)), ("Y", (0.0, 1.0, 0.0)), ("Z", (0.0, 0.0, 1.0))):
-        px, py = camera.tela(vetor)
-        norma = math.hypot(px, py) or 1.0
-        fim = (origem[0] + 28 * px / norma, origem[1] + 28 * py / norma)
-        corpo.append(d.seta(*origem, *fim, cor=d.COR_SUAVE, largura=1.4, cabeca=6))
-        corpo.append(
-            d.texto(
-                fim[0] + 8 * px / norma,
-                fim[1] + 8 * py / norma,
-                eixo,
-                tamanho=10.5,
-                cor=d.COR_SUAVE,
-                peso="bold",
-            )
-        )
-    if eixos_do_modelo:
-        corpo.append(
-            d.texto(22, altura - 14, eixos_do_modelo, tamanho=10, ancora="start", cor=d.COR_SUAVE)
-        )
-    corpo.append(
-        d.escala_de_cor(
-            largura - 250, altura - 40, 220, 0.0, maior, "kN/m", titulo="carga distribuída na barra"
-        )
-    )
+    seta = c3.SetaCena(ponta, w, _titulo_da_direcao(angulo), d.COR_VENTO, larga=True,
+                       comprimento_relativo=0.55)  # fmt: skip
     subtitulo = (
         f"{d.n(direcao.total_kN, 2)} kN no total ({d.n(direcao.estrutura_kN, 2)} kN nas barras"
         + (f", {d.n(direcao.elementos_kN, 2)} kN nos elementos" if direcao.elementos else "")
         + f") · tombamento {d.n(direcao.momento_tombamento_kNm, 1)} kN·m · torção "
         f"{d.n(direcao.torcao_kNm, 1)} kN·m"
     )
-    return d.documento(
-        largura,
-        altura,
-        corpo,
-        f"{_titulo_da_direcao(angulo)} — carga em cada barra",
+    return c3.Cena(
+        barras=tuple(barras),
+        paineis=tuple(paineis),
+        setas=(seta,),
+        distribuidas=tuple(distribuidas),
+        textos=tuple(textos),
+        titulo=f"{_titulo_da_direcao(angulo)} — carga em cada barra",
         subtitulo=subtitulo,
+        escala=c3.EscalaDeCor(0.0, maior, "kN/m", "carga distribuída na barra"),
+        eixo_vertical_do_modelo=eixo_vertical,
     )
+
+
+def svg_vento_3d(
+    r: vpb.ResultadoPorBarras,
+    angulo: int,
+    *,
+    quantos_rotulos: int = 5,
+    eixo_vertical: str = "Y",
+    perfil_real: bool = True,
+) -> str:
+    """A estrutura vista de cima e de barlavento (o vento entra pela esquerda), cada barra com o
+    perfil e a cor da sua carga (kN/m), o pente das mais carregadas e a seta grande do vento."""
+    cena = cena_do_vento(r, angulo, quantos_rotulos=quantos_rotulos, eixo_vertical=eixo_vertical)
+    desenho = c3.projetar(cena, azimute=angulo - 120.0, elevacao=26.0, largura=900.0,
+                          altura=600.0, perfil_real=perfil_real)  # fmt: skip
+    return svg_da_cena(desenho)
 
 
 # ---------------------------------------------------------------------------------------------

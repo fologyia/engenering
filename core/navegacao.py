@@ -127,6 +127,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 ":material/inventory_2:",
                 "Gerar a lista de material e a lista de corte do modelo",
             ),
+            ItemMenu(
+                "app_pages/modelo_3d.py",
+                "Modelo em 3D",
+                ":material/deployed_code:",
+                "Ver o modelo em 3D com o perfil real, as cargas, as reações e os resultados",
+            ),
         ),
     ),
     GrupoMenu(

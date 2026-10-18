@@ -602,6 +602,56 @@ LARGURA_DIAGRAMA_MM = 130.0
 LARGURA_DESENHO_MM = 150.0
 
 
+def imagem_da_cena(cena: Any, vista: Mapping[str, Any], legenda: str) -> ImagemDiagrama:
+    from core import cena_3d as c3
+    from core import cena_3d_png
+
+    def numero(chave: str, padrao: float) -> float:
+        try:
+            valor = float(vista.get(chave, padrao))
+        except (TypeError, ValueError):
+            return padrao
+        return valor if math.isfinite(valor) else padrao
+
+    desenho = c3.projetar(
+        cena,
+        azimute=numero("azimute", c3.VISTAS[c3.VISTA_ISOMETRICA][0]),
+        elevacao=numero("elevacao", c3.VISTAS[c3.VISTA_ISOMETRICA][1]),
+        perfil_real=bool(vista.get("perfil_real", True)),
+    )
+    png = cena_3d_png.png_da_cena(desenho, escala=2.0)
+    return ImagemDiagrama(
+        desenho.titulo or "Modelo em 3D",
+        legenda,
+        png,
+        round(desenho.largura * 2),
+        round(desenho.altura * 2),
+    )
+
+
+def _figuras_3d(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
+    """``figura_3d`` (a cena gravada pela página Modelo em 3D) e ``escada_3d`` (a escada da página
+    Degrau de escada, no modo escolhido: detalhada ou casca translúcida)."""
+    figuras: list[tuple[Any, float]] = []
+    gravada = resultados.get("figura_3d")
+    if isinstance(gravada, Mapping) and isinstance(gravada.get("cena"), Mapping):
+        from core import cena_3d as c3
+
+        cena = c3.cena_de_dicionario(dict(gravada["cena"]))
+        legenda = str(gravada.get("legenda") or "Modelo em 3D.")
+        figuras.append((imagem_da_cena(cena, gravada, legenda), LARGURA_DESENHO_MM))
+    escada = resultados.get("escada_3d")
+    if isinstance(escada, Mapping):
+        from core import cena_escada as ce
+
+        cena = ce.cena_do_registro(escada)
+        modo = str(escada.get("modo") or ce.MODO_DETALHADO).lower()
+        figuras.append(
+            (imagem_da_cena(cena, escada, f"Escada em 3D ({modo})."), LARGURA_DESENHO_MM)
+        )
+    return figuras
+
+
 def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     """Figuras que qualquer módulo pode gravar no registro, redesenhadas aqui.
 
@@ -616,6 +666,7 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     from core import portico_plano as pp
 
     figuras: list[Any] = []
+    figuras.extend(_figuras_3d(resultados))
     ligacao = resultados.get("figura_ligacao")
     if isinstance(ligacao, Mapping):
         from core import ligacoes as lg

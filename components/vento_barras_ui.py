@@ -18,6 +18,7 @@ from components.robustez import secao_protegida
 from components.vento_barras_help import AJUDA
 from core import base_tecnica as bt
 from core import esforcos_modelo as em
+from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import vento_por_barras as vpb
 from core import vento_por_barras_registro as vbr
@@ -216,13 +217,45 @@ def _barras_da_tabela(
     return barras
 
 
-def _editor_de_elementos(chave: str, nomes_das_barras: list[str]) -> pd.DataFrame:
+def _guarda_corpos_das_bordas(
+    projeto: Any, geometria: ld.GeometriaDoModelo, eixo_vertical: str, nomes: set[str]
+) -> tuple[pd.DataFrame, gm.BordasDoPiso, gm.EscolhaDoGuardaCorpo]:
+    """Uma linha de guarda-corpo por trecho marcado nas bordas do piso (Cargas do esqueleto)."""
+    from components.guarda_corpo_ui import escolha_inicial
+
+    escolha = escolha_inicial(projeto)
+    bordas = gm.bordas_do_projeto(geometria, eixo_vertical, escolha)
+    linhas = []
+    for t in bordas.marcados(escolha.trocados):
+        if t.viga not in nomes:
+            continue
+        linhas.append(
+            [
+                True,
+                f"GC {t.id}",
+                vpb.TIPO_GUARDA_CORPO,
+                *t.inicio,
+                *t.fim,
+                escolha.altura_m,
+                None,
+                None,
+                escolha.phi,
+                None,
+                t.viga,
+            ]
+        )
+    return pd.DataFrame(linhas, columns=COLUNAS_ELEMENTOS), bordas, escolha
+
+
+def _editor_de_elementos(
+    chave: str, nomes_das_barras: list[str], inicial: pd.DataFrame | None = None
+) -> pd.DataFrame:
     coordenada = {
         c: st.column_config.NumberColumn(format="%.3f", help=f"{c} em m (modelo).")
         for c in ("X1", "Y1", "Z1", "X2", "Y2", "Z2")
     }
     return st.data_editor(
-        pd.DataFrame(columns=COLUNAS_ELEMENTOS),
+        inicial if inicial is not None else pd.DataFrame(columns=COLUNAS_ELEMENTOS),
         num_rows="dynamic",
         hide_index=True,
         key=chave,
@@ -296,6 +329,12 @@ def _elementos_da_tabela(
             )
         )
     return elementos
+
+
+def _assinatura_da_tabela(tabela: pd.DataFrame) -> str:
+    import zlib
+
+    return f"{zlib.crc32(tabela.to_csv(index=False).encode('utf-8')):08x}"
 
 
 def _rotulo_da_direcao(angulo: int) -> str:
@@ -390,11 +429,29 @@ def mostrar_vento_por_barras() -> None:
         st.subheader(
             "3. Guarda-corpos, escadas, painéis e equipamentos", help=AJUDA["sec_elementos"]
         )
+        inicial = None
+        chave_el = "vb_elementos_dig"
+        if origem == ORIGEM_ESQUELETO:
+            usar_bordas = st.toggle(
+                "Guarda-corpos das bordas do piso (do esqueleto)",
+                value=True,
+                key="vb_gc_bordas",
+                help=AJUDA["gc_bordas"],
+            )
+            chave_el = "vb_elementos_esq"
+            if usar_bordas:
+                inicial, bordas, escolha = _guarda_corpos_das_bordas(
+                    projeto, geometria, eixo_vertical, {b.nome for b in barras}
+                )
+                chave_el += f"_{_assinatura_da_tabela(inicial)}"
+                st.caption(
+                    f":material/fence: {len(inicial)} guarda-corpos nas bordas "
+                    f"({bordas.metodo}; altura {_pt(escolha.altura_m, 2)} m, φ "
+                    f"{_pt(escolha.phi, 2)}) — os trechos e a altura se ajustam em **Cargas do "
+                    "esqueleto › Guarda-corpo nas bordas do piso**."
+                )
         st.caption("Elementos (modelo, em m)", help=AJUDA["tabela_elementos"])
-        tabela_el = _editor_de_elementos(
-            f"vb_elementos_{'esq' if origem == ORIGEM_ESQUELETO else 'dig'}",
-            [b.nome for b in barras],
-        )
+        tabela_el = _editor_de_elementos(chave_el, [b.nome for b in barras], inicial)
         elementos = _elementos_da_tabela(tabela_el, eixo_vertical, erros)
     vento = ce.formulario_vento(base, titulo="4. Vento (NBR 6123:2023)")
     with st.container(border=True):
@@ -514,11 +571,6 @@ def _resultados(
         help=AJUDA["ver_direcao"],
     )
     direcao = r.direcao(int(angulo))
-    eixos_do_modelo = (
-        "Eixos da planta (Z para cima); no SolidWorks com Y para cima: X = X, Y = −Z, Z = Y"
-        if eixo_vertical == "Y"
-        else "Eixos da planta = eixos do modelo (Z para cima)"
-    )
     abas = st.tabs(
         [
             "Estrutura em 3D",
@@ -531,7 +583,7 @@ def _resultados(
     )
     with abas[0], secao_protegida("Desenho 3D do vento"):
         st.subheader("Carga em cada barra", help=AJUDA["res_3d"])
-        st.image(svg_vento_3d(r, direcao.angulo, eixos_do_modelo=eixos_do_modelo), width="stretch")
+        st.image(svg_vento_3d(r, direcao.angulo, eixo_vertical=eixo_vertical), width="stretch")
     with abas[1], secao_protegida("Planta do vento"):
         st.subheader("Planta", help=AJUDA["res_planta"])
         st.image(svg_vento_planta(r, direcao.angulo), width="stretch")

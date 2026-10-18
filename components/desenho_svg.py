@@ -11,6 +11,12 @@ import math
 from collections.abc import Sequence
 from xml.sax.saxutils import escape
 
+# A câmera, o enquadramento e os rótulos são do núcleo da cena 3D (reexportados aqui).
+from core.cena_3d import Camera as Camera
+from core.cena_3d import Enquadramento as Enquadramento
+from core.cena_3d import Rotulos as Rotulos
+from core.cena_3d import largura_do_texto as largura_do_texto
+
 FONTE = "Inter, 'Segoe UI', Helvetica, Arial, sans-serif"
 COR_TEXTO = "#1f2328"
 COR_SUAVE = "#6b7280"
@@ -162,43 +168,6 @@ def seta_de_vento(
         (x1 - meia * px, y1 - meia * py),
     )
     return poligono(pontos, preenchimento=cor, contorno=COR_VENTO_ESCURO, largura=1.0)
-
-
-def largura_do_texto(conteudo: str, tamanho: float) -> float:
-    """Largura aproximada do texto (fonte sem serifa): estreitas e largas contam diferente."""
-    estreitas = sum(1 for c in conteudo if c in "il.,:;|'!()[]/ ·")
-    largas = sum(1 for c in conteudo if c in "mwMWÇ")
-    return tamanho * (0.53 * (len(conteudo) - estreitas - largas) + 0.3 * estreitas + 0.8 * largas)
-
-
-class Rotulos:
-    """Coloca etiquetas sem que uma cubra a outra: se bater, sobe (ou desce) até achar lugar."""
-
-    def __init__(self, limites: tuple[float, float, float, float] | None = None) -> None:
-        self.caixas: list[tuple[float, float, float, float]] = []
-        self.limites = limites
-
-    def lugar(self, x: float, y: float, conteudo: str, tamanho: float) -> tuple[float, float]:
-        largura = largura_do_texto(conteudo, tamanho) + 12
-        altura = tamanho + 9
-        if self.limites is not None:
-            x0, _, x1, _ = self.limites
-            x = max(x0 + largura / 2, min(x1 - largura / 2, x))
-        for tentativa in range(16):
-            deslocamento = (tentativa + 1) // 2 * altura * (1 if tentativa % 2 else -1)
-            yy = y + deslocamento
-            caixa = (x - largura / 2, yy - altura / 2, x + largura / 2, yy + altura / 2)
-            if all(
-                caixa[2] <= c[0] or caixa[0] >= c[2] or caixa[3] <= c[1] or caixa[1] >= c[3]
-                for c in self.caixas
-            ):
-                self.caixas.append(caixa)
-                return x, yy
-        self.caixas.append((x - largura / 2, y - altura / 2, x + largura / 2, y + altura / 2))
-        return x, y
-
-    def ocupar(self, x0: float, y0: float, x1: float, y1: float) -> None:
-        self.caixas.append((x0, y0, x1, y1))
 
 
 def etiqueta(
@@ -354,58 +323,6 @@ def legenda(x: float, y: float, itens: Sequence[tuple[str, str, str]], *, passo:
         partes.append(texto(x + 26, y, rotulo, tamanho=11, ancora="start", cor=COR_SUAVE))
         x += passo or (34 + 6.1 * len(rotulo))
     return "".join(partes)
-
-
-class Camera:
-    """Vista axonométrica (paralela) de um ponto de vista no alto: azimute e elevação em graus.
-
-    ``tela(p)`` dá (x, y) na tela antes do enquadramento (y para baixo); ``profundidade(p)``
-    cresce para perto de quem olha (para desenhar do fundo para a frente).
-    """
-
-    def __init__(self, azimute_graus: float, elevacao_graus: float = 28.0) -> None:
-        a, e = math.radians(azimute_graus), math.radians(elevacao_graus)
-        self.olho = (math.cos(a) * math.cos(e), math.sin(a) * math.cos(e), math.sin(e))
-        self.direita = (-math.sin(a), math.cos(a), 0.0)
-        frente = (-self.olho[0], -self.olho[1], -self.olho[2])
-        d = self.direita
-        self.cima = (
-            d[1] * frente[2] - d[2] * frente[1],
-            d[2] * frente[0] - d[0] * frente[2],
-            d[0] * frente[1] - d[1] * frente[0],
-        )
-
-    def tela(self, p: Sequence[float]) -> tuple[float, float]:
-        x = p[0] * self.direita[0] + p[1] * self.direita[1] + p[2] * self.direita[2]
-        y = p[0] * self.cima[0] + p[1] * self.cima[1] + p[2] * self.cima[2]
-        return x, -y
-
-    def profundidade(self, p: Sequence[float]) -> float:
-        return p[0] * self.olho[0] + p[1] * self.olho[1] + p[2] * self.olho[2]
-
-
-class Enquadramento:
-    """Leva coordenadas (da tela ou do desenho) para a área útil do SVG, na mesma escala em x e y."""
-
-    def __init__(
-        self,
-        pontos: Sequence[tuple[float, float]],
-        area: tuple[float, float, float, float],
-        *,
-        escala_maxima: float = math.inf,
-    ) -> None:
-        x0, y0, x1, y1 = area
-        xs = [p[0] for p in pontos] or [0.0]
-        ys = [p[1] for p in pontos] or [0.0]
-        self.xmin, self.xmax, self.ymin, self.ymax = min(xs), max(xs), min(ys), max(ys)
-        largura = max(self.xmax - self.xmin, 1e-6)
-        altura = max(self.ymax - self.ymin, 1e-6)
-        self.escala = min((x1 - x0) / largura, (y1 - y0) / altura, escala_maxima)
-        self.dx = x0 + ((x1 - x0) - largura * self.escala) / 2 - self.xmin * self.escala
-        self.dy = y0 + ((y1 - y0) - altura * self.escala) / 2 - self.ymin * self.escala
-
-    def __call__(self, p: tuple[float, float]) -> tuple[float, float]:
-        return p[0] * self.escala + self.dx, p[1] * self.escala + self.dy
 
 
 def documento(

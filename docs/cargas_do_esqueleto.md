@@ -39,6 +39,49 @@ carregadas, 72,98 kN = 5 kN/m² × 14,596 m² projetados.
 As cargas por área vêm do plano (as ações com kN/m²) ou da base técnica (SC). O peso das chapas não
 entra: ele já está no modelo (a gravidade do PP).
 
+## Guarda-corpo nas bordas do piso (`core/guarda_corpo_do_modelo.py`)
+
+O guarda-corpo fica nas bordas do piso que não encostam em outro piso, parafusado na viga da borda.
+Com as chapas de piso do esqueleto (macro v5: contorno e aberturas):
+
+1. o contorno e as aberturas de cada chapa são percorridos em estações de 5 cm; a estação é
+   **livre** quando o ponto 12 cm para fora (no plano da chapa) não cai em outra chapa a menos de
+   30 cm do plano dela. Onde o lance da escada encosta na plataforma ou no patamar há piso dos dois
+   lados: é o **acesso**, sem guarda-corpo. O lado em nível de um lance (pé ou topo) também é acesso;
+2. a **viga da borda** de cada estação é a barra paralela à borda (até 12°) que cobre a estação,
+   logo abaixo da chapa (de 5 cm acima da linha de centro até a altura da seção + 25 cm abaixo) e a
+   até 35 cm dela no plano da chapa — a mais perto; cantoneira de enrijecimento (seção < 10 cm)
+   perde para a viga. Estações seguidas com a mesma viga formam um **trecho**; no lance inclinado
+   (> 10°) é guarda-corpo de escada, na longarina;
+3. borda livre **sem viga embaixo** vira aviso e não recebe carga.
+
+Sem chapas de piso, as bordas saem das vigas: estação a estação, a viga horizontal (seção ≥ 10 cm,
+≥ 0,5 m) que tem paralela do mesmo nível (±25 cm, a 0,2–15 m) só de um lado é borda; isolada não
+entra. O acesso da escada que não está como chapa vem das **longarinas**: duas barras de 15° a 65°,
+paralelas, a 0,5–2,0 m uma da outra, com a ponta junto da borda (até 40 cm) e saindo para **fora**
+do piso — a mão-francesa e o travamento, que vão para baixo do piso, não contam.
+
+O engenheiro confere numa tabela (desmarca o lado da parede, o portão) e na planta; a escolha fica em
+`projeto["guarda_corpo_do_modelo"]` (só os trechos trocados, pela chave, mais peso, altura e φ). O
+peso (padrão 0,40 kN/m ≈ 40 kg/m) vai ao caso **PE**, uniforme em cada viga de borda (total ÷
+comprimento da viga, como o piso), em linhas marcadas "Guarda-corpo nas bordas": reenviar o piso
+mantém essas linhas e reenviar o guarda-corpo troca só elas. O vento barra a barra usa os mesmos
+trechos como guarda-corpos (altura 1,10 m, ou 1,30 m no critério Anglo; φ 0,30).
+
+**Ajustes** (no alto do bloco): duas chaves — "Achar o acesso da escada pelas longarinas" (desligada,
+não procura o acesso pelas longarinas; o que vem das chapas fica) e "Guarda-corpo nos lances de escada"
+(desligada, os lados dos lances aparecem desmarcados) — e a tabela **Trechos à mão**: viga, de/até (m,
+do início da viga; vazio = a viga inteira) e tipo. *Guarda-corpo à mão* entra no lugar do que o
+programa achou naquela parte da viga (corta os trechos achados: nunca conta duas vezes); *acesso /
+portão à mão* tira o guarda-corpo daquela parte. Os pedaços de um trecho cortado herdam a escolha
+dele (chave com "#1", "#2"). Viga que não está no esqueleto, faixa invertida (é invertida de volta),
+fora da viga (é cortada nela), menor que 10 cm ou com valor inválido vira aviso. Tudo fica em
+`projeto["guarda_corpo_do_modelo"]` e vale para o peso no PE e para o vento barra a barra.
+
+Robustez: corpo com coordenada inválida, chapa sem área ou contorno dobrado e barra de comprimento
+zero ficam de fora com o motivo nos avisos; o cálculo não levanta exceção por geometria (teste de
+fuzz em `tests/test_guarda_corpo_do_modelo.py`).
+
 ## Entrada (`EntradaEsqueleto`, gravada em `projeto["cargas_do_esqueleto"]`)
 
 * **Eixos**: posições em X (eixos 1, 2, 3…) e em Y (eixos A, B, C…). Pilar em cada cruzamento (um

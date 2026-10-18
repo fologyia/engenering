@@ -38,6 +38,11 @@ AJUDA: dict[str, str] = {
         "rodapé ≈ 0,30; lateral de escada ≈ 0,50; painel fechado = 1). Barra vazia: o programa "
         "acha a viga embaixo da linha (ou a mais próxima)."
     ),
+    "gc_bordas": (
+        "Põe na tabela um guarda-corpo em cada borda livre do piso, na viga que o apoia — o "
+        "programa acha pelas chapas de piso do esqueleto (o acesso da escada fica sem). Os "
+        "trechos, a altura e o φ se ajustam em Cargas do esqueleto."
+    ),
     "sec_opcoes": "Quais direções calcular, se considera a proteção entre planos e onde é o chão.",
     "direcoes": (
         "As 4 perpendiculares às faces (0°, 90°, 180°, 270°) são o que a NBR 6123 pede para "

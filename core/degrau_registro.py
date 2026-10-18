@@ -605,8 +605,12 @@ def registro_degrau(
     responsavel: str = "",
     escada: el.EscadaComPatamares | None = None,
     longarina: le.ResultadoLongarina | None = None,
+    escada_3d: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Registro técnico v2 do degrau (um cálculo = um registro).
+
+    ``escada_3d`` (:func:`core.cena_escada.para_o_registro`, com a vista): a escada em 3D no modo
+    escolhido na página — detalhada ou casca translúcida — vai ao memorial.
 
     ``escada`` (com patamares informados) já deve estar aplicada em ``r``
     (:func:`core.escada_lances.aplicar_na_escada`); ``longarina`` acrescenta as verificações, as
@@ -657,6 +661,8 @@ def registro_degrau(
             resultados["projeção_horizontal_total_mm"] = _finito(maximo - minimo, 1)
     if longarina is not None:
         resultados["figuras_portico"] = [figuras_da_longarina(lg) for lg in longarina.longarinas]
+    if escada_3d is not None and escada is not None:
+        resultados["escada_3d"] = dict(escada_3d)
     alertas = [f"{v.nome}: {v.formula}" for v in verificacoes if v.status in ("NÃO OK", "ALERTA")]
     if longarina is not None:
         alertas = [
