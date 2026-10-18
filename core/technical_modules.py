@@ -79,8 +79,8 @@ def _registrar_padrao() -> None:
             titulo="Casos e combinações de carga",
             versao="1.0",
             pagina="app_pages/casos_carga.py",
-            grupo_navegacao="Gestão industrial",
-            ordem=15,
+            grupo_navegacao="Cargas e vento",
+            ordem=50,
             icone=":material/layers:",
             descricao="Cenários operacionais, combinações vetoriais e envelopes rastreáveis.",
             aliases=("Casos de carga", "Combinações de carga"),
@@ -91,8 +91,8 @@ def _registrar_padrao() -> None:
             titulo="Cargas do esqueleto",
             versao="1.0",
             pagina="app_pages/cargas_esqueleto.py",
-            grupo_navegacao="Gestão industrial",
-            ordem=12,
+            grupo_navegacao="Cargas e vento",
+            ordem=10,
             icone=":material/grid_view:",
             descricao=(
                 "O que não está no modelo do esqueleto (piso, guarda-corpo, escadas, equipamentos, "
@@ -105,8 +105,8 @@ def _registrar_padrao() -> None:
             titulo="Esforços do modelo",
             versao="1.0",
             pagina="app_pages/esforcos_modelo.py",
-            grupo_navegacao="Gestão industrial",
-            ordem=14,
+            grupo_navegacao="Modelo SolidWorks",
+            ordem=10,
             icone=":material/upload_file:",
             descricao=(
                 "Resultados do SolidWorks Simulation (forças das vigas e reações) conferidos contra o "
@@ -119,7 +119,7 @@ def _registrar_padrao() -> None:
             titulo="Análise estática",
             versao="1.1",
             pagina="app_pages/analise_estatica.py",
-            grupo_navegacao="Análises técnicas",
+            grupo_navegacao="Mecânica geral",
             ordem=10,
             icone=":material/analytics:",
             descricao="Estado plano de tensões, equivalentes e margens estáticas.",
@@ -129,8 +129,8 @@ def _registrar_padrao() -> None:
             titulo="Vento nas estruturas",
             versao="1.0",
             pagina="app_pages/vento_nbr6123.py",
-            grupo_navegacao="Análises técnicas",
-            ordem=12,
+            grupo_navegacao="Cargas e vento",
+            ordem=30,
             icone=":material/air:",
             descricao=(
                 "Forças do vento em edificações pela NBR 6123:2023: pressão dinâmica, coeficientes "
@@ -152,8 +152,8 @@ def _registrar_padrao() -> None:
             titulo="Vento em estruturas abertas",
             versao="1.0",
             pagina="app_pages/vento_estrutura_aberta.py",
-            grupo_navegacao="Análises técnicas",
-            ordem=13,
+            grupo_navegacao="Cargas e vento",
+            ordem=20,
             icone=":material/air:",
             descricao=(
                 "Vento em plataformas, mezaninos e pipe racks pela NBR 6123:2023 (capítulo 8): "
@@ -173,8 +173,8 @@ def _registrar_padrao() -> None:
             titulo="Flambagem de colunas",
             versao="3.0",
             pagina="app_pages/flambagem_colunas.py",
-            grupo_navegacao="Análises técnicas",
-            ordem=15,
+            grupo_navegacao="Barras e vigas",
+            ordem=20,
             icone=":material/architecture:",
             descricao=(
                 "Barra inteira comprimida ou flexocomprimida pela NBR 8800:2008, pelo Projeto "
@@ -195,8 +195,8 @@ def _registrar_padrao() -> None:
             titulo="Vigas e eixos",
             versao="1.0",
             pagina="app_pages/vigas_eixos.py",
-            grupo_navegacao="Análises técnicas",
-            ordem=25,
+            grupo_navegacao="Mecânica geral",
+            ordem=20,
             icone=":material/linear_scale:",
             descricao=(
                 "Diagramas de cortante e momento, linha elástica, torção e "
@@ -217,8 +217,8 @@ def _registrar_padrao() -> None:
             titulo="Análise de fadiga",
             versao="1.2",
             pagina="app_pages/analise_fadiga.py",
-            grupo_navegacao="Análises técnicas",
-            ordem=20,
+            grupo_navegacao="Mecânica geral",
+            ordem=30,
             icone=":material/cycle:",
             descricao="Resistência à fadiga, critérios de tensão média e vida estimada.",
         ),
@@ -227,8 +227,8 @@ def _registrar_padrao() -> None:
             titulo="Assistente de cargas",
             versao="1.1",
             pagina="app_pages/assistente_cargas.py",
-            grupo_navegacao="Análises técnicas",
-            ordem=30,
+            grupo_navegacao="Cargas e vento",
+            ordem=60,
             icone=":material/manufacturing:",
             descricao="Conversão de esforços e geometrias em estados de tensão.",
         ),
@@ -237,7 +237,7 @@ def _registrar_padrao() -> None:
             titulo="Círculo de Mohr",
             versao="1.1",
             pagina="app_pages/circulo_mohr.py",
-            grupo_navegacao="Análises técnicas",
+            grupo_navegacao="Mecânica geral",
             ordem=40,
             icone=":material/donut_large:",
             descricao="Transformações, tensões principais e estados 2D/3D.",
@@ -247,7 +247,7 @@ def _registrar_padrao() -> None:
             titulo="Análise de sensibilidade",
             versao="1.0",
             pagina="app_pages/analise_sensibilidade.py",
-            grupo_navegacao="Análises técnicas",
+            grupo_navegacao="Mecânica geral",
             ordem=50,
             icone=":material/tune:",
             descricao="Influência local, Monte Carlo e risco de não atendimento.",
@@ -257,8 +257,8 @@ def _registrar_padrao() -> None:
             titulo="Projeto de parafusos",
             versao="1.0",
             pagina="app_pages/projeto_parafusos.py",
-            grupo_navegacao="Dimensionamento complementar",
-            ordem=10,
+            grupo_navegacao="Ligações e bases",
+            ordem=20,
             icone=":material/build:",
             descricao="Verificação orientativa de juntas e grupos parafusados.",
         ),
@@ -267,8 +267,8 @@ def _registrar_padrao() -> None:
             titulo="Degrau de escada em grade",
             versao="1.0",
             pagina="app_pages/degrau_escada.py",
-            grupo_navegacao="Dimensionamento complementar",
-            ordem=15,
+            grupo_navegacao="Escadas",
+            ordem=10,
             icone=":material/stairs:",
             descricao=(
                 "Degrau de escada industrial em grade de piso eletrofundida (Selmec DS): "
@@ -288,8 +288,8 @@ def _registrar_padrao() -> None:
             titulo="Vigas de piso",
             versao="1.0",
             pagina="app_pages/viga_de_piso.py",
-            grupo_navegacao="Dimensionamento complementar",
-            ordem=17,
+            grupo_navegacao="Barras e vigas",
+            ordem=10,
             icone=":material/view_week:",
             descricao=(
                 "Viga que apoia a grade da plataforma: combinações da NBR 8800, flexão com FLT, "
@@ -303,8 +303,8 @@ def _registrar_padrao() -> None:
             titulo="Ligações estruturais",
             versao="1.0",
             pagina="app_pages/ligacoes_estruturais.py",
-            grupo_navegacao="Dimensionamento complementar",
-            ordem=18,
+            grupo_navegacao="Ligações e bases",
+            ordem=10,
             icone=":material/link:",
             descricao=(
                 "Chapa simples viga–viga e viga–pilar (NBR 8800), perfil formado a frio "
@@ -324,8 +324,8 @@ def _registrar_padrao() -> None:
             titulo="Contraventamento de estruturas abertas",
             versao="1.0",
             pagina="app_pages/contraventamento_estrutura.py",
-            grupo_navegacao="Dimensionamento complementar",
-            ordem=16,
+            grupo_navegacao="Barras e vigas",
+            ordem=30,
             icone=":material/grid_on:",
             descricao=(
                 "Contraventamento vertical de plataformas, mezaninos e pipe racks: vento por "
@@ -347,8 +347,8 @@ def _registrar_padrao() -> None:
             titulo="Ligação de contraventamento",
             versao="1.0",
             pagina="app_pages/ligacao_contraventamento.py",
-            grupo_navegacao="Dimensionamento complementar",
-            ordem=17,
+            grupo_navegacao="Ligações e bases",
+            ordem=30,
             icone=":material/hub:",
             descricao=(
                 "Chapa de nó de contraventamento em canto viga–coluna pelo Método das Forças "
@@ -369,8 +369,8 @@ def _registrar_padrao() -> None:
             titulo="Estruturas de aço",
             versao="1.1",
             pagina="app_pages/estruturas_aco.py",
-            grupo_navegacao="Dimensionamento complementar",
-            ordem=20,
+            grupo_navegacao="Barras e vigas",
+            ordem=40,
             icone=":material/domain:",
             descricao="Barras, ligações, combinações e modelos estruturais 2D.",
         ),

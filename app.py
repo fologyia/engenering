@@ -10,7 +10,7 @@ from components.acesso_ui import acesso_na_lateral, exigir_acesso
 from components.armazenamento_ui import preparar_armazenamento, situacao_na_lateral
 from components.project_tools import sincronizar_projeto_ativo
 from components.robustez import executar_pagina, iniciar_execucao, secao_protegida
-from core.technical_modules import listar_modulos, obter_modulo
+from core import navegacao as nv
 
 st.set_page_config(
     page_title="Mecânica Toolkit",
@@ -37,133 +37,22 @@ with secao_protegida("projeto ativo"):
     sincronizar_projeto_ativo()
 
 
-def pagina_modulo(modulo_id: str) -> st.Page:
-    modulo = obter_modulo(modulo_id)
-    return st.Page(
-        modulo.pagina,
-        title=modulo.titulo,
-        icon=modulo.icone,
-    )
+# O menu inteiro vem de core/navegacao.py (a Visão geral e o selo de cada página leem de lá).
+paginas_por_caminho: dict[str, st.Page] = {}
 
 
-paginas_analises = [
-    st.Page(item.pagina, title=item.titulo, icon=item.icone)
-    for item in listar_modulos(grupo="Análises técnicas")
-]
-paginas_dimensionamento = [
-    st.Page(item.pagina, title=item.titulo, icon=item.icone)
-    for item in listar_modulos(grupo="Dimensionamento complementar")
-]
+def _pagina(item: nv.ItemMenu, *, inicial: bool = False) -> st.Page:
+    pagina = st.Page(item.pagina, title=item.titulo, icon=item.icone, default=inicial)
+    paginas_por_caminho[item.pagina] = pagina
+    return pagina
 
-pagina = st.navigation(
-    {
-        "": [
-            st.Page(
-                "app_pages/inicio.py",
-                title="Visão geral",
-                icon=":material/home:",
-                default=True,
-            ),
-        ],
-        "Gestão industrial": [
-            st.Page(
-                "app_pages/roteiro_projeto.py",
-                title="Roteiro do projeto",
-                icon=":material/format_list_numbered:",
-            ),
-            st.Page(
-                "app_pages/painel_industrial.py",
-                title="Painel industrial",
-                icon=":material/dashboard:",
-            ),
-            st.Page(
-                "app_pages/gestao_projetos.py",
-                title="Projetos permanentes",
-                icon=":material/folder_managed:",
-            ),
-            st.Page(
-                "app_pages/base_tecnica.py",
-                title="Base técnica do projeto",
-                icon=":material/tune:",
-            ),
-            st.Page(
-                "app_pages/cargas_esqueleto.py",
-                title="Cargas do esqueleto",
-                icon=":material/grid_view:",
-            ),
-            st.Page(
-                "app_pages/plano_cargas.py",
-                title="Plano de cargas",
-                icon=":material/table_chart:",
-            ),
-            st.Page(
-                "app_pages/esforcos_modelo.py",
-                title="Esforços do modelo",
-                icon=":material/upload_file:",
-            ),
-            st.Page(
-                "app_pages/lista_de_material.py",
-                title="Lista de material",
-                icon=":material/inventory_2:",
-            ),
-            pagina_modulo("casos_carga"),
-            st.Page(
-                "app_pages/central_validacao.py",
-                title="Central de validação",
-                icon=":material/fact_check:",
-            ),
-            st.Page(
-                "app_pages/central_relatorios.py",
-                title="Central de relatórios",
-                icon=":material/description:",
-            ),
-        ],
-        "Análises técnicas": paginas_analises,
-        "Dimensionamento complementar": paginas_dimensionamento,
-        "Ferramentas": [
-            st.Page(
-                "app_pages/assistente_projeto.py",
-                title="Assistente de projeto",
-                icon=":material/route:",
-            ),
-            st.Page(
-                "app_pages/conversor_unidades.py",
-                title="Conversor de unidades",
-                icon=":material/swap_horiz:",
-            ),
-        ],
-        "Referências": [
-            st.Page(
-                "app_pages/materiais_tecnicos.py",
-                title="Materiais técnicos",
-                icon=":material/science:",
-            ),
-            st.Page(
-                "app_pages/catalogo_materiais.py",
-                title="Catálogo de materiais",
-                icon=":material/science:",
-            ),
-            st.Page(
-                "app_pages/catalogo_perfis.py",
-                title="Catálogo de perfis",
-                icon=":material/view_in_ar:",
-            ),
-            st.Page(
-                "app_pages/normas_tecnicas.py",
-                title="Normas técnicas",
-                icon=":material/library_books:",
-            ),
-        ],
-        "Ajuda": [
-            st.Page(
-                "app_pages/guia_geral.py",
-                title="Guia geral",
-                icon=":material/help:",
-            ),
-        ],
-    },
-    position="sidebar",
-    expanded=True,
+
+menu: dict[str, list[st.Page]] = {"": [_pagina(nv.VISAO_GERAL, inicial=True)]}
+for grupo in nv.MENU:
+    menu[grupo.nome] = [_pagina(item) for item in grupo.itens]
+pagina = st.navigation(menu, position="sidebar", expanded=True)
+st.session_state["_pagina_atual"] = next(
+    (caminho for caminho, p in paginas_por_caminho.items() if p is pagina), ""
 )
 
 with secao_protegida("lateral"):

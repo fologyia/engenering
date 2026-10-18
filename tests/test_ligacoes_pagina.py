@@ -41,7 +41,7 @@ def test_todo_texto_de_ajuda_e_usado():
 
 def test_modulo_registrado_em_dimensionamento_complementar():
     modulo = next(m for m in listar_modulos() if m.id == lg.MODULO_ID)
-    assert modulo.pagina == PAGINA and modulo.grupo_navegacao == "Dimensionamento complementar"
+    assert modulo.pagina == PAGINA and modulo.grupo_navegacao == "Ligações e bases"
 
 
 @pytest.mark.parametrize(

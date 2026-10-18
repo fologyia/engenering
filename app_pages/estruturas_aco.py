@@ -2057,7 +2057,8 @@ elif modulo == "4. Ligações":
 
     elif tipo_ligacao == "Placa de base":
         st.caption(
-            "AISC Design Guide 1 (2ª ed.): pressão de contato f_p,max = φ_c·0,85·f_ck·√(A₂/A₁), "
+            "Pressão de contato no concreto pela NBR 8800 6.6.5 (f_ck/1,96·√(A₂/A₁) ≤ f_ck); "
+            "AISC Design Guide 1 (2ª ed.) para o resto: "
             "placa em flexão plástica (m, n, λn'), momento pequeno (Y = N − 2e) ou grande "
             "(tração nos chumbadores) e chumbadores por AISC J3. P positivo = compressão."
         )
@@ -2319,10 +2320,12 @@ elif modulo == "4. Ligações":
                     and (not isinstance(valor, float) or math.isfinite(valor))
                 },
                 metodo=(
-                    "AISC Design Guide 1 (2ª ed.): f_p,max = φ_c·0,85·f_ck·√(A₂/A₁) ≤ 1,7·f_ck; "
+                    "Pressão no concreto pela NBR 8800 6.6.5: σ_c,Rd = f_ck/(γ_c·γ_n)·√(A₂/A₁) ≤ f_ck; "
+                    "AISC Design Guide 1 (2ª ed.): "
                     "placa em flexão plástica com cantiléveres m, n e λn'; casos de compressão, "
                     "momento pequeno (Y = N − 2e) e grande (Y pela equação do 2º grau, T = q_max·Y − P); "
-                    "chumbadores por AISC J3 (F_nt = 0,75·F_u, F_nv = 0,45·F_u, interação J3.7)."
+                    "chumbadores pela NBR 8800 6.3.3 (0,75·A_b·f_u/γ_a2 à tração, 0,40·A_b·f_u/γ_a2 ao corte, "
+                    "interação 6.3.3.4)."
                 ),
                 equacoes=list(resultado_base.memoria),
                 premissas=[

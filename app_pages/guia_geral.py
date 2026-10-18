@@ -2226,7 +2226,8 @@ elif modulo == "Esforços do modelo":
            Excel, CSV e registro.
         10. Em **Placas de base dos pilares**, informe a placa padrão (N, B, espessura, f_ck e os
            chumbadores) e grave: o programa combina os esforços da base de cada pilar e verifica
-           a placa e os chumbadores pelo Design Guide 1 do AISC, com as exigências da Anglo
+           a placa e os chumbadores (concreto pela NBR 8800 6.6.5, placa e chumbadores pelo
+           Design Guide 1 do AISC), com as exigências da Anglo
            (placa ≥ 16 mm, chumbador ≥ 5/8" e o furo, a arruela e o graute do item 8.7).
         """
     )
@@ -3062,14 +3063,15 @@ else:
         )
         st.markdown(
             """
-            **Placa de base** (AISC Design Guide 1): informe o perfil da coluna,
+            **Placa de base** (NBR 8800 6.6.5 no concreto; AISC Design Guide 1 na placa e
+            nos chumbadores): informe o perfil da coluna,
             N × B × t_p, f_y, f_ck e A₂/A₁ do pedestal, os esforços P (+ compressão),
             M e V na base e os chumbadores (quantidade, lado tracionado, diâmetro,
             f_u e distância f). O programa classifica o caso — compressão centrada,
             momento pequeno (Y = N − 2e) ou grande (tração nos chumbadores) e
             arrancamento — e devolve f_p, Y, a espessura requerida pelo apoio e
             pela tração, a tração e o cisalhamento por chumbador e a interação
-            J3.7. A ancoragem no concreto (cone, fendilhamento) e a fundação ficam
+            (NBR 8800 6.3.3.4). A ancoragem no concreto (cone, fendilhamento) e a fundação ficam
             fora e são avisadas.
             """
         )

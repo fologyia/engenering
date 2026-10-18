@@ -8,6 +8,8 @@ f_y = 36 ksi, e são convertidos para SI aqui.
 import math
 import unittest
 
+import pytest
+
 from core import base_plate as bp
 
 IN = 25.4
@@ -24,6 +26,7 @@ W12X96 = {
 class ExemplosDoDesignGuideTests(unittest.TestCase):
     def test_exemplo_4_1_compressao_centrada(self):
         resultado = bp.verificar_placa_base(
+            norma=bp.NORMA_AISC,  # os exemplos são do Design Guide 1
             **W12X96,
             comprimento_placa_mm=22 * IN,
             largura_placa_mm=20 * IN,
@@ -41,6 +44,7 @@ class ExemplosDoDesignGuideTests(unittest.TestCase):
 
     def test_exemplo_4_4_momento_pequeno(self):
         resultado = bp.verificar_placa_base(
+            norma=bp.NORMA_AISC,  # os exemplos são do Design Guide 1
             **W12X96,
             comprimento_placa_mm=19 * IN,
             largura_placa_mm=19 * IN,
@@ -61,6 +65,7 @@ class ExemplosDoDesignGuideTests(unittest.TestCase):
 
     def test_exemplo_4_5_momento_grande(self):
         resultado = bp.verificar_placa_base(
+            norma=bp.NORMA_AISC,  # os exemplos são do Design Guide 1
             **W12X96,
             comprimento_placa_mm=19 * IN,
             largura_placa_mm=19 * IN,
@@ -100,6 +105,7 @@ class CasosDeBordaTests(unittest.TestCase):
             "forca_axial_N": 100e3,
         }
         parametros.update(extras)
+        parametros.setdefault("norma", bp.NORMA_AISC)
         return bp.verificar_placa_base(**parametros)
 
     def test_arrancamento_divide_a_tracao_e_soma_o_momento(self):
@@ -150,3 +156,20 @@ class CasosDeBordaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_pressao_no_concreto_pela_nbr_8800_6_6_5_e_o_padrao():
+    import math
+
+    comum = dict(
+        profundidade_coluna_mm=200.0, largura_mesa_mm=100.0, espessura_mesa_mm=8.0,
+        comprimento_placa_mm=350.0, largura_placa_mm=300.0, espessura_placa_mm=25.0,
+        fy_placa_MPa=250.0, fck_MPa=25.0, forca_axial_N=100e3, razao_areas_a2_a1=2.0,
+    )  # fmt: skip
+    nbr = bp.verificar_placa_base(**comum)
+    assert nbr.pressao_maxima_MPa == pytest.approx(25 / 1.96 * math.sqrt(2))
+    aisc = bp.verificar_placa_base(**comum, norma=bp.NORMA_AISC)
+    assert aisc.pressao_maxima_MPa == pytest.approx(0.65 * 0.85 * 25 * math.sqrt(2))
+    assert nbr.pressao_maxima_MPa < aisc.pressao_maxima_MPa  # a NBR é mais conservadora
+    teto = bp.verificar_placa_base(**{**comum, "razao_areas_a2_a1": 9.0})
+    assert teto.pressao_maxima_MPa == pytest.approx(25.0)  # σ_c,Rd ≤ f_ck

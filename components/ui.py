@@ -153,7 +153,16 @@ def cabecalho_pagina(
     mostrar_ferramentas: bool = True,
     modulo_id: str | None = None,
 ) -> None:
-    """Exibe um cabeçalho consistente com ações e acesso ao guia."""
+    """Exibe um cabeçalho consistente com ações e acesso ao guia.
+
+    O selo mostra o grupo do menu da página aberta (:mod:`core.navegacao`), para o topo da página
+    e a barra lateral dizerem a mesma coisa; ``categoria`` só vale fora do menu.
+    """
+    from core import navegacao
+
+    grupo = navegacao.grupo_da_pagina(str(st.session_state.get("_pagina_atual") or ""))
+    if grupo is not None:
+        categoria = grupo.nome
     with st.container(border=True):
         with st.container(horizontal=True):
             st.badge(categoria, icon=icone, color=cor)

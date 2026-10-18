@@ -1,4 +1,4 @@
-"""Placas de base dos pilares do modelo: AISC Design Guide 1 com os esforços combinados da base.
+"""Placas de base dos pilares do modelo: NBR 8800 6.6.5 e AISC Design Guide 1, esforços combinados.
 
 Para cada pilar do quadro das fundações (:mod:`core.quadro_fundacoes`), os esforços da base de cada
 caso são combinados com os fatores ELU do plano de cargas; em cada combinação a placa e os
@@ -208,7 +208,7 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
             r.pressao_atuante_MPa,
             r.pressao_maxima_MPa,
             "MPa",
-            "AISC DG1 3.4; AISC J8",
+            "AISC DG1 3.4; NBR 8800 6.6.5",
             f"momento grande: o concreto trabalha em f_p,máx num comprimento Y = "
             f"{_n(r.comprimento_contato_mm)} mm{excentricidade} e o resto vai para os chumbadores; "
             "a placa atende ao contato se Y existir",
@@ -247,8 +247,8 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
                 r.tracao_por_chumbador_N / 1e3,
                 r.resistencia_tracao_chumbador_N / 1e3,
                 "kN",
-                "AISC J3.6",
-                "φ·0,75·F_u·A_b por chumbador do lado tracionado",
+                "NBR 8800 6.3.3.1",
+                "0,75·A_b·f_u/γ_a2 por chumbador do lado tracionado (barra rosqueada)",
             )
         )
     if r.cisalhamento_por_chumbador_N > 0:
@@ -258,8 +258,8 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
                 r.cisalhamento_por_chumbador_N / 1e3,
                 r.resistencia_cisalhamento_chumbador_N / 1e3,
                 "kN",
-                "AISC J3.6",
-                "φ·0,45·F_u·A_b (rosca no plano de corte), dividido por todos os chumbadores",
+                "NBR 8800 6.3.3.2",
+                "0,40·A_b·f_u/γ_a2 (rosca no plano de corte), dividido por todos os chumbadores",
             )
         )
     if r.cisalhamento_por_chumbador_N > 0 and r.tracao_por_chumbador_N > 0:
@@ -269,8 +269,8 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
                 r.utilizacao_interacao_chumbador,
                 1.0,
                 "—",
-                "AISC J3.7",
-                "interação da tração com o cisalhamento",
+                "NBR 8800 6.3.3.4",
+                "(F_t,Sd/F_t,Rd)² + (F_v,Sd/F_v,Rd)² ≤ 1",
             )
         )
     for aviso in r.avisos:

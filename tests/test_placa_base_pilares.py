@@ -31,9 +31,9 @@ def test_placa_padrao_do_portico_confere_com_a_conta_a_mao():
         pb.verificar_placas(portico(PILAR, PILAR_2), plano_do_portico(), pb.ParametrosDaPlaca())
     )
     assert r.n == pytest.approx(52.6, abs=0.05) and abs(r.m) == pytest.approx(22.9, abs=0.05)
-    # À mão: f_p,máx = 0,65·0,85·25 = 13,81 MPa; q = 4144 N/mm; e = M/P; f = 350/2 − 50 = 125 mm;
+    # À mão: σ_c,Rd = 25/(1,4·1,4) = 12,76 MPa (NBR 8800 6.6.5); q = 4144 N/mm; e = M/P; f = 350/2 − 50 = 125 mm;
     # Y = (f + N/2) − √[(f + N/2)² − 2P(e + f)/q]; m = (350 − 0,95·201)/2 = 79,5 mm.
-    q = 0.65 * 0.85 * 25 * 300
+    q = 25 / (1.4 * 1.4) * 300
     p, e = r.n * 1e3, abs(r.m) * 1e6 / (r.n * 1e3)
     y = 300 - math.sqrt(300**2 - 2 * p * (e + 125) / q)
     m = (350 - 0.95 * 201) / 2
@@ -42,7 +42,7 @@ def test_placa_padrao_do_portico_confere_com_a_conta_a_mao():
     assert r.utilizacao == pytest.approx((t_req / 19) ** 2, rel=1e-3)
     assert r.status == "NÃO OK" and r.modo == "Espessura da placa (flexão)"
     tracao = (q * y - p) / 2  # 2 chumbadores no lado tracionado
-    resistencia = 0.75 * 0.75 * 400 * math.pi * 19.05**2 / 4
+    resistencia = 0.75 * 400 * math.pi * 19.05**2 / 4 / 1.35  # NBR 8800 6.3.3.1
     assert _linha(r, "Chumbador: tração").aproveitamento == pytest.approx(
         tracao / resistencia, rel=1e-3
     )

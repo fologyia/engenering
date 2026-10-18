@@ -101,12 +101,16 @@ class _Tripla:
     n: float
     m_forte: float
     m_fraco: float
-    v: float
+    v: float  # resultante (informativo)
     t: float
+    v_forte: float = 0.0  # cortante no plano da alma (acompanha o momento do eixo forte)
+    v_fraco: float = 0.0  # cortante nas mesas (acompanha o momento do eixo fraco)
 
 
 def _triplas(combinados: Sequence[em.Combinado], eixo_forte: str, b2: float) -> list[_Tripla]:
     forte, fraco = (4, 3) if eixo_forte == em.EIXO_M2 else (3, 4)
+    # Flexão em torno de 2 vem com o cortante na direção 1 (V₁ ↔ M₂; V₂ ↔ M₁).
+    v_forte, v_fraco = (1, 2) if eixo_forte == em.EIXO_M2 else (2, 1)
     return [
         _Tripla(
             nome,
@@ -116,27 +120,60 @@ def _triplas(combinados: Sequence[em.Combinado], eixo_forte: str, b2: float) -> 
             b2 * v[fraco],
             b2 * math.hypot(v[1], v[2]),
             v[5],
+            b2 * abs(v[v_forte]),
+            b2 * abs(v[v_fraco]),
         )
         for nome, ponto, v in combinados
     ]
 
 
+def _cortantes_rd(perfil: Any, fy: float) -> tuple[tuple[float, str], tuple[float, str]]:
+    """V_Rd no plano da alma e nas mesas pela NBR 8800 5.4.3 (com a esbeltez de cada parte)."""
+    from core import nbr8800
+
+    saida = []
+    for eixo, rotulo in (("x", "alma"), ("y", "mesas")):
+        r = nbr8800.verificar_cisalhamento(perfil, fy, 200_000.0, 0.0, eixo=eixo)
+        texto = (
+            f"{rotulo}: A_w = {_n(r.area_cisalhamento_mm2, 0)} mm², k_v = {_n(r.kv, 1)}, "
+            f"λ = {_n(r.esbeltez_alma, 1)} (λ_p = {_n(r.lambda_p, 1)}), regime {r.regime}"
+            if r.kv
+            else f"{rotulo}: V_pl = 0,6·f_y·A_w, A_w = {_n(r.area_cisalhamento_mm2, 0)} mm²"
+        )
+        saida.append((r.resistencia_N / 1e3, texto))
+    return saida[0], saida[1]
+
+
 def _linhas_comuns(
-    triplas: Sequence[_Tripla], v_rd: float | None, rotulo_vrd: str
+    triplas: Sequence[_Tripla],
+    cortantes: tuple[tuple[float, str], tuple[float, str]] | None,
 ) -> list[Verificacao]:
     linhas: list[Verificacao] = []
-    maior_v = max(triplas, key=lambda x: x.v)
-    if v_rd:
+    if cortantes:
+        (v_rd_alma, texto_alma), (v_rd_mesas, texto_mesas) = cortantes
+        maior = max(triplas, key=lambda x: x.v_forte)
         linhas.append(
             Verificacao(
-                "Cortante (resultante de V₁ e V₂) ≤ V_Rd",
-                maior_v.v,
-                v_rd,
+                "Cortante no plano da alma ≤ V_Rd",
+                maior.v_forte,
+                v_rd_alma,
                 "kN",
-                "NBR 8800 5.4.3",
-                f"{maior_v.combinacao}, {maior_v.ponto}; {rotulo_vrd}",
+                "NBR 8800 5.4.3.1",
+                f"{maior.combinacao}, {maior.ponto}; {texto_alma}",
             )
         )
+        maior_fraco = max(triplas, key=lambda x: x.v_fraco)
+        if maior_fraco.v_fraco > 1e-9:
+            linhas.append(
+                Verificacao(
+                    "Cortante nas mesas (eixo fraco) ≤ V_Rd",
+                    maior_fraco.v_fraco,
+                    v_rd_mesas,
+                    "kN",
+                    "NBR 8800 5.4.3.5",
+                    f"{maior_fraco.combinacao}, {maior_fraco.ponto}; {texto_mesas}",
+                )
+            )
     maior_t = max(triplas, key=lambda x: abs(x.t))
     linhas.append(
         Verificacao(
@@ -183,7 +220,7 @@ def _verificar_perfil(
     nc_rd = referencia.compressao["Nc_Rd"] if referencia.compressao else None
     mx_rd, my_rd = referencia.mrd_x_kNm, referencia.mrd_y_kNm
     nt_rd = perfil.area_mm2 * fy / GAMMA_A1 / 1e3
-    v_rd = 0.60 * fy * perfil.area_cisalhamento_mm2 / GAMMA_A1 / 1e3
+    cortantes = _cortantes_rd(perfil, fy)
 
     def rapido(t: _Tripla) -> float:
         n_ratio = _razao(t.n, nc_rd) if t.n < 0 else _razao(t.n, nt_rd)
@@ -263,7 +300,7 @@ def _verificar_perfil(
             melhor = (indice, t, linhas, governante, n_rd)
     assert melhor is not None
     indice, t, linhas, governante, n_rd = melhor
-    linhas = [*linhas, *_linhas_comuns(triplas, v_rd, "V_Rd = 0,6·f_y·A_w/γ_a1")]
+    linhas = [*linhas, *_linhas_comuns(triplas, cortantes)]
     return ResultadoDaBarra(
         membro,
         cfg.perfil,
@@ -328,7 +365,7 @@ def _verificar_cantoneira(
             tipo="informativo",
         )
     )
-    linhas += _linhas_comuns(triplas, None, "")
+    linhas += _linhas_comuns(triplas, None)
     governante = max(
         (v for v in linhas if v.tipo == "resistencia"),
         key=lambda v: v.aproveitamento or 0.0,
@@ -365,6 +402,7 @@ class EsforcoNoPonto:
     v: float
     m_fraco: float = 0.0
     t: float = 0.0
+    v_fraco: float = 0.0
 
 
 def verificar_barra_com_esforcos(
@@ -395,7 +433,18 @@ def verificar_barra_com_esforcos(
         raise ValueError("Os comprimentos de flambagem e o destravado precisam ser positivos.")
     cfg = em.ConfiguracaoDoMembro(perfil=perfil, tipo=tipo)
     triplas = [
-        _Tripla(e.combinacao, e.ponto, e.n, e.m_forte, e.m_fraco, abs(e.v), e.t) for e in esforcos
+        _Tripla(
+            e.combinacao,
+            e.ponto,
+            e.n,
+            e.m_forte,
+            e.m_fraco,
+            abs(e.v),
+            e.t,
+            abs(e.v),
+            abs(e.v_fraco),
+        )
+        for e in esforcos
     ]
     fy = ACOS[aco][0]
     if perfil in ct.CATALOGO_CANTONEIRAS:

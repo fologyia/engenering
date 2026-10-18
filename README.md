@@ -12,9 +12,10 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-O aplicativo abre em `http://localhost:8501`. O menu lateral é organizado em
-**Gestão industrial**, **Análises técnicas**, **Dimensionamento complementar**,
-**Ferramentas**, **Referências** e **Ajuda**.
+O aplicativo abre em `http://localhost:8501`. O menu lateral segue a ordem do trabalho
+(`core/navegacao.py`, a mesma fonte da Visão geral e do selo de cada página): **Projeto**,
+**Cargas e vento**, **Modelo SolidWorks**, **Barras e vigas**, **Ligações e bases**, **Escadas**,
+**Entrega**, **Mecânica geral** (ferramentas de máquinas) e **Referências e ajuda**.
 
 ### Onde ficam os dados
 

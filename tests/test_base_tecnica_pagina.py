@@ -334,7 +334,7 @@ def test_todo_botao_de_ajuda_das_paginas_aponta_para_um_capitulo_do_guia():
 def test_pagina_inicial_mostra_o_caminho_do_projeto(banco_com_projeto):
     t = abrir("app_pages/inicio.py")
     assert "Caminho do projeto" in [s.value for s in t.subheader]
-    corpo = " ".join(s.value for s in t.subheader)
+    corpo = " ".join(str(p.proto.label) for p in t.get("page_link"))
     for titulo in ("Base técnica do projeto", "Plano de cargas", "Vento em estruturas abertas"):
         assert titulo in corpo, titulo
     opcoes = t.selectbox[0].options

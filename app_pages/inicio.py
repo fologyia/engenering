@@ -1,541 +1,121 @@
+"""Visão geral: o projeto ativo, o próximo passo e tudo o que o programa faz, na ordem do trabalho."""
+
 import streamlit as st
 
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import mapa_do_projeto
 from core import armazenamento
-from core import material_catalog as mat
-from core import section_catalog as catalogo_perfis
-
-try:
-    materiais = mat.carregar_materiais()
-except (FileNotFoundError, ValueError) as erro:
-    st.error(f"Não foi possível carregar a base de materiais: {erro}", icon=":material/error:")
-    st.stop()
+from core import navegacao as nv
+from core import roteiro as rt
+from core.project_store import obter_projeto_ativo
 
 with st.container(border=True):
     with st.container(horizontal=True):
+        st.badge("Estruturas de aço industriais", icon=":material/domain:", color="primary")
         st.badge(
-            "Engenharia mecânica",
-            icon=":material/precision_manufacturing:",
-            color="primary",
-        )
-        st.badge(
-            "Análise e pré-dimensionamento",
-            icon=":material/verified:",
-            color="green",
+            "NBR 8800 · NBR 6120 · NBR 6123 · Anglo", icon=":material/verified:", color="green"
         )
     st.title("Mecânica Toolkit")
     st.markdown(
-        "Organize **projetos industriais permanentes**, transforme dados em verificações "
-        "rastreáveis e consolide validações e memoriais técnicos."
+        "Do esqueleto no SolidWorks ao **memorial de cálculo**: cargas, vento, verificação das "
+        "barras, ligações, bases e escadas, com a norma e o item em cada conta."
     )
-    st.caption(
-        "Foco em equipamentos, sistemas, estruturas de aço, carregamentos, tensões, "
-        "fadiga, documentação e referências normativas."
-    )
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    with st.container(horizontal=True):
         st.page_link(
-            "app_pages/gestao_projetos.py",
-            label="Projetos permanentes",
-            icon=":material/folder_managed:",
+            "app_pages/roteiro_projeto.py",
+            label="Roteiro do projeto",
+            icon=":material/format_list_numbered:",
         )
         st.page_link(
-            "app_pages/assistente_projeto.py",
-            label="Projeto guiado",
-            icon=":material/route:",
+            "app_pages/gestao_projetos.py", label="Projetos", icon=":material/folder_managed:"
         )
         st.page_link(
-            "app_pages/conversor_unidades.py",
-            label="Converter unidades",
-            icon=":material/swap_horiz:",
+            "app_pages/central_relatorios.py",
+            label="Gerar memorial",
+            icon=":material/description:",
         )
         st.page_link(
             "app_pages/guia_geral.py",
-            label="Guia geral",
+            label="Guia",
             icon=":material/help:",
-            help="Coleta de dados, exemplos preenchidos e interpretação.",
             query_params={"modulo": "Comece aqui"},
         )
-        st.page_link(
-            "app_pages/casos_carga.py",
-            label="Estruturar casos de carga",
-            icon=":material/arrow_forward:",
-            icon_position="right",
-        )
 
-projeto_ativo = st.session_state.get("projeto_ativo")
-if projeto_ativo:
-    with st.container(border=True):
-        st.badge(
-            "Projeto ativo",
-            icon=":material/folder_open:",
-            color="green",
-        )
-        st.subheader(projeto_ativo["nome"])
-        if projeto_ativo.get("descricao"):
-            st.caption(projeto_ativo["descricao"])
-        st.markdown(
-            f"**Código:** {projeto_ativo.get('codigo', 'não definido')}  ·  "
-            f"**Revisão:** {int(projeto_ativo.get('revisao', 0)):02d}  ·  "
-            f"**Situação:** {projeto_ativo.get('status', 'Em elaboração')}"
-        )
+# ------------------------------------------------------------------ projeto ativo e próximo passo
+projeto = obter_projeto_ativo()
+with st.container(border=True):
+    if projeto:
+        st.badge("Projeto ativo", icon=":material/folder_open:", color="green")
+        st.subheader(projeto["nome"])
         st.caption(
-            f"Objetivo: {projeto_ativo.get('objetivo') or 'ainda não definido'}. "
+            f"Código {projeto.get('codigo') or '—'} · Revisão "
+            f"{int(projeto.get('revisao', 0)):02d} · {projeto.get('status', 'Em elaboração')}. "
             f"{armazenamento.frase_de_persistencia()}"
         )
-        with st.container(horizontal=True, horizontal_alignment="right"):
-            st.page_link(
-                "app_pages/gestao_projetos.py",
-                label="Abrir projeto",
-                icon=":material/edit_note:",
+        proximo = rt.proximo_passo(rt.situacoes(projeto))
+        if proximo is not None:
+            passo = rt.PASSOS[proximo - 1]
+            st.info(
+                f"**Próximo passo — {passo.numero}. {passo.titulo}:** {passo.onde}.",
+                icon=":material/arrow_forward:",
             )
-            st.page_link(
-                "app_pages/central_validacao.py",
-                label="Validar",
-                icon=":material/fact_check:",
+            if passo.pagina:
+                st.page_link(
+                    passo.pagina, label=f"Abrir {passo.onde}", icon=":material/open_in_new:"
+                )
+        else:
+            st.success(
+                "Todos os passos com rastro no projeto estão feitos: gere o memorial.",
+                icon=":material/check_circle:",
             )
-            st.page_link(
-                "app_pages/central_relatorios.py",
-                label="Gerar memorial",
-                icon=":material/description:",
-            )
+    else:
+        st.badge("Sem projeto ativo", icon=":material/folder_off:", color="gray")
+        st.markdown(
+            "Abra ou crie um projeto para o programa guardar os cálculos e montar o memorial."
+        )
+        st.page_link(
+            "app_pages/gestao_projetos.py",
+            label="Abrir ou criar um projeto",
+            icon=":material/folder_managed:",
+        )
 
 mapa_do_projeto(AJUDA_BASE["sec_mapa"])
 
-modulos = [
-    (
-        "Painel industrial",
-        ":material/dashboard:",
-        "Carteira de projetos",
-        "Situação, prontidão, bloqueios, prazos vencidos e cálculos desatualizados de todos os projetos.",
-        "app_pages/painel_industrial.py",
-        "blue",
-    ),
-    (
-        "Projetos permanentes",
-        ":material/folder_managed:",
-        "Sistema industrial",
-        "Base de projeto, critérios, escopo, documentos, normas, registros, checklist com prazos, fluxo de situação e revisões comparáveis.",
-        "app_pages/gestao_projetos.py",
-        "blue",
-    ),
-    (
-        "Base técnica do projeto",
-        ":material/tune:",
-        "Etapa 1 — preencher uma vez",
-        "Critério do cliente (Anglo), vento do local, tipo de estrutura e sobrecarga: as demais páginas começam com esses valores.",
-        "app_pages/base_tecnica.py",
-        "violet",
-    ),
-    (
-        "Plano de cargas",
-        ":material/table_chart:",
-        "Etapa 3 — ações e combinações",
-        "Ações com código padrão (PP, SC, W0…), cargas para o modelo (SolidWorks, Robot), combinações ELU/ELS e CSV.",
-        "app_pages/plano_cargas.py",
-        "violet",
-    ),
-    (
-        "Casos e combinações de carga",
-        ":material/layers:",
-        "Cenários e envelopes",
-        "Registra condições operacionais, fatores explícitos e cenários governantes sem misturar máximos independentes.",
-        "app_pages/casos_carga.py",
-        "blue",
-    ),
-    (
-        "Central de validação",
-        ":material/fact_check:",
-        "Controle de pendências",
-        "Consolida bloqueios, lacunas documentais e resultados técnicos para tratamento.",
-        "app_pages/central_validacao.py",
-        "orange",
-    ),
-    (
-        "Central de relatórios",
-        ":material/description:",
-        "Word e PDF modulares",
-        "Monta o memorial de cálculo como molde: cálculos completos, agrupados por peça, e campos em aberto marcados para preencher.",
-        "app_pages/central_relatorios.py",
-        "green",
-    ),
-    (
-        "Materiais técnicos",
-        ":material/science:",
-        "Proveniência e confiança",
-        "Qualifica condição, produto, propriedades, fonte, lote e aplicabilidade por projeto.",
-        "app_pages/materiais_tecnicos.py",
-        "green",
-    ),
-    (
-        "Assistente de projeto",
-        ":material/route:",
-        "Roteiro em quatro etapas",
-        "Organiza objetivo, dados, checklist e encaminha ao primeiro cálculo.",
-        "app_pages/assistente_projeto.py",
-        "violet",
-    ),
-    (
-        "Conversor de unidades",
-        ":material/swap_horiz:",
-        "SI e sistema inglês",
-        "Converte 15 grandezas e mostra equivalências para conferência.",
-        "app_pages/conversor_unidades.py",
-        "blue",
-    ),
-    (
-        "Assistente de cargas",
-        ":material/manufacturing:",
-        "Cargas e dimensões",
-        "Converte forças, momentos, torque e pressão em componentes de tensão.",
-        "app_pages/assistente_cargas.py",
-        "violet",
-    ),
-    (
-        "Análise estática",
-        ":material/analytics:",
-        "Tensões conhecidas",
-        "Calcula von Mises, tensões principais, utilização e segurança.",
-        "app_pages/analise_estatica.py",
-        "blue",
-    ),
-    (
-        "Círculo de Mohr",
-        ":material/donut_large:",
-        "Transformações 2D e 3D",
-        "Encontra planos principais, cisalhamento máximo e tração em um plano.",
-        "app_pages/circulo_mohr.py",
-        "blue",
-    ),
-    (
-        "Análise de fadiga",
-        ":material/cycle:",
-        "Carregamento variável",
-        "Aplica Marin, Goodman, Soderberg e estima a vida pela curva S–N.",
-        "app_pages/analise_fadiga.py",
-        "green",
-    ),
-    (
-        "Análise de sensibilidade",
-        ":material/tune:",
-        "Robustez e incerteza",
-        "Classifica entradas por influência e estima a chance de cruzar o critério informado.",
-        "app_pages/analise_sensibilidade.py",
-        "violet",
-    ),
-    (
-        "Projeto de parafusos",
-        ":material/build:",
-        "Juntas mecânicas",
-        "Verifica aperto, distribuição de carga, separação, atrito e chapa.",
-        "app_pages/projeto_parafusos.py",
-        "orange",
-    ),
-    (
-        "Estruturas de aço",
-        ":material/domain:",
-        "Barras e estruturas",
-        "Integra perfis, combinações, ligações, treliças e pórticos 2D.",
-        "app_pages/estruturas_aco.py",
-        "violet",
-    ),
-    (
-        "Vento nas estruturas",
-        ":material/air:",
-        "NBR 6123:2023",
-        "Calcula a pressão do vento, os coeficientes por zona, o arrasto e as cargas do pórtico transversal de uma edificação.",
-        "app_pages/vento_nbr6123.py",
-        "blue",
-    ),
-    (
-        "Degrau de escada em grade",
-        ":material/stairs:",
-        "NR-12, NR-22 e Anglo",
-        "Define a geometria da escada, escolhe o modelo Selmec e fecha 38 verificações do degrau em grade eletrofundida.",
-        "app_pages/degrau_escada.py",
-        "green",
-    ),
-    (
-        "Vento em estruturas abertas",
-        ":material/air:",
-        "Só o vento, para anotar",
-        "Força do vento por nível, por pórtico e em cada nó (NBR 6123, cap. 8), com desenho e CSV para lançar no modelo.",
-        "app_pages/vento_estrutura_aberta.py",
-        "blue",
-    ),
-    (
-        "Contraventamento de estruturas abertas",
-        ":material/grid_on:",
-        "Plataformas e pipe racks",
-        "Vento nos reticulados, combinações ELU/ELS com forças nocionais, B₂, diagonais e deslocamentos.",
-        "app_pages/contraventamento_estrutura.py",
-        "blue",
-    ),
-    (
-        "Ligação de contraventamento",
-        ":material/hub:",
-        "Chapa de nó (AISC DG29)",
-        "Divide a força da barra entre chapa, viga e coluna pelo Método das Forças Uniformes e verifica parafusos, Whitmore, soldas e alma.",
-        "app_pages/ligacao_contraventamento.py",
-        "violet",
-    ),
-    (
-        "Normas técnicas",
-        ":material/library_books:",
-        "Referências e PDFs locais",
-        "Separa normas por segmento, indexa PDFs e rastreia resultados por página.",
-        "app_pages/normas_tecnicas.py",
-        "green",
-    ),
-]
-
-
-with st.container(horizontal=True):
-    st.metric(
-        ":material/apps: Áreas integradas",
-        len(modulos),
-        border=True,
-        help="Gestão, validação, relatórios, análises, estruturas, ferramentas e biblioteca normativa.",
-    )
-    st.metric(
-        ":material/database: Materiais",
-        len(materiais),
-        border=True,
-        help="Valores típicos de referência cadastrados.",
-    )
-    st.metric(
-        ":material/view_in_ar: Perfis geométricos",
-        len(catalogo_perfis.listar_perfis()),
-        border=True,
-        help="Perfis idealizados disponíveis na área de estruturas de aço.",
-    )
-
+# ------------------------------------------------------------------ rota rápida
 with st.container(border=True):
-    st.badge("Rota rápida", icon=":material/route:", color="blue")
-    st.subheader("Por onde devo começar?")
-    situacoes = [
-        "Quero ver a carteira inteira: o que está travado, vencido ou desatualizado",
-        "Quero manter dados, cálculos e revisões de um projeto industrial",
-        "Quero conferir pendências e preparar a liberação de um projeto",
-        "Quero gerar um memorial consolidado em Word ou PDF",
-        "Ainda não sei qual análise usar ou quero montar um roteiro",
-        "Preciso converter os dados para as unidades do programa",
-        "Tenho vários cenários operacionais e preciso combinar ou envelopar cargas",
-        "Tenho forças, momentos, torque ou pressão e as dimensões da peça",
-        "Já tenho as componentes de tensão em um ponto",
-        "Minha carga varia com o tempo e quero verificar fadiga",
-        "Quero dimensionar ou conferir uma junta parafusada",
-        "Quero verificar uma barra, ligação, treliça ou pórtico de aço",
-        "Quero localizar a norma aplicável ou pesquisar meus PDFs",
-        "Quero cadastrar propriedades de material com origem confiável",
-        "Quero saber quais entradas governam o resultado e avaliar incertezas",
-        "Preciso das forças do vento em uma edificação (NBR 6123:2023)",
-        "Preciso dimensionar o degrau de uma escada industrial em grade",
-        "Preciso dimensionar a chapa de nó de um contraventamento no canto viga–coluna",
-        "Preciso contraventar uma plataforma, mezanino ou pipe rack aberto",
-        "Quero definir uma vez o vento do local e o critério do cliente (Anglo) para o projeto",
-        "Preciso só da força do vento numa plataforma ou pipe rack aberto, para o modelo",
-        "Quero montar o plano de cargas com códigos e combinações para o modelo",
-    ]
-    situacao = st.selectbox("Escolha o que você possui", situacoes)
-
-    recomendacoes = {
-        situacoes[0]: (
-            "Painel industrial",
-            "Resume todos os projetos: situação, prontidão, bloqueios, prazos vencidos e cálculos desatualizados.",
-            "app_pages/painel_industrial.py",
-            ":material/dashboard:",
-        ),
-        situacoes[1]: (
-            "Projetos permanentes",
-            "Centraliza identificação, base de projeto, critérios, escopo físico, documentos, normas, registros, checklist e revisões.",
-            "app_pages/gestao_projetos.py",
-            ":material/folder_managed:",
-        ),
-        situacoes[2]: (
-            "Central de validação",
-            "Separa bloqueios, atenções e pendências e permite convertê-los em ações rastreáveis.",
-            "app_pages/central_validacao.py",
-            ":material/fact_check:",
-        ),
-        situacoes[3]: (
-            "Central de relatórios",
-            "Seleciona seções e registros e gera Word editável e PDF a partir da mesma revisão.",
-            "app_pages/central_relatorios.py",
-            ":material/description:",
-        ),
-        situacoes[4]: (
-            "Assistente de projeto",
-            "Organiza objetivo, dados e checklist antes de abrir o cálculo correto.",
-            "app_pages/assistente_projeto.py",
-            ":material/route:",
-        ),
-        situacoes[5]: (
-            "Conversor de unidades",
-            "Converte grandezas de engenharia para as unidades indicadas nos campos.",
-            "app_pages/conversor_unidades.py",
-            ":material/swap_horiz:",
-        ),
-        situacoes[6]: (
-            "Casos e combinações de carga",
-            "Mantém cenários físicos, fatores explícitos e o vetor governante de cada componente.",
-            "app_pages/casos_carga.py",
-            ":material/layers:",
-        ),
-        situacoes[7]: (
-            "Assistente de cargas",
-            "Transforma cargas e geometria em σx, σy e τxy.",
-            "app_pages/assistente_cargas.py",
-            ":material/manufacturing:",
-        ),
-        situacoes[8]: (
-            "Análise estática",
-            "Verifica von Mises, tensões principais e segurança ao escoamento. "
-            "Use Mohr quando precisar girar o plano ou analisar um tensor 3D.",
-            "app_pages/analise_estatica.py",
-            ":material/analytics:",
-        ),
-        situacoes[9]: (
-            "Análise de fadiga",
-            "Corrige o limite de resistência e avalia Goodman, Soderberg e vida S–N.",
-            "app_pages/analise_fadiga.py",
-            ":material/cycle:",
-        ),
-        situacoes[10]: (
-            "Projeto de parafusos",
-            "Avalia pré-carga, torque, separação, deslizamento, chapa e fadiga axial.",
-            "app_pages/projeto_parafusos.py",
-            ":material/build:",
-        ),
-        situacoes[11]: (
-            "Estruturas de aço",
-            "Reúne perfis, barras, combinações, ligações e análise estrutural 2D.",
-            "app_pages/estruturas_aco.py",
-            ":material/domain:",
-        ),
-        situacoes[12]: (
-            "Normas técnicas",
-            "Organiza referências por segmento e pesquisa seus PDFs por arquivo e página.",
-            "app_pages/normas_tecnicas.py",
-            ":material/library_books:",
-        ),
-        situacoes[13]: (
-            "Materiais técnicos",
-            "Separa referência preliminar de propriedade rastreada a certificado, norma, fabricante ou ensaio.",
-            "app_pages/materiais_tecnicos.py",
-            ":material/science:",
-        ),
-        situacoes[14]: (
-            "Análise de sensibilidade",
-            "Ordena entradas por influência e propaga as incertezas declaradas com OAT e Monte Carlo.",
-            "app_pages/analise_sensibilidade.py",
-            ":material/tune:",
-        ),
-        situacoes[15]: (
-            "Vento nas estruturas",
-            "Calcula as forças do vento pela NBR 6123:2023: pressão dinâmica, coeficientes por zona, arrasto e cargas do pórtico.",
-            "app_pages/vento_nbr6123.py",
-            ":material/air:",
-        ),
-        situacoes[16]: (
-            "Degrau de escada em grade",
-            "Define a geometria da escada, escolhe o modelo do catálogo e fecha as 38 verificações da NR-12, da NR-22 e do critério Anglo.",
-            "app_pages/degrau_escada.py",
-            ":material/stairs:",
-        ),
-        situacoes[17]: (
-            "Ligação de contraventamento",
-            "Divide a força da barra entre chapa, viga e coluna pelo Método das Forças Uniformes e verifica a chapa de nó pelo AISC 360-16.",
-            "app_pages/ligacao_contraventamento.py",
-            ":material/hub:",
-        ),
-        situacoes[18]: (
-            "Contraventamento de estruturas abertas",
-            "Calcula o vento nos pórticos abertos, combina as ações com as forças nocionais e verifica as diagonais e os deslocamentos.",
-            "app_pages/contraventamento_estrutura.py",
-            ":material/grid_on:",
-        ),
-        situacoes[19]: (
-            "Base técnica do projeto",
-            "Guarda no projeto o critério do cliente, V₀, S₁, terreno, S₃, o tipo de estrutura e a sobrecarga; as páginas de cálculo começam com esses valores.",
-            "app_pages/base_tecnica.py",
-            ":material/tune:",
-        ),
-        situacoes[20]: (
-            "Vento em estruturas abertas",
-            "Calcula a força do vento por nível, por pórtico e em cada nó (NBR 6123, cap. 8), com desenho, CSV e envio ao plano de cargas.",
-            "app_pages/vento_estrutura_aberta.py",
-            ":material/air:",
-        ),
-        situacoes[21]: (
-            "Plano de cargas",
-            "Reúne as ações com código padrão, as cargas para o modelo e as combinações ELU e ELS numeradas, com CSV.",
-            "app_pages/plano_cargas.py",
-            ":material/table_chart:",
-        ),
-    }
-    titulo, descricao, destino, icone = recomendacoes[situacao]
-    st.info(f"**Recomendação: {titulo}.** {descricao}", icon=icone)
-    st.page_link(
-        destino,
-        label=f"Abrir {titulo.lower()}",
-        icon=":material/arrow_forward:",
-        icon_position="right",
-        width="stretch",
+    st.subheader("O que você precisa fazer?")
+    itens = [item for grupo in nv.MENU for item in grupo.itens]
+    tarefa = st.selectbox(
+        "Escolha a tarefa",
+        [item.tarefa for item in itens],
+        index=None,
+        placeholder="Por exemplo: calcular o vento, verificar uma ligação…",
+        key="inicio_tarefa",
+        help="Cada tarefa leva à página que a resolve.",
     )
+    if tarefa:
+        escolhido = next(item for item in itens if item.tarefa == tarefa)
+        st.page_link(
+            escolhido.pagina,
+            label=f"Abrir {escolhido.titulo}",
+            icon=escolhido.icone,
+            width="stretch",
+        )
 
-st.subheader("Explore as ferramentas")
-st.caption("Cada módulo mostra suas hipóteses, unidades e critérios de leitura.")
-
-for inicio_linha in range(0, len(modulos), 3):
+# ------------------------------------------------------------------ tudo o que o programa faz
+st.subheader("Tudo o que o programa faz")
+st.caption("Os grupos estão na mesma ordem da barra lateral e do trabalho.")
+for inicio in range(0, len(nv.MENU), 3):
     colunas = st.columns(3)
-    # A última linha da grade pode ter menos módulos do que colunas.
-    for coluna, dados_modulo in zip(
-        colunas, modulos[inicio_linha : inicio_linha + 3], strict=False
-    ):
-        titulo_modulo, icone, etiqueta, descricao, pagina, cor = dados_modulo
-        with coluna:
-            with st.container(border=True, height=215):
-                st.badge(etiqueta, color=cor)
-                st.subheader(f"{icone} {titulo_modulo}")
-                st.caption(descricao)
-                st.page_link(
-                    pagina,
-                    label="Abrir módulo",
-                    icon=":material/arrow_forward:",
-                    icon_position="right",
-                )
+    for coluna, grupo in zip(colunas, nv.MENU[inicio : inicio + 3], strict=False):
+        with coluna, st.container(border=True, height="stretch"):
+            st.markdown(f"#### {grupo.icone} {grupo.nome}")
+            st.caption(grupo.descricao)
+            for item in grupo.itens:
+                st.page_link(item.pagina, label=item.titulo, icon=item.icone, help=item.tarefa)
 
-fluxo, limites = st.columns(2)
-with fluxo:
-    with st.container(border=True, height="stretch"):
-        st.badge("Método", icon=":material/checklist:", color="green")
-        st.subheader("Fluxo recomendado")
-        st.markdown(
-            """
-            1. Faça o diagrama de corpo livre.
-            2. Escolha a seção e o ponto crítico.
-            3. Confira unidades e sinais.
-            4. Compare demanda com resistência.
-            5. Revise hipóteses e norma aplicável.
-            """
-        )
-with limites:
-    with st.container(border=True, height="stretch"):
-        st.badge("Leitura", icon=":material/query_stats:", color="blue")
-        st.subheader("Como ler os diagnósticos")
-        st.markdown(
-            """
-            - **Utilização ≤ 1:** capacidade calculada não excedida.
-            - **Fator ≥ meta:** margem definida foi alcançada.
-            - **Aviso:** hipótese ou margem precisa de revisão.
-            - **Erro:** entrada incompatível ou capacidade excedida.
-            """
-        )
-
-st.warning(
-    "Ferramenta de análise e pré-dimensionamento. Projetos reais exigem cargas "
-    "completas, propriedades certificadas, normas aplicáveis e revisão de "
-    "profissional habilitado.",
-    icon=":material/engineering:",
+st.caption(
+    ":material/engineering: Ferramenta de cálculo e conferência. O projeto e a responsabilidade "
+    "técnica continuam do engenheiro habilitado; casos fora do escopo de cada página estão "
+    "indicados nela e no memorial."
 )

@@ -363,6 +363,59 @@ def tabela_de_apoio(
 # ---------------------------------------------------------------------------------------------
 # Dados de entrada
 # ---------------------------------------------------------------------------------------------
+#: Ligações estruturais (os quatro tipos usam um registro só; cada um mostra os seus campos).
+_ENTRADAS_LIGACOES_BASE: tuple[tuple[str, str, str], ...] = (
+    ("obra", "Obra", "se_preenchido"),
+    ("tag", "TAG", "se_preenchido"),
+    ("perfil", "Perfil", "sempre"),
+    ("aco_viga", "Aço da viga", "se_preenchido"),
+    ("apoio", "Apoio", "se_preenchido"),
+    ("t_apoio_mm", "Espessura do apoio [mm]", "se_preenchido"),
+    ("aco_apoio", "Aço do apoio", "se_preenchido"),
+    ("recorte", "Mesa superior recortada", "se_preenchido"),
+    ("recorte_altura_mm", "Altura do recorte [mm]", "se_preenchido"),
+    ("recorte_comprimento_mm", "Comprimento do recorte [mm]", "se_preenchido"),
+    ("cantoneira", "Cantoneiras", "se_preenchido"),
+    ("aco_cantoneira", "Aço das cantoneiras", "se_preenchido"),
+    ("comprimento_mm", "Comprimento [mm]", "se_preenchido"),
+    ("t_chapa_mm", "Espessura da chapa [mm]", "se_preenchido"),
+    ("aco_chapa", "Aço da chapa", "se_preenchido"),
+    ("parafuso", "Parafuso", "se_preenchido"),
+    ("grau", "Grau do parafuso", "se_preenchido"),
+    ("especificacao", "Especificação do parafuso", "se_preenchido"),
+    ("rosca_no_plano", "Rosca no plano de corte", "sempre"),
+    ("n_parafusos", "Nº de parafusos (por linha)", "se_preenchido"),
+    ("n_linhas", "Linhas de parafusos", "se_preenchido"),
+    ("n_por_linha", "Parafusos por linha", "se_preenchido"),
+    ("passo_mm", "Passo [mm]", "se_preenchido"),
+    ("gabarito_mm", "Gabarito [mm]", "se_preenchido"),
+    ("borda_vertical_mm", "Borda vertical [mm]", "se_preenchido"),
+    ("distancia_solda_furo_mm", "Solda aos furos, a [mm]", "se_preenchido"),
+    ("gabarito_alma_mm", "Gabarito na alma [mm]", "se_preenchido"),
+    ("gabarito_apoio_mm", "Gabarito no apoio [mm]", "se_preenchido"),
+    ("borda_horizontal_chapa_mm", "Borda horizontal da chapa [mm]", "se_preenchido"),
+    ("borda_alma_mm", "Furo à ponta da viga [mm]", "se_preenchido"),
+    ("topo_alma_mm", "Parafuso ao topo da alma [mm]", "se_preenchido"),
+    ("borda_mm", "Borda na direção da força [mm]", "se_preenchido"),
+    ("borda_lateral_mm", "Borda lateral [mm]", "se_preenchido"),
+    ("perna_solda_mm", "Perna da solda [mm]", "se_preenchido"),
+    ("perna_mm", "Perna da solda [mm]", "se_preenchido"),
+    ("eletrodo", "Eletrodo", "se_preenchido"),
+    ("arranjo", "Arranjo dos filetes", "se_preenchido"),
+    ("largura_mm", "Largura do grupo [mm]", "se_preenchido"),
+    ("t1_mm", "Espessura t₁ [mm]", "se_preenchido"),
+    ("t2_mm", "Espessura t₂ [mm]", "se_preenchido"),
+    ("aco", "Aço", "se_preenchido"),
+    ("aco_perfil", "Aço do perfil", "se_preenchido"),
+    ("v_sd_kN", "Cortante de cálculo V_Sd [kN]", "se_preenchido"),
+    ("n_sd_kN", "Normal de cálculo N_Sd [kN]", "se_preenchido"),
+    ("m_sd_kNm", "Momento de cálculo M_Sd [kN·m]", "se_preenchido"),
+    ("barra_axial", "Barra de treliça ou contraventamento", "se_preenchido"),
+    ("n_rd_barra_kN", "N_Rd da barra [kN]", "se_preenchido"),
+    ("norma", "Norma", "se_preenchido"),
+    ("anglo", "Critério Anglo", "se_preenchido"),
+)
+_ENTRADAS_LIGACOES = _ENTRADAS_LIGACOES_BASE
 NOMES_DE_NORMA = {
     "NBR8800_2008": "ABNT NBR 8800:2008",
     "NBR8800_2024": "Projeto de revisão ABNT NBR 8800 (2024)",
@@ -383,17 +436,17 @@ _ENTRADAS_FLAMBAGEM: tuple[_Entrada, ...] = (
     ("area_mm2", "Área A [mm²]", "sempre"),
     ("inercia_x_mm4", "Inércia Ix [mm⁴]", "sempre"),
     ("inercia_y_mm4", "Inércia Iy [mm⁴]", "sempre"),
-    ("raio_giracao_x_mm", "Raio de giração rx [mm]", "sempre"),
-    ("raio_giracao_y_mm", "Raio de giração ry [mm]", "sempre"),
-    ("J_mm4", "Constante de torção J [mm⁴]", "sempre"),
-    ("Cw_mm6", "Empenamento Cw [mm⁶]", "se_preenchido"),
-    ("x0_mm", "Centro de cisalhamento x0 [mm]", "se_preenchido"),
-    ("y0_mm", "Centro de cisalhamento y0 [mm]", "se_preenchido"),
-    ("modulo_elasticidade_MPa", "Módulo E [MPa]", "sempre"),
-    ("modulo_cisalhamento_MPa", "Módulo G [MPa]", "sempre"),
+    ("raio_giracao_x_mm", "Raio de giração rx [mm]", "nunca"),
+    ("raio_giracao_y_mm", "Raio de giração ry [mm]", "nunca"),
+    ("J_mm4", "Constante de torção J [mm⁴]", "nunca"),
+    ("Cw_mm6", "Empenamento Cw [mm⁶]", "nunca"),
+    ("x0_mm", "Centro de cisalhamento x0 [mm]", "nunca"),
+    ("y0_mm", "Centro de cisalhamento y0 [mm]", "nunca"),
+    ("modulo_elasticidade_MPa", "Módulo E [MPa]", "nunca"),
+    ("modulo_cisalhamento_MPa", "Módulo G [MPa]", "nunca"),
     ("escoamento_MPa", "Escoamento fy [MPa]", "sempre"),
-    ("gamma_a1", "Coeficiente γa1", "se_preenchido"),
-    ("fator_resistencia", "Fator de resistência", "sempre"),
+    ("gamma_a1", "Coeficiente γa1", "nunca"),
+    ("fator_resistencia", "Fator de resistência", "nunca"),
     ("comprimento_total_mm", "Comprimento total L [mm]", "se_preenchido"),
     ("comprimento_x_mm", "Comprimento Lx [mm]", "sempre"),
     ("comprimento_y_mm", "Comprimento Ly [mm]", "sempre"),
@@ -666,6 +719,7 @@ ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
     "vento_estrutura_aberta": _ENTRADAS_VENTO_ABERTO,
     "contraventamento_estrutura": _ENTRADAS_CONTRAVENTAMENTO_ESTRUTURA,
     "ligacao_contraventamento": _ENTRADAS_CONTRAVENTAMENTO,
+    "ligacoes_estruturais": _ENTRADAS_LIGACOES,
     "viga_de_piso": (
         ("obra", "Obra", "se_preenchido"),
         ("tag", "TAG", "se_preenchido"),
@@ -795,6 +849,10 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "projeção_horizontal_total_mm",
         "peso_unitário_kg",
         "peso_total_kg",
+        # viga de piso (a reação já está na tabela de apoio) e figuras gravadas
+        "reacao_de_calculo_kN",
+        "reacao_minima_da_ligacao_kN",
+        "figura_ligacao",
     }
 )
 
@@ -841,8 +899,8 @@ def pares_de_entrada(
         return formatar(valor)
 
     for chave, rotulo, quando in curadas:
-        if chave not in entradas:
-            continue
+        if chave not in entradas or quando == "nunca":
+            continue  # "nunca": dado do catálogo ou da norma, já nos valores de apoio
         valor = entradas[chave]
         if valor is None or (quando == "se_preenchido" and _vazio(valor)):
             continue

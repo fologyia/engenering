@@ -140,7 +140,8 @@ AJUDA: dict[str, str] = {
         "pilar e o quadro completo."
     ),
     "sec_placas": (
-        "A placa de base e os chumbadores de cada pilar, pelo Design Guide 1 do AISC: os esforços "
+        "A placa de base e os chumbadores de cada pilar (concreto pela NBR 8800 6.6.5; placa e "
+        "chumbadores pelo Design Guide 1 do AISC): os esforços "
         "da base (os mesmos do quadro das fundações) são combinados com os fatores do plano de "
         "cargas e vale a combinação que mais exige. Uma placa padrão para todos os pilares."
     ),

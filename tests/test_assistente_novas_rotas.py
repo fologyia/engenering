@@ -64,6 +64,7 @@ def test_pagina_inicial_traz_os_tres_cartoes_e_as_tres_rotas_rapidas(banco_isola
             *(m.value for m in t.markdown),
             *(s.value for s in t.subheader),
             *(c.value for c in t.caption),
+            *(str(p.proto.label) for p in t.get("page_link")),
         ]
     )
     for titulo in (

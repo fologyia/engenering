@@ -318,10 +318,15 @@ def _lateral():
 
     # Fora do app.py não há navegação multipágina para o st.page_link resolver: troca por um
     # texto com o mesmo rótulo, só para conferir que o link é oferecido.
+    # A troca vale só aqui: o módulo do Streamlit é o mesmo em toda a suíte.
+    original = st.page_link
     st.page_link = lambda pagina, label="", **_: st.markdown(f"link: {label}")
-    from components.armazenamento_ui import situacao_na_lateral
+    try:
+        from components.armazenamento_ui import situacao_na_lateral
 
-    situacao_na_lateral()
+        situacao_na_lateral()
+    finally:
+        st.page_link = original
 
 
 def _preparar():

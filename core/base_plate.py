@@ -6,14 +6,17 @@ roteiro fechado para isso; a prática brasileira usa o Design Guide 1 da
 AISC, que é o que está aqui, com os fatores de resistência explícitos e
 editáveis:
 
-* pressão de contato no concreto ``f_p,max = φ_c·0,85·f_c·√(A₂/A₁)`` com
-  ``√(A₂/A₁) ≤ 2`` (AISC J8 / ACI 318), ``φ_c = 0,65``;
+* pressão de contato no concreto pela **NBR 8800 6.6.5** (padrão):
+  ``σ_c,Rd = f_ck/(γ_c·γ_n)·√(A₂/A₁) ≤ f_ck``, com ``γ_c = γ_n = 1,40``; ou, à escolha, pela
+  AISC J8 do DG1, ``f_p,max = φ_c·0,85·f_c·√(A₂/A₁)`` com ``√(A₂/A₁) ≤ 2`` e ``φ_c = 0,65``
+  (cerca de 8 % acima da NBR);
 * flexão da placa em regime plástico, ``φ_b = 0,90``, cantiléveres
   ``m = (N − 0,95d)/2``, ``n = (B − 0,8b_f)/2`` e ``λn' = λ√(d·b_f)/4``;
 * compressão pura (DG1 3.1), momento pequeno com ``e ≤ e_crit`` (DG1 3.3),
   momento grande com tração nos chumbadores (DG1 3.4, ``Y`` pela equação
   do 2º grau) e arrancamento (tração na base, DG1 3.2);
-* chumbadores à tração ``φ_t·0,75·F_u·A_b`` e ao cisalhamento
+* chumbadores pela NBR 8800 6.3.3 (padrão: ``0,75·A_b·f_u/γ_a2`` à tração, ``0,40·A_b·f_u/γ_a2``
+  ao corte, interação 6.3.3.4) ou, à escolha, à tração ``φ_t·0,75·F_u·A_b`` e ao cisalhamento
   ``φ_v·0,45·F_u·A_b`` (rosca no plano de corte), com a interação de AISC
   J3.7, ``φ = 0,75``.
 
@@ -32,6 +35,16 @@ FATOR_CONTATO_CONCRETO = 0.65  # φ_c, AISC J8
 FATOR_FLEXAO_PLACA = 0.90  # φ_b
 FATOR_CHUMBADOR = 0.75  # φ para tração e cisalhamento (AISC J3)
 LIMITE_CONFINAMENTO = 2.0  # √(A₂/A₁) ≤ 2
+GAMMA_C = 1.40  # NBR 6118 / NBR 8800 6.6.5
+GAMMA_A2 = 1.35  # NBR 8800 Tabela 3
+GAMMA_N = 1.40  # coeficiente de comportamento, NBR 8800 6.6.5
+NORMA_NBR = "NBR8800"
+NORMA_AISC = "AISC"
+NORMAS = {
+    NORMA_NBR: "NBR 8800 (concreto 6.6.5; chumbadores 6.3.3) — padrão",
+    NORMA_AISC: "AISC J8 e J3 (Design Guide 1)",
+}
+PRESSAO_NBR, PRESSAO_AISC = NORMA_NBR, NORMA_AISC  # nomes antigos
 FRACAO_TRACAO_NOMINAL = 0.75  # F_nt = 0,75·F_u
 FRACAO_CISALHAMENTO_NOMINAL = 0.45  # F_nv = 0,45·F_u, rosca no plano de corte
 
@@ -105,6 +118,7 @@ def verificar_placa_base(
     fator_contato: float = FATOR_CONTATO_CONCRETO,
     fator_flexao: float = FATOR_FLEXAO_PLACA,
     fator_chumbador: float = FATOR_CHUMBADOR,
+    norma: str = NORMA_NBR,
 ) -> ResultadoPlacaBase:
     """Verifica placa e chumbadores para ``P`` (+ compressão, − tração), ``M`` e ``V``.
 
@@ -150,15 +164,26 @@ def verificar_placa_base(
     avisos: list[str] = []
     memoria: list[str] = []
     area_placa = comprimento * largura
-    confinamento = min(math.sqrt(razao), LIMITE_CONFINAMENTO)
-    f_p_max = phi_c * 0.85 * fc * confinamento
+    if norma == NORMA_NBR:
+        confinamento = math.sqrt(razao)
+        f_p_max = min(fc / (GAMMA_C * GAMMA_N) * confinamento, fc)
+        texto_pressao = (
+            f"σ_c,Rd = f_ck/(γ_c·γ_n)·√(A₂/A₁) ≤ f_ck = {fc:.1f}/(1,40 × 1,40) × "
+            f"{confinamento:.3f} = {f_p_max:.3f} MPa (NBR 8800 6.6.5)"
+        )
+    elif norma == NORMA_AISC:
+        confinamento = min(math.sqrt(razao), LIMITE_CONFINAMENTO)
+        f_p_max = phi_c * 0.85 * fc * confinamento
+        texto_pressao = (
+            f"f_p,max = φ_c·0,85·f_ck·√(A₂/A₁) = {phi_c:.2f} × 0,85 × {fc:.1f} × "
+            f"{confinamento:.3f} = {f_p_max:.3f} MPa (AISC J8)"
+        )
+    else:
+        raise ValueError(f"Norma desconhecida: {norma!r}.")
     q_max = f_p_max * largura
     m = (comprimento - 0.95 * d) / 2.0
     n = (largura - 0.8 * bf) / 2.0
-    memoria.append(
-        f"f_p,max = φ_c·0,85·f_ck·√(A₂/A₁) = {phi_c:.2f} × 0,85 × {fc:.1f} × {confinamento:.3f} "
-        f"= {f_p_max:.3f} MPa; q_max = f_p,max·B = {q_max / 1e3:.3f} kN/mm"
-    )
+    memoria.append(f"{texto_pressao}; q_max = f_p,max·B = {q_max / 1e3:.3f} kN/mm")
     memoria.append(
         f"m = (N − 0,95d)/2 = {m:.1f} mm; n = (B − 0,8b_f)/2 = {n:.1f} mm; "
         f"A₁ = N·B = {area_placa:.0f} mm²"
@@ -287,33 +312,52 @@ def verificar_placa_base(
 
     area_chumbador = math.pi * d_ch**2 / 4.0
     tracao_por_chumbador = tracao_total / n_lado if tracao_total > 0 else 0.0
-    resistencia_tracao = phi_t * FRACAO_TRACAO_NOMINAL * fu_ch * area_chumbador
-    utilizacao_tracao = tracao_por_chumbador / resistencia_tracao
     cisalhamento_por_chumbador = v_u / n_ch
-    resistencia_cisalhamento = phi_t * FRACAO_CISALHAMENTO_NOMINAL * fu_ch * area_chumbador
-    utilizacao_cisalhamento = cisalhamento_por_chumbador / resistencia_cisalhamento
-    # AISC J3.7: F'_nt = 1,3·F_nt − F_nt·f_rv/(φ·F_nv) ≤ F_nt.
-    f_nt = FRACAO_TRACAO_NOMINAL * fu_ch
-    f_nv = FRACAO_CISALHAMENTO_NOMINAL * fu_ch
-    f_rv = cisalhamento_por_chumbador / area_chumbador
-    f_nt_reduzida = min(f_nt, 1.3 * f_nt - f_nt * f_rv / (phi_t * f_nv))
-    if f_nt_reduzida <= 0:
-        utilizacao_interacao = math.inf
-    else:
-        utilizacao_interacao = (
-            tracao_por_chumbador / (phi_t * f_nt_reduzida * area_chumbador)
-            if tracao_por_chumbador > 0
-            else utilizacao_cisalhamento
+    if norma == NORMA_NBR:
+        # NBR 8800 6.3.3.1 (barra rosqueada, A_be = 0,75·A_b), 6.3.3.2 a) e 6.3.3.4.
+        resistencia_tracao = 0.75 * area_chumbador * fu_ch / GAMMA_A2
+        resistencia_cisalhamento = 0.40 * area_chumbador * fu_ch / GAMMA_A2
+        utilizacao_tracao = tracao_por_chumbador / resistencia_tracao
+        utilizacao_cisalhamento = cisalhamento_por_chumbador / resistencia_cisalhamento
+        utilizacao_interacao = utilizacao_tracao**2 + utilizacao_cisalhamento**2
+        texto_resistencias = (
+            f"F_t,Rd = 0,75·A_b·f_u/γ_a2 = {resistencia_tracao / 1e3:.2f} kN; F_v,Rd = "
+            f"0,40·A_b·f_u/γ_a2 = {resistencia_cisalhamento / 1e3:.2f} kN por chumbador (NBR 8800 6.3.3)"
         )
+        texto_interacao = (
+            f"interação 6.3.3.4: (F_t/F_t,Rd)² + (F_v/F_v,Rd)² = {utilizacao_interacao:.3f}"
+        )
+    else:
+        resistencia_tracao = phi_t * FRACAO_TRACAO_NOMINAL * fu_ch * area_chumbador
+        utilizacao_tracao = tracao_por_chumbador / resistencia_tracao
+        resistencia_cisalhamento = phi_t * FRACAO_CISALHAMENTO_NOMINAL * fu_ch * area_chumbador
+        utilizacao_cisalhamento = cisalhamento_por_chumbador / resistencia_cisalhamento
+        # AISC J3.7: F'_nt = 1,3·F_nt − F_nt·f_rv/(φ·F_nv) ≤ F_nt.
+        f_nt = FRACAO_TRACAO_NOMINAL * fu_ch
+        f_nv = FRACAO_CISALHAMENTO_NOMINAL * fu_ch
+        f_rv = cisalhamento_por_chumbador / area_chumbador
+        f_nt_reduzida = min(f_nt, 1.3 * f_nt - f_nt * f_rv / (phi_t * f_nv))
+        if f_nt_reduzida <= 0:
+            utilizacao_interacao = math.inf
+        else:
+            utilizacao_interacao = (
+                tracao_por_chumbador / (phi_t * f_nt_reduzida * area_chumbador)
+                if tracao_por_chumbador > 0
+                else utilizacao_cisalhamento
+            )
+        texto_resistencias = (
+            f"T_Rd = φ·0,75·f_u·A_b = {resistencia_tracao / 1e3:.2f} kN; V_Rd = φ·0,45·f_u·A_b = "
+            f"{resistencia_cisalhamento / 1e3:.2f} kN por chumbador (AISC J3)"
+        )
+        texto_interacao = f"interação J3.7: F'_nt = {f_nt_reduzida:.1f} MPa"
     memoria.append(
         f"Chumbador Ø{d_ch:.2f} mm, A_b = {area_chumbador:.1f} mm², f_u = {fu_ch:.0f} MPa: "
-        f"T_Rd = φ·0,75·f_u·A_b = {resistencia_tracao / 1e3:.2f} kN por chumbador; "
-        f"V_Rd = φ·0,45·f_u·A_b = {resistencia_cisalhamento / 1e3:.2f} kN por chumbador"
+        + texto_resistencias
     )
     memoria.append(
         f"Tração por chumbador = {tracao_por_chumbador / 1e3:.2f} kN ({n_lado} no lado tracionado); "
         f"cisalhamento por chumbador = {cisalhamento_por_chumbador / 1e3:.2f} kN ({n_ch} no total); "
-        f"interação J3.7: F'_nt = {f_nt_reduzida:.1f} MPa"
+        + texto_interacao
     )
     if utilizacao_contato > 1.0:
         avisos.append(
@@ -340,7 +384,7 @@ def verificar_placa_base(
         "Flexão da placa": utilizacao_placa,
         "Tração do chumbador": utilizacao_tracao,
         "Cisalhamento do chumbador": utilizacao_cisalhamento,
-        "Interação tração–cisalhamento (J3.7)": utilizacao_interacao,
+        "Interação tração–cisalhamento": utilizacao_interacao,
     }
     modo, governante = max(candidatos.items(), key=lambda item: item[1])
     return ResultadoPlacaBase(

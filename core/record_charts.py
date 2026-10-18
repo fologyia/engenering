@@ -597,7 +597,12 @@ def imagens_flambagem(
     ]
 
 
-def imagens_gravadas(resultados: Mapping[str, Any]) -> list[Any]:
+#: Largura das figuras gravadas no memorial: os diagramas cabem dois por página.
+LARGURA_DIAGRAMA_MM = 130.0
+LARGURA_DESENHO_MM = 150.0
+
+
+def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     """Figuras que qualquer módulo pode gravar no registro, redesenhadas aqui.
 
     * ``figura_ligacao`` — o desenho da ligação (:mod:`core.ligacoes`);
@@ -615,10 +620,12 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[Any]:
     if isinstance(ligacao, Mapping):
         from core import ligacoes as lg
 
-        figuras.append(lg.figura_gravada(ligacao))
+        figuras.append((lg.figura_gravada(ligacao), LARGURA_DESENHO_MM))
     esquematico = resultados.get("esquematico_escada")
     if isinstance(esquematico, Mapping):
-        figuras.append(el.figura_esquematico(*el.geometria_do_dicionario(esquematico)))
+        figuras.append(
+            (el.figura_esquematico(*el.geometria_do_dicionario(esquematico)), LARGURA_DESENHO_MM)
+        )
     porticos = resultados.get("figuras_portico")
     for item in porticos if isinstance(porticos, list) else []:
         if not isinstance(item, Mapping) or not isinstance(item.get("modelo"), Mapping):
@@ -627,7 +634,8 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[Any]:
         servico = item.get("modelo_deformada")
         deformada = pp.resolver(pp.de_dicionario(servico)) if isinstance(servico, Mapping) else None
         figuras.extend(
-            pf.figuras_do_portico(
+            (figura, LARGURA_DIAGRAMA_MM)
+            for figura in pf.figuras_do_portico(
                 principal,
                 prefixo=str(item.get("titulo") or ""),
                 caso=str(item.get("caso") or ""),
@@ -663,18 +671,23 @@ def imagens_do_registro(
             desenhos = imagens_flambagem(entradas, resultados)
         else:
             desenhos = []
-        desenhos = [*desenhos, *imagens_gravadas(resultados)]
-        if not desenhos:
+        com_largura: list[tuple[Any, float | None]] = [(d, None) for d in desenhos]
+        com_largura += list(imagens_gravadas(resultados))
+        if not com_largura:
             return [], ""
     except Exception as erro:  # noqa: BLE001 - o memorial não pode cair por causa de um gráfico
         return [], f"Gráfico omitido: {erro}"
-    return [
-        {
+    saida = []
+    for imagem, largura_mm in com_largura:
+        item: dict[str, Any] = {
             "titulo": imagem.titulo,
             "legenda": imagem.legenda,
             "png": imagem.png,
             "largura_px": imagem.largura_px,
             "altura_px": imagem.altura_px,
         }
-        for imagem in desenhos
-    ], ""
+        if largura_mm:
+            item["largura_mm"] = largura_mm
+            item["largura_pol"] = round(largura_mm / 25.4, 2)
+        saida.append(item)
+    return saida, ""
