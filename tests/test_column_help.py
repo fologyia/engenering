@@ -258,7 +258,7 @@ def test_textos_da_flambagem_nao_falam_em_valor_normativo():
         *cb.REFERENCIAS_NORMA.values(),
         *cb.EXPLICACAO_FLT.values(),
         *cb.FORA_DO_ESCOPO,
-        *cb.CONFERIR_NBR8800_2008,
+        *cb.CONFERIDOS_NBR8800_2008,
         *cb.REGRAS_B1,
         cb.__doc__ or "",
     ]

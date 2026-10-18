@@ -1483,9 +1483,8 @@ elif modulo == "Flambagem de colunas":
             - **Mão-francesa:** H = F·sen θ flete a coluna com braço a; V = F·cos θ
               comprime (marque “Somar V a N_Sd” só se a reação ainda não estiver em
               N_Sd). O cisalhamento (5.4.3) não é verificado aqui: o programa avisa.
-            - **Norma 2008 “CONFERIR”:** Q_s e Q_a, a Tabela E.1 de K, o λ_p dos
-              tubos na flexão e a forma da FLT foram trazidos de memória; confirme
-              na norma antes de emitir.
+            - **Norma 2008:** Q_s e Q_a, a Tabela E.1 de K, o λ_p dos tubos na flexão e
+              a forma da FLT foram conferidos no texto da norma.
             """
         )
     st.warning(

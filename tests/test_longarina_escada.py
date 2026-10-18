@@ -21,7 +21,9 @@ def escada() -> de.ResultadoEscada:
 
 def _carga_elu_inclinada(lg: le.LongarinaDoLance) -> float:
     cos_a = math.cos(math.radians(lg.alfa_graus))
-    return lg.gamma_g * lg.cargas.permanente_inclinada(cos_a) + lg.gamma_q * lg.cargas.sobrecarga_kN_m
+    return (
+        lg.gamma_g * lg.cargas.permanente_inclinada(cos_a) + lg.gamma_q * lg.cargas.sobrecarga_kN_m
+    )
 
 
 def test_lances_iguais_saem_numa_longarina_so_com_a_linha_dos_bocéis(escada):
@@ -68,9 +70,7 @@ def test_reta_pino_pino_bate_com_a_viga_horizontal_equivalente(escada):
 
 def test_rolete_no_topo_nao_muda_o_momento_da_reta(escada):
     pino = le.calcular_longarina(escada, le.EntradaLongarina()).longarinas[0]
-    rolete = le.calcular_longarina(
-        escada, le.EntradaLongarina(apoio_topo=le.ROLETE)
-    ).longarinas[0]
+    rolete = le.calcular_longarina(escada, le.EntradaLongarina(apoio_topo=le.ROLETE)).longarinas[0]
     assert rolete.elu.barra(le.TRECHO_INCLINADO).m_max.m == pytest.approx(
         pino.elu.barra(le.TRECHO_INCLINADO).m_max.m, rel=1e-6
     )
@@ -144,4 +144,6 @@ def test_verificacao_com_esforcos_de_fora_sem_torcao():
     assert r.status == "OK" and r.aproveitamento and 0 < r.aproveitamento < 1
     assert not any(v.nome.startswith("Torção") for v in r.linhas)
     with pytest.raises(ValueError):
-        vb.verificar_barra_com_esforcos("V1", 'U 8" x 17,10', "ASTM A36", [], lx_m=1, ly_m=1, lb_m=1)
+        vb.verificar_barra_com_esforcos(
+            "V1", 'U 8" x 17,10', "ASTM A36", [], lx_m=1, ly_m=1, lb_m=1
+        )

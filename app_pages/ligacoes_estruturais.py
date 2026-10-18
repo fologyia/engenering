@@ -12,6 +12,7 @@ from components.verification_table import mostrar_tabela_verificacoes
 from core import bolted_connection as bc
 from core import ligacoes as lg
 from core import section_catalog as sc
+from core.project_store import obter_projeto_ativo
 from core.verificacao import csv_verificacoes
 
 configurar_pagina("Ligações estruturais", ":material/link:")
@@ -267,6 +268,25 @@ if tipo == lg.CHAPA_SIMPLES:
             help=AJUDA["eletrodo"],
         )
         st.subheader("4. Esforços de cálculo", help=AJUDA["sec_esforcos"])
+        registradas = lg.reacoes_do_projeto(obter_projeto_ativo())
+        if registradas:
+            rotulos = [r.rotulo for r in registradas]
+            c = st.columns([3, 1])
+            escolhida = c[0].selectbox(
+                "Trazer de um cálculo registrado",
+                rotulos,
+                key="lig_origem",
+                help=AJUDA["origem"],
+            )
+            reacao = registradas[rotulos.index(escolhida)]
+            c[1].button(
+                "Usar esta reação",
+                icon=":material/input:",
+                key="lig_usar_reacao",
+                help=AJUDA["usar_reacao"],
+                on_click=st.session_state.update,
+                kwargs={"lig_v": round(reacao.v_kN, 2), "lig_n_sd": round(reacao.n_kN, 2)},
+            )
         c = st.columns(3)
         v_sd = c[0].number_input(
             "V_Sd (kN)",

@@ -667,7 +667,6 @@ class TestSaidaWord:
             "Não passou (",
             "Não passou: nenhuma.",
             "O que não passou, por cálculo.",
-            "Conferir antes de emitir",
         ):
             assert esperado in texto, esperado
         for proibido in (

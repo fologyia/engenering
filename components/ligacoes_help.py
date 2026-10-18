@@ -54,6 +54,14 @@ AJUDA: dict[str, str] = {
     "perna": "Tamanho da perna do filete de solda, em mm (os dois lados da chapa).",
     "eletrodo": "Classe do eletrodo: E70 (485 MPa) é o usual; E60 tem 415 MPa.",
     "sec_esforcos": "Os esforços de cálculo (já majorados, combinação ELU) que chegam na ligação.",
+    "origem": (
+        "Reações de cálculo dos cálculos já registrados no projeto ativo: vigas de piso (a de "
+        "cálculo e, com o Anglo, a mínima da ligação) e longarinas da escada (cada apoio, ELU)."
+    ),
+    "usar_reacao": (
+        "Copia a reação escolhida para V_Sd e N_Sd (a horizontal da longarina vira N_Sd). Dá "
+        "para ajustar os números depois."
+    ),
     "v_sd": "Força cortante de cálculo na ponta da viga (a reação ELU), em kN.",
     "n_sd": (
         "Força normal de cálculo na viga, em kN: positiva se puxa (tração), negativa se empurra. "

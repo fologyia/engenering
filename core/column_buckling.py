@@ -295,13 +295,13 @@ FORA_DO_ESCOPO = (
     "Perfis formados a frio (NBR 14762).",
 )
 
-#: Valores da NBR 8800:2008 que o módulo de referência trouxe de memória (a norma vigente não
-#: estava disponível). Confirmar na norma antes de liberar a versão.
-CONFERIR_NBR8800_2008 = (
-    "Q_s e Q_a do Anexo F.",
-    "Tabela E.1 de K.",
-    "λ_p de tubos na flexão.",
-    "Forma da FLT de 2008, com C_b multiplicando a interpolação.",
+#: Valores da NBR 8800:2008 que o módulo de referência trouxe de memória e que foram conferidos
+#: no texto da norma (2026-10-17): estão certos.
+CONFERIDOS_NBR8800_2008 = (
+    "Q_s (F.2, grupos 3 a 6) e Q_a com a largura efetiva (F.3).",
+    "Tabela E.1 de K (teóricos e recomendados).",
+    "λ_p e λ_r dos tubos na flexão (Tabela G.1).",
+    "Forma da FLT de 2008, com C_b multiplicando a interpolação (G.2.1 b).",
 )
 
 REGRAS_B1 = (
@@ -317,7 +317,7 @@ REGRAS_B1 = (
 EXPLICACAO_FLT = {
     "NBR8800_2008": (
         "FLT na NBR 8800:2008: C_b multiplica a interpolação (λ_p < λ ≤ λ_r) e o M_cr; λ_r não "
-        "depende de C_b. Item marcado CONFERIR."
+        "depende de C_b (G.2.1 b)."
     ),
     "NBR8800_2024": (
         "FLT no Projeto 2024: C_b entra em λ_r e no M_cr; a interpolação não é multiplicada por C_b."
@@ -1649,10 +1649,6 @@ def registro_coluna(
     alertas = [
         f"{v.nome}: {v.formula}" for v in resultado.verificacoes if v.status in ("NÃO OK", "ALERTA")
     ] + list(resultado.avisos)
-    if norma == "NBR8800_2008":
-        alertas.append(
-            "Conferir na NBR 8800:2008 antes de emitir: " + " ".join(CONFERIR_NBR8800_2008)
-        )
 
     conclusao = (
         f"Status geral {resultado.status_geral}; aproveitamento máximo "

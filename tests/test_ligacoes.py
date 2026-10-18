@@ -256,3 +256,40 @@ def test_limite_geometrico_nao_define_o_aproveitamento():
     assert r.governante is not None and not r.governante.nome.startswith(
         ("Distância", "Espaçamento")
     )
+
+
+# ------------------------------------------------------------------ reações dos cálculos registrados
+def _registros_de_exemplo() -> dict:
+    from core import degrau_escada as de
+    from core import degrau_registro as dreg
+    from core import longarina_escada as le
+    from core import viga_de_piso as vp
+
+    viga = vp.calcular(vp.EntradaVigaDePiso(anglo=True))
+    escada = de.calcular_escada(de.EntradaDegrau())
+    longarina = le.calcular_longarina(escada, le.EntradaLongarina(trecho_topo_m=0.3))
+    registros = [
+        vp.registro_viga(viga),
+        dreg.registro_degrau(escada, longarina=longarina),
+        {"modulo_id": "viga_de_piso", "resultados": {"reacao_de_calculo_kN": "estragado"}},
+    ]
+    return {"registros_tecnicos": json.loads(json.dumps(registros))}, viga, longarina
+
+
+def test_reacoes_dos_calculos_registrados():
+    from core import longarina_escada as le
+
+    projeto, viga, longarina = _registros_de_exemplo()
+    reacoes = lg.reacoes_do_projeto(projeto)
+    rotulos = [r.rotulo for r in reacoes]
+    assert any(r.endswith("reação de cálculo") for r in rotulos)
+    de_calculo = next(r for r in reacoes if r.rotulo.endswith("reação de cálculo"))
+    assert de_calculo.v_kN == pytest.approx(viga.reacao_calculo_kN, rel=1e-3)
+    if viga.reacao_minima_ligacao_kN and viga.reacao_minima_ligacao_kN > viga.reacao_calculo_kN:
+        assert any("Anglo 9.1" in r for r in rotulos)
+    apoios = [r for r in reacoes if "(ELU)" in r.rotulo]
+    esperadas = longarina.longarinas[0].reacoes(le.ELU)
+    assert len(apoios) == 2
+    assert apoios[0].v_kN == pytest.approx(abs(esperadas[0].ry), rel=1e-3)
+    assert apoios[0].n_kN == pytest.approx(esperadas[0].rx, rel=1e-3, abs=1e-6)
+    assert lg.reacoes_do_projeto(None) == [] and lg.reacoes_do_projeto({}) == []

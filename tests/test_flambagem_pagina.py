@@ -221,7 +221,10 @@ def test_secao_sem_paredes_nunca_fica_ok_sem_confirmacao(banco_isolado):
 
 
 def test_tubo_nao_compacto_na_flexao_pede_mrd_informado(banco_isolado):
-    estado = dict(col_tipo_secao=ui.SEC_TUBO_C, col_tc_D=200.0, col_tc_t=2.5, col_Mx=2.0)
+    # tubo retangular esbelto (b/t > 1,12·√(E/f_y)): sem largura efetiva, a norma não dá M_Rd
+    estado = dict(
+        col_tipo_secao=ui.SEC_TUBO_R, col_tr_B=200.0, col_tr_H=200.0, col_tr_t=3.0, col_Mx=2.0
+    )
     t = abrir(banco_isolado, **estado)
     assert linha(t, "Flexão em x não calculada")["Status"] == "NÃO OK"
     assert not tem_metrica(t, "Índice de interação")
@@ -452,9 +455,10 @@ def test_b1_bloqueado_aparece_como_infinito_e_mrd_informado_com_a_origem(banco_i
     assert metrica(t, "B₁ em x") == "∞" and metrica(t, "M_x,Sd amplificado") == "∞"
     informado = abrir(
         banco_isolado,
-        col_tipo_secao=ui.SEC_TUBO_C,
-        col_tc_D=200.0,
-        col_tc_t=2.5,
+        col_tipo_secao=ui.SEC_TUBO_R,
+        col_tr_B=200.0,
+        col_tr_H=200.0,
+        col_tr_t=3.0,
         col_Mx=2.0,
         col_mrd_x_ativar=True,
         col_mrd_x=30.0,
@@ -511,9 +515,9 @@ def test_csv_e_escopo(banco_isolado):
     assert any("Cantoneira simples" in w.value for w in t.warning)  # fora do escopo, sempre visível
 
 
-def test_norma_2008_lista_os_valores_a_conferir(banco_isolado):
+def test_norma_2008_lista_os_valores_conferidos(banco_isolado):
     def itens_a_conferir(teste: AppTest) -> bool:
-        return any("Tabela E.1 de K." in m.value for m in teste.markdown)
+        return any("Tabela E.1 de K" in m.value for m in teste.markdown)
 
     assert itens_a_conferir(abrir(banco_isolado))
     assert not itens_a_conferir(abrir(banco_isolado, col_norma="AISC360_16_LRFD"))

@@ -95,3 +95,16 @@ def test_guia_tem_o_capitulo(banco_isolado):
     t.run()
     assert not t.exception
     assert "Ligações estruturais" in [h.value for h in t.header]
+
+
+def test_trazer_a_reacao_de_um_calculo_registrado(banco_com_projeto):
+    from core import viga_de_piso as vp
+    from core.project_store import adicionar_registro_tecnico
+
+    viga = vp.calcular(vp.EntradaVigaDePiso())
+    adicionar_registro_tecnico(obter_projeto_ativo()["id"], vp.registro_viga(viga))
+    t = abrir()
+    assert t.selectbox(key="lig_origem").value.endswith("reação de cálculo")
+    t.button(key="lig_usar_reacao").click().run()
+    assert not t.exception
+    assert t.number_input(key="lig_v").value == pytest.approx(round(viga.reacao_calculo_kN, 2))

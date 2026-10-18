@@ -1445,13 +1445,9 @@ def _regras(entrada: cb.EntradaColuna) -> None:
         )
     if entrada.norma == "NBR8800_2008":
         with st.expander(
-            "Valores da NBR 8800:2008 marcados “CONFERIR”", icon=":material/fact_check:"
+            "Valores da NBR 8800:2008 conferidos na norma", icon=":material/fact_check:"
         ):
-            st.markdown("\n".join(f"- {item}" for item in cb.CONFERIR_NBR8800_2008))
-            st.caption(
-                "Foram trazidos de memória no módulo de referência, porque a norma vigente não "
-                "estava disponível. Confirme na NBR 8800:2008 antes de liberar o documento."
-            )
+            st.markdown("\n".join(f"- {item}" for item in cb.CONFERIDOS_NBR8800_2008))
 
 
 def _registro(

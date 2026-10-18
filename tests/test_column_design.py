@@ -312,8 +312,6 @@ def test_blocos_levantam_erro_em_vez_de_estimar():
     with pytest.raises(ValueError, match="D/t > 0,45"):
         F.resist_compressao(F.secao_tubo_circular(200, 0.5), 250, 1000, 1000)  # D/t = 400
     with pytest.raises(NotImplementedError, match="não compacto"):
-        F.momento_resistente(F.secao_tubo_circular(200, 2.5), 250)
-    with pytest.raises(NotImplementedError, match="não compacto"):
         F.momento_resistente(F.secao_tubo_retangular(200, 200, 3), 250)
     with pytest.raises(NotImplementedError, match="Alma esbelta"):
         F.momento_resistente(F.secao_I(900, 200, 8, 4, soldado=True), 345)
@@ -325,3 +323,16 @@ def test_blocos_levantam_erro_em_vez_de_estimar():
         )
     with pytest.raises(ValueError, match="N_Sd1"):
         F.coef_B1(1e6, 1e7, 4000, 1.0)
+
+
+def test_tubo_circular_nao_compacto_pela_tabela_g1():
+    import pytest
+
+    sec = F.secao_tubo_circular(200, 2.5)  # D/t = 80: entre λp = 56 e λr = 248 (f_y = 250)
+    r = F.momento_resistente(sec, 250)
+    assert r["governa"] == "FLM (parede)"
+    assert r["estados"]["FLM (parede)"] == pytest.approx(
+        (0.021 * 200e3 / 80 + 250) * sec.Wx / 1.10 / 1e6, rel=1e-6
+    )
+    compacto = F.momento_resistente(F.secao_tubo_circular(200, 5), 250)  # D/t = 40 ≤ 56
+    assert compacto["governa"] == "plastificação"

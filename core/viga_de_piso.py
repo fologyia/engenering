@@ -394,6 +394,10 @@ def registro_viga(
             "verificações": linhas_para_registro(list(r.verificacoes)),
             "utilizacao_maxima": numero_json(r.aproveitamento_maximo, 4),
             "destaque_memorial": destaque,
+            "reacao_de_calculo_kN": numero_json(r.reacao_calculo_kN, 3),
+            "reacao_minima_da_ligacao_kN": numero_json(r.reacao_minima_ligacao_kN, 3)
+            if r.reacao_minima_ligacao_kN
+            else None,
         },
         metodo=(
             "Viga biapoiada. Combinações ELU da NBR 8800 (Tabelas 1 e 2) com o peso próprio do aço, "

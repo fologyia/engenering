@@ -1565,3 +1565,57 @@ def registro_ligacao(
 def linhas_resumo(verificacoes: Sequence[Verificacao]) -> list[str]:
     """As linhas que não passaram, em texto curto (para avisos da página)."""
     return [f"{v.nome}: {v.formula}" for v in verificacoes if v.status == "NÃO OK"]
+
+
+# =============================================================================================
+# Reações já registradas no projeto (para não redigitar)
+# =============================================================================================
+@dataclass(frozen=True)
+class ReacaoRegistrada:
+    rotulo: str
+    v_kN: float  # vertical (cortante na ligação), de cálculo
+    n_kN: float  # horizontal (normal na ligação), de cálculo; positivo puxando a viga
+
+
+def reacoes_do_projeto(projeto: Mapping[str, Any] | None) -> list[ReacaoRegistrada]:
+    """As reações de cálculo (ELU) dos cálculos registrados: vigas de piso e longarinas.
+
+    Viga de piso: a reação de cálculo e, com o critério Anglo, a mínima da ligação (item 9.1).
+    Longarina: o modelo ELU gravado é resolvido de novo e cada apoio dá V = |R_y| e N = R_x.
+    """
+    from core import portico_plano as pp
+
+    saida: list[ReacaoRegistrada] = []
+    for registro in (projeto or {}).get("registros_tecnicos", []) or []:
+        if not isinstance(registro, Mapping):
+            continue
+        res = registro.get("resultados")
+        if not isinstance(res, Mapping):
+            continue
+        titulo = str(registro.get("titulo") or registro.get("modulo") or "cálculo")
+        try:
+            if registro.get("modulo_id") == "viga_de_piso" and res.get("reacao_de_calculo_kN"):
+                v = float(res["reacao_de_calculo_kN"])
+                saida.append(ReacaoRegistrada(f"{titulo}: reação de cálculo", v, 0.0))
+                minima = res.get("reacao_minima_da_ligacao_kN")
+                if minima and float(minima) > v + 1e-9:
+                    saida.append(
+                        ReacaoRegistrada(
+                            f"{titulo}: mínima da ligação (Anglo 9.1)", float(minima), 0.0
+                        )
+                    )
+            for item in res.get("figuras_portico") or []:
+                if not isinstance(item, Mapping) or not isinstance(item.get("modelo"), Mapping):
+                    continue
+                elu = pp.resolver(pp.de_dicionario(item["modelo"]))
+                for reacao in elu.reacoes:
+                    saida.append(
+                        ReacaoRegistrada(
+                            f"{item.get('titulo') or titulo}: apoio {reacao.no} (ELU)",
+                            abs(reacao.ry),
+                            reacao.rx,
+                        )
+                    )
+        except (TypeError, ValueError, KeyError, pp.PorticoInvalido):
+            continue  # registro antigo ou estragado: simplesmente não oferece a reação
+    return saida

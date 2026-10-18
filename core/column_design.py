@@ -19,7 +19,8 @@ Validação (ver tests/test_column_design.py): AISC Design Guide 29 (HSS8×8×1/
 F_cre = 41,9 ksi) e o programa "Flambagem de colunas" (barra circular Ø50: N_c,Rd = 120,71 kN).
 
 Unidades internas: mm, MPa, N. Funções públicas devolvem kN e kN·m.
-Itens marcados "CONFERIR" vieram da NBR 8800:2008, que não estava nos arquivos de referência.
+Os itens da NBR 8800:2008 trazidos de memória (Q_s, Q_a, Tabela E.1, λ_p dos tubos, forma
+da FLT) foram conferidos no texto da norma em 2026-10-17.
 """
 
 from __future__ import annotations
@@ -305,7 +306,7 @@ def secao_U(
 
 
 # ---------------------------------------------------------------------------------------------
-# COEFICIENTE DE FLAMBAGEM K (NBR 8800:2008 Tabela E.1 — CONFERIR)
+# COEFICIENTE DE FLAMBAGEM K (NBR 8800:2008 Tabela E.1, conferida)
 # ---------------------------------------------------------------------------------------------
 K_TABELA_E1: dict[str, tuple[float, float]] = {
     "engaste-engaste": (0.5, 0.65),
@@ -401,7 +402,7 @@ def bt_lim(el: dict[str, Any], fy: float, E: float = E_ACO) -> float:
 
 
 def Qs_elemento_2008(el: dict[str, Any], fy: float, E: float = E_ACO) -> float:
-    """NBR 8800:2008 Anexo F.2 (elementos AL) — CONFERIR. Mesmos valores do AISC 360-05 E7.1."""
+    """NBR 8800:2008 Anexo F.2 (elementos AL), conferido. Mesmos valores do AISC 360-05 E7.1."""
     bt = el["b"] / el["t"]
     s = math.sqrt(E / fy)
     g = el["grupo"]
@@ -435,7 +436,7 @@ def Qs_elemento_2008(el: dict[str, Any], fy: float, E: float = E_ACO) -> float:
 
 
 def bef_AA_2008(el: dict[str, Any], fy: float, sigma: float, E: float = E_ACO) -> float:
-    """NBR 8800:2008 F.3.2 — CONFERIR: b_ef = 1,92 t √(E/σ)[1 − (c_a/(b/t))√(E/σ)] ≤ b;
+    """NBR 8800:2008 F.3.2 (conferido): b_ef = 1,92 t √(E/σ)[1 − (c_a/(b/t))√(E/σ)] ≤ b;
     c_a = 0,38 (tubos retangulares) ou 0,34; σ = χ f_y com χ calculado para Q = 1 (ou σ = f_y, conservador).
 
     Correção (verificada por teste): o original decidia a redução pelo limite da Tabela F.1 (com f_y)
@@ -548,7 +549,7 @@ def resist_compressao(
 
 
 # ---------------------------------------------------------------------------------------------
-# FLEXÃO (Projeto NBR Anexo D, Tabela D.1; NBR 2008 Anexo G — CONFERIR; AISC F2/F3/F6/F11)
+# FLEXÃO (Projeto NBR Anexo D, Tabela D.1; NBR 2008 Anexo G, conferido; AISC F2/F3/F6/F11)
 # ---------------------------------------------------------------------------------------------
 def _interp(Mpl: float, Mr: float, lam: float, lp: float, lr: float) -> float:
     return Mpl - (Mpl - Mr) * (lam - lp) / (lr - lp)
@@ -663,18 +664,23 @@ def momento_resistente(
     elif sec.tipo == "tubo_circ":
         if sec.D_t is None:  # Guarda
             raise ValueError("D/t não informado para o tubo circular.")
-        if sec.D_t > 0.07 * E / fy:  # CONFERIR (λp da parede, 2008 Tab. G.1 / AISC F8)
-            raise NotImplementedError(
-                "Tubo circular não compacto à flexão: implementar a verificação da parede (norma)."
-            )
-        res["plastificação"] = Mpl
+        # NBR 8800:2008 Tabela G.1 (tubo circular; = AISC F8): λ = D/t, λp = 0,07·E/f_y,
+        # λr = 0,31·E/f_y; entre eles (0,021·E/(D/t) + f_y)·W; acima, 0,33·E/(D/t)·W.
+        if sec.D_t <= 0.07 * E / fy:
+            res["plastificação"] = Mpl
+        elif sec.D_t <= 0.31 * E / fy:
+            res["FLM (parede)"] = min((0.021 * E / sec.D_t + fy) * W, Mpl)
+        elif sec.D_t <= 0.45 * E / fy:
+            res["FLM (parede)"] = min(0.33 * E / sec.D_t * W, Mpl)
+        else:
+            raise ValueError("D/t > 0,45 E/f_y: tubo circular não previsto pela norma.")
     elif sec.tipo == "tubo_ret":
         d = sec.dims
         bt_f = (d["b"] if eixo == "x" else d["h"]) / d["t"]
         bt_w = (d["h"] if eixo == "x" else d["b"]) / d["t"]
         if bt_f > 1.12 * math.sqrt(E / fy) or bt_w > 2.42 * math.sqrt(
             E / fy
-        ):  # CONFERIR (λp FLM/FLA de tubos)
+        ):  # λp FLM 1,12 e FLA 2,42 (Tab. G.1, nota 10; conferidos)
             raise NotImplementedError(
                 "Tubo retangular não compacto: implementar FLM/FLA conforme D.2.7."
             )
