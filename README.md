@@ -422,6 +422,13 @@ dos pórticos com as forças; CSV (ponto e vírgula, vírgula decimal); envio de
 **plano de cargas**; registro com capítulo próprio no memorial (resultado, entradas, método e as
 tabelas). Usa os mesmos campos do Contraventamento de estruturas abertas.
 
+**Viga a viga, pilar a pilar** (`core/vento_por_barras.py`, `docs/vento_barra_a_barra.md`): para
+estruturas que não são uma grade de pórticos iguais (duas colunas com balanço, escada ao lado,
+assimetria), o vento é calculado em cada barra do esqueleto do modelo, pela área de sombra (8.3), com
+φ, C_a e a proteção η por plano nas direções perpendiculares (8.4) e, opcionalmente, os diagonais
+(C_a = 2,0, sem proteção); guarda-corpos, escadas, painéis e equipamentos vão para as barras que os
+apoiam. Desenhos em 3D, planta e "o que o vento vê"; W0 a W315 no plano de cargas; memorial.
+
 ### Cargas do esqueleto
 
 Com o esqueleto da macro (v5: contorno das chapas), a carga do piso vai direto para as vigas do

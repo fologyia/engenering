@@ -2618,6 +2618,30 @@ elif modulo == "Vento em estruturas abertas":
         f"momento na base {_n(_r.x.momento_na_base_kNm)} kN·m em X.",
     )
     with st.container(border=True):
+        st.subheader("Viga a viga, pilar a pilar")
+        st.markdown(
+            """
+            Quando a estrutura **não é uma grade de pórticos iguais** — duas colunas com a
+            plataforma em balanço, escada ao lado, passarela, estrutura assimétrica — use o botão
+            **"Viga a viga, pilar a pilar"** no alto da página. O programa pega cada barra do
+            esqueleto do modelo (ou as que você digitar) e, em cada direção do vento:
+
+            - mede a **sombra** da barra (ℓ·sen θ·c: a área que ela mostra para o vento, pela
+              seção e pela posição da alma) e usa o q da altura dela — F = C_a·η·q·A (8.3);
+            - no vento **perpendicular às faces** (0°, 90°, 180°, 270°), agrupa as barras de frente
+              para o vento em planos: φ e C_a por plano (Figura 12) e a proteção η (Figura 14) só na
+              parte que fica atrás do plano da frente (8.4);
+            - nos **diagonais** (45°, 135°…), opcionais, usa C_a = 2,0 e nenhuma proteção (a favor
+              da segurança: por isso costumam dar mais força);
+            - guarda-corpo, lateral de escada, painel e equipamento entram à parte e a força vai
+              para a viga que os apoia.
+
+            Sai a carga por metro em **cada barra** e direção, com desenho em 3D, planta e "o que o
+            vento vê", e o envio de W0 a W315 ao plano de cargas. Numa grade regular, o resultado
+            bate com o dos pórticos (diferença de poucos por cento no contorno de cada plano).
+            """
+        )
+    with st.container(border=True):
         st.subheader("Como interpretar")
         st.markdown(
             """
@@ -2630,8 +2654,10 @@ elif modulo == "Vento em estruturas abertas":
             """
         )
     st.warning(
-        "Fora do escopo: vento oblíquo, efeitos dinâmicos (capítulo 9) e coberturas isoladas — "
-        "use o módulo Vento nas estruturas para edificações fechadas e coberturas.",
+        "Fora do escopo: efeitos dinâmicos (capítulo 9) e coberturas isoladas — use o módulo "
+        "Vento nas estruturas para edificações fechadas e coberturas. Estrutura sem "
+        "contraventamento numa direção (duas colunas numa linha): a estabilidade vem do engaste "
+        "ou do pórtico — confira pelo modelo.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/vento_estrutura_aberta.py", "Abrir Vento em estruturas abertas")

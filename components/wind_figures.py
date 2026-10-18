@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from xml.sax.saxutils import escape
 
+from components import desenho_svg as ds
 from core.vento_edificio import COBERTURA_UMA_AGUA, CasoDeVento, ResultadoEdificio
 
 LARGURA = 760
@@ -91,8 +92,8 @@ def svg_planta(resultado: ResultadoEdificio, alpha: int) -> str:
     escala = min(540.0 / a, 300.0 / b)
     pa, pb = a * escala, b * escala
     x0 = MARGEM + ESPESSURA_PAREDE
-    y0 = MARGEM / 2 + ESPESSURA_PAREDE + 20.0
-    altura = pb + 2 * ESPESSURA_PAREDE + MARGEM + 40.0
+    y0 = MARGEM / 2 + ESPESSURA_PAREDE + 52.0
+    altura = pb + 2 * ESPESSURA_PAREDE + MARGEM + 96.0
     x1, meio_a, meio_b = g.x_m * escala, pa / 2.0, pb / 2.0
     c1 = g.c1_m * escala
 
@@ -105,7 +106,8 @@ def svg_planta(resultado: ResultadoEdificio, alpha: int) -> str:
     partes: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {LARGURA} {altura:.0f}" '
         f'width="100%" role="img" aria-label="Zonas de pressão do vento a {alpha} graus">',
-        f'<rect x="0" y="0" width="{LARGURA}" height="{altura:.0f}" rx="8" fill="{COR_FUNDO}"/>',
+        f'<rect x="0.5" y="0.5" width="{LARGURA - 1}" height="{altura - 1:.0f}" rx="10" '
+        f'fill="{COR_FUNDO}" stroke="{ds.COR_BORDA}"/>',
     ]
 
     def celula_telhado(xa: float, xb: float, ya: float, yb: float, id_: str) -> None:
@@ -187,15 +189,15 @@ def svg_planta(resultado: ResultadoEdificio, alpha: int) -> str:
 
     # ---- cotas e título
     partes.append(
-        _texto(x0 + pa / 2, y0 - t - 14, f"a = {g.a_m:g} m".replace(".", ","), tamanho=11)
+        ds.cota(x0 - t, y0 - t - 16, x0 + pa + t, y0 - t - 16, f"a = {g.a_m:g} m".replace(".", ","))
     )
     partes.append(
-        _texto(
-            x0 + pa + t + 16,
-            y0 + pb / 2,
+        ds.cota(
+            x0 + pa + t + 18,
+            y0 + pb + t,
+            x0 + pa + t + 18,
+            y0 - t,
             f"b = {g.b_m:g} m".replace(".", ","),
-            tamanho=11,
-            giro=-90.0,
         )
     )
     legenda = {
@@ -203,33 +205,49 @@ def svg_planta(resultado: ResultadoEdificio, alpha: int) -> str:
         90: "Vento a 90° (ao longo de b)",
         -90: "Vento a −90° (contra a inclinação)",
     }[alpha]
+    partes.append(ds.texto(22, 24, legenda, tamanho=15, ancora="start", peso="bold"))
     partes.append(
-        _texto(
-            LARGURA / 2,
-            altura - 14,
-            legenda
-            + f" — classe {caso.classe}, q = {caso.vento.q_kN_m2:.3f} kN/m²".replace(".", ","),
-            tamanho=12,
-            peso="bold",
+        ds.texto(
+            22,
+            44,
+            f"Classe {caso.classe}, q = {caso.vento.q_kN_m2:.3f} kN/m² · telhado dentro do "
+            "retângulo, paredes nas faixas em volta".replace(".", ",", 1),
+            tamanho=11,
+            ancora="start",
+            cor=ds.COR_SUAVE,
         )
     )
 
     # ---- seta do vento
     if alpha == 0:
         ya = y0 + pb / 2
-        partes.append(_seta(14.0, ya, x0 - t - 8, ya))
-        partes.append(_texto(48, ya - 14, "vento", tamanho=11))
+        partes.append(ds.seta_de_vento(12.0, ya, x0 - t - 8, ya, espessura=14))
+        partes.append(
+            ds.etiqueta(
+                16,
+                ya - 22,
+                "Vento",
+                tamanho=11,
+                cor=ds.COR_VENTO_ESCURO,
+                peso="bold",
+                ancora="start",
+            )
+        )
     else:
-        xa = 40.0
+        xa = 42.0
         meio = y0 + pb / 2
         if alpha == 90:  # sopra de baixo para cima
-            partes.append(_seta(xa, y0 + pb + t, xa, meio - 30))
+            partes.append(ds.seta_de_vento(xa, y0 + pb + t, xa, meio - 30, espessura=14))
         else:  # sopra de cima para baixo
-            partes.append(_seta(xa, y0 - t, xa, meio + 30))
-        partes.append(_texto(xa + 16, meio, "vento", tamanho=11, giro=-90.0))
+            partes.append(ds.seta_de_vento(xa, y0 - t, xa, meio + 30, espessura=14))
+        partes.append(
+            ds.texto(
+                xa + 22, meio, "Vento", tamanho=11, giro=-90.0, cor=ds.COR_VENTO_ESCURO, peso="bold"
+            )
+        )
     # ---- escala de cores
     xl = LARGURA - 190
-    yl = altura - 54
+    yl = altura - 34
     for i, valor in enumerate((-2.0, -1.0, -0.5, 0.0, 0.5, 1.0)):
         partes.append(_rect(xl + i * 28, yl, 28, 10, valor))
         partes.append(_texto(xl + i * 28 + 14, yl + 20, _numero(valor), tamanho=8.5))

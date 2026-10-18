@@ -81,6 +81,8 @@ files = [
     "core/lista_de_material.py",
     "core/diagnostico.py",
     "core/cargas_esqueleto.py",
+    "core/vento_por_barras.py",
+    "core/vento_por_barras_registro.py",
     "core/quadro_fundacoes.py",
     "core/verificacao_barras.py",
     "core/contraventamento_barras.py",

@@ -78,9 +78,13 @@ CODIGOS: tuple[CodigoDeAcao, ...] = (
         descricao="Pessoas, ferramentas, manutenção (Anglo Tabela 2).",
     ),
     CodigoDeAcao("W0", "Vento a 0° (+X)", CATEGORIA_VENTO, GRUPO_VENTO),
+    CodigoDeAcao("W45", "Vento a 45° (+X +Y)", CATEGORIA_VENTO, GRUPO_VENTO),
     CodigoDeAcao("W90", "Vento a 90° (+Y)", CATEGORIA_VENTO, GRUPO_VENTO),
+    CodigoDeAcao("W135", "Vento a 135° (−X +Y)", CATEGORIA_VENTO, GRUPO_VENTO),
     CodigoDeAcao("W180", "Vento a 180° (−X)", CATEGORIA_VENTO, GRUPO_VENTO),
+    CodigoDeAcao("W225", "Vento a 225° (−X −Y)", CATEGORIA_VENTO, GRUPO_VENTO),
     CodigoDeAcao("W270", "Vento a 270° (−Y)", CATEGORIA_VENTO, GRUPO_VENTO),
+    CodigoDeAcao("W315", "Vento a 315° (+X −Y)", CATEGORIA_VENTO, GRUPO_VENTO),
     CodigoDeAcao(
         "T+", "Temperatura +10 °C", CATEGORIA_TEMPERATURA, GRUPO_TEMPERATURA, "Anglo 5.8."
     ),
@@ -115,21 +119,24 @@ CODIGOS: tuple[CodigoDeAcao, ...] = (
     ),
 )
 CODIGOS_POR_NOME = {c.codigo: c for c in CODIGOS}
+#: Os ventos perpendiculares às faces (os que a NBR 6123 pede) e os diagonais (vento barra a barra).
+CODIGOS_DE_VENTO_PERPENDICULARES: tuple[str, ...] = ("W0", "W90", "W180", "W270")
+CODIGOS_DE_VENTO: tuple[str, ...] = ("W0", "W45", "W90", "W135", "W180", "W225", "W270", "W315")
 
 #: Combinação mínima do critério Anglo (5.9) → códigos que ela precisa.
 COMBINACOES_ANGLO: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...] = (
     (ca.COMBINACOES_MINIMAS[0], (("PP",), ("SC",), ("EQ",), ("PRV",), ("MO",))),
     (ca.COMBINACOES_MINIMAS[1], (("PP",), ("SC",), ("EQ",), ("PRV",), ("HT",), ("MO",))),
-    (ca.COMBINACOES_MINIMAS[2], (("PP",), ("EQ",), ("W0", "W90", "W180", "W270"))),
+    (ca.COMBINACOES_MINIMAS[2], (("PP",), ("EQ",), CODIGOS_DE_VENTO)),
     (
         ca.COMBINACOES_MINIMAS[3],
-        (("PP",), ("EQ",), ("SC",), ("PRV",), ("MO",), ("W0", "W90", "W180", "W270")),
+        (("PP",), ("EQ",), ("SC",), ("PRV",), ("MO",), CODIGOS_DE_VENTO),
     ),
     (
         ca.COMBINACOES_MINIMAS[4],
-        (("PP",), ("EQ",), ("SC",), ("PRV",), ("HT",), ("MO",), ("W0", "W90", "W180", "W270")),
+        (("PP",), ("EQ",), ("SC",), ("PRV",), ("HT",), ("MO",), CODIGOS_DE_VENTO),
     ),
-    (ca.COMBINACOES_MINIMAS[5], (("HL",), ("W0", "W90", "W180", "W270"))),
+    (ca.COMBINACOES_MINIMAS[5], (("HL",), CODIGOS_DE_VENTO)),
 )
 #: Códigos que só existem se o projeto tiver o equipamento (não contam como faltantes).
 CODIGOS_OPCIONAIS = frozenset({"PRV", "HT", "HL", "MO"})

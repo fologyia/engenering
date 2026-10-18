@@ -284,7 +284,7 @@ def situacoes(projeto: Mapping[str, Any] | None) -> list[Situacao]:
     do_modelo = [r for r in vigentes if r.get("modulo_id") == "esforcos_modelo"]
     outros = [r for r in vigentes if r.get("modulo_id") != "esforcos_modelo"]
     do_esqueleto = [a for a in plano.acoes if a.origem == ce.ORIGEM]
-    ventos = [c for c in plano.codigos if c in ("W0", "W90", "W180", "W270")]
+    ventos = [c for c in plano.codigos if c in pc.CODIGOS_DE_VENTO]
     erros = [
         i
         for i in pc.conferir_plano(plano, anglo=bool(base and base.anglo))

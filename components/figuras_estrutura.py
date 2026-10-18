@@ -12,6 +12,7 @@ import math
 from collections.abc import Sequence
 from xml.sax.saxutils import escape
 
+from components import desenho_svg as ds
 from core import cargas_esqueleto as ce
 from core import contraventamento_ligacao as lig
 from core import contraventamento_plataforma as cp
@@ -108,107 +109,217 @@ def _legenda(x: float, y: float, itens: Sequence[tuple[str, str, str]]) -> list[
 
 
 # ---------------------------------------------------------------------------------------------
-# Vento em estrutura aberta — elevação na direção do vento
+# Vento em estrutura aberta — os pórticos em perspectiva
 # ---------------------------------------------------------------------------------------------
 def svg_vento_elevacao(g: va.GeometriaAberta, r: va.VentoNaDirecao) -> str:
-    """Os pórticos vistos de lado, o vento chegando pela esquerda e a força em cada nível."""
-    largura, altura = 780.0, 430.0
-    comprimento = max(p.coordenada_m for p in r.planos) or 1.0
-    h_total = g.altura_total_m
-    esquerda, direita, topo, base = 210.0, 40.0, 40.0, 70.0
-    escala = min((largura - esquerda - direita) / comprimento, (altura - topo - base) / h_total)
-    x0, y0 = esquerda, altura - base
+    """Os pórticos perpendiculares ao vento, em perspectiva, de barlavento (P1) para sotavento, com
+    o η de cada um, a força em cada nível no pórtico de barlavento e a faixa da base."""
+    largura, altura = 900.0, 560.0
+    camera = ds.Camera(-120.0, 24.0)
+    profundidade_total = max((p.coordenada_m for p in r.planos), default=0.0)
+    frente = r.largura_frontal_m
+    h = g.altura_m
+    h_gc = g.altura_total_m
+    pilares = max(r.pilares_por_portico, 2)
+    xs = [frente * k / (pilares - 1) for k in range(pilares)]
+    margem = 0.12 * max(profundidade_total, frente, 1.0)
+    # eixos locais: u ao longo do vento (x da câmera), v ao longo da frente, z para cima
+    chao = [
+        (-margem, -margem, 0.0),
+        (profundidade_total + margem, -margem, 0.0),
+        (profundidade_total + margem, frente + margem, 0.0),
+        (-margem, frente + margem, 0.0),
+    ]
+    seta_z = 0.55 * h
+    inicio = (-0.95 * max(profundidade_total, frente, 3.0), frente / 2, seta_z)
+    fim = (-margem * 0.9, frente / 2, seta_z)
+    pontos = [*chao, inicio, (0.0, 0.0, h_gc), (profundidade_total, frente, h_gc)]
+    enq = ds.Enquadramento([camera.tela(p) for p in pontos], (60, 90, largura - 230, altura - 60))
 
-    def px(x_m: float) -> float:
-        return x0 + x_m * escala
+    def t(p: tuple[float, float, float]) -> tuple[float, float]:
+        return enq(camera.tela(p))
 
-    def py(z_m: float) -> float:
-        return y0 - z_m * escala
-
-    corpo: list[str] = [_linha(x0 - 30, y0, px(comprimento) + 30, y0, cor="#444", largura=2)]
-    # pórticos
-    for plano in sorted(r.planos, key=lambda p: p.coordenada_m):
-        cor = COR_CONTRAVENTADO if plano.contraventado else COR_ESTRUTURA
-        x = px(plano.coordenada_m)
-        corpo.append(
-            _linha(x, y0, x, py(g.altura_m), cor=cor, largura=4 if plano.contraventado else 2.5)
-        )
-        corpo.append(_texto(x, y0 + 16, f"P{plano.posicao}", tamanho=12, peso="bold"))
-        corpo.append(_texto(x, y0 + 32, f"η {_n(plano.eta, 2)}", tamanho=11))
-    # pisos e guarda-corpos
-    for nivel in r.niveis:
-        y = py(nivel.cota_m)
-        corpo.append(_linha(px(0), y, px(comprimento), y, cor=COR_ESTRUTURA, largura=3))
-        if g.guarda_corpo:
-            yg = py(nivel.cota_m + g.altura_guarda_corpo_m)
+    corpo: list[str] = [
+        ds.poligono([t(p) for p in chao], preenchimento="#eef1f5", contorno="#d5dae1")
+    ]
+    # linhas de piso que ligam os pórticos (vigas na direção do vento)
+    for z in g.cotas_m:
+        for v in (0.0, frente):
             corpo.append(
-                _linha(
-                    px(0), yg, px(comprimento), yg, cor=COR_ESTRUTURA, largura=1.2, tracejado="5 4"
+                ds.linha(
+                    *t((0.0, v, z)),
+                    *t((profundidade_total, v, z)),
+                    cor=ds.COR_ESTRUTURA_CLARA,
+                    largura=1.6,
                 )
             )
+    # u = distância ao pórtico de barlavento (P1), na direção do vento
+    referencia = next((p.coordenada_m for p in r.planos if p.posicao == 1), 0.0)
+    planos = sorted(r.planos, key=lambda p: -abs(p.coordenada_m - referencia))
+    for plano in planos:  # do fundo para a frente
+        u = abs(plano.coordenada_m - referencia)
+        cor = ds.COR_CONTRAVENTADO if plano.contraventado else ds.COR_ESTRUTURA
+        espessura = 3.4 if plano.contraventado else 2.4
+        opac = 1.0 if plano.posicao == 1 else 0.85
+        for v in xs:
             corpo.append(
-                _linha(px(0), y, px(0), yg, cor=COR_ESTRUTURA, largura=1.2, tracejado="5 4")
+                ds.linha(*t((u, v, 0.0)), *t((u, v, h)), cor=cor, largura=espessura, opacidade=opac)
             )
+            px, py = t((u, v, 0.0))
+            corpo.append(f'<ellipse cx="{px:.1f}" cy="{py:.1f}" rx="6" ry="2.6" fill="#c9cfd8"/>')
+        for z in g.cotas_m:
             corpo.append(
-                _linha(
-                    px(comprimento),
-                    y,
-                    px(comprimento),
-                    yg,
-                    cor=COR_ESTRUTURA,
-                    largura=1.2,
-                    tracejado="5 4",
+                ds.linha(
+                    *t((u, 0.0, z)), *t((u, frente, z)), cor=cor, largura=espessura, opacidade=opac
                 )
             )
-        # cota
+        if plano.contraventado:
+            v0, v1 = xs[0], xs[1]
+            base = 0.0
+            for z in g.cotas_m:
+                corpo.append(
+                    ds.linha(
+                        *t((u, v0, base)), *t((u, v1, z)), cor=cor, largura=1.6, opacidade=opac
+                    )
+                )
+                corpo.append(
+                    ds.linha(
+                        *t((u, v0, z)), *t((u, v1, base)), cor=cor, largura=1.6, opacidade=opac
+                    )
+                )
+                base = z
+        x, y = t((u, frente, h_gc))
         corpo.append(
-            _texto(px(comprimento) + 6, y, f"{_n(nivel.cota_m, 2)} m", tamanho=11, ancora="start")
-        )
-    # setas do vento por nível
-    maior = max((n.total_kN for n in r.niveis), default=1.0) or 1.0
-    for nivel in r.niveis:
-        y = py(nivel.cota_m)
-        comprimento_seta = 60 + 80 * nivel.total_kN / maior
-        corpo.append(_seta(x0 - 12 - comprimento_seta, y, x0 - 12, y))
-        corpo.append(
-            _texto(
-                x0 - 12 - comprimento_seta / 2,
-                y - 12,
-                f"F{nivel.nivel} = {_n(nivel.total_kN)} kN",
-                tamanho=12,
+            ds.etiqueta(
+                x + 6,
+                y - 14,
+                f"P{plano.posicao} · η {_n(plano.eta, 2)}",
+                tamanho=10,
+                cor=cor,
                 peso="bold",
-                cor=COR_VENTO,
             )
         )
-    if r.forca_na_base_kN > 0:
-        yb = py(r.niveis[0].faixa_m[0] / 2) if r.niveis else y0
-        corpo.append(_seta(x0 - 70, yb, x0 - 12, yb, largura=1.5))
-        corpo.append(
-            _texto(x0 - 41, yb - 11, f"base {_n(r.forca_na_base_kN)} kN", tamanho=10, cor=COR_VENTO)
+    # guarda-corpo no perímetro de cada piso: corrimão e montantes nos cantos
+    if g.guarda_corpo:
+        cantos = (
+            (0.0, 0.0),
+            (profundidade_total, 0.0),
+            (profundidade_total, frente),
+            (0.0, frente),
         )
+        for z in g.cotas_m:
+            topo = z + g.altura_guarda_corpo_m
+            for k in range(4):
+                (ua, va_), (ub, vb) = cantos[k], cantos[(k + 1) % 4]
+                corpo.append(
+                    ds.linha(
+                        *t((ua, va_, topo)),
+                        *t((ub, vb, topo)),
+                        cor=ds.COR_PAINEL,
+                        largura=1.3,
+                        tracejado="5 3",
+                    )
+                )
+                corpo.append(
+                    ds.linha(*t((ua, va_, z)), *t((ua, va_, topo)), cor=ds.COR_PAINEL, largura=1.0)
+                )
+    # vento e forças por nível no pórtico de barlavento
+    (sx, sy), (ex, ey) = t(inicio), t(fim)
+    corpo.append(ds.seta_de_vento(sx, sy, ex, ey, espessura=15))
     corpo.append(
-        _texto(
-            20,
-            22,
-            f"Vento em {r.direcao} — elevação dos pórticos",
-            tamanho=14,
-            ancora="start",
+        ds.etiqueta(
+            sx + 10,
+            sy - 24,
+            f"Vento em {r.direcao}",
+            tamanho=11.5,
+            cor=ds.COR_VENTO_ESCURO,
             peso="bold",
+            ancora="start",
         )
     )
-    corpo.extend(
-        _legenda(
-            20,
-            altura - 14,
+    maior = max((n.total_kN for n in r.niveis), default=1.0) or 1.0
+    escala_seta = max(profundidade_total, frente, 3.0)
+    v_seta = 0.18 * frente
+    for nivel in r.niveis:
+        comprimento = (0.18 + 0.22 * nivel.total_kN / maior) * escala_seta
+        (ax_, ay_), (bx_, by_) = (
+            t((-comprimento, v_seta, nivel.cota_m)),
+            t((-0.02 * escala_seta, v_seta, nivel.cota_m)),
+        )
+        corpo.append(ds.seta(ax_, ay_, bx_, by_, cor=ds.COR_VENTO, largura=2.6, cabeca=10))
+        corpo.append(
+            ds.etiqueta(
+                ax_,
+                ay_ - 14,
+                f"F{nivel.nivel} = {_n(nivel.total_kN)} kN",
+                tamanho=10.5,
+                cor=ds.COR_VENTO_ESCURO,
+                peso="bold",
+            )
+        )
+    if r.forca_na_base_kN > 0 and r.niveis:
+        z_base = r.niveis[0].faixa_m[0] / 2
+        (ax_, ay_), (bx_, by_) = (
+            t((-0.16 * escala_seta, v_seta, z_base)),
+            t((-0.02 * escala_seta, v_seta, z_base)),
+        )
+        corpo.append(ds.seta(ax_, ay_, bx_, by_, cor=ds.COR_VENTO, largura=1.6, cabeca=8))
+        corpo.append(
+            ds.etiqueta(
+                ax_,
+                ay_ + 14,
+                f"base {_n(r.forca_na_base_kN)} kN",
+                tamanho=9.5,
+                cor=ds.COR_VENTO_ESCURO,
+            )
+        )
+    # cotas dos níveis junto do pilar do fundo do pórtico de barlavento
+    for nivel in r.niveis:
+        x, y = t((0.0, frente, nivel.cota_m))
+        corpo.append(
+            ds.texto(
+                x - 10, y, f"{_n(nivel.cota_m, 2)} m", tamanho=10, ancora="end", cor=ds.COR_SUAVE
+            )
+        )
+    # quadro à direita
+    xq, yq = largura - 205, 96
+    corpo.append(
+        ds.texto(xq, yq, "Pórticos (de barlavento)", tamanho=11, ancora="start", peso="bold")
+    )
+    for k, plano in enumerate(sorted(r.planos, key=lambda p: p.posicao)[:14]):
+        corpo.append(
+            ds.texto(
+                xq,
+                yq + 20 + 17 * k,
+                f"P{plano.posicao}: φ {_n(plano.phi, 2)} · C_a {_n(plano.ca, 2)} · "
+                f"η {_n(plano.eta, 2)}",
+                tamanho=10,
+                ancora="start",
+                cor=ds.COR_SUAVE,
+            )
+        )
+    corpo.append(
+        ds.legenda(
+            22,
+            altura - 18,
             (
-                (COR_CONTRAVENTADO, "", "pórtico contraventado"),
-                (COR_ESTRUTURA, "", "pórtico sem diagonais"),
-                (COR_ESTRUTURA, "5 4", "guarda-corpo"),
-                (COR_VENTO, "", "força do vento (característica)"),
+                (ds.COR_CONTRAVENTADO, "", "pórtico contraventado"),
+                (ds.COR_ESTRUTURA, "", "pórtico sem diagonais"),
+                (ds.COR_PAINEL, "5 3", "guarda-corpo"),
+                (ds.COR_VENTO, "", "força do vento (característica)"),
             ),
         )
     )
-    return _svg(largura, altura, corpo, f"Vento em {r.direcao}")
+    return ds.documento(
+        largura,
+        altura,
+        corpo,
+        f"Vento em {r.direcao} — pórticos de barlavento a sotavento",
+        subtitulo=(
+            "O pórtico da frente (P1) recebe o vento cheio; os de trás, o seu fator de proteção η "
+            "(NBR 6123, 8.4). Setas: força de cada nível."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------------------------
@@ -221,114 +332,200 @@ def _linhas_contraventadas(n_linhas_de_pilares: int, contraventadas: int) -> lis
     return sorted(ordem[:contraventadas])
 
 
+def _letra(indice: int) -> str:
+    letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    return letras[indice] if indice < len(letras) else f"A{indice}"
+
+
 def svg_planta(e: cp.EntradaContraventamento) -> str:
-    """Planta com os pilares, as linhas contraventadas (com o X nos painéis) e o vento."""
-    largura, altura = 780.0, 470.0
-    margem_esq, margem_dir, margem_topo, margem_base = 110.0, 60.0, 60.0, 90.0
-    escala = min(
-        (largura - margem_esq - margem_dir) / e.comprimento_x_m,
-        (altura - margem_topo - margem_base) / e.largura_y_m,
+    """Planta com os eixos, os pilares, as linhas contraventadas (com o símbolo do contraventamento
+    nos painéis), as cotas e o vento nas duas direções."""
+    largura, altura = 900.0, 560.0
+    enq = ds.Enquadramento(
+        [(0.0, 0.0), (e.comprimento_x_m, -e.largura_y_m)], (150, 110, largura - 150, altura - 160)
     )
-    x0, y0 = margem_esq, altura - margem_base
 
-    def px(x_m: float) -> float:
-        return x0 + x_m * escala
-
-    def py(y_m: float) -> float:
-        return y0 - y_m * escala
+    def p(x_m: float, y_m: float) -> tuple[float, float]:
+        return enq((x_m, -y_m))
 
     ax = e.comprimento_x_m / e.vaos_x
     ay = e.largura_y_m / e.vaos_y
     corpo: list[str] = []
-    # vigas (grade)
+    x_esq, y_base = p(0.0, 0.0)
+    x_dir, y_topo = p(e.comprimento_x_m, e.largura_y_m)
+    # eixos (traço e ponto) com as bolhas
+    for i in range(e.vaos_x + 1):
+        x, _ = p(i * ax, 0.0)
+        corpo.append(
+            ds.linha(
+                x, y_topo - 26, x, y_base + 26, cor="#b8bfc8", largura=0.8, tracejado="10 3 2 3"
+            )
+        )
+        corpo.append(ds.bolha(x, y_topo - 40, str(i + 1)))
+    for j in range(e.vaos_y + 1):
+        _, y = p(0.0, j * ay)
+        corpo.append(
+            ds.linha(x_esq - 26, y, x_dir + 26, y, cor="#b8bfc8", largura=0.8, tracejado="10 3 2 3")
+        )
+        corpo.append(ds.bolha(x_esq - 40, y, _letra(j)))
+    # vigas
     for j in range(e.vaos_y + 1):
         corpo.append(
-            _linha(px(0), py(j * ay), px(e.comprimento_x_m), py(j * ay), cor="#c3c8ce", largura=2)
+            ds.linha(*p(0, j * ay), *p(e.comprimento_x_m, j * ay), cor="#9aa3ad", largura=2.4)
         )
     for i in range(e.vaos_x + 1):
-        corpo.append(
-            _linha(px(i * ax), py(0), px(i * ax), py(e.largura_y_m), cor="#c3c8ce", largura=2)
-        )
+        corpo.append(ds.linha(*p(i * ax, 0), *p(i * ax, e.largura_y_m), cor="#9aa3ad", largura=2.4))
     # linhas contraventadas
     sx, sy = e.contraventamento_x, e.contraventamento_y
     for j in _linhas_contraventadas(e.vaos_y + 1, sx.linhas):
-        y = py(j * ay)
-        corpo.append(_linha(px(0), y, px(e.comprimento_x_m), y, cor=COR_CONTRAVENTADO, largura=4))
+        corpo.append(
+            ds.linha(
+                *p(0, j * ay), *p(e.comprimento_x_m, j * ay), cor=ds.COR_CONTRAVENTADO, largura=4.5
+            )
+        )
+        lado = 1 if j * ay >= e.largura_y_m / 2 else -1
         for painel in range(min(sx.paineis_por_linha, e.vaos_x)):
-            xa, xb = px(painel * ax), px((painel + 1) * ax)
-            corpo.append(_marca_painel(xa, xb, y, horizontal=True, tipo=sx.tipo))
+            xa, ya = p(painel * ax, j * ay)
+            xb, _ = p((painel + 1) * ax, j * ay)
+            corpo.append(_marca_painel(xa, xb, ya, horizontal=True, tipo=sx.tipo, lado=-lado))
     for i in _linhas_contraventadas(e.vaos_x + 1, sy.linhas):
-        x = px(i * ax)
-        corpo.append(_linha(x, py(0), x, py(e.largura_y_m), cor=COR_CONTRAVENTADO, largura=4))
+        corpo.append(
+            ds.linha(
+                *p(i * ax, 0), *p(i * ax, e.largura_y_m), cor=ds.COR_CONTRAVENTADO, largura=4.5
+            )
+        )
+        lado = 1 if i * ax >= e.comprimento_x_m / 2 else -1
         for painel in range(min(sy.paineis_por_linha, e.vaos_y)):
-            ya, yb = py(painel * ay), py((painel + 1) * ay)
-            corpo.append(_marca_painel(ya, yb, x, horizontal=False, tipo=sy.tipo))
-    # pilares
-    lado = 10.0
+            xa, ya = p(i * ax, painel * ay)
+            _, yb = p(i * ax, (painel + 1) * ay)
+            corpo.append(_marca_painel(ya, yb, xa, horizontal=False, tipo=sy.tipo, lado=lado))
+    # pilares (H)
     for i in range(e.vaos_x + 1):
         for j in range(e.vaos_y + 1):
-            corpo.append(
-                f'<rect x="{px(i * ax) - lado / 2:.1f}" y="{py(j * ay) - lado / 2:.1f}" width="{lado}" '
-                f'height="{lado}" fill="{COR_ESTRUTURA}"/>'
-            )
-    # cotas
+            x, y = p(i * ax, j * ay)
+            corpo.append(_pilar_h(x, y))
+    # cotas: vãos e total
+    y_cota = y_base + 46
+    for i in range(e.vaos_x):
+        corpo.append(
+            ds.cota(*p(i * ax, 0)[:1], y_cota, *p((i + 1) * ax, 0)[:1], y_cota, f"{_n(ax, 2)} m")
+        )
     corpo.append(
-        _texto(
-            (px(0) + px(e.comprimento_x_m)) / 2,
-            y0 + 26,
+        ds.cota(
+            x_esq,
+            y_cota + 26,
+            x_dir,
+            y_cota + 26,
             f"L_x = {_n(e.comprimento_x_m, 2)} m ({e.vaos_x} vão(s))",
-            tamanho=12,
         )
     )
-    corpo.append(
-        _texto(
-            px(e.comprimento_x_m) + 22,
-            (py(0) + py(e.largura_y_m)) / 2,
-            f"L_y = {_n(e.largura_y_m, 2)} m",
-            tamanho=12,
-            giro=-90,
+    x_cota = x_dir + 46
+    for j in range(e.vaos_y):
+        corpo.append(
+            ds.cota(x_cota, p(0, j * ay)[1], x_cota, p(0, (j + 1) * ay)[1], f"{_n(ay, 2)} m")
         )
+    corpo.append(
+        ds.cota(x_cota + 30, y_base, x_cota + 30, y_topo, f"L_y = {_n(e.largura_y_m, 2)} m")
     )
     # vento
-    ym = (py(0) + py(e.largura_y_m)) / 2
-    corpo.append(_seta(20, ym, x0 - 22, ym))
-    corpo.append(_texto(46, ym - 14, "vento X", tamanho=12, cor=COR_VENTO, peso="bold"))
-    xm = (px(0) + px(e.comprimento_x_m)) / 2 - 140
-    corpo.append(_seta(xm, altura - 18, xm, y0 + 10))
+    ym = (y_base + y_topo) / 2
+    corpo.append(ds.seta_de_vento(24, ym, x_esq - 60, ym, espessura=15))
     corpo.append(
-        _texto(
-            xm + 10, altura - 30, "vento Y", tamanho=12, cor=COR_VENTO, peso="bold", ancora="start"
+        ds.etiqueta(
+            30, ym - 24, "Vento X", tamanho=11, cor=ds.COR_VENTO_ESCURO, peso="bold", ancora="start"
         )
     )
+    xm = x_esq + (x_dir - x_esq) * 0.3
+    corpo.append(ds.seta_de_vento(xm, altura - 22, xm, y_base + 92, espessura=15))
     corpo.append(
-        _texto(20, 24, "Planta — linhas contraventadas", tamanho=14, ancora="start", peso="bold")
-    )
-    corpo.append(
-        _texto(
-            20,
-            42,
-            "Painéis marcados na ponta da linha só para ilustrar: a posição é a do seu desenho.",
-            tamanho=10,
+        ds.etiqueta(
+            xm + 18,
+            altura - 34,
+            "Vento Y",
+            tamanho=11,
+            cor=ds.COR_VENTO_ESCURO,
+            peso="bold",
             ancora="start",
-            cor="#666",
         )
     )
-    return _svg(largura, altura, corpo, "Planta do contraventamento")
+    corpo.append(
+        ds.legenda(
+            largura - 330,
+            altura - 18,
+            (
+                (ds.COR_CONTRAVENTADO, "", "linha contraventada"),
+                ("#9aa3ad", "", "viga"),
+                ("#b8bfc8", "10 3 2 3", "eixo"),
+            ),
+        )
+    )
+    return ds.documento(
+        largura,
+        altura,
+        corpo,
+        "Planta — linhas contraventadas",
+        subtitulo=(
+            "Símbolo do contraventamento no painel da ponta da linha só para ilustrar: a posição "
+            "é a do seu desenho."
+        ),
+    )
 
 
-def _marca_painel(a: float, b: float, c: float, *, horizontal: bool, tipo: str) -> str:
-    """Símbolo do contraventamento sobre o painel (em planta: um X ou uma barra)."""
+def _pilar_h(x: float, y: float, tamanho: float = 13.0) -> str:
+    meia = tamanho / 2
+    mesa = 2.6
+    return (
+        ds.poligono(
+            (
+                (x - meia, y - meia),
+                (x + meia, y - meia),
+                (x + meia, y - meia + mesa),
+                (x - meia, y - meia + mesa),
+            ),
+            preenchimento=ds.COR_ESTRUTURA,
+        )
+        + ds.poligono(
+            (
+                (x - meia, y + meia - mesa),
+                (x + meia, y + meia - mesa),
+                (x + meia, y + meia),
+                (x - meia, y + meia),
+            ),
+            preenchimento=ds.COR_ESTRUTURA,
+        )
+        + ds.poligono(
+            ((x - 1.1, y - meia), (x + 1.1, y - meia), (x + 1.1, y + meia), (x - 1.1, y + meia)),
+            preenchimento=ds.COR_ESTRUTURA,
+        )
+    )
+
+
+def _marca_painel(
+    a: float, b: float, c: float, *, horizontal: bool, tipo: str, lado: int = -1
+) -> str:
+    """Símbolo do contraventamento ao lado do painel: a elevação do painel rebatida (um retângulo
+    pequeno com o X, a diagonal ou o V), do lado de fora da planta."""
     meio = (a + b) / 2
-    meia = abs(b - a) * 0.18
+    comprimento = min(abs(b - a) * 0.55, 70.0)
+    alto = 20.0
     if horizontal:
-        p1, p2 = (meio - meia, c - 9), (meio + meia, c + 9)
-        q1, q2 = (meio - meia, c + 9), (meio + meia, c - 9)
+        x0, x1 = meio - comprimento / 2, meio + comprimento / 2
+        y0, y1 = (c + 8, c + 8 + alto) if lado > 0 else (c - 8 - alto, c - 8)
+        cantos = ((x0, y1), (x1, y1), (x1, y0), (x0, y0))  # base embaixo, topo em cima
     else:
-        p1, p2 = (c - 9, meio - meia), (c + 9, meio + meia)
-        q1, q2 = (c + 9, meio - meia), (c - 9, meio + meia)
-    partes = [_linha(*p1, *p2, cor=COR_TRACAO, largura=2.5)]
-    if tipo != cp.TIPO_DIAGONAL_SIMPLES:
-        partes.append(_linha(*q1, *q2, cor=COR_TRACAO, largura=2.5))
+        y0, y1 = meio - comprimento / 2, meio + comprimento / 2
+        x0, x1 = (c + 8, c + 8 + alto) if lado > 0 else (c - 8 - alto, c - 8)
+        cantos = ((x0, y1), (x0, y0), (x1, y0), (x1, y1))
+    (pa, pb, pc, pd) = cantos  # pé esquerdo, pé direito, topo direito, topo esquerdo
+    partes = [ds.poligono(cantos, preenchimento="#ffffff", contorno="#9aa3ad", largura=0.8)]
+    if tipo == cp.TIPO_V_INVERTIDO:
+        topo = ((pc[0] + pd[0]) / 2, (pc[1] + pd[1]) / 2)
+        partes.append(ds.linha(*pa, *topo, cor=ds.COR_CONTRAVENTADO, largura=1.8))
+        partes.append(ds.linha(*pb, *topo, cor=ds.COR_CONTRAVENTADO, largura=1.8))
+    else:
+        partes.append(ds.linha(*pa, *pc, cor=ds.COR_CONTRAVENTADO, largura=1.8))
+        if tipo != cp.TIPO_DIAGONAL_SIMPLES:
+            partes.append(ds.linha(*pb, *pd, cor=ds.COR_CONTRAVENTADO, largura=1.8))
     return "".join(partes)
 
 
@@ -338,142 +535,137 @@ def _marca_painel(a: float, b: float, c: float, *, horizontal: bool, tipo: str) 
 def svg_elevacao_linha(
     e: cp.EntradaContraventamento, andares: Sequence[cp.AndarNaDirecao], direcao: str
 ) -> str:
-    """A linha contraventada mais carregada vista de frente, com a força em cada diagonal."""
+    """A linha contraventada mais carregada vista de frente, com a força em cada diagonal e o
+    cortante de cada andar."""
     s = e.sistema(direcao)
     comprimento = e.comprimento_x_m if direcao == "X" else e.largura_y_m
     vaos = e.vaos_x if direcao == "X" else e.vaos_y
     painel = comprimento / vaos
-    largura, altura = 780.0, 470.0
-    esquerda, direita, topo, base = 70.0, 190.0, 50.0, 80.0
+    largura, altura = 900.0, 540.0
     h_total = e.cotas_m[-1]
-    escala = min((largura - esquerda - direita) / comprimento, (altura - topo - base) / h_total)
-    x0, y0 = esquerda, altura - base
+    enq = ds.Enquadramento(
+        [(0.0, 0.0), (comprimento, -h_total)], (110, 90, largura - 240, altura - 90)
+    )
 
-    def px(x_m: float) -> float:
-        return x0 + x_m * escala
+    def p(x_m: float, z_m: float) -> tuple[float, float]:
+        return enq((x_m, -z_m))
 
-    def py(z_m: float) -> float:
-        return y0 - z_m * escala
-
-    corpo: list[str] = [_linha(x0 - 25, y0, px(comprimento) + 25, y0, cor="#444", largura=2)]
-    for k in range(vaos + 1):
-        x = px(k * painel)
-        corpo.append(_linha(x, y0, x, py(h_total), cor=COR_ESTRUTURA, largura=3))
-        corpo.append(
-            f'<polygon points="{x - 7:.1f},{y0 + 9:.1f} {x + 7:.1f},{y0 + 9:.1f} {x:.1f},{y0:.1f}" fill="{COR_ESTRUTURA}"/>'
-        )
+    x0, y0 = p(0.0, 0.0)
+    xf, _ = p(comprimento, 0.0)
+    corpo: list[str] = [ds.terreno(x0 - 40, xf + 40, y0 + 10.5)]
     cotas = (0.0, *e.cotas_m)
-    for z in e.cotas_m:
-        corpo.append(_linha(px(0), py(z), px(comprimento), py(z), cor=COR_ESTRUTURA, largura=3))
-        corpo.append(_texto(x0 - 8, py(z), f"{_n(z, 2)} m", tamanho=11, ancora="end"))
     por_andar = {a.andar: a for a in andares}
+    # diagonais primeiro (pilares e vigas por cima)
     for i in range(1, len(cotas)):
         andar = por_andar.get(i)
         if andar is None:
             continue
         zb, zt = cotas[i - 1], cotas[i]
-        for p in range(min(s.paineis_por_linha, vaos)):
-            xa, xb = px(p * painel), px((p + 1) * painel)
-            yb_, yt = py(zb), py(zt)
-            n_t = _n(andar.tracao_kN)
-            n_c = _n(andar.compressao_kN)
+        for k in range(min(s.paineis_por_linha, vaos)):
+            (xa, yb_), (xb, yt) = p(k * painel, zb), p((k + 1) * painel, zt)
+            n_t, n_c = _n(andar.tracao_kN), _n(andar.compressao_kN)
             if s.tipo == cp.TIPO_V_INVERTIDO:
                 xm = (xa + xb) / 2
-                corpo.append(_linha(xa, yb_, xm, yt, cor=COR_TRACAO, largura=3))
-                corpo.append(_linha(xb, yb_, xm, yt, cor=COR_COMPRESSAO, largura=3))
+                corpo.append(ds.linha(xa, yb_, xm, yt, cor=COR_TRACAO, largura=3.2))
+                corpo.append(ds.linha(xb, yb_, xm, yt, cor=COR_COMPRESSAO, largura=3.2))
                 corpo.append(
-                    _texto(
-                        (xa + xm) / 2 - 8,
+                    ds.etiqueta(
+                        (xa + xm) / 2,
                         (yb_ + yt) / 2,
                         f"+{n_t}",
-                        tamanho=11,
+                        tamanho=10.5,
                         cor=COR_TRACAO,
-                        ancora="end",
+                        peso="bold",
                     )
                 )
                 corpo.append(
-                    _texto(
-                        (xb + xm) / 2 + 8,
+                    ds.etiqueta(
+                        (xb + xm) / 2,
                         (yb_ + yt) / 2,
                         f"−{n_c}",
-                        tamanho=11,
+                        tamanho=10.5,
                         cor=COR_COMPRESSAO,
-                        ancora="start",
+                        peso="bold",
                     )
                 )
             elif s.tipo == cp.TIPO_DIAGONAL_SIMPLES:
-                corpo.append(_linha(xa, yb_, xb, yt, cor="#7b3fb5", largura=3))
+                corpo.append(ds.linha(xa, yb_, xb, yt, cor="#7b3fb5", largura=3.2))
                 corpo.append(
-                    _texto(
+                    ds.etiqueta(
                         (xa + xb) / 2,
-                        (yb_ + yt) / 2 - 12,
+                        (yb_ + yt) / 2,
                         f"±{n_t}",
-                        tamanho=11,
+                        tamanho=10.5,
                         cor="#7b3fb5",
                         peso="bold",
                     )
                 )
             else:
-                corpo.append(_linha(xa, yb_, xb, yt, cor=COR_TRACAO, largura=3))
+                corpo.append(ds.linha(xa, yb_, xb, yt, cor=COR_TRACAO, largura=3.2))
                 if s.tipo == cp.TIPO_X_TRACAO:
                     corpo.append(
-                        _linha(xa, yt, xb, yb_, cor=COR_DESPREZADA, largura=2, tracejado="6 5")
+                        ds.linha(xa, yt, xb, yb_, cor=COR_DESPREZADA, largura=2, tracejado="6 5")
                     )
-                    rotulo_c = "0 (desprezada)"
+                    rotulo_c, cor_c = "0 (desprezada)", COR_DESPREZADA
                 else:
-                    corpo.append(_linha(xa, yt, xb, yb_, cor=COR_COMPRESSAO, largura=3))
-                    rotulo_c = f"−{n_c}"
+                    corpo.append(ds.linha(xa, yt, xb, yb_, cor=COR_COMPRESSAO, largura=3.2))
+                    rotulo_c, cor_c = f"−{n_c}", COR_COMPRESSAO
                 xm, ym = (xa + xb) / 2, (yb_ + yt) / 2
                 corpo.append(
-                    _texto(xm, ym - 16, f"+{n_t}", tamanho=11, cor=COR_TRACAO, peso="bold")
+                    ds.etiqueta(xm, ym - 17, f"+{n_t}", tamanho=10.5, cor=COR_TRACAO, peso="bold")
                 )
-                corpo.append(
-                    _texto(
-                        xm,
-                        ym + 16,
-                        rotulo_c,
-                        tamanho=11,
-                        cor=COR_COMPRESSAO if s.tipo != cp.TIPO_X_TRACAO else COR_DESPREZADA,
-                    )
-                )
+                corpo.append(ds.etiqueta(xm, ym + 17, rotulo_c, tamanho=10, cor=cor_c))
         # cortante do andar à direita
-        ym = py((zb + zt) / 2)
+        _, ym = p(0.0, (zb + zt) / 2)
+        corpo.append(ds.seta(xf + 120, ym, xf + 14, ym, cor=ds.COR_VENTO, largura=2.6, cabeca=10))
         corpo.append(
-            _seta(px(comprimento) + 110, ym, px(comprimento) + 30, ym, cor=COR_VENTO, largura=2)
-        )
-        corpo.append(
-            _texto(
-                px(comprimento) + 36,
-                ym - 14,
+            ds.etiqueta(
+                xf + 70,
+                ym - 16,
                 f"V{i} = {_n(andar.forca_na_linha_kN)} kN",
-                tamanho=11,
-                ancora="start",
-                cor=COR_VENTO,
+                tamanho=10.5,
+                cor=ds.COR_VENTO_ESCURO,
+                peso="bold",
             )
         )
-    corpo.append(
-        _texto(
-            20,
-            22,
-            f"Elevação da linha mais carregada — direção {direcao} ({cp.TIPOS[s.tipo].split(' (')[0]})",
-            tamanho=14,
-            ancora="start",
-            peso="bold",
+    for k in range(vaos + 1):
+        x, _ = p(k * painel, 0.0)
+        corpo.append(ds.linha(x, y0, x, p(0.0, h_total)[1], cor=ds.COR_ESTRUTURA, largura=3.6))
+        corpo.append(ds.apoio(x, y0 + 0.5, tamanho=7))
+    for z in e.cotas_m:
+        _, y = p(0.0, z)
+        corpo.append(ds.linha(x0, y, xf, y, cor=ds.COR_ESTRUTURA, largura=3.6))
+        corpo.append(
+            ds.poligono(
+                ((x0 - 24, y), (x0 - 32, y - 7), (x0 - 16, y - 7)), preenchimento=ds.COR_SUAVE
+            )
         )
-    )
-    corpo.extend(
-        _legenda(
-            20,
+        corpo.append(
+            ds.texto(x0 - 38, y - 3, f"+{_n(z, 2)} m", tamanho=10.5, ancora="end", cor=ds.COR_SUAVE)
+        )
+    for k in range(vaos):
+        xa, _ = p(k * painel, 0.0)
+        xb, _ = p((k + 1) * painel, 0.0)
+        corpo.append(ds.cota(xa, y0 + 34, xb, y0 + 34, f"{_n(painel, 2)} m"))
+    corpo.append(
+        ds.legenda(
+            22,
             altura - 18,
             (
                 (COR_TRACAO, "", "tração (kN)"),
                 (COR_COMPRESSAO, "", "compressão (kN)"),
                 (COR_DESPREZADA, "6 5", "desprezada"),
-                (COR_VENTO, "", "cortante na linha (ELU, com B₂)"),
+                (ds.COR_VENTO, "", "cortante na linha (ELU, com B₂)"),
             ),
         )
     )
-    return _svg(largura, altura, corpo, f"Elevação da linha contraventada em {direcao}")
+    return ds.documento(
+        largura,
+        altura,
+        corpo,
+        f"Elevação da linha mais carregada — direção {direcao}",
+        subtitulo=f"{cp.TIPOS[s.tipo]}; forças de cálculo nas diagonais (ELU, com B₂).",
+    )
 
 
 # ---------------------------------------------------------------------------------------------

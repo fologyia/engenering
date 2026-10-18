@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from components import contraventamento_estrutura_ui as ce
+from components import vento_barras_ui as vbu
 from components.base_tecnica_ui import base_ativa, gravar_acoes_no_plano, legenda_da_base
 from components.figuras_estrutura import svg_vento_elevacao
 from components.project_tools import botao_registrar_calculo
@@ -58,10 +59,23 @@ AJUDA: dict[str, str] = {
     "res_simplificada": "A carga de cada nível: o total do nível (estrutura e guarda-corpo) dividido pelas linhas de pilares na direção do vento e pelo comprimento delas. Selecione só as vigas dessas linhas (todos os trechos), não as secundárias. Os equipamentos continuam como força no centro deles.",
     "reg_registrar": "Grava o cálculo no projeto ativo: o memorial passa a trazer as três tabelas.",
     "direcao": "Qual direção do vento mostrar.",
+    "metodo": (
+        "**Pórticos regulares**: a estrutura é uma grade de pórticos iguais (vãos em X e em Y, "
+        "pelo menos 4 pilares) e o vento vai por nível, a 0° e 90°. **Viga a viga, pilar a "
+        "pilar**: o programa pega cada barra do seu modelo (ou as que você digitar) e calcula o "
+        "vento nela, em cada direção — serve para qualquer forma, como duas colunas com a "
+        "plataforma em balanço, escada ao lado ou estrutura assimétrica."
+    ),
 }
 
+METODO_GRADE = "Pórticos regulares (grade)"
+METODO_BARRAS = "Viga a viga, pilar a pilar"
+METODOS = (METODO_GRADE, METODO_BARRAS)
+
 FORA_DO_ESCOPO = (
-    "Vento oblíquo (entre 0° e 90°) e efeitos dinâmicos (capítulo 9 da NBR 6123).",
+    "Estrutura que não é uma grade regular de pórticos (duas colunas, balanço, escada ao lado) e "
+    "vento diagonal: use “Viga a viga, pilar a pilar”, acima.",
+    "Efeitos dinâmicos do vento (capítulo 9 da NBR 6123).",
     "Coberturas isoladas e placas (Tabelas 24 e 25 e 7.1): use o módulo Vento nas estruturas.",
     "Barras de seção circular com o C_a menor da Figura 13: o programa usa a Figura 12 (a favor da "
     "segurança).",
@@ -81,6 +95,17 @@ def _tabela(dados: dict[str, Any]) -> None:
 
 
 def mostrar_vento_em_estrutura_aberta() -> None:
+    metodo = st.segmented_control(
+        "Como calcular o vento",
+        METODOS,
+        default=METODO_GRADE,
+        key="va_metodo",
+        help=AJUDA["metodo"],
+    )
+    if metodo == METODO_BARRAS:
+        fronteira_modelo(list(vbu.FORA_DO_ESCOPO), titulo="O que esta página não faz")
+        vbu.mostrar_vento_por_barras()
+        return
     fronteira_modelo(list(FORA_DO_ESCOPO), titulo="O que esta página não faz")
     base = base_ativa()
     legenda_da_base(base)
