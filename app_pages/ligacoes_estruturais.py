@@ -10,6 +10,7 @@ from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
 from core import bolted_connection as bc
+from core import cantoneiras as ct
 from core import ligacoes as lg
 from core import section_catalog as sc
 from core.project_store import obter_projeto_ativo
@@ -29,6 +30,7 @@ cabecalho_pagina(
 
 TIPOS = {
     lg.CHAPA_SIMPLES: "Chapa simples (viga–viga e viga–pilar)",
+    lg.CANTONEIRA_DUPLA: "Dupla cantoneira (viga–viga e viga–pilar)",
     lg.PERFIL_FRIO: "Perfil formado a frio (NBR 14762)",
     lg.SOLDA: "Solda de filete",
 }
@@ -39,6 +41,7 @@ PERFIS_FRIOS = [
     lg.PERFIL_A_MAO,
 ]
 PADRAO_CHAPA = lg.EntradaChapaSimples()
+PADRAO_CANT = lg.EntradaCantoneiraDupla()
 PADRAO_FRIO = lg.EntradaPerfilFrio()
 PADRAO_SOLDA = lg.EntradaSolda()
 
@@ -57,7 +60,7 @@ tipo = st.segmented_control(
     help=AJUDA["tipo"],
 )
 tipo = tipo or lg.CHAPA_SIMPLES
-entrada: lg.EntradaChapaSimples | lg.EntradaPerfilFrio | lg.EntradaSolda
+entrada: lg.EntradaChapaSimples | lg.EntradaCantoneiraDupla | lg.EntradaPerfilFrio | lg.EntradaSolda
 
 if tipo == lg.CHAPA_SIMPLES:
     with st.container(border=True), secao_protegida("1. A viga e o apoio"):
@@ -338,6 +341,163 @@ if tipo == lg.CHAPA_SIMPLES:
         eletrodo=eletrodo,
         v_sd_kN=float(v_sd),
         n_sd_kN=float(n_sd),
+        norma=norma,
+        anglo=bool(anglo),
+    )
+elif tipo == lg.CANTONEIRA_DUPLA:
+    acos = list(bc.ACOS)
+    with st.container(border=True), secao_protegida("1. A viga e o apoio"):
+        st.subheader("1. A viga e o apoio", help=AJUDA["sec_viga"])
+        c = st.columns(4)
+        perfil = c[0].selectbox(
+            "Perfil da viga apoiada", PERFIS_DE_VIGA,
+            index=_indice(PERFIS_DE_VIGA, PADRAO_CANT.perfil), key="lig_c_perfil",
+            persist_state="session", help=AJUDA["perfil"],
+        )  # fmt: skip
+        aco_viga = c[1].selectbox(
+            "Aço da viga", acos, index=_indice(acos, PADRAO_CANT.aco_viga), key="lig_c_aco_viga",
+            persist_state="session", help=AJUDA["aco_viga"],
+        )  # fmt: skip
+        apoio = c[2].selectbox(
+            "Apoio", list(lg.APOIOS), format_func=lg.APOIOS.get, key="lig_c_apoio",
+            persist_state="session", help=AJUDA["apoio"],
+        )  # fmt: skip
+        t_apoio = c[3].number_input(
+            "Espessura do apoio (mm)", 0.5, 100.0, PADRAO_CANT.t_apoio_mm, 0.5,
+            key="lig_c_t_apoio", persist_state="session", help=AJUDA["t_apoio"],
+        )  # fmt: skip
+        c = st.columns(5)
+        aco_apoio = c[0].selectbox(
+            "Aço do apoio", acos, index=_indice(acos, PADRAO_CANT.aco_apoio), key="lig_c_aco_apoio",
+            persist_state="session", help=AJUDA["aco_apoio"],
+        )  # fmt: skip
+        recorte = c[1].toggle(
+            "Mesa superior recortada", value=PADRAO_CANT.recorte, key="lig_c_recorte",
+            persist_state="session", help=AJUDA["recorte"],
+        )  # fmt: skip
+        rec_h = c[2].number_input(
+            "Altura do recorte (mm)", 1.0, 500.0, PADRAO_CANT.recorte_altura_mm, 5.0,
+            key="lig_c_rec_h", persist_state="session", help=AJUDA["recorte_altura"],
+            disabled=not recorte,
+        )  # fmt: skip
+        rec_c = c[3].number_input(
+            "Comprimento do recorte (mm)", 1.0, 2000.0, PADRAO_CANT.recorte_comprimento_mm, 5.0,
+            key="lig_c_rec_c", persist_state="session", help=AJUDA["recorte_comprimento"],
+            disabled=not recorte,
+        )  # fmt: skip
+        normas = list(lg.NORMAS)
+        norma = c[4].selectbox(
+            "Norma", normas, format_func=lg.NORMAS_ROTULOS.get, key="lig_c_norma",
+            persist_state="session", help=AJUDA["norma"],
+        )  # fmt: skip
+    with st.container(border=True), secao_protegida("2. Cantoneiras e parafusos"):
+        st.subheader("2. Cantoneiras e parafusos", help=AJUDA["sec_cantoneiras"])
+        c = st.columns(4)
+        cantoneiras = list(ct.CATALOGO_CANTONEIRAS)
+        cantoneira = c[0].selectbox(
+            "Cantoneira", cantoneiras, index=_indice(cantoneiras, PADRAO_CANT.cantoneira),
+            key="lig_c_cantoneira", persist_state="session", help=AJUDA["cantoneira"],
+        )  # fmt: skip
+        aco_cant = c[1].selectbox(
+            "Aço das cantoneiras", acos, index=_indice(acos, PADRAO_CANT.aco_cantoneira),
+            key="lig_c_aco_cant", persist_state="session", help=AJUDA["aco_cantoneira"],
+        )  # fmt: skip
+        comprimento = c[2].number_input(
+            "Comprimento das cantoneiras (mm)", 20.0, 2000.0, PADRAO_CANT.comprimento_mm, 5.0,
+            key="lig_c_comp", persist_state="session", help=AJUDA["comprimento_cantoneira"],
+        )  # fmt: skip
+        parafusos = list(bc.PARAFUSOS)
+        parafuso = c[3].selectbox(
+            "Parafuso", parafusos, index=_indice(parafusos, PADRAO_CANT.parafuso),
+            key="lig_c_parafuso", persist_state="session", help=AJUDA["parafuso"],
+        )  # fmt: skip
+        c = st.columns(4)
+        grau = c[0].selectbox(
+            "Grau", list(bc.GRAUS), key="lig_c_grau", persist_state="session", help=AJUDA["grau"]
+        )
+        n_par = c[1].number_input(
+            "Parafusos por linha", 1, 12, PADRAO_CANT.n_parafusos, 1, key="lig_c_n",
+            persist_state="session", help=AJUDA["n_parafusos"],
+        )  # fmt: skip
+        passo = c[2].number_input(
+            "Passo (mm)", 1.0, 1000.0, PADRAO_CANT.passo_mm, 5.0, key="lig_c_passo",
+            persist_state="session", help=AJUDA["passo"],
+        )  # fmt: skip
+        rosca = c[3].toggle(
+            "Rosca no plano de corte", value=True, key="lig_c_rosca", persist_state="session",
+            help=AJUDA["rosca"],
+        )  # fmt: skip
+        c = st.columns(5)
+        borda_v = c[0].number_input(
+            "Borda vertical (mm)", 1.0, 1000.0, PADRAO_CANT.borda_vertical_mm, 5.0,
+            key="lig_c_borda_v", persist_state="session", help=AJUDA["borda_vertical"],
+        )  # fmt: skip
+        g_alma = c[1].number_input(
+            "Gabarito na alma (mm)", 1.0, 500.0, PADRAO_CANT.gabarito_alma_mm, 5.0,
+            key="lig_c_g_alma", persist_state="session", help=AJUDA["gabarito_alma"],
+        )  # fmt: skip
+        g_apoio = c[2].number_input(
+            "Gabarito no apoio (mm)", 1.0, 500.0, PADRAO_CANT.gabarito_apoio_mm, 5.0,
+            key="lig_c_g_apoio", persist_state="session", help=AJUDA["gabarito_apoio"],
+        )  # fmt: skip
+        borda_alma = c[3].number_input(
+            "Furo à ponta da viga (mm)", 1.0, 1000.0, PADRAO_CANT.borda_alma_mm, 5.0,
+            key="lig_c_borda_alma", persist_state="session", help=AJUDA["borda_alma"],
+        )  # fmt: skip
+        topo = c[4].number_input(
+            "Parafuso ao topo da alma (mm)", 1.0, 1000.0, PADRAO_CANT.topo_alma_mm, 5.0,
+            key="lig_c_topo", persist_state="session", help=AJUDA["topo_alma"],
+        )  # fmt: skip
+    with st.container(border=True), secao_protegida("3. Esforço de cálculo"):
+        st.subheader("3. Esforço de cálculo", help=AJUDA["sec_esforcos"])
+        registradas = lg.reacoes_do_projeto(obter_projeto_ativo())
+        if registradas:
+            rotulos = [r.rotulo for r in registradas]
+            c = st.columns([3, 1])
+            escolhida = c[0].selectbox(
+                "Trazer de um cálculo registrado", rotulos, key="lig_c_origem",
+                help=AJUDA["origem"],
+            )  # fmt: skip
+            c[1].button(
+                "Usar esta reação",
+                icon=":material/input:",
+                key="lig_c_usar_reacao",
+                help=AJUDA["usar_reacao"],
+                on_click=st.session_state.update,
+                kwargs={"lig_c_v": round(registradas[rotulos.index(escolhida)].v_kN, 2)},
+            )
+        c = st.columns(2)
+        v_sd = c[0].number_input(
+            "V_Sd (kN)", 0.0, 5000.0, PADRAO_CANT.v_sd_kN, 1.0, key="lig_c_v",
+            persist_state="session", help=AJUDA["v_sd"],
+        )  # fmt: skip
+        anglo = c[1].toggle(
+            "Critério Anglo American", key="lig_c_anglo", persist_state="session",
+            help=AJUDA["anglo"],
+        )  # fmt: skip
+    entrada = lg.EntradaCantoneiraDupla(
+        perfil=perfil,
+        aco_viga=aco_viga,
+        apoio=apoio,
+        t_apoio_mm=float(t_apoio),
+        aco_apoio=aco_apoio,
+        recorte=bool(recorte),
+        recorte_altura_mm=float(rec_h),
+        recorte_comprimento_mm=float(rec_c),
+        cantoneira=cantoneira,
+        aco_cantoneira=aco_cant,
+        comprimento_mm=float(comprimento),
+        parafuso=parafuso,
+        grau=grau,
+        rosca_no_plano=bool(rosca),
+        n_parafusos=int(n_par),
+        passo_mm=float(passo),
+        borda_vertical_mm=float(borda_v),
+        gabarito_alma_mm=float(g_alma),
+        gabarito_apoio_mm=float(g_apoio),
+        borda_alma_mm=float(borda_alma),
+        topo_alma_mm=float(topo),
+        v_sd_kN=float(v_sd),
         norma=norma,
         anglo=bool(anglo),
     )

@@ -312,7 +312,7 @@ def test_blocos_levantam_erro_em_vez_de_estimar():
     with pytest.raises(ValueError, match="D/t > 0,45"):
         F.resist_compressao(F.secao_tubo_circular(200, 0.5), 250, 1000, 1000)  # D/t = 400
     with pytest.raises(NotImplementedError, match="não compacto"):
-        F.momento_resistente(F.secao_tubo_retangular(200, 200, 3), 250)
+        F.momento_resistente(F.secao_tubo_retangular(200, 600, 3), 250)
     with pytest.raises(NotImplementedError, match="Alma esbelta"):
         F.momento_resistente(F.secao_I(900, 200, 8, 4, soldado=True), 345)
     with pytest.raises(ValueError, match="Z"):
@@ -336,3 +336,29 @@ def test_tubo_circular_nao_compacto_pela_tabela_g1():
     )
     compacto = F.momento_resistente(F.secao_tubo_circular(200, 5), 250)  # D/t = 40 ≤ 56
     assert compacto["governa"] == "plastificação"
+
+
+def test_tubo_retangular_nao_compacto_pela_tabela_g1():
+    import math
+
+    import pytest
+
+    sec = F.secao_tubo_retangular(200, 200, 3)  # b/t = h/t = 63,7: FLM esbelta, FLA não compacta
+    fy, E = 250.0, 200e3
+    raiz = math.sqrt(E / fy)
+    r = F.momento_resistente(sec, fy, norma="NBR8800_2008")
+    b, t = 191.0, 3.0
+    bef = 1.92 * t * raiz * (1 - 0.38 / (b / t) * raiz)
+    assert bef < b and b / t > 1.40 * raiz  # mesa esbelta: M_cr = W_ef²/W·f_y
+    flm = r["estados"]["FLM"]
+    assert flm < sec.Wx * fy * 0.9 / 1e6  # menor que o momento de início de escoamento
+    assert "FLA" not in r["estados"]  # h/t = 63,7 ≤ 2,42·√(E/f_y) = 68,4: alma compacta
+    assert r["governa"] == "FLM"
+    alto = F.secao_tubo_retangular(100, 300, 3)  # h/t = 97: alma não compacta
+    fla = F.momento_resistente(alto, fy, norma="NBR8800_2008")["estados"]["FLA"]
+    esperado = F._interp(alto.Zx * fy, alto.Wx * fy, 291 / 3, 2.42 * raiz, 5.70 * raiz)
+    assert fla == pytest.approx(esperado / 1.10 / 1e6)
+    aisc = F.momento_resistente(sec, fy, norma="AISC360_16_LRFD")
+    assert aisc["governa"] == "FLM" and aisc["MRd"] > 0
+    compacto = F.momento_resistente(F.secao_tubo_retangular(100, 150, 8), fy)
+    assert compacto["governa"] in ("plastificação", "FLT")

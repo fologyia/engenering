@@ -293,3 +293,29 @@ def test_reacoes_dos_calculos_registrados():
     assert apoios[0].v_kN == pytest.approx(abs(esperadas[0].ry), rel=1e-3)
     assert apoios[0].n_kN == pytest.approx(esperadas[0].rx, rel=1e-3, abs=1e-6)
     assert lg.reacoes_do_projeto(None) == [] and lg.reacoes_do_projeto({}) == []
+
+
+# ------------------------------------------------------------------ dupla cantoneira
+def test_dupla_cantoneira_parafusos_e_cantoneiras():
+    e = lg.EntradaCantoneiraDupla()
+    r = lg.calcular(e)
+    alma = linha(r, "Parafusos na alma")
+    assert alma.solicitante == pytest.approx(math.hypot(40 / 3, 40 * 45 * 70 / (2 * 70**2)))
+    d = bc.dados_parafuso('3/4"')
+    ab = math.pi * d["d_b"] ** 2 / 4
+    assert alma.resistente <= 2 * 0.45 * ab * 830 / 1.35 / 1000 + 1e-9  # corte duplo
+    assert linha(r, "Parafusos no apoio").solicitante == pytest.approx(40 / 6)
+    from core import cantoneiras as ct
+
+    ta = ct.obter_cantoneira(e.cantoneira).t_mm
+    assert linha(r, "Cantoneiras: escoamento").resistente == pytest.approx(
+        0.6 * 250 * 2 * 210 * ta / 1.1 / 1000
+    )
+    assert r.status == "OK"
+    with pytest.raises(lg.LigacaoInvalida, match="não cabem"):
+        lg.calcular(replace(e, comprimento_mm=100))
+    figura = lg.figura(r)
+    assert Image.open(io.BytesIO(figura.png)).format == "PNG"
+    registro = json.loads(json.dumps(lg.registro_ligacao(r)))
+    imagens, aviso = imagens_do_registro(registro, {})
+    assert aviso == "" and len(imagens) == 1

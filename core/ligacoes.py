@@ -315,6 +315,92 @@ def _forca_no_parafuso(coords: list[tuple[float, float]], v: float, n: float, m:
     )
 
 
+def _alma_da_viga(
+    e: EntradaChapaSimples | EntradaCantoneiraDupla,
+    d: float,
+    tw: float,
+    fy_v: float,
+    fu_v: float,
+    n: int,
+    s: float,
+    dhl: float,
+    v: float,
+) -> list[Verificacao]:
+    """Alma da viga apoiada: cisalhamento e, com recorte, colapso por rasgamento e flexão."""
+    linhas: list[Verificacao] = []
+    altura_alma = d - e.recorte_altura_mm if e.recorte else d
+    linhas.append(
+        Verificacao(
+            "Alma da viga: escoamento por cisalhamento",
+            v,
+            0.60 * fy_v * altura_alma * tw / GAMMA_A1 / 1000,
+            "kN",
+            "NBR 8800 6.5.5 a)",
+            f"altura {'recortada ' if e.recorte else ''}{_n(altura_alma, 0)} mm × t_w = {_n(tw, 1)} mm",
+        )
+    )
+    linhas.append(
+        Verificacao(
+            "Alma da viga: ruptura por cisalhamento na linha dos furos",
+            v,
+            0.60 * fu_v * (altura_alma - n * dhl) * tw / GAMMA_A2 / 1000,
+            "kN",
+            "NBR 8800 6.5.5 b)",
+            f"A_nv = ({_n(altura_alma, 0)} − {n}·{_n(dhl, 1)})·{_n(tw, 1)} mm",
+        )
+    )
+    if e.recorte:
+        agv_w = (e.topo_alma_mm + (n - 1) * s) * tw
+        anv_w = agv_w - (n - 0.5) * dhl * tw
+        ant_w = (e.borda_alma_mm - 0.5 * dhl) * tw
+        linhas.append(
+            Verificacao(
+                "Alma recortada: colapso por rasgamento",
+                v,
+                bc.resist_colapso_rasgamento(agv_w, anv_w, ant_w, fy_v, fu_v, e.norma, 1.0),
+                "kN",
+                "NBR 8800 6.5.6 (Figura 18)",
+                f"A_gv = {_n(agv_w, 0)}, A_nv = {_n(anv_w, 0)}, A_nt = {_n(ant_w, 0)} mm²; C_ts = 1,0",
+            )
+        )
+        w_rec = tw * altura_alma**2 / 6
+        linhas.append(
+            Verificacao(
+                "Alma recortada: flexão na seção do recorte (M = V·c)",
+                v * e.recorte_comprimento_mm / 1000,
+                fy_v * w_rec / GAMMA_A1 / 1e6,
+                "kN·m",
+                "NBR 8800 6.5 (seção da alma, sem a mesa inferior: a favor da segurança)",
+                f"c = {_n(e.recorte_comprimento_mm, 0)} mm; W = t_w·h²/6 = {_n(w_rec / 1e3, 1)} cm³",
+            )
+        )
+        usual = e.recorte_comprimento_mm <= d and e.recorte_altura_mm <= 0.2 * d
+        linhas.append(
+            Verificacao(
+                "Recorte na faixa usual (c ≤ d e d_c ≤ 0,2·d)",
+                None,
+                None,
+                "—",
+                "AISC Manual, Parte 9 (vigas recortadas)",
+                "dentro da faixa usual"
+                if usual
+                else "fora da faixa usual: confira a flambagem local da alma recortada à parte",
+                status="OK" if usual else "ALERTA",
+                tipo="limite",
+            )
+        )
+    else:
+        linhas.append(
+            _na(
+                "Alma recortada: colapso por rasgamento",
+                "NBR 8800 6.5.6",
+                "sem recorte: a alma continua até a mesa superior",
+            )
+        )
+
+    return linhas
+
+
 def calcular_chapa_simples(e: EntradaChapaSimples) -> ResultadoLigacao:
     _validar_chapa(e)
     try:
@@ -449,76 +535,7 @@ def calcular_chapa_simples(e: EntradaChapaSimples) -> ResultadoLigacao:
             )
         )
 
-    # ------------------------------------------------------------------ alma da viga apoiada
-    altura_alma = d - e.recorte_altura_mm if e.recorte else d
-    linhas.append(
-        Verificacao(
-            "Alma da viga: escoamento por cisalhamento",
-            v,
-            0.60 * fy_v * altura_alma * tw / GAMMA_A1 / 1000,
-            "kN",
-            "NBR 8800 6.5.5 a)",
-            f"altura {'recortada ' if e.recorte else ''}{_n(altura_alma, 0)} mm × t_w = {_n(tw, 1)} mm",
-        )
-    )
-    linhas.append(
-        Verificacao(
-            "Alma da viga: ruptura por cisalhamento na linha dos furos",
-            v,
-            0.60 * fu_v * (altura_alma - n * dhl) * tw / GAMMA_A2 / 1000,
-            "kN",
-            "NBR 8800 6.5.5 b)",
-            f"A_nv = ({_n(altura_alma, 0)} − {n}·{_n(dhl, 1)})·{_n(tw, 1)} mm",
-        )
-    )
-    if e.recorte:
-        agv_w = (e.topo_alma_mm + (n - 1) * s) * tw
-        anv_w = agv_w - (n - 0.5) * dhl * tw
-        ant_w = (e.borda_alma_mm - 0.5 * dhl) * tw
-        linhas.append(
-            Verificacao(
-                "Alma recortada: colapso por rasgamento",
-                v,
-                bc.resist_colapso_rasgamento(agv_w, anv_w, ant_w, fy_v, fu_v, e.norma, 1.0),
-                "kN",
-                "NBR 8800 6.5.6 (Figura 18)",
-                f"A_gv = {_n(agv_w, 0)}, A_nv = {_n(anv_w, 0)}, A_nt = {_n(ant_w, 0)} mm²; C_ts = 1,0",
-            )
-        )
-        w_rec = tw * altura_alma**2 / 6
-        linhas.append(
-            Verificacao(
-                "Alma recortada: flexão na seção do recorte (M = V·c)",
-                v * e.recorte_comprimento_mm / 1000,
-                fy_v * w_rec / GAMMA_A1 / 1e6,
-                "kN·m",
-                "NBR 8800 6.5 (seção da alma, sem a mesa inferior: a favor da segurança)",
-                f"c = {_n(e.recorte_comprimento_mm, 0)} mm; W = t_w·h²/6 = {_n(w_rec / 1e3, 1)} cm³",
-            )
-        )
-        usual = e.recorte_comprimento_mm <= d and e.recorte_altura_mm <= 0.2 * d
-        linhas.append(
-            Verificacao(
-                "Recorte na faixa usual (c ≤ d e d_c ≤ 0,2·d)",
-                None,
-                None,
-                "—",
-                "AISC Manual, Parte 9 (vigas recortadas)",
-                "dentro da faixa usual"
-                if usual
-                else "fora da faixa usual: confira a flambagem local da alma recortada à parte",
-                status="OK" if usual else "ALERTA",
-                tipo="limite",
-            )
-        )
-    else:
-        linhas.append(
-            _na(
-                "Alma recortada: colapso por rasgamento",
-                "NBR 8800 6.5.6",
-                "sem recorte: a alma continua até a mesa superior",
-            )
-        )
+    linhas.extend(_alma_da_viga(e, d, tw, fy_v, fu_v, n, s, dhl, v))
 
     # ------------------------------------------------------------------ solda da chapa no apoio
     comprimento = hp
@@ -619,6 +636,236 @@ def calcular_chapa_simples(e: EntradaChapaSimples) -> ResultadoLigacao:
             "momento_V_a_kNm": m_kNm,
             "solda_kN_cm": f_solda * 10,
         },
+    )
+
+
+# =============================================================================================
+# 1b. Dupla cantoneira (viga–viga e viga–pilar)
+# =============================================================================================
+CANTONEIRA_DUPLA = "cantoneira_dupla"
+
+
+@dataclass(frozen=True)
+class EntradaCantoneiraDupla:
+    perfil: str = "W 250 x 17,9"  # viga apoiada
+    aco_viga: str = "ASTM A572 Gr 50"
+    apoio: str = APOIO_VIGA
+    t_apoio_mm: float = 5.8
+    aco_apoio: str = "ASTM A572 Gr 50"
+    recorte: bool = True
+    recorte_altura_mm: float = 30.0
+    recorte_comprimento_mm: float = 100.0
+    cantoneira: str = 'L 3" × 5/16"'
+    aco_cantoneira: str = "ASTM A36"
+    comprimento_mm: float = 210.0  # altura das cantoneiras
+    parafuso: str = '3/4"'
+    grau: str = "A325"
+    rosca_no_plano: bool = True
+    n_parafusos: int = 3  # por linha vertical (na alma; no apoio, a mesma quantidade em cada aba)
+    passo_mm: float = 70.0
+    borda_vertical_mm: float = 35.0  # na cantoneira, do furo à ponta
+    gabarito_alma_mm: float = 45.0  # da quina da cantoneira (face do apoio) aos furos da alma
+    gabarito_apoio_mm: float = 45.0  # da quina aos furos no apoio
+    borda_alma_mm: float = 35.0  # dos furos à ponta da viga
+    topo_alma_mm: float = 40.0
+    v_sd_kN: float = 40.0
+    norma: str = "NBR8800_2024"
+    anglo: bool = False
+
+
+def calcular_cantoneira_dupla(e: EntradaCantoneiraDupla) -> ResultadoLigacao:
+    """Duas cantoneiras parafusadas na alma da viga (corte duplo) e no apoio (corte simples)."""
+    from core import cantoneiras as ct
+
+    if (
+        e.n_parafusos < 1
+        or min(
+            e.passo_mm if e.n_parafusos > 1 else 1.0,
+            e.borda_vertical_mm,
+            e.gabarito_alma_mm,
+            e.gabarito_apoio_mm,
+            e.borda_alma_mm,
+            e.topo_alma_mm,
+            e.t_apoio_mm,
+        )
+        <= 0
+    ):
+        raise LigacaoInvalida(
+            "Parafusos, passo, bordas, gabaritos e espessuras precisam ser maiores que zero."
+        )
+    if e.v_sd_kN < 0:
+        raise LigacaoInvalida("Informe a força cortante de cálculo como valor positivo.")
+    if e.norma not in NORMAS or e.apoio not in APOIOS:
+        raise LigacaoInvalida("Escolha a norma e o apoio da lista.")
+    for aco in (e.aco_viga, e.aco_cantoneira, e.aco_apoio):
+        if aco not in ACOS:
+            raise LigacaoInvalida(f"Aço desconhecido: {aco!r}.")
+    if e.parafuso not in bc.PARAFUSOS or e.grau not in bc.GRAUS:
+        raise LigacaoInvalida("Escolha o parafuso e o grau da lista.")
+    if e.cantoneira not in ct.CATALOGO_CANTONEIRAS:
+        raise LigacaoInvalida(f"Cantoneira desconhecida: {e.cantoneira!r}.")
+    try:
+        perfil = sc.obter_perfil(e.perfil)
+    except (KeyError, sc.ErroDeCatalogo) as erro:
+        raise LigacaoInvalida(f"Perfil desconhecido: {e.perfil!r}.") from erro
+    cant = ct.obter_cantoneira(e.cantoneira)
+    ta, aba = cant.t_mm, cant.b_mm
+    d, tw, tf = perfil.altura_mm, perfil.espessura_alma_mm, perfil.espessura_mesa_mm
+    fy_v, fu_v = ACOS[e.aco_viga]
+    fy_a, fu_a = ACOS[e.aco_cantoneira]
+    _fy_s, fu_s = ACOS[e.aco_apoio]
+    par = bc.dados_parafuso(e.parafuso)
+    db, dh, emin = float(par["d_b"]), float(par["d_h"]), float(par["e_min"])
+    dhl = dh + FOLGA_FURO
+    n, s, v, comp = e.n_parafusos, e.passo_mm, e.v_sd_kN, e.comprimento_mm
+    if e.borda_vertical_mm * 2 + (n - 1) * s > comp + 1e-6:
+        raise LigacaoInvalida(
+            "Os furos não cabem na cantoneira: comprimento ≥ 2·borda + (n − 1)·passo."
+        )
+    linhas: list[Verificacao] = []
+
+    # ------------------------------------------------------------------ parafusos na alma (corte duplo)
+    coords = [(0.0, k * s) for k in range(n)]
+    m_alma = v * e.gabarito_alma_mm / 1000
+    f_alma = _forca_no_parafuso(coords, v, 0.0, m_alma)
+    fv2 = bc.resist_corte(db, e.grau, e.norma, e.rosca_no_plano, 2)
+    lf_cant = [e.borda_vertical_mm - dh / 2, aba - e.gabarito_alma_mm - dh / 2]
+    lf_alma = [e.borda_alma_mm - dh / 2]
+    if n > 1:
+        lf_cant.append(s - dh)
+        lf_alma.append(s - dh)
+    if e.recorte:
+        lf_alma.append(e.topo_alma_mm - dh / 2)
+    fc_cant = 2 * bc.resist_contato(db, ta, fu_a, min(lf_cant), e.norma)
+    fc_alma = bc.resist_contato(db, tw, fu_v, min(lf_alma), e.norma)
+    r_alma = min(fv2, fc_cant, fc_alma)
+    linhas.append(
+        Verificacao(
+            "Parafusos na alma (corte duplo, M = V·g)",
+            f_alma,
+            r_alma,
+            "kN",
+            "NBR 8800 6.3.3.2 e 6.3.3.3",
+            f"{n} × {e.parafuso} {e.grau}; M = V·g = {_n(m_alma, 3)} kN·m; F_v,Rd (2 planos) = "
+            f"{_n(fv2)} kN; contato nas 2 cantoneiras {_n(fc_cant)} kN, na alma {_n(fc_alma)} kN",
+        )
+    )
+    # ------------------------------------------------------------------ parafusos no apoio (corte simples)
+    f_apoio = v / (2 * n)
+    fv1 = bc.resist_corte(db, e.grau, e.norma, e.rosca_no_plano, 1)
+    lf_apoio = [e.borda_vertical_mm - dh / 2] + ([s - dh] if n > 1 else [])
+    fc_cant_apoio = bc.resist_contato(db, ta, fu_a, min(lf_apoio), e.norma)
+    fc_apoio = bc.resist_contato(db, e.t_apoio_mm, fu_s, s - dh if n > 1 else None, e.norma)
+    r_apoio = min(fv1, fc_cant_apoio, fc_apoio)
+    linhas.append(
+        Verificacao(
+            "Parafusos no apoio (corte simples)",
+            f_apoio,
+            r_apoio,
+            "kN",
+            "NBR 8800 6.3.3.2 e 6.3.3.3",
+            f"2 × {n} parafusos com V/(2n); F_v,Rd = {_n(fv1)} kN; contato na cantoneira "
+            f"{_n(fc_cant_apoio)} kN, no apoio {_n(fc_apoio)} kN (t = {_n(e.t_apoio_mm, 1)} mm); "
+            "a excentricidade da aba no apoio é desprezada (gabarito curto)",
+        )
+    )
+    # ------------------------------------------------------------------ cantoneiras
+    linhas.append(
+        Verificacao(
+            "Cantoneiras: escoamento por cisalhamento",
+            v,
+            0.60 * fy_a * 2 * comp * ta / GAMMA_A1 / 1000,
+            "kN",
+            "NBR 8800 6.5.5 a)",
+            f"duas abas de {_n(comp, 0)} × {_n(ta, 2)} mm",
+        )
+    )
+    linhas.append(
+        Verificacao(
+            "Cantoneiras: ruptura por cisalhamento",
+            v,
+            0.60 * fu_a * 2 * (comp - n * dhl) * ta / GAMMA_A2 / 1000,
+            "kN",
+            "NBR 8800 6.5.5 b)",
+            f"A_nv = 2·({_n(comp, 0)} − {n}·{_n(dhl, 1)})·{_n(ta, 2)} mm",
+        )
+    )
+    agv = (comp - e.borda_vertical_mm) * ta
+    anv = agv - (n - 0.5) * dhl * ta
+    ant = (aba - e.gabarito_alma_mm - 0.5 * dhl) * ta
+    linhas.append(
+        Verificacao(
+            "Cantoneiras: colapso por rasgamento (aba na alma)",
+            v,
+            2 * bc.resist_colapso_rasgamento(agv, anv, ant, fy_a, fu_a, e.norma, 1.0),
+            "kN",
+            "NBR 8800 6.5.6",
+            f"cada cantoneira: A_gv = {_n(agv, 0)}, A_nv = {_n(anv, 0)}, A_nt = {_n(ant, 0)} mm²",
+        )
+    )
+    # ------------------------------------------------------------------ alma da viga e geometria
+    linhas.extend(_alma_da_viga(e, d, tw, fy_v, fu_v, n, s, dhl, v))
+    alma_livre = d - tf - (e.recorte_altura_mm if e.recorte else tf)
+    ocupado = comp + max(e.topo_alma_mm - e.borda_vertical_mm, 0.0)
+    linhas.append(
+        _maximo(
+            "Cantoneiras cabem na alma livre da viga",
+            ocupado,
+            alma_livre,
+            "mm",
+            "geometria",
+            f"cantoneiras de {_n(comp, 0)} mm",
+        )
+    )
+    for nome, gab in (("na alma", e.gabarito_alma_mm), ("no apoio", e.gabarito_apoio_mm)):
+        linhas.append(
+            _minimo(
+                f"Furo à borda da aba ({nome})",
+                emin,
+                aba - gab,
+                "mm",
+                "NBR 8800 6.3.11",
+                f"aba {_n(aba, 1)} mm − gabarito {_n(gab, 0)} mm",
+            )
+        )
+        linhas.append(
+            _minimo(
+                f"Folga para apertar o parafuso ({nome})",
+                ta + db,
+                gab,
+                "mm",
+                "detalhe construtivo",
+                "gabarito ≥ t + d_b, para a porca não encostar na outra aba",
+            )
+        )
+    linhas.append(
+        _minimo(
+            "Distância do furo à ponta da viga",
+            emin,
+            e.borda_alma_mm,
+            "mm",
+            "NBR 8800 6.3.11",
+            "e ≥ e_mín",
+        )
+    )
+    linhas.extend(
+        replace(v_, tipo="limite")
+        for v_ in bc.disposicoes_construtivas(
+            db, dh, emin, ta, e.borda_vertical_mm, s if n > 1 else 0.0
+        )
+    )
+    if e.anglo:
+        linhas.extend(bc.criterio_anglo(n, e.grau, db))
+    titulo = (
+        f"Ligação flexível por dupla cantoneira — {e.perfil} em "
+        f"{APOIOS[e.apoio].split(' (')[0].lower()}"
+    )
+    return ResultadoLigacao(
+        CANTONEIRA_DUPLA,
+        titulo,
+        e,
+        tuple(linhas),
+        {"forca_parafuso_alma_kN": f_alma, "forca_parafuso_apoio_kN": f_apoio},
     )
 
 
@@ -1274,6 +1521,40 @@ def figura_chapa_simples(e: EntradaChapaSimples) -> ImagemDiagrama:
     )
 
 
+def figura_cantoneira_dupla(e: EntradaCantoneiraDupla) -> ImagemDiagrama:
+    """Vista lateral: a ponta da viga com a cantoneira (aba na alma), os furos e o apoio."""
+    from core import cantoneiras as ct
+
+    aba = ct.obter_cantoneira(e.cantoneira).b_mm
+    como_chapa = EntradaChapaSimples(
+        perfil=e.perfil,
+        apoio=e.apoio,
+        recorte=e.recorte,
+        recorte_altura_mm=e.recorte_altura_mm,
+        recorte_comprimento_mm=e.recorte_comprimento_mm,
+        parafuso=e.parafuso,
+        grau=e.grau,
+        n_parafusos=e.n_parafusos,
+        passo_mm=e.passo_mm,
+        borda_vertical_mm=e.borda_vertical_mm,
+        distancia_solda_furo_mm=e.gabarito_alma_mm,
+        borda_horizontal_chapa_mm=max(aba - e.gabarito_alma_mm, 1.0),
+        borda_alma_mm=e.borda_alma_mm,
+        topo_alma_mm=e.topo_alma_mm,
+        t_chapa_mm=ct.obter_cantoneira(e.cantoneira).t_mm,
+        v_sd_kN=e.v_sd_kN,
+    )
+    base = figura_chapa_simples(como_chapa)
+    titulo = "Ligação flexível por dupla cantoneira (vista lateral)"
+    legenda = (
+        f"Duas cantoneiras {e.cantoneira} ({e.aco_cantoneira}) de {_n(e.comprimento_mm, 0)} mm, "
+        f"{e.n_parafusos} parafusos {e.parafuso} {e.grau} em corte duplo na alma da {e.perfil} e "
+        f"{2 * e.n_parafusos} em corte simples no apoio; a aba aparece na posição da chapa (sem "
+        "solda)."
+    )
+    return ImagemDiagrama(titulo, legenda, base.png, base.largura_px, base.altura_px)
+
+
 def figura_perfil_frio(e: EntradaPerfilFrio) -> ImagemDiagrama:
     """A alma do perfil com a grade de parafusos, as bordas e as forças."""
     largura_px, altura_px = 900, 420
@@ -1437,6 +1718,7 @@ def figura_solda(e: EntradaSolda) -> ImagemDiagrama:
 
 _ENTRADAS: dict[str, type] = {
     CHAPA_SIMPLES: EntradaChapaSimples,
+    CANTONEIRA_DUPLA: EntradaCantoneiraDupla,
     PERFIL_FRIO: EntradaPerfilFrio,
     SOLDA: EntradaSolda,
 }
@@ -1445,6 +1727,8 @@ _ENTRADAS: dict[str, type] = {
 def figura(r: ResultadoLigacao) -> ImagemDiagrama:
     if r.tipo == CHAPA_SIMPLES:
         return figura_chapa_simples(r.entrada)
+    if r.tipo == CANTONEIRA_DUPLA:
+        return figura_cantoneira_dupla(r.entrada)
     if r.tipo == PERFIL_FRIO:
         return figura_perfil_frio(r.entrada)
     return figura_solda(r.entrada)
@@ -1458,9 +1742,13 @@ def figura_gravada(dados: Mapping[str, Any]) -> ImagemDiagrama:
     return figura(ResultadoLigacao(str(dados["tipo"]), "", entrada, ()))
 
 
-def calcular(entrada: EntradaChapaSimples | EntradaPerfilFrio | EntradaSolda) -> ResultadoLigacao:
+def calcular(
+    entrada: EntradaChapaSimples | EntradaCantoneiraDupla | EntradaPerfilFrio | EntradaSolda,
+) -> ResultadoLigacao:
     if isinstance(entrada, EntradaChapaSimples):
         return calcular_chapa_simples(entrada)
+    if isinstance(entrada, EntradaCantoneiraDupla):
+        return calcular_cantoneira_dupla(entrada)
     if isinstance(entrada, EntradaPerfilFrio):
         return calcular_perfil_frio(entrada)
     return calcular_solda(entrada)
@@ -1470,6 +1758,11 @@ def calcular(entrada: EntradaChapaSimples | EntradaPerfilFrio | EntradaSolda) ->
 # Registro
 # =============================================================================================
 _METODO = {
+    CANTONEIRA_DUPLA: (
+        "Ligação flexível (rotulada) por duas cantoneiras: a cortante passa da alma da viga aos "
+        "parafusos em corte duplo (com o momento V·g), às cantoneiras e aos parafusos no apoio em "
+        "corte simples. Cantoneiras e alma pela NBR 8800 6.5."
+    ),
     CHAPA_SIMPLES: (
         "Ligação flexível (rotulada) por chapa simples: a cortante de cálculo e, se houver, a força "
         "normal passam da alma da viga apoiada aos parafusos e à chapa, e da chapa ao apoio pelos "
@@ -1488,6 +1781,11 @@ _METODO = {
     ),
 }
 _PREMISSAS = {
+    CANTONEIRA_DUPLA: [
+        "Parafusos da alma com o momento V·g (g da face do apoio aos furos), a favor da segurança.",
+        "Parafusos do apoio com V/(2n), sem a excentricidade da aba (gabarito curto).",
+        "O apoio (alma da viga principal ou pilar) é verificado só no contato dos parafusos.",
+    ],
     CHAPA_SIMPLES: [
         "A favor da segurança, o momento V·a entra nos parafusos e também na solda.",
         "Pressão de contato com a menor distância livre ℓ_f de cada parte (chapa e alma), em "

@@ -1144,7 +1144,12 @@ def _aba_catalogo(r: de.ResultadoEscada) -> None:
     )
 
 
-def _aba_requisicao(r: de.ResultadoEscada, ident: Identificacao) -> None:
+def _aba_requisicao(
+    r: de.ResultadoEscada,
+    ident: Identificacao,
+    escada: el.EscadaComPatamares | None = None,
+    longarina: le.ResultadoLongarina | None = None,
+) -> None:
     st.subheader("Texto para a requisição", help=AJUDA["res_requisicao"])
     st.code(r.especificacao, language=None, wrap_lines=True)
     colunas = st.columns(2)
@@ -1176,10 +1181,15 @@ def _aba_requisicao(r: de.ResultadoEscada, ident: Identificacao) -> None:
         key="dg_baixar_catalogo",
         help=AJUDA["btn_csv_catalogo"],
     )
-    _botao_pdf(botoes[2], r, ident)
+    _botao_pdf(botoes[2], r, ident, escada, longarina)
 
 
-def _pdf_bytes(r: de.ResultadoEscada, ident: Identificacao) -> bytes:
+def _pdf_bytes(
+    r: de.ResultadoEscada,
+    ident: Identificacao,
+    escada: el.EscadaComPatamares | None = None,
+    longarina: le.ResultadoLongarina | None = None,
+) -> bytes:
     return gerar_pdf_degrau(
         r,
         {
@@ -1188,10 +1198,18 @@ def _pdf_bytes(r: de.ResultadoEscada, ident: Identificacao) -> bytes:
             "responsavel": ident.responsavel,
             "data": ident.data,
         },
+        escada=escada,
+        longarina=longarina,
     )
 
 
-def _botao_pdf(alvo: Any, r: de.ResultadoEscada, ident: Identificacao) -> None:
+def _botao_pdf(
+    alvo: Any,
+    r: de.ResultadoEscada,
+    ident: Identificacao,
+    escada: el.EscadaComPatamares | None = None,
+    longarina: le.ResultadoLongarina | None = None,
+) -> None:
     """Botão do PDF: o arquivo só é gerado no clique (``data`` aceita uma função)."""
     opcoes: dict[str, Any] = {
         "file_name": "degrau_escada_relatorio.pdf",
@@ -1202,9 +1220,13 @@ def _botao_pdf(alvo: Any, r: de.ResultadoEscada, ident: Identificacao) -> None:
         "help": AJUDA["btn_pdf"],
     }
     try:
-        alvo.download_button("Relatório em PDF", data=lambda: _pdf_bytes(r, ident), **opcoes)
+        alvo.download_button(
+            "Relatório em PDF", data=lambda: _pdf_bytes(r, ident, escada, longarina), **opcoes
+        )
     except Exception:  # noqa: BLE001 - Streamlit sem download adiado: gera já, como os CSV
-        alvo.download_button("Relatório em PDF", data=_pdf_bytes(r, ident), **opcoes)
+        alvo.download_button(
+            "Relatório em PDF", data=_pdf_bytes(r, ident, escada, longarina), **opcoes
+        )
 
 
 def _blocos_fixos(r: de.ResultadoEscada) -> None:
@@ -1315,6 +1337,6 @@ def mostrar_degrau_de_escada() -> None:
     with aba_catalogo:
         _aba_catalogo(resultado)
     with aba_requisicao:
-        _aba_requisicao(resultado, ident)
+        _aba_requisicao(resultado, ident, escada, calculo_longarina)
     _blocos_fixos(resultado)
     _registrar(resultado, ident, escada, calculo_longarina)

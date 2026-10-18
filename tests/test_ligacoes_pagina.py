@@ -50,6 +50,7 @@ def test_modulo_registrado_em_dimensionamento_complementar():
         {"lig_tipo": lg.CHAPA_SIMPLES},
         {"lig_tipo": lg.PERFIL_FRIO, "lig_f_perfil": lg.PERFIL_A_MAO},
         {"lig_tipo": lg.SOLDA},
+        {"lig_tipo": lg.CANTONEIRA_DUPLA},
     ],
 )
 def test_cada_tipo_abre_com_ajuda_em_tudo_e_figura(banco_isolado, estado):

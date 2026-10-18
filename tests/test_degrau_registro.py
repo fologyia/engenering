@@ -413,3 +413,18 @@ def test_memorial_word_e_pdf_com_escada_e_longarina():
         assert "Longarina do lance 2" in texto
         for proibido in PALAVRAS_PROIBIDAS:
             assert proibido not in texto, proibido
+
+
+def test_pdf_da_pagina_com_escada_e_longarina():
+    r = resultado(H_mm=5400)
+    esc = el.montar_escada(r, [el.PatamarInformado(1500, 1200, 1000)])
+    r = el.aplicar_na_escada(r, esc)
+    lg = le.calcular_longarina(r, le.EntradaLongarina(trecho_topo_m=0.3), esc)
+    conteudo = gerar_pdf_degrau(r, {"obra": "Obra X"}, escada=esc, longarina=lg)
+    texto = texto_pdf(conteudo)
+    assert "2.1 Lances, patamares e esquemático" in texto
+    assert "3.1 Longarina" in texto and "Longarina do lance 2" in texto
+    imagens = sum(len(pagina.images) for pagina in PdfReader(BytesIO(conteudo)).pages)
+    assert imagens >= 1 + 2 * 7  # esquemático + 7 figuras por longarina diferente
+    for proibido in PALAVRAS_PROIBIDAS:
+        assert proibido not in texto, proibido

@@ -516,7 +516,7 @@ class TestBloqueios:
         assert r.status_geral == "NÃO OK"
 
     def test_tubo_nao_compacto_na_flexao_nao_e_estimado(self):
-        sec = cd.secao_tubo_retangular(200, 200, 3)  # b/t acima de 1,12·√(E/f_y)
+        sec = cd.secao_tubo_retangular(200, 600, 3)  # alma esbelta: h/t > 5,70·√(E/f_y)
         r = cb.verificar_coluna(entrada(sec, Mx_kNm=2.0))
         assert linha(r, "Flexão em x não calculada").status == "NÃO OK"
         assert "não compacto" in r.bloqueios[0]
@@ -526,7 +526,7 @@ class TestBloqueios:
         assert liberado.indice_interacao is not None and liberado.status_geral == "OK"
 
     def test_tubo_retangular_nao_compacto(self):
-        r = cb.verificar_coluna(entrada(cd.secao_tubo_retangular(200, 200, 3), Mx_kNm=2.0))
+        r = cb.verificar_coluna(entrada(cd.secao_tubo_retangular(200, 600, 3), Mx_kNm=2.0))
         assert r.status_geral == "NÃO OK" and "não compacto" in r.bloqueios[0]
 
     def test_nsd_acima_de_ne_no_b1(self):
@@ -677,7 +677,7 @@ class TestRevisao:
         assert "b1_y" not in resultados  # sem momento em y
 
     def test_mrd_informado_vai_ao_registro_e_ao_resultado(self):
-        sec = cd.secao_tubo_retangular(200, 200, 3)  # não compacto: sem largura efetiva
+        sec = cd.secao_tubo_retangular(200, 600, 3)  # alma esbelta: a norma não dá M_Rd
         e = entrada(sec, N_Sd_kN=10.0, Mx_kNm=2.0, MRd_x_informado_kNm=30.0)
         r = cb.verificar_coluna(e)
         assert r.flexao_x is None and r.mrd_x_kNm == 30.0 and r.mrd_y_kNm is None

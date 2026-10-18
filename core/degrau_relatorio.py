@@ -16,6 +16,9 @@ from typing import Any
 
 from core import degrau_escada as de
 from core import degrau_registro as reg
+from core import escada_lances as el
+from core import longarina_escada as le
+from core import portico_figuras as pf
 from core.pdf_fonts import fonte_pdf, texto_para_fonte
 
 _COR_STATUS = {
@@ -39,9 +42,17 @@ def _data_texto(valor: Any) -> str:
 
 
 def gerar_pdf_degrau(
-    r: de.ResultadoEscada, identificacao: Mapping[str, Any] | None = None
+    r: de.ResultadoEscada,
+    identificacao: Mapping[str, Any] | None = None,
+    *,
+    escada: el.EscadaComPatamares | None = None,
+    longarina: le.ResultadoLongarina | None = None,
 ) -> bytes:
-    """PDF (A4 em paisagem) do cálculo. ``identificacao``: obra, tag, responsavel e data."""
+    """PDF (A4 em paisagem) do cálculo. ``identificacao``: obra, tag, responsavel e data.
+
+    Com ``escada``, entra o esquemático e as tabelas de lances e patamares (2.1); com
+    ``longarina``, as cargas, os esforços, as reações, as verificações e os diagramas (3.1).
+    """
     try:
         from reportlab.lib import colors
         from reportlab.lib.enums import TA_LEFT
@@ -49,6 +60,7 @@ def gerar_pdf_degrau(
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
         from reportlab.platypus import (
+            Image,
             KeepTogether,
             LongTable,
             Paragraph,
@@ -199,6 +211,19 @@ def gerar_pdf_degrau(
         tab.setStyle(TableStyle(comandos))
         return tab
 
+    def figura(
+        png: bytes, largura_px: int, altura_px: int, legenda: str, largura_mm: float = 200
+    ) -> Any:
+        altura_mm = largura_mm * altura_px / largura_px
+        if altura_mm > 150:
+            largura_mm, altura_mm = largura_mm * 150 / altura_mm, 150
+        return KeepTogether(
+            [
+                Image(BytesIO(png), width=largura_mm * mm, height=altura_mm * mm),
+                paragrafo(legenda, "legenda"),
+            ]
+        )
+
     # ------------------------------------------------------------------ conteúdo
     e, g, ln, a = r.entrada, r.geometria, r.lances, r.adotado
     historia: list[Any] = [
@@ -296,6 +321,29 @@ def gerar_pdf_degrau(
         )
     )
 
+    if escada is not None:
+        historia.append(paragrafo("2.1 Lances, patamares e esquemático", "h1"))
+        esquema = el.figura_da_escada(escada)
+        historia.append(
+            figura(esquema.png, esquema.largura_px, esquema.altura_px, esquema.legenda, 230)
+        )
+        historia.append(
+            tabela(
+                list(el.CABECALHO_LANCES),
+                el.linhas_dos_lances(escada),
+                [15, 45, 22, 22, 22, 22, 35, 35],
+            )
+        )
+        if escada.patamares:
+            historia.append(Spacer(1, 2 * mm))
+            historia.append(
+                tabela(
+                    list(el.CABECALHO_PATAMARES),
+                    el.linhas_dos_patamares(escada),
+                    [25, 70, 40, 40, 68],
+                )
+            )
+
     historia.append(paragrafo(f"3. Memorial do modelo adotado ({a.modelo.nome})", "h1"))
     historia.append(
         tabela(
@@ -304,6 +352,84 @@ def gerar_pdf_degrau(
             [60, 40, 12, 131],
         )
     )
+
+    if longarina is not None:
+        historia.append(
+            paragrafo(
+                f"3.1 Longarina {longarina.entrada.perfil} ({longarina.entrada.aco}) — "
+                f"{longarina.status}",
+                "h1",
+            )
+        )
+        historia.append(
+            paragrafo(
+                "Núcleo de pórtico plano do programa: ELU γg·G + γq·Q para os esforços, ELS G + Q "
+                f"para a flecha; apoios: pé {longarina.entrada.apoio_pe}, topo "
+                f"{longarina.entrada.apoio_topo}.",
+                "legenda",
+            )
+        )
+        for aviso in longarina.avisos:
+            historia.append(paragrafo(f"Aviso: {aviso}"))
+        for lg in longarina.longarinas:
+            historia.append(paragrafo(lg.titulo, "corpo"))
+            historia.append(
+                tabela(
+                    ["Carga", "Valor", "Un.", "Origem"], le.linhas_das_cargas(lg), [70, 35, 30, 108]
+                )
+            )
+            historia.append(Spacer(1, 2 * mm))
+            historia.append(
+                tabela(
+                    list(le.CABECALHO_TRECHOS),
+                    le.linhas_dos_trechos(lg),
+                    [22, 18, 20, 32, 22, 24, 40, 25, 20],
+                )
+            )
+            historia.append(Spacer(1, 2 * mm))
+            historia.append(
+                tabela(list(le.CABECALHO_REACOES), le.linhas_das_reacoes(lg), [30, 70, 45, 45, 53])
+            )
+            historia.append(Spacer(1, 2 * mm))
+            historia.append(
+                tabela(
+                    [
+                        "Verificação",
+                        "Norma/item",
+                        "Solicitante",
+                        "Resistente",
+                        "Un.",
+                        "Aprov. (%)",
+                        "Status",
+                        "Cálculo",
+                    ],
+                    [
+                        [
+                            v.nome,
+                            v.referencia,
+                            "—" if v.solicitante is None else reg_n(v.solicitante, 3),
+                            "—" if v.resistente is None else reg_n(v.resistente, 3),
+                            v.unidade,
+                            "—" if v.aproveitamento is None else reg_n(100 * v.aproveitamento, 1),
+                            v.status,
+                            v.formula,
+                        ]
+                        for v in lg.decisivas
+                    ],
+                    [60, 30, 18, 18, 12, 15, 14, 76],
+                    status_coluna=6,
+                )
+            )
+            for desenho in pf.figuras_do_portico(
+                lg.elu,
+                prefixo=lg.titulo,
+                caso=f"ELU ({reg_n(lg.gamma_g)}·G + {reg_n(lg.gamma_q)}·Q)",
+                deformada=lg.els,
+                caso_deformada=le.ELS,
+            ):
+                historia.append(
+                    figura(desenho.png, desenho.largura_px, desenho.altura_px, desenho.legenda, 190)
+                )
 
     historia.append(paragrafo("4. Os 64 modelos do catálogo", "h1"))
     historia.append(

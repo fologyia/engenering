@@ -68,6 +68,23 @@ AJUDA: dict[str, str] = {
         "Deixe 0 se não houver."
     ),
     "anglo": "Acrescenta as exigências do critério Anglo American para parafusos (item 9.1).",
+    # ------------------------------------------------------------------ dupla cantoneira
+    "sec_cantoneiras": (
+        "As duas cantoneiras, uma de cada lado da alma da viga, e os parafusos: os da alma "
+        "trabalham com dois planos de corte, os do apoio com um."
+    ),
+    "cantoneira": "O tamanho das cantoneiras (aba × espessura), iguais dos dois lados.",
+    "aco_cantoneira": "O aço das cantoneiras.",
+    "aco_apoio": "O aço do apoio (alma da viga principal ou pilar), para o contato dos parafusos.",
+    "comprimento_cantoneira": (
+        "Altura das cantoneiras ao longo da alma, em mm: precisa caber os furos e caber na alma "
+        "livre da viga."
+    ),
+    "gabarito_alma": (
+        "Da quina da cantoneira (face do apoio) até os furos da alma, em mm. Cria o momento V·g "
+        "nos parafusos da alma."
+    ),
+    "gabarito_apoio": "Da quina da cantoneira até os furos que vão no apoio, em mm.",
     # ------------------------------------------------------------------ perfil formado a frio
     "sec_perfil_frio": "O perfil dobrado ligado pela alma e a chapa em que ele se apoia.",
     "perfil_frio": (

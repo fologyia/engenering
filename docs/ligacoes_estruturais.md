@@ -29,6 +29,15 @@ na alma da viga apoiada, numa linha vertical; mesa superior recortada ou não.
 A favor da segurança, o momento V·a entra nos parafusos **e** na solda, e a pressão de contato usa a
 menor distância livre ℓ_f de cada parte em qualquer direção.
 
+## 1b. Dupla cantoneira (viga–viga e viga–pilar) — NBR 8800
+
+Uma cantoneira de cada lado da alma da viga apoiada. Parafusos da alma em corte duplo, com o
+momento V·g (g = da face do apoio aos furos), contato nas duas cantoneiras e na alma; parafusos do
+apoio em corte simples com V/(2n) (a excentricidade da aba curta é desprezada) e contato na
+cantoneira e no apoio. Cantoneiras ao cisalhamento (6.5.5) e ao colapso por rasgamento da aba na
+alma (6.5.6); a alma da viga como na chapa simples; furo à borda da aba e folga para apertar o
+parafuso (gabarito ≥ t + d_b).
+
 ## 2. Perfil formado a frio parafusado — NBR 14762:2010
 
 Perfil ligado pela alma a uma chapa, grade de parafusos com forças iguais (sem momento no grupo).

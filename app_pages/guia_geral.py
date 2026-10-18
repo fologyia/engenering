@@ -2559,6 +2559,10 @@ elif modulo == "Ligações estruturais":
               na alma; a chapa ao cisalhamento, ao colapso por rasgamento e à flexão; a alma da viga
               ao cisalhamento e, com a mesa recortada, ao colapso por rasgamento e à flexão no
               recorte; a solda pelo método elástico, com perna mínima, máxima e comprimento.
+            - **Dupla cantoneira (viga–viga e viga–pilar):** uma cantoneira de cada lado da
+              alma; parafusos da alma em corte duplo com o momento V·g, parafusos do apoio em
+              corte simples, cantoneiras ao cisalhamento e ao colapso por rasgamento, a mesma
+              alma da viga da chapa simples e a folga para apertar o parafuso.
             - **Perfil formado a frio, NBR 14762:** corte do parafuso (0,4 ou 0,5·A_b·f_ub/1,35),
               rasgamento (t·e·f_u/1,45), esmagamento (α_e·d·t·f_u/1,55), tração na seção líquida
               com o C_t do perfil ligado só pela alma, colapso por rasgamento, espaçamentos e a

@@ -591,8 +591,8 @@ def momento_resistente(
     """M_Rd (kN·m) e o estado-limite que governa. Implementado para:
       I/H duplamente simétricos e U: eixo x (FLT, FLM, FLA) e eixo y (FLM);
       barras maciças circulares (plastificação) e retangulares (FLT no eixo de maior inércia);
-      tubos compactos (plastificação; FLT do tubo retangular — acréscimo, ver abaixo). Tubo não compacto
-      → erro (implementar D.2.7).
+      tubos (plastificação; tubo circular não compacto pela Tabela G.1; tubo retangular com FLM pelo
+      W_ef da Nota 4 e FLA; FLT do tubo retangular). Tubo retangular de alma esbelta → erro.
     Limite: M_Rd ≤ 1,50 W f_y/γ_a1 (5.4.2.2)."""
     _check(norma)
     fat = fator_resistencia(norma, gama_a1)
@@ -676,14 +676,43 @@ def momento_resistente(
             raise ValueError("D/t > 0,45 E/f_y: tubo circular não previsto pela norma.")
     elif sec.tipo == "tubo_ret":
         d = sec.dims
-        bt_f = (d["b"] if eixo == "x" else d["h"]) / d["t"]
-        bt_w = (d["h"] if eixo == "x" else d["b"]) / d["t"]
-        if bt_f > 1.12 * math.sqrt(E / fy) or bt_w > 2.42 * math.sqrt(
-            E / fy
-        ):  # λp FLM 1,12 e FLA 2,42 (Tab. G.1, nota 10; conferidos)
+        b_mesa = d["b"] if eixo == "x" else d["h"]  # parte plana da mesa comprimida
+        h_alma = d["h"] if eixo == "x" else d["b"]
+        altura = d["H"] if eixo == "x" else d["B"]
+        I_eixo = sec.Ix if eixo == "x" else sec.Iy
+        t = d["t"]
+        raiz = math.sqrt(E / fy)
+        bt_f, bt_w = b_mesa / t, h_alma / t
+        # FLM — NBR 8800:2008 Tabela G.1 (λp = 1,12, λr = 1,40·√(E/f_y); M_r = W_ef·f_y,
+        # M_cr = W_ef²/W·f_y, W_ef pela Nota 4: mesa com b_ef da F.3.2 e σ = f_y) ou AISC F7.2.
+        if bt_f > 1.12 * raiz:
+            bef = min(b_mesa, 1.92 * t * raiz * (1 - 0.38 / bt_f * raiz))
+            perda = (b_mesa - bef) * t
+            y_mesa = altura / 2 - t / 2
+            area_ef = sec.A - perda
+            desce = perda * y_mesa / area_ef
+            I_ef = I_eixo - perda * y_mesa**2 - (b_mesa - bef) * t**3 / 12 - area_ef * desce**2
+            Wef = I_ef / (altura / 2 + desce)
+            if norma == "NBR8800_2008":
+                if bt_f <= 1.40 * raiz:
+                    res["FLM"] = _interp(Mpl, Wef * fy, bt_f, 1.12 * raiz, 1.40 * raiz)
+                else:
+                    res["FLM"] = Wef**2 / W * fy
+            elif bt_f <= 1.40 * raiz:
+                res["FLM"] = min(Mpl, Mpl - (Mpl - fy * W) * (3.57 * bt_f / raiz - 4.0))
+            else:
+                res["FLM"] = fy * Wef
+        # FLA — λp = 2,42 (Nota 10), λr = 5,70·√(E/f_y); acima de λr a norma não prevê
+        if bt_w > 5.70 * raiz:
             raise NotImplementedError(
-                "Tubo retangular não compacto: implementar FLM/FLA conforme D.2.7."
+                "Tubo retangular não compacto com alma esbelta (h/t > 5,70·√(E/f_y)): não previsto "
+                "pela norma."
             )
+        if bt_w > 2.42 * raiz:
+            if norma == "NBR8800_2008":
+                res["FLA"] = _interp(Mpl, W * fy, bt_w, 2.42 * raiz, 5.70 * raiz)
+            else:
+                res["FLA"] = min(Mpl, Mpl - (Mpl - fy * W) * (0.305 * bt_w / raiz - 0.738))
         res["plastificação"] = Mpl
         # Acréscimo: a docstring prometia a FLT do tubo retangular, que faltava no código. Vale só
         # para o eixo de maior inércia (x numa seção em pé, y numa deitada) e seção não quadrada,

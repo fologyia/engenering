@@ -223,7 +223,7 @@ def test_secao_sem_paredes_nunca_fica_ok_sem_confirmacao(banco_isolado):
 def test_tubo_nao_compacto_na_flexao_pede_mrd_informado(banco_isolado):
     # tubo retangular esbelto (b/t > 1,12·√(E/f_y)): sem largura efetiva, a norma não dá M_Rd
     estado = dict(
-        col_tipo_secao=ui.SEC_TUBO_R, col_tr_B=200.0, col_tr_H=200.0, col_tr_t=3.0, col_Mx=2.0
+        col_tipo_secao=ui.SEC_TUBO_R, col_tr_B=200.0, col_tr_H=600.0, col_tr_t=3.0, col_Mx=2.0
     )
     t = abrir(banco_isolado, **estado)
     assert linha(t, "Flexão em x não calculada")["Status"] == "NÃO OK"
@@ -457,7 +457,7 @@ def test_b1_bloqueado_aparece_como_infinito_e_mrd_informado_com_a_origem(banco_i
         banco_isolado,
         col_tipo_secao=ui.SEC_TUBO_R,
         col_tr_B=200.0,
-        col_tr_H=200.0,
+        col_tr_H=600.0,
         col_tr_t=3.0,
         col_Mx=2.0,
         col_mrd_x_ativar=True,
