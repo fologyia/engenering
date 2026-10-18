@@ -212,6 +212,7 @@ def formulario_enquadramento() -> DadosEnquadramento:
 class DadosGeometria:
     H_mm: float
     h_alvo_mm: float
+    angulo_alvo_graus: float | None
     n_imposto: int | None
     b_imposto_mm: float | None
     C_imposto_mm: float | None
@@ -292,7 +293,20 @@ def formulario_geometria() -> DadosGeometria:
             passo=50.0,
             alvo=linha2[3],
         )
-        linha3 = st.columns(2)
+        linha3 = st.columns(3)
+        angulo_alvo = _opcional(
+            "Ângulo alvo da escada (°)",
+            "dg_angulo_alvo",
+            AJUDA["angulo_alvo"],
+            minimo=1.0,
+            passo=0.5,
+            alvo=linha3[2],
+        )
+        if angulo_alvo is not None:
+            linha3[2].caption(
+                f"espelho alvo pelo ângulo: {_pt(de.espelho_do_angulo(float(angulo_alvo), b_imposto), 1)} mm "
+                "(o “Espelho alvo” acima fica sem efeito)"
+            )
         altura_max = _opcional(
             "Altura máxima por lance imposta (mm)",
             "dg_altura_lance",
@@ -309,7 +323,7 @@ def formulario_geometria() -> DadosGeometria:
             help=AJUDA["C_padronizado"],
         )
     return DadosGeometria(
-        H, h_alvo, n_imposto if n_imposto is None else int(n_imposto), b_imposto, C_imposto,
+        H, h_alvo, None if angulo_alvo is None else float(angulo_alvo), n_imposto if n_imposto is None else int(n_imposto), b_imposto, C_imposto,
         bool(padronizado), L, reducao, altura_max, patamar,
     )  # fmt: skip
 
@@ -937,6 +951,7 @@ def montar_entrada(
         uso=enq.uso,
         H_mm=geo.H_mm,
         h_alvo_mm=geo.h_alvo_mm,
+        angulo_alvo_graus=geo.angulo_alvo_graus,
         n_imposto=geo.n_imposto,
         b_imposto_mm=geo.b_imposto_mm,
         C_imposto_mm=geo.C_imposto_mm,

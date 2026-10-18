@@ -94,6 +94,7 @@ opcoes = [
     "Projeto de parafusos",
     "Degrau de escada em grade",
     "Vigas de piso",
+    "Ligações estruturais",
     "Vento em estruturas abertas",
     "Contraventamento de estruturas abertas",
     "Ligação de contraventamento",
@@ -1862,9 +1863,8 @@ elif modulo == "Projeto de parafusos":
             """
         )
     st.warning(
-        "Alguns valores da NBR 8800:2008 "
-        "(μ = 0,35 nas classes A e C, f_ub do A325 e C_t ≤ 0,90) estão marcados “CONFERIR” até "
-        "serem confirmados na norma. O grupo excêntrico usa o método elástico (conservador).",
+        "Os valores da NBR 8800:2008 (μ = 0,35 nas classes A e C, f_ub do A325 e C_t ≤ 0,90) "
+        "foram conferidos na norma. O grupo excêntrico usa o método elástico (conservador).",
         icon=":material/warning:",
     )
     link_modulo("app_pages/projeto_parafusos.py", "Abrir o projeto de parafusos")
@@ -2541,6 +2541,39 @@ elif modulo == "Vigas de piso":
             """
         )
     link_modulo("app_pages/viga_de_piso.py", "Abrir Vigas de piso")
+
+
+elif modulo == "Ligações estruturais":
+    st.header("Ligações estruturais")
+    st.markdown(
+        "Os casos comuns de ligação do mezanino e da escada, cada um com a figura, a tabela de "
+        "verificações (norma e item em cada linha) e o registro para o memorial. Os esforços "
+        "entram **já de cálculo** (combinação ELU) — por exemplo a reação da viga de piso ou da "
+        "longarina."
+    )
+    with st.container(border=True):
+        st.markdown(
+            """
+            - **Chapa simples (viga–viga e viga–pilar), NBR 8800:** a chapa é soldada no apoio e
+              parafusada na alma da viga, numa linha vertical. Os parafusos resistem a V, à normal
+              e ao momento V·a (a = da solda aos furos), com corte e pressão de contato na chapa e
+              na alma; a chapa ao cisalhamento, ao colapso por rasgamento e à flexão; a alma da viga
+              ao cisalhamento e, com a mesa recortada, ao colapso por rasgamento e à flexão no
+              recorte; a solda pelo método elástico, com perna mínima, máxima e comprimento.
+            - **Perfil formado a frio, NBR 14762:** corte do parafuso (0,4 ou 0,5·A_b·f_ub/1,35),
+              rasgamento (t·e·f_u/1,45), esmagamento (α_e·d·t·f_u/1,55), tração na seção líquida
+              com o C_t do perfil ligado só pela alma, colapso por rasgamento, espaçamentos e a
+              regra dos 50 % para barras de treliça e contraventamento. Peça com mais de 4,75 mm
+              segue a NBR 8800.
+            - **Solda de filete:** um filete, dois paralelos ou o contorno de um retângulo, com V,
+              N e momento no plano; metal da solda e metal-base pela NBR 8800 — ou pela NBR 14762
+              quando a chapa mais fina tem até 4,75 mm.
+            - **Fora do programa:** ligação rígida (com momento), chapa de extremidade,
+              enrijecedores, efeito de alavanca e o apoio como um todo — o caso específico é do
+              projetista.
+            """
+        )
+    link_modulo("app_pages/ligacoes_estruturais.py", "Abrir Ligações estruturais")
 
 
 elif modulo == "Vento em estruturas abertas":

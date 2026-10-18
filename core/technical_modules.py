@@ -299,6 +299,27 @@ def _registrar_padrao() -> None:
             aliases=("Viga de piso", "Viga da plataforma", "Viga de grade"),
         ),
         ModuloTecnico(
+            id="ligacoes_estruturais",
+            titulo="Ligações estruturais",
+            versao="1.0",
+            pagina="app_pages/ligacoes_estruturais.py",
+            grupo_navegacao="Dimensionamento complementar",
+            ordem=18,
+            icone=":material/link:",
+            descricao=(
+                "Chapa simples viga–viga e viga–pilar (NBR 8800), perfil formado a frio "
+                "parafusado (NBR 14762) e grupo de soldas de filete, com a figura da ligação e as "
+                "verificações para o memorial."
+            ),
+            aliases=(
+                "Ligação viga-viga",
+                "Ligação viga-pilar",
+                "Chapa simples",
+                "Ligação parafusada perfil frio",
+                "Solda de filete",
+            ),
+        ),
+        ModuloTecnico(
             id="contraventamento_estrutura",
             titulo="Contraventamento de estruturas abertas",
             versao="1.0",

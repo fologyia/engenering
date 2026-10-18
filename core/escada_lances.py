@@ -137,7 +137,13 @@ def _espelhos_do_lance(
 ) -> tuple[int, float, float]:
     """Espelhos, h e b de um lance com o seu próprio desnível (sem o ajuste ao espelho comum)."""
     try:
-        faixa = de.faixa_espelho(desnivel, e.h_alvo_mm, e.enquadramento, e.espelho_fechado)
+        faixa = de.faixa_espelho(
+            desnivel,
+            de.espelho_alvo(e),
+            e.enquadramento,
+            e.espelho_fechado,
+            alvo_acima_do_catalogo=e.angulo_alvo_graus is not None,
+        )
         n = de.escolher_n(faixa, None)
     except de.EntradaInvalida as erro:
         raise de.EntradaInvalida(f"Lance {numero}: {erro}") from erro

@@ -81,7 +81,7 @@ def test_rotulos_avisos_e_referencias_da_norma_2024_nao_falam_em_valor_normativo
         *chk.SUPERFICIES_ROTULOS.values(),
         *chk.FORA_DO_ESCOPO.values(),
         bc.__doc__ or "",
-        *bc.CONFERIR_NBR8800_2008,
+        *bc.CONFERIDOS_NBR8800_2008,
     ]
     for texto in textos:
         for frase in FRASES_PROIBIDAS:

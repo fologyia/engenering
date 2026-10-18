@@ -600,6 +600,7 @@ def imagens_flambagem(
 def imagens_gravadas(resultados: Mapping[str, Any]) -> list[Any]:
     """Figuras que qualquer módulo pode gravar no registro, redesenhadas aqui.
 
+    * ``figura_ligacao`` — o desenho da ligação (:mod:`core.ligacoes`);
     * ``esquematico_escada`` — a vista lateral da escada (:mod:`core.escada_lances`);
     * ``figuras_portico`` — lista de ``{"titulo", "caso", "modelo", "modelo_deformada",
       "caso_deformada"}``: o modelo do núcleo de pórtico plano (:mod:`core.portico_plano`) é
@@ -610,6 +611,11 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[Any]:
     from core import portico_plano as pp
 
     figuras: list[Any] = []
+    ligacao = resultados.get("figura_ligacao")
+    if isinstance(ligacao, Mapping):
+        from core import ligacoes as lg
+
+        figuras.append(lg.figura_gravada(ligacao))
     esquematico = resultados.get("esquematico_escada")
     if isinstance(esquematico, Mapping):
         figuras.append(el.figura_esquematico(*el.geometria_do_dicionario(esquematico)))

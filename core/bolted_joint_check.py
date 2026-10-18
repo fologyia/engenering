@@ -58,8 +58,6 @@ FORA_DO_ESCOPO = {
 }
 
 AVISOS_FIXOS = (
-    "Valores da NBR 8800:2008 trazidos de memória no módulo de referência estão marcados "
-    "“CONFERIR” (ver lista abaixo) e precisam ser confirmados na norma antes de emitir o documento.",
     "O torque de aperto é só uma estimativa (T ≈ K·F_Tb·d). A instalação deve ser por rotação "
     "da porca, chave calibrada ou indicador direto de tração.",
     "O grupo excêntrico usa o método elástico, que é conservador frente ao centro instantâneo de rotação.",
@@ -749,10 +747,6 @@ def registro_ligacao(
     alertas = [
         f"{v.nome}: {v.formula}" for v in resultado.verificacoes if v.status in ("NÃO OK", "ALERTA")
     ]
-    if entrada.norma == "NBR8800_2008":
-        alertas.append(
-            "Conferir na NBR 8800:2008 antes de emitir: " + " ".join(bc.CONFERIR_NBR8800_2008)
-        )
 
     grade = entrada.coordenadas is None
     entradas: dict[str, Any] = {

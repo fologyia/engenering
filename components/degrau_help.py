@@ -74,6 +74,12 @@ AJUDA: dict[str, str] = {
         "**Desnível total** a vencer, de piso acabado a piso acabado, em milímetros. Com ele o "
         "programa define o número de espelhos."
     ),
+    "angulo_alvo": (
+        "Inclinação que você quer para a escada deste projeto, em graus. Vazio: vale o espelho "
+        "alvo. Informado, o programa acha o espelho que dá esse ângulo pela fórmula de Blondel "
+        "(2h + b = 635 mm) — ou pelo piso imposto — e mostra o ângulo obtido; mais de 1° de "
+        "diferença vira alerta. Com o Anglo, só cabe de 30° a 34° mais ou menos."
+    ),
     "h_alvo": (
         "Altura de espelho que você gostaria de ter (em mm). O programa a usa como referência, "
         "mas respeita a faixa da norma e o número inteiro de espelhos. O Anglo aceita 160 a "

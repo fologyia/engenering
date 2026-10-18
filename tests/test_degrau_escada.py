@@ -870,3 +870,38 @@ def test_guarda_corpo_do_criterio_anglo_nao_reprova_na_faixa_da_nr():
     r2 = de.calcular_escada(trocar(de.EntradaDegrau(), gc_superior_mm=1250.0))
     nr2 = r2.verificacoes[33]
     assert nr2.status == "NÃO OK"
+
+
+# ------------------------------------------------------------------ ângulo alvo do projeto
+def test_angulo_alvo_vira_espelho_alvo_por_blondel():
+    import math
+
+    h = de.espelho_do_angulo(30.0)
+    assert 2 * h + h / math.tan(math.radians(30.0)) == pytest.approx(de.BLONDEL_DO_ANGULO)
+    assert de.espelho_do_angulo(35.0, b_imposto_mm=250.0) == pytest.approx(
+        250 * math.tan(math.radians(35))
+    )
+    assert de.espelho_alvo(de.EntradaDegrau(h_alvo_mm=170.0)) == 170.0
+
+
+def test_angulo_alvo_passa_a_frente_do_catalogo_mas_nao_da_norma():
+    padrao = de.calcular_escada(de.EntradaDegrau())
+    assert padrao.geometria.n == 20 and not any(
+        v.nome == "Ângulo alvo do projeto" for v in padrao.verificacoes
+    )
+    trinta = de.calcular_escada(de.EntradaDegrau(angulo_alvo_graus=30.0))
+    g = trinta.geometria
+    assert g.n == 21 and g.alfa_graus == pytest.approx(30.59, abs=0.01)
+    assert g.faixa.nivel == 2  # Anglo atendido, fora do catálogo (C > 300 mm)
+    linha = next(v for v in trinta.verificacoes if v.nome == "Ângulo alvo do projeto")
+    assert linha.status == "OK" and "C = " in linha.formula
+    no_catalogo = de.calcular_escada(de.EntradaDegrau(angulo_alvo_graus=33.5))
+    assert no_catalogo.geometria.faixa.nivel == 1
+    impossivel = de.calcular_escada(de.EntradaDegrau(angulo_alvo_graus=45.0))
+    linha = next(v for v in impossivel.verificacoes if v.nome == "Ângulo alvo do projeto")
+    assert linha.status == "ALERTA" and "passa de 1°" in linha.formula
+    assert impossivel.geometria.h_mm <= 180.0 + 1e-9  # o Anglo continua acima do alvo
+
+
+def test_angulo_alvo_invalido():
+    assert de.validar_entrada(de.EntradaDegrau(angulo_alvo_graus=95.0))

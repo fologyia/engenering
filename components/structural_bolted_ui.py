@@ -42,12 +42,8 @@ _REVESTIMENTOS = {
 def _avisos_fixos() -> None:
     corpo = "\n".join(f"- {aviso}" for aviso in chk.AVISOS_FIXOS)
     st.warning(f"**Leia antes de usar:**\n\n{corpo}", icon=":material/gavel:")
-    with st.expander("Valores da NBR 8800:2008 marcados “CONFERIR”", icon=":material/fact_check:"):
-        st.markdown("\n".join(f"- {item}" for item in bc.CONFERIR_NBR8800_2008))
-        st.caption(
-            "Foram trazidos de memória no módulo de referência, porque a norma vigente não estava "
-            "disponível. Confirme na NBR 8800:2008 antes de liberar o documento."
-        )
+    with st.expander("Valores da NBR 8800:2008 conferidos na norma", icon=":material/fact_check:"):
+        st.markdown("\n".join(f"- {item}" for item in bc.CONFERIDOS_NBR8800_2008))
 
 
 def _formulario() -> chk.EntradaLigacao | None:

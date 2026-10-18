@@ -32,12 +32,12 @@ KIP_KN = 4.448222  # 1 kip em kN
 TF_KN = 9.80665  # 1 tf em kN
 NORMAS = ("NBR8800_2008", "NBR8800_2024", "AISC360_LRFD", "RCSC2004")
 
-# Valores da NBR 8800:2008 que o módulo de referência trouxe de memória, porque a norma
-# vigente não estava disponível. Confirmar na norma antes de liberar a versão.
-CONFERIR_NBR8800_2008 = (
-    "μ = 0,35 nas superfícies das classes A e C.",
-    "f_ub do A325 = 825 MPa (d ≤ 25,4 mm) e 725 MPa (d > 25,4 mm) (Tab. A.3).",
-    "C_t limitado a 0,90 (item 5.2.5).",
+# Valores da NBR 8800:2008 que o módulo de referência trouxe de memória e que foram conferidos
+# no texto da norma (2026-10-17): estão certos.
+CONFERIDOS_NBR8800_2008 = (
+    "μ = 0,35 nas superfícies das classes A e C (6.3.4.3 a).",
+    "f_ub do A325 = 825 MPa (d ≤ 25,4 mm) e 725 MPa (d > 25,4 mm) (Tabela A.3).",
+    "C_t limitado a 0,90 (5.2.5 c).",
 )
 
 
@@ -74,7 +74,7 @@ PARAFUSOS = {
 }
 
 # f_ub (MPa) por versão da NBR: (d_b ≤ 25,4 mm, d_b > 25,4 mm)
-#   NBR 8800:2008 Tabela A.3 — CONFERIR NA NORMA (não estava nos arquivos de referência).
+#   NBR 8800:2008 Tabela A.3 (conferida na norma).
 #   Projeto NBR 8800:2024 Tabela A.3 (ASTM F3125: resistência única).
 # AISC 360-10 Tabela J3.2 (SI): F_nv rosca no plano (N) / fora (X).  RCSC 2004 Tabela 5.1: F_n (N) / (X).
 GRAUS = {
@@ -102,7 +102,7 @@ GRAUS = {
 ACOS = {"ASTM A36": (250, 400), "ASTM A572 Gr 50": (345, 450), "ASTM A588": (345, 485)}
 
 # Coeficiente médio de atrito μ por superfície e norma
-#   NBR 2024: item 6.3.4.3 (arquivo de referência).  NBR 2008: 0,35 nas classes A/C — CONFERIR NA NORMA.
+#   NBR 2024: item 6.3.4.3 (arquivo de referência).  NBR 2008: 0,35 nas classes A/C (6.3.4.3, conferido).
 #   RCSC 2004 §5.4.1: A = 0,33; B = 0,50; C = 0,35; galvanizado sem tratamento não é previsto (None).
 SUPERFICIES: dict[str, dict[str, float | None]] = {
     "galvanizada_sem_tratamento": {
@@ -304,7 +304,7 @@ def area_liquida(A_g: float, n_furos_secao: int, d_h: float, t: float, norma: st
 
 
 def coef_Ct(e_c: float, l_c: float, norma: str) -> float | None:
-    """C_t = 1 − e_c/ℓ_c (NBR 5.2.5 c; AISC U, Tab. D3.1 caso 2). NBR 2008 limita a 0,90 — CONFERIR."""
+    """C_t = 1 − e_c/ℓ_c (NBR 5.2.5 c; AISC U, Tab. D3.1 caso 2). NBR 2008 limita a 0,90 (5.2.5 c)."""
     if l_c <= 0:
         return None
     return min(_P[norma]["Ct_max"], 1 - e_c / l_c)

@@ -400,6 +400,17 @@ Anglo), espessura mínima Anglo, reação para a ligação com o mínimo de 75 %
 natural, o **perfil mais leve** da família com o botão para adotá-lo, desenho da viga e registro no
 memorial.
 
+### Ligações estruturais
+
+Os casos comuns de ligação do mezanino e da escada (`core/ligacoes.py`; detalhes em
+`docs/ligacoes_estruturais.md`), cada um com a figura, a tabela de verificações e o registro no
+memorial: **chapa simples** viga–viga e viga–pilar pela NBR 8800 (parafusos com o momento V·a, chapa,
+alma da viga com ou sem recorte, solda no apoio, disposições, critério Anglo), **perfil formado a frio
+parafusado** pela NBR 14762:2010 (corte, rasgamento, esmagamento, seção líquida com C_t, colapso por
+rasgamento, espaçamentos e a regra dos 50 %) e **grupo de soldas de filete** (NBR 8800 6.2, ou NBR 14762
+10.2.3 em chapa fina). Ligação rígida, chapa de extremidade, enrijecedores e efeito de alavanca ficam
+com o projetista.
+
 ### Vento em estruturas abertas
 
 Só o vento de **plataformas, mezaninos e pipe racks sem fechamento**, para anotar no relatório e lançar
