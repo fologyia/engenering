@@ -591,6 +591,19 @@ def test_resumo_e_linhas_da_leitura():
     assert linhas[0][0] == PILAR and linhas[0][7] == "rígida / rígida"
 
 
+def test_tabela_da_leitura_vai_ao_navegador_sem_conserto():
+    """Barra com corpo e barra sem corpo na mesma tabela: o comprimento que falta é None, e a
+    coluna continua numérica (com "", o Streamlit da web enchia o log de tracebacks do Arrow)."""
+    import pandas as pd
+    import pyarrow as pa
+
+    com = ld.ler_barras(importar(*TODOS), geometria())[:1]
+    sem = ld.ler_barras(importar(*TODOS))[:1]
+    tabela = pd.DataFrame(ld.linhas_da_leitura([*com, *sem]), columns=list(ld.COLUNAS_LEITURA))
+    assert tabela["Comprimento (m)"].isna().tolist() == [False, True]
+    pa.Table.from_pandas(tabela)  # sem erro de tipos misturados
+
+
 # ------------------------------------------------------------------ inclinação pelo peso próprio
 def elemento(n1, v1_1, n2, v1_2, m=0.0, nome="1"):
     return (ponto(nome, "1", n=n1, v1=v1_1, m2=m), ponto(nome, "2", n=n2, v1=v1_2, m2=m))

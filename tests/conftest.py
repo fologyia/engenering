@@ -14,6 +14,7 @@ projeto cheio — sem depender da ordem de execução.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -65,6 +66,33 @@ def _banco_da_sessao_isolado(tmp_path_factory):
 
         config_do_streamlit.set_option("client.showErrorDetails", "full")
         yield banco
+
+
+class _TabelasQueOStreamlitConserta(logging.Handler):
+    """Guarda cada vez que o Streamlit não consegue mandar uma tabela ao navegador como está
+    (coluna com número e texto misturados, como um "" no lugar de um valor que falta) e a converte
+    sozinho: a página segue, mas a coluna vira texto e o log da versão web enche de traceback."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.falhas: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if "Arrow" in record.getMessage():
+            erro = record.exc_info[1] if record.exc_info else None
+            self.falhas.append(str(erro or record.getMessage()))
+
+
+@pytest.fixture(autouse=True)
+def _tabelas_compativeis_com_o_navegador():
+    """Nenhuma tabela das páginas pode precisar do conserto automático do Streamlit: o valor que
+    falta numa coluna numérica é ``None``, não ``""``."""
+    vigia = _TabelasQueOStreamlitConserta()
+    logger = logging.getLogger("streamlit.dataframe_util")
+    logger.addHandler(vigia)
+    yield
+    logger.removeHandler(vigia)
+    assert not vigia.falhas, f"Tabela com tipos misturados numa coluna: {vigia.falhas[0]}"
 
 
 @pytest.fixture(autouse=True)

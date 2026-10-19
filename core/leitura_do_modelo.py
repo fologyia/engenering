@@ -2355,7 +2355,7 @@ def linhas_da_leitura(leituras: Sequence[LeituraDaBarra]) -> list[list[object]]:
             lb.motivo_do_tipo,
             lb.perfil_sugerido or "—",
             lb.origem_do_perfil or "—",
-            "" if lb.comprimento_m is None else lb.comprimento_m,
+            lb.comprimento_m,  # None (sem corpo) e não texto: a coluna é numérica
             lb.elementos,
             " / ".join(lb.pontas),
             "; ".join(lb.avisos),
