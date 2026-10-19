@@ -41,6 +41,7 @@ from core import esforcos_modelo as em
 from core import lista_de_material as lm
 from core import plano_de_cargas as pc
 from core import section_catalog as sc
+from core import steel_sections as ss
 
 TIPO_ESQUELETO = "Esqueleto do modelo"
 TIPO_LISTA_DE_CORTE = "Lista de corte"
@@ -58,6 +59,14 @@ ANGULO_PILAR = 76.0  # graus com a horizontal (= 14° do prumo): pilar
 ANGULO_HORIZONTAL = 2.0  # graus: horizontal
 SINAL_MINIMO_KN = 0.02  # ΔN + ΔV do peso próprio abaixo disso: sem sinal para a inclinação
 DIFERENCA_DE_INCLINACAO = 10.0  # graus entre o esqueleto e o PP: o corpo não é o da viga
+#: De onde veio o eixo forte de cada barra (qual momento do Simulation é o do eixo forte).
+EIXO_PELA_MACRO = "seção medida pela macro v6"
+EIXO_PELO_PERFIL = "seção do perfil"
+EIXO_PELO_MOMENTO = "momento que domina"
+EIXOS_CERTOS = (EIXO_PELA_MACRO, EIXO_PELO_PERFIL)
+FAMILIAS_I = ("w", "hp", "i")
+FAMILIAS_U = ("u", "c")
+FOLGA_DO_CATALOGO = 1.05  # a aresta mais longa passa a outra em 5 %, com o raio já descontado
 
 
 class GeometriaInvalida(ValueError):
@@ -818,6 +827,8 @@ class LeituraDaBarra:
     ly_m: float | None = None
     lb_m: float | None = None
     motivo_dos_comprimentos: str = ""
+    #: De onde veio o eixo forte (EIXO_PELA_MACRO, EIXO_PELO_PERFIL ou EIXO_PELO_MOMENTO).
+    origem_do_eixo: str = EIXO_PELO_MOMENTO
 
     @property
     def tem_ponta_solta(self) -> bool:
@@ -1172,6 +1183,72 @@ def _perfil(
     return "", ""
 
 
+def _direcao_1_na_alma(perfil: Any, corpo: CorpoDoModelo | None) -> tuple[bool, str] | None:
+    """A direção 1 do Simulation (a aresta reta mais longa da seção) está ao longo da altura d
+    (a alma) ou da largura b (a mesa)? Pela macro v6 quando ela mede sem dúvida; senão pelo
+    catálogo, com a folga do raio de concordância; ``None`` na dúvida."""
+    familia = ss.familia_do_perfil(perfil)
+    d, b = float(perfil.altura_mm), float(perfil.largura_mm)
+    tf, tw = float(perfil.espessura_mesa_mm), float(perfil.espessura_alma_mm)
+    if familia in FAMILIAS_I:
+        alma_max = d - 2.0 * tf  # a face reta da alma, sem o raio
+        alma_min = alma_max - 2.0 * max(tw, tf)  # com um raio generoso
+    elif familia in FAMILIAS_U:
+        alma_max = alma_min = d  # as costas da alma são retas na altura toda
+    elif familia == "t":
+        alma_max = d - tf
+        alma_min = alma_max - max(tw, tf)
+    elif familia == "tubo" and ss.e_tubo_retangular(perfil):
+        alma_max = alma_min = d  # os cantos arredondados descontam o mesmo dos dois lados
+    else:
+        return None  # cantoneira, barra, tubo redondo: o eixo forte não vem daqui
+    # 1) A macro v6 mediu a direção 1; a direção A (a medida maior da caixa) diz se é a alma.
+    if (
+        corpo is not None
+        and corpo.direcao_1 is not None
+        and corpo.direcao_secao is not None
+        and (corpo.folga_da_direcao_1_mm or 0.0) >= 1.0
+        and corpo.secao_mm is not None
+        and corpo.secao_mm[0] >= 1.05 * corpo.secao_mm[1]
+        and abs(d - b) >= 0.05 * max(d, b)
+    ):
+        cos = abs(sum(x * y for x, y in zip(corpo.direcao_1, corpo.direcao_secao, strict=True)))
+        a_e_a_altura = d > b
+        if cos >= 0.9:
+            return a_e_a_altura, EIXO_PELA_MACRO
+        if cos <= 0.1:
+            return not a_e_a_altura, EIXO_PELA_MACRO
+    # 2) O catálogo: só sem dúvida (alma e mesa longe uma da outra).
+    if alma_min >= FOLGA_DO_CATALOGO * b:
+        return True, EIXO_PELO_PERFIL
+    if b >= FOLGA_DO_CATALOGO * alma_max:
+        return False, EIXO_PELO_PERFIL
+    return None
+
+
+def eixo_forte_pela_secao(
+    perfil: str, corpo: CorpoDoModelo | None = None
+) -> tuple[str, str] | None:
+    """Qual momento do Simulation é o do eixo forte, pela seção — (EIXO_M1 ou EIXO_M2, origem).
+
+    O Simulation põe a direção 1 na aresta reta mais longa da seção. Ao longo da alma (altura d),
+    o M₂ é em torno da direção da mesa: o eixo forte (x do catálogo). Ao longo da mesa, o M₁.
+    Conferido no modelo real pelo módulo resistente que o Simulation usa (S = M/σ): pilar
+    W 200 × 31,3 com S₁ = W_y e S₂ = W_x; vigas U com S₂ = W_x. ``None`` sem o perfil no catálogo
+    ou na dúvida (cantoneira, tubo quadrado, alma e mesa quase iguais sem a macro v6).
+    """
+    if not perfil:
+        return None
+    try:
+        p = sc.obter_perfil(perfil)
+    except (KeyError, ValueError):
+        return None
+    na_alma = _direcao_1_na_alma(p, corpo)
+    if na_alma is None:
+        return None
+    return (em.EIXO_M2 if na_alma[0] else em.EIXO_M1), na_alma[1]
+
+
 def esqueleto_de_outro_modelo(g: GeometriaDoModelo, dados: em.EsforcosDoModelo) -> bool:
     """Menos da metade das barras do Simulation acha o corpo no esqueleto: ele é de outra peça (ou
     de outra versão) e as deduções pela geometria — tipo, perfil, peso, bases — sairiam erradas."""
@@ -1243,7 +1320,13 @@ def ler_barras(
                 f"uma carga distribuída pode ficar até {100 / elementos**2:.0f} % abaixo do real "
                 "— refine a malha (número par de elementos ou 7 ou mais)"
             )
-        eixo_forte = em.eixo_forte_sugerido(_pontos(dados, barra))
+        escolhido = dados.membros[barra].perfil if barra in dados.membros else ""
+        pela_secao = eixo_forte_pela_secao(escolhido or perfil, corpo)
+        if pela_secao is not None:
+            eixo_forte, origem_do_eixo = pela_secao
+        else:
+            eixo_forte = em.eixo_forte_sugerido(_pontos(dados, barra))
+            origem_do_eixo = EIXO_PELO_MOMENTO
         sugeridos = (
             tv.comprimentos(g, corpo, tipo, dados.eixo_vertical) if corpo is not None else None
         )
@@ -1269,6 +1352,7 @@ def ler_barras(
                 ly_m=sugeridos.ly_m if sugeridos else None,
                 lb_m=sugeridos.lb_m if sugeridos else None,
                 motivo_dos_comprimentos=sugeridos.motivo if sugeridos else "",
+                origem_do_eixo=origem_do_eixo,
             )
         )
     return leituras
@@ -1279,9 +1363,11 @@ def aplicar_sugestoes(
 ) -> tuple[em.EsforcosDoModelo, int]:
     """Preenche a tabela das barras só onde está vazia; devolve os dados e quantas barras mudaram.
 
-    Tipo, perfil (só do catálogo), eixo forte (só quando o tipo também era vazio) e os comprimentos
-    de flambagem: os dos travamentos do esqueleto (:mod:`core.travamentos`) ou, sem eles, o
-    comprimento da barra (K = 1).
+    Tipo, perfil (só do catálogo), eixo forte e os comprimentos de flambagem: os dos travamentos do
+    esqueleto (:mod:`core.travamentos`) ou, sem eles, o comprimento da barra (K = 1).
+    O eixo forte pela seção (macro v6 ou perfil) não é escolha: é qual momento do Simulation é o
+    do eixo forte, e ele troca o que estiver na tabela. Pelo momento que domina (sem a seção), só
+    entra quando o tipo também era vazio.
     O perfil que entrou sozinho pelo nome da viga (na importação) não é escolha de ninguém: com o
     esqueleto, ele dá lugar ao perfil do modelo (lista de corte conferida pela área da seção), que
     é a seção que a análise usou.
@@ -1304,7 +1390,11 @@ def aplicar_sugestoes(
             atual,
             tipo=tipo if tipo in em.TIPOS_DE_BARRA else atual.tipo,
             perfil=perfil,
-            eixo_forte=leitura.eixo_forte if atual.tipo == "—" else atual.eixo_forte,
+            eixo_forte=(
+                leitura.eixo_forte
+                if leitura.origem_do_eixo in EIXOS_CERTOS or atual.tipo == "—"
+                else atual.eixo_forte
+            ),
             lx_m=atual.lx_m or leitura.lx_m or comprimento,
             ly_m=atual.ly_m or leitura.ly_m or comprimento,
             lb_m=atual.lb_m or leitura.lb_m or comprimento,
@@ -1820,6 +1910,25 @@ def diagnosticar(
                 tuple(rigidas),
             )
         )
+    eixo_trocado = [
+        lb.barra
+        for lb in leituras
+        if lb.origem_do_eixo in EIXOS_CERTOS
+        and lb.barra in dados.membros
+        and dados.membros[lb.barra].eixo_forte != lb.eixo_forte
+    ]
+    if eixo_trocado:
+        achados.append(
+            Achado(
+                pc.NIVEL_ERRO,
+                "Eixo forte trocado",
+                f"{_lista(eixo_trocado)}: na tabela, o eixo forte é o outro momento. Pela seção, "
+                "o Simulation põe a direção 1 na aresta reta mais longa — ao longo da alma, o M₂ é "
+                "o do eixo forte; ao longo da mesa, o M₁ — e a verificação compararia o momento "
+                "do eixo fraco com a resistência do forte. “Aplicar as sugestões” corrige.",
+                tuple(eixo_trocado),
+            )
+        )
     escolhidos = {
         lb.barra: dados.membros[lb.barra].perfil
         for lb in leituras
@@ -1971,6 +2080,9 @@ def avisos_da_importacao(
 # ---------------------------------------------------------------------------------------------
 ESCOAMENTO_A36_MPA = 250.0
 TOLERANCIA_SECAO_SIMULATION = 0.05
+#: S de um eixo ÷ o do outro para o Simulation dizer qual momento é o do eixo forte.
+RAZAO_DOS_MODULOS = 1.5
+TOLERANCIA_MODULO_SIMULATION = 0.10
 
 
 def area_no_simulation(
@@ -1992,6 +2104,119 @@ def area_no_simulation(
         if valores:
             areas[barra] = statistics.median(valores)
     return areas
+
+
+def modulos_no_simulation(
+    forcas: Mapping[str, Sequence[em.PontoDeEsforco]],
+    tensoes: Mapping[str, Sequence[em.TensaoDaViga]],
+) -> dict[str, tuple[float | None, float | None]]:
+    """O módulo resistente (mm³) que o Simulation usou em torno de cada direção da seção:
+    S₁ = |M₁| ÷ |σ da flexão 1| e S₂ = |M₂| ÷ |σ da flexão 2|, ponta a ponta (mesmo elemento e
+    ponta nos dois arquivos do mesmo estudo); a mediana da barra, ``None`` sem momento."""
+    saida: dict[str, tuple[float | None, float | None]] = {}
+    for barra, pontos in tensoes.items():
+        forca = {(p.elemento, p.fim): p for p in forcas.get(barra, ())}
+        s1: list[float] = []
+        s2: list[float] = []
+        for t in pontos:
+            f = forca.get((t.elemento, t.fim))
+            if f is None:
+                continue
+            if abs(f.m1) >= 0.001 and abs(t.flexao1) >= 0.05:
+                s1.append(abs(f.m1) * 1e6 / abs(t.flexao1))
+            if abs(f.m2) >= 0.001 and abs(t.flexao2) >= 0.05:
+                s2.append(abs(f.m2) * 1e6 / abs(t.flexao2))
+        if s1 or s2:
+            saida[barra] = (
+                statistics.median(s1) if s1 else None,
+                statistics.median(s2) if s2 else None,
+            )
+    return saida
+
+
+def _eixos_pelas_tensoes(
+    estudo: str,
+    forcas: Mapping[str, Sequence[em.PontoDeEsforco]],
+    tensoes: Mapping[str, Sequence[em.TensaoDaViga]],
+    dados: em.EsforcosDoModelo,
+    leituras: Mapping[str, LeituraDaBarra],
+) -> list[Achado]:
+    """Qual momento é o do eixo forte, pelo próprio Simulation (o S maior), contra a tabela; e o
+    S do eixo forte contra o W_x do perfil."""
+    trocados: list[str] = []
+    barras_trocadas: list[str] = []
+    modulo_diferente: list[str] = []
+    conferidas = 0
+    for nome, (s1, s2) in sorted(modulos_no_simulation(forcas, tensoes).items()):
+        if s1 is None or s2 is None:
+            continue
+        leitura = leituras.get(nome)
+        escolhido = dados.membros[nome].perfil if nome in dados.membros else ""
+        perfil = escolhido or (leitura.perfil_sugerido if leitura else "") or ""
+        try:
+            p = sc.obter_perfil(perfil) if perfil else None
+        except (KeyError, ValueError):
+            p = None
+        if p is None or ss.familia_do_perfil(p) not in (*FAMILIAS_I, *FAMILIAS_U, "t", "tubo"):
+            continue
+        if not p.sx_mm3 or p.sx_mm3 < 1.3 * p.sy_mm3:
+            continue  # seção quase simétrica: não há um eixo forte claro
+        if s2 >= RAZAO_DOS_MODULOS * s1:
+            pelo_simulation, forte = em.EIXO_M2, s2
+        elif s1 >= RAZAO_DOS_MODULOS * s2:
+            pelo_simulation, forte = em.EIXO_M1, s1
+        else:
+            continue
+        conferidas += 1
+        na_tabela = (
+            dados.membros[nome].eixo_forte
+            if nome in dados.membros
+            else (leitura.eixo_forte if leitura else em.EIXO_M2)
+        )
+        if na_tabela != pelo_simulation:
+            barras_trocadas.append(nome)
+            trocados.append(
+                f"{nome} (S₁ = {_n(s1 / 1e3, 1)} e S₂ = {_n(s2 / 1e3, 1)} cm³: o forte é o "
+                f"{pelo_simulation}; na tabela, {na_tabela})"
+            )
+        if abs(forte - p.sx_mm3) > TOLERANCIA_MODULO_SIMULATION * p.sx_mm3:
+            modulo_diferente.append(
+                f"{nome} ({_n(forte / 1e3, 1)} cm³ no Simulation; {perfil}: "
+                f"W_x = {_n(p.sx_mm3 / 1e3, 1)} cm³)"
+            )
+    achados: list[Achado] = []
+    if trocados:
+        achados.append(
+            Achado(
+                pc.NIVEL_ERRO,
+                f"{estudo}: eixo forte trocado (pelas tensões)",
+                f"{_lista(trocados, 4)}. O módulo resistente que o próprio Simulation usou "
+                "(momento ÷ tensão de flexão) mostra qual momento é o do eixo forte: a "
+                "verificação compararia o momento do eixo fraco com a resistência do forte. "
+                "“Aplicar as sugestões” (com o esqueleto da macro v6) ou a coluna Eixo forte "
+                "corrige.",
+                tuple(barras_trocadas),
+            )
+        )
+    elif conferidas:
+        achados.append(
+            Achado(
+                pc.NIVEL_OK,
+                f"{estudo}: eixo forte confere pelas tensões",
+                f"Em {conferidas} barra(s), o momento do eixo forte da tabela é o que o Simulation "
+                "usou com o módulo resistente maior.",
+            )
+        )
+    if modulo_diferente:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                f"{estudo}: módulo resistente do Simulation diferente do perfil",
+                f"{_lista(modulo_diferente, 4)}: o S do eixo forte que o Simulation usou não é o "
+                "W_x do perfil — a seção do modelo não é a da tabela.",
+            )
+        )
+    return achados
 
 
 def conferir_tensoes(
@@ -2091,6 +2316,9 @@ def conferir_tensoes(
                     "axial) é a do perfil.",
                 )
             )
+        achados.extend(
+            _eixos_pelas_tensoes(estudo, forcas, arquivo.tensoes_da_viga, dados, leituras)
+        )
     return sorted(achados, key=lambda a: ORDEM_DOS_NIVEIS.get(a.nivel, 9))
 
 
@@ -2106,6 +2334,7 @@ COLUNAS_LEITURA = (
     "Observação",
     "Lx / Ly / Lb (m)",
     "Comprimentos de flambagem",
+    "Eixo forte",
 )
 
 
@@ -2132,6 +2361,7 @@ def linhas_da_leitura(leituras: Sequence[LeituraDaBarra]) -> list[list[object]]:
             "; ".join(lb.avisos),
             comprimentos_em_texto(lb),
             lb.motivo_dos_comprimentos,
+            f"{lb.eixo_forte} ({lb.origem_do_eixo})",
         ]
         for lb in leituras
     ]

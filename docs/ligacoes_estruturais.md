@@ -29,6 +29,15 @@ na alma da viga apoiada, numa linha vertical; mesa superior recortada ou não.
 A favor da segurança, o momento V·a entra nos parafusos **e** na solda, e a pressão de contato usa a
 menor distância livre ℓ_f de cada parte em qualquer direção.
 
+**Trazer de um cálculo ou do modelo** (`reacoes_do_projeto`): as reações ELU dos cálculos
+registrados (viga de piso, longarina) e as **pontas das vigas e diagonais do modelo importado** em
+Esforços do modelo (`reacoes_do_modelo`): em cada ponta (Fim 1 e Fim 2 da viga no Simulation), a
+combinação ELU do plano de cargas com o maior cortante no plano da alma — V₁ quando o eixo forte da
+tabela é o M₂, V₂ quando é o M₁ — e o normal na mesma combinação (tração positiva). Barra sem tipo
+na tabela entra pelo que o peso próprio diz. Quando a ponta tem momento (mais de 0,5 kN·m), ele vai
+no rótulo: a junta do modelo é rígida e a ligação flexível não o leva — articule a ponta no modelo
+ou detalhe uma ligação rígida.
+
 ## 1b. Dupla cantoneira (viga–viga e viga–pilar) — NBR 8800
 
 Uma cantoneira de cada lado da alma da viga apoiada. Parafusos da alma em corte duplo, com o

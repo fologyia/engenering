@@ -99,6 +99,7 @@ files = [
     "core/contraventamento_registro.py",
     "core/contraventamento_plataforma.py",
     "core/contraventamento_vento_barras.py",
+    "core/contraventamento_do_esqueleto.py",
     "core/contraventamento_ufm.py",
     "core/degrau_escada.py",
     "core/degrau_registro.py",

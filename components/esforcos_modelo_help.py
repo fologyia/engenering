@@ -81,8 +81,15 @@ AJUDA: dict[str, str] = {
         "Preenche a tabela das barras com o que o programa entendeu: tipo, perfil (só se estiver "
         "no catálogo), eixo forte e os comprimentos de flambagem pelos travamentos do esqueleto "
         "(onde outras barras se ligam a cada uma, em cada direção; K = 1, balanço K = 2,1). Só "
-        "preenche o que está vazio; nada que você escolheu é trocado. A chapa de piso presa à "
-        "mesa superior não entra no Lb sugerido: confira a fixação antes de reduzir."
+        "preenche o que está vazio — com uma exceção: o eixo forte tirado da seção (macro v6 ou "
+        "perfil) troca o da tabela, porque não é escolha, é qual momento do Simulation é o do "
+        "eixo forte. A chapa de piso presa à mesa superior não entra no Lb sugerido: confira a "
+        "fixação antes de reduzir."
+    ),
+    "fundacoes_no_modelo": (
+        "Para dar a força e o momento do pilar nos eixos do SolidWorks, o programa precisa saber "
+        "para que lado a seção do pilar está virada no Simulation: a linha pela macro v6 e o "
+        "sentido por um caso de vento viga a viga (carga em cada pilar), importado aqui."
     ),
     "sec_envoltoria": (
         "Para cada barra, o pior de todas as combinações do plano de cargas, ponto a ponto: a "

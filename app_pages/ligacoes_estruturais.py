@@ -276,7 +276,7 @@ if tipo == lg.CHAPA_SIMPLES:
             rotulos = [r.rotulo for r in registradas]
             c = st.columns([3, 1])
             escolhida = c[0].selectbox(
-                "Trazer de um cálculo registrado",
+                "Trazer de um cálculo ou do modelo",
                 rotulos,
                 key="lig_origem",
                 help=AJUDA["origem"],
@@ -455,7 +455,7 @@ elif tipo == lg.CANTONEIRA_DUPLA:
             rotulos = [r.rotulo for r in registradas]
             c = st.columns([3, 1])
             escolhida = c[0].selectbox(
-                "Trazer de um cálculo registrado", rotulos, key="lig_c_origem",
+                "Trazer de um cálculo ou do modelo", rotulos, key="lig_c_origem",
                 help=AJUDA["origem"],
             )  # fmt: skip
             c[1].button(

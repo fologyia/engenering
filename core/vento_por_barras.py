@@ -196,7 +196,7 @@ class EntradaPorBarras:
     parametros: va.ParametrosVento = field(default_factory=va.ParametrosVento)
     elementos: tuple[ElementoAoVento, ...] = ()
     direcoes: tuple[int, ...] = DIRECOES_PERPENDICULARES
-    cota_do_terreno_m: float | None = None  # None: o ponto mais baixo das barras
+    cota_do_terreno_m: float | None = None  # None: o pé dos pilares (:func:`terreno_dos_pilares`)
     protecao: bool = True  # fator η da Figura 14 entre planos (8.4)
 
 
@@ -803,6 +803,22 @@ def _forca_do_elemento(
     )
 
 
+#: Barra "em pé" (pilar ou poste) até este ângulo do prumo.
+COS_EM_PE = math.cos(math.radians(15.0))
+
+
+def terreno_dos_pilares(barras: Sequence[BarraAoVento]) -> float | None:
+    """O chão do modelo: o pé mais baixo das barras em pé (até 15° do prumo). Uma longarina de
+    escada ou um chumbador que desce abaixo da base dos pilares não puxa o chão para baixo.
+    ``None`` sem barra em pé."""
+    pes = [
+        min(b.inicio[2], b.fim[2])
+        for b in barras
+        if b.comprimento_m > 0 and abs(b.fim[2] - b.inicio[2]) / b.comprimento_m >= COS_EM_PE
+    ]
+    return min(pes) if pes else None
+
+
 def _limites(e: EntradaPorBarras) -> tuple[float, float, float, float, float, float]:
     xs, ys, zs = [], [], []
     for b in e.barras:
@@ -831,7 +847,11 @@ def calcular(e: EntradaPorBarras) -> ResultadoPorBarras:
     if not (math.isfinite(e.parametros.v0_m_s) and e.parametros.v0_m_s > 0):
         raise VentoPorBarrasInvalido("V₀ precisa ser maior que zero.")
     x0, x1, y0, y1, z0, z1 = _limites(e)
-    terreno = z0 if e.cota_do_terreno_m is None else float(e.cota_do_terreno_m)
+    if e.cota_do_terreno_m is not None:
+        terreno = float(e.cota_do_terreno_m)
+    else:
+        pelos_pilares = terreno_dos_pilares(e.barras)
+        terreno = z0 if pelos_pilares is None else pelos_pilares
     altura = z1 - terreno
     if altura <= 0:
         raise VentoPorBarrasInvalido(

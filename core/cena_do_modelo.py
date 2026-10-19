@@ -549,7 +549,7 @@ def _pe(corpo: ld.CorpoDoModelo, eixo_vertical: str) -> c3.Ponto:
     return a if a[2] <= b[2] else b
 
 
-def _direcoes(
+def direcoes_do_projeto(
     g: ld.GeometriaDoModelo,
     eixo_vertical: str,
     dados: em.EsforcosDoModelo,
@@ -607,7 +607,7 @@ def apoios_e_reacoes(
     conferencia = ""
     if quadro is not None and quadro.pilares and dados is not None and caso in dados.casos:
         try:
-            direcoes = _direcoes(g, eixo_vertical, dados, nomes, quadro, plano)
+            direcoes = direcoes_do_projeto(g, eixo_vertical, dados, nomes, quadro, plano)
         except (ArithmeticError, ValueError, KeyError) as erro:
             avisos.append(f"As direções das seções dos pilares não foram lidas ({erro}).")
         else:

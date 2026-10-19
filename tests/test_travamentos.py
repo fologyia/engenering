@@ -189,8 +189,9 @@ def test_leitura_e_sugestoes_usam_os_travamentos():
     sugerido, _ = ld.aplicar_sugestoes(escolhido, list(leituras.values()))
     assert sugerido.membros[VIGA].lb_m == 1.0
     assert leituras[PILAR].lx_m == pytest.approx(4.0)
-    linha = ld.linhas_da_leitura([leituras[VIGA]])[0]
-    assert linha[-2] == "6,00 / 2,00 / 2,00" and "travamentos laterais" in linha[-1]
+    linha = dict(zip(ld.COLUNAS_LEITURA, ld.linhas_da_leitura([leituras[VIGA]])[0], strict=True))
+    assert linha["Lx / Ly / Lb (m)"] == "6,00 / 2,00 / 2,00"
+    assert "travamentos laterais" in linha["Comprimentos de flambagem"]
 
 
 def test_sem_esqueleto_nao_ha_sugestao_de_comprimento():

@@ -13,6 +13,9 @@ projeta a fundação faz as combinações dela).
   tabela das barras).
 * Conferência: a soma de N nas bases de todos os pilares tem de bater com a reação vertical total do
   modelo (arquivo "Listar forças resultantes"), quando todos os apoios são bases de pilares.
+* **Nos eixos do modelo**: com a direção da seção de cada pilar no Simulation
+  (:mod:`core.direcoes_da_secao`), a força e o momento horizontais que o pilar faz na fundação saem
+  nos eixos do SolidWorks (F e M em X e Z, com Y vertical) — o que quem projeta a base usa.
 
 Sem Streamlit.
 """
@@ -179,27 +182,50 @@ COLUNAS = (
 )
 
 
-def linhas_do_quadro(quadro: QuadroDeFundacoes, plano: pc.PlanoDeCargas) -> list[list[object]]:
+#: (pilar, caso) → (F, F, M, M) do pilar na fundação nos eixos horizontais do modelo.
+NoModelo = Mapping[tuple[str, str], tuple[float, float, float, float]]
+
+
+def colunas_no_modelo(eixos: tuple[str, str]) -> tuple[str, ...]:
+    a, b = eixos
+    return (f"F{a} (kN)", f"F{b} (kN)", f"M{a} (kN·m)", f"M{b} (kN·m)")
+
+
+def colunas(
+    no_modelo: NoModelo | None = None, eixos: tuple[str, str] = ("X", "Z")
+) -> tuple[str, ...]:
+    return (*COLUNAS, *colunas_no_modelo(eixos)) if no_modelo else COLUNAS
+
+
+def linhas_do_quadro(
+    quadro: QuadroDeFundacoes,
+    plano: pc.PlanoDeCargas,
+    no_modelo: NoModelo | None = None,
+) -> list[list[object]]:
+    """Uma linha por pilar e caso; com ``no_modelo``, mais as quatro colunas nos eixos do modelo
+    (vazias no pilar sem a direção da seção)."""
     linhas: list[list[object]] = []
     for p in quadro.pilares:
         for c in p.cargas:
             acao = plano.acao(c.caso)
-            linhas.append(
-                [
-                    p.pilar,
-                    p.perfil or "—",
-                    c.caso,
-                    acao.nome if acao else "—",
-                    c.n,
-                    c.v1,
-                    c.v2,
-                    c.m1,
-                    c.m2,
-                    c.t,
-                    p.eixo_forte,
-                    f"{p.base} ({p.origem_da_base})",
-                ]
-            )
+            linha: list[object] = [
+                p.pilar,
+                p.perfil or "—",
+                c.caso,
+                acao.nome if acao else "—",
+                c.n,
+                c.v1,
+                c.v2,
+                c.m1,
+                c.m2,
+                c.t,
+                p.eixo_forte,
+                f"{p.base} ({p.origem_da_base})",
+            ]
+            if no_modelo:
+                valores = no_modelo.get((p.pilar, c.caso))
+                linha.extend(valores if valores is not None else ("", "", "", ""))
+            linhas.append(linha)
     return linhas
 
 
@@ -213,8 +239,13 @@ def matriz_de_compressao(quadro: QuadroDeFundacoes) -> tuple[list[str], list[lis
     return cabecalho, linhas
 
 
-def csv_do_quadro(quadro: QuadroDeFundacoes, plano: pc.PlanoDeCargas) -> bytes:
-    return pc._csv(COLUNAS, linhas_do_quadro(quadro, plano))
+def csv_do_quadro(
+    quadro: QuadroDeFundacoes,
+    plano: pc.PlanoDeCargas,
+    no_modelo: NoModelo | None = None,
+    eixos: tuple[str, str] = ("X", "Z"),
+) -> bytes:
+    return pc._csv(colunas(no_modelo, eixos), linhas_do_quadro(quadro, plano, no_modelo))
 
 
 NOTA_ANGLO = (
@@ -225,10 +256,19 @@ CONVENCAO = (
     "N = força vertical na fundação, compressão positiva. V1, V2, M1, M2 e T = esforços internos na "
     "seção da base, nos eixos 1 e 2 da seção do SolidWorks (o eixo forte está na coluna Eixo forte)."
 )
+CONVENCAO_NO_MODELO = (
+    "F e M nos eixos do modelo = força e momento que o pilar faz na fundação, nos eixos "
+    "horizontais do SolidWorks (vazio no pilar sem a direção da seção sabida)."
+)
 
 
 def xlsx_do_quadro(
-    quadro: QuadroDeFundacoes, plano: pc.PlanoDeCargas, *, titulo: str = ""
+    quadro: QuadroDeFundacoes,
+    plano: pc.PlanoDeCargas,
+    *,
+    titulo: str = "",
+    no_modelo: NoModelo | None = None,
+    eixos: tuple[str, str] = ("X", "Z"),
 ) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -243,6 +283,7 @@ def xlsx_do_quadro(
         "",
         NOTA_ANGLO,
         CONVENCAO,
+        *([CONVENCAO_NO_MODELO] if no_modelo else []),
         f"Casos: {', '.join(quadro.casos)}.",
     ):
         leia.append([texto])
@@ -252,7 +293,7 @@ def xlsx_do_quadro(
     fundo = PatternFill("solid", fgColor="1F4E8C")
     cabecalho_m, linhas_m = matriz_de_compressao(quadro)
     for nome, cabecalho, linhas in (
-        ("Quadro", COLUNAS, linhas_do_quadro(quadro, plano)),
+        ("Quadro", colunas(no_modelo, eixos), linhas_do_quadro(quadro, plano, no_modelo)),
         ("Compressão por pilar", cabecalho_m, linhas_m),
     ):
         folha = livro.create_sheet(nome)
@@ -280,6 +321,8 @@ def registro_do_quadro(
     *,
     contexto: Mapping[str, Any] | None = None,
     responsavel: str = "",
+    no_modelo: NoModelo | None = None,
+    eixos: tuple[str, str] = ("X", "Z"),
 ) -> dict[str, Any]:
     cargas = [c for p in quadro.pilares for c in p.cargas]
     maior = max(cargas, key=lambda c: c.n, default=None)
@@ -302,6 +345,22 @@ def registro_do_quadro(
         "larguras": [2560, 900, 1180, 1180, 1180, 1180, 1180],
         "fonte": 7.0,
     }
+    tabelas_no_modelo = []
+    if no_modelo:
+        a, b = eixos
+        tabelas_no_modelo.append(
+            {
+                "legenda": "Força e momento horizontais do pilar na fundação, nos eixos do modelo "
+                f"do SolidWorks ({a} e {b}) — pela direção da seção de cada pilar no Simulation.",
+                "cabecalhos": ["Pilar", "Caso", *colunas_no_modelo(eixos)],
+                "linhas": [
+                    [pilar, caso, *(_n(v) for v in valores)]
+                    for (pilar, caso), valores in no_modelo.items()
+                ],
+                "larguras": [3000, 1100, 1315, 1315, 1315, 1315],
+                "fonte": 7.0,
+            }
+        )
     cabecalho_m, linhas_m = matriz_de_compressao(quadro)
     matriz = {
         "legenda": "Compressão (N, kN) na base de cada pilar, por caso.",
@@ -328,11 +387,13 @@ def registro_do_quadro(
         entradas=entradas,
         resultados={
             "destaque_memorial": destaque,
-            "tabelas_memorial": [matriz, tabela],
+            "tabelas_memorial": [matriz, tabela, *tabelas_no_modelo],
         },
         metodo=(
             "Esforços na seção de base de cada pilar, tirados das forças das vigas de cada estudo "
-            "do SolidWorks Simulation (um estudo por caso de carga). " + CONVENCAO
+            "do SolidWorks Simulation (um estudo por caso de carga). "
+            + CONVENCAO
+            + (" " + CONVENCAO_NO_MODELO if no_modelo else "")
         ),
         premissas=[NOTA_ANGLO],
         alertas=alertas,

@@ -23,6 +23,17 @@ AJUDA: dict[str, str] = {
         "**reticulados planos** (capítulo 8): cada pórtico perpendicular ao vento recebe força, "
         "e os de trás ficam parcialmente protegidos pelo da frente."
     ),
+    "preencher_esqueleto": (
+        "Preenche a planta (L_x, L_y entre eixos dos pilares), os vãos, as cotas dos pisos, a "
+        "área de piso, os perfis dos pilares e das vigas e o contraventamento de cada direção "
+        "(tipo, linhas, painéis e o perfil das diagonais, se for cantoneira, tubo ou barra "
+        "redonda) com o que o esqueleto do modelo mostra. Os outros campos não mudam."
+    ),
+    "area_piso": (
+        "A área de piso de cada nível (m²), que multiplica o peso da estrutura, do piso e a "
+        "sobrecarga por área. Vazio: L_x × L_y. Numa plataforma em balanço ou com recortes, a área "
+        "real é diferente — o esqueleto a dá pelas chapas de piso."
+    ),
     "sec_metodo_vento": (
         "De onde vem a força do vento. **Pórticos regulares**: a grade da seção 2, cada pórtico "
         "como um reticulado. **Viga a viga, pilar a pilar**: cada barra do esqueleto do modelo "
@@ -46,7 +57,7 @@ AJUDA: dict[str, str] = {
         "Figura 14). Desligado: todas recebem o vento cheio."
     ),
     "vb_terreno": (
-        "A cota do chão no modelo (m). Vazio: o ponto mais baixo das barras (o pé dos pilares). "
+        "A cota do chão no modelo (m). Vazio: o pé dos pilares (sem pilares, o ponto mais baixo). "
         "As cotas dos pisos da seção 2 contam a partir daqui."
     ),
     "vb_usar_cotas": (

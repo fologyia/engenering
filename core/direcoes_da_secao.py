@@ -135,6 +135,21 @@ class DirecoesDaSecao:
         fa, f1, f2 = s * -carga.n, s * carga.v1, s * carga.v2
         return _soma(_soma(_escala(self.axial, fa), _escala(self.d1, f1)), _escala(self.d2, f2))
 
+    def na_fundacao(self, carga: qf.CargaNaBase) -> tuple[Ponto, Ponto] | None:
+        """Força (kN) e momento (kN·m) que o pilar faz na fundação, na planta: o contrário da
+        reação. N de compressão sai para baixo; o momento, com M₁, M₂ e o torque."""
+        if self.d1 is None or self.d2 is None:
+            return None
+        reacao = self.reacao(carga)
+        if reacao is None:  # pragma: no cover - mesma condição de cima
+            return None
+        s = self.sinal_da_base
+        momento = _soma(
+            _soma(_escala(self.d1, s * carga.m1), _escala(self.d2, s * carga.m2)),
+            _escala(self.axial, s * carga.t),
+        )
+        return _escala(reacao, -1.0), _escala(momento, -1.0)
+
     def horizontal(self, carga: qf.CargaNaBase) -> Ponto | None:
         """Só a parte transversal da reação (V₁ e V₂ no espaço), kN."""
         if self.d1 is None or self.d2 is None:
@@ -409,6 +424,38 @@ def direcoes_dos_pilares(
             "ficam no rótulo. " + " · ".join(partes[:3]) + "."
         )
     return DirecoesDosPilares(pilares, tuple(avisos))
+
+
+def eixos_horizontais(eixo_vertical: str) -> tuple[str, str]:
+    """Os dois eixos horizontais do modelo do SolidWorks (Y vertical: X e Z)."""
+    return ("X", "Z") if eixo_vertical == "Y" else ("X", "Y")
+
+
+def na_fundacao_no_modelo(
+    direcoes: DirecoesDosPilares, quadro: qf.QuadroDeFundacoes, eixo_vertical: str
+) -> dict[tuple[str, str], tuple[float, float, float, float]]:
+    """(pilar, caso) → (F, F, M, M) do pilar na fundação nos dois eixos horizontais do modelo
+    (:func:`eixos_horizontais`), kN e kN·m; só os pilares com a direção da seção sabida."""
+    a, b = eixos_horizontais(eixo_vertical)
+    indice = {"X": 0, "Y": 1, "Z": 2}
+    saida: dict[tuple[str, str], tuple[float, float, float, float]] = {}
+    for pilar in quadro.pilares:
+        d = direcoes.pilares.get(pilar.pilar)
+        if d is None or not d.sabida:
+            continue
+        for carga in pilar.cargas:
+            acao = d.na_fundacao(carga)
+            if acao is None:
+                continue
+            f = vpb.do_modelo(acao[0], eixo_vertical)
+            m = vpb.do_modelo(acao[1], eixo_vertical)
+            saida[(pilar.pilar, carga.caso)] = (
+                f[indice[a]],
+                f[indice[b]],
+                m[indice[a]],
+                m[indice[b]],
+            )
+    return saida
 
 
 def conferir_horizontais(

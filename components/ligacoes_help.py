@@ -55,8 +55,12 @@ AJUDA: dict[str, str] = {
     "eletrodo": "Classe do eletrodo: E70 (485 MPa) é o usual; E60 tem 415 MPa.",
     "sec_esforcos": "Os esforços de cálculo (já majorados, combinação ELU) que chegam na ligação.",
     "origem": (
-        "Reações de cálculo dos cálculos já registrados no projeto ativo: vigas de piso (a de "
-        "cálculo e, com o Anglo, a mínima da ligação) e longarinas da escada (cada apoio, ELU)."
+        "Reações de cálculo dos cálculos já registrados no projeto ativo — vigas de piso (a de "
+        "cálculo e, com o Anglo, a mínima da ligação) e longarinas da escada (cada apoio, ELU) — "
+        "e as pontas das vigas e diagonais do modelo do SolidWorks importado em Esforços do "
+        "modelo: em cada ponta, a combinação ELU com o maior cortante no plano da alma e o "
+        "normal junto. Quando a ponta tem momento, ele aparece no rótulo: a junta do modelo é "
+        "rígida e a ligação flexível não o leva."
     ),
     "usar_reacao": (
         "Copia a reação escolhida para V_Sd e N_Sd (a horizontal da longarina vira N_Sd). Dá "

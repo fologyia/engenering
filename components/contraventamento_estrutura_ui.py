@@ -37,6 +37,7 @@ from components.verification_table import mostrar_tabela_verificacoes
 from core import base_tecnica as bt
 from core import bolted_connection as bc
 from core import contraventamento_barras as cb
+from core import contraventamento_do_esqueleto as cesq
 from core import contraventamento_estrutura_registro as reg
 from core import contraventamento_plataforma as cp
 from core import contraventamento_vento_barras as cvb
@@ -82,6 +83,15 @@ def _chave(nome: str) -> str:
     return PREFIXO + nome
 
 
+#: Valores que vieram do esqueleto (o botão "Preencher pelo esqueleto"): também o valor inicial
+#: do campo quando ele é criado de novo (outra página, outra sessão).
+PADROES = PREFIXO + "padroes_do_esqueleto"
+
+
+def _padrao(chave: str, valor: Any) -> Any:
+    return st.session_state.get(PADROES, {}).get(chave, valor)
+
+
 def _numero(
     rotulo: str,
     chave: str,
@@ -99,7 +109,7 @@ def _numero(
             rotulo,
             min_value=float(minimo),
             max_value=maximo,
-            value=float(valor),
+            value=float(_padrao(chave, valor)),
             step=passo,
             format=formato,
             key=_chave(chave),
@@ -117,7 +127,7 @@ def _inteiro(
             rotulo,
             min_value=minimo,
             max_value=maximo,
-            value=valor,
+            value=int(_padrao(chave, valor)),
             step=1,
             key=_chave(chave),
             persist_state="session",
@@ -137,6 +147,7 @@ def _selecao(
     alvo: Any = st,
 ) -> str:
     completa = _chave(chave)
+    padrao = _padrao(chave, padrao)
     if st.session_state.get(completa) not in opcoes:
         st.session_state.pop(completa, None)
     return str(
@@ -154,7 +165,13 @@ def _selecao(
 
 def _toggle(rotulo: str, chave: str, ajuda: str, *, valor: bool = False, alvo: Any = st) -> bool:
     return bool(
-        alvo.toggle(rotulo, value=valor, key=_chave(chave), persist_state="session", help=ajuda)
+        alvo.toggle(
+            rotulo,
+            value=bool(_padrao(chave, valor)),
+            key=_chave(chave),
+            persist_state="session",
+            help=ajuda,
+        )
     )
 
 
@@ -224,11 +241,106 @@ class DadosEstrutura:
     guarda_corpo: bool
     altura_gc: float
     phi_gc: float
+    area_de_piso_m2: float | None = None
 
 
-def formulario_estrutura(erros: list[str]) -> DadosEstrutura:
+def esqueleto_do_projeto() -> cesq.EsqueletoDoContraventamento | None:
+    """O que o esqueleto do projeto diz da estrutura (``None`` sem esqueleto)."""
+    projeto = obter_projeto_ativo()
+    geometria = ld.geometria_do_projeto(projeto)
+    if not geometria.corpos:
+        return None
+    eixo = em.esforcos_do_projeto(projeto).eixo_vertical
+    eixo = str(st.session_state.get(_chave("vb_eixo"), eixo if eixo in ("Y", "Z") else "Y"))
+    try:
+        return cesq.ler_esqueleto(geometria, eixo)
+    except (ArithmeticError, ValueError):
+        return None
+
+
+def _preencher_pelo_esqueleto(esq: cesq.EsqueletoDoContraventamento) -> None:
+    """Os campos da página com o que o esqueleto diz (só o que ele sabe)."""
+    valores: dict[str, Any] = {
+        "Lx": max(esq.lx_m, 0.5),
+        "Ly": max(esq.ly_m, 0.5),
+        "vaos_x": min(max(esq.vaos_x, 1), 20),
+        "vaos_y": min(max(esq.vaos_y, 1), 20),
+    }
+    perfis = _perfis_i()
+    if esq.pilar in perfis:
+        valores["pilar"] = esq.pilar
+    if esq.viga in perfis:
+        valores["viga"] = esq.viga
+    if esq.cotas_m:
+        valores["n_pisos"] = min(len(esq.cotas_m), 8)
+        valores["h_andar"] = max(round(esq.cotas_m[0], 2), 0.5)
+    sistemas = {s: esq.sistema(d) for s, d in (("_x", "X"), ("_y", "Y"))}
+    for sufixo, s in sistemas.items():
+        if s is None:
+            continue
+        valores[f"tipo{sufixo}"] = s.tipo
+        valores[f"linhas{sufixo}"] = min(s.linhas, 20)
+        valores[f"paineis{sufixo}"] = min(s.paineis_por_linha, 20)
+        if s.familia:
+            valores[f"familia{sufixo}"] = s.familia
+            valores[f"perfil{sufixo}"] = s.perfil
+    sx, sy = sistemas["_x"], sistemas["_y"]
+    valores["mesmo_sistema"] = (
+        sx is not None
+        and sy is not None
+        and (sx.tipo, sx.linhas, sx.paineis_por_linha, sx.perfil)
+        == (sy.tipo, sy.linhas, sy.paineis_por_linha, sy.perfil)
+    )
+    # O valor vai direto no campo (no navegador, o campo guarda o dele pela chave) e fica também
+    # como o inicial, para quando o campo for criado de novo.
+    st.session_state[PADROES] = {**st.session_state.get(PADROES, {}), **valores}
+    for chave, valor in valores.items():
+        st.session_state[_chave(chave)] = valor
+    st.session_state[_chave("cotas_livres")] = "; ".join(_pt(z, 2) for z in esq.cotas_m)
+    st.session_state[_chave("area_piso")] = esq.area_de_piso_m2
+
+
+def mostrar_esqueleto(esq: cesq.EsqueletoDoContraventamento | None) -> None:
+    """O resumo do que o esqueleto diz e o botão que preenche a página com isso."""
+    if esq is None:
+        return
+    partes = [
+        f"{len(esq.pilares)} pilares em {esq.linhas_de_pilares[0]} × {esq.linhas_de_pilares[1]} "
+        f"linhas ({esq.pilar or 'perfil ?'})",
+        f"L_x × L_y = {_pt(esq.lx_m, 2)} × {_pt(esq.ly_m, 2)} m",
+        "pisos a " + ("; ".join(_pt(z, 2) for z in esq.cotas_m) or "—") + " m",
+    ]
+    if esq.area_de_piso_m2:
+        partes.append(f"piso de {_pt(esq.area_de_piso_m2, 1)} m²")
+    for direcao in cp.DIRECOES:
+        s = esq.sistema(direcao)
+        partes.append(
+            f"{direcao}: "
+            + (
+                f"{cp.TIPOS[s.tipo].split(' (')[0].split(' —')[0]}, {s.linhas} linha(s)"
+                if s
+                else "sem diagonais"
+            )
+        )
+    linha = st.columns([4, 1.4])
+    linha[0].caption(":material/account_tree: Esqueleto do modelo: " + " · ".join(partes))
+    linha[1].button(
+        "Preencher pelo esqueleto",
+        on_click=_preencher_pelo_esqueleto,
+        args=(esq,),
+        icon=":material/account_tree:",
+        key=_chave("preencher_esqueleto"),
+        help=AJUDA["preencher_esqueleto"],
+        width="stretch",
+    )
+
+
+def formulario_estrutura(
+    erros: list[str], esq: cesq.EsqueletoDoContraventamento | None = None
+) -> DadosEstrutura:
     with st.container(border=True):
         st.subheader("2. Estrutura", help=AJUDA["sec_2"])
+        mostrar_esqueleto(esq)
         linha = st.columns(4)
         lx = _numero(
             "Comprimento L_x (m)", "Lx", 12.0, AJUDA["Lx"], minimo=0.5, passo=0.5, alvo=linha[0]
@@ -300,6 +412,17 @@ def formulario_estrutura(erros: list[str]) -> DadosEstrutura:
                 formato="%.2f",
                 alvo=colunas[1],
             )
+            area_piso = st.number_input(
+                "Área de piso por nível (m²) — opcional",
+                min_value=0.0,
+                value=None,
+                step=0.5,
+                format="%.2f",
+                placeholder="L_x × L_y",
+                key=_chave("area_piso"),
+                persist_state="session",
+                help=AJUDA["area_piso"],
+            )
     cotas = tuple(h_andar * (k + 1) for k in range(n_pisos))
     if texto.strip():
         try:
@@ -319,6 +442,7 @@ def formulario_estrutura(erros: list[str]) -> DadosEstrutura:
         guarda,
         altura_gc,
         phi_gc,
+        float(area_piso) if area_piso else None,
     )
 
 
@@ -1320,7 +1444,8 @@ def mostrar_contraventamento_de_estrutura() -> None:
     legenda_da_base(base)
     erros: list[str] = []
     ident = formulario_identificacao()
-    estrutura = formulario_estrutura(erros)
+    esqueleto = esqueleto_do_projeto()
+    estrutura = formulario_estrutura(erros, esqueleto)
     cargas, equipamentos = formulario_cargas(erros, base)
     vento = formulario_vento(base)
     vento_do_esqueleto = formulario_metodo_do_vento(estrutura, equipamentos, vento, erros)
@@ -1352,6 +1477,7 @@ def mostrar_contraventamento_de_estrutura() -> None:
         criterio_anglo=ajustes.criterio_anglo,
         tipo_de_estrutura=ajustes.tipo_de_estrutura,
         vento_do_esqueleto=vento_do_esqueleto,
+        area_de_piso_m2=estrutura.area_de_piso_m2,
     )
     problemas = cp.validar_entrada(entrada)
     if problemas:
@@ -1364,6 +1490,22 @@ def mostrar_contraventamento_de_estrutura() -> None:
         st.error(f"Não foi possível calcular: {erro}", icon=":material/error:")
         st.stop()
     st.header("Resultados")
+    if esqueleto is not None:
+        diferencas = cesq.conferir_com_a_pagina(esqueleto, entrada)
+        avisos_do_esqueleto = [
+            *esqueleto.avisos,
+            *(
+                [
+                    "A página está diferente do esqueleto do modelo: "
+                    + "; ".join(diferencas)
+                    + ". Use “Preencher pelo esqueleto” (seção 2) ou confira."
+                ]
+                if diferencas
+                else []
+            ),
+        ]
+        for aviso in avisos_do_esqueleto:
+            st.warning(aviso, icon=":material/account_tree:")
     _resumo(resultado)
     abas = st.tabs(["Desenhos", "Verificações", "Vento", "Combinações e andares", "Ligação"])
     with abas[0]:

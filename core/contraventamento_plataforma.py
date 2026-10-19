@@ -165,6 +165,8 @@ class EntradaContraventamento:
     tipo_de_estrutura: str = ""
     #: Vento viga a viga pelo esqueleto do modelo, já nos pisos (``None``: pórticos regulares).
     vento_do_esqueleto: cvb.VentoDoEsqueleto | None = None
+    #: Área de piso de cada nível (m²) para o peso por área; ``None``: L_x × L_y.
+    area_de_piso_m2: float | None = None
 
     def sistema(self, direcao: str) -> SistemaDeContraventamento:
         return self.contraventamento_x if direcao == "X" else self.contraventamento_y
@@ -180,6 +182,10 @@ class EntradaContraventamento:
 
     @property
     def area_planta_m2(self) -> float:
+        """A área de piso de cada nível: a informada (pelas chapas do esqueleto, por exemplo) ou
+        L_x × L_y."""
+        if self.area_de_piso_m2 is not None:
+            return self.area_de_piso_m2
         return self.comprimento_x_m * self.largura_y_m
 
 
@@ -251,6 +257,10 @@ def validar_entrada(e: EntradaContraventamento) -> list[str]:
         if not f.nome.strip() or f.nome in nomes:
             erros.append("Cada força horizontal precisa de um nome único.")
         nomes.add(f.nome)
+    if e.area_de_piso_m2 is not None and not (
+        math.isfinite(e.area_de_piso_m2) and e.area_de_piso_m2 > 0
+    ):
+        erros.append("A área de piso precisa ser maior que zero (ou vazia: L_x × L_y).")
     if not 0.0 <= e.excentricidade <= 0.5:
         erros.append("A excentricidade vai de 0 a 0,5 da dimensão perpendicular à força.")
     if e.tipo_de_estrutura and e.tipo_de_estrutura not in bt.TIPOS_DE_ESTRUTURA:

@@ -319,3 +319,56 @@ def test_dupla_cantoneira_parafusos_e_cantoneiras():
     registro = json.loads(json.dumps(lg.registro_ligacao(r)))
     imagens, aviso = imagens_do_registro(registro, {})
     assert aviso == "" and len(imagens) == 1
+
+
+# ------------------------------------------------------------------ pontas das vigas do modelo
+def _projeto_do_modelo(eixo_forte: str = "Momento 2", tipo: str = "Viga") -> dict:
+    """Uma viga biapoiada no PP (V₁ = ±5 kN nas pontas, M₂ no meio) e um pilar."""
+    from core import esforcos_modelo as em
+    from core import plano_de_cargas as pc
+
+    pontos = []
+    for i, (x1, x2) in enumerate(((0.0, 1.0), (1.0, 2.0))):
+        for fim, x in (("1", x1), ("2", x2)):
+            v = 5.0 - 5.0 * x  # de +5 a −5 kN
+            m = 5.0 * x - 2.5 * x * x  # 0 nas pontas
+            pontos.append(em.PontoDeEsforco(str(i + 1), fim, 0.4, v, 0.1, 0.0, m, 0.0))
+    dados = em.EsforcosDoModelo(
+        casos={"PP": em.CasoImportado("PP", "PP", "pp.csv", "", "x",
+                                      {"Viga-1(V[1])": tuple(pontos), "Viga-2(P[1])": tuple(pontos)})},
+        membros={"Viga-1(V[1])": em.ConfiguracaoDoMembro(tipo=tipo, eixo_forte=eixo_forte),
+                 "Viga-2(P[1])": em.ConfiguracaoDoMembro(tipo="Pilar")},
+    )  # fmt: skip
+    plano = pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("PP"))
+    return {
+        "esforcos_do_modelo": em.para_dicionario(dados),
+        "plano_de_cargas": pc.para_dicionario(plano),
+    }
+
+
+def test_pontas_das_vigas_do_modelo_com_a_combinacao_elu():
+    from core import esforcos_modelo as em
+    from core import load_combinations as comb
+    from core import plano_de_cargas as pc
+
+    projeto = _projeto_do_modelo()
+    reacoes = lg.reacoes_do_modelo(projeto)
+    assert len(reacoes) == 2  # o pilar não entra
+    preparo = em.preparar_combinacoes(
+        em.esforcos_do_projeto(projeto),
+        pc.plano_do_projeto(projeto),
+        list(comb.COMBINACOES_ULTIMAS),
+    )
+    fator = max(f[0] for f in preparo.fatores)
+    for r in reacoes:
+        assert r.v_kN == pytest.approx(5.0 * fator)  # V₁: o cortante do eixo forte (M₂)
+        assert r.n_kN == pytest.approx(0.4 * fator)
+        assert "Fim 1" in r.rotulo or "Fim 2" in r.rotulo
+        assert "M " not in r.rotulo  # sem momento nas pontas
+    # Eixo forte M₁: o cortante da alma é o V₂.
+    v2 = lg.reacoes_do_modelo(_projeto_do_modelo(em.EIXO_M1))
+    assert v2[0].v_kN == pytest.approx(0.1 * fator)
+    # Entram na lista da página junto com os cálculos registrados.
+    assert lg.reacoes_do_projeto(projeto)[-2:] == reacoes
+    # Sem o tipo na tabela: o que o peso próprio diz (aqui, sem esqueleto e sem PP inclinado).
+    assert lg.reacoes_do_modelo({"esforcos_do_modelo": {"casos": "lixo"}}) == []

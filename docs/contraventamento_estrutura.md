@@ -36,6 +36,30 @@ verificada, sem montar o modelo estrutural. O núcleo não depende do Streamlit.
 * Simplificação a favor da segurança: barras circulares também usam a Figura 12 (1,6 a 2,0 contra
   1,1 da Figura 13).
 
+### Preencher pelo esqueleto (`core/contraventamento_do_esqueleto.py`)
+
+Com o esqueleto no projeto, a seção 2 mostra o que ele diz e o botão **Preencher pelo esqueleto**
+põe na página:
+
+* **Pilares**: barras em pé (até 15° do prumo) com o pé no chão e o topo no primeiro piso — o poste
+  de um patamar de escada não conta (aviso). As linhas de pilares dão os vãos e L_x, L_y **entre
+  eixos**; com os pilares numa linha só numa direção, a medida do piso e o aviso de balanço.
+* **Pisos**: as cotas das vigas deitadas e a **área de piso** pelas chapas deitadas de cada nível
+  (o peso por área multiplica essa área, não L_x × L_y; campo "Área de piso por nível").
+* **Diagonais**: inclinadas (15° a 75°) num plano vertical X ou Y, vencendo pelo menos metade do
+  andar e saindo do pé de um pilar. Mão-francesa e longarina de escada não contam. Cruzadas no mesmo
+  plano e andar = X; encontrando-se em cima = V invertido; sozinha = diagonal simples. Duas barras no
+  mesmo lugar (pontas a menos de 15 cm) contam uma vez, com aviso — no Simulation, cada corpo é
+  uma viga inteira (o modelo real tinha uma diagonal T assim).
+* **Perfis**: o mais comum dos pilares e das vigas; o das diagonais, se for cantoneira, tubo ou
+  barra redonda do catálogo (senão, aviso: a página não verifica aquele perfil).
+* **Direção sem diagonal**: aviso de que a estabilidade nela é de pórtico (engaste, ligação rígida,
+  mãos-francesas) e a página não verifica isso.
+
+Os avisos e o que a página tiver diferente do esqueleto aparecem no topo dos resultados.
+**Chão**: o pé dos pilares (`vpb.terreno_dos_pilares`) — uma longarina de escada que desce abaixo da
+base não puxa o chão para baixo (no modelo real, 15 cm), nem no vento viga a viga.
+
 ### Viga a viga, pilar a pilar (o esqueleto do modelo)
 
 O seletor **Como o vento chega à estrutura** troca a grade da seção 2 pelo esqueleto que a macro do
@@ -157,7 +181,8 @@ dos pilares e a compressão que ela induz nas diagonais.
 
 `tests/test_vento_estrutura_aberta.py` (figuras e tabelas da norma, exemplo conferido à mão),
 `tests/test_contraventamento_vento_barras.py` (faixas, soma que fecha, níveis, planta, excentricidade,
-ações caso a caso, registro),
+ações caso a caso, registro), `tests/test_contraventamento_do_esqueleto.py` (planta, vãos, área,
+X/V/simples, mão-francesa, poste, sobrepostas, balanço, conferência),
 `tests/test_contraventamento_barras.py`, `tests/test_contraventamento_plataforma.py` (ações,
 envoltória, B₂, tipos, deslocamentos, registro e memorial), `tests/test_combinacoes_nbr8681.py` e
 `tests/test_contraventamento_estrutura_pagina.py`.

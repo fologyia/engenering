@@ -1875,8 +1875,70 @@ class ReacaoRegistrada:
     n_kN: float  # horizontal (normal na ligação), de cálculo; positivo puxando a viga
 
 
+#: Momento na ponta da viga acima disso aparece no rótulo: a chapa simples não o leva.
+MOMENTO_NA_PONTA_KNM = 0.5
+TIPOS_LIGADOS = ("Viga", "Diagonal", "Contraventamento")
+
+
+def _n_pt(valor: float, casas: int = 1) -> str:
+    if round(valor, casas) == 0:
+        valor = 0.0  # sem "-0,0"
+    return f"{valor:.{casas}f}".replace(".", ",")
+
+
+def reacoes_do_modelo(projeto: Mapping[str, Any] | None) -> list[ReacaoRegistrada]:
+    """As forças de cálculo nas pontas das barras do modelo importado (Esforços do modelo).
+
+    Para cada viga (e diagonal; sem tipo na tabela, pelo peso próprio), em cada ponta (o Fim 1 e o Fim 2 da viga no Simulation), a
+    combinação ELU do plano de cargas com o maior cortante no plano da alma — o do eixo forte da
+    tabela das barras: V₁ quando o eixo forte é o M₂ — e o normal na mesma combinação (tração
+    positiva). O momento do eixo forte na ponta, quando passa de 0,5 kN·m, vai no rótulo: a
+    ligação flexível (chapa simples, cantoneira dupla) não o leva — a junta do modelo é rígida.
+    """
+    from core import esforcos_modelo as em
+    from core import leitura_do_modelo as ld
+    from core import load_combinations as comb
+    from core import plano_de_cargas as pc
+
+    dados = em.esforcos_do_projeto(projeto)
+    if not dados.casos:
+        return []
+    plano = pc.plano_do_projeto(projeto)
+    preparo = em.preparar_combinacoes(dados, plano, list(comb.COMBINACOES_ULTIMAS))
+    if preparo is None or not preparo.nomes:
+        return []
+    saida: list[ReacaoRegistrada] = []
+    for nome in dados.nomes_dos_membros:
+        cfg = dados.membros.get(nome, em.ConfiguracaoDoMembro())
+        tipo = cfg.tipo
+        if tipo == "—":  # sem tipo na tabela: o que o peso próprio diz
+            tipo = ld.tipo_pelos_esforcos(dados, nome, plano)[0]
+        if tipo not in TIPOS_LIGADOS:
+            continue
+        combinados, metodo, _ = em.combinados_do_membro(nome, preparo)
+        if metodo.startswith("soma"):
+            continue  # sem os pontos alinhados, não há "a ponta"
+        rotulos = list(dict.fromkeys(r for _, r, _ in combinados))
+        if len(rotulos) < 2:
+            continue
+        forte = 1 if cfg.eixo_forte == em.EIXO_M2 else 2  # (N, V1, V2, M1, M2, T)
+        momento = 4 if cfg.eixo_forte == em.EIXO_M2 else 3
+        for ponta, rotulo in (("ponta do Fim 1", rotulos[0]), ("ponta do Fim 2", rotulos[-1])):
+            na_ponta = [(c, v) for c, r, v in combinados if r == rotulo]
+            if not na_ponta:
+                continue
+            combinacao, vetor = max(na_ponta, key=lambda cv: abs(cv[1][forte]))
+            v, n, m = abs(vetor[forte]), vetor[0], vetor[momento]
+            texto = f"Modelo — {nome}, {ponta}: V {_n_pt(v)} kN · N {_n_pt(n)} kN"
+            if abs(m) > MOMENTO_NA_PONTA_KNM:
+                texto += f" · M {_n_pt(abs(m))} kN·m (ligação flexível não leva)"
+            saida.append(ReacaoRegistrada(f"{texto} ({combinacao})", v, n))
+    return saida
+
+
 def reacoes_do_projeto(projeto: Mapping[str, Any] | None) -> list[ReacaoRegistrada]:
-    """As reações de cálculo (ELU) dos cálculos registrados: vigas de piso e longarinas.
+    """As reações de cálculo (ELU) dos cálculos registrados — vigas de piso e longarinas — e as
+    forças nas pontas das barras do modelo importado (:func:`reacoes_do_modelo`).
 
     Viga de piso: a reação de cálculo e, com o critério Anglo, a mínima da ligação (item 9.1).
     Longarina: o modelo ELU gravado é resolvido de novo e cada apoio dá V = |R_y| e N = R_x.
@@ -1916,4 +1978,8 @@ def reacoes_do_projeto(projeto: Mapping[str, Any] | None) -> list[ReacaoRegistra
                     )
         except (TypeError, ValueError, KeyError, pp.PorticoInvalido):
             continue  # registro antigo ou estragado: simplesmente não oferece a reação
+    try:
+        saida.extend(reacoes_do_modelo(projeto))
+    except (ArithmeticError, TypeError, ValueError, KeyError):
+        pass  # esforços gravados estragados: só não oferece as pontas do modelo
     return saida

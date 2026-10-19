@@ -285,3 +285,34 @@ def test_viga_a_viga_registra_e_envia_ao_plano(banco_com_projeto):
         if r["modulo_id"] == "contraventamento_estrutura"
     )
     assert "viga a viga" in achado["entradas"]["vento"]
+
+
+def test_preencher_pelo_esqueleto(banco_com_projeto):
+    from core import leitura_do_modelo as ld
+    from core.project_store import salvar_projeto
+    from tests.test_contraventamento_do_esqueleto import com_x_nas_bordas
+    from tests.test_guarda_corpo_do_modelo import LINHA
+
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(
+        ld.GeometriaDoModelo(corpos=tuple(com_x_nas_bordas()), arquivo="x_esqueleto.csv")
+    )
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir(banco_com_projeto)
+    assert any("Esqueleto do modelo" in c.value for c in t.caption)
+    t.button(key="ce_preencher_esqueleto").click().run()
+    assert not t.exception
+    estado = t.session_state
+    assert (estado["ce_Lx"], estado["ce_Ly"], estado["ce_vaos_x"], estado["ce_vaos_y"]) == (
+        6.0, 4.0, 1, 1)  # fmt: skip
+    assert estado["ce_cotas_livres"] == f"{LINHA:.2f}".replace(".", ",")
+    assert estado["ce_area_piso"] == pytest.approx(24.0)
+    assert estado["ce_tipo_x"] == cp.TIPO_X_TRACAO and estado["ce_linhas_x"] == 2
+    assert estado["ce_mesmo_sistema"] is False
+    textos = " ".join(w.value for w in t.warning)
+    assert "Sem contraventamento em Y" in textos
+    assert "A página está diferente do esqueleto" not in textos
+    faltam = {
+        (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
+    } - ISENTOS
+    assert not faltam, sorted(faltam)

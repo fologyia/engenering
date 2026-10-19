@@ -668,6 +668,7 @@ _ENTRADAS_CONTRAVENTAMENTO_ESTRUTURA: tuple[_Entrada, ...] = (
     ("comprimento_x_m", "Comprimento L_x [m]", "sempre"),
     ("largura_y_m", "Largura L_y [m]", "sempre"),
     ("cotas_dos_pisos_m", "Cotas dos pisos [m]", "sempre"),
+    ("area_de_piso_m2", "Área de piso por nível [m²]", "se_preenchido"),
     ("vaos_x", "Vãos em X", "sempre"),
     ("vaos_y", "Vãos em Y", "sempre"),
     ("largura_do_pilar_m", "Largura do pilar vista pelo vento [m]", "sempre"),

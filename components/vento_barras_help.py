@@ -55,8 +55,9 @@ AJUDA: dict[str, str] = {
         "(fator η da norma). Desligado: todas recebem o vento cheio (mais conservador)."
     ),
     "terreno": (
-        "A cota do chão no seu modelo (m, no eixo vertical). Vazio: o ponto mais baixo das barras "
-        "(o pé dos pilares). A altura de cada barra acima do chão define a pressão do vento nela."
+        "A cota do chão no seu modelo (m, no eixo vertical). Vazio: o pé dos pilares (o mais baixo "
+        "das barras em pé; sem pilares, o ponto mais baixo). A altura de cada barra acima do chão "
+        "define a pressão do vento nela."
     ),
     "res_governante": "A direção que dá a maior força total na estrutura.",
     "res_total": "Soma das forças do vento (barras e elementos) na direção que mais carrega.",

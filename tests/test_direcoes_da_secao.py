@@ -45,12 +45,17 @@ def pontos(q, d1, para_cima=True):
     def interno(x):  # o topo (livre) em x = L subindo, em x = 0 descendo
         return [wi * (L - x) if para_cima else -wi * x for wi in w]
 
+    def momentos(x):  # dM1/dx = V2 e dM2/dx = −V1 (conferido nos arquivos reais), topo livre
+        resto = (L - x) ** 2 / 2 if para_cima else x**2 / 2
+        return -w[2] * resto, w[1] * resto
+
     lista = []
     ell = L / N_ELEMENTOS
     for i in range(N_ELEMENTOS):
         for fim, x in (("1", i * ell), ("2", (i + 1) * ell)):
             n, v1, v2 = interno(x)
-            lista.append(em.PontoDeEsforco(str(i + 1), fim, n, v1, v2, 0.0, 0.0, 0.0))
+            m1, m2 = momentos(x)
+            lista.append(em.PontoDeEsforco(str(i + 1), fim, n, v1, v2, m1, m2, 0.0))
     return tuple(lista)
 
 
@@ -208,3 +213,36 @@ def test_cena_desenha_a_seta_horizontal_na_base():
     sem = cm.apoios_e_reacoes(g, "Z", d, nomes, "W0")
     assert not [s for s in sem.reacoes if abs(s.vetor[2]) < 1e-9] and sem.horizontais == 0
     assert any("V₁ e V₂ ficam no rótulo" in a for a in sem.avisos)
+
+
+# ------------------------------------------------------------------ a fundação nos eixos do modelo
+@pytest.mark.parametrize("para_cima", [True, False], ids=["fim1-na-base", "fim2-na-base"])
+def test_forca_e_momento_na_fundacao_nos_eixos_do_modelo(para_cima):
+    a = math.radians(30.0)
+    d1 = (math.cos(a), math.sin(a), 0.0)
+    quadro, d, r = calcular(dados(d1, para_cima), corpo(d1))
+    assert ds.eixos_horizontais("Z") == ("X", "Y") and ds.eixos_horizontais("Y") == ("X", "Z")
+    no_modelo = ds.na_fundacao_no_modelo(r, quadro, "Z")
+    qx, qy = VENTO[0], VENTO[1]
+    # Balanço com q uniforme: a fundação recebe q·L e o momento (L²/2)·(ẑ × q).
+    fx, fy, mx, my = no_modelo[(VIGA, "W0")]
+    assert (fx, fy) == pytest.approx((qx * L, qy * L), abs=1e-9)
+    assert (mx, my) == pytest.approx((-qy * L**2 / 2, qx * L**2 / 2), abs=1e-9)
+    assert no_modelo[(VIGA, "PP")] == pytest.approx((0.0, 0.0, 0.0, 0.0), abs=1e-9)
+    # No quadro: quatro colunas a mais, e o registro com a tabela nos eixos do modelo.
+    linhas = qf.linhas_do_quadro(quadro, pc.PlanoDeCargas(), no_modelo)
+    colunas = qf.colunas(no_modelo, ("X", "Y"))
+    assert colunas[-4:] == ("FX (kN)", "FY (kN)", "MX (kN·m)", "MY (kN·m)")
+    assert all(len(linha) == len(colunas) for linha in linhas)
+    assert b"FX (kN)" in qf.csv_do_quadro(quadro, pc.PlanoDeCargas(), no_modelo, ("X", "Y"))
+    registro = qf.registro_do_quadro(quadro, pc.PlanoDeCargas(), no_modelo=no_modelo,
+                                     eixos=("X", "Y"))  # fmt: skip
+    legendas = [t["legenda"] for t in registro["resultados"]["tabelas_memorial"]]
+    assert any("eixos do modelo" in x for x in legendas)
+    assert qf.xlsx_do_quadro(quadro, pc.PlanoDeCargas(), no_modelo=no_modelo)[:2] == b"PK"
+
+
+def test_pilar_sem_direcao_fica_vazio_no_quadro():
+    quadro, _, r = calcular(dados((1.0, 0.0, 0.0), casos=("PP", "SC")), corpo((1.0, 0.0, 0.0)))
+    assert ds.na_fundacao_no_modelo(r, quadro, "Z") == {}
+    assert qf.colunas({}, ("X", "Y")) == qf.COLUNAS  # sem nada nos eixos do modelo, sem colunas

@@ -36,8 +36,13 @@ Com o estudo resolvido, botão direito em **Resultados**:
 * **Perfil pelo nome** (`perfil_do_nome`): `Canal c C8X13.75` → U 8" do catálogo de massa mais
   próxima; `Ângulo L2.5X2.5X0.25` → L 2 1/2" × 1/4"; `W8X31` ou `W 200 x 35.9` → o W de mesma altura
   e massa mais próxima. Barras `Aparar/Estender…` não dizem o perfil: escolhe-se na tabela das barras.
-* **Eixo forte**: o programa sugere o momento que domina (nos perfis em U de piso, o Momento 2);
-  confirma-se na tabela das barras.
+* **Eixo forte**: na importação, o momento que domina (nos perfis em U de piso, o Momento 2). Com
+  o perfil e o esqueleto, a **seção** decide (`ld.eixo_forte_pela_secao`): o Simulation põe a
+  direção 1 na aresta reta mais longa da seção; ao longo da alma, o M₂ é o do eixo forte; ao longo
+  da mesa, o M₁. A direção 1 vem medida pela macro v6 (comparada com a direção da alma) ou, sem
+  dúvida, do catálogo (alma reta com um raio generoso contra a mesa; U pelas costas da alma; T;
+  tubo retangular). No modelo real, a regra antiga trocava os pilares W 200 × 31,3 — no PP, o M₁
+  dominava, mas é o do eixo fraco (S₁ = 61,2 cm³ = W_y no próprio Simulation).
 
 ## Conferência das reações (`conferir_reacoes`)
 
@@ -194,6 +199,12 @@ junto ou já no projeto), a área que o Simulation usou em cada barra = |N| ÷ |
 mais de 5 % de diferença é aviso. No modelo real, a seção nominal apareceu em todas as barras (U 8":
 25,9 cm²; pilares: 40,4 cm² do W 200 x 31,3), menos numa peça de 340 mm com cortes a 53°/37°, em
 que o Simulation tomou 14,8 cm² — a seção errada.
+Também o **módulo resistente** de cada direção (`modulos_no_simulation`): S₁ = |M₁| ÷ |σ flexão 1| e
+S₂ = |M₂| ÷ |σ flexão 2|. O maior (pelo menos 1,5 vez o outro) é o do eixo forte, pelo próprio
+Simulation: diferente da coluna Eixo forte da tabela é **erro** ("eixo forte trocado (pelas
+tensões)"); igual, conferido. O S do eixo forte contra o W_x do perfil (mais de 10 % é aviso: a
+seção do modelo não é a da tabela). No modelo real: pilares S₁ = 61,2 e S₂ = 301,9 cm³ (W_y e W_x
+do W 200 × 31,3), vigas U 8" S₂ = 147,5 cm³.
 
 **Corpos renomeados depois do estudo** (`correspondencia`). O Simulation guarda o nome do corpo de
 quando a malha foi feita; renomeado o membro estrutural depois ("Canal c C8X13.75(1)" → "U 8"x17,1 -
@@ -242,7 +253,9 @@ A tabela das barras mostra "Lx / Ly / Lb sugeridos (m)" e a leitura barra a barr
 **Sugestões** (`aplicar_sugestoes`, botão "Aplicar as sugestões"): preenchem só o que está vazio —
 tipo, perfil (só se estiver no catálogo), eixo forte (quando o tipo também era vazio) e Lx, Ly e Lb
 pelos travamentos do esqueleto (sem eles, o comprimento da barra). O perfil que entrou sozinho pelo nome da viga na importação dá lugar ao do modelo
-(com o esqueleto). Nada escolhido à mão é trocado. O esqueleto fica em
+(com o esqueleto). Nada escolhido à mão é trocado — menos o eixo forte tirado da seção (macro v6 ou
+catálogo): ele não é escolha, é qual momento do Simulation é o do eixo forte, e troca o da tabela.
+Enquanto a tabela tiver o outro, o diagnóstico mostra **"Eixo forte trocado"** (erro). O esqueleto fica em
 `projeto["geometria_do_modelo"]` (lido de forma tolerante: linhas fora do formato são puladas).
 
 ## Pior caso de cada barra (`envoltoria`)
@@ -296,6 +309,12 @@ nem majorar** (critério Anglo, item 5.9: quem projeta a fundação faz as combi
 * **Saídas**: compressão por pilar (pilar × caso), quadro completo, Excel (Leia-me com a nota da
   Anglo e a convenção, Quadro, Compressão por pilar), CSV e registro no projeto (capítulo de cálculo
   no memorial com as duas tabelas).
+* **Nos eixos do modelo** (`ds.na_fundacao_no_modelo`): com a direção da seção de cada pilar no
+  Simulation (`core/direcoes_da_secao.py`: a linha pela macro v6, o sentido por um caso de vento
+  viga a viga com carga no pilar), o quadro ganha F e M nos dois eixos horizontais do SolidWorks
+  (FX, FZ, MX, MZ com Y vertical) — a força e o momento que o pilar faz na fundação, o contrário da
+  reação. Conferido num pilar em balanço: a fundação recebe q·L e o momento (L²/2)·(ẑ × q), com o
+  Fim 1 na base ou no topo. Os pilares sem a direção ficam vazios, e o motivo aparece.
 
 ## Placas de base dos pilares (`core/placa_base_pilares.py`)
 

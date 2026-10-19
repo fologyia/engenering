@@ -274,6 +274,7 @@ def _entradas(r: cp.ResultadoContraventamento, contexto: Mapping[str, Any] | Non
         "comprimento_x_m": e.comprimento_x_m,
         "largura_y_m": e.largura_y_m,
         "cotas_dos_pisos_m": _cotas(e.cotas_m),
+        "area_de_piso_m2": e.area_de_piso_m2,
         "vaos_x": e.vaos_x,
         "vaos_y": e.vaos_y,
         "largura_do_pilar_m": e.largura_pilar_m,

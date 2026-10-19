@@ -22,8 +22,10 @@ from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
 from core import cantoneiras as ct
+from core import cena_do_modelo as cm
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
+from core import direcoes_da_secao as ds
 from core import esforcos_modelo as em
 from core import exportacao_cargas as ex
 from core import gerenciador_solidworks as gs
@@ -704,6 +706,25 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
     quadro = qf.montar_quadro(dados)
     for item in quadro.conferencia:
         MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])
+    # Nos eixos do modelo: com a direção da seção de cada pilar (esqueleto + um caso com carga
+    # no pilar).
+    no_modelo: dict[tuple[str, str], tuple[float, float, float, float]] = {}
+    eixos = ds.eixos_horizontais(dados.eixo_vertical)
+    direcoes = None
+    geometria_quadro = ld.geometria_do_projeto(projeto)
+    if quadro.pilares and geometria_quadro.corpos:
+        try:
+            direcoes = cm.direcoes_do_projeto(
+                geometria_quadro,
+                dados.eixo_vertical,
+                dados,
+                cm.Nomes.do_projeto(geometria_quadro, dados),
+                quadro,
+                plano,
+            )
+            no_modelo = ds.na_fundacao_no_modelo(direcoes, quadro, dados.eixo_vertical)
+        except (ArithmeticError, ValueError, KeyError):
+            direcoes = None
     if quadro.pilares and any(p.cargas for p in quadro.pilares):
         numeros = qf.resumo_numerico(quadro)
         colunas = st.columns(3)
@@ -740,22 +761,38 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
                 },
             )
         else:
+            cabecalho_q = qf.colunas(no_modelo, eixos)
             st.dataframe(
-                pd.DataFrame(qf.linhas_do_quadro(quadro, plano), columns=list(qf.COLUNAS)),
+                pd.DataFrame(
+                    qf.linhas_do_quadro(quadro, plano, no_modelo), columns=list(cabecalho_q)
+                ).replace("", None),
                 hide_index=True,
                 width="stretch",
                 column_config={
                     c: st.column_config.NumberColumn(format="%.2f")
-                    for c in qf.COLUNAS
+                    for c in cabecalho_q
                     if "(kN" in c
                 },
             )
-        st.caption(f"{qf.NOTA_ANGLO} {qf.CONVENCAO}")
+        st.caption(
+            f"{qf.NOTA_ANGLO} {qf.CONVENCAO}" + (f" {qf.CONVENCAO_NO_MODELO}" if no_modelo else "")
+        )
+        if direcoes is not None and direcoes.sabidas < len(direcoes.pilares):
+            st.caption(
+                f":material/explore: {direcoes.sabidas} de {len(direcoes.pilares)} pilar(es) com "
+                f"a força nos eixos do modelo ({eixos[0]} e {eixos[1]}). "
+                + " ".join(direcoes.avisos),
+                help=AJUDA["fundacoes_no_modelo"],
+            )
         colunas = st.columns(2)
         colunas[0].download_button(
             "Quadro das fundações (Excel)",
             data=qf.xlsx_do_quadro(
-                quadro, plano, titulo=f"{projeto.get('nome', '')} ({projeto.get('codigo', '')})"
+                quadro,
+                plano,
+                titulo=f"{projeto.get('nome', '')} ({projeto.get('codigo', '')})",
+                no_modelo=no_modelo,
+                eixos=eixos,
             ),
             file_name=f"quadro_fundacoes_{projeto.get('codigo') or 'projeto'}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -766,7 +803,7 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
         )
         colunas[1].download_button(
             "Quadro das fundações (CSV)",
-            data=qf.csv_do_quadro(quadro, plano),
+            data=qf.csv_do_quadro(quadro, plano, no_modelo, eixos),
             file_name=f"quadro_fundacoes_{projeto.get('codigo') or 'projeto'}.csv",
             mime="text/csv",
             icon=":material/download:",
@@ -776,7 +813,7 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
         )
         st.subheader("Registrar o quadro no projeto", help=AJUDA["reg_quadro"])
         botao_registrar_calculo(
-            qf.registro_do_quadro(quadro, plano),
+            qf.registro_do_quadro(quadro, plano, no_modelo=no_modelo, eixos=eixos),
             key="registrar_quadro_fundacoes",
             rotulo="Registrar o quadro das fundações no projeto ativo",
             identificar_peca=False,

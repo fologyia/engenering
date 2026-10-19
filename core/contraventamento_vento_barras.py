@@ -263,11 +263,15 @@ def entrada_pelo_esqueleto(
             "O esqueleto do modelo não tem barras (só chapas): rode a macro de novo na peça com "
             "os membros estruturais."
         )
-    terreno = (
-        min(min(b.inicio[2], b.fim[2]) for b in barras)
-        if cota_do_terreno_m is None
-        else float(cota_do_terreno_m)
-    )
+    if cota_do_terreno_m is not None:
+        terreno = float(cota_do_terreno_m)
+    else:
+        pelos_pilares = vpb.terreno_dos_pilares(barras)
+        terreno = (
+            min(min(b.inicio[2], b.fim[2]) for b in barras)
+            if pelos_pilares is None
+            else pelos_pilares
+        )
     planta = _planta_dos_pisos(barras, terreno, cotas_m)
     if planta is None:
         xs = [p[0] for b in barras for p in (b.inicio, b.fim)]

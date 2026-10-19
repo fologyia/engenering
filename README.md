@@ -368,7 +368,11 @@ esqueleto), gravidade esquecida num estudo duplicado, casos repetidos ou sem car
 que mudou entre os estudos, eixo vertical trocado, unidade errada e a 2ª ordem global (B₂). O botão
 "Aplicar as sugestões" preenche a tabela das barras só onde está vazia — inclusive Lx, Ly e Lb pelos
 travamentos do esqueleto (`core/travamentos.py`: onde outras barras se ligam a cada uma, em cada
-direção; K = 1 com o B₂, balanço K = 2,1).
+direção; K = 1 com o B₂, balanço K = 2,1). O **eixo forte** de cada barra sai da seção (a direção 1
+do Simulation na aresta reta mais longa, medida pela macro v6 ou pelo catálogo) e é conferido pelo
+módulo resistente que o próprio Simulation usou (S = M/σ, com o "Listar tensões da viga"); o quadro
+das fundações ganha F e M **nos eixos do modelo**, e a página Ligações estruturais traz as forças
+das pontas de cada viga do modelo (combinação ELU com o maior cortante da alma).
 **Verificação de todas as barras** (`core/verificacao_barras.py`) pela NBR 8800 com os esforços de
 todas as combinações ELU em todos os pontos, multiplicados pelo B₂ do tipo: varredura rápida da
 interação e verificação completa dos pontos críticos pelo motor da Flambagem de colunas (todos os
@@ -511,7 +515,9 @@ diagonal verificada (`core/contraventamento_plataforma.py`; detalhes em
   Figura 14 entre pórticos, guarda-corpos e equipamentos (cilindros pelas Tabelas 27 e 28), levados
   aos pisos (`core/vento_estrutura_aberta.py`) — ou **viga a viga, pilar a pilar**, pelo esqueleto
   do modelo, uma ação por direção (W0 … W315) com a excentricidade real da resultante
-  (`core/contraventamento_vento_barras.py`);
+  (`core/contraventamento_vento_barras.py`); a planta, os vãos, as cotas, a área de piso e o
+  contraventamento de cada direção preenchidos pelo esqueleto
+  (`core/contraventamento_do_esqueleto.py`), com aviso da direção sem diagonal;
 - **ações e combinações** da NBR 8800 com forças nocionais de 0,3 % em todas as combinações
   últimas, vento nas quatro direções num grupo exclusivo e cortante de cada andar pela envoltória
   rigorosa, com a combinação governante escrita por extenso;
