@@ -112,6 +112,19 @@ AJUDA: dict[str, str] = {
         "**Profundidade C** do degrau, em mm (a dimensão de uma chapa lateral à outra no sentido "
         "do passo). Vazio = automática. O catálogo vai de 175 a 300 mm."
     ),
+    "recobrimento": (
+        "**Recobrimento r**: quanto o fundo de um degrau passa por baixo da frente do degrau "
+        "seguinte, na horizontal, em mm (ex.: 25 mm). Informado, a profundidade do degrau fica "
+        "C = b + r — e o C entra na carga do degrau e na escolha do modelo. Vazio = automática "
+        "(C da série do catálogo, com C ≥ b + 20 do Anglo). Não use junto com a profundidade C "
+        "imposta."
+    ),
+    "canto_longarina": (
+        "Distância do **canto de trabalho do degrau** (o bocel, a quina da frente em cima) até a "
+        "borda de cima da longarina, medida na perpendicular à inclinação, em mm (normalmente "
+        "25 mm). Diz onde o degrau fica na longarina: sai no 3D, na tabela da geometria e no "
+        "memorial (não muda o cálculo do degrau)."
+    ),
     "C_padronizado": (
         "Ligado, a profundidade automática segue a série do catálogo (175, 200, 225, … 300 mm). "
         "Desligado, usa o menor múltiplo de 5 mm que cumpre a norma. C fora da série exige "

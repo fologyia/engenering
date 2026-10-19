@@ -198,6 +198,12 @@ class EntradaDegrau:
     b_imposto_mm: float | None = None
     C_imposto_mm: float | None = None
     C_padronizado: bool = True
+    #: Recobrimento r: quanto o fundo de um degrau passa por baixo da frente do seguinte, na
+    #: horizontal (mm). Informado, C = b + r; vazio, C pela série do catálogo (C ≥ b + 20).
+    recobrimento_imposto_mm: float | None = None
+    #: Distância, perpendicular à inclinação, do canto de trabalho do degrau (o bocel) à borda de
+    #: cima da longarina (mm): onde o degrau fica na longarina (3D, tabela e memorial).
+    canto_a_longarina_mm: float = 25.0
     L_mm: float = 800.0
     reducao_largura_mm: float = 0.0
     altura_max_lance_imposta_mm: float | None = None
@@ -260,6 +266,19 @@ def validar_entrada(e: EntradaDegrau) -> list[str]:
         erros.append("O piso b imposto precisa ser maior que zero.")
     if e.C_imposto_mm is not None and not e.C_imposto_mm > 0:
         erros.append("A profundidade C imposta precisa ser maior que zero.")
+    if e.recobrimento_imposto_mm is not None:
+        if not (math.isfinite(e.recobrimento_imposto_mm) and e.recobrimento_imposto_mm > 0):
+            erros.append(
+                "O recobrimento entre degraus precisa ser maior que zero (com zero ou menos, fica "
+                "um vão entre um degrau e o seguinte)."
+            )
+        if e.C_imposto_mm is not None:
+            erros.append(
+                "Informe a profundidade C ou o recobrimento r, não os dois: C = b + r, um decide o "
+                "outro."
+            )
+    if not (math.isfinite(e.canto_a_longarina_mm) and 0 <= e.canto_a_longarina_mm <= 300):
+        erros.append("A distância do canto do degrau à longarina precisa estar entre 0 e 300 mm.")
     if e.reducao_largura_mm < 0 or e.reducao_largura_mm >= e.L_mm > 0:
         erros.append("A redução da largura útil precisa estar entre 0 e o comprimento L.")
     if e.altura_max_lance_imposta_mm is not None and not e.altura_max_lance_imposta_mm > 0:
@@ -507,10 +526,18 @@ def piso_b(
 # ---------------------------------------------------------------------------------------------
 # 5.3 Profundidade do degrau C e furação F
 # ---------------------------------------------------------------------------------------------
-def profundidade_C(b_mm: float, C_imposto_mm: float | None, padronizado: bool) -> float:
-    """C = o imposto; senão a série 175, 200, … 300 (e 325, 350…) ou o múltiplo de 5 mm."""
+def profundidade_C(
+    b_mm: float,
+    C_imposto_mm: float | None,
+    padronizado: bool,
+    recobrimento_mm: float | None = None,
+) -> float:
+    """C = o imposto; com o recobrimento r informado, b + r; senão a série 175, 200, … 300 (e
+    325, 350…) ou o múltiplo de 5 mm."""
     if C_imposto_mm is not None:
         return float(C_imposto_mm)
+    if recobrimento_mm is not None:
+        return float(b_mm + recobrimento_mm)
     c_min_anglo = b_mm + K["A_sobrep"]
     c_min_norma = b_mm  # NR-12: projeção r ≥ 0
     c_req = max(c_min_anglo, c_min_norma, K["Cat_Cmin"])
@@ -1864,7 +1891,7 @@ def geometria_da_escada(e: EntradaDegrau) -> Geometria:
             f"O piso b resultou em {numero_pt(b)} mm (não positivo): o espelho h = {numero_pt(h)} mm é alto "
             "demais para a fórmula 2h + b. Revise o desnível, o nº de espelhos ou imponha b."
         )
-    C = profundidade_C(b, e.C_imposto_mm, e.C_padronizado)
+    C = profundidade_C(b, e.C_imposto_mm, e.C_padronizado, e.recobrimento_imposto_mm)
     if C <= b:
         raise EntradaInvalida(
             f"A profundidade C = {numero_pt(C)} mm precisa ser maior que o piso b = {numero_pt(b)} mm."

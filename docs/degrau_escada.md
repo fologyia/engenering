@@ -59,6 +59,17 @@ não informa a espessura).
 * **Profundidade.** `C ≥ max(b + 20; b; 175)`; padronizada, segue 175, 200, 225… (e passa de 300 se
   preciso); `F` vem do maior `C` padrão que não passa de `min(max(C; 175); 300)` (85, 85, 110, 110, 135,
   135). `r = C − b`.
+* **Recobrimento informado.** O campo "Recobrimento entre degraus r" (quanto o fundo de um degrau
+  passa por baixo da frente do seguinte, na horizontal — ex.: 25 mm) faz `C = b + r`, sem a série do
+  catálogo; não vale junto com a "Profundidade C imposta" (um decide o outro: erro). O `C` assim
+  obtido segue o resto do cálculo como qualquer outro: a carga do degrau, a escolha do modelo, a
+  furação `F` e as verificações de sempre (`C ≥ b + 20` do Anglo, `C ≥ 175`, a sobreposição da NR-12)
+  — um recobrimento de 15 mm, por exemplo, reprova o `C ≥ b + 20`. Zero ou negativo vira erro (fica
+  um vão entre os degraus).
+* **Canto do degrau à longarina.** "Canto do degrau à longarina" (padrão 25 mm): a distância, na
+  perpendicular à inclinação, do canto de trabalho do degrau (o bocel, a quina da frente em cima) à
+  borda de cima da longarina. Diz onde o degrau fica na longarina; vai ao 3D, à tabela da geometria e
+  ao memorial (0 a 300 mm).
 * **Lances.** Altura máxima por lance: a imposta, 3.600 mm (NR-22) ou 3.000 mm (NR-12). `k_max = ⌊altura/h⌋`;
   `n_lances = ⌈n/k_max⌉`; degraus em grade `= n − n_lances` (o último espelho chega ao patamar).
   **Se a altura imposta for maior que a legal, a verificação 12 continua comparando com a legal.**
@@ -134,3 +145,8 @@ A aba "Escada em 3D" monta a escada (`core/cena_escada.py`) com a visualização
 **escada detalhada** (degraus, longarinas com o perfil, patamares, guarda-corpo e apoios) ou **casca
 translúcida** (o volume) — e a vista (isométrica, superior, frontal, lateral e giro). O mesmo modo e a
 mesma vista vão ao PDF (2.1) e ao memorial (`escada_3d`).
+
+No 3D, cada degrau vai do bocel para trás a profundidade `C` — o recobrimento `r = C − b` passa por
+baixo da frente do degrau seguinte — e a borda de cima da longarina fica o "canto do degrau à
+longarina" `e` acima da linha dos bocéis, na perpendicular à inclinação (o eixo da longarina fica
+`(d/2 − e)/cos α` abaixo da linha dos bocéis, na vertical).

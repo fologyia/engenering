@@ -31,6 +31,7 @@ COR_PATAMAR = "#b9c3ce"
 COR_GUARDA_CORPO = "#a9bcd6"
 COR_CASCA = "#7c9cc4"
 ESPESSURA_DO_DEGRAU_M = 0.035
+CANTO_A_LONGARINA_PADRAO_MM = 25.0
 VAO_ENTRE_LANCES_EM_U_M = 0.10
 TUBO = c3.Secao(c3.FORMA_TUBO_CIRCULAR, 0.042, 0.042)
 VAO_DE_MONTANTE_M = 1.2
@@ -82,8 +83,23 @@ def cena_da_escada(
     apoio_topo: str = c3.APOIO_ARTICULADO,
     titulo: str = "Escada em 3D",
     subtitulo: str = "",
+    profundidade_do_degrau_mm: float | None = None,
+    canto_a_longarina_mm: float = CANTO_A_LONGARINA_PADRAO_MM,
 ) -> c3.Cena:
-    """A cena da escada; lances e patamares como :mod:`core.escada_lances` os monta."""
+    """A cena da escada; lances e patamares como :mod:`core.escada_lances` os monta.
+
+    A geometria é a da vista lateral do degrau: a linha dos bocéis passa por ``(x_pe, nível
+    inicial)``; o espelho j fica em ``x_pe + j·b`` e o degrau j vai do bocel dele, em
+    ``x_pe + j·b``, até o espelho seguinte, ``x_pe + (j + 1)·b`` — o último degrau chega na borda
+    do patamar (ou da chegada) e o primeiro sai do primeiro espelho. Um lance que sai de um
+    patamar começa no primeiro espelho, que fica na borda do patamar: a longarina e o
+    guarda-corpo dele não entram no patamar (a longarina se liga na viga da borda). O lance que
+    sai do piso de partida apoia no piso, na linha dos bocéis.
+
+    ``profundidade_do_degrau_mm`` (C): o degrau vai do bocel para trás C, passando o recobrimento
+    r = C − b por baixo da frente do seguinte (sem ela, C = b). ``canto_a_longarina_mm`` (e): a
+    borda de cima da longarina fica e acima do bocel, na perpendicular à inclinação.
+    """
     secao = secao_da_longarina or c3.Secao(c3.FORMA_U, 0.2032, 0.0574, 0.0056, 0.0099)
     altura_gc = altura_do_guarda_corpo_m if altura_do_guarda_corpo_m > 0 else 1.10
     barras: list[c3.BarraCena] = []
@@ -100,15 +116,28 @@ def cena_da_escada(
         x_pe, x_topo = lance.x_pe_mm / 1000.0, lance.x_topo_mm / 1000.0
         sentido = 1.0 if lance.sentido >= 0 else -1.0
         h, b = lance.h_mm / 1000.0, lance.b_mm / 1000.0
-        # Longarinas: na linha dos bocéis, baixadas meia altura da seção (do pé ao patamar).
-        baixa = secao.d / 2
+        profundidade = (
+            profundidade_do_degrau_mm / 1000.0
+            if profundidade_do_degrau_mm and profundidade_do_degrau_mm > 0
+            else b
+        )
+        cos_alfa = b / math.hypot(b, h) if b > 0 else 1.0
+        # Onde o lance começa: no piso de partida, a linha dos bocéis no piso; saindo de um
+        # patamar, o primeiro espelho, na borda dele (nada do lance entra no patamar).
+        if k == 0 or lance.n_espelhos < 2:
+            x_ini, z_ini = x_pe, z0
+        else:
+            x_ini, z_ini = x_pe + sentido * b, z0 + h
+        # Longarinas: a borda de cima e acima da linha dos bocéis (perpendicular), o eixo meia
+        # altura da seção abaixo dela; na vertical, divididos por cos α.
+        baixa = (secao.d / 2 - max(canto_a_longarina_mm, 0.0) / 1000.0) / cos_alfa
         for lado, y in (("esquerda", y0), ("direita", y1)):
-            a = _ponto(x_pe, y, z0 - baixa)
+            a = _ponto(x_ini, y, z_ini - baixa)
             c = _ponto(x_topo, y, z1 - baixa)
             if modo == MODO_DETALHADO:
                 barras.append(c3.BarraCena(f"Longarina L{lance.numero} {lado}", a, c, secao,
                                            (0.0, 0.0, 1.0), COR_LONGARINA, grupo="longarina"))  # fmt: skip
-            bocel_a, bocel_c = _ponto(x_pe, y, z0), _ponto(x_topo, y, z1)
+            bocel_a, bocel_c = _ponto(x_ini, y, z_ini), _ponto(x_topo, y, z1)
             gc_barras, gc_paineis = _guarda_corpo(
                 f"GC L{lance.numero} {lado}", bocel_a, bocel_c, altura_gc, modo
             )
@@ -117,13 +146,15 @@ def cena_da_escada(
         if modo == MODO_DETALHADO:
             for j in range(1, max(lance.n_espelhos, 1)):
                 z = z0 + j * h
-                x_meio = x_pe + sentido * (j - 0.5) * b
+                # Do bocel do degrau j (no espelho j) para trás a profundidade C: até o espelho
+                # j + 1 e o recobrimento r por baixo do degrau seguinte.
+                x_meio = x_pe + sentido * (j * b + profundidade / 2)
                 barras.append(
                     c3.BarraCena(
                         f"Degrau L{lance.numero}.{j}",
                         _ponto(x_meio, y0 + 0.02, z - ESPESSURA_DO_DEGRAU_M / 2),
                         _ponto(x_meio, y1 - 0.02, z - ESPESSURA_DO_DEGRAU_M / 2),
-                        c3.Secao(c3.FORMA_CHEIA, ESPESSURA_DO_DEGRAU_M, b * 0.96),
+                        c3.Secao(c3.FORMA_CHEIA, ESPESSURA_DO_DEGRAU_M, profundidade),
                         (0.0, 0.0, 1.0),
                         COR_DEGRAU,
                         grupo="degrau",
@@ -133,8 +164,8 @@ def cena_da_escada(
             paineis.append(
                 c3.PainelCena(
                     f"Lance {lance.numero}",
-                    (_ponto(x_pe, y0, z0), _ponto(x_topo, y0, z1), _ponto(x_topo, y1, z1),
-                     _ponto(x_pe, y1, z0)),
+                    (_ponto(x_ini, y0, z_ini), _ponto(x_topo, y0, z1), _ponto(x_topo, y1, z1),
+                     _ponto(x_ini, y1, z_ini)),
                     COR_CASCA,
                     0.30,
                     "lance",
@@ -158,12 +189,11 @@ def cena_da_escada(
         cantos = (_ponto(xa, y0, z), _ponto(xb, y0, z), _ponto(xb, y1, z), _ponto(xa, y1, z))
         paineis.append(c3.PainelCena(f"Patamar {p.numero}", cantos, COR_PATAMAR,
                                      0.85 if modo == MODO_DETALHADO else 0.30, "patamar"))  # fmt: skip
-        # Guarda-corpo do patamar: o lado da ponta e os lados de fora (sem o da chegada/saída).
-        lados = [(cantos[1], cantos[2])]
-        if not p.volta:
-            lados += [(cantos[0], cantos[1]), (cantos[2], cantos[3])]
-        else:
-            lados += [(cantos[0], cantos[1]), (cantos[3], cantos[2])]
+        # Guarda-corpo do patamar: os dois lados ao longo da escada; a ponta só na escada em U
+        # (na reta, a ponta é a saída para o lance de cima — fechá-la tranca a passagem).
+        lados = [(cantos[0], cantos[1]), (cantos[3], cantos[2])]
+        if p.volta:
+            lados.append((cantos[1], cantos[2]))
         for i, (a, c) in enumerate(lados):
             gc_barras, gc_paineis = _guarda_corpo(f"GC P{p.numero}.{i}", a, c, altura_gc, modo)
             barras += gc_barras
@@ -208,7 +238,23 @@ def cena_do_registro(dados: Mapping[str, Any]) -> c3.Cena:
         altura_do_guarda_corpo_m=float(dados.get("altura_do_guarda_corpo_m") or 1.10),
         apoio_pe=str(dados.get("apoio_pe") or c3.APOIO_ARTICULADO),
         apoio_topo=str(dados.get("apoio_topo") or c3.APOIO_ARTICULADO),
+        profundidade_do_degrau_mm=_numero(dados.get("profundidade_do_degrau_mm")),
+        canto_a_longarina_mm=(
+            CANTO_A_LONGARINA_PADRAO_MM
+            if (canto := _numero(dados.get("canto_a_longarina_mm"))) is None
+            else canto
+        ),
     )
+
+
+def _numero(valor: Any) -> float | None:
+    if isinstance(valor, bool):
+        return None
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) and numero >= 0 else None
 
 
 def para_o_registro(
@@ -219,6 +265,8 @@ def para_o_registro(
     altura_do_guarda_corpo_m: float,
     apoio_pe: str = c3.APOIO_ARTICULADO,
     apoio_topo: str = c3.APOIO_ARTICULADO,
+    profundidade_do_degrau_mm: float | None = None,
+    canto_a_longarina_mm: float = CANTO_A_LONGARINA_PADRAO_MM,
 ) -> dict[str, Any]:
     secao = secao_da_longarina
     return {
@@ -230,4 +278,6 @@ def para_o_registro(
         "altura_do_guarda_corpo_m": altura_do_guarda_corpo_m,
         "apoio_pe": apoio_pe,
         "apoio_topo": apoio_topo,
+        "profundidade_do_degrau_mm": profundidade_do_degrau_mm,
+        "canto_a_longarina_mm": canto_a_longarina_mm,
     }

@@ -380,3 +380,16 @@ def test_escada_em_3d_detalhada_ou_casca(banco_isolado):
         teste = abrir(banco_isolado, dg_3d_modo=modo, dg_3d_vista="Lateral", dg_3d_giro=30)
         assert "Escada em 3D" in [s.value for s in teste.subheader]
         assert any(c.value.startswith(f"{modo} — é assim que a escada sai") for c in teste.caption)
+
+
+def test_recobrimento_e_canto_a_longarina(banco_isolado):
+    t = abrir(banco_isolado, dg_b=275.0, dg_recobrimento=25.0, dg_canto_longarina=30.0)
+    assert metrica(t, "Profundidade C × L (mm)") == "300 × 800"
+    assert any("C = b + r" in c.value for c in t.caption)
+    faltam = {
+        (tipo, _rotulo_de(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda_de(e)
+    } - ISENTOS_DE_AJUDA
+    assert not faltam, sorted(faltam)
+    # Com a profundidade C imposta junto, erro claro (os dois se contradizem).
+    t = abrir(banco_isolado, dg_recobrimento=25.0, dg_C=300.0)
+    assert any("não os dois" in e.value for e in t.error)

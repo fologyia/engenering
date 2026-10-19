@@ -922,3 +922,41 @@ def test_angulo_alvo_acima_da_nr12_reprova_a_inclinacao():
 
 def test_angulo_alvo_invalido():
     assert de.validar_entrada(de.EntradaDegrau(angulo_alvo_graus=95.0))
+
+
+# ------------------------------------------------------------------ recobrimento e canto à longarina
+def _recobrimento(r_mm, **outros):
+    return de.calcular_escada(
+        de.EntradaDegrau(enquadramento=de.NR22, H_mm=3600, h_alvo_mm=180, angulo_alvo_graus=35.5,
+                         b_imposto_mm=275, recobrimento_imposto_mm=r_mm, **outros)
+    )  # fmt: skip
+
+
+def test_recobrimento_define_a_profundidade():
+    r = _recobrimento(25.0)
+    assert r.geometria.C_mm == pytest.approx(300.0) and r.geometria.r_mm == pytest.approx(25.0)
+    anglo = next(v for v in r.verificacoes if "Profundidade C ≥ b + 20" in v.nome)
+    assert anglo.status == "OK"
+    # Abaixo dos 20 mm do Anglo, a verificação acusa (o programa não corrige a entrada).
+    curto = next(v for v in _recobrimento(15.0).verificacoes if "Profundidade C ≥ b + 20" in v.nome)
+    assert curto.status == "NÃO OK"
+
+
+def test_recobrimento_muda_a_carga_do_degrau():
+    largo, estreito = _recobrimento(45.0), _recobrimento(25.0)
+    assert largo.selecao.adotado.C_mm > estreito.selecao.adotado.C_mm
+    assert largo.reacoes.R_q_kN > estreito.reacoes.R_q_kN  # a sobrecarga numa faixa C maior
+
+
+@pytest.mark.parametrize(
+    ("campos", "mensagem"),
+    [
+        ({"recobrimento_imposto_mm": 0.0}, "recobrimento entre degraus precisa ser maior que zero"),
+        ({"recobrimento_imposto_mm": 25.0, "C_imposto_mm": 300.0}, "não os dois"),
+        ({"canto_a_longarina_mm": -1.0}, "canto do degrau à longarina"),
+        ({"canto_a_longarina_mm": float("nan")}, "canto do degrau à longarina"),
+    ],
+)
+def test_recobrimento_e_canto_invalidos_viram_erro(campos, mensagem):
+    erros = de.validar_entrada(de.EntradaDegrau(**campos))
+    assert any(mensagem in e for e in erros), erros

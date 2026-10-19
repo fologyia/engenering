@@ -95,7 +95,14 @@ Um seletor na página (e na aba "Escada em 3D" do Degrau de escada) escolhe:
   painéis translúcidos do piso à altura dele: o volume, que ajuda a ver o conjunto e fica limpo no
   relatório.
 
-`core/cena_escada.py` monta a escada da página do degrau; `cena_do_modelo.chapas_da_cena` e
+`core/cena_escada.py` monta a escada da página do degrau, com a mesma geometria da vista lateral
+(`core/escada_lances.py`): o espelho j fica em `x_pe + j·b` e o degrau j vai do bocel dele até o
+espelho seguinte — o último degrau chega na borda do patamar e o primeiro sai do primeiro espelho.
+Um lance que sai de um patamar começa no primeiro espelho, na borda do patamar: longarina, degraus e
+guarda-corpo não entram no patamar (a longarina se liga na viga da borda). O patamar de escada reta
+tem guarda-corpo só nos dois lados; a ponta só fecha na escada em U. (Até 19/10 o 3D desenhava os
+degraus um piso para trás e a longarina do lance de cima começava 1 piso dentro do patamar — caso
+do usuário, travado em `tests/test_cena_escada.py`.) `cena_do_modelo.chapas_da_cena` e
 `guarda_corpos_da_cena` recebem o modo para o modelo.
 
 ## O relatório

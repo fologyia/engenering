@@ -235,10 +235,18 @@ def linhas_da_geometria(r: de.ResultadoEscada) -> list[list[str]]:
             "mm",
             "imposta"
             if e.C_imposto_mm is not None
+            else f"b + r, com o recobrimento r = {_n(e.recobrimento_imposto_mm)} mm informado"
+            if e.recobrimento_imposto_mm is not None
             else "C ≥ b + 20 (Anglo 10.2), série do catálogo",
         ],
         ["Furação F da chapa lateral", str(g.F_mm), "mm", "Selmec, tabela C × F"],
         ["Sobreposição r = C − b", _n(g.r_mm), "mm", "NR-12 Anexo III 11 f)"],
+        [
+            "Canto do degrau à longarina",
+            _n(e.canto_a_longarina_mm),
+            "mm",
+            "do bocel à borda de cima da longarina, perpendicular à inclinação",
+        ],
         [
             "Distribuição dos lances",
             ln.texto,
@@ -544,6 +552,8 @@ def _entradas(r: de.ResultadoEscada, contexto: Mapping[str, Any] | None) -> dict
         "n_espelhos_imposto": e.n_imposto,
         "piso_b_imposto_mm": e.b_imposto_mm,
         "profundidade_C_imposta_mm": e.C_imposto_mm,
+        "recobrimento_imposto_mm": e.recobrimento_imposto_mm,
+        "canto_a_longarina_mm": e.canto_a_longarina_mm,
         "C_padronizado": e.C_padronizado,
         "comprimento_L_mm": e.L_mm,
         "reducao_da_largura_util_mm": e.reducao_largura_mm,

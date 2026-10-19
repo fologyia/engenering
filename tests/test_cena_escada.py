@@ -139,3 +139,109 @@ def test_vista_registrada_vai_ao_memorial():
     assert registro["modulo_id"] == cm.MODULO_ID
     figuras = imagens_gravadas(registro["resultados"])
     assert len(figuras) == 1 and figuras[0][0].legenda.startswith("Modelo em 3D")
+
+
+# ------------------------------------------------------------------ nada do lance dentro do patamar
+def _caso_do_usuario(em_u: bool) -> el.EscadaComPatamares:
+    """O caso que invadia o patamar (19/10): NR-22, H = 3,6 m, h = 200, b = 275, patamar de
+    800 mm, dois lances de 9 espelhos."""
+    r = de.calcular_escada(
+        de.EntradaDegrau(enquadramento=de.NR22, H_mm=3600, h_alvo_mm=180, angulo_alvo_graus=35.5,
+                         b_imposto_mm=275, L_mm=800, patamar_mm=800,
+                         altura_max_lance_imposta_mm=2000.0)
+    )  # fmt: skip
+    if em_u:
+        return el.montar_escada(r, (el.PatamarInformado(1800, 800, None, True),), lances_em_u=True)
+    return el.montar_escada(r)
+
+
+@pytest.mark.parametrize("em_u", [False, True], ids=["reta", "em U"])
+def test_degraus_e_longarinas_ficam_fora_do_patamar(em_u):
+    esc = _caso_do_usuario(em_u)
+    (p,) = esc.patamares
+    xa, xb = sorted((p.x_inicio_mm / 1000.0, p.x_fim_mm / 1000.0))
+    cena = cesc.cena_da_escada(esc.H_mm, esc.lances, esc.patamares)
+
+    def extensao(barra: c3.BarraCena) -> tuple[float, float]:
+        meia = barra.secao.b / 2 if barra.grupo == "degrau" else 0.0
+        xs = (
+            barra.inicio[0] - meia,
+            barra.inicio[0] + meia,
+            barra.fim[0] - meia,
+            barra.fim[0] + meia,
+        )
+        return min(xs), max(xs)
+
+    for barra in cena.barras:
+        if barra.grupo not in ("degrau", "longarina"):
+            continue
+        x0, x1 = extensao(barra)
+        dentro = min(x1, xb) - max(x0, xa)
+        assert dentro <= 1e-6, f"{barra.nome} entra {dentro * 1000:.0f} mm no patamar"
+    # O último degrau do lance de baixo chega na borda; o primeiro do de cima sai da outra borda.
+    l1 = [extensao(b) for b in cena.barras if b.nome.startswith("Degrau L1.")]
+    l2 = [extensao(b) for b in cena.barras if b.nome.startswith("Degrau L2.")]
+    assert max(x for _, x in l1) == pytest.approx(xa)
+    if em_u:
+        assert max(x for _, x in l2) == pytest.approx(p.x_inicio_mm / 1000.0)
+    else:
+        assert min(x for x, _ in l2) == pytest.approx(xb)
+
+
+@pytest.mark.parametrize(("em_u", "lados"), [(False, 2), (True, 3)], ids=["reta", "em U"])
+def test_guarda_corpo_do_patamar_nao_tranca_a_saida(em_u, lados):
+    esc = _caso_do_usuario(em_u)
+    cena = cesc.cena_da_escada(esc.H_mm, esc.lances, esc.patamares)
+    corrimaos = [b for b in cena.barras if b.nome.startswith("GC P1.") and "corrimão" in b.nome]
+    assert len(corrimaos) == lados
+    if not em_u:  # na reta, nenhum corrimão atravessa a escada (todos ao longo de X)
+        assert all(abs(b.inicio[1] - b.fim[1]) < 1e-9 for b in corrimaos)
+
+
+# ------------------------------------------------------------------ recobrimento e canto à longarina
+def test_degrau_com_recobrimento_passa_por_baixo_do_seguinte():
+    esc = _caso_do_usuario(False)
+    (p,) = esc.patamares
+    xa = p.x_inicio_mm / 1000.0
+    b = esc.lances[0].b_mm / 1000.0
+    cena = cesc.cena_da_escada(esc.H_mm, esc.lances, esc.patamares, profundidade_do_degrau_mm=300)
+    degraus = sorted(
+        (b_ for b_ in cena.barras if b_.nome.startswith("Degrau L1.")),
+        key=lambda d: d.inicio[2],
+    )
+    frentes = [d.inicio[0] - d.secao.b / 2 for d in degraus]
+    fundos = [d.inicio[0] + d.secao.b / 2 for d in degraus]
+    assert all(d.secao.b == pytest.approx(0.300) for d in degraus)
+    # O fundo de cada degrau passa 25 mm (C − b) por baixo da frente do seguinte.
+    for fundo, frente_seguinte in zip(fundos, frentes[1:], strict=False):
+        assert fundo - frente_seguinte == pytest.approx(0.300 - b)
+    # A frente do último fica na borda do espelho de cima; o fundo vai 25 mm por baixo do patamar.
+    assert frentes[-1] == pytest.approx(xa - b) and fundos[-1] == pytest.approx(xa + 0.025)
+
+
+@pytest.mark.parametrize("canto", [0.0, 25.0, 60.0])
+def test_borda_da_longarina_fica_o_canto_acima_do_bocel(canto):
+    esc = _caso_do_usuario(False)
+    lance = esc.lances[0]
+    secao = cm.secao_do_perfil('U 8" x 17,10')
+    cena = cesc.cena_da_escada(esc.H_mm, esc.lances, esc.patamares, secao_da_longarina=secao,
+                               canto_a_longarina_mm=canto)  # fmt: skip
+    longarina = next(b for b in cena.barras if b.nome == "Longarina L1 esquerda")
+    # Distância perpendicular do eixo da longarina à linha dos bocéis = d/2 − e.
+    h, b = lance.h_mm / 1000.0, lance.b_mm / 1000.0
+    cos_alfa = b / (b * b + h * h) ** 0.5
+    vertical = longarina.inicio[2] - lance.nivel_inicial_mm / 1000.0  # no pé da linha dos bocéis
+    assert vertical * cos_alfa == pytest.approx(canto / 1000.0 - secao.d / 2)
+
+
+def test_registro_leva_a_profundidade_e_o_canto():
+    esc = _caso_do_usuario(False)
+    dados = cesc.para_o_registro(esc, modo=cesc.MODO_DETALHADO, secao_da_longarina=None,
+                                 altura_do_guarda_corpo_m=1.2, profundidade_do_degrau_mm=300,
+                                 canto_a_longarina_mm=0.0)  # fmt: skip
+    cena = cesc.cena_do_registro(dados)
+    degrau = next(b for b in cena.barras if b.grupo == "degrau")
+    assert degrau.secao.b == pytest.approx(0.300)
+    antigo = {k: v for k, v in dados.items() if k not in ("profundidade_do_degrau_mm",
+                                                          "canto_a_longarina_mm")}  # fmt: skip
+    assert cesc.cena_do_registro(antigo).barras  # registro de antes desses campos ainda abre

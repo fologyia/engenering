@@ -224,6 +224,8 @@ class DadosGeometria:
     reducao_largura_mm: float
     altura_max_lance_mm: float | None
     patamar_mm: float
+    recobrimento_mm: float | None = None
+    canto_a_longarina_mm: float = 25.0
 
 
 def formulario_geometria() -> DadosGeometria:
@@ -326,9 +328,31 @@ def formulario_geometria() -> DadosGeometria:
             persist_state="session",
             help=AJUDA["C_padronizado"],
         )
+        linha4 = st.columns(4)
+        recobrimento = _opcional(
+            "Recobrimento entre degraus r (mm)",
+            "dg_recobrimento",
+            AJUDA["recobrimento"],
+            minimo=0.0,
+            passo=1.0,
+            alvo=linha4[0],
+        )
+        if recobrimento is not None:
+            linha4[0].caption("C = b + r; a “Profundidade C imposta” fica vazia")
+        canto = _numero(
+            "Canto do degrau à longarina (mm)",
+            "dg_canto_longarina",
+            25.0,
+            AJUDA["canto_longarina"],
+            minimo=0.0,
+            maximo=300.0,
+            passo=1.0,
+            alvo=linha4[1],
+        )
     return DadosGeometria(
         H, h_alvo, None if angulo_alvo is None else float(angulo_alvo), n_imposto if n_imposto is None else int(n_imposto), b_imposto, C_imposto,
         bool(padronizado), L, reducao, altura_max, patamar,
+        None if recobrimento is None else float(recobrimento), float(canto),
     )  # fmt: skip
 
 
@@ -888,6 +912,8 @@ def _aba_escada_3d(
         apoio_topo=APOIO_NO_3D.get(longarina.apoio_topo, "articulado")
         if longarina
         else "articulado",
+        profundidade_do_degrau_mm=r.geometria.C_mm,
+        canto_a_longarina_mm=r.entrada.canto_a_longarina_mm,
     )
     azimute, elevacao = c3.VISTAS[str(vista)]
     dados["azimute"] = azimute + float(giro)
@@ -1018,6 +1044,8 @@ def montar_entrada(
         b_imposto_mm=geo.b_imposto_mm,
         C_imposto_mm=geo.C_imposto_mm,
         C_padronizado=geo.C_padronizado,
+        recobrimento_imposto_mm=geo.recobrimento_mm,
+        canto_a_longarina_mm=geo.canto_a_longarina_mm,
         L_mm=geo.L_mm,
         reducao_largura_mm=geo.reducao_largura_mm,
         altura_max_lance_imposta_mm=geo.altura_max_lance_mm,

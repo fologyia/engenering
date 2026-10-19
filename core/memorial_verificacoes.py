@@ -576,6 +576,8 @@ _ENTRADAS_DEGRAU: tuple[_Entrada, ...] = (
     ("n_espelhos_imposto", "Nº de espelhos imposto", "se_preenchido"),
     ("piso_b_imposto_mm", "Piso b imposto [mm]", "se_preenchido"),
     ("profundidade_C_imposta_mm", "Profundidade C imposta [mm]", "se_preenchido"),
+    ("recobrimento_imposto_mm", "Recobrimento entre degraus r [mm]", "se_preenchido"),
+    ("canto_a_longarina_mm", "Canto do degrau à borda da longarina [mm]", "sempre"),
     ("C_padronizado", "C da série padrão (175, 200, … 300)", "sempre"),
     ("comprimento_L_mm", "Comprimento do degrau L [mm]", "sempre"),
     ("reducao_da_largura_util_mm", "Redução da largura útil [mm]", "se_preenchido"),
