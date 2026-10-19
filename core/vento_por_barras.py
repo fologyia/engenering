@@ -970,9 +970,24 @@ def _sinal(valor: float, eixo: str) -> str:
 
 
 def cargas_da_direcao(d: VentoNaDirecao) -> list[pc.CargaDoModelo]:
-    """As linhas do plano de uma direção: kN/m em cada barra (componentes X e Y) e as parcelas dos
-    elementos nas barras que os apoiam."""
-    linhas: list[pc.CargaDoModelo] = []
+    """As linhas do plano de uma direção: kN/m em cada barra (componentes X e Y) com o que os
+    guarda-corpos, escadas e painéis mandam a ela somado — uma linha por barra, eixo e unidade
+    (no SolidWorks, uma carga só) —, e a força total dos equipamentos (kN) nas barras que os
+    apoiam."""
+    somas: dict[tuple[str, str, str], list[float]] = {}
+    textos: dict[tuple[str, str, str], list[str]] = {}
+    comprimentos: dict[tuple[str, str, str], float] = {}
+
+    def somar(
+        rotulo: str, unidade: str, eixo: str, valor: float, texto: str, comprimento: float
+    ) -> None:
+        if abs(valor) <= 1e-7:
+            return
+        chave = (rotulo, unidade, eixo)
+        somas.setdefault(chave, [0.0])[0] += valor
+        textos.setdefault(chave, []).append(texto)
+        comprimentos[chave] = comprimento
+
     for f in d.barras:
         if f.forca_kN <= 1e-9:
             continue
@@ -981,38 +996,39 @@ def cargas_da_direcao(d: VentoNaDirecao) -> list[pc.CargaDoModelo]:
             f"q {_n(f.q_N_m2 / 1e3, 3)} kN/m², A {_n(f.area_m2, 3)} m², plano {f.plano})"
         )
         for valor, eixo in ((f.fx_kN_m, "X"), (f.fy_kN_m, "Y")):
-            if abs(valor) > 1e-7:
-                linhas.append(
-                    pc.CargaDoModelo(
-                        elemento=f.rotulo,
-                        valor=round(valor, 5),
-                        unidade="kN/m",
-                        direcao=_sinal(valor, eixo),
-                        observacao=observacao,
-                        comprimento_m=round(f.comprimento_m, 4),
-                    )
-                )
+            somar(f.rotulo, "kN/m", eixo, valor, observacao, f.comprimento_m)
     for el in d.elementos:
         for p in el.parcelas:
+            observacao = f"{el.elemento} ({el.tipo.lower()}): {_n(el.forca_kN, 3)} kN" + (
+                " — força total na barra (no SolidWorks: Força › Por item)"
+                if p.unidade == "kN"
+                else ""
+            )
             for valor, eixo in ((p.fx, "X"), (p.fy, "Y")):
-                if abs(valor) > 1e-7:
-                    linhas.append(
-                        pc.CargaDoModelo(
-                            elemento=p.rotulo,
-                            valor=round(valor, 5),
-                            unidade=p.unidade,
-                            direcao=_sinal(valor, eixo),
-                            observacao=(
-                                f"{el.elemento} ({el.tipo.lower()}): {_n(el.forca_kN, 3)} kN"
-                                + (
-                                    " — força total na barra (no SolidWorks: Força › Por item)"
-                                    if p.unidade == "kN"
-                                    else ""
-                                )
-                            ),
-                            comprimento_m=round(p.comprimento_m, 4) if p.unidade == "kN/m" else 0.0,
-                        )
-                    )
+                somar(
+                    p.rotulo,
+                    p.unidade,
+                    eixo,
+                    valor,
+                    observacao,
+                    p.comprimento_m if p.unidade == "kN/m" else 0.0,
+                )
+    linhas: list[pc.CargaDoModelo] = []
+    for chave, (valor,) in somas.items():
+        rotulo, unidade, eixo = chave
+        if abs(valor) <= 1e-7:
+            continue
+        partes = textos[chave]
+        linhas.append(
+            pc.CargaDoModelo(
+                elemento=rotulo,
+                valor=round(valor, 5),
+                unidade=unidade,
+                direcao=_sinal(valor, eixo),
+                observacao=partes[0] if len(partes) == 1 else "soma de " + "; ".join(partes),
+                comprimento_m=round(comprimentos[chave], 4),
+            )
+        )
     return linhas
 
 
@@ -1032,14 +1048,20 @@ def acoes_para_o_plano(r: ResultadoPorBarras) -> list[pc.Acao]:
     return acoes
 
 
-def plano_com_o_vento(plano: pc.PlanoDeCargas, r: ResultadoPorBarras) -> pc.PlanoDeCargas:
+def plano_com_o_vento(
+    plano: pc.PlanoDeCargas,
+    r: ResultadoPorBarras,
+    acoes: Sequence[pc.Acao] | None = None,
+) -> pc.PlanoDeCargas:
     """O plano com o vento barra a barra: as direções calculadas entram (ou substituem) e as
-    diagonais de um envio anterior saem quando agora só as perpendiculares foram calculadas."""
+    diagonais de um envio anterior saem quando agora só as perpendiculares foram calculadas.
+    ``acoes``: as ações já montadas (a forma simplificada de :mod:`core.vento_por_nivel`); sem
+    elas, a carga barra a barra."""
     calculadas = {d.codigo for d in r.direcoes}
     for codigo in pc.CODIGOS_DE_VENTO:
         if codigo not in calculadas and codigo not in pc.CODIGOS_DE_VENTO_PERPENDICULARES:
             plano = pc.sem_acao(plano, codigo)
-    for acao in acoes_para_o_plano(r):
+    for acao in acoes_para_o_plano(r) if acoes is None else acoes:
         plano = pc.com_acao(plano, acao)
     return plano
 

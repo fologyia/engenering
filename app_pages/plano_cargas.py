@@ -353,6 +353,15 @@ with st.container(border=True), secao_protegida("Combinações"):
         "direções é um grupo exclusivo. Valores característicos no modelo, combinações aqui."
     )
     if lista:
+        st.info(
+            "**No SolidWorks você não digita estas combinações.** Rode só os "
+            f"{len(plano.acoes)} casos primários ({', '.join(plano.codigos)}): o programa "
+            "combina sozinho quando os resultados entram em **Esforços do modelo**. Para vê-las "
+            "no SolidWorks, elas já vão no arquivo do **Gerenciador de casos de carga** "
+            "(Exportar para o modelo, abaixo): “Carregar os dados de entrada de um arquivo .csv "
+            "externo” cria todas de uma vez.",
+            icon=":material/info:",
+        )
         ver = st.radio(
             "Mostrar",
             ["Matriz de fatores", "Expressões"],
@@ -362,12 +371,15 @@ with st.container(border=True), secao_protegida("Combinações"):
         )
         if ver == "Matriz de fatores":
             cabecalho, linhas_matriz = ex.matriz_de_combinacoes(plano, estados)
-            matriz = pd.DataFrame(
-                [linha[:-1] for linha in linhas_matriz], columns=cabecalho[:-1]
-            ).replace(0.0, None)
+            # Sem None nas células: o Streamlit escreve "None" na célula vazia e não usa o
+            # texto formatado nela; o zero fica e aparece como "—" (a ação não entra).
+            matriz = pd.DataFrame([linha[:-1] for linha in linhas_matriz], columns=cabecalho[:-1])
+
+            def _fora(valor: object) -> bool:
+                return not isinstance(valor, float) or pd.isna(valor) or abs(valor) < 1e-12
 
             def _cor(valor: object) -> str:
-                if not isinstance(valor, float) or pd.isna(valor):
+                if _fora(valor) or not isinstance(valor, float):
                     return ""
                 if valor > 1.0 + 1e-9:
                     return "background-color: #f6d2c1; color: #712b13"
@@ -375,7 +387,7 @@ with st.container(border=True), secao_protegida("Combinações"):
 
             st.dataframe(
                 matriz.style.map(_cor, subset=list(plano.codigos)).format(
-                    lambda v: "" if v is None or pd.isna(v) else f"{v:.2f}".replace(".", ","),
+                    lambda v: "—" if _fora(v) else f"{v:.2f}".replace(".", ","),
                     subset=list(plano.codigos),
                 ),
                 hide_index=True,
@@ -384,7 +396,7 @@ with st.container(border=True), secao_protegida("Combinações"):
             )
             st.caption(
                 "Laranja: fator maior que 1 (a ação entra majorada) · azul: fator até 1 "
-                "(acompanhante com ψ, permanente favorável ou serviço) · vazio: a ação não entra."
+                "(acompanhante com ψ, permanente favorável ou serviço) · —: a ação não entra."
             )
         else:
             st.dataframe(

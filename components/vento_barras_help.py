@@ -67,6 +67,29 @@ AJUDA: dict[str, str] = {
         "Cada direção calculada: o caso no plano de cargas (W0 sopra para +X, W90 para +Y), as "
         "forças nas barras e nos elementos, o tombamento e a torção da planta."
     ),
+    "res_niveis": (
+        "A força do vento que chega a cada nível (piso, patamar), em cada direção — o número para "
+        'aplicar "no geral" ou conferir o contraventamento. Cada barra manda metade do vento '
+        "dela para cada ponta; o que chega no pé dos pilares vai direto à fundação (linha "
+        '"base"). "Passa em" é a linha, no modelo, por onde passa a força do nível: fora do '
+        "meio da planta, ela também torce a estrutura."
+    ),
+    "res_nivel_principal": (
+        "A força do vento no nível com mais vigas (a plataforma), nesta direção, em kN."
+    ),
+    "forma": (
+        "Barra a barra: cada barra com a carga dela — o mais fiel, mas muitas cargas no "
+        "SolidWorks. Simplificada: a força de cada nível vai para as vigas desse nível que correm "
+        "na direção do vento (uma carga por linha de vigas): bem menos cargas, com a mesma força e "
+        "a mesma torção em cada nível. Só a flexão de cada barra pelo vento dela fica de fora (o "
+        "programa mostra quanto)."
+    ),
+    "res_simplificada": (
+        "Em cada nível, a força do vento dividida entre as linhas de vigas na direção dele, pela "
+        "regra da alavanca (a linha mais perto da força recebe mais). Cada viga da linha recebe o "
+        "q da linha, ao longo do eixo dela: no SolidWorks, força distribuída na viga, na direção "
+        "da própria viga."
+    ),
     "ver_direcao": "Qual direção do vento mostrar nos desenhos e nas tabelas abaixo.",
     "res_3d": (
         "A estrutura em 3D, vista de barlavento: a cor de cada barra é a carga dela (kN/m) e as "
@@ -96,10 +119,13 @@ AJUDA: dict[str, str] = {
         "à mão. No SolidWorks: Força por unidade de comprimento em cada viga, nas componentes X e "
         "Y dadas (o plano converte para os eixos do modelo)."
     ),
-    "btn_csv": "Tabela (CSV, abre no Excel) com a carga de cada barra em cada direção.",
+    "btn_csv": (
+        "Tabela (CSV, abre no Excel) com as cargas da forma escolhida: a de cada barra em cada "
+        "direção, ou a de cada linha de vigas em cada nível."
+    ),
     "btn_plano": (
         "Grava W0, W90, W180 e W270 (e os diagonais, se calculados) no plano de cargas do projeto, "
-        "com a carga em cada barra. Substitui o vento que já estiver lá."
+        "na forma escolhida. Substitui o vento que já estiver lá."
     ),
     "reg_registrar": (
         "Grava o cálculo no projeto ativo: o memorial passa a trazer o resumo, os reticulados, a "

@@ -20,8 +20,10 @@ from core import base_tecnica as bt
 from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
+from core import plano_de_cargas as pc
 from core import vento_por_barras as vpb
 from core import vento_por_barras_registro as vbr
+from core import vento_por_nivel as vpn
 from core.project_store import obter_projeto_ativo
 
 ORIGEM_ESQUELETO = "Esqueleto do modelo (macro do SolidWorks)"
@@ -502,6 +504,84 @@ def mostrar_vento_por_barras() -> None:
     _resultados(r, eixo_vertical, origem, geometria, ident, base)
 
 
+def _forcas_por_nivel(vn: vpn.VentoPorNivel, eixo_vertical: str) -> None:
+    """A força do vento em cada nível, em cada direção, e por onde ela passa."""
+    st.subheader("Força do vento em cada nível", help=AJUDA["res_niveis"])
+    principal = vn.nivel_principal
+    if principal is None:
+        for aviso in vn.avisos:
+            st.warning(aviso, icon=":material/warning:")
+        return
+    nivel = vn.niveis[principal]
+    st.caption(
+        f"Nível {nivel.numero}, o de mais vigas (a plataforma): cota {_pt(nivel.cota_m, 2)} m "
+        f"do terreno ({vpn.cota_no_modelo(nivel, eixo_vertical)} no modelo). A força do vento "
+        "nele, em cada direção:"
+    )
+    colunas = st.columns(min(len(vn.direcoes), 4))
+    for k, d in enumerate(vn.direcoes):
+        forca = d.niveis[principal].forca_kN
+        colunas[k % len(colunas)].metric(
+            f"{d.codigo} ({vpb.SENTIDOS.get(d.angulo, '')})",
+            f"{_pt(forca, 2 if forca < 10 else 1)} kN",
+            help=AJUDA["res_nivel_principal"],
+        )
+    st.dataframe(
+        pd.DataFrame(vpn.tabela_por_nivel(vn, eixo_vertical)),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            c: st.column_config.NumberColumn(format="%.2f")
+            for c in ("Cota (m)", "F_x (kN)", "F_y (kN)", "F (kN)")
+        },
+    )
+    st.caption(
+        "Cada barra manda metade do vento dela para cada ponta (a ponta que cai no meio de outra "
+        "barra, como a mão francesa no pilar, passa às pontas dessa barra); guarda-corpos e "
+        "equipamentos vão pela viga que os apoia. A linha **base** é o que chega no pé dos "
+        "pilares: vai direto à fundação. Níveis + base = a força total do resumo."
+    )
+    for aviso in vn.avisos:
+        st.warning(aviso, icon=":material/warning:")
+
+
+def _forma_simplificada(
+    vn: vpn.VentoPorNivel,
+    eixo_vertical: str,
+    acoes_barras: list[pc.Acao],
+    acoes: list[pc.Acao],
+) -> None:
+    st.markdown("**Forma simplificada: a força de cada nível nas vigas na direção do vento**")
+    if not vn.simplificada_possivel:
+        st.error(
+            "A forma simplificada não serve neste modelo (veja os avisos da força em cada nível): "
+            "use a carga barra a barra.",
+            icon=":material/error:",
+        )
+        return
+    st.caption("Cargas por linha de vigas", help=AJUDA["res_simplificada"])
+    st.dataframe(
+        pd.DataFrame(vpn.tabela_simplificada(vn, eixo_vertical)),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "L (m)": st.column_config.NumberColumn(format="%.2f"),
+            "F (kN)": st.column_config.NumberColumn(format="%.3f"),
+            "q (kN/m)": st.column_config.NumberColumn(format="%.3f"),
+        },
+    )
+    maior = max(vn.direcoes, key=lambda d: d.flexao_local_kNm)
+    st.caption(
+        f":material/info: No SolidWorks: {vpn.numero_de_cargas_no_estudo(acoes)} cargas de vento "
+        f"no estudo, contra {vpn.numero_de_cargas_no_estudo(acoes_barras)} barra a barra. "
+        "Em cada viga da linha, força distribuída com o q da linha, na direção da própria viga. "
+        "A força e a torção de cada nível são as do cálculo viga a viga; fica de fora só a flexão "
+        "de cada barra pelo vento dela — a maior é "
+        f"{_pt(maior.flexao_local_kNm, 2)} kN·m ({maior.barra_da_flexao or '—'}, {maior.codigo}): "
+        "confira que é pequena perto da flexão das outras cargas."
+    )
+
+
 def _resultados(
     r: vpb.ResultadoPorBarras,
     eixo_vertical: str,
@@ -560,6 +640,9 @@ def _resultados(
             )
         },
     )
+    vn = vpn.vento_por_nivel(r)
+    with secao_protegida("Força do vento em cada nível"):
+        _forcas_por_nivel(vn, eixo_vertical)
     angulos = [d.angulo for d in r.direcoes]
     angulo = st.radio(
         "Direção mostrada",
@@ -680,16 +763,37 @@ def _resultados(
 
     with st.container(border=True), secao_protegida("Levar o vento barra a barra"):
         st.subheader("Levar ao projeto", help=AJUDA["sec_levar"])
+        forma = st.radio(
+            "Como aplicar o vento no modelo", vpn.FORMAS, key="vb_forma", help=AJUDA["forma"]
+        )
+        simplificada = forma == vpn.FORMA_SIMPLIFICADA
+        acoes_barras = vpb.acoes_para_o_plano(r)
+        acoes: list[pc.Acao] = acoes_barras
+        if simplificada:
+            acoes = vpn.acoes_simplificadas(vn) if vn.simplificada_possivel else []
+            _forma_simplificada(vn, eixo_vertical, acoes_barras, acoes)
+        else:
+            st.caption(
+                f":material/info: No SolidWorks: {vpn.numero_de_cargas_no_estudo(acoes_barras)} "
+                "cargas de vento no estudo (uma por barra e eixo; cada caso muda só o valor)"
+                + (
+                    f" — na forma simplificada, "
+                    f"{vpn.numero_de_cargas_no_estudo(vpn.acoes_simplificadas(vn))}."
+                    if vn.simplificada_possivel
+                    else "."
+                )
+            )
         colunas = st.columns(2)
         colunas[0].download_button(
-            "Cargas nas barras (CSV)",
-            data=vpb.csv_das_cargas(r),
-            file_name="vento_barra_a_barra.csv",
+            "Cargas do vento (CSV)",
+            data=vpn.csv_simplificado(vn, eixo_vertical) if simplificada else vpb.csv_das_cargas(r),
+            file_name="vento_por_nivel.csv" if simplificada else "vento_barra_a_barra.csv",
             mime="text/csv",
             icon=":material/download:",
             key="vb_csv",
             help=AJUDA["btn_csv"],
             width="stretch",
+            disabled=not acoes,
         )
         codigos = ", ".join(d.codigo for d in r.direcoes)
         if colunas[1].button(
@@ -698,11 +802,20 @@ def _resultados(
             key="vb_para_plano",
             help=AJUDA["btn_plano"],
             width="stretch",
+            disabled=not acoes,
         ) and gravar_plano(
-            vpb.plano_com_o_vento(plano_ativo(), r),
-            f"Plano de cargas: {codigos} do vento barra a barra",
+            vpb.plano_com_o_vento(plano_ativo(), r, acoes),
+            f"Plano de cargas: {codigos} do vento barra a barra"
+            + (" (forma simplificada)" if simplificada else ""),
         ):
             st.success(f"{codigos} gravados no plano de cargas.", icon=":material/check_circle:")
+        st.caption(
+            "Cada direção vira um caso primário (W0, W90…) no plano de cargas. **As combinações "
+            "não precisam ser digitadas no SolidWorks**: o programa combina os casos primários "
+            "quando você manda os resultados em Esforços do modelo, e o arquivo do Gerenciador de "
+            "casos de carga (página Plano de cargas) já leva todas — no SolidWorks, “Carregar os "
+            "dados de entrada de um arquivo .csv externo”."
+        )
 
     contexto: dict[str, Any] = {"data_do_calculo": ident.data.isoformat()}
     if ident.obra:
@@ -714,6 +827,7 @@ def _resultados(
     )
     registro = vbr.registro_vento_por_barras(
         r,
+        eixo_vertical=eixo_vertical,
         origem_das_barras=origem_texto,
         contexto=contexto,
         responsavel=ident.responsavel,

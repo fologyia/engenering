@@ -12,7 +12,10 @@ from streamlit.testing.v1 import AppTest
 from components import figuras_vento as fv
 from components import vento_aberto_ui
 from components.vento_barras_help import AJUDA
+from core import plano_de_cargas as pc
 from core import vento_por_barras as vpb
+from core import vento_por_nivel as vpn
+from core.project_store import obter_projeto_ativo
 from tests.test_esforcos_modelo_pagina import TIPOS_COM_AJUDA, _ajuda, _rotulo
 from tests.test_vento_por_barras import VENTO, _grade
 
@@ -98,3 +101,45 @@ def test_so_as_perpendiculares_pela_interface(banco_isolado):
     assert not t.exception, [str(e.value) for e in t.exception]
     radio = next(r for r in t.radio if r.label == "Direção mostrada")
     assert [o.split(" ")[0] for o in radio.options] == ["W0", "W90", "W180", "W270"]
+
+
+def _abrir_barra_a_barra() -> AppTest:
+    t = AppTest.from_file(APP, default_timeout=180)
+    t.run()
+    t.switch_page(PAGINA)
+    t.session_state["va_metodo"] = vento_aberto_ui.METODO_BARRAS
+    t.session_state["vb_direcoes"] = "Só as 4 perpendiculares às faces (NBR 6123, 8.5)"
+    t.run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    return t
+
+
+def test_forca_em_cada_nivel_aparece_na_pagina(banco_isolado):
+    t = _abrir_barra_a_barra()
+    assert "Força do vento em cada nível" in [s.value for s in t.subheader]
+    metricas = {m.label: m.value for m in t.metric}
+    for codigo, sentido in (("W0", "+X"), ("W90", "+Y"), ("W180", "−X"), ("W270", "−Y")):
+        assert metricas[f"{codigo} ({sentido})"].endswith(" kN")
+    tabela = next(d.value for d in t.dataframe if "Passa em (modelo)" in list(d.value.columns))
+    assert set(tabela["Caso"]) == {"W0", "W90", "W180", "W270"}
+    assert any(str(n).startswith("base") for n in tabela["Nível"])
+
+
+def test_forma_simplificada_vai_ao_plano_com_poucas_cargas(banco_com_projeto):
+    t = _abrir_barra_a_barra()
+    assert t.radio(key="vb_forma").value == vpn.FORMA_BARRAS
+    t.button(key="vb_para_plano").click().run()
+    assert not t.exception
+    barra_a_barra = pc.plano_do_projeto(obter_projeto_ativo())
+    t.radio(key="vb_forma").set_value(vpn.FORMA_SIMPLIFICADA).run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    assert any("cargas de vento no estudo, contra" in c.value for c in t.caption)
+    t.button(key="vb_para_plano").click().run()
+    assert not t.exception
+    simplificada = pc.plano_do_projeto(obter_projeto_ativo())
+    assert simplificada.codigos == barra_a_barra.codigos
+    for codigo in ("W0", "W90", "W180", "W270"):
+        acao = simplificada.acao(codigo)
+        assert acao is not None and "forma simplificada" in acao.resumo
+        assert len(acao.cargas) < len(barra_a_barra.acao(codigo).cargas)
+    assert any("não precisam ser digitadas" in c.value for c in t.caption)

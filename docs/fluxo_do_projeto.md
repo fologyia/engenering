@@ -88,6 +88,10 @@ cargas que vão para o modelo.
 * **Um código por ação**: enviar o vento de novo substitui W0 a W270 — o plano não acumula cópias.
 * **Combinações** (`combinacoes`) pelas Tabelas 1 e 2 da NBR 8800, numeradas (o número serve de nome
   do caso no modelo); grupos exclusivos nunca atuam juntos.
+  **Nada disso se digita no SolidWorks**: lá rodam só os casos primários; o programa combina na
+  importação (Esforços do modelo) e o arquivo do Gerenciador de casos de carga leva as combinações
+  para quem quiser vê-las lá. A página diz isso logo abaixo da contagem (aviso azul), e a matriz de
+  fatores marca com "—" a ação que não entra (célula vazia aparecia como "None" no Streamlit).
 * **Critério Anglo 5.9** (`cobertura_das_combinacoes_anglo`): quais combinações mínimas do cliente já
   podem ser formadas e quais ações faltam; PRV, HT, HL e MO só contam se houver o equipamento.
 * **CSV** das ações, das cargas e das combinações (com o fator de cada ação em colunas).

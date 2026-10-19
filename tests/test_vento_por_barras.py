@@ -209,6 +209,25 @@ def test_plano_recebe_um_caso_por_direcao_com_a_soma_certa():
         assert not pc.validar_acao(acao)
 
 
+def test_barra_com_o_vento_dela_e_o_do_guarda_corpo_vira_uma_linha_so():
+    """A viga de borda recebe o vento dela e o do guarda-corpo: uma linha só no plano (uma carga
+    no SolidWorks), com a soma — sem o aviso de "aparece duas vezes" na conferência."""
+    gc = vpb.ElementoAoVento(
+        "GC", vpb.TIPO_GUARDA_CORPO, (0.0, 0.0, 4.0), (6.0, 0.0, 4.0), barra="VX0a"
+    )
+    r = vpb.calcular(vpb.EntradaPorBarras(tuple(_grade()), VENTO, elementos=(gc,)))
+    d = r.direcao(90)
+    linhas = [c for c in vpb.cargas_da_direcao(d) if c.elemento == "VX0a"]
+    assert len(linhas) == 1 and linhas[0].direcao == "+Y"
+    propria = d.da_barra("VX0a")
+    assert propria is not None
+    parcela = d.elementos[0].parcelas[0]
+    assert linhas[0].valor == pytest.approx(propria.fy_kN_m + parcela.fy, abs=1e-5)
+    assert linhas[0].observacao.startswith("soma de ") and "GC" in linhas[0].observacao
+    plano = vpb.plano_com_o_vento(pc.PlanoDeCargas(), r)
+    assert not any("aparece duas vezes" in i.texto for i in pc.conferir_plano(plano))
+
+
 def test_enviar_so_as_perpendiculares_tira_os_diagonais_antigos():
     todas = vpb.calcular(
         vpb.EntradaPorBarras(tuple(_grade()), VENTO, direcoes=vpb.DIRECOES_COM_DIAGONAIS)
@@ -269,9 +288,11 @@ def test_registro_traz_o_resumo_os_reticulados_e_a_carga_de_cada_barra():
     )
     registro = vbr.registro_vento_por_barras(r, origem_das_barras="digitadas")
     tabelas = registro["resultados"]["tabelas_memorial"]
-    assert len(tabelas) == 3
-    assert tabelas[2]["cabecalhos"][3:] == list(pc.CODIGOS_DE_VENTO)
-    assert len(tabelas[2]["linhas"]) == len(_grade())
+    assert len(tabelas) == 4
+    assert tabelas[1]["legenda"].startswith("Força do vento em cada nível")
+    assert len(tabelas[1]["linhas"]) == len(pc.CODIGOS_DE_VENTO) * 2  # o nível e a base
+    assert tabelas[3]["cabecalhos"][3:] == list(pc.CODIGOS_DE_VENTO)
+    assert len(tabelas[3]["linhas"]) == len(_grade())
     for tabela in tabelas:
         assert sum(tabela["larguras"]) == 9360
         assert all(len(linha) == len(tabela["cabecalhos"]) for linha in tabela["linhas"])

@@ -1,8 +1,9 @@
 """Registro técnico (memorial) do vento barra a barra. Sem Streamlit.
 
 Fica no mesmo módulo da página (Vento em estruturas abertas): o memorial traz o resumo por
-direção, os reticulados com φ, C_a e η, a carga de cada barra em cada direção (kN/m) e os
-guarda-corpos, escadas e equipamentos com a barra que recebe cada um.
+direção, a força que chega a cada nível (:mod:`core.vento_por_nivel`), os reticulados com φ, C_a
+e η, a carga de cada barra em cada direção (kN/m) e os guarda-corpos, escadas e equipamentos com
+a barra que recebe cada um.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Any
 
 from core import vento_aberto_registro as var
 from core import vento_por_barras as vpb
+from core import vento_por_nivel as vpn
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import numero_json
 
@@ -95,7 +97,9 @@ def linhas_dos_elementos(r: vpb.ResultadoPorBarras) -> list[list[str]]:
     return linhas
 
 
-def tabelas_para_memorial(r: vpb.ResultadoPorBarras) -> list[dict[str, Any]]:
+def tabelas_para_memorial(
+    r: vpb.ResultadoPorBarras, eixo_vertical: str = "Y"
+) -> list[dict[str, Any]]:
     codigos = [d.codigo for d in r.direcoes]
     largura_codigo = max(4, round(48 / max(len(codigos), 1)))
     tabelas: list[dict[str, Any]] = [
@@ -120,6 +124,29 @@ def tabelas_para_memorial(r: vpb.ResultadoPorBarras) -> list[dict[str, Any]]:
             "fonte": 7.4,
         }
     ]
+    vn = vpn.vento_por_nivel(r)
+    if vn.niveis:
+        tabelas.append(
+            {
+                "legenda": (
+                    "Força do vento em cada nível (kN, característica): cada barra leva o vento "
+                    "dela às duas pontas, metade em cada, e a ponta no meio de outra barra passa às "
+                    "pontas dela; a linha base é o que chega ao pé dos pilares, direto à fundação. "
+                    "A última coluna é a linha do modelo por onde passa a força do nível."
+                ),
+                "cabecalhos": [
+                    "Caso",
+                    "Nível",
+                    "Cota (m)",
+                    "F_x (kN)",
+                    "F_y (kN)",
+                    "Passa em (modelo)",
+                ],
+                "linhas": vpn.linhas_por_nivel_para_memorial(vn, eixo_vertical),
+                "larguras": var._larguras([8, 22, 9, 10, 10, 30]),
+                "fonte": 7.2,
+            }
+        )
     reticulados = linhas_dos_reticulados(r)
     if reticulados:
         tabelas.append(
@@ -202,6 +229,7 @@ def registro_vento_por_barras(
     contexto: Mapping[str, Any] | None = None,
     responsavel: str = "",
     avisos_da_base: list[str] | None = None,
+    eixo_vertical: str = "Y",
 ) -> dict[str, Any]:
     e = r.entrada
     p = e.parametros
@@ -235,7 +263,7 @@ def registro_vento_por_barras(
         entradas=entradas,
         resultados={
             "destaque_memorial": destaque,
-            "tabelas_memorial": tabelas_para_memorial(r),
+            "tabelas_memorial": tabelas_para_memorial(r, eixo_vertical),
             "direcao_de_maior_forca": g.codigo,
             "forca_total_maior_kN": numero_json(g.total_kN),
             "momento_de_tombamento_maior_kNm": numero_json(
