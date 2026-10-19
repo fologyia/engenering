@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from core import contraventamento_plataforma as cp
+from core import contraventamento_vento_barras as cvb
 from core import load_combinations as comb
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import (
@@ -146,7 +147,48 @@ def linhas_dos_andares(r: cp.ResultadoContraventamento) -> list[list[str]]:
     return linhas
 
 
+def _tabelas_do_vento_por_barras(ve: cvb.VentoDoEsqueleto) -> list[dict[str, Any]]:
+    return [
+        {
+            "legenda": (
+                "Forças do vento por nível, viga a viga (NBR 6123:2023, 8.3 e 8.4): cada barra do "
+                "esqueleto com a sua área de sombra, φ/C_a e η do plano, levada aos pisos pelas "
+                "faixas de influência; guarda-corpos e equipamentos pela cota do centro. A linha "
+                "“base” vai direto à fundação."
+            ),
+            "cabecalhos": [
+                "Caso",
+                "Nível",
+                "Cota (m)",
+                "F_x (kN)",
+                "F_y (kN)",
+                "V_x do andar (kN)",
+                "V_y do andar (kN)",
+            ],
+            "linhas": cvb.linhas_dos_niveis(ve),
+            "larguras": _larguras([10, 9, 11, 14, 14, 21, 21]),
+            "fonte": 7.4,
+        },
+        {
+            "legenda": (
+                "Planos de barras perpendiculares ao vento: área exposta, contorno, índice φ, C_a "
+                "(Figura 12) e fator de proteção η (Figura 14) — R1 é o de barlavento."
+            ),
+            "cabecalhos": ["Caso", "Plano", "Barras", "A_e (m²)", "Contorno (m²)", "φ", "C_a", "η"],
+            "linhas": cvb.linhas_dos_planos(ve),
+            "larguras": _larguras([10, 10, 10, 13, 16, 12, 12, 12]),
+            "fonte": 7.4,
+        },
+    ]
+
+
 def tabelas_para_memorial(r: cp.ResultadoContraventamento) -> list[dict[str, Any]]:
+    ve = r.entrada.vento_do_esqueleto
+    vento = _tabelas_do_vento_por_barras(ve) if ve is not None else _tabelas_do_vento_em_grade(r)
+    return [*vento, *_tabelas_das_combinacoes(r)]
+
+
+def _tabelas_do_vento_em_grade(r: cp.ResultadoContraventamento) -> list[dict[str, Any]]:
     return [
         {
             "legenda": (
@@ -178,10 +220,20 @@ def tabelas_para_memorial(r: cp.ResultadoContraventamento) -> list[dict[str, Any
             "larguras": _larguras([10, 12, 14, 16, 14, 14, 14]),
             "fonte": 7.4,
         },
+    ]
+
+
+def _tabelas_das_combinacoes(r: cp.ResultadoContraventamento) -> list[dict[str, Any]]:
+    vento = (
+        "um caso por direção calculada (as diagonais carregam X e Y juntas)"
+        if r.vento_por_barras
+        else "+X, −X, +Y, −Y"
+    )
+    return [
         {
             "legenda": (
                 "Ações e coeficientes (NBR 8800, Tabelas 1 e 2). As gravitacionais levam a força "
-                "nocional de 0,3 % (4.10.7.1); o vento está num grupo exclusivo (+X, −X, +Y, −Y)."
+                f"nocional de 0,3 % (4.10.7.1); o vento está num grupo exclusivo ({vento})."
             ),
             "cabecalhos": ["Ação", "Categoria", "γ", "γ fav.", "ψ0", "ψ1", "ψ2", "Grupo"],
             "linhas": linhas_das_acoes(r),
@@ -234,6 +286,11 @@ def _entradas(r: cp.ResultadoContraventamento, contexto: Mapping[str, Any] | Non
             for eq in e.equipamentos
         )
         or None,
+        "vento": (
+            f"viga a viga, pilar a pilar, pelo esqueleto do modelo ({e.vento_do_esqueleto.arquivo})"
+            if e.vento_do_esqueleto is not None
+            else "pórticos regulares"
+        ),
         "V0_m_s": v.v0_m_s,
         "S1": v.s1,
         "categoria_de_rugosidade": v.categoria,
@@ -249,6 +306,14 @@ def _entradas(r: cp.ResultadoContraventamento, contexto: Mapping[str, Any] | Non
         )
         or None,
         "excentricidade": e.excentricidade,
+        "excentricidade_da_resultante": (
+            "; ".join(
+                f"{d}: {_n(100 * e.vento_do_esqueleto.excentricidade_real.get(d, 0.0), 1)} %"
+                for d in cp.DIRECOES
+            )
+            if e.vento_do_esqueleto is not None
+            else None
+        ),
         "combinacao_de_servico": e.combinacao_de_servico,
         "criterio_do_cliente": "Anglo American AA-BR-DPST-DR-0001 Rev. 1"
         if e.criterio_anglo
@@ -269,7 +334,8 @@ def _entradas(r: cp.ResultadoContraventamento, contexto: Mapping[str, Any] | Non
 def texto_de_destaque(r: cp.ResultadoContraventamento) -> str:
     gov = r.diagonal_governante()
     partes = [
-        f"Vento: {_n(r.vento.x.total_kN, 1)} kN em X e {_n(r.vento.y.total_kN, 1)} kN em Y "
+        f"Vento{' viga a viga' if r.vento_por_barras else ''}: "
+        f"{_n(r.vento_total_kN('X'), 1)} kN em X e {_n(r.vento_total_kN('Y'), 1)} kN em Y "
         f"(característicos).",
         f"Diagonal mais solicitada: {gov.direcao}, andar {gov.andar} — N_t = "
         f"{_n(gov.tracao_kN, 1)} kN"
@@ -323,14 +389,22 @@ def registro_contraventamento(
         resumo=(
             f"Contraventamento vertical de estrutura aberta {_n(e.comprimento_x_m, 1)} × "
             f"{_n(e.largura_y_m, 1)} m com pisos nas cotas {_cotas(e.cotas_m)} m: vento pela NBR "
-            "6123:2023 (reticulados), combinações e forças nocionais pela NBR 8800, B₂ e diagonais "
-            f"verificadas; aproveitamento máximo {_n(100 * r.aproveitamento_maximo, 1)} %."
+            f"6123:2023 ({'viga a viga, pelo esqueleto do modelo' if r.vento_por_barras else 'reticulados'}), "
+            "combinações e forças nocionais pela NBR 8800, B₂ e diagonais verificadas; "
+            f"aproveitamento máximo {_n(100 * r.aproveitamento_maximo, 1)} %."
         ),
         entradas=_entradas(r, contexto),
         resultados=resultados,
         metodo=(
-            "Vento por reticulados planos paralelos (NBR 6123:2023, 8.3 e 8.4), levado aos pisos "
-            "por faixas de influência; ações com os coeficientes das Tabelas 1 e 2 da NBR 8800 e "
+            (
+                "Vento viga a viga, pilar a pilar (NBR 6123:2023, 8.3 e 8.4): cada barra do "
+                "esqueleto com a área de sombra ℓ·sen θ·c, C_a e φ do plano a que pertence e a "
+                "proteção η, levado aos pisos por faixas de influência; "
+                if r.vento_por_barras
+                else "Vento por reticulados planos paralelos (NBR 6123:2023, 8.3 e 8.4), levado "
+                "aos pisos por faixas de influência; "
+            )
+            + "ações com os coeficientes das Tabelas 1 e 2 da NBR 8800 e "
             "força nocional de 0,3 % das gravitacionais em todas as combinações; cortante de cada "
             "andar pela envoltória rigorosa das combinações (variável favorável fora, permanente "
             "favorável com γ = 1,0, vento num grupo exclusivo); B₂ do Anexo C com a rigidez axial "
@@ -340,11 +414,21 @@ def registro_contraventamento(
             "Pórticos com vigas rotuladas: o cortante de cada direção vai inteiro para as linhas "
             "contraventadas daquela direção.",
             f"Linha mais carregada com a fração 1/n + e·y_máx/Σy² (e = "
-            f"{_n(100 * e.excentricidade, 1)} % da dimensão perpendicular).",
+            f"{_n(100 * e.excentricidade, 1)} % da dimensão perpendicular"
+            + (", somada à da resultante do vento viga a viga" if r.vento_por_barras else "")
+            + ").",
             "Contraventamento em X só tração: a diagonal comprimida é desprezada; nas demais, cada "
             "diagonal ativa recebe a mesma parcela do cortante.",
             "Barras de seção circular tratadas pela Figura 12 (faces planas), a favor da segurança.",
             "Peso da estrutura e do piso informados por área de piso, em cada nível.",
+            *(
+                [
+                    "Vento viga a viga: a força de cada barra vai às faixas na proporção da altura "
+                    "dela em cada uma; ventos diagonais com C_a = 2,0 e sem proteção."
+                ]
+                if r.vento_por_barras
+                else []
+            ),
         ],
         equacoes=[
             "F_a = C_a·q·A_e; C_an = C_a1·[1 + (n − 1)·η] (NBR 6123, 8.3 e 8.4)",

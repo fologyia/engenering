@@ -23,6 +23,36 @@ AJUDA: dict[str, str] = {
         "**reticulados planos** (capítulo 8): cada pórtico perpendicular ao vento recebe força, "
         "e os de trás ficam parcialmente protegidos pelo da frente."
     ),
+    "sec_metodo_vento": (
+        "De onde vem a força do vento. **Pórticos regulares**: a grade da seção 2, cada pórtico "
+        "como um reticulado. **Viga a viga, pilar a pilar**: cada barra do esqueleto do modelo "
+        "recebe o vento dela (a área que mostra ao vento × pressão × coeficiente), e a força vai "
+        "aos pisos pelas mesmas faixas — para estruturas que não são uma grade (duas colunas, "
+        "escada, balanço)."
+    ),
+    "metodo_vento": (
+        "Pórticos regulares: rápido, para planta retangular com pilares em grade. Viga a viga: "
+        "usa o esqueleto que a macro do SolidWorks exportou, com os guarda-corpos das bordas e os "
+        "equipamentos da tabela."
+    ),
+    "vb_eixo": "Qual eixo do modelo do SolidWorks aponta para cima (Y no padrão do SolidWorks).",
+    "vb_direcoes": (
+        "As 8 direções incluem os ventos inclinados (45°…), a favor da segurança (C_a = 2,0 e sem "
+        "proteção): cada um carrega X e Y ao mesmo tempo. A norma (8.5) pede só as 4 "
+        "perpendiculares."
+    ),
+    "vb_protecao": (
+        "Ligado: as barras que ficam atrás de um plano de barras recebem menos vento (fator η da "
+        "Figura 14). Desligado: todas recebem o vento cheio."
+    ),
+    "vb_terreno": (
+        "A cota do chão no modelo (m). Vazio: o ponto mais baixo das barras (o pé dos pilares). "
+        "As cotas dos pisos da seção 2 contam a partir daqui."
+    ),
+    "vb_usar_cotas": (
+        "Copia para as cotas dos pisos as alturas em que o esqueleto tem vigas (a partir do "
+        "terreno). Confira depois o número de pisos e as cargas."
+    ),
     "sec_5": (
         "O contraventamento vertical: o tipo (X, diagonal simples ou V invertido), quantas linhas "
         "e painéis travam cada direção, e a barra da diagonal com a sua ligação."
@@ -191,6 +221,26 @@ AJUDA: dict[str, str] = {
     "res_vento_niveis": (
         "Força do vento em cada nível: pórticos (estrutura), guarda-corpos e equipamentos, com a "
         "pressão q da faixa."
+    ),
+    "res_vento_casos": (
+        "Cada direção do vento levada aos pisos: a força em X e em Y em cada nível e o cortante "
+        "de cada andar. A linha “base” é a parte de baixo do primeiro andar, que vai direto à "
+        "fundação."
+    ),
+    "res_comparacao": (
+        "O cortante de cada andar pelos pórticos regulares e viga a viga, para ver quanto a "
+        "estrutura real se afasta da grade."
+    ),
+    "res_vento_3d": "A carga do vento em cada barra do esqueleto (kN/m), nesta direção.",
+    "vb_ver": "Qual direção do vento desenhar.",
+    "res_planos": (
+        "Os planos de barras perpendiculares ao vento: área exposta, contorno, φ, C_a da Figura "
+        "12 e o fator de proteção η (o de barlavento tem η = 1)."
+    ),
+    "btn_csv_barras": "Baixa a carga do vento em cada barra, por direção (kN/m), em CSV.",
+    "btn_plano_barras": (
+        "Grava os casos de vento (W0, W45 …) no plano de cargas, uma carga por metro em cada "
+        "barra, prontos para o SolidWorks. Se já existirem, são substituídos."
     ),
     "res_porticos": (
         "Cada pórtico perpendicular ao vento: área exposta, φ, C_a da Figura 12 e o fator de "

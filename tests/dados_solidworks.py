@@ -193,18 +193,22 @@ def csv_esqueleto(
     decimal: str = ",",
     volumes_cm3: dict | None = None,
     formas: dict | None = None,
-    versao: str = "v5",
+    versao: str = "v6",
     versao_antiga: bool = False,
     direcoes: dict | None = None,
+    direcoes_1: dict | None = None,
     contornos: dict | None = None,
     aberturas: dict | None = None,
     linhas_extras: tuple[str, ...] = (),
 ) -> bytes:
     """O ``<peça>_esqueleto.csv`` da macro (cp1252; ``Format "0.0"``; mm e cm³).
 
-    v5 (padrão): cabeçalho (macro, peça, configuração, data), forma, medidas e direção da seção
-    (a medida maior: a alma) e, nas chapas, o contorno e as aberturas (``contornos`` e
-    ``aberturas``: nome → pontos em mm). ``versao="v4"``: sem direção nem contorno.
+    v6 (padrão): cabeçalho (macro, peça, configuração, data), forma, medidas e direção da seção
+    (a medida maior: a alma), nas chapas o contorno e as aberturas (``contornos`` e
+    ``aberturas``: nome → pontos em mm) e, nas barras, a direção 1 do Simulation (a face reta mais
+    larga: a alma se ``altura − 2·t_f`` passa a mesa, senão a mesa; ``direcoes_1``: nome →
+    (vetor, folga em mm) ou ``None``). ``versao="v5"``: sem a direção 1. ``versao="v4"``: sem
+    direção nem contorno.
     ``versao_antiga`` (v3): sem cabeçalho, forma nem seção.
     """
 
@@ -223,8 +227,10 @@ def csv_esqueleto(
             "COMPRIMENTO (mm);VOLUME (cm3)"
         ]
     else:
-        if versao == "v5":
+        if versao in ("v5", "v6"):
             colunas += ";DIRECAO A X;DIRECAO A Y;DIRECAO A Z;CONTORNO (mm);ABERTURAS (mm)"
+        if versao == "v6":
+            colunas += ";DIRECAO 1 X;DIRECAO 1 Y;DIRECAO 1 Z;DIRECAO 1 FOLGA (mm)"
         linhas = [
             f'MACRO;"Mecanica Toolkit - exportar_lista_de_corte {versao}"',
             'PECA;"portico.SLDPRT"',
@@ -251,7 +257,7 @@ def csv_esqueleto(
             f"{_campo(nome)};{_campo(item)};{_campo(descricao)};{forma};{pontas};"
             f"{texto(comprimento)};{medidas};{cauda}"
         )
-        if versao == "v5":
+        if versao in ("v5", "v6"):
             # A alma: na horizontal (X) num pilar, na vertical (Y) numa barra deitada.
             vertical = abs(p2[1] - p1[1]) >= 0.97 * comprimento if comprimento else False
             direcao = (direcoes or {}).get(nome, (1.0, 0.0, 0.0) if vertical else (0.0, 1.0, 0.0))
@@ -261,9 +267,38 @@ def csv_esqueleto(
                 _texto_do_poligono(abertura, texto) for abertura in (aberturas or {}).get(nome, ())
             )
             linha += f';{componentes};"{contorno}";"{furos}"'
+        if versao == "v6":
+            linha += ";" + _direcao_1(nome, p1, p2, secao, direcao, forma, direcoes_1, decimal)
         linhas.append(linha)
     linhas.extend(linhas_extras)
     return "\r\n".join(linhas).encode("cp1252")
+
+
+def _direcao_1(nome, p1, p2, secao, alma, forma, direcoes_1, decimal) -> str:
+    """Os quatro campos da direção 1 como a macro v6 escreve (vazios fora das barras)."""
+    if direcoes_1 is not None and nome in direcoes_1:
+        escolhida = direcoes_1[nome]
+        if escolhida is None:
+            return ";;;"
+        vetor, folga = escolhida
+    else:
+        if forma != "BARRA":
+            return ";;;"
+        eixo = [b - a for a, b in zip(p1, p2, strict=True)]
+        norma = math.sqrt(sum(v * v for v in eixo)) or 1.0
+        u = [v / norma for v in eixo]
+        alma_reta = secao.altura_mm - 2 * secao.espessura_mesa_mm
+        if alma_reta >= secao.largura_mm:
+            vetor = tuple(alma)
+        else:  # a mesa: perpendicular à alma e ao eixo
+            vetor = (
+                u[1] * alma[2] - u[2] * alma[1],
+                u[2] * alma[0] - u[0] * alma[2],
+                u[0] * alma[1] - u[1] * alma[0],
+            )
+        folga = abs(alma_reta - secao.largura_mm)
+    componentes = ";".join(f"{v:.4f}".replace(".", decimal) for v in vetor)
+    return componentes + ";" + f"{folga:.1f}".replace(".", decimal)
 
 
 def peso_do_esqueleto_kN(escala_do_volume: float = 1.0) -> float:

@@ -97,3 +97,33 @@ def test_cada_opcao_abre_sem_erro(banco_com_projeto, estado):
         metricas = {m.label: m.value for m in t.metric}
         assert metricas["Cargas desenhadas (vertical)"] == "2,40 kN"
         assert metricas["Reações verticais"] == "100,00 kN"
+
+
+def test_reacao_horizontal_com_a_direcao_da_secao(banco_com_projeto):
+    from tests import test_direcoes_da_secao as tds
+
+    d1 = (0.0, 1.0, 0.0)
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(
+        ld.GeometriaDoModelo(corpos=(tds.corpo(d1),), arquivo="pilar_esqueleto.csv")
+    )
+    projeto["esforcos_do_modelo"] = em.para_dicionario(tds.dados(d1))
+    plano = pc.com_acao(
+        pc.PlanoDeCargas(),
+        pc.nova_acao(
+            "W0",
+            cargas=[
+                pc.CargaDoModelo(tds.VIGA, tds.VENTO[0], "kN/m", "+X", comprimento_m=tds.L),
+                pc.CargaDoModelo(tds.VIGA, tds.VENTO[1], "kN/m", "+Y", comprimento_m=tds.L),
+            ],
+        ),
+    )
+    projeto["plano_de_cargas"] = pc.para_dicionario(plano)
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir(m3_caso_reacoes="W0", m3_cargas="W0")
+    metricas = {m.label: m.value for m in t.metric}
+    x, y = (-v * tds.L for v in tds.VENTO[:2])
+    assert metricas["Reações horizontais (X / Y)"] == f"{x:.2f} / {y:.2f} kN".replace(".", ",")
+    assert metricas["Cargas desenhadas (X / Y)"] == f"{-x:.2f} / {-y:.2f} kN".replace(".", ",")
+    tabela = next(d.value for d in t.dataframe if "Direção 1" in d.value.columns)
+    assert list(tabela["Direção 1"]) == ["+Y"] and list(tabela["Sentido pelo caso"]) == ["W0"]

@@ -12,8 +12,9 @@ Viabilidade das setas (o que dá para mostrar com o que o programa lê):
   não tem lugar certo e fica listada como não localizada.
 * **Reações** — o quadro das fundações dá, em cada pilar marcado como Pilar, o N na base (vertical,
   compressão positiva): vira uma seta para cima no pé do pilar. As forças horizontais V₁ e V₂ estão
-  nos eixos da seção do Simulation, sem a orientação no espaço — saem no rótulo (H = √(V₁² + V₂²)),
-  não como seta.
+  nos eixos da seção do Simulation: com a direção 1 da seção (macro v6) e o sentido tirado de um
+  caso com carga no pilar (:mod:`core.direcoes_da_secao`), viram a seta horizontal H; sem isso,
+  ficam no rótulo (H = √(V₁² + V₂²)) e o motivo vai nos avisos.
 * **Apoios** — no pé de cada pilar (a ponta mais baixa): **engastado** quando a base tem momento
   num caso importado, **articulado** quando nunca tem; sem esforços importados, o pé dos pilares que
   chegam no chão, sem o tipo.
@@ -29,6 +30,7 @@ from core import cantoneiras
 from core import cargas_pelo_modelo as cpm
 from core import cena_3d as c3
 from core import cena_escada as cesc
+from core import direcoes_da_secao as ds
 from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
@@ -56,6 +58,8 @@ COR_DA_REACAO = "#2e7d32"
 TOLERANCIA_DO_CHAO_M = 0.20  # pé de pilar e de escada no chão, com placa e graute
 MOMENTO_DE_ENGASTE_KNM = 0.05  # base com mais que isso num caso: engastada
 REACAO_MINIMA_KN = 0.05  # menos que isso não vira seta
+#: A seta horizontal da reação só nos pilares em pé (até 15° do prumo).
+COS_PILAR_EM_PE = math.cos(math.radians(15.0))
 
 
 def _n(valor: float, casas: int = 2) -> str:
@@ -497,17 +501,78 @@ def cargas_do_caso(
 # ---------------------------------------------------------------------------------------------
 # Apoios e reações
 # ---------------------------------------------------------------------------------------------
+def cargas_distribuidas_por_corpo(
+    plano: pc.PlanoDeCargas,
+    casos: Iterable[str],
+    g: ld.GeometriaDoModelo,
+    nomes: Nomes,
+) -> dict[str, dict[str, c3.Ponto]]:
+    """Caso → corpo → a carga distribuída total que o plano manda na barra (kN, planta): o que
+    o Simulation tem de mostrar dentro dos elementos dela."""
+    corpos = _corpos(g)
+    resultado: dict[str, dict[str, c3.Ponto]] = {}
+    for caso in casos:
+        acao = plano.acao(caso)
+        if acao is None:
+            continue
+        por_corpo: dict[str, list[float]] = {}
+        for carga in acao.cargas:
+            if carga.unidade != "kN/m":
+                continue
+            nome = nomes.corpo_do_elemento(carga.elemento, corpos)
+            vetor = _vetor_da_carga(carga)
+            if not nome or vetor is None:
+                continue
+            fator = corpos[nome].comprimento_m * carga.quantidade
+            soma = por_corpo.setdefault(nome, [0.0, 0.0, 0.0])
+            for k in range(3):
+                soma[k] += vetor[k] * fator
+        resultado[caso] = {nome: (v[0], v[1], v[2]) for nome, v in por_corpo.items()}
+    return resultado
+
+
 @dataclass(frozen=True)
 class ApoiosNaCena:
     apoios: tuple[c3.ApoioCena, ...]
     reacoes: tuple[c3.SetaCena, ...]
     avisos: tuple[str, ...]
     soma_vertical_kN: float = 0.0
+    #: Soma das reações horizontais desenhadas (planta, kN) e quantos pilares as têm.
+    soma_horizontal_kN: tuple[float, float] = (0.0, 0.0)
+    horizontais: int = 0
+    direcoes: ds.DirecoesDosPilares | None = None
+    conferencia: str = ""  # as horizontais contra o arquivo de reações
 
 
 def _pe(corpo: ld.CorpoDoModelo, eixo_vertical: str) -> c3.Ponto:
     a, b = _planta(corpo.inicio, eixo_vertical), _planta(corpo.fim, eixo_vertical)
     return a if a[2] <= b[2] else b
+
+
+def _direcoes(
+    g: ld.GeometriaDoModelo,
+    eixo_vertical: str,
+    dados: em.EsforcosDoModelo,
+    nomes: Nomes,
+    quadro: qf.QuadroDeFundacoes,
+    plano: pc.PlanoDeCargas | None,
+) -> ds.DirecoesDosPilares:
+    corpos = _corpos(g)
+    inverso = {v: k for k, v in nomes.do_simulation.items()}
+    das_vigas = {
+        p.pilar: corpo
+        for p in quadro.pilares
+        if (corpo := corpos.get(inverso.get(p.pilar, ld.nome_do_corpo(p.pilar)))) is not None
+    }
+    aplicadas = (
+        cargas_distribuidas_por_corpo(plano, dados.casos, g, nomes) if plano is not None else {}
+    )
+    perfis = ld.perfis_do_esqueleto(ld.GeometriaDoModelo(corpos=tuple(das_vigas.values())))
+    secoes = {
+        c.nome: secao_do_perfil(perfis.get(c.nome, ("", ""))[0], c.secao_mm)
+        for c in das_vigas.values()
+    }
+    return ds.direcoes_dos_pilares(quadro, dados, das_vigas, eixo_vertical, aplicadas, secoes)
 
 
 def apoios_e_reacoes(
@@ -516,8 +581,12 @@ def apoios_e_reacoes(
     dados: em.EsforcosDoModelo | None,
     nomes: Nomes,
     caso: str = "",
+    *,
+    plano: pc.PlanoDeCargas | None = None,
 ) -> ApoiosNaCena:
-    """Os apoios no pé dos pilares e, com um caso importado, a reação vertical em cada um."""
+    """Os apoios no pé dos pilares e, com um caso importado, a reação em cada um: a vertical
+    sempre; a horizontal quando a direção da seção do pilar é sabida (:mod:`core.direcoes_da_secao`,
+    com o ``plano`` de cargas para tirar o sentido)."""
     corpos = _corpos(g)
     avisos: list[str] = []
     if dados is not None and dados.casos:
@@ -532,6 +601,17 @@ def apoios_e_reacoes(
     apoios: list[c3.ApoioCena] = []
     reacoes: list[c3.SetaCena] = []
     soma = 0.0
+    soma_h = [0.0, 0.0]
+    horizontais = 0
+    direcoes: ds.DirecoesDosPilares | None = None
+    conferencia = ""
+    if quadro is not None and quadro.pilares and dados is not None and caso in dados.casos:
+        try:
+            direcoes = _direcoes(g, eixo_vertical, dados, nomes, quadro, plano)
+        except (ArithmeticError, ValueError, KeyError) as erro:
+            avisos.append(f"As direções das seções dos pilares não foram lidas ({erro}).")
+        else:
+            avisos.extend(direcoes.avisos)
     if quadro is not None and quadro.pilares:
         for pilar in quadro.pilares:
             corpo = corpos.get(inverso.get(pilar.pilar, ld.nome_do_corpo(pilar.pilar)))
@@ -556,18 +636,45 @@ def apoios_e_reacoes(
             apoios.append(c3.ApoioCena(pe, tipo, "", "apoio"))
             carga = next((c for c in pilar.cargas if c.caso == caso), None)
             if carga is not None and c3.finito(carga.n):
+                d = direcoes.pilares.get(pilar.pilar) if direcoes is not None else None
+                vetor_h = (
+                    d.horizontal(carga)
+                    if d is not None and abs(d.axial[2]) >= COS_PILAR_EM_PE
+                    else None
+                )
                 h = math.hypot(carga.v1, carga.v2)
-                rotulo = f"N {_n(carga.n, 1)} kN" + (f" · H {_n(h, 1)} kN" if h >= 0.05 else "")
+                if vetor_h is not None and c3.finito(*vetor_h):
+                    rotulo = f"N {_n(carga.n, 1)} kN"
+                    horizontais += 1
+                    soma_h = [soma_h[0] + vetor_h[0], soma_h[1] + vetor_h[1]]
+                    h = math.hypot(vetor_h[0], vetor_h[1])
+                    if h >= REACAO_MINIMA_KN:
+                        reacoes.append(
+                            c3.SetaCena(pe, (vetor_h[0], vetor_h[1], 0.0), f"H {_n(h, 1)} kN",
+                                        COR_DA_REACAO, True, "reacao")
+                        )  # fmt: skip
+                else:
+                    rotulo = f"N {_n(carga.n, 1)} kN" + (f" · H {_n(h, 1)} kN" if h >= 0.05 else "")
                 if abs(carga.n) >= REACAO_MINIMA_KN:
                     reacoes.append(
                         c3.SetaCena(pe, (0.0, 0.0, carga.n), rotulo, COR_DA_REACAO, True, "reacao")
                     )
                 soma += carga.n
+        if direcoes is not None and dados is not None and caso in dados.casos:
+            reacoes_do_arquivo = dados.casos[caso].reacoes
+            if reacoes_do_arquivo is not None:
+                conferencia = ds.conferir_horizontais(
+                    direcoes,
+                    quadro,
+                    caso,
+                    vpb.para_a_planta(reacoes_do_arquivo.modelo, eixo_vertical),
+                )
         if caso and not reacoes and caso not in dados.casos:  # type: ignore[union-attr]
             avisos.append(f"O caso {caso} não foi importado em Esforços do modelo: sem reações.")
     # O pé de cada barra em pé que chega no chão e não está no quadro (sem o tipo).
     if not corpos:
-        return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma)
+        return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma, (soma_h[0], soma_h[1]),
+                            horizontais, direcoes, conferencia)  # fmt: skip
     chao = min(_pe(c, eixo_vertical)[2] for c in corpos.values())
     sem_tipo = 0
     for corpo in corpos.values():
@@ -584,7 +691,8 @@ def apoios_e_reacoes(
             "barra como Pilar (Esforços do modelo) para o programa dizer engastado ou articulado e "
             "mostrar a reação."
         )
-    return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma)
+    return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma, (soma_h[0], soma_h[1]),
+                        horizontais, direcoes, conferencia)  # fmt: skip
 
 
 # ---------------------------------------------------------------------------------------------

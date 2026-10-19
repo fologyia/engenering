@@ -205,3 +205,83 @@ def test_registrar_grava_no_projeto(banco_com_projeto):
         if r["modulo_id"] == "contraventamento_estrutura"
     ]
     assert len(achados) == 1 and achados[0]["entradas"]["tag"] == "PL-9"
+
+
+# ------------------------------------------------------------------ vento viga a viga
+def _projeto_com_esqueleto() -> None:
+    from core import leitura_do_modelo as ld
+    from core.project_store import salvar_projeto
+    from tests.test_guarda_corpo_do_modelo import plataforma
+
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(
+        ld.GeometriaDoModelo(corpos=tuple(plataforma()), arquivo="plataforma_esqueleto.csv")
+    )
+    salvar_projeto(projeto, motivo="teste")
+
+
+BARRAS = {"ce_metodo_vento": "Viga a viga, pilar a pilar", "ce_Lx": 6.0, "ce_Ly": 4.0,
+          "ce_vaos_x": 1, "ce_h_andar": 3.9}  # fmt: skip
+
+
+def test_viga_a_viga_sem_esqueleto_vira_erro_claro(banco_com_projeto):
+    t = abrir(banco_com_projeto, ce_metodo_vento="Viga a viga, pilar a pilar")
+    assert any("ainda não tem o esqueleto" in e.value for e in t.error)
+    assert not any(m.label == "Status geral" for m in t.metric)
+
+
+@pytest.mark.parametrize(
+    "estado",
+    [
+        pytest.param({}, id="padrao"),
+        pytest.param(
+            {
+                "ce_vb_direcoes": "Só as 4 perpendiculares às faces (NBR 6123, 8.5)",
+                "ce_vb_protecao": False,
+                "ce_desenho_direcao": "Y",
+            },
+            id="4-direcoes",
+        ),  # fmt: skip
+        pytest.param({"ce_guarda_corpo": False, "ce_vb_ver": 45}, id="sem-guarda-corpo"),
+        pytest.param({"ce_h_andar": 3.0}, id="cotas-que-nao-batem"),
+    ],
+)
+def test_viga_a_viga_com_o_esqueleto(banco_com_projeto, estado):
+    _projeto_com_esqueleto()
+    t = abrir(banco_com_projeto, **(BARRAS | estado))
+    faltam = {
+        (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
+    } - ISENTOS
+    assert not faltam, sorted(faltam)
+    assert any(m.label == "Status geral" for m in t.metric)
+    colunas = [tuple(d.value.columns) for d in t.dataframe]
+    assert (
+        "Direção / andar",
+        "Pórticos regulares (kN)",
+        "Viga a viga (kN)",
+        "Diferença (%)",
+    ) in colunas
+    if estado.get("ce_h_andar") == 3.0:
+        assert any(b.key == "ce_vb_usar_cotas" for b in t.button)
+        t.button(key="ce_vb_usar_cotas").click().run()
+        assert t.session_state["ce_cotas_livres"] == "3,89"
+    else:
+        assert not any(b.key == "ce_vb_usar_cotas" for b in t.button)
+
+
+def test_viga_a_viga_registra_e_envia_ao_plano(banco_com_projeto):
+    from core import plano_de_cargas as pc
+
+    _projeto_com_esqueleto()
+    t = abrir(banco_com_projeto, **BARRAS)
+    t.button(key="ce_vb_para_plano").click().run()
+    assert not t.exception
+    plano = pc.plano_do_projeto(obter_projeto_ativo())
+    assert {"W0", "W45", "W90", "W315"} <= {a.codigo for a in plano.acoes}
+    t.button(key="registrar_contraventamento_estrutura").click().run()
+    achado = next(
+        r
+        for r in obter_projeto_ativo()["registros_tecnicos"]
+        if r["modulo_id"] == "contraventamento_estrutura"
+    )
+    assert "viga a viga" in achado["entradas"]["vento"]

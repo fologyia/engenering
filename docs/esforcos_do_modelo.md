@@ -71,7 +71,10 @@ tabela das barras (passo 4) e nos avisos da hora de enviar (passo 1).
 grava, além da lista de corte, o `<peça>_esqueleto.csv`: quatro linhas de cabeçalho (MACRO com a
 versão, PECA, CONFIGURACAO, DATA) e um corpo por linha, com o item da lista de corte, a descrição, a
 **forma** (BARRA, CHAPA ou BLOCO), as pontas da linha de centro (X1…Z2, mm, nos eixos da peça), o
-comprimento, as duas medidas da seção (SECAO A e B, mm) e o volume (cm³). Como a macro (v4) mede:
+comprimento, as duas medidas da seção (SECAO A e B, mm) e o volume (cm³); desde a v5, a direção da
+medida maior da seção (a alma) e o contorno das chapas; na **v6**, a **direção 1 do Simulation** de
+cada barra (a face plana ao longo da barra mais larga = a aresta reta mais longa da seção, com a folga
+para a segunda; ver `docs/modelo_3d.md`). Como a macro (v4) mede:
 as direções principais da nuvem de pontos do corpo (vértices e centros das arestas circulares — um
 tubo redondo não tem vértice), pelo método de Jacobi; as medidas, pelos pontos extremos do corpo
 nessas direções (caixa orientada: uma chapa inclinada sai com comprimento × largura × espessura); a

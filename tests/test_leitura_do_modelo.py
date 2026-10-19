@@ -704,7 +704,7 @@ def test_le_o_cabecalho_da_macro():
         "portico.SLDPRT",
         "Padrão",
         "2026-10-12 18:30",
-        "v5",
+        "v6",
     )
     assert g.origem == "portico.SLDPRT, configuração Padrão, gerado em 2026-10-12 18:30"
     assert outros_avisos(g) == ()
@@ -741,10 +741,13 @@ def test_linhas_ruins_viram_aviso_e_nao_erro():
 
 def test_versao_diferente_da_esperada_avisa():
     conteudo = sw.csv_esqueleto().replace(
-        b"exportar_lista_de_corte v5", b"exportar_lista_de_corte v9"
+        b"exportar_lista_de_corte v6", b"exportar_lista_de_corte v9"
     )
     (aviso,) = outros_avisos(ld.ler_esqueleto(conteudo, "x.csv"))
-    assert "macro v9" in aviso and "espera a v5" in aviso
+    assert "macro v9" in aviso and "espera a v6" in aviso
+    # A v5 ainda vale: lê tudo e diz o que falta (a direção 1 do Simulation).
+    (aviso,) = outros_avisos(ld.ler_esqueleto(sw.csv_esqueleto(versao="v5"), "x.csv"))
+    assert aviso.startswith("Esqueleto da macro v5") and "direção 1" in aviso
     # A v4 ainda vale: lê tudo e diz o que falta (orientação e contorno).
     (aviso,) = outros_avisos(ld.ler_esqueleto(sw.csv_esqueleto(versao="v4"), "x.csv"))
     assert aviso.startswith("Esqueleto da macro v4") and "contorno das chapas" in aviso
@@ -830,7 +833,7 @@ def test_contrato_com_a_macro():
     # e as aberturas — tantos campos quanto colunas.
     valores = ['"Viga[1]"', '"W8x31<1>"', '"W8x31"', "BARRA", "0,0", "0,0", "0,0", "0,0"]
     valores += ["4000,0", "0,0", "4000,0", "201,0", "165,0", "18280,0"]
-    valores += ["1,0000", "0,0000", "-0,0000", '""', '""']
+    valores += ["1,0000", "0,0000", "-0,0000", '""', '""', "0,0000", "0,0000", "1,0000", "15,6"]
     assert len(valores) == len(colunas)
     cabecalho = [
         f'{chave};"{valor}"'
@@ -852,13 +855,15 @@ def test_contrato_com_a_macro():
     assert corpo.forma == "BARRA" and corpo.secao_mm == (201.0, 165.0)
     assert corpo.fim == pytest.approx((0.0, 4.0, 0.0)) and corpo.volume_m3 == pytest.approx(0.01828)
     assert corpo.direcao_secao == pytest.approx((1.0, 0.0, 0.0))
+    assert corpo.direcao_1 == pytest.approx((0.0, 0.0, 1.0))
+    assert corpo.folga_da_direcao_1_mm == pytest.approx(15.6)
     assert ld.tipo_do_arquivo(conteudo) == ld.TIPO_ESQUELETO
     # Uma chapa, com o contorno e uma abertura como a macro escreve (PontosDoLaco).
     contorno = '"0,0 0,0 0,0 | 2000,0 0,0 0,0 | 2000,0 0,0 1000,0 | 0,0 0,0 1000,0"'
     furo = '"500,0 0,0 300,0 | 700,0 0,0 300,0 | 700,0 0,0 500,0"'
     chapa = ['"Chapa[1]"', '"Item48"', '"Item48"', "CHAPA", "0,0", "0,0", "500,0", "2000,0"]
     chapa += ["0,0", "500,0", "2000,0", "1000,0", "6,4", "12800,0", "0,0000", "0,0000"]
-    chapa += ["1,0000", contorno, furo]
+    chapa += ["1,0000", contorno, furo, "", "", "", ""]
     conteudo = "\r\n".join(
         [*cabecalho, ";".join(colunas), ";".join(valores), ";".join(chapa)]
     ).encode("ascii")

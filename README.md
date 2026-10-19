@@ -434,7 +434,9 @@ apoiam. Desenhos em 3D, planta e "o que o vento vê"; W0 a W315 no plano de carg
 Núcleo de cena 3D (`core/cena_3d.py`, detalhes em `docs/modelo_3d.md`): o esqueleto do SolidWorks
 com o perfil real de cada barra (seção do catálogo varrida na linha de centro, alma como a macro leu),
 chapas e guarda-corpos; cargas de um caso do plano (pentes e setas), apoios (engastado/articulado
-pelas bases) e reações verticais do quadro das fundações; cor por tipo, perfil, vento, esforço
+pelas bases) e reações do quadro das fundações — a horizontal como seta quando a direção da seção
+do pilar no Simulation é sabida (`core/direcoes_da_secao.py`: a linha pela macro v6, o sentido pela
+carga do vento no pilar); cor por tipo, perfil, vento, esforço
 normal ou aproveitamento; vistas isométrica, superior, frontal e lateral com giro; SVG nas páginas
 e PNG para o memorial. Página Modelo SolidWorks › Modelo em 3D; o 3D do vento barra a barra usa o
 mesmo núcleo.
@@ -507,7 +509,9 @@ diagonal verificada (`core/contraventamento_plataforma.py`; detalhes em
 
 - **vento por reticulados** pela NBR 6123:2023, capítulo 8 — C_a da Figura 12 por φ, proteção η da
   Figura 14 entre pórticos, guarda-corpos e equipamentos (cilindros pelas Tabelas 27 e 28), levados
-  aos pisos (`core/vento_estrutura_aberta.py`);
+  aos pisos (`core/vento_estrutura_aberta.py`) — ou **viga a viga, pilar a pilar**, pelo esqueleto
+  do modelo, uma ação por direção (W0 … W315) com a excentricidade real da resultante
+  (`core/contraventamento_vento_barras.py`);
 - **ações e combinações** da NBR 8800 com forças nocionais de 0,3 % em todas as combinações
   últimas, vento nas quatro direções num grupo exclusivo e cortante de cada andar pela envoltória
   rigorosa, com a combinação governante escrita por extenso;

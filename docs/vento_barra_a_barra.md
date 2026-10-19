@@ -14,6 +14,8 @@ Arquivos: `core/vento_por_barras.py` (cálculo, plano de cargas, CSV),
 
 - **Esqueleto do modelo**: o `…_esqueleto.csv` da macro do SolidWorks (página Cargas do esqueleto),
   com as pontas de cada barra, as duas medidas da seção e a direção da maior (a alma, macro v5).
+  O mesmo cálculo alimenta o **Contraventamento de estruturas abertas** (seletor "Viga a viga, pilar
+  a pilar"), levado aos pisos por faixas (`core/contraventamento_vento_barras.py`).
   As chapas ficam de fora: piso deitado não pega vento e chapa em pé pode ser só apoio de carga do
   modelo — a página lista as chapas em pé para o engenheiro decidir.
 - **Digitar**: uma tabela com as pontas (X, Y, Z do modelo, em m), as medidas da seção (mm) e o eixo

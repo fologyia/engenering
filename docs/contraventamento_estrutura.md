@@ -7,6 +7,7 @@ verificada, sem montar o modelo estrutural. O núcleo não depende do Streamlit.
 | Arquivo | O que faz |
 | --- | --- |
 | `core/vento_estrutura_aberta.py` | vento por reticulados planos (NBR 6123:2023, capítulo 8): Figuras 12 e 14, Tabelas 27 e 28, forças por nível |
+| `core/contraventamento_vento_barras.py` | vento viga a viga, pilar a pilar, pelo esqueleto do modelo, levado aos pisos (faixas, níveis e planta do esqueleto, excentricidade real) |
 | `core/load_combinations.py` | combinações (ELU normal, especial, excepcional; ELS rara, frequente, quase permanente), grupos exclusivos e envoltória rigorosa por esforço |
 | `core/contraventamento_plataforma.py` | ações, cortante de cada andar, B₂, distribuição entre as linhas, forças nas diagonais, deslocamentos |
 | `core/contraventamento_barras.py` | verificação das diagonais (cantoneira, tubo, tirante) e da ligação delas na chapa de nó |
@@ -35,6 +36,33 @@ verificada, sem montar o modelo estrutural. O núcleo não depende do Streamlit.
 * Simplificação a favor da segurança: barras circulares também usam a Figura 12 (1,6 a 2,0 contra
   1,1 da Figura 13).
 
+### Viga a viga, pilar a pilar (o esqueleto do modelo)
+
+O seletor **Como o vento chega à estrutura** troca a grade da seção 2 pelo esqueleto que a macro do
+SolidWorks exportou — para o que não é grade (duas colunas, escada, balanço):
+
+* Cada barra recebe o vento dela (`core/vento_por_barras.py`, ver `docs/vento_barra_a_barra.md`):
+  sombra `ℓ·sen θ·c`, φ e C_a do plano a que pertence, proteção η; os guarda-corpos das bordas do
+  piso (Cargas do esqueleto) e os equipamentos da tabela (no centro da planta dos pisos, apoiados no
+  piso do nível deles) entram como elementos.
+* A força vai aos pisos pelas **mesmas faixas** da grade: a de uma barra se divide na proporção da
+  altura que ela tem em cada faixa (carga uniforme); a de um elemento vai à faixa da cota do centro;
+  acima da faixa do último piso, tudo vai para ele; a parte de baixo do primeiro andar, à fundação.
+  A soma dos níveis e da base fecha com o vento da direção (teste).
+* **Uma ação por direção calculada** (W0, W45 … W315) no grupo exclusivo do vento: as
+  perpendiculares carregam uma direção do contraventamento; as diagonais, X e Y juntas. W0 e W180 têm
+  cada um o seu valor (o plano de barlavento muda).
+* **Excentricidade**: a resultante do vento perpendicular passa onde a estrutura a põe, medida do
+  centro da planta dos pisos; a informada nos ajustes (6.1.4: vento oblíquo e vizinhança, a partir
+  do eixo) soma-se a ela, até 0,5. Acima de 2,5 %, aviso com os dois valores.
+* **Conferências**: as cotas dos pisos contra os níveis de vigas do esqueleto (grupos de vigas
+  deitadas a até 15 cm, com pelo menos 25 % do comprimento do maior; botão para usar as do
+  esqueleto) e L_x × L_y contra a planta dos pisos do esqueleto (aviso se não batem ou se parecem
+  trocadas). O peso por área e os painéis continuam a usar as medidas da página.
+* A aba **Vento** mostra o vento por nível caso a caso, a comparação com os pórticos regulares andar
+  por andar, a figura 3D de cada direção, os planos (φ, C_a, η), o CSV das cargas por barra e o
+  envio ao plano de cargas; o memorial leva as mesmas tabelas.
+
 ## Ações e combinações
 
 | Ação | Categoria (NBR 8800, Tabelas 1 e 2) | Esforços |
@@ -43,7 +71,7 @@ verificada, sem montar o modelo estrutural. O núcleo não depende do Streamlit.
 | Piso | elementos construtivos industrializados (1,35 / 1,0) | idem |
 | Equipamentos | peso de equipamentos (Projeto 2024: 1,25; ou 1,50) | idem |
 | Sobrecarga | sobrecarga de uso (1,50; ψ por tipo de uso) | idem |
-| Vento +X, −X, +Y, −Y | vento (1,40; ψ 0,6 / 0,3 / 0) — **grupo exclusivo** | cortante do andar |
+| Vento +X, −X, +Y, −Y (grade) ou W0 … W315 (viga a viga) | vento (1,40; ψ 0,6 / 0,3 / 0) — **grupo exclusivo** | cortante do andar |
 | Forças horizontais | equipamentos em operação, truncada, ponte rolante ou excepcional | cortante dos andares abaixo do nível |
 
 * **Força nocional** (4.10.7.1.1): cada ação gravitacional leva 0,3 % do seu valor como força
@@ -128,6 +156,8 @@ dos pilares e a compressão que ela induz nas diagonais.
 ## Testes
 
 `tests/test_vento_estrutura_aberta.py` (figuras e tabelas da norma, exemplo conferido à mão),
+`tests/test_contraventamento_vento_barras.py` (faixas, soma que fecha, níveis, planta, excentricidade,
+ações caso a caso, registro),
 `tests/test_contraventamento_barras.py`, `tests/test_contraventamento_plataforma.py` (ações,
 envoltória, B₂, tipos, deslocamentos, registro e memorial), `tests/test_combinacoes_nbr8681.py` e
 `tests/test_contraventamento_estrutura_pagina.py`.

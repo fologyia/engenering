@@ -1,7 +1,8 @@
 """Interface da página Contraventamento de estruturas abertas.
 
 Só desenha: o cálculo está em :mod:`core.contraventamento_plataforma` (vento em
-:mod:`core.vento_estrutura_aberta`, combinações em :mod:`core.load_combinations`, diagonais em
+:mod:`core.vento_estrutura_aberta` ou, viga a viga, em :mod:`core.contraventamento_vento_barras`,
+combinações em :mod:`core.load_combinations`, diagonais em
 :mod:`core.contraventamento_barras`) e o registro em :mod:`core.contraventamento_estrutura_registro`.
 Poucos campos à vista, com os valores usuais; o resto fica em "Ajustes". Entrada impossível vira
 erro claro — nada é corrigido em silêncio.
@@ -22,11 +23,15 @@ from components.base_tecnica_ui import (
     base_ativa,
     botao_recarregar_da_base,
     gravar_acoes_no_plano,
+    gravar_plano,
     legenda_da_base,
+    plano_ativo,
 )
 from components.contraventamento_estrutura_help import AJUDA
 from components.figuras_estrutura import svg_elevacao_linha, svg_planta, svg_vento_elevacao
+from components.figuras_vento import svg_vento_3d
 from components.project_tools import botao_registrar_calculo
+from components.robustez import secao_protegida
 from components.ui import fronteira_modelo
 from components.verification_table import mostrar_tabela_verificacoes
 from core import base_tecnica as bt
@@ -34,12 +39,18 @@ from core import bolted_connection as bc
 from core import contraventamento_barras as cb
 from core import contraventamento_estrutura_registro as reg
 from core import contraventamento_plataforma as cp
+from core import contraventamento_vento_barras as cvb
+from core import esforcos_modelo as em
+from core import guarda_corpo_do_modelo as gm
+from core import leitura_do_modelo as ld
 from core import load_combinations as comb
 from core import section_catalog as sc
 from core import steel_sections as ss
 from core import vento_aberto_registro as var
 from core import vento_estrutura_aberta as va
 from core import vento_nbr6123 as vb
+from core import vento_por_barras as vpb
+from core.project_store import obter_projeto_ativo
 
 PREFIXO = "ce_"
 PILAR_PADRAO = "W 200 x 46,1 (H)"
@@ -55,6 +66,10 @@ COLUNAS_EQUIPAMENTOS = [
     "C_a (vazio = automático)",
 ]
 COLUNAS_FORCAS = ["Nome", "Direção", "Nível", "Valor (kN)", "Categoria", "Nos dois sentidos"]
+METODO_GRADE = "Pórticos regulares (grade)"
+METODO_BARRAS = "Viga a viga, pilar a pilar"
+DIRECOES_8 = "As 8 direções (de 45° em 45°)"
+DIRECOES_4 = "Só as 4 perpendiculares às faces (NBR 6123, 8.5)"
 
 
 def _pt(valor: float, casas: int = 1) -> str:
@@ -550,6 +565,156 @@ def formulario_vento(
     return va.ParametrosVento(v0_m_s=v0, s1=s1, categoria=categoria, grupo_s3=int(grupo))
 
 
+def _usar_cotas_do_esqueleto(niveis: tuple[float, ...]) -> None:
+    st.session_state[_chave("cotas_livres")] = "; ".join(_pt(z, 2) for z in niveis)
+
+
+def formulario_metodo_do_vento(
+    estrutura: DadosEstrutura,
+    equipamentos: tuple[va.Equipamento, ...],
+    vento: va.ParametrosVento,
+    erros: list[str],
+) -> cvb.VentoDoEsqueleto | None:
+    """Pórticos regulares (a grade da seção 2) ou viga a viga, pilar a pilar (o esqueleto do
+    modelo); no segundo, o vento já levado aos pisos."""
+    with st.container(border=True), secao_protegida("Como o vento chega à estrutura"):
+        st.subheader("Como o vento chega à estrutura", help=AJUDA["sec_metodo_vento"])
+        metodo = (
+            st.segmented_control(
+                "Método do vento",
+                [METODO_GRADE, METODO_BARRAS],
+                default=METODO_GRADE,
+                key=_chave("metodo_vento"),
+                help=AJUDA["metodo_vento"],
+            )
+            or METODO_GRADE
+        )
+        if metodo == METODO_GRADE:
+            st.caption(
+                "Pórticos regulares: a planta, os vãos e os perfis da seção 2, cada pórtico "
+                "perpendicular ao vento como um reticulado, a 0° e 90° (nos dois sentidos)."
+            )
+            return None
+        projeto = obter_projeto_ativo()
+        geometria = ld.geometria_do_projeto(projeto)
+        if not geometria.corpos:
+            st.info(
+                "O vento viga a viga usa o esqueleto do modelo: rode a macro do SolidWorks e "
+                "envie o …_esqueleto.csv em **Cargas do esqueleto**.",
+                icon=":material/account_tree:",
+            )
+            st.page_link(
+                "app_pages/cargas_esqueleto.py",
+                label="Abrir Cargas do esqueleto",
+                icon=":material/account_tree:",
+            )
+            erros.append(
+                "Vento viga a viga: o projeto ainda não tem o esqueleto do modelo. Envie o "
+                "esqueleto em Cargas do esqueleto ou use os pórticos regulares."
+            )
+            return None
+        esforcos = em.esforcos_do_projeto(projeto)
+        linha = st.columns([1, 2, 1, 1])
+        eixos = ["Y", "Z"]
+        eixo = str(
+            linha[0].radio(
+                "Eixo vertical do modelo",
+                eixos,
+                index=eixos.index(esforcos.eixo_vertical) if esforcos.eixo_vertical in eixos else 0,
+                horizontal=True,
+                key=_chave("vb_eixo"),
+                help=AJUDA["vb_eixo"],
+            )
+        )
+        quais = linha[1].radio(
+            "Direções do vento",
+            [DIRECOES_8, DIRECOES_4],
+            key=_chave("vb_direcoes"),
+            help=AJUDA["vb_direcoes"],
+        )
+        protecao = _toggle(
+            "Proteção entre planos (η)", "vb_protecao", AJUDA["vb_protecao"], valor=True,
+            alvo=linha[2],
+        )  # fmt: skip
+        terreno = linha[3].number_input(
+            "Cota do terreno no modelo (m)",
+            value=None,
+            step=0.1,
+            format="%.3f",
+            placeholder="o pé dos pilares",
+            key=_chave("vb_terreno"),
+            help=AJUDA["vb_terreno"],
+        )
+        guarda_corpos: list[vpb.ElementoAoVento] = []
+        if estrutura.guarda_corpo:
+            from components.guarda_corpo_ui import escolha_inicial
+
+            escolha = escolha_inicial(projeto)
+            bordas = gm.bordas_do_projeto(geometria, eixo, escolha)
+            guarda_corpos = gm.elementos_ao_vento(
+                bordas.marcados(escolha.trocados), eixo, altura_m=escolha.altura_m, phi=escolha.phi
+            )
+            st.caption(
+                f":material/fence: {len(guarda_corpos)} guarda-corpos nas bordas do piso "
+                f"({bordas.metodo}; altura {_pt(escolha.altura_m, 2)} m, φ "
+                f"{_pt(escolha.phi, 2)}) — os trechos e a altura se ajustam em **Cargas do "
+                "esqueleto › Guarda-corpo nas bordas do piso**."
+            )
+        nomes = {
+            corpo.nome: barra
+            for barra, corpo in ld.correspondencia(
+                geometria, esforcos.nomes_dos_membros, esforcos
+            ).corpos.items()
+        }
+        try:
+            entrada = cvb.entrada_pelo_esqueleto(
+                geometria,
+                eixo,
+                vento,
+                cotas_m=estrutura.cotas,
+                equipamentos=equipamentos,
+                guarda_corpos=guarda_corpos,
+                direcoes=(
+                    vpb.DIRECOES_COM_DIAGONAIS
+                    if quais == DIRECOES_8
+                    else vpb.DIRECOES_PERPENDICULARES
+                ),
+                protecao=bool(protecao),
+                cota_do_terreno_m=None if terreno is None else float(terreno),
+                nomes_no_simulation=nomes,
+            )
+            problemas = vpb.validar_entrada(entrada)
+            if problemas:
+                erros.extend(f"Vento viga a viga: {p}" for p in problemas)
+                return None
+            r = vpb.calcular(entrada)
+            ve = cvb.vento_nos_niveis(
+                r, estrutura.cotas, eixo_vertical=eixo, arquivo=geometria.arquivo
+            )
+        except ValueError as erro:
+            erros.append(f"Vento viga a viga: {erro}")
+            return None
+        px, py = ve.planta_m
+        st.caption(
+            f":material/account_tree: {geometria.arquivo} · {len(entrada.barras)} barras · "
+            f"planta dos pisos {_pt(px, 2)} × {_pt(py, 2)} m · vigas nas cotas "
+            + ("; ".join(_pt(z, 2) for z in ve.niveis_do_esqueleto_m) or "—")
+            + " m (do terreno)"
+        )
+        if ve.niveis_do_esqueleto_m and not cvb.cotas_batem(
+            ve.niveis_do_esqueleto_m, estrutura.cotas
+        ):
+            st.button(
+                "Usar as cotas do esqueleto nos pisos",
+                on_click=_usar_cotas_do_esqueleto,
+                args=(ve.niveis_do_esqueleto_m,),
+                icon=":material/height:",
+                key=_chave("vb_usar_cotas"),
+                help=AJUDA["vb_usar_cotas"],
+            )
+        return ve
+
+
 def _sistema(
     sufixo: str, titulo: str, alvo: Any, *, com_ligacao: bool = True
 ) -> cp.SistemaDeContraventamento:
@@ -814,7 +979,7 @@ def _resumo(r: cp.ResultadoContraventamento) -> None:
     )
     colunas[2].metric(
         "Vento X / Y (kN)",
-        f"{_pt(r.vento.x.total_kN)} / {_pt(r.vento.y.total_kN)}",
+        f"{_pt(r.vento_total_kN('X'))} / {_pt(r.vento_total_kN('Y'))}",
         help=AJUDA["res_vento"],
     )
     colunas[3].metric("B₂ máximo", _pt(max(a.b2 for a in r.andares), 3), help=AJUDA["res_b2"])
@@ -897,10 +1062,19 @@ def _aba_desenhos(r: cp.ResultadoContraventamento) -> None:
     )
     st.subheader(f"Elevação da linha contraventada — {direcao}", help=AJUDA["res_desenhos"])
     st.image(svg_elevacao_linha(e, r.andares_da_direcao(direcao), direcao), width="stretch")
-    st.subheader(f"Vento em {direcao} nos pórticos", help=AJUDA["res_vento_niveis"])
-    st.image(
-        svg_vento_elevacao(cp.geometria_do_vento(e), r.vento.direcao(direcao)), width="stretch"
-    )
+    ve = e.vento_do_esqueleto
+    if ve is not None:
+        angulo = 0 if direcao == "X" else 90
+        st.subheader(f"Vento W{angulo} viga a viga", help=AJUDA["res_vento_3d"])
+        st.image(
+            svg_vento_3d(ve.resultado, angulo, eixo_vertical=ve.eixo_vertical), width="stretch"
+        )
+    else:
+        st.subheader(f"Vento em {direcao} nos pórticos", help=AJUDA["res_vento_niveis"])
+        st.image(
+            svg_vento_elevacao(cp.geometria_do_vento(e), r.vento.direcao(direcao)),
+            width="stretch",
+        )
     st.subheader("Cortante de cálculo por andar", help=AJUDA["res_cortante"])
     st.altair_chart(grafico_do_cortante(list(r.andares)), width="stretch")
 
@@ -945,7 +1119,98 @@ def mostrar_vento_simplificado(
     )
 
 
+def _comparacao_com_a_grade(r: cp.ResultadoContraventamento) -> pd.DataFrame:
+    ve = r.entrada.vento_do_esqueleto
+    assert ve is not None
+    linhas = []
+    for d in cp.DIRECOES:
+        grade = r.vento.direcao(d).cortantes_dos_andares_kN
+        for i in range(1, len(r.entrada.cotas_m) + 1):
+            barras = ve.maior_cortante_kN(d, i)
+            linhas.append(
+                {
+                    "Direção / andar": f"{d} / {i}",
+                    "Pórticos regulares (kN)": grade[i - 1],
+                    "Viga a viga (kN)": barras,
+                    "Diferença (%)": 100.0 * (barras / grade[i - 1] - 1.0)
+                    if grade[i - 1]
+                    else None,
+                }
+            )
+    return pd.DataFrame(linhas)
+
+
+def _aba_vento_por_barras(r: cp.ResultadoContraventamento) -> None:
+    ve = r.entrada.vento_do_esqueleto
+    assert ve is not None
+    tabelas = reg.tabelas_para_memorial(r)
+    st.subheader("Vento por nível, caso a caso", help=AJUDA["res_vento_casos"])
+    _tabela(tabelas[0])
+    st.subheader("Pórticos regulares × viga a viga", help=AJUDA["res_comparacao"])
+    st.dataframe(
+        _comparacao_com_a_grade(r),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            c: st.column_config.NumberColumn(format="%.2f")
+            for c in ("Pórticos regulares (kN)", "Viga a viga (kN)")
+        }
+        | {"Diferença (%)": st.column_config.NumberColumn(format="%+.0f")},
+    )
+    reais = ", ".join(
+        f"{d}: {_pt(100 * ve.excentricidade_real.get(d, 0.0), 1)} %" for d in cp.DIRECOES
+    )
+    st.caption(
+        "Cortante característico de cada andar (o maior entre os casos). Excentricidade da "
+        f"resultante do vento viga a viga (da dimensão perpendicular): {reais}; a distribuição "
+        "entre as linhas soma a excentricidade informada nos ajustes."
+    )
+    angulos = [c.angulo for c in ve.casos]
+    angulo = st.radio(
+        "Direção mostrada",
+        angulos,
+        format_func=lambda a: f"W{a} ({vpb.SENTIDOS.get(a, '')})",
+        horizontal=True,
+        key=_chave("vb_ver"),
+        help=AJUDA["vb_ver"],
+    )
+    with secao_protegida("Desenho 3D do vento no contraventamento"):
+        st.image(
+            svg_vento_3d(ve.resultado, int(angulo), eixo_vertical=ve.eixo_vertical),
+            width="stretch",
+        )
+    st.subheader("Reticulados (planos perpendiculares ao vento)", help=AJUDA["res_planos"])
+    _tabela(tabelas[1])
+    colunas = st.columns(2)
+    colunas[0].download_button(
+        "Cargas nas barras (CSV)",
+        data=vpb.csv_das_cargas(ve.resultado),
+        file_name="contraventamento_vento_barra_a_barra.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        key=_chave("vb_csv"),
+        help=AJUDA["btn_csv_barras"],
+        width="stretch",
+    )
+    codigos = ", ".join(c.codigo for c in ve.casos)
+    if colunas[1].button(
+        "Enviar ao plano de cargas",
+        icon=":material/table_chart:",
+        key=_chave("vb_para_plano"),
+        help=AJUDA["btn_plano_barras"],
+        width="stretch",
+    ) and gravar_plano(
+        vpb.plano_com_o_vento(plano_ativo(), ve.resultado),
+        f"Plano de cargas: {codigos} do vento barra a barra (contraventamento)",
+    ):
+        st.success(f"{codigos} gravados no plano de cargas.", icon=":material/check_circle:")
+    st.caption(" · ".join(ve.resultado.vento_no_topo.memoria))
+
+
 def _aba_vento(r: cp.ResultadoContraventamento) -> None:
+    if r.vento_por_barras:
+        _aba_vento_por_barras(r)
+        return
     tabelas = reg.tabelas_para_memorial(r)
     st.subheader("Vento por nível", help=AJUDA["res_vento_niveis"])
     _tabela(tabelas[0])
@@ -1058,6 +1323,7 @@ def mostrar_contraventamento_de_estrutura() -> None:
     estrutura = formulario_estrutura(erros)
     cargas, equipamentos = formulario_cargas(erros, base)
     vento = formulario_vento(base)
+    vento_do_esqueleto = formulario_metodo_do_vento(estrutura, equipamentos, vento, erros)
     sx, sy = formulario_contraventamento()
     ajustes = formulario_ajustes(base)
     if erros:
@@ -1085,6 +1351,7 @@ def mostrar_contraventamento_de_estrutura() -> None:
         combinacao_de_servico=ajustes.combinacao_servico,
         criterio_anglo=ajustes.criterio_anglo,
         tipo_de_estrutura=ajustes.tipo_de_estrutura,
+        vento_do_esqueleto=vento_do_esqueleto,
     )
     problemas = cp.validar_entrada(entrada)
     if problemas:

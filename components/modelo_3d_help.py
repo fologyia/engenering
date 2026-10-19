@@ -25,13 +25,30 @@ AJUDA: dict[str, str] = {
         "kN como uma seta no meio dela. Só entram as linhas que estão numa barra do esqueleto."
     ),
     "reacoes": (
-        "Mostra os apoios no pé dos pilares e, com um caso importado, a reação vertical (N) de "
-        "cada um. O apoio é engastado quando a base tem momento, articulado quando não tem."
+        "Mostra os apoios no pé dos pilares e, com um caso importado, a reação de cada um: a "
+        "vertical (N) sempre e a horizontal (H) quando o programa sabe para que lado a seção do "
+        "pilar está virada no Simulation. O apoio é engastado quando a base tem momento, "
+        "articulado quando não tem."
     ),
     "caso_reacoes": "O caso importado de Esforços do modelo cujas reações aparecem.",
     "barra": "Destaca uma barra (as outras ficam claras) e mostra os dados dela ao lado.",
     "res_cargas": "Soma das cargas desenhadas do caso (na direção vertical, para baixo).",
     "res_reacoes": "Soma das reações verticais nas bases dos pilares (para cima).",
+    "res_cargas_h": (
+        "Soma das cargas horizontais desenhadas do caso, em X e em Y da planta (kN). Com todos os "
+        "apoios nos pilares, as reações horizontais têm de dar o mesmo valor com o sinal trocado."
+    ),
+    "res_reacoes_h": (
+        "Soma das reações horizontais nas bases dos pilares que têm a direção da seção, em X e Y "
+        "da planta (kN): a força que o apoio faz no pilar."
+    ),
+    "sec_direcoes": (
+        "O Simulation dá V₁ e V₂ nos eixos da seção de cada viga: a direção 1 é paralela à aresta "
+        "reta mais longa da seção, mas o sentido dela ele escolhe sozinho. O programa pega a "
+        "linha pela macro v6 e o sentido por um caso com carga no pilar (o vento viga a viga): a "
+        "carga que o Simulation mostra no pilar tem de apontar para onde o plano mandou. Sem "
+        "isso, V₁ e V₂ ficam só no rótulo."
+    ),
     "res_fora": (
         "Linhas do caso que não estão numa barra do esqueleto (por área, por texto, num nó): "
         "não têm lugar certo no desenho."

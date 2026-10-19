@@ -26,8 +26,8 @@ from core.project_store import obter_projeto_ativo
 
 ORIGEM_ESQUELETO = "Esqueleto do modelo (macro do SolidWorks)"
 ORIGEM_DIGITADA = "Digitar as barras"
-DIRECOES_8 = "As 8 direções (de 45° em 45°)"
-DIRECOES_4 = "Só as 4 perpendiculares às faces (NBR 6123, 8.5)"
+DIRECOES_8 = ce.DIRECOES_8
+DIRECOES_4 = ce.DIRECOES_4
 ALMA_MACRO = "da macro"
 ALMA_NAO_SEI = "não sei"
 OPCOES_ALMA = ("X", "Y", "Z", ALMA_MACRO, ALMA_NAO_SEI)

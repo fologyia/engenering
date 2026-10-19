@@ -3,7 +3,9 @@ NBR 8800 (Projeto de revisão de 2024), com o vento da NBR 6123:2023 (capítulo 
 
 Da geometria e das cargas à diagonal verificada, sem precisar montar o modelo:
 
-1. **Vento** por nível nas direções X e Y (:mod:`core.vento_estrutura_aberta`).
+1. **Vento** por nível nas direções X e Y: pelos pórticos regulares
+   (:mod:`core.vento_estrutura_aberta`) ou viga a viga, pilar a pilar, pelo esqueleto do modelo
+   (:mod:`core.contraventamento_vento_barras`, uma ação por direção calculada).
 2. **Ações** com os seus coeficientes (Tabelas 1 e 2): peso da estrutura, piso, equipamentos,
    sobrecarga, vento (+X, −X, +Y e −Y num grupo exclusivo) e forças horizontais informadas. Cada
    ação gravitacional leva junto a **força nocional** de 0,3 % do seu peso (4.10.7.1.1), sempre no
@@ -29,6 +31,7 @@ from dataclasses import dataclass, field, replace
 
 from core import base_tecnica as bt
 from core import contraventamento_barras as cb
+from core import contraventamento_vento_barras as cvb
 from core import criterio_anglo as ca
 from core import load_combinations as comb
 from core import vento_estrutura_aberta as va
@@ -77,6 +80,9 @@ CATEGORIAS_DE_FORCA_HORIZONTAL = (
 )
 DIRECOES = ("X", "Y")
 GRUPO_VENTO = "Vento"
+EXCENTRICIDADE_MAXIMA = 0.5
+#: Abaixo disso a resultante do vento viga a viga é "centrada" (sem aviso).
+EXCENTRICIDADE_DESPREZIVEL = 0.025
 
 
 class ContraventamentoInvalido(ValueError):
@@ -157,6 +163,8 @@ class EntradaContraventamento:
     criterio_anglo: bool = False
     #: Tipo de estrutura para o limite do deslocamento (vazio = NBR 8800, Tabela B.1).
     tipo_de_estrutura: str = ""
+    #: Vento viga a viga pelo esqueleto do modelo, já nos pisos (``None``: pórticos regulares).
+    vento_do_esqueleto: cvb.VentoDoEsqueleto | None = None
 
     def sistema(self, direcao: str) -> SistemaDeContraventamento:
         return self.contraventamento_x if direcao == "X" else self.contraventamento_y
@@ -249,7 +257,25 @@ def validar_entrada(e: EntradaContraventamento) -> list[str]:
         erros.append(f"Tipo de estrutura desconhecido: {e.tipo_de_estrutura!r}.")
     if e.combinacao_de_servico not in (comb.ELS_RARA, comb.ELS_FREQUENTE):
         erros.append("A combinação de serviço para os deslocamentos é a rara ou a frequente.")
+    ve = e.vento_do_esqueleto
+    if ve is not None and (
+        len(ve.cotas_m) != len(e.cotas_m)
+        or any(abs(a - b) > 1e-9 for a, b in zip(ve.cotas_m, e.cotas_m, strict=False))
+    ):
+        erros.append(
+            "O vento viga a viga foi levado a outras cotas de piso: calcule de novo com as cotas "
+            "da página."
+        )
     return erros
+
+
+def excentricidade_usada(e: EntradaContraventamento, direcao: str) -> float:
+    """A excentricidade da distribuição entre as linhas: a informada e, no vento viga a viga,
+    mais a da resultante calculada (6.1.4 mede a partir do eixo; até 0,5)."""
+    ve = e.vento_do_esqueleto
+    if ve is None:
+        return e.excentricidade
+    return min(EXCENTRICIDADE_MAXIMA, e.excentricidade + ve.excentricidade_real.get(direcao, 0.0))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -297,6 +323,18 @@ class ResultadoContraventamento:
 
     def andares_da_direcao(self, direcao: str) -> list[AndarNaDirecao]:
         return [a for a in self.andares if a.direcao == direcao]
+
+    @property
+    def vento_por_barras(self) -> bool:
+        return self.entrada.vento_do_esqueleto is not None
+
+    def vento_total_kN(self, direcao: str) -> float:
+        """Força característica do vento na direção (no barra a barra, a do caso que mais carrega
+        essa direção)."""
+        ve = self.entrada.vento_do_esqueleto
+        if ve is not None:
+            return ve.maior_total_kN(direcao)
+        return self.vento.direcao(direcao).total_kN
 
     @property
     def status(self) -> str:
@@ -364,18 +402,34 @@ def montar_acoes(
     gravitacional("Equipamentos", c.categoria_equipamentos, pesos_eq)
     gravitacional("Sobrecarga", c.categoria_sobrecarga, [c.sobrecarga_kN_m2 * area] * n)
 
-    for d in DIRECOES:
-        cortantes = vento.direcao(d).cortantes_dos_andares_kN
-        for sinal, rotulo in ((1.0, "+"), (-1.0, "−")):
+    ve = e.vento_do_esqueleto
+    if ve is not None:
+        # Uma ação por direção calculada: as diagonais carregam X e Y ao mesmo tempo.
+        for caso in ve.casos:
             efeitos = {}
-            for i in range(1, n + 1):
-                efeitos[_efeito("V", d, i)] = sinal * cortantes[i - 1]
-                efeitos[_efeito("S", d, i)] = sinal * cortantes[i - 1]
+            for d in DIRECOES:
+                cortantes = caso.cortantes_kN(d)
+                for i in range(1, n + 1):
+                    efeitos[_efeito("V", d, i)] = cortantes[i - 1]
+                    efeitos[_efeito("S", d, i)] = cortantes[i - 1]
             acoes.append(
                 comb.acao_da_categoria(
-                    f"Vento {rotulo}{d}", CATEGORIA_VENTO, grupo=GRUPO_VENTO, efeitos=efeitos
+                    f"Vento {caso.rotulo}", CATEGORIA_VENTO, grupo=GRUPO_VENTO, efeitos=efeitos
                 )
             )
+    else:
+        for d in DIRECOES:
+            cortantes = vento.direcao(d).cortantes_dos_andares_kN
+            for sinal, rotulo in ((1.0, "+"), (-1.0, "−")):
+                efeitos = {}
+                for i in range(1, n + 1):
+                    efeitos[_efeito("V", d, i)] = sinal * cortantes[i - 1]
+                    efeitos[_efeito("S", d, i)] = sinal * cortantes[i - 1]
+                acoes.append(
+                    comb.acao_da_categoria(
+                        f"Vento {rotulo}{d}", CATEGORIA_VENTO, grupo=GRUPO_VENTO, efeitos=efeitos
+                    )
+                )
     for f in c.forcas_horizontais:
         efeitos = {}
         for i in range(1, f.nivel + 1):
@@ -427,6 +481,10 @@ def calcular_contraventamento(e: EntradaContraventamento) -> ResultadoContravent
     andares: list[AndarNaDirecao] = []
     linhas: list[Verificacao] = []
     avisos: list[str] = list(vento.avisos)
+    ve = e.vento_do_esqueleto
+    if ve is not None:
+        avisos = list(ve.avisos)
+        avisos.extend(cvb.avisos_da_planta(ve, e.comprimento_x_m, e.largura_y_m))
     deslocamento_topo: dict[str, float] = {}
 
     for d in DIRECOES:
@@ -435,7 +493,18 @@ def calcular_contraventamento(e: EntradaContraventamento) -> ResultadoContravent
         area_diag = cb.area_bruta_mm2(diag)
         painel_mm = e.painel_m(d) * 1e3
         projecao_mm = painel_mm / 2.0 if s.tipo == TIPO_V_INVERTIDO else painel_mm
-        fracao = _fracao_da_linha_mais_carregada(s.linhas, e.excentricidade)
+        excentricidade = excentricidade_usada(e, d)
+        fracao = _fracao_da_linha_mais_carregada(s.linhas, excentricidade)
+        real = ve.excentricidade_real.get(d, 0.0) if ve is not None else 0.0
+        if real >= EXCENTRICIDADE_DESPREZIVEL:
+            avisos.append(
+                f"Direção {d}: a resultante do vento viga a viga passa a "
+                f"{_n(100 * real, 1)} % da dimensão perpendicular do centro da planta; somada aos "
+                f"{_n(100 * e.excentricidade, 1)} % informados, a linha mais carregada usa e = "
+                f"{_n(100 * excentricidade, 1)} %"
+                + (" (o limite de 50 %)" if excentricidade >= EXCENTRICIDADE_MAXIMA else "")
+                + "."
+            )
         if s.linhas == 1:
             avisos.append(
                 f"Direção {d}: uma só linha contraventada não resiste à torção em planta — a "

@@ -69,7 +69,7 @@ class GeometriaInvalida(ValueError):
 # ---------------------------------------------------------------------------------------------
 FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO = "BARRA", "CHAPA", "BLOCO"
 FORMAS = (FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO)
-VERSAO_ATUAL_DA_MACRO = "v5"
+VERSAO_ATUAL_DA_MACRO = "v6"
 COORDENADA_ABSURDA_M = 10_000.0  # 10 km: o arquivo não está em mm
 #: Linhas de cabeçalho da macro (antes da linha das colunas) → campo da geometria.
 _METADADOS = {
@@ -100,6 +100,11 @@ class CorpoDoModelo:
     #: Chapa: o contorno da face maior (m) e as aberturas dela (macro v5).
     contorno: tuple[tuple[float, float, float], ...] = ()
     aberturas: tuple[tuple[tuple[float, float, float], ...], ...] = ()
+    #: A direção 1 da viga no Simulation (macro v6): paralela à aresta reta mais longa da seção,
+    #: unitária, sem o sentido (o Simulation escolhe; o programa o tira dos resultados).
+    direcao_1: tuple[float, float, float] | None = None
+    #: Quanto essa aresta passa a mais longa das outras direções (mm): perto de zero é empate.
+    folga_da_direcao_1_mm: float | None = None
 
     @property
     def vetor(self) -> tuple[float, float, float]:
@@ -257,6 +262,8 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
     c_vol = opcional("volume")
     c_direcao = (opcional("direcao a x"), opcional("direcao a y"), opcional("direcao a z"))
     c_contorno, c_aberturas = opcional("contorno"), opcional("aberturas")
+    c_direcao_1 = (opcional("direcao 1 x"), opcional("direcao 1 y"), opcional("direcao 1 z"))
+    c_folga = opcional("direcao 1 folga")
     obrigatorias = max([c_corpo, c_comp, *c_coord])
 
     def celula(linha: list[str], j: int | None) -> str:
@@ -302,6 +309,8 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
             for trecho in celula(linha, c_aberturas).split("||")
             if len(poligono := _poligono(trecho)) >= 3
         )
+        direcao_1 = _direcao([lm.numero_da_celula(celula(linha, j), "")[0] for j in c_direcao_1])
+        folga = lm.numero_da_celula(celula(linha, c_folga), "")[0] if direcao_1 else None
         corpos.append(
             CorpoDoModelo(
                 nome=nome,
@@ -316,6 +325,8 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
                 direcao_secao=direcao,
                 contorno=contorno if len(contorno) >= 3 else (),
                 aberturas=aberturas,
+                direcao_1=direcao_1,
+                folga_da_direcao_1_mm=folga if folga is not None and math.isfinite(folga) else None,
             )
         )
     if not corpos:
@@ -330,6 +341,13 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
             "Lx = Ly = o maior trecho, a favor da segurança) e sem o contorno das chapas (só as "
             "chapas retangulares recebem as cargas do piso). Rode a macro v5 (botão “Macro do "
             "SolidWorks”) para ter os dois."
+        )
+    elif versao == "v5":
+        avisos.append(
+            "Esqueleto da macro v5: lê tudo, mas sem a direção 1 das seções do Simulation (as "
+            "setas das reações horizontais no Modelo em 3D saem só pelos resultados de um caso "
+            "com vento nos pilares). Rode a macro v6 (botão “Macro do SolidWorks”) para ter a "
+            "direção de cada seção."
         )
     elif versao != VERSAO_ATUAL_DA_MACRO:
         avisos.append(
@@ -462,6 +480,8 @@ def para_dicionario(g: GeometriaDoModelo) -> dict[str, Any]:
                 list(c.direcao_secao) if c.direcao_secao else None,
                 [[round(v, 4) for v in ponto] for ponto in c.contorno],
                 [[[round(v, 4) for v in ponto] for ponto in abertura] for abertura in c.aberturas],
+                list(c.direcao_1) if c.direcao_1 else None,
+                c.folga_da_direcao_1_mm,
             ]
             for c in g.corpos
         ],
@@ -545,6 +565,13 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
             if len(linha) > 16 and isinstance(linha[16], list | tuple)
             else ()
         )
+        gravada_1 = linha[17] if len(linha) > 17 else None
+        direcao_1 = (
+            _direcao([_numero(v) for v in gravada_1])
+            if isinstance(gravada_1, list | tuple) and len(gravada_1) == 3
+            else None
+        )
+        folga = _numero(linha[18]) if len(linha) > 18 and direcao_1 else None
         corpos.append(
             CorpoDoModelo(
                 str(linha[0]),
@@ -559,6 +586,8 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
                 direcao,
                 contorno if len(contorno) >= 3 else (),
                 aberturas,
+                direcao_1,
+                folga,
             )
         )
     avisos = dados.get("avisos")

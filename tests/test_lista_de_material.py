@@ -396,6 +396,10 @@ def test_macro_e_ascii_e_grava_as_colunas_que_a_leitura_procura():
         "GetLoops",  # o contorno das chapas (v5)
         "GetCoEdges",
         "Scripting.Dictionary",
+        "DirecaoDaSecao",  # a direção 1 do Simulation (v6): a face reta mais larga da seção
+        "swFace.Normal",
+        "GetStartVertex",
+        "GetEndVertex",
     ):
         assert chamada in macro, chamada
 

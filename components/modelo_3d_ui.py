@@ -171,6 +171,7 @@ def mostrar_modelo_3d(projeto: Any) -> None:
         rotulos[barra] = barra.split(" - ")[-1]
 
     # ------------------------------------------------------------------ cena
+    apoios = cm.ApoiosNaCena((), (), ())
     with secao_protegida("Modelo em 3D"):
         barras, legenda, escala = cm.barras_da_cena(
             geometria,
@@ -197,9 +198,10 @@ def mostrar_modelo_3d(projeto: Any) -> None:
         cargas = cm.CargasNaCena((), (), (), (0.0, 0.0, 0.0))
         if caso_das_cargas != NENHUM:
             cargas = cm.cargas_do_caso(plano, str(caso_das_cargas), geometria, eixo, nomes)
-        apoios = cm.ApoiosNaCena((), (), ())
         if reacoes:
-            apoios = cm.apoios_e_reacoes(geometria, eixo, dados, nomes, caso_das_reacoes)
+            apoios = cm.apoios_e_reacoes(
+                geometria, eixo, dados, nomes, caso_das_reacoes, plano=plano
+            )
             avisos.extend(apoios.avisos)
         titulo = "Modelo em 3D"
         if caso_das_cargas != NENHUM:
@@ -242,9 +244,25 @@ def mostrar_modelo_3d(projeto: Any) -> None:
                         + ("…" if len(cargas.nao_localizadas) > 4 else ""),
                         help=AJUDA["res_fora"],
                     )
+            if caso_das_cargas != NENHUM and (cargas.total_kN[0] or cargas.total_kN[1]):
+                st.metric(
+                    "Cargas desenhadas (X / Y)",
+                    f"{_pt(cargas.total_kN[0], 2)} / {_pt(cargas.total_kN[1], 2)} kN",
+                    help=AJUDA["res_cargas_h"],
+                )
             if apoios.reacoes:
                 st.metric("Reações verticais", f"{_pt(apoios.soma_vertical_kN, 2)} kN",
                           help=AJUDA["res_reacoes"])  # fmt: skip
+            if apoios.horizontais:
+                total = len(apoios.direcoes.pilares) if apoios.direcoes else apoios.horizontais
+                st.metric(
+                    "Reações horizontais (X / Y)",
+                    f"{_pt(apoios.soma_horizontal_kN[0], 2)} / "
+                    f"{_pt(apoios.soma_horizontal_kN[1], 2)} kN",
+                    help=AJUDA["res_reacoes_h"],
+                )
+                if apoios.horizontais < total:
+                    st.caption(f"{apoios.horizontais} de {total} pilares com a direção da seção.")
             st.download_button(
                 "Baixar a imagem (PNG)",
                 data=cena_3d_png.png_da_cena(resultado),
@@ -272,8 +290,52 @@ def mostrar_modelo_3d(projeto: Any) -> None:
             botao_registrar_calculo(
                 registro, key="registrar_modelo_3d", rotulo="Registrar a vista no memorial"
             )
+    if apoios.conferencia:
+        st.caption(f":material/balance: {apoios.conferencia}")
     for aviso in dict.fromkeys([*resultado.avisos, *avisos]):
         st.caption(f":material/info: {aviso}")
+    if apoios.direcoes is not None and apoios.direcoes.pilares:
+        _tabela_das_direcoes(apoios.direcoes, eixo)
+
+
+def _direcao_no_modelo(vetor: tuple[float, float, float] | None, eixo: str) -> str:
+    """A direção nos eixos do modelo do SolidWorks: "+X", "−Z" ou os componentes."""
+    if vetor is None:
+        return "—"
+    v = vpb.do_modelo(vetor, eixo)
+    for indice, nome in enumerate("XYZ"):
+        if abs(v[indice]) >= 0.996:  # até 5° do eixo
+            return ("+" if v[indice] > 0 else "−") + nome
+    return "(" + "; ".join(_pt(c, 2) for c in v) + ")"
+
+
+def _tabela_das_direcoes(direcoes: Any, eixo: str) -> None:
+    with st.expander(
+        f"Direções da seção dos pilares no Simulation ({direcoes.sabidas} de "
+        f"{len(direcoes.pilares)} sabidas)"
+    ):
+        st.caption(
+            "Para conferir no SolidWorks: num gráfico do estudo, botão direito › Configurações › "
+            "Mostrar direções da viga — a seta verde é a direção 1 e a azul a direção 2.",
+            help=AJUDA["sec_direcoes"],
+        )
+        st.dataframe(
+            [
+                {
+                    "Pilar (Simulation)": d.viga,
+                    "Corpo": d.corpo,
+                    "Axial (Fim 1 → Fim 2)": _direcao_no_modelo(d.axial, eixo),
+                    "Direção 1": _direcao_no_modelo(d.d1, eixo),
+                    "Direção 2": _direcao_no_modelo(d.d2, eixo),
+                    "Linha da direção 1": d.linha or "—",
+                    "Sentido pelo caso": d.sentido if d.sabida else "—",
+                    "Por que não": "" if d.sabida else d.sentido,
+                }
+                for d in direcoes.pilares.values()
+            ],
+            hide_index=True,
+            width="stretch",
+        )
 
 
 def _painel_lateral(

@@ -8,8 +8,9 @@
 ' Saem dois arquivos na pasta da peca:
 ' - <peca>_lista_de_corte.csv: envie na pagina "Lista de material" do Mecanica Toolkit;
 ' - <peca>_esqueleto.csv: cada corpo com a linha de centro (mm), a forma (barra, chapa ou bloco),
-'   as medidas, a direcao da medida maior da secao (a alma) e o volume; nas chapas, o contorno da
-'   face maior e as aberturas. Envie na pagina "Esforcos do modelo" junto com os CSV do
+'   as medidas, a direcao da medida maior da secao (a alma), a direcao 1 do Simulation (a
+'   aresta reta mais longa da secao) e o volume; nas chapas, o contorno da face maior e as
+'   aberturas. Envie na pagina "Esforcos do modelo" junto com os CSV do
 '   Simulation (pilares, vigas e contraventamentos, comprimentos de flambagem, perfis) e use em
 '   "Cargas do esqueleto" (a carga do piso distribuida pelas vigas que apoiam cada chapa).
 '
@@ -19,7 +20,7 @@
 ' sempre com virgula decimal, qualquer que seja a configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v5"
+Const VERSAO_DA_MACRO As String = "v6"
 Const DENSIDADE_ACO As Double = 7850#
 
 Dim nomes() As String
@@ -139,7 +140,7 @@ Sub main()
     Cabecalho arquivoEsqueleto, peca, configuracao, quando
     Print #arquivoEsqueleto, "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);" & _
         "X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3);" & _
-        "DIRECAO A X;DIRECAO A Y;DIRECAO A Z;CONTORNO (mm);ABERTURAS (mm)"
+        "DIRECAO A X;DIRECAO A Y;DIRECAO A Z;CONTORNO (mm);ABERTURAS (mm);DIRECAO 1 X;DIRECAO 1 Y;DIRECAO 1 Z;DIRECAO 1 FOLGA (mm)"
 
     ' 5) Um item por linha na lista de corte; um corpo por linha no esqueleto.
     Dim vistos As Object
@@ -312,6 +313,7 @@ End Sub
 Sub EscreverCorpo(swCorpo As SldWorks.Body2, item As String, descricao As String, forma As String, _
     g() As Double, vMassa As Variant)
     Dim volumeTexto As String, contorno As String, aberturas As String
+    Dim d1(2) As Double, folga As Double, direcaoUm As String
     volumeTexto = ""
     If IsArray(vMassa) Then volumeTexto = Num(vMassa(3) * 1000000#, "0.0")
     contorno = ""
@@ -322,6 +324,14 @@ Sub EscreverCorpo(swCorpo As SldWorks.Body2, item As String, descricao As String
             aberturas = ""
         End If
     End If
+    ' A direcao 1 do Simulation (so nas barras); sem ela, os quatro campos saem vazios.
+    direcaoUm = ";;;"
+    If forma = "BARRA" Then
+        If DirecaoDaSecao(swCorpo, g, d1, folga) Then
+            direcaoUm = Num(d1(0), "0.0000") & ";" & Num(d1(1), "0.0000") & ";" & _
+                Num(d1(2), "0.0000") & ";" & Num(folga * 1000#, "0.0")
+        End If
+    End If
     Print #arquivoEsqueleto, Campo(swCorpo.Name) & ";" & Campo(item) & ";" & Campo(descricao) & ";" & _
         forma & ";" & _
         Num(g(0) * 1000#, "0.0") & ";" & Num(g(1) * 1000#, "0.0") & ";" & Num(g(2) * 1000#, "0.0") & ";" & _
@@ -329,8 +339,113 @@ Sub EscreverCorpo(swCorpo As SldWorks.Body2, item As String, descricao As String
         Num(g(6) * 1000#, "0.0") & ";" & Num(g(7) * 1000#, "0.0") & ";" & Num(g(8) * 1000#, "0.0") & ";" & _
         volumeTexto & ";" & _
         Num(g(9), "0.0000") & ";" & Num(g(10), "0.0000") & ";" & Num(g(11), "0.0000") & ";" & _
-        Campo(contorno) & ";" & Campo(aberturas)
+        Campo(contorno) & ";" & Campo(aberturas) & ";" & direcaoUm
 End Sub
+
+Function DirecaoDaSecao(swCorpo As SldWorks.Body2, g() As Double, d1() As Double, folga As Double) As Boolean
+    ' A direcao 1 do Simulation: paralela a aresta reta mais longa da secao (ajuda do SOLIDWORKS,
+    ' "Beam Directions"). Cada aresta reta da secao e a largura de uma face plana ao longo da
+    ' barra (normal perpendicular ao eixo), medida pelos vertices da face na direcao eixo x
+    ' normal. folga: quanto a face mais larga passa a mais larga das outras direcoes (m); perto
+    ' de zero e empate (tubo quadrado, cantoneira de abas iguais) e o Simulation escolhe sozinho.
+    ' O sentido da direcao 1 nao sai da geometria: o programa o tira dos resultados.
+    Dim ux As Double, uy As Double, uz As Double, k As Long, j As Long, n As Long, lado As Long
+    Dim vFaces As Variant, swFace As SldWorks.Face2, swSuperficie As SldWorks.Surface
+    Dim vNormal As Variant, tx As Double, ty As Double, tz As Double, tamanho As Double
+    Dim vArestas As Variant, swAresta As SldWorks.Edge, swVertice As SldWorks.Vertex
+    Dim vPonto As Variant, s As Double, menor As Double, maior As Double, temPonto As Boolean
+    Dim larguras() As Double, lx() As Double, ly() As Double, lz() As Double
+    Dim melhor As Long, outra As Double
+    On Error GoTo Falhou
+    DirecaoDaSecao = False
+    folga = 0#
+    If g(6) <= 0# Then Exit Function
+    ux = (g(3) - g(0)) / g(6)
+    uy = (g(4) - g(1)) / g(6)
+    uz = (g(5) - g(2)) / g(6)
+    vFaces = swCorpo.GetFaces
+    If Not IsArray(vFaces) Then Exit Function
+    ReDim larguras(UBound(vFaces))
+    ReDim lx(UBound(vFaces))
+    ReDim ly(UBound(vFaces))
+    ReDim lz(UBound(vFaces))
+    n = 0
+    For k = 0 To UBound(vFaces)
+        Set swFace = vFaces(k)
+        Set swSuperficie = swFace.GetSurface
+        If Not swSuperficie Is Nothing Then
+            If swSuperficie.IsPlane Then
+                vNormal = swFace.Normal
+                If IsArray(vNormal) Then
+                    If Abs(vNormal(0) * ux + vNormal(1) * uy + vNormal(2) * uz) < 0.02 Then
+                        tx = uy * vNormal(2) - uz * vNormal(1)
+                        ty = uz * vNormal(0) - ux * vNormal(2)
+                        tz = ux * vNormal(1) - uy * vNormal(0)
+                        tamanho = Sqr(tx * tx + ty * ty + tz * tz)
+                        If tamanho > 0.5 Then
+                            tx = tx / tamanho
+                            ty = ty / tamanho
+                            tz = tz / tamanho
+                            temPonto = False
+                            vArestas = swFace.GetEdges
+                            If IsArray(vArestas) Then
+                                For j = 0 To UBound(vArestas)
+                                    Set swAresta = vArestas(j)
+                                    For lado = 0 To 1
+                                        If lado = 0 Then
+                                            Set swVertice = swAresta.GetStartVertex
+                                        Else
+                                            Set swVertice = swAresta.GetEndVertex
+                                        End If
+                                        If Not swVertice Is Nothing Then
+                                            vPonto = swVertice.GetPoint
+                                            s = vPonto(0) * tx + vPonto(1) * ty + vPonto(2) * tz
+                                            If Not temPonto Then
+                                                menor = s
+                                                maior = s
+                                                temPonto = True
+                                            Else
+                                                If s < menor Then menor = s
+                                                If s > maior Then maior = s
+                                            End If
+                                        End If
+                                    Next lado
+                                Next j
+                            End If
+                            If temPonto Then
+                                larguras(n) = maior - menor
+                                lx(n) = tx
+                                ly(n) = ty
+                                lz(n) = tz
+                                n = n + 1
+                            End If
+                        End If
+                    End If
+                End If
+            End If
+        End If
+    Next k
+    If n = 0 Then Exit Function
+    melhor = 0
+    For k = 1 To n - 1
+        If larguras(k) > larguras(melhor) Then melhor = k
+    Next k
+    If larguras(melhor) <= 0# Then Exit Function
+    outra = 0#
+    For k = 0 To n - 1
+        If Abs(lx(k) * lx(melhor) + ly(k) * ly(melhor) + lz(k) * lz(melhor)) < 0.9 Then
+            If larguras(k) > outra Then outra = larguras(k)
+        End If
+    Next k
+    d1(0) = lx(melhor)
+    d1(1) = ly(melhor)
+    d1(2) = lz(melhor)
+    folga = larguras(melhor) - outra
+    DirecaoDaSecao = True
+    Exit Function
+Falhou:
+    DirecaoDaSecao = False
+End Function
 
 Function ContornoDaChapa(swCorpo As SldWorks.Body2, contorno As String, aberturas As String) As Boolean
     ' O contorno da face plana maior da chapa (o laco externo) e as aberturas (os lacos internos),
