@@ -46,6 +46,10 @@ RAZAO_MINIMA, RAZAO_MAXIMA = 0.5, 2.0  # medida no Simulation ÷ a do plano
 ANGULO_MAXIMO_GRAUS = 20.0  # entre a linha da seção e a dos resultados
 ESPALHAMENTO_MAXIMO_GRAUS = 10.0  # entre os casos, sem a linha
 FOLGA_MINIMA_MM = 1.0  # abaixo disso a aresta mais longa empata (o Simulation escolhe)
+#: Seção simétrica (cantoneira de abas iguais, tubo quadrado ou redondo): as duas arestas mais longas
+#: são iguais no perfil e o Simulation escolhe uma; a folga que a macro mede (até ~5 mm no modelo
+#: real, pelo eixo da barra levemente torto num corpo aparado) não decide nada.
+SECAO_SIMETRICA = 0.02  # |d − b| até 2 % da maior medida
 FOLGA_DO_PERFIL = 1.15  # alma reta / mesa: acima disso (ou abaixo do inverso), sem dúvida
 COS_PERPENDICULAR = 0.9  # a linha precisa ficar perto do plano da seção
 
@@ -175,6 +179,17 @@ def _base_e_topo(corpo: ld.CorpoDoModelo, eixo_vertical: str) -> tuple[Ponto, Po
     return (a, b) if a[2] <= b[2] else (b, a)
 
 
+def empate_pelo_perfil(secao: c3.Secao | None) -> bool:
+    """A seção tem duas arestas mais longas iguais (o Simulation escolhe a direção 1 sozinho)?"""
+    if secao is None:
+        return False
+    if secao.forma == c3.FORMA_TUBO_CIRCULAR:
+        return True
+    if secao.forma in (c3.FORMA_L, c3.FORMA_TUBO_RETANGULAR, c3.FORMA_CHEIA):
+        return abs(secao.d - secao.b) <= SECAO_SIMETRICA * max(secao.d, secao.b, 1e-9)
+    return False
+
+
 def _linha_pelo_perfil(
     corpo: ld.CorpoDoModelo, secao: c3.Secao | None, eixo_vertical: str, axial: Ponto
 ) -> Ponto | None:
@@ -263,7 +278,7 @@ def _direcoes_do_pilar(
     # A linha da direção 1.
     linha: Ponto | None = None
     fonte = ""
-    if corpo.direcao_1 is not None:
+    if corpo.direcao_1 is not None and not empate_pelo_perfil(secao):
         folga = corpo.folga_da_direcao_1_mm
         candidata = _unitario(_no_plano(vpb.para_a_planta(corpo.direcao_1, eixo_vertical), axial))
         bruta = _unitario(vpb.para_a_planta(corpo.direcao_1, eixo_vertical))

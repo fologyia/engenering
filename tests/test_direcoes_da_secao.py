@@ -132,6 +132,20 @@ def test_empate_na_macro_usa_os_resultados():
     assert d.sabida and d.linha == ds.LINHA_RESULTADOS and d.d1 == pytest.approx((0, 1, 0))
 
 
+def test_cantoneira_de_abas_iguais_e_empate_mesmo_com_folga_na_macro():
+    # No modelo real (macro v6), cantoneiras L 2½" aparadas saíram com folga de 2,6 a 4,9 mm só
+    # porque o eixo da barra fica levemente torto: o perfil é simétrico e o Simulation escolhe.
+    cantoneira = c3.Secao(c3.FORMA_L, 0.0635, 0.0635, 0.00635, 0.00635)
+    assert ds.empate_pelo_perfil(cantoneira)
+    assert ds.empate_pelo_perfil(c3.Secao(c3.FORMA_TUBO_CIRCULAR, 0.1, 0.1))
+    assert ds.empate_pelo_perfil(c3.Secao(c3.FORMA_TUBO_RETANGULAR, 0.1, 0.1))
+    assert not ds.empate_pelo_perfil(c3.Secao(c3.FORMA_TUBO_RETANGULAR, 0.15, 0.1))
+    assert not ds.empate_pelo_perfil(c3.Secao(c3.FORMA_I, 0.21, 0.134, 0.0064, 0.0102))
+    assert not ds.empate_pelo_perfil(None)
+    _, d, _ = calcular(dados((0.0, 1.0, 0.0)), corpo((1.0, 0.0, 0.0), folga=4.9), secao=cantoneira)
+    assert d.sabida and d.linha == ds.LINHA_RESULTADOS and d.d1 == pytest.approx((0, 1, 0))
+
+
 def test_ordem_dos_elementos_contra_o_peso_proprio():
     d = dados((1.0, 0.0, 0.0))
     # A base escolhida à mão no topo: o PP aponta para cima ao longo do "axial".

@@ -55,8 +55,16 @@ de viga para viga no mesmo modelo, e a API do Simulation não o dá. O programa:
 
 1. **A linha da direção 1**: a macro **v6** mede a seção no SolidWorks — a face plana ao longo da
    barra mais larga é a aresta reta mais longa da seção — e grava a direção e a folga para a segunda
-   (perto de zero é empate: tubo quadrado, cantoneira de abas iguais). Sem a v6: o perfil (U e I com a
+   (abaixo de 1 mm é empate). Seção simétrica — cantoneira de abas iguais, tubo quadrado ou redondo —
+   é empate pelo próprio perfil, qualquer que seja a folga medida (no modelo real, cantoneiras
+   aparadas saíram com 2,6 a 4,9 mm só pelo eixo levemente torto). Sem a v6: o perfil (U e I com a
    alma reta bem mais alta que a mesa, tubo retangular) e a alma da v5.
+
+   **Conferido no modelo real** (macro v6 rodada no SolidWorks em 19/10, 45 barras): o módulo
+   resistente que o próprio Simulation usa, S = |M|/|σ| em torno de cada direção ("Listar forças" ×
+   "Listar tensões" do mesmo estudo), mostra que a direção 1 é a alma em todos os W e U — no pilar
+   W 200 × 31,3, S₁ = 61,2 cm³ (W_y do catálogo) e S₂ = 301,9 cm³ (W_x 301,7); nas vigas U 8",
+   S₂ = 147,5 cm³ — exatamente o que a macro mediu.
 2. **O axial**: pela ponta da base do quadro das fundações (início da lista = Fim 1 embaixo, o axial
    sobe); o peso próprio confere — dentro dos elementos do pilar, a carga do PP aponta para baixo.
 3. **O sentido**: num caso com carga distribuída transversal no pilar (o vento viga a viga põe carga
