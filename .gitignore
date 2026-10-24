@@ -31,3 +31,7 @@ data/*.sqlite3.*
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Ferramentas locais (grafo do código, agentes)
+graphify-out/
+.kimi/
