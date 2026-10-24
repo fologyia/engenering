@@ -166,7 +166,12 @@ cargas que vão para o modelo.
    da viga", elemento a elemento, por `GetBeamForcesForEntities`) e `<estudo>-<caso>-reacoes.csv`
    (formato do "Listar forças resultantes", por `GetReactionForcesAndMomentsWithSelections`), com
    "Caso de carga: <caso>" no cabeçalho, e o quadro dos sensores da Vista de resultados em cada caso
-   e combinação. A macro precisa da referência "SOLIDWORKS Simulation <ano> type library"
+   e combinação. Na **v10**: no SOLIDWORKS do usuário (19/10) o `LoadResultsOfPrimaryLoadCase`
+   devolveu Verdadeiro nos 7 casos e o `Study.Results` veio vazio (o exemplo da API pega o
+   `Study.Results` logo depois); a macro tenta o estudo pego de novo, o estudo ativado e a Vista de
+   resultados aberta de novo, diz o que conferir (duplo clique no caso: aparece o gráfico?; pasta do
+   OneDrive "Sempre manter neste dispositivo"; quantos `.cwr` há na pasta) e grava sempre
+   `<estudo>-diagnostico-da-macro.txt` (versão do SOLIDWORKS, como cada caso veio, itens de fora). A macro precisa da referência "SOLIDWORKS Simulation <ano> type library"
    marcada no editor do VBA (Ferramentas → Referências): sem ela, chamando o Simulation pelo nome,
    o `BeamBodyName` e o `LoadResultsOfPrimaryLoadCase` não responderam (erro 438) no SolidWorks do
    usuário. O quadro dos sensores, se for enviado na página, é reconhecido e fica só para

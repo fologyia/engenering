@@ -32,6 +32,12 @@
 ' macro nao grava os -forcas, so as reacoes e o quadro; os esforcos das vigas saem pelo "Listar
 ' forcas da viga" de cada caso, que o programa le do mesmo jeito.
 '
+' A v10: no SOLIDWORKS do usuario (19/10) o LoadResultsOfPrimaryLoadCase devolveu Verdadeiro em
+' todos os casos e o Study.Results veio vazio (o exemplo da API pega o Study.Results logo depois).
+' A macro tenta o estudo pego de novo, o estudo ativado e a Vista de resultados aberta de novo;
+' se nada der, diz o que conferir. Sempre grava o diagnostico em
+' <estudo>-diagnostico-da-macro.txt, na pasta da peca (mande esse arquivo se der problema).
+'
 ' Robustez: se algo der errado, a macro diz em que etapa parou e por que (arquivo aberto no Excel,
 ' pasta sem permissao...) e fecha os arquivos. Uma viga ou um caso sem resultados fica de fora e e
 ' listado no aviso final; os outros saem normalmente. Se a leitura de todas as vigas juntas nao
@@ -39,7 +45,7 @@
 ' configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v9"
+Const VERSAO_DA_MACRO As String = "v10"
 Const PECA As Long = 1          ' swDocPART
 Const CORPO_SOLIDO As Long = 0  ' swSolidBody
 Const UNIDADES_SI As Long = 0   ' swsUnitSI: N e N.m
@@ -53,6 +59,8 @@ Dim ultimaFalha As String
 Dim falhasDoGerenciador As String
 Dim modelo As SldWorks.ModelDoc2
 Dim jeito As Long  ' 0 a descobrir; 1 corpo selecionado; 2 corpo direto; 3 viga do estudo; -1 nenhum
+Dim comoVieram As String
+Dim diagnostico As String
 
 Sub main()
     Dim swApp As SldWorks.SldWorks
@@ -86,6 +94,8 @@ Sub main()
     Dim motivo As String, pelosCorpos As Boolean, naoVigas As Long, jaClassificou As Boolean
     Dim inicio As Single, marca As Single
     Dim tCarregar As Single, tVigas As Single, tReacoes As Single, tQuadro As Single
+    Dim indiceDoEstudo As Long, semResultados As Long, casosSemResultados As String
+    Dim baseTinhaResultados As Boolean, arquivosCwr As Long, totalDeCasos As Long
 
     On Error GoTo Falha
     ' Um arquivo que ficou aberto numa execucao interrompida trava a proxima: fecha tudo antes.
@@ -95,6 +105,7 @@ Sub main()
     totalProblemas = 0
     ultimaFalha = ""
     falhasDoGerenciador = ""
+    diagnostico = ""
     jeito = 0
     inicio = Timer
 
@@ -131,7 +142,8 @@ Sub main()
         Exit Sub
     End If
     Set gerenteDeEstudos = documentoDoSimulation.StudyManager
-    Set estudo = gerenteDeEstudos.GetStudy(gerenteDeEstudos.ActiveStudy)
+    indiceDoEstudo = gerenteDeEstudos.ActiveStudy
+    Set estudo = gerenteDeEstudos.GetStudy(indiceDoEstudo)
     If estudo Is Nothing Then
         MsgBox "Selecione a aba do estudo do gerenciador de casos de carga e rode de novo.", vbExclamation
         Exit Sub
@@ -153,6 +165,9 @@ Sub main()
     combinacoes = NomesDoGerenciador(gerenciador, "combinacoes")
     sensores = NomesDoGerenciador(gerenciador, "sensores")
     Tentar gerenciador, "resultados"
+    etapa = "conferir os resultados do estudo " & nomeDoEstudo
+    baseTinhaResultados = TemResultados(estudo)
+    arquivosCwr = ContarArquivos(pasta, "*.cwr")
 
     etapa = "ler os corpos da peca"
     Set corpos = CreateObject("Scripting.Dictionary")
@@ -200,12 +215,16 @@ Sub main()
         marca = Timer
         If Not CarregarCaso(gerenciador, caso) Then
             Problema caso & " (" & ultimaFalha & ")"
+            diagnostico = diagnostico & "  " & caso & ": " & ultimaFalha & vbCrLf
             tCarregar = tCarregar + (Timer - marca)
         Else
-            Set resultados = estudo.Results
+            Set resultados = ResultadosDoCaso(gerenteDeEstudos, indiceDoEstudo, estudo, gerenciador, caso)
+            diagnostico = diagnostico & "  " & caso & ": resultados por " & comoVieram & vbCrLf
             tCarregar = tCarregar + (Timer - marca)
             If resultados Is Nothing Then
-                Problema caso & " (sem resultados: Executar no gerenciador antes)"
+                semResultados = semResultados + 1
+                If casosSemResultados <> "" Then casosSemResultados = casosSemResultados & ", "
+                casosSemResultados = casosSemResultados & caso
             Else
                 marca = Timer
                 If jeito = 0 Then
@@ -318,7 +337,18 @@ Sub main()
         If naoVigas > 0 Then texto = texto & "; " & naoVigas & " corpo(s) que nao sao viga no estudo ficaram de fora"
         texto = texto & "."
     End If
-    If casosExportados = 0 And ultimaFalha <> "" Then
+    totalDeCasos = UBound(casos) - LBound(casos) + 1
+    If semResultados > 0 And semResultados = totalDeCasos Then
+        ' Curto: a caixa de mensagem corta perto de 1024 caracteres (o resto vai no diagnostico).
+        texto = texto & vbCrLf & vbCrLf & "NENHUM CASO ENTREGOU OS RESULTADOS (o gerenciador carregou " & _
+            "cada um, mas o Simulation devolveu vazio). Confira: 1) Vista de resultados, duplo clique no " & _
+            CStr(casos(LBound(casos))) & ": sem grafico, Executar de novo no gerenciador e esperar " & _
+            "terminar; 2) peca no OneDrive: pasta > Sempre manter neste dispositivo (.cwr na pasta: " & _
+            arquivosCwr & "); 3) enquanto isso, Listar forcas resultantes e Listar forcas da viga em " & _
+            "cada caso (PP-reacoes.csv, PP-forcas.csv)."
+    ElseIf semResultados > 0 Then
+        texto = texto & vbCrLf & vbCrLf & "Carregaram, mas sem resultados: " & casosSemResultados & "."
+    ElseIf casosExportados = 0 And ultimaFalha <> "" Then
         texto = texto & vbCrLf & vbCrLf & "Nenhuma viga deu esforcos. Ultima falha: " & ultimaFalha
     End If
     If casosExportados = 0 And falhasDoGerenciador <> "" Then
@@ -335,8 +365,26 @@ Sub main()
             "arquivos junto com os -reacoes desta macro."
     End If
     texto = texto & vbCrLf & vbCrLf & "Envie os arquivos -forcas e -reacoes na pagina Esforcos do modelo."
+    texto = texto & vbCrLf & "Diagnostico: " & NomeDeArquivo(nomeDoEstudo & "-diagnostico-da-macro") & ".txt"
+
+    GravarDiagnostico pasta & NomeDeArquivo(nomeDoEstudo & "-diagnostico-da-macro") & ".txt", _
+        "Mecanica Toolkit - exportar_casos_de_carga " & VERSAO_DA_MACRO & vbCrLf & _
+        "SOLIDWORKS " & Revisao(swApp) & vbCrLf & _
+        "Peca: " & swModel.GetPathName & vbCrLf & _
+        "Estudo: " & nomeDoEstudo & " (indice " & indiceDoEstudo & ")" & vbCrLf & _
+        "Estudo com resultados antes de carregar os casos: " & IIf(baseTinhaResultados, "sim", "nao") & vbCrLf & _
+        "Arquivos .cwr na pasta da peca: " & arquivosCwr & vbCrLf & _
+        "Gerenciador: " & IIf(falhasDoGerenciador = "", "abriu e mostrou a Vista de resultados", falhasDoGerenciador) & vbCrLf & _
+        "Vigas: " & totalDeVigas & IIf(pelosCorpos, " pelos corpos da peca (" & motivo & ")", " pela lista do estudo") & _
+        "; jeito " & jeito & vbCrLf & _
+        "Casos (" & totalDeCasos & ", sem resultados " & semResultados & "):" & vbCrLf & diagnostico & _
+        "Itens de fora: " & IIf(problemas = "", "nenhum", problemas) & vbCrLf & _
+        "Ultima falha: " & IIf(ultimaFalha = "", "nenhuma", ultimaFalha) & vbCrLf & _
+        "Tempo: " & Segundos(Timer - inicio)
     If totalProblemas > 0 Then
         texto = texto & vbCrLf & vbCrLf & "ATENCAO: " & totalProblemas & " item(ns) ficaram de fora: " & problemas
+    End If
+    If totalProblemas > 0 Or semResultados > 0 Then
         MsgBox texto, vbExclamation
     Else
         MsgBox texto, vbInformation
@@ -387,6 +435,99 @@ Sub Tentar(gerenciador As CosmosWorksLib.CWLoadCaseManager, acao As String)
         falhasDoGerenciador = falhasDoGerenciador & IIf(acao = "abrir", "OpenLoadCaseManager", _
             "ShowResultsViewTab") & " devolveu Falso; "
     End If
+    Err.Clear
+End Sub
+
+Function ResultadosDoCaso(gerente As CosmosWorksLib.CWStudyManager, indice As Long, _
+    estudo As CosmosWorksLib.CWStudy, gerenciador As CosmosWorksLib.CWLoadCaseManager, _
+    caso As String) As CosmosWorksLib.CWResults
+    ' Como no exemplo da API: o Study.Results logo depois do LoadResultsOfPrimaryLoadCase. Se vier
+    ' vazio, o estudo pego de novo, o estudo ativado e, por ultimo, a Vista de resultados aberta
+    ' de novo com o caso carregado outra vez. comoVieram diz qual deu (ou que nenhum deu).
+    Dim r As CosmosWorksLib.CWResults, outro As CosmosWorksLib.CWStudy, ok As Boolean
+    On Error Resume Next
+    Set ResultadosDoCaso = Nothing
+    Set r = Nothing
+    Set r = estudo.Results
+    If Not r Is Nothing Then
+        comoVieram = "Study.Results"
+        Set ResultadosDoCaso = r
+        Exit Function
+    End If
+    Err.Clear
+    Set outro = Nothing
+    Set outro = gerente.GetStudy(indice)
+    If Not outro Is Nothing Then Set r = outro.Results
+    If Not r Is Nothing Then
+        comoVieram = "o estudo pego de novo"
+        Set ResultadosDoCaso = r
+        Exit Function
+    End If
+    Err.Clear
+    gerente.ActiveStudy = indice
+    Err.Clear
+    Set outro = Nothing
+    Set outro = gerente.GetStudy(indice)
+    If Not outro Is Nothing Then Set r = outro.Results
+    If Not r Is Nothing Then
+        comoVieram = "o estudo ativado"
+        Set ResultadosDoCaso = r
+        Exit Function
+    End If
+    Err.Clear
+    ok = gerenciador.ShowResultsViewTab()
+    DoEvents
+    ok = False
+    ok = gerenciador.LoadResultsOfPrimaryLoadCase(caso)
+    DoEvents
+    Set outro = Nothing
+    Set outro = gerente.GetStudy(indice)
+    If Not outro Is Nothing Then Set r = outro.Results
+    If r Is Nothing Then Set r = estudo.Results
+    If Not r Is Nothing Then
+        comoVieram = "a Vista de resultados aberta de novo"
+        Set ResultadosDoCaso = r
+    Else
+        comoVieram = "nenhum: Study.Results, o estudo pego de novo, o estudo ativado e a Vista de " & _
+            "resultados aberta de novo vieram vazios" & _
+            IIf(ok, "", " (o segundo LoadResultsOfPrimaryLoadCase devolveu Falso)")
+    End If
+    Err.Clear
+End Function
+
+Function TemResultados(estudo As CosmosWorksLib.CWStudy) As Boolean
+    On Error Resume Next
+    TemResultados = False
+    TemResultados = Not (estudo.Results Is Nothing)
+    Err.Clear
+End Function
+
+Function ContarArquivos(onde As String, padrao As String) As Long
+    Dim nome As String, n As Long
+    On Error Resume Next
+    n = 0
+    nome = Dir(onde & padrao)
+    Do While nome <> ""
+        n = n + 1
+        nome = Dir()
+    Loop
+    ContarArquivos = n
+End Function
+
+Function Revisao(swApp As SldWorks.SldWorks) As String
+    On Error Resume Next
+    Revisao = "?"
+    Revisao = swApp.RevisionNumber()
+End Function
+
+Sub GravarDiagnostico(caminho As String, relato As String)
+    ' Nao para a macro se nao der para gravar (pasta sincronizando, arquivo aberto).
+    Dim f As Integer
+    On Error Resume Next
+    f = FreeFile
+    Open caminho For Output As #f
+    Print #f, relato
+    Close #f
     Err.Clear
 End Sub
 
