@@ -837,6 +837,11 @@ with st.container(border=True), secao_protegida("7. Verificação das barras"):
 # ============================================================ 8. fundações
 with st.container(border=True), secao_protegida("8. Quadro de cargas para as fundações"):
     st.subheader("8. Quadro de cargas para as fundações", help=AJUDA["sec_fundacoes"])
+    st.page_link(
+        "app_pages/reacoes_nas_bases.py",
+        label="Mandar ao engenheiro civil: força e momento de cada pé, caso a caso (Excel)",
+        icon=":material/foundation:",
+    )
     quadro = qf.montar_quadro(dados)
     for item in quadro.conferencia:
         MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])

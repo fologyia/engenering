@@ -189,11 +189,14 @@ PASSOS: tuple[Passo, ...] = (
         "Esforços do modelo",
         "app_pages/esforcos_modelo.py",
         "—",
-        "verificação das barras, quadro das fundações, placas de base (registros)",
+        "verificação das barras, quadro das fundações, placas de base (registros); Excel das "
+        "reações nas bases para o engenheiro civil",
         (
             "Na tabela das barras: Aplicar as sugestões; confira tipo, perfil e Lx/Ly/Lb.",
             "Veja o pior caso de cada barra e a verificação; ajuste o modelo se algo não passa.",
             "Registre a verificação, o quadro das fundações e as placas no projeto.",
+            "Na página Reações nas bases, baixe o Excel com a força e o momento de cada pé, caso a "
+            "caso, para quem projeta a fundação.",
         ),
         "Nenhuma barra sem dados; o que não passa tem motivo entendido.",
     ),

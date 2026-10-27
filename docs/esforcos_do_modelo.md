@@ -380,6 +380,35 @@ nem majorar** (critério Anglo, item 5.9: quem projeta a fundação faz as combi
   reação. Conferido num pilar em balanço: a fundação recebe q·L e o momento (L²/2)·(ẑ × q), com o
   Fim 1 na base ou no topo. Os pilares sem a direção ficam vazios, e o motivo aparece.
 
+## Reações nas bases para o engenheiro civil (`core/reacoes_nas_bases.py`)
+
+Página própria (**Modelo SolidWorks › Reações nas bases**; atalho na seção 8): de cada pé, em cada
+caso importado (PP, PE, SC, W0, W90…), as três forças e os três momentos que a estrutura faz na
+fundação — **característicos, sem combinar nem majorar** (Anglo 5.9): o engenheiro civil combina.
+
+* **De onde vem cada número**, caso a caso: (1) a reação em cada apoio da macro (`-apoios.csv`), se
+  os apoios do caso somam a reação total dele; (2) senão, a força na base do pilar levada aos eixos
+  do modelo pela direção da seção (`ds.DirecoesDaSecao.na_fundacao`). O pé sem nenhuma das duas fica
+  de fora com o motivo (nunca uma célula vazia que pareça zero).
+* **Apoio × pilar**: pela posição (esqueleto e nós com posição, macro v13+) ou, sem ela (macro
+  v12), **pelos valores** — o único apoio cuja compressão e cortante batem com a base do pilar em
+  todos os casos da macro (`_ligar_pelos_valores`).
+* **Direção da seção pela macro** (`_direcao_pela_macro`): sem a direção da página (vento só nos
+  nós do topo, sem carga ao longo do pilar), a cortante na base (V₁, V₂) gira até ser a reação
+  horizontal no pé, nos casos da macro (mínimos quadrados no ângulo, só casos com cortante ≥ 0,05 kN
+  e ≥ 10 % da compressão; o axial também tem de bater). Assim, os casos com os apoios de outra
+  rodada saem pela base dos pilares. No banco real (27/10): PP, PE, SC, W0 e W90 pela macro; W180 e
+  W270 pelos pilares — o W180 fecha com a reação total (1,82 kN).
+* **Conferência**: a soma dos pés de cada caso contra a reação total do caso.
+* **Pendências** (`pendencias`): os erros do painel "Antes de verificar" que mudam as reações (não
+  contam a grade no plano nem o eixo forte; os do arquivo de forças só se algum pé do caso saiu da
+  base do pilar). Com pendência, o Excel sai **PRELIMINAR** e a página lista o que corrigir.
+* **Eixos**: da fundação (X e Y na planta, Z para cima: Y = −Z do SolidWorks) ou os do SolidWorks.
+* **Excel**: Leia-me (nota da Anglo, convenção, conferência, avisos, pendências), Casos (natureza,
+  γ e ψ da NBR 8800 — ψ só nas variáveis), Locação (coordenadas e engastado/articulado), Reações por
+  pé (pé × caso, com filtro: Fx…Mz, N, H, M horizontal, descrição, pilar e de onde veio) e Resumo
+  por pé (maior compressão, arrancamento, H e M, com o caso).
+
 ## Placas de base dos pilares (`core/placa_base_pilares.py`)
 
 Uma **placa padrão** para todos os pilares (gravada em `esforcos_do_modelo["placa"]`): comprimento N
@@ -408,6 +437,22 @@ linha tracionada (vazio = N/2 − 50 mm).
   passou no memorial). A ancoragem no concreto (cone, comprimento) e o bloco ficam para a fundação.
 
 ## Testes
+
+`tests/test_nucleo_esforcos_ponta_a_ponta.py` prova o núcleo de ponta a ponta com o teste01 do
+usuário resolvido como **pórtico espacial** (`tests/portico_3d_teste01.py`: rigidez direta, 12 graus
+de liberdade por elemento, 4 elementos por barra, PP com g = 10,5, SC 1,5 kN/m no contorno e os
+quatro ventos nos nós do topo). Os arquivos saem no formato do SolidWorks e da macro (forças,
+reações, apoios, fixações, esqueleto) e passam pela leitura, pelo projeto, pelos quadros, pela
+envoltória (contra Σ γ·N à mão) e pelo painel: tudo certo primeiro; depois cada erro de envio — forças
+de outro caso (W0 com o W90, W180 com o W0, SC com o PP), estudo base, gravidade no vento, estudo
+majorado, nomes trocados, apoios de outra rodada, eixo vertical, B₂, o W270 real com o valor do vento
+em X — e o painel tem de apontar o problema certo, com o caso certo; dados estragados ao acaso nunca
+quebram o painel, e uma conferência que falha não derruba as outras.
+
+`tests/test_reacoes_nas_bases.py`: com o mesmo pórtico, cada pé em cada caso tem de ser a reação do
+cálculo (forças e momentos) pela macro, pela base do pilar (direção da seção dada ou tirada da
+macro), com os apoios v12 sem posição ligados pelos valores, com apoios de outra rodada; eixos da
+fundação × SolidWorks, casos com γ e ψ, Excel, pendências (só as que mudam as reações) e a página.
 
 `tests/test_travamentos.py` (pontos mais próximos entre barras, pilar travado numa direção, com e
 sem a orientação, balanço, viga com secundárias e pilar no meio, mão-francesa, sobra curta,
