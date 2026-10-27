@@ -23,13 +23,15 @@ REACOES = {
 }
 
 
-def _pontos(compressao: float, primeiro: int = 1) -> tuple[em.PontoDeEsforco, ...]:
+def _pontos(
+    compressao: float, primeiro: int = 1, cortante: float = 0.0
+) -> tuple[em.PontoDeEsforco, ...]:
     """Pilar de dois elementos com a base no início (a ponta mais comprimida)."""
     return (
-        em.PontoDeEsforco(str(primeiro), "1", -compressao, 0, 0, 0, 0, 0),
-        em.PontoDeEsforco(str(primeiro), "2", -compressao * 0.9, 0, 0, 0, 0, 0),
-        em.PontoDeEsforco(str(primeiro + 1), "1", -compressao * 0.9, 0, 0, 0, 0, 0),
-        em.PontoDeEsforco(str(primeiro + 1), "2", -compressao * 0.8, 0, 0, 0, 0, 0),
+        em.PontoDeEsforco(str(primeiro), "1", -compressao, cortante, 0, 0, 0, 0),
+        em.PontoDeEsforco(str(primeiro), "2", -compressao * 0.9, cortante, 0, 0, 0, 0),
+        em.PontoDeEsforco(str(primeiro + 1), "1", -compressao * 0.9, cortante, 0, 0, 0, 0),
+        em.PontoDeEsforco(str(primeiro + 1), "2", -compressao * 0.8, cortante, 0, 0, 0, 0),
     )
 
 
@@ -44,13 +46,14 @@ def dados(
     casos = {}
     for codigo, r in reacoes.items():
         por_pilar = compressao.get(codigo, r[1] / 2)
+        cortante = (r[0] + r[2]) / 2  # cada pilar leva metade do vento, com o sinal dele
         casos[codigo] = em.CasoImportado(
             codigo,
             "Análise estática 1",
             f"{codigo}-forcas.csv",
             "",
             "",
-            {p: _pontos(por_pilar, primeiro_elemento.get(codigo, 1)) for p in PILARES},
+            {p: _pontos(por_pilar, primeiro_elemento.get(codigo, 1), cortante) for p in PILARES},
             reacoes=em.Reacoes(modelo=r),
             arquivo_reacoes=f"{codigo}-reacoes.csv",
         )
@@ -202,7 +205,10 @@ def test_painel_na_pagina_e_o_botao_de_trocar_os_nomes(banco_com_projeto):
     trocado = {**REACOES, "W90": REACOES["W270"], "W270": REACOES["W90"]}
     projeto = obter_projeto_ativo()
     projeto["plano_de_cargas"] = pc.para_dicionario(plano())
-    projeto["esforcos_do_modelo"] = em.para_dicionario(dados(trocado))
+    # Com o B₂ informado, o painel não pede a segunda ordem e pode dizer "Tudo confere".
+    projeto["esforcos_do_modelo"] = em.para_dicionario(
+        em.com_parametros(dados(trocado), {"Pilar": em.ParametrosDoTipo(b2=1.1)})
+    )
     salvar_projeto(projeto, motivo="teste")
     t = abrir()
     assert not sem_ajuda(t), sorted(sem_ajuda(t))

@@ -321,9 +321,20 @@ ESTILO_DO_ACHADO = {
     dm.NIVEL_ATENCAO: (":material/warning:", "orange", "Para conferir"),
     dm.NIVEL_INFO: (":material/info:", "blue", "Para saber"),
 }
+#: O painel guarda a leitura do modelo para a seção 3 (``None`` se o painel não rodou).
+diagnostico_do_painel: dm.Diagnostico | None = None
 with st.container(border=True), secao_protegida("Antes de verificar"):
     apoios_salvos = am.do_projeto(projeto)
-    diagnostico = dm.diagnosticar(dados, plano, apoios_salvos)
+    diagnostico = dm.diagnosticar(
+        dados,
+        plano,
+        apoios_salvos,
+        geometria=geometria,
+        leituras=leituras,
+        ler_o_modelo=True,
+        peso_da_estrutura_kN=lm.peso_da_estrutura_kN(lm.resumir(lm.lista_do_projeto(projeto))),
+    )
+    diagnostico_do_painel = diagnostico
     st.subheader("Antes de verificar: o que conferir", help=AJUDA["sec_diagnostico"])
     if diagnostico.tudo_certo:
         st.success(
@@ -473,11 +484,28 @@ with st.container(border=True), secao_protegida("3. Conferência das reações")
             key="em_macro",
             help=AJUDA["btn_macro_esqueleto"],
         )
-    for achado in ld.diagnosticar(
-        dados, plano, geometria, leituras, peso_da_estrutura_kN=peso_da_lista
-    ):
+    # Os problemas da leitura (corrigir e conferir) estão no painel do início, com o passo a passo;
+    # aqui ficam os informativos. Sem o painel, tudo aparece aqui.
+    if diagnostico_do_painel is not None:
+        achados_da_leitura = list(diagnostico_do_painel.leitura)
+        no_painel = [a for a in achados_da_leitura if a.nivel in (pc.NIVEL_ERRO, pc.NIVEL_ATENCAO)]
+    else:
+        achados_da_leitura = ld.diagnosticar(
+            dados, plano, geometria, leituras, peso_da_estrutura_kN=peso_da_lista
+        )
+        no_painel = []
+    for achado in achados_da_leitura:
+        if achado in no_painel:
+            continue
         MOSTRAR.get(achado.nivel, st.success)(
             f"**{achado.titulo}** — {achado.texto}", icon=ICONES[achado.nivel]
+        )
+    if no_painel:
+        st.caption(
+            f":material/arrow_upward: {len(no_painel)} ponto(s) da leitura do modelo para corrigir "
+            "ou conferir estão no painel “Antes de verificar”, no início da página: "
+            + "; ".join(a.titulo for a in no_painel)
+            + "."
         )
     with st.expander("Leitura barra a barra"):
         st.dataframe(

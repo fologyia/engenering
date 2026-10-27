@@ -33,6 +33,15 @@
         "set MECANICA_TOOLKIT_DB=tmp\\demo\\projetos_demo.sqlite3&& .venv\\Scripts\\streamlit.exe run app.py --server.headless true --server.port 8503"
       ],
       "port": 8503
+    },
+    {
+      "name": "mecanica-toolkit-copia",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set MECANICA_TOOLKIT_DB=tmp\\copia\\projetos_industriais.sqlite3&& .venv\\Scripts\\streamlit.exe run app.py --server.headless true --server.port 8504"
+      ],
+      "port": 8504
     }
   ]
 }

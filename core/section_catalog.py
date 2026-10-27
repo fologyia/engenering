@@ -18,6 +18,7 @@ uso, e o programa respeita isso em vez de recusar em silêncio.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections.abc import Iterable, Mapping
@@ -215,7 +216,26 @@ def catalogos_de_referencia() -> list[Path]:
     return sorted(PASTA_DADOS.glob(PADRAO_REFERENCIA))
 
 
+#: (arquivo, editável) → (resumo do conteúdo quando foi lido, perfis lidos). A página pede o
+#: catálogo centenas de vezes por tela: os perfis só são montados de novo quando o arquivo muda
+#: (pelo conteúdo, não pela data — duas gravações no mesmo instante não enganam).
+_LIDOS: dict[tuple[Path, bool], tuple[str, dict[str, PerfilCadastrado]]] = {}
+
+
 def _carregar(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]:
+    try:
+        versao = hashlib.sha1(caminho.read_bytes()).hexdigest()
+    except OSError:  # ausente: catálogo vazio; ilegível: o erro de sempre
+        return _ler_perfis(caminho, editavel=editavel)
+    guardado = _LIDOS.get((caminho, editavel))
+    if guardado is not None and guardado[0] == versao:
+        return dict(guardado[1])
+    resultado = _ler_perfis(caminho, editavel=editavel)
+    _LIDOS[(caminho, editavel)] = (versao, resultado)
+    return dict(resultado)
+
+
+def _ler_perfis(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]:
     documento = _ler_arquivo(caminho)
     origem_padrao = str(documento.get("origem") or caminho.stem)
     resultado: dict[str, PerfilCadastrado] = {}

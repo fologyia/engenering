@@ -72,8 +72,24 @@ Logo depois do envio dos arquivos, a página junta todas as conferências num pa
 menos, cada problema num cartão com **o que está errado** e **como corrigir** (passo a passo, em
 linguagem simples), e o que já confere embaixo:
 
-- **Forças que não são do caso** — a soma das bases dos pilares não bate com a reação do caso; se bate
-  com a soma de todos os casos, o arquivo foi salvo com o estudo base (o PP-forcas do usuário, 24/10).
+- **Forças que não são do caso** — o erro mais comum: salvar o "Listar forças da viga" sem trocar o
+  caso no gerenciador. O programa confere o arquivo de forças de cada caso de quatro jeitos, todos
+  independentes da orientação da seção, e diz de que caso os números são quando dá:
+  - *mesmo arquivo em dois casos* (os mesmos números, reações diferentes): o caso cujas outras
+    conferências fecham é o dono; o outro foi salvo errado;
+  - *vertical*: a compressão nas bases dos pilares contra a reação vertical — se bate com a reação de
+    outro caso, diz qual; com a soma de todos, foi salvo com o estudo base (o PP-forcas, 24/10);
+  - *pé de cada pilar*: a compressão e a cortante na base de cada pilar contra a reação no pé dele (o
+    -apoios.csv da macro; com o esqueleto, cada pilar no seu apoio, desde que só ele chegue ali; sem o
+    esqueleto, os conjuntos de tamanhos). Batendo com os apoios de outro caso, diz qual. Sem o pé de
+    cada pilar, um vento e o do lado oposto (W0 × W180) têm as mesmas forças em tamanho: o espelho
+    não conta como prova (falso alarme visto no banco real, 26/10);
+  - *tombamento*: com o esqueleto, o lado comprimido mostra para onde as forças empurram
+    (Σ N·posição do pé); contra a reação do caso, acha forças de vento com a direção de outro caso;
+  - *cortante*: os pilares não levam menos que a reação horizontal quando todos os apoios são pés de
+    pilar (confirmado pelos apoios da macro → erro; sem eles → para conferir, pode haver travamento
+    na estrutura existente). Com a direção pelo tombamento, diz se é a mesma direção com outro valor
+    — o W270 do usuário (26/10): vento em −Z com 1,82 kN em vez de 2,18 kN, de uma rodada anterior.
 - **Plano com cargas de exemplo** — linhas da grade de eixos ("N1 · eixo A…") que o modelo não tem:
   botão **Tirar do plano as cargas da grade**.
 - **Ventos com os nomes trocados** — cada caso do estudo é, em direção e valor, um caso do programa
@@ -87,6 +103,14 @@ linguagem simples), e o que já confere embaixo:
   (um guarda-corpo numa borda que no modelo é o acesso).
 - **Apoios de outra rodada ou sem posição**, **falta o arquivo de reações**, **casos do plano sem
   resultado** (informação) e os erros do estudo (majorado, eixo vertical, sem fixação).
+- **Os problemas da leitura do modelo** (`ld.diagnosticar`: gravidade esquecida num caso, PP mais
+  pesado que o aço, eixo forte trocado, pontas soltas, B₂…), os de corrigir e os de conferir, com o
+  passo a passo dos mais comuns; a seção 3 fica com os informativos e diz quais foram para o painel.
+  O que outra conferência do painel já disse não se repete (eixo vertical, malha, estudo sem carga).
+
+Robustez: cada conferência roda separada (`_protegido`). Uma que falhe com um dado fora do esperado
+vira um cartão "Não deu para conferir", com a referência da ocorrência, e as outras rodam; enquanto
+isso, o painel não diz "Tudo confere".
 
 Macro **v16** (`exportar_casos_de_carga`): com as vigas selecionadas na árvore do estudo do Simulation,
 lê as forças de cada viga pela seleção, como o exemplo oficial da API ("Get Forces and Stresses for

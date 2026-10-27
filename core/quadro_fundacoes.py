@@ -106,7 +106,10 @@ def montar_quadro(dados: em.EsforcosDoModelo) -> QuadroDeFundacoes:
         cfg = dados.membros.get(nome, em.ConfiguracaoDoMembro())
         if cfg.tipo != "Pilar":
             continue
-        pontos_por_caso = {k: c.membros[nome] for k, c in dados.casos.items() if nome in c.membros}
+        # Sem pontos num caso (arquivo gravado incompleto), o pilar fica fora desse caso.
+        pontos_por_caso = {
+            k: c.membros[nome] for k, c in dados.casos.items() if c.membros.get(nome)
+        }
         base, origem = ponta_da_base(pontos_por_caso, cfg.base)
         cargas: list[CargaNaBase] = []
         if base is not None:

@@ -239,7 +239,12 @@ def test_o_que_o_programa_entendeu_sem_o_esqueleto(banco_com_projeto):
     assert metricas["Pontas soltas"] == "0"
     assert any("Sem o esqueleto do modelo" in c.value for c in t.caption)
     assert t.get("download_button")  # a macro, para gerar o esqueleto
-    assert any("Segunda ordem global" in w.value for w in t.warning)
+    # Os problemas da leitura vão para o painel "Antes de verificar", com o passo a passo.
+    assert any("o B₂ dos pilares está em 1,00" in m.value for m in t.markdown)
+    assert any(
+        "painel “Antes de verificar”" in c.value and "Segunda ordem global" in c.value
+        for c in t.caption
+    )
     barras = next(d.value for d in t.dataframe if "Tipo sugerido" in d.value.columns)
     assert list(barras["Tipo sugerido"]) == ["Pilar", "Viga", "Pilar"]
 
@@ -256,7 +261,8 @@ def test_com_o_esqueleto_confere_o_peso_e_aplica_as_sugestoes(banco_com_projeto)
     assert not sem_ajuda(t), sorted(sem_ajuda(t))
     assert any("3 das 3 barras com o corpo achado" in c.value for c in t.caption)
     # O PP do exemplo (9 kN) é quase o dobro do aço dos três corpos (4,8 kN).
-    assert any("PP mais pesado que a estrutura" in e.value for e in t.error)
+    assert any("PP mais pesado que a estrutura" in c.value for c in t.caption)
+    assert any("o aço de todos os corpos do esqueleto pesa" in m.value for m in t.markdown)
     assert not any("Monte a Lista de material" in i.value for i in t.info)
     t.button(key="em_aplicar_sugestoes").click().run()
     assert not t.exception, [str(e.value) for e in t.exception]

@@ -143,8 +143,13 @@ AJUDA: dict[str, str] = {
     "btn_csv_quadro": "O quadro completo em CSV (abre no Excel).",
     "sec_diagnostico": (
         "O programa confere todos os arquivos juntos — o plano de cargas, as reações, as forças, os "
-        "apoios — e diz aqui, antes da verificação, o que está errado e como corrigir, do mais grave "
-        "ao menos. Os que têm botão se corrigem no próprio programa."
+        "apoios e a leitura do modelo — e diz aqui, antes da verificação, o que está errado e como "
+        "corrigir, do mais grave ao menos. Os que têm botão se corrigem no próprio programa.\n\n"
+        "O erro mais comum é salvar as forças com outro caso carregado no gerenciador. Por isso o "
+        "programa confere cada arquivo de forças contra a reação do mesmo caso: a soma vertical, a "
+        "reação no pé de cada pilar (arquivos de apoios da macro), para que lado o vento empurra "
+        "(o lado comprimido, com o esqueleto) e a cortante dos pilares. Quando os números são de "
+        "outro caso, ele diz qual."
     ),
     "res_diagnostico": (
         "Para corrigir: o resultado está errado até corrigir. Para conferir: pode estar errado. "
