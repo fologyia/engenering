@@ -213,3 +213,34 @@ def test_csv_das_cargas():
     texto = cpm.csv_das_cargas(d, {"V0": "Viga-1(V0)"}).decode("utf-8-sig")
     assert texto.startswith("Caso;Viga (corpo no SolidWorks);Viga no Simulation;kN/m")
     assert "SC;V0;Viga-1(V0);" in texto and texto.count("\r\n") == 4
+
+
+# ------------------------------------------------------------------ grade × esqueleto
+def test_grade_de_eixos_diferente_do_piso_do_esqueleto_trava_o_envio():
+    """A grade de exemplo (12 × 3 m) contra o piso de 6 × 3 m do esqueleto: o dobro da área — o
+    envio das cargas da grade fica travado; a grade com a planta do modelo passa."""
+    chapas = cpm.chapas_do_piso(piso_6x3(), "Y")[0]
+    motivo = cpm.grade_confere_com_o_modelo(36.0, 1, chapas)
+    assert "36,00 m²" in motivo and "18,00 m²" in motivo and "chapas do esqueleto" in motivo
+    assert cpm.grade_confere_com_o_modelo(18.0, 1, chapas) == ""
+    assert cpm.grade_confere_com_o_modelo(9.0, 2, chapas) == ""  # dois níveis de 9 m²
+    assert (
+        cpm.grade_confere_com_o_modelo(36.0, 1, []) == ""
+    )  # sem chapa de piso: não há com o que comparar
+
+
+def test_linhas_da_grade_que_sobraram_no_plano_saem_e_as_outras_ficam():
+    """O PE do usuário (24/10): as linhas da grade de exemplo (21,6 kN em barras "N1 · eixo A…")
+    ficaram no plano e o guarda-corpo das bordas foi somado em cima. Tirar a grade deixa só o resto."""
+    grade = pc.CargaDoModelo(
+        "N1 · eixo A · 1–2; N1 · eixo B · 1–2", 0.585, "kN/m", "Z (vertical)", "", 4, 6.0
+    )
+    borda = pc.CargaDoModelo(
+        "Gerenciamento de cantos1[5]", 0.36, "kN/m", "Z (vertical)", "", 1, 1.0
+    )
+    plano = pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("PE", cargas=[grade, borda]))
+    plano = pc.com_acao(plano, pc.nova_acao("SC", cargas=[borda]))
+    assert cpm.cargas_da_grade_no_plano(plano) == [("PE", grade)]
+    limpo = cpm.sem_cargas_da_grade(plano)
+    assert limpo.acao("PE").cargas == (borda,) and limpo.acao("SC").cargas == (borda,)
+    assert cpm.cargas_da_grade_no_plano(limpo) == []

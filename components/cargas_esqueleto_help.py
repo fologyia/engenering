@@ -79,6 +79,10 @@ AJUDA: dict[str, str] = {
         "planilha para o SolidWorks."
     ),
     "btn_gravar": "Grava só os dados desta página no projeto ativo.",
+    "btn_tirar_grade": (
+        "Tira do plano de cargas as linhas que a grade de eixos desta página mandou antes (barras "
+        '"N1 · eixo A…" que o seu modelo não tem). As outras cargas das mesmas ações ficam.'
+    ),
     "btn_enviar": (
         "Grava os dados e substitui no Plano de cargas os casos que esta página gera (PE, SC, EQ, "
         "EO, IM e a temperatura), além de pôr o acréscimo de ligações na gravidade do PP."

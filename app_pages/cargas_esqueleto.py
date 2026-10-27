@@ -532,6 +532,40 @@ with st.container(border=True), secao_protegida("4. Gravar e enviar ao plano de 
             "esta página os substitui.",
             icon=":material/warning:",
         )
+    # Com o esqueleto no projeto, a grade só vale se for a mesma planta (correto acima do
+    # jeito: a grade de exemplo mandava 24 vezes a sobrecarga de uma plataforma pequena).
+    grade_diferente = ""
+    if geometria.corpos:
+        grade_diferente = cpm.grade_confere_com_o_modelo(
+            entrada.area_planta_m2,
+            len(entrada.niveis),
+            cpm.chapas_do_piso(geometria, esforcos.eixo_vertical)[0],
+        )
+    if grade_diferente:
+        st.error(grade_diferente, icon=":material/block:")
+    da_grade = cpm.cargas_da_grade_no_plano(plano) if geometria.corpos else []
+    if da_grade:
+        casos_da_grade = sorted({codigo for codigo, _ in da_grade})
+        total_da_grade = sum(abs(c.resultante or 0.0) for _, c in da_grade)
+        texto_total = f"{total_da_grade:.2f}".replace(".", ",")
+        st.warning(
+            f"O plano de cargas ainda tem {len(da_grade)} linha(s) da grade de eixos em "
+            f"{', '.join(casos_da_grade)} ({texto_total} kN), em barras que o esqueleto "
+            'do modelo não tem ("N1 · eixo A…"): sobra de um envio antigo, carga que o modelo '
+            "não recebe.",
+            icon=":material/warning:",
+        )
+        if st.button(
+            "Tirar do plano as cargas da grade",
+            icon=":material/delete_sweep:",
+            key="ce_tirar_grade",
+            help=AJUDA["btn_tirar_grade"],
+        ) and gravar_campos_do_projeto(
+            {"plano_de_cargas": pc.para_dicionario(cpm.sem_cargas_da_grade(plano))},
+            "Cargas da grade de eixos tiradas do plano de cargas",
+        ):
+            st.session_state["ce_versao"] = versao + 1
+            st.rerun()
     colunas = st.columns(3)
     if colunas[0].button(
         "Gravar e enviar ao plano",
@@ -540,6 +574,7 @@ with st.container(border=True), secao_protegida("4. Gravar e enviar ao plano de 
         key="ce_enviar",
         help=AJUDA["btn_enviar"],
         width="stretch",
+        disabled=bool(grade_diferente),
     ) and gravar_campos_do_projeto(
         {
             "cargas_do_esqueleto": ce.para_dicionario(entrada),

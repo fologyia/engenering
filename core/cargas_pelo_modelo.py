@@ -26,6 +26,7 @@ Sem Streamlit.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
@@ -165,6 +166,58 @@ class ChapaDoPiso:
     def altura(self, ponto: Sequence[float]) -> float:
         """Distância (m) do ponto ao plano da chapa, positiva para cima."""
         return tv._dot(tv._sub(ponto, self.origem), self.normal)
+
+
+#: Diferença relativa de área entre a grade de eixos e o piso do esqueleto que trava o envio.
+DIFERENCA_DE_AREA_DA_GRADE = 0.15
+
+
+def grade_confere_com_o_modelo(
+    area_da_grade_m2: float, niveis: int, chapas: Sequence[ChapaDoPiso]
+) -> str:
+    """Vazio quando a grade de eixos da página tem a área do piso do esqueleto; senão, o motivo.
+
+    Com o esqueleto do SolidWorks no projeto, as cargas da grade (eixos e níveis) só valem se a
+    grade for a mesma planta: uma grade de exemplo (12 × 3 m) mandava 24 vezes a sobrecarga de
+    uma plataforma de 1,5 × 1,0 m ao plano de cargas.
+    """
+    area_do_modelo = sum(c.area_projetada_m2 for c in chapas)
+    if area_do_modelo <= 0:
+        return ""
+    area_da_grade = area_da_grade_m2 * max(niveis, 1)
+    if abs(area_da_grade - area_do_modelo) <= DIFERENCA_DE_AREA_DA_GRADE * area_do_modelo:
+        return ""
+    return (
+        f"A grade de eixos desta seção tem {area_da_grade:.2f} m² de piso".replace(".", ",")
+        + f" e as chapas de piso do esqueleto, {area_do_modelo:.2f} m²".replace(".", ",")
+        + ": as cargas da grade não são as do seu modelo. Use as cargas pelas chapas do "
+        "esqueleto (no alto da página) ou ajuste os eixos e os níveis para a planta do modelo."
+    )
+
+
+#: Nome que a grade de eixos dá às barras ("N1 · eixo A · 1–2"): não é corpo do esqueleto.
+_NOME_DA_GRADE = re.compile(r"^N\d+ · ")
+
+
+def cargas_da_grade_no_plano(plano: pc.PlanoDeCargas) -> list[tuple[str, pc.CargaDoModelo]]:
+    """As linhas do plano que vieram da grade de eixos (barras "N1 · eixo A…" que o esqueleto
+    do SolidWorks não tem). Com o esqueleto no projeto, elas sobram de um envio antigo e somam
+    carga que o modelo não recebe — no caso do usuário, 21,6 kN de PE numa plataforma de 1,5 m²."""
+    return [
+        (a.codigo, c)
+        for a in plano.acoes
+        for c in a.cargas
+        if _NOME_DA_GRADE.match(c.elemento.strip())
+    ]
+
+
+def sem_cargas_da_grade(plano: pc.PlanoDeCargas) -> pc.PlanoDeCargas:
+    """O plano sem as linhas da grade de eixos (as outras linhas e as ações ficam)."""
+    for acao in plano.acoes:
+        restantes = [c for c in acao.cargas if not _NOME_DA_GRADE.match(c.elemento.strip())]
+        if len(restantes) != len(acao.cargas):
+            plano = pc.com_acao(plano, replace(acao, cargas=tuple(restantes)))
+    return plano
 
 
 @dataclass(frozen=True)

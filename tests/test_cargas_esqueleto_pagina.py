@@ -134,3 +134,36 @@ def test_cargas_do_piso_pelo_esqueleto_vao_ao_plano(banco_com_projeto):
     sc = pc.plano_do_projeto(obter_projeto_ativo()).acao("SC")
     assert sc.origem == cpm.ORIGEM and {c.unidade for c in sc.cargas} == {"kN/m"}
     assert len(sc.cargas) == 3
+
+
+def test_grade_de_exemplo_nao_vai_ao_plano_com_o_esqueleto_no_projeto(banco_com_projeto):
+    """O caso do usuário (24/10): com o esqueleto de uma plataforma pequena no projeto, a grade de
+    exemplo da seção de eixos mandava 24 vezes a sobrecarga ao plano. Agora o botão trava."""
+    from core import leitura_do_modelo as ld
+    from tests.test_cargas_pelo_modelo import piso_6x3
+
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(piso_6x3())
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    assert any("as cargas da grade não são as do seu modelo" in e.value for e in t.error)
+    assert t.button(key="ce_enviar").disabled
+
+
+def test_cargas_da_grade_que_sobraram_saem_pelo_botao(banco_com_projeto):
+    from core import leitura_do_modelo as ld
+    from tests.test_cargas_pelo_modelo import piso_6x3
+
+    projeto = obter_projeto_ativo()
+    projeto["geometria_do_modelo"] = ld.para_dicionario(piso_6x3())
+    grade = pc.CargaDoModelo("N1 · eixo A · 1–2", 0.585, "kN/m", "Z (vertical)", "", 4, 6.0)
+    borda = pc.CargaDoModelo("V0", 0.36, "kN/m", "Z (vertical)", "", 1, 6.0)
+    projeto["plano_de_cargas"] = pc.para_dicionario(
+        pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("PE", cargas=[grade, borda]))
+    )
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    assert any("linha(s) da grade de eixos em PE (14,04 kN)" in w.value for w in t.warning)
+    t.button(key="ce_tirar_grade").click().run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    assert pc.plano_do_projeto(obter_projeto_ativo()).acao("PE").cargas == (borda,)
