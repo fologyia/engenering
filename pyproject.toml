@@ -90,6 +90,8 @@ files = [
     "core/vento_por_barras.py",
     "core/vento_por_barras_registro.py",
     "core/vento_por_nivel.py",
+    "core/apoios_do_modelo.py",
+    "core/diagnostico_do_modelo.py",
     "core/guarda_corpo_do_modelo.py",
     "core/cena_3d.py",
     "core/cena_3d_png.py",

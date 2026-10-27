@@ -11,15 +11,14 @@ AJUDA: dict[str, str] = {
         "a macro abaixo grava os dois arquivos de todos os casos de uma vez."
     ),
     "btn_macro_casos": (
-        "Baixa a macro que tira os resultados do gerenciador de casos de carga sem passar pelo "
-        "relatório. Na primeira vez, no editor de macros do SolidWorks: Ferramentas → Referências "
-        "→ marque “SOLIDWORKS Simulation <ano> type library”. Com a peça aberta e a aba do estudo "
-        "selecionada (depois de Executar no gerenciador): Ferramentas → Macro → Executar. Ela "
-        "grava, na pasta da peça, as reações de "
-        "cada caso primário (o caso vai no cabeçalho) e o quadro dos sensores da Vista de "
-        "resultados. As forças das vigas, quando a API do Simulation não separa as vigas (o aviso "
-        "final diz), saem do “Listar forças da viga” de cada caso, com o código no nome do "
-        "arquivo. Envie tudo aqui, junto."
+        "Baixa a macro que tira os resultados do gerenciador de casos de carga. Na primeira vez, no "
+        "editor de macros do SolidWorks: Ferramentas → Referências → marque “SOLIDWORKS Simulation "
+        "<ano> type library”. Depois de Executar no gerenciador, com a aba Vista de resultados "
+        "aberta: Ferramentas → Macro → Executar. Ela grava, na pasta da peça, as reações de cada "
+        "caso, a reação em cada apoio, as fixações e o quadro dos sensores (sensores não são "
+        "necessários). Para sair também as forças das vigas, antes de rodar selecione as vigas na "
+        "árvore do estudo do Simulation (a primeira, Shift + a última); se não sair, use o “Listar "
+        "forças da viga” de cada caso, com o código no nome do arquivo. Envie tudo aqui, junto."
     ),
     "arquivos": (
         "Pode enviar vários de uma vez: forças da viga e reações de cada estudo, e o "
@@ -142,6 +141,37 @@ AJUDA: dict[str, str] = {
     ),
     "btn_xlsx_quadro": "O quadro em Excel, com a nota do critério Anglo e a convenção de sinais.",
     "btn_csv_quadro": "O quadro completo em CSV (abre no Excel).",
+    "sec_diagnostico": (
+        "O programa confere todos os arquivos juntos — o plano de cargas, as reações, as forças, os "
+        "apoios — e diz aqui, antes da verificação, o que está errado e como corrigir, do mais grave "
+        "ao menos. Os que têm botão se corrigem no próprio programa."
+    ),
+    "res_diagnostico": (
+        "Para corrigir: o resultado está errado até corrigir. Para conferir: pode estar errado. "
+        "Conferem: o que já bate."
+    ),
+    "btn_diag_grade": (
+        "Tira do plano de cargas as linhas da grade de exemplo (barras “N1 · eixo A…” que o seu "
+        "modelo não tem). As outras cargas ficam."
+    ),
+    "btn_diag_nomes": (
+        "Troca o nome dos casos importados (forças, reações e apoios) para o do caso do programa que "
+        "tem a mesma direção e o mesmo valor. O SolidWorks não muda: renomeie lá também para as "
+        "próximas vezes."
+    ),
+    "sec_apoios": (
+        "A reação em cada apoio do modelo, direto do SolidWorks (arquivos -apoios.csv da macro, "
+        "um por caso): a força e o momento que cada apoio põe na fundação, por caso, sem combinar "
+        "nem majorar — o que se manda ao engenheiro da fundação. Vale para qualquer apoio (pé de "
+        "pilar, pé de escada), não só para as barras marcadas como Pilar."
+    ),
+    "res_apoios_comportamento": (
+        "Como cada apoio trabalhou no modelo: com momento em algum caso, engastado; sem momento, "
+        "articulado. Confira com a fixação que você pôs no SolidWorks e com a base que vai ser "
+        "construída (placa com chumbadores fora da linha do pilar = engaste)."
+    ),
+    "btn_xlsx_apoios": "O quadro por apoio em Excel, com a aba do comportamento de cada apoio.",
+    "btn_csv_apoios": "O quadro por apoio em CSV (abre no Excel).",
     "reg_quadro": (
         "Grava o quadro no projeto ativo: o memorial ganha o capítulo com a compressão por "
         "pilar e o quadro completo."

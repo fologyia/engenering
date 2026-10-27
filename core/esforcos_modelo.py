@@ -1144,6 +1144,201 @@ def conferir_peso_proprio(
 REACAO_NULA_kN = 1e-3
 
 
+# ---------------------------------------------------------------------------------------------
+# Direção de cada caso de vento no estudo
+# ---------------------------------------------------------------------------------------------
+#: A força do estudo e a de outro caso do plano "são a mesma" até estes desvios.
+ANGULO_IGUAL_GRAUS = 10.0
+VALOR_IGUAL = 0.05
+
+
+def sentido_no_modelo(vetor_plano: tuple[float, float], eixo_vertical: str) -> str:
+    """Para onde uma força horizontal da planta aponta no SolidWorks: "+X", "−Z", "+X −Z"..."""
+    fx, fy = vetor_plano
+    partes = []
+    norma = math.hypot(fx, fy)
+    if norma <= 0:
+        return "—"
+    if abs(fx) >= 0.2 * norma:
+        partes.append(("+" if fx > 0 else "−") + "X")
+    if abs(fy) >= 0.2 * norma:
+        if eixo_vertical == "Y":  # o +Y da planta é o −Z do SolidWorks
+            partes.append(("−" if fy > 0 else "+") + "Z")
+        else:
+            partes.append(("+" if fy > 0 else "−") + "Y")
+    return " ".join(partes)
+
+
+def _angulo(a: tuple[float, float], b: tuple[float, float]) -> float:
+    na, nb = math.hypot(*a), math.hypot(*b)
+    if na <= 0 or nb <= 0:
+        return 180.0
+    cosseno = max(-1.0, min(1.0, (a[0] * b[0] + a[1] * b[1]) / (na * nb)))
+    return math.degrees(math.acos(cosseno))
+
+
+def diagnostico_do_vento(
+    codigo: str,
+    forca_no_estudo: tuple[float, float],
+    plano: pc.PlanoDeCargas,
+    eixo_vertical: str = "Y",
+) -> str:
+    """O que aconteceu com um caso de vento que não equilibra o plano, em português claro.
+
+    ``forca_no_estudo`` é a força horizontal que o caso aplicou (a reação com o sinal trocado),
+    nos eixos da planta. Procura no plano o caso com essa direção e o caso com esse valor:
+    * direção e valor de outro caso → os nomes estão trocados;
+    * direção de um caso e valor de outro → a força tem o valor certo e a direção de outro caso
+      (plano de referência ou sentido trocado no SolidWorks);
+    * mesma direção do próprio caso com outro valor → falta ou sobra carga;
+    * direção oposta → sentido trocado.
+    """
+    ventos = {
+        a.codigo: (t[0], t[1])
+        for a in plano.acoes
+        if a.grupo == pc.GRUPO_VENTO and (t := total_esperado(a)) is not None
+    }
+    proprio = ventos.get(codigo)
+    valor = math.hypot(*forca_no_estudo)
+    no_modelo = sentido_no_modelo(forca_no_estudo, eixo_vertical)
+
+    def mesmo_valor(v: tuple[float, float]) -> bool:
+        return abs(math.hypot(*v) - valor) <= VALOR_IGUAL * max(math.hypot(*v), 1e-9)
+
+    def mesma_direcao(v: tuple[float, float]) -> bool:
+        return _angulo(v, forca_no_estudo) <= ANGULO_IGUAL_GRAUS
+
+    convencao = (
+        "No programa (Y para cima): W0 → +X, W90 → −Z, W180 → −X, W270 → +Z — na vista "
+        "Superior do SolidWorks, W90 aponta para cima na tela."
+        if eixo_vertical == "Y"
+        else "No programa: W0 → +X, W90 → +Y, W180 → −X, W270 → −Y."
+    )
+    inicio = f"no estudo, {codigo} empurra para {no_modelo} com {_n(valor)} kN"
+    if proprio is not None and mesma_direcao(proprio):
+        return (
+            f"{inicio}, na direção certa; o plano manda {_n(math.hypot(*proprio))} kN — falta ou "
+            "sobra carga no modelo (confira o valor e o “Por item” × “Total” da força)."
+        )
+    if proprio is not None and _angulo(proprio, forca_no_estudo) >= 180 - ANGULO_IGUAL_GRAUS:
+        return f"{inicio}: o sentido está trocado (o plano manda {sentido_no_modelo(proprio, eixo_vertical)}). {convencao}"
+    iguais = [c for c, v in ventos.items() if c != codigo and mesma_direcao(v) and mesmo_valor(v)]
+    if iguais:
+        return (
+            f"{inicio} — é exatamente o {iguais[0]} do programa (mesma direção e mesmo valor): "
+            f"os nomes dos casos estão trocados no SolidWorks. Renomeie o caso no gerenciador "
+            f"(ou envie o arquivo com o código {iguais[0]}). {convencao}"
+        )
+    direcao_de = [c for c, v in ventos.items() if c != codigo and mesma_direcao(v)]
+    valor_de = [c for c, v in ventos.items() if mesmo_valor(v)]
+    if direcao_de:
+        texto = f"{inicio}: essa é a direção do {direcao_de[0]} do programa"
+        if proprio is not None and mesmo_valor(proprio):
+            texto += (
+                f", com o valor do próprio {codigo} — a força do {codigo} tem o valor certo e a "
+                f"direção de outro caso: confira o plano de referência e o sentido dela no "
+                f"SolidWorks (o {codigo} do programa empurra para "
+                f"{sentido_no_modelo(proprio, eixo_vertical)})"
+            )
+        elif valor_de:
+            texto += f", com o valor do {' / '.join(valor_de)}"
+        return f"{texto}. {convencao}"
+    return f"{inicio}, e nenhum vento do plano tem essa direção. {convencao}"
+
+
+def resumo_dos_ventos(
+    dados: EsforcosDoModelo, plano: pc.PlanoDeCargas
+) -> pc.ItemDeConferencia | None:
+    """Uma linha com os ventos do estudo lado a lado com os do programa, quando algum não bate.
+
+    Diz também se dá para só renomear (cada caso do estudo é, em direção e valor, um caso do
+    programa) ou se as forças precisam ser corrigidas no SolidWorks.
+    """
+    estudo: dict[str, tuple[float, float]] = {}
+    programa: dict[str, tuple[float, float]] = {}
+    for a in plano.acoes:
+        caso = dados.casos.get(a.codigo)
+        esperado = total_esperado(a)
+        if a.grupo != pc.GRUPO_VENTO or caso is None or caso.reacoes is None or esperado is None:
+            continue
+        rx, ry, _ = para_o_plano(caso.reacoes.modelo, dados.eixo_vertical)
+        estudo[a.codigo] = (-rx, -ry)
+        programa[a.codigo] = (esperado[0], esperado[1])
+    if not estudo:
+        return None
+
+    def bate(a: tuple[float, float], b: tuple[float, float]) -> bool:
+        return _angulo(a, b) <= ANGULO_IGUAL_GRAUS and abs(
+            math.hypot(*a) - math.hypot(*b)
+        ) <= VALOR_IGUAL * max(math.hypot(*b), 1e-9)
+
+    if all(bate(estudo[c], programa[c]) for c in estudo):
+        return None
+    eixo = dados.eixo_vertical
+
+    def lista(vetores: Mapping[str, tuple[float, float]]) -> str:
+        return ", ".join(
+            f"{c} → {sentido_no_modelo(v, eixo)} ({_n(math.hypot(*v))} kN)"
+            for c, v in vetores.items()
+        )
+
+    so_nomes = all(any(bate(v, w) for w in programa.values()) for v in estudo.values())
+    conclusao = (
+        "Cada caso do estudo é um caso do programa com outro nome: renomeie os casos no "
+        "gerenciador do SolidWorks (ou envie cada arquivo com o código certo)."
+        if so_nomes
+        else "Não dá para só renomear: há caso com a direção de um vento e o valor de outro (o "
+        "valor do vento muda com a direção — a face que ele vê). Corrija a direção das forças "
+        "no SolidWorks (plano de referência e sentido), rode de novo e envie os arquivos."
+    )
+    return pc.ItemDeConferencia(
+        pc.NIVEL_ATENCAO,
+        f"Ventos — no seu estudo: {lista(estudo)}. No programa: {lista(programa)}. {conclusao}",
+    )
+
+
+def mapa_de_nomes_dos_ventos(
+    dados: EsforcosDoModelo, plano: pc.PlanoDeCargas
+) -> dict[str, str] | None:
+    """Quando cada caso de vento do estudo é, em direção e valor, um caso do plano com outro nome:
+    ``{código no estudo: código no programa}`` só com os que mudam. ``None`` quando não é só troca
+    de nomes (ou não há o que trocar)."""
+    estudo: dict[str, tuple[float, float]] = {}
+    programa: dict[str, tuple[float, float]] = {}
+    for a in plano.acoes:
+        caso = dados.casos.get(a.codigo)
+        esperado = total_esperado(a)
+        if a.grupo != pc.GRUPO_VENTO or caso is None or caso.reacoes is None or esperado is None:
+            continue
+        rx, ry, _ = para_o_plano(caso.reacoes.modelo, dados.eixo_vertical)
+        estudo[a.codigo] = (-rx, -ry)
+        programa[a.codigo] = (esperado[0], esperado[1])
+
+    def bate(a: tuple[float, float], b: tuple[float, float]) -> bool:
+        return _angulo(a, b) <= ANGULO_IGUAL_GRAUS and abs(
+            math.hypot(*a) - math.hypot(*b)
+        ) <= VALOR_IGUAL * max(math.hypot(*b), 1e-9)
+
+    mapa: dict[str, str] = {}
+    for codigo, vetor in estudo.items():
+        iguais = [c for c, v in programa.items() if bate(vetor, v)]
+        if len(iguais) != 1:
+            return None
+        mapa[codigo] = iguais[0]
+    if sorted(mapa.values()) != sorted(mapa) or all(a == b for a, b in mapa.items()):
+        return None  # não é uma troca entre os próprios casos (ou já está certo)
+    return {a: b for a, b in mapa.items() if a != b}
+
+
+def trocar_codigos(dados: EsforcosDoModelo, mapa: Mapping[str, str]) -> EsforcosDoModelo:
+    """Os casos importados com os códigos trocados (``{atual: novo}``); os outros ficam."""
+    casos: dict[str, CasoImportado] = {}
+    for codigo, caso in dados.casos.items():
+        novo = mapa.get(codigo, codigo)
+        casos[novo] = replace(caso, codigo=novo)
+    return replace(dados, casos=casos)
+
+
 def conferir_reacoes(
     dados: EsforcosDoModelo,
     plano: pc.PlanoDeCargas,
@@ -1274,6 +1469,16 @@ def conferir_reacoes(
                             f"majorado. {ESTUDO_MAJORADO}",
                         )
                     )
+                elif acao.grupo == pc.GRUPO_VENTO and math.hypot(rx, ry) > 0.5 * abs(rz):
+                    # Vento: diz para onde o caso do estudo empurrou e com que caso do plano ele
+                    # bate (nome trocado, direção de outro caso, sentido trocado).
+                    itens.append(
+                        pc.ItemDeConferencia(
+                            pc.NIVEL_ATENCAO,
+                            f"{texto} Para onde: "
+                            + diagnostico_do_vento(codigo, (-rx, -ry), plano, dados.eixo_vertical),
+                        )
+                    )
                 else:
                     itens.append(
                         pc.ItemDeConferencia(
@@ -1294,7 +1499,14 @@ def conferir_reacoes(
             itens.append(
                 pc.ItemDeConferencia(
                     NIVEL_INFO,
-                    f"PP: peso do modelo = {_n(rz)} kN ({_n(rz / 9.81 * 1000, 0)} kg)."
+                    f"PP: peso do modelo = {_n(rz)} kN ({_n(rz / 9.81 * 1000, 0)} kg"
+                    + (
+                        f"; {_n(rz / 9.81 / plano.fator_peso_proprio * 1000, 0)} kg de aço sem "
+                        f"os {_n(100 * (plano.fator_peso_proprio - 1), 0)} % de ligações"
+                        if plano.fator_peso_proprio > 1
+                        else ""
+                    )
+                    + ")."
                     + (
                         " Monte a Lista de material para conferir com o peso da estrutura."
                         if not peso_da_estrutura_kN and not peso_conferido_no_esqueleto
@@ -1312,6 +1524,9 @@ def conferir_reacoes(
                         + (f", × {_n(fator)} de ligações não modeladas" if fator > 1 else ""),
                     )
                 )
+    resumo = resumo_dos_ventos(dados, plano)
+    if resumo is not None:
+        itens.append(resumo)
     faltam = [c for c in plano.codigos if c not in dados.casos]
     if dados.casos and faltam:
         itens.append(
@@ -1375,6 +1590,23 @@ def _pontos_alinhados(
         rotulos = [f"ponto {i + 1} de {len(listas[0])}" for i in range(len(listas[0]))]
         return [[p.vetor() for p in lista] for lista in listas], rotulos, "pela ordem dos elementos"
     return None
+
+
+_AVISO_DE_ORDEM = ": a numeração dos elementos muda entre os estudos; combinei pela ordem"
+
+
+def agrupar_avisos(avisos: Sequence[str]) -> list[str]:
+    """Os avisos de "combinei pela ordem" (um por barra) viram uma linha só, à frente."""
+    pela_ordem = [a.split(_AVISO_DE_ORDEM)[0] for a in avisos if _AVISO_DE_ORDEM in a]
+    outros = [a for a in avisos if _AVISO_DE_ORDEM not in a]
+    if pela_ordem:
+        outros.insert(
+            0,
+            f"{len(pela_ordem)} barra(s) combinadas pela ordem dos elementos: a numeração muda "
+            "entre os casos (um arquivo de forças é de outra rodada do estudo) — veja “Antes de "
+            "verificar”, no início da página.",
+        )
+    return outros
 
 
 #: (combinação, ponto, (N, V1, V2, M1, M2, T)) — esforços de cálculo de uma barra.

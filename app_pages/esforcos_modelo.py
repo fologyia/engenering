@@ -21,10 +21,12 @@ from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
+from core import apoios_do_modelo as am
 from core import cantoneiras as ct
 from core import cena_do_modelo as cm
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
+from core import diagnostico_do_modelo as dm
 from core import direcoes_da_secao as ds
 from core import esforcos_modelo as em
 from core import exportacao_cargas as ex
@@ -140,8 +142,20 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         st.markdown("\n".join(f"- {item}" for item in ex.CONVENCAO_DE_NOMES))
     lidos: list[em.ArquivoLido] = []
     geometria_nova: ld.GeometriaDoModelo | None = None
+    apoios_lidos: list[am.ApoiosDoCaso] = []
+    fixacoes_lidas: am.FixacoesDoEstudo | None = None
     for enviado in enviados or []:
         conteudo = enviado.getvalue()
+        tipo_dos_apoios = am.tipo_do_arquivo(conteudo)
+        if tipo_dos_apoios is not None:
+            try:
+                if tipo_dos_apoios == am.TIPO_APOIOS:
+                    apoios_lidos.append(am.ler_apoios(conteudo, enviado.name))
+                else:
+                    fixacoes_lidas = am.ler_fixacoes(conteudo, enviado.name)
+            except am.ArquivoDeApoiosInvalido as erro:
+                st.error(f"{enviado.name}: {erro}", icon=":material/error:")
+            continue
         tipo_da_macro = ld.tipo_do_arquivo(conteudo)
         if tipo_da_macro == ld.TIPO_ESQUELETO:
             try:
@@ -183,6 +197,19 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         )
         for aviso in geometria_nova.avisos:
             st.warning(f"{geometria_nova.arquivo}: {aviso}", icon=":material/warning:")
+    for apoios_do_caso in apoios_lidos:
+        st.success(
+            f"{apoios_do_caso.arquivo}: reações em {len(apoios_do_caso.nos)} nó(s) apoiado(s) do "
+            f"caso {apoios_do_caso.caso}"
+            + ("" if apoios_do_caso.caso in codigos else " (esse código não está no plano)"),
+            icon=":material/foundation:",
+        )
+    if fixacoes_lidas is not None:
+        st.success(
+            f"{fixacoes_lidas.arquivo}: {len(fixacoes_lidas.nomes)} fixação(ões) do estudo "
+            f"({', '.join(fixacoes_lidas.nomes)}).",
+            icon=":material/anchor:",
+        )
     escolhas: list[tuple[em.ArquivoLido, str]] = []
     if lidos:
         st.subheader("O que foi reconhecido", help=AJUDA["res_arquivos"])
@@ -231,7 +258,9 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
             f"**{achado.titulo}** — {achado.texto}", icon=ICONES[achado.nivel]
         )
     bloqueado = any(a.nivel == pc.NIVEL_ERRO for a in avisos_envio)
-    if (lidos or geometria_nova is not None) and st.button(
+    if (
+        lidos or geometria_nova is not None or apoios_lidos or fixacoes_lidas is not None
+    ) and st.button(
         "Gravar no projeto",
         type="primary",
         icon=":material/save:",
@@ -259,6 +288,13 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         campos: dict[str, object] = {"esforcos_do_modelo": em.para_dicionario(novos)}
         if geometria_nova is not None:
             campos["geometria_do_modelo"] = ld.para_dicionario(geometria_nova)
+        if apoios_lidos or fixacoes_lidas is not None:
+            apoios_novos = am.do_projeto(projeto)
+            for apoios_do_caso in apoios_lidos:
+                apoios_novos = am.com_caso(apoios_novos, apoios_do_caso)
+            if fixacoes_lidas is not None:
+                apoios_novos = am.com_fixacoes(apoios_novos, fixacoes_lidas)
+            campos["apoios_do_modelo"] = am.para_dicionario(apoios_novos)
         if not problemas and gravar_campos_do_projeto(
             campos, "Esforços do modelo importados do SolidWorks"
         ):
@@ -278,6 +314,76 @@ if not dados.casos:
 geometria = ld.geometria_do_projeto(projeto)
 leituras = ld.ler_barras(dados, geometria, plano)
 leitura_da_barra = {lb.barra: lb for lb in leituras}
+
+# ============================================================ antes de verificar
+ESTILO_DO_ACHADO = {
+    dm.NIVEL_ERRO: (":material/error:", "red", "Para corrigir"),
+    dm.NIVEL_ATENCAO: (":material/warning:", "orange", "Para conferir"),
+    dm.NIVEL_INFO: (":material/info:", "blue", "Para saber"),
+}
+with st.container(border=True), secao_protegida("Antes de verificar"):
+    apoios_salvos = am.do_projeto(projeto)
+    diagnostico = dm.diagnosticar(dados, plano, apoios_salvos)
+    st.subheader("Antes de verificar: o que conferir", help=AJUDA["sec_diagnostico"])
+    if diagnostico.tudo_certo:
+        st.success(
+            "Tudo confere: o modelo recebeu as cargas do plano e os arquivos são da mesma rodada. "
+            "Pode seguir para a verificação.",
+            icon=":material/verified:",
+        )
+    else:
+        colunas = st.columns(3)
+        colunas[0].metric("Para corrigir", diagnostico.erros, help=AJUDA["res_diagnostico"])
+        colunas[1].metric("Para conferir", diagnostico.atencoes, help=AJUDA["res_diagnostico"])
+        colunas[2].metric("Já conferem", len(diagnostico.certos), help=AJUDA["res_diagnostico"])
+    for indice, achado in enumerate(diagnostico.achados):
+        icone, cor, rotulo = ESTILO_DO_ACHADO.get(achado.nivel, ESTILO_DO_ACHADO[dm.NIVEL_INFO])
+        with st.expander(
+            f":{cor}[**{rotulo}**] · {achado.titulo}",
+            expanded=achado.nivel == dm.NIVEL_ERRO,
+            icon=icone,
+        ):
+            st.markdown(f"**O que está errado.** {achado.problema}")
+            if achado.passos:
+                st.markdown(
+                    "**Como corrigir**\n\n"
+                    + "\n".join(f"{n}. {passo}" for n, passo in enumerate(achado.passos, 1))
+                )
+            if achado.acao == dm.ACAO_TIRAR_GRADE and st.button(
+                "Tirar do plano as cargas da grade",
+                icon=":material/delete_sweep:",
+                type="primary",
+                key=f"em_diag_grade_{indice}",
+                help=AJUDA["btn_diag_grade"],
+            ):
+                if gravar_campos_do_projeto(
+                    {"plano_de_cargas": pc.para_dicionario(dm.tirar_grade(plano))},
+                    "Cargas da grade de eixos tiradas do plano de cargas",
+                ):
+                    st.rerun()
+            if achado.acao == dm.ACAO_TROCAR_NOMES:
+                mapa = dict(achado.detalhe.get("mapa", {}))
+                if st.button(
+                    "Trocar os nomes no programa ("
+                    + ", ".join(f"{a} → {b}" for a, b in mapa.items())
+                    + ")",
+                    icon=":material/swap_horiz:",
+                    type="primary",
+                    key=f"em_diag_nomes_{indice}",
+                    help=AJUDA["btn_diag_nomes"],
+                ):
+                    novos, apoios_novos = dm.corrigir_nomes(dados, apoios_salvos, mapa)
+                    if gravar_campos_do_projeto(
+                        {
+                            "esforcos_do_modelo": em.para_dicionario(novos),
+                            "apoios_do_modelo": am.para_dicionario(apoios_novos),
+                        },
+                        "Casos de vento renomeados: "
+                        + ", ".join(f"{a} → {b}" for a, b in mapa.items()),
+                    ):
+                        st.rerun()
+    for certo in diagnostico.certos:
+        st.caption(f":material/check_circle: {certo}")
 
 # ============================================================ 2. casos
 with st.container(border=True), secao_protegida("2. Casos importados"):
@@ -519,7 +625,7 @@ with st.container(border=True), secao_protegida("5. Pior caso de cada barra"):
     if not estados:
         st.stop()
     resultado = em.envoltoria(dados, plano, estados)
-    for aviso in resultado.avisos:
+    for aviso in em.agrupar_avisos(resultado.avisos):
         st.warning(aviso, icon=":material/warning:")
     if resultado.membros:
         st.caption(
@@ -639,7 +745,7 @@ with st.container(border=True), secao_protegida("6. Parâmetros da verificação
 with st.container(border=True), secao_protegida("7. Verificação das barras"):
     st.subheader("7. Verificação das barras", help=AJUDA["sec_verificacao"])
     resultados, avisos_verificacao = vb.verificar_barras(dados, plano, estados)
-    for aviso in avisos_verificacao:
+    for aviso in em.agrupar_avisos(avisos_verificacao):
         st.warning(aviso, icon=":material/warning:")
     sintese = vb.resumo(resultados)
     colunas = st.columns(4)
@@ -817,6 +923,57 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
             key="registrar_quadro_fundacoes",
             rotulo="Registrar o quadro das fundações no projeto ativo",
             identificar_peca=False,
+        )
+    apoios_do_modelo = am.do_projeto(projeto)
+    if apoios_do_modelo.casos:
+        st.subheader("Reação em cada apoio (pela macro)", help=AJUDA["sec_apoios"])
+        quadro_apoios = am.montar_quadro(
+            apoios_do_modelo,
+            geometria=geometria_quadro,
+            esforcos=dados,
+            eixo_vertical=dados.eixo_vertical,
+        )
+        for item in quadro_apoios.conferencia:
+            MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])
+        st.dataframe(
+            pd.DataFrame(
+                am.linhas_do_quadro(quadro_apoios), columns=am.colunas(dados.eixo_vertical)
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                c: st.column_config.NumberColumn(format="%.2f")
+                for c in am.colunas(dados.eixo_vertical)
+                if "(kN" in c
+            },
+        )
+        st.caption(am.NOTA)
+        st.caption("Como cada apoio trabalhou", help=AJUDA["res_apoios_comportamento"])
+        st.dataframe(
+            pd.DataFrame(am.linhas_dos_apoios(quadro_apoios)), hide_index=True, width="stretch"
+        )
+        colunas = st.columns(2)
+        colunas[0].download_button(
+            "Quadro por apoio (Excel)",
+            data=am.xlsx_do_quadro(
+                quadro_apoios, f"{projeto.get('nome', '')} ({projeto.get('codigo', '')})"
+            ),
+            file_name=f"reacoes_nos_apoios_{projeto.get('codigo') or 'projeto'}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            icon=":material/table_view:",
+            key="em_xlsx_apoios",
+            help=AJUDA["btn_xlsx_apoios"],
+            width="stretch",
+        )
+        colunas[1].download_button(
+            "Quadro por apoio (CSV)",
+            data=am.csv_do_quadro(quadro_apoios),
+            file_name=f"reacoes_nos_apoios_{projeto.get('codigo') or 'projeto'}.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            key="em_csv_apoios",
+            help=AJUDA["btn_csv_apoios"],
+            width="stretch",
         )
 
 # ============================================================ 9. placas de base

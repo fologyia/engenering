@@ -449,7 +449,8 @@ def test_reacao_em_outro_eixo_nao_e_estudo_majorado():
     dados = em.com_reacoes(dados, "W0", em.Reacoes(modelo=(0.0, 0.0, 8.0 * 1.4)), "W0.csv")
     r = niveis(em.conferir_reacoes(dados, plano_do_portico()))
     assert "majorado" not in r.get(pc.NIVEL_ERRO, "") + r.get(pc.NIVEL_ATENCAO, "")
-    assert "Falta ou sobra carga" in r[pc.NIVEL_ATENCAO]
+    # Vento: em vez de "falta ou sobra carga", o programa diz para onde o caso empurrou.
+    assert "Para onde: no estudo, W0 empurra para −Z com 11,20 kN" in r[pc.NIVEL_ATENCAO]
 
 
 def test_arquivo_com_todas_as_vigas_iguais_e_recusado():

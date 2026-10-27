@@ -66,6 +66,46 @@ Para cada caso importado, nos eixos do plano (Z para cima; o Y do SolidWorks é 
   pede cargas sem majorar (Anglo 5.9), sairia errado. Não há modo de importar estudo combinado.
 * Casos do plano ainda sem esforços e casos importados fora do plano são avisados.
 
+## Antes de verificar (`core/diagnostico_do_modelo.py`)
+
+Logo depois do envio dos arquivos, a página junta todas as conferências num painel, do mais grave ao
+menos, cada problema num cartão com **o que está errado** e **como corrigir** (passo a passo, em
+linguagem simples), e o que já confere embaixo:
+
+- **Forças que não são do caso** — a soma das bases dos pilares não bate com a reação do caso; se bate
+  com a soma de todos os casos, o arquivo foi salvo com o estudo base (o PP-forcas do usuário, 24/10).
+- **Plano com cargas de exemplo** — linhas da grade de eixos ("N1 · eixo A…") que o modelo não tem:
+  botão **Tirar do plano as cargas da grade**.
+- **Ventos com os nomes trocados** — cada caso do estudo é, em direção e valor, um caso do programa
+  (`em.mapa_de_nomes_dos_ventos`): botão **Trocar os nomes no programa** (forças, reações e apoios,
+  `em.trocar_codigos`/`am.trocar_codigos`); se há direção de um com valor de outro, pede a correção no
+  SolidWorks com a regra da vista Superior.
+- **Forças de outra rodada** — o arquivo de forças de um caso tem outra numeração de elementos que a
+  maioria (rodada anterior): diz qual caso listar de novo. Os avisos "combinei pela ordem" de cada barra
+  viram uma linha só nas seções 5 e 7 (`em.agrupar_avisos`).
+- **Plano × modelo** em casos sem vento, com a pista quando a diferença é exatamente uma linha do plano
+  (um guarda-corpo numa borda que no modelo é o acesso).
+- **Apoios de outra rodada ou sem posição**, **falta o arquivo de reações**, **casos do plano sem
+  resultado** (informação) e os erros do estudo (majorado, eixo vertical, sem fixação).
+
+Macro **v16** (`exportar_casos_de_carga`): com as vigas selecionadas na árvore do estudo do Simulation,
+lê as forças de cada viga pela seleção, como o exemplo oficial da API ("Get Forces and Stresses for
+Selected Beams"), e grava os -forcas junto com os -reacoes e -apoios; se duas vigas derem os mesmos
+números, não grava e diz para listar à mão. A v14 trocava a pasta de resultados para consertar uma
+pasta presa e o SOLIDWORKS travou: desde a v15 a macro não muda mais a pasta (só avisa).
+
+### Direção de cada vento (`diagnostico_do_vento`, `resumo_dos_ventos`)
+
+Caso de vento que não equilibra o plano: em vez de "falta ou sobra carga", o programa diz para onde
+o caso do estudo empurrou (a reação com o sinal trocado, nos eixos do SolidWorks: o +Y da planta é o
+−Z com o Y para cima) e com que caso do plano ele bate — mesma direção e valor de outro caso (nomes
+trocados: renomear basta), direção de um caso com o valor do próprio (plano de referência ou sentido
+da força errados no SolidWorks), sentido oposto, ou só o valor diferente. Um resumo lado a lado
+("no seu estudo" × "no programa") diz se dá para só renomear ou se as forças precisam ser corrigidas
+— o valor do vento depende da direção (a face que ele vê). Caso do usuário (24/10, teste01): W90 em
++Z, W180 em −Z com 1,82 kN e W270 em −X com 2,18 kN, contra W90 −Z, W180 −X e W270 +Z do programa.
+O PP mostra também o aço sem o acréscimo de ligações (320 kg com g = 9,81 → 299 kg de aço).
+
 ## Leitura do modelo (`core/leitura_do_modelo.py`)
 
 Os arquivos dizem números; a leitura do modelo diz o que eles significam e o que parece errado.
