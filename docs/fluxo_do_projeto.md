@@ -171,7 +171,17 @@ cargas que vão para o modelo.
    `Study.Results` logo depois); a macro tenta o estudo pego de novo, o estudo ativado e a Vista de
    resultados aberta de novo, diz o que conferir (duplo clique no caso: aparece o gráfico?; pasta do
    OneDrive "Sempre manter neste dispositivo"; quantos `.cwr` há na pasta) e grava sempre
-   `<estudo>-diagnostico-da-macro.txt` (versão do SOLIDWORKS, como cada caso veio, itens de fora). A macro precisa da referência "SOLIDWORKS Simulation <ano> type library"
+   `<estudo>-diagnostico-da-macro.txt` (versão do SOLIDWORKS, como cada caso veio, itens de fora). A **v11**
+   aponta a pasta de resultados do estudo (`StaticStudyOptions.ResultFolder`) para
+   `<peça>-<estudo>-LoadCaseManager\Primary Load Case n` quando a API devolve vazio e sempre devolve
+   a pasta original. A **v12** grava também `<estudo>-fixacoes.csv` (cada fixação, tipo, entidades
+   e vértices) e, por caso, `<estudo>-<caso>-apoios.csv` (a reação em cada nó apoiado — o retorno de
+   `GetReactionForcesAndMomentsWithSelections`, 9 valores por nó, com a posição por
+   `Mesh.GetNodeLocation` — e a soma por fixação). A página Esforços do modelo junta os dois
+   (`core/apoios_do_modelo.py`) na seção 8: **reação em cada apoio** (nós a menos de 10 cm formam um
+   apoio; a barra que chega e a fixação pelo ponto; ação na fundação = −reação, N compressão +;
+   engastado se tiver momento em algum caso), conferida com a reação total e com a soma por
+   fixação, em Excel/CSV para o engenheiro da fundação. Sensores não são usados pelo programa. A macro precisa da referência "SOLIDWORKS Simulation <ano> type library"
    marcada no editor do VBA (Ferramentas → Referências): sem ela, chamando o Simulation pelo nome,
    o `BeamBodyName` e o `LoadResultsOfPrimaryLoadCase` não responderam (erro 438) no SolidWorks do
    usuário. O quadro dos sensores, se for enviado na página, é reconhecido e fica só para

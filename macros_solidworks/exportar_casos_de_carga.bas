@@ -38,6 +38,33 @@
 ' se nada der, diz o que conferir. Sempre grava o diagnostico em
 ' <estudo>-diagnostico-da-macro.txt, na pasta da peca (mande esse arquivo se der problema).
 '
+' A v11: o diagnostico da v10 no SOLIDWORKS 2026 (34.3) mostrou que os resultados de cada caso
+' estao no disco (<pasta de resultados>\<peca>-<estudo>-LoadCaseManager\Primary Load Case n, com
+' os mesmos nomes de arquivo do estudo), mas a API nao os entrega. Se as outras tentativas vierem
+' vazias, a macro aponta a pasta de resultados do estudo (StaticStudyOptions.ResultFolder) para a
+' pasta do caso, le, e no fim devolve a pasta original - sempre, mesmo se der erro. Casos
+' seguidos com as mesmas reacoes viram aviso (a pasta n pode nao ser a do caso n).
+'
+' A v12 grava tambem, para quem projeta as fundacoes:
+' - <estudo>-fixacoes.csv: cada fixacao do estudo (nome, tipo, entidades e, quando a entidade e um
+'   vertice, onde ele fica);
+' - <estudo>-<caso>-apoios.csv: a reacao em cada no apoiado (posicao, Fx, Fy, Fz, Mx, My, Mz) e a
+'   soma por fixacao. O programa junta os dois: o quadro de cargas por apoio, sem combinar.
+'
+' A v14: numa das rodadas do usuario a pasta de resultados do estudo ficou presa na pasta de um
+' caso (...-LoadCaseManager\Primary Load Case 1) e o gerenciador passou a gravar uma pasta dentro
+' da outra - nenhuma leitura achava nada. Ao comecar, a macro devolve a pasta para a de cima da do
+' gerenciador e para, pedindo para Executar de novo; ao terminar, confere que a pasta voltou.
+'
+' A v15: a v14 trocava a pasta de resultados para consertar e o SOLIDWORKS fechou/travou. A macro
+' NAO muda mais a pasta de resultados (nem o truque da v11): so avisa e diz como consertar a mao.
+'
+' A v16 tira as FORCAS DAS VIGAS junto com as reacoes pelo caminho do exemplo oficial da API
+' ("Get Forces and Stresses for Selected Beams"): antes de rodar, SELECIONE AS VIGAS NA ARVORE DO
+' ESTUDO DO SIMULATION (pasta das vigas do estudo: clique na primeira, Shift + clique na ultima).
+' A macro guarda essa selecao e le as forcas de cada viga por ela. Se duas vigas derem os mesmos
+' numeros, a selecao nao serviu: a macro nao grava os -forcas e o aviso diz o que fazer.
+'
 ' Robustez: se algo der errado, a macro diz em que etapa parou e por que (arquivo aberto no Excel,
 ' pasta sem permissao...) e fecha os arquivos. Uma viga ou um caso sem resultados fica de fora e e
 ' listado no aviso final; os outros saem normalmente. Se a leitura de todas as vigas juntas nao
@@ -45,7 +72,7 @@
 ' configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v10"
+Const VERSAO_DA_MACRO As String = "v16"
 Const PECA As Long = 1          ' swDocPART
 Const CORPO_SOLIDO As Long = 0  ' swSolidBody
 Const UNIDADES_SI As Long = 0   ' swsUnitSI: N e N.m
@@ -60,6 +87,15 @@ Dim falhasDoGerenciador As String
 Dim modelo As SldWorks.ModelDoc2
 Dim jeito As Long  ' 0 a descobrir; 1 corpo selecionado; 2 corpo direto; 3 viga do estudo; -1 nenhum
 Dim comoVieram As String
+Dim estudoAtual As CosmosWorksLib.CWStudy
+Dim pastaOriginal As String
+Dim pastaMudada As Boolean
+Dim pastaDoGerenciador As String
+Dim nomesDasFixacoes() As String
+Dim tiposDasFixacoes() As Long
+Dim entidadesDasFixacoes() As Variant
+Dim totalDeFixacoes As Long
+Dim fatorDaMalha As Double
 Dim diagnostico As String
 
 Sub main()
@@ -96,6 +132,9 @@ Sub main()
     Dim tCarregar As Single, tVigas As Single, tReacoes As Single, tQuadro As Single
     Dim indiceDoEstudo As Long, semResultados As Long, casosSemResultados As String
     Dim baseTinhaResultados As Boolean, arquivosCwr As Long, totalDeCasos As Long
+    Dim reacaoAgora As String, reacaoAnterior As String, casoAnterior As String
+    Dim nosComReacao As Variant, apoiosGravados As Long
+    Dim selecionadas() As Object, totalSelecionadas As Long, tipoDaSelecao As String
 
     On Error GoTo Falha
     ' Um arquivo que ficou aberto numa execucao interrompida trava a proxima: fecha tudo antes.
@@ -106,6 +145,9 @@ Sub main()
     ultimaFalha = ""
     falhasDoGerenciador = ""
     diagnostico = ""
+    pastaMudada = False
+    pastaOriginal = ""
+    pastaDoGerenciador = ""
     jeito = 0
     inicio = Timer
 
@@ -126,6 +168,8 @@ Sub main()
     End If
     Set swPeca = swModel
     Set modelo = swModel
+    ' A selecao das vigas na arvore do Simulation, antes que qualquer passo a limpe.
+    totalSelecionadas = SelecaoInicial(swModel, selecionadas, tipoDaSelecao)
     pasta = Left(swModel.GetPathName, InStrRev(swModel.GetPathName, "\"))
     quando = Format(Now, "hh:nn") & "; " & Format(Now, "dd/mm/yyyy")
 
@@ -167,6 +211,21 @@ Sub main()
     Tentar gerenciador, "resultados"
     etapa = "conferir os resultados do estudo " & nomeDoEstudo
     baseTinhaResultados = TemResultados(estudo)
+    Set estudoAtual = estudo
+    pastaOriginal = PastaDoEstudo(estudo)
+    If InStr(1, pastaOriginal, "-LoadCaseManager", vbTextCompare) > 0 Then
+        ' A pasta ficou presa na de um caso (v11 a v13). A macro nao muda mais a pasta: trocar a
+        ' pasta de resultados com o gerenciador aberto fechou/travou o SOLIDWORKS 2026 (v14).
+        MsgBox "A pasta de resultados do estudo " & nomeDoEstudo & " esta presa na pasta de um caso:" & _
+            vbCrLf & pastaOriginal & vbCrLf & vbCrLf & "Conserte a mao: botao direito no estudo > " & _
+            "Propriedades > Pasta de resultados = " & Left(pastaOriginal, InStrRev(pastaOriginal, "\", _
+            InStr(1, pastaOriginal, "-LoadCaseManager", vbTextCompare)) - 1) & _
+            vbCrLf & vbCrLf & "Depois salve a peca, clique em Executar no gerenciador e rode a macro de novo.", _
+            vbExclamation
+        Exit Sub
+    End If
+    pastaDoGerenciador = IIf(pastaOriginal = "", pasta, Barra(pastaOriginal)) & _
+        NomeSemExtensao(swModel.GetPathName) & "-" & nomeDoEstudo & "-LoadCaseManager\"
     arquivosCwr = ContarArquivos(pasta, "*.cwr")
 
     etapa = "ler os corpos da peca"
@@ -184,6 +243,26 @@ Sub main()
     etapa = "ler a lista de vigas do estudo"
     motivo = ""
     totalDeVigas = LerVigasDoEstudo(estudo, corpos, nomesDasVigas, corposDasVigas, vigasDoEstudo, motivo)
+
+    etapa = "ler as fixacoes do estudo"
+    totalDeFixacoes = LerFixacoes(estudo)
+    fatorDaMalha = UnidadeDaMalha(estudo)
+    If totalDeFixacoes > 0 Then
+        etapa = "gravar as fixacoes do estudo"
+        caminho = pasta & NomeDeArquivo(nomeDoEstudo & "-fixacoes") & ".csv"
+        arquivo = FreeFile
+        Open caminho For Output As #arquivo
+        Print #arquivo, "sep=;"
+        Print #arquivo, quando
+        Print #arquivo, "Nome do estudo:" & nomeDoEstudo
+        Print #arquivo, "Macro: Mecanica Toolkit - exportar_casos_de_carga " & VERSAO_DA_MACRO
+        Print #arquivo, ""
+        Print #arquivo, "Fixacoes do estudo"
+        Print #arquivo, "Fixacao;Tipo (codigo);Entidades;Entidade;Tipo da entidade;X (m);Y (m);Z (m)"
+        GravarFixacoes
+        Close #arquivo
+        arquivo = 0
+    End If
     pelosCorpos = (totalDeVigas < 1)
     If pelosCorpos Then
         etapa = "usar os corpos da peca como vigas"
@@ -202,6 +281,22 @@ Sub main()
             j = j + 1
         Next corpo
     End If
+    If totalSelecionadas > 0 Then
+        ' As vigas selecionadas na arvore do Simulation, como no exemplo da API: cada uma vai direto
+        ' (jeito 2) ou pela selecao (jeito 1); o primeiro caso confere se duas vigas diferem.
+        Dim nomesDoEstudo() As String
+        nomesDoEstudo = nomesDasVigas
+        ReDim nomesDasVigas(totalSelecionadas - 1)
+        ReDim corposDasVigas(totalSelecionadas - 1)
+        ReDim vigasDoEstudo(totalSelecionadas - 1)
+        For j = 0 To totalSelecionadas - 1
+            Set corposDasVigas(j) = selecionadas(j)
+            Set vigasDoEstudo(j) = Nothing
+            nomesDasVigas(j) = NomeDaSelecionada(selecionadas(j), j, nomesDoEstudo)
+        Next j
+        totalDeVigas = totalSelecionadas
+        pelosCorpos = False
+    End If
     ReDim ehViga(totalDeVigas - 1)
     ReDim alvos(totalDeVigas - 1)
     For j = 0 To totalDeVigas - 1
@@ -218,7 +313,8 @@ Sub main()
             diagnostico = diagnostico & "  " & caso & ": " & ultimaFalha & vbCrLf
             tCarregar = tCarregar + (Timer - marca)
         Else
-            Set resultados = ResultadosDoCaso(gerenteDeEstudos, indiceDoEstudo, estudo, gerenciador, caso)
+            Set resultados = ResultadosDoCaso(gerenteDeEstudos, indiceDoEstudo, estudo, gerenciador, caso, _
+                i - LBound(casos) + 1)
             diagnostico = diagnostico & "  " & caso & ": resultados por " & comoVieram & vbCrLf
             tCarregar = tCarregar + (Timer - marca)
             If resultados Is Nothing Then
@@ -275,7 +371,7 @@ Sub main()
 
                 etapa = "gravar as reacoes do caso " & caso
                 marca = Timer
-                If ReacoesDoModelo(resultados, soma) Then
+                If ReacoesDoModelo(resultados, soma, nosComReacao) Then
                     caminho = pasta & NomeDeArquivo(nomeDoEstudo & "-" & caso & "-reacoes") & ".csv"
                     arquivo = FreeFile
                     Open caminho For Output As #arquivo
@@ -283,6 +379,30 @@ Sub main()
                     GravarReacoes soma
                     Close #arquivo
                     arquivo = 0
+                    ' Mesmas reacoes do caso anterior: a pasta lida pode nao ser a deste caso.
+                    reacaoAgora = NumLivre(soma(LBound(soma) + 8)) & "|" & NumLivre(soma(LBound(soma) + 9)) & _
+                        "|" & NumLivre(soma(LBound(soma) + 10))
+                    If reacaoAgora = reacaoAnterior Then
+                        Problema caso & " (mesmas reacoes de " & casoAnterior & ": confira se cada caso tem cargas diferentes)"
+                    End If
+                    reacaoAnterior = reacaoAgora
+                    casoAnterior = caso
+                    ' A reacao em cada no apoiado e a soma por fixacao.
+                    etapa = "gravar as reacoes nos apoios do caso " & caso
+                    caminho = pasta & NomeDeArquivo(nomeDoEstudo & "-" & caso & "-apoios") & ".csv"
+                    arquivo = FreeFile
+                    Open caminho For Output As #arquivo
+                    CabecalhoDoCaso nomeDoEstudo, caso, quando
+                    Print #arquivo, "Reacoes nos nos (N; N.m)"
+                    Print #arquivo, "No;X (m);Y (m);Z (m);Fx (N);Fy (N);Fz (N);Mx (N.m);My (N.m);Mz (N.m)"
+                    GravarNos estudo, nosComReacao
+                    Print #arquivo, ""
+                    Print #arquivo, "Reacoes por fixacao (N; N.m)"
+                    Print #arquivo, "Fixacao;Fx (N);Fy (N);Fz (N);Mx (N.m);My (N.m);Mz (N.m)"
+                    GravarPorFixacao resultados
+                    Close #arquivo
+                    arquivo = 0
+                    apoiosGravados = apoiosGravados + 1
                 Else
                     Problema caso & " (sem as reacoes: " & ultimaFalha & ")"
                 End If
@@ -295,6 +415,8 @@ Sub main()
     On Error Resume Next
     modelo.ClearSelection2 True
     On Error GoTo Falha
+    etapa = "devolver a pasta de resultados do estudo"
+    RestaurarPasta
 
     ' O quadro da Vista de resultados: cada sensor em cada caso e em cada combinacao.
     If TemItens(sensores) Then
@@ -354,10 +476,19 @@ Sub main()
     If casosExportados = 0 And falhasDoGerenciador <> "" Then
         texto = texto & vbCrLf & vbCrLf & "No gerenciador: " & falhasDoGerenciador
     End If
+    If casosExportados = 0 And InStr(falhasDoGerenciador, "ShowResultsViewTab") > 0 Then
+        texto = texto & " Abra o gerenciador de casos de carga, clique na aba Vista de resultados (o " & _
+            "quadro com os casos tem de aparecer) e rode a macro de novo; se o SOLIDWORKS travou antes, " & _
+            "feche e abra a peca."
+    End If
     texto = texto & vbCrLf & vbCrLf & "Tempo: " & Segundos(Timer - inicio) & " (carregar os casos " & _
         Segundos(tCarregar) & "; esforcos das vigas " & Segundos(tVigas) & "; reacoes " & _
         Segundos(tReacoes) & "; quadro " & Segundos(tQuadro) & ")."
-    If jeito < 0 Then
+    If jeito < 0 And totalSelecionadas = 0 Then
+        texto = texto & vbCrLf & vbCrLf & "FORCAS DAS VIGAS: selecione as vigas na arvore do estudo do " & _
+            "Simulation (pasta das vigas: primeira, Shift + ultima) e rode a macro de novo - ela le as " & _
+            "forcas pela selecao, como o exemplo da API."
+    ElseIf jeito < 0 Then
         texto = texto & vbCrLf & vbCrLf & "ESFORCOS DAS VIGAS: o Simulation desta versao devolve os mesmos " & _
             "esforcos para todas as vigas pela API, entao a macro nao gravou os -forcas (" & ultimaFalha & _
             "). Em cada caso: Vista de resultados, clique no caso, Resultados > Listar forcas da viga " & _
@@ -365,6 +496,8 @@ Sub main()
             "arquivos junto com os -reacoes desta macro."
     End If
     texto = texto & vbCrLf & vbCrLf & "Envie os arquivos -forcas e -reacoes na pagina Esforcos do modelo."
+    If apoiosGravados > 0 Then texto = texto & vbCrLf & "Reacoes por apoio: " & apoiosGravados & _
+        " caso(s) (-apoios.csv) e " & totalDeFixacoes & " fixacao(oes) (-fixacoes.csv)."
     texto = texto & vbCrLf & "Diagnostico: " & NomeDeArquivo(nomeDoEstudo & "-diagnostico-da-macro") & ".txt"
 
     GravarDiagnostico pasta & NomeDeArquivo(nomeDoEstudo & "-diagnostico-da-macro") & ".txt", _
@@ -374,12 +507,18 @@ Sub main()
         "Estudo: " & nomeDoEstudo & " (indice " & indiceDoEstudo & ")" & vbCrLf & _
         "Estudo com resultados antes de carregar os casos: " & IIf(baseTinhaResultados, "sim", "nao") & vbCrLf & _
         "Arquivos .cwr na pasta da peca: " & arquivosCwr & vbCrLf & _
+        "Pasta de resultados do estudo: " & IIf(pastaOriginal = "", "(nao lida)", pastaOriginal) & vbCrLf & _
+        "Pasta do gerenciador: " & pastaDoGerenciador & vbCrLf & _
         "Gerenciador: " & IIf(falhasDoGerenciador = "", "abriu e mostrou a Vista de resultados", falhasDoGerenciador) & vbCrLf & _
         "Vigas: " & totalDeVigas & IIf(pelosCorpos, " pelos corpos da peca (" & motivo & ")", " pela lista do estudo") & _
         "; jeito " & jeito & vbCrLf & _
         "Casos (" & totalDeCasos & ", sem resultados " & semResultados & "):" & vbCrLf & diagnostico & _
         "Itens de fora: " & IIf(problemas = "", "nenhum", problemas) & vbCrLf & _
         "Ultima falha: " & IIf(ultimaFalha = "", "nenhuma", ultimaFalha) & vbCrLf & _
+        "Selecao: " & IIf(totalSelecionadas > 0, totalSelecionadas & " objeto(s) (" & tipoDaSelecao & ")", _
+        "nenhuma (forcas pelos corpos da peca)") & vbCrLf & _
+        "Fixacoes: " & totalDeFixacoes & "; apoios gravados em " & apoiosGravados & " caso(s); " & _
+        "fator da malha " & fatorDaMalha & vbCrLf & _
         "Tempo: " & Segundos(Timer - inicio)
     If totalProblemas > 0 Then
         texto = texto & vbCrLf & vbCrLf & "ATENCAO: " & totalProblemas & " item(ns) ficaram de fora: " & problemas
@@ -397,6 +536,7 @@ Falha:
     descricaoDoErro = Err.Description
     On Error Resume Next
     Close
+    RestaurarPasta
     Select Case numero
         Case 52, 53, 55, 70, 75, 76
             MsgBox "Nao consegui " & etapa & "." & vbCrLf & vbCrLf & _
@@ -438,9 +578,46 @@ Sub Tentar(gerenciador As CosmosWorksLib.CWLoadCaseManager, acao As String)
     Err.Clear
 End Sub
 
+Function SelecaoInicial(m As SldWorks.ModelDoc2, lista() As Object, tipo As String) As Long
+    ' O que estava selecionado quando a macro comecou (as vigas na arvore do Simulation).
+    Dim gerente As Object, n As Long, k As Long
+    On Error Resume Next
+    SelecaoInicial = 0
+    tipo = ""
+    Set gerente = m.SelectionManager
+    If gerente Is Nothing Then Exit Function
+    n = gerente.GetSelectedObjectCount2(-1)
+    If n < 1 Then Exit Function
+    ReDim lista(n - 1)
+    For k = 1 To n
+        Set lista(k - 1) = gerente.GetSelectedObject6(k, -1)
+    Next k
+    If Not lista(0) Is Nothing Then tipo = TypeName(lista(0))
+    SelecaoInicial = n
+    Err.Clear
+End Function
+
+Function NomeDaSelecionada(objeto As Object, indice As Long, nomesDoEstudo() As String) As String
+    ' "Viga-n(corpo)" como no Listar forcas da viga: pelo nome do corpo, na lista do estudo.
+    Dim nome As String, k As Long
+    On Error Resume Next
+    nome = ""
+    nome = objeto.Name
+    If nome = "" Then nome = objeto.BeamBodyName
+    For k = LBound(nomesDoEstudo) To UBound(nomesDoEstudo)
+        If nome <> "" And InStr(1, nomesDoEstudo(k), "(" & nome & ")", vbTextCompare) > 0 Then
+            NomeDaSelecionada = nomesDoEstudo(k)
+            Exit Function
+        End If
+    Next k
+    If nome = "" Then nome = "selecao " & (indice + 1)
+    NomeDaSelecionada = nome
+    Err.Clear
+End Function
+
 Function ResultadosDoCaso(gerente As CosmosWorksLib.CWStudyManager, indice As Long, _
     estudo As CosmosWorksLib.CWStudy, gerenciador As CosmosWorksLib.CWLoadCaseManager, _
-    caso As String) As CosmosWorksLib.CWResults
+    caso As String, numero As Long) As CosmosWorksLib.CWResults
     ' Como no exemplo da API: o Study.Results logo depois do LoadResultsOfPrimaryLoadCase. Se vier
     ' vazio, o estudo pego de novo, o estudo ativado e, por ultimo, a Vista de resultados aberta
     ' de novo com o caso carregado outra vez. comoVieram diz qual deu (ou que nenhum deu).
@@ -487,12 +664,48 @@ Function ResultadosDoCaso(gerente As CosmosWorksLib.CWStudyManager, indice As Lo
     If Not r Is Nothing Then
         comoVieram = "a Vista de resultados aberta de novo"
         Set ResultadosDoCaso = r
-    Else
-        comoVieram = "nenhum: Study.Results, o estudo pego de novo, o estudo ativado e a Vista de " & _
-            "resultados aberta de novo vieram vazios" & _
-            IIf(ok, "", " (o segundo LoadResultsOfPrimaryLoadCase devolveu Falso)")
+        Err.Clear
+        Exit Function
+    End If
+    comoVieram = "nenhum: Study.Results, o estudo pego de novo, o estudo ativado e a Vista de " & _
+        "resultados aberta de novo vieram vazios" & _
+        IIf(ok, "", " (o segundo LoadResultsOfPrimaryLoadCase devolveu Falso)")
+    Err.Clear
+End Function
+
+Function PastaDoEstudo(estudo As CosmosWorksLib.CWStudy) As String
+    On Error Resume Next
+    PastaDoEstudo = ""
+    PastaDoEstudo = estudo.StaticStudyOptions.ResultFolder
+    Err.Clear
+End Function
+
+Sub RestaurarPasta()
+    ' Devolve a pasta de resultados original do estudo (a macro nao deixa o estudo mudado).
+    On Error Resume Next
+    If pastaMudada And Not estudoAtual Is Nothing Then
+        estudoAtual.StaticStudyOptions.ResultFolder = pastaOriginal
+        If Err.Number = 0 And PastaDoEstudo(estudoAtual) = pastaOriginal Then
+            pastaMudada = False
+        Else
+            MsgBox "A macro nao conseguiu devolver a pasta de resultados do estudo para:" & vbCrLf & _
+                pastaOriginal & vbCrLf & vbCrLf & "Conserte a mao antes de Executar de novo: botao " & _
+                "direito no estudo > Propriedades > Pasta de resultados.", vbCritical
+        End If
     End If
     Err.Clear
+End Sub
+
+Function Barra(texto As String) As String
+    Barra = texto
+    If Right(texto, 1) <> "\" Then Barra = texto & "\"
+End Function
+
+Function NomeSemExtensao(caminho As String) As String
+    Dim nome As String
+    nome = Mid(caminho, InStrRev(caminho, "\") + 1)
+    If InStrRev(nome, ".") > 0 Then nome = Left(nome, InStrRev(nome, ".") - 1)
+    NomeSemExtensao = nome
 End Function
 
 Function TemResultados(estudo As CosmosWorksLib.CWStudy) As Boolean
@@ -752,9 +965,10 @@ Sub GravarDaViga(nome As String, valores() As Variant)
     Next e
 End Sub
 
-Function ReacoesDoModelo(resultados As CosmosWorksLib.CWResults, soma As Variant) As Boolean
-    ' A soma das reacoes do modelo inteiro (posicoes 8 a 15 do segundo retorno).
-    Dim cada As Variant, nos As Variant, vazio As Variant, erro As Long
+Function ReacoesDoModelo(resultados As CosmosWorksLib.CWResults, soma As Variant, nos As Variant) As Boolean
+    ' A soma das reacoes do modelo inteiro (posicoes 8 a 15 do segundo retorno) e, no retorno, a
+    ' reacao de cada no: no, Fx, Fy, Fz, F, Mx, My, Mz, M (9 por no).
+    Dim cada As Variant, vazio As Variant, erro As Long
     On Error Resume Next
     ReacoesDoModelo = False
     soma = Empty
@@ -773,6 +987,148 @@ Function ReacoesDoModelo(resultados As CosmosWorksLib.CWResults, soma As Variant
     End If
     ReacoesDoModelo = (UBound(soma) - LBound(soma) + 1 >= 16)
 End Function
+
+Function LerFixacoes(estudo As CosmosWorksLib.CWStudy) As Long
+    ' As fixacoes do estudo: nome, tipo e as entidades de cada uma.
+    Dim gerente As Object, item As Object, n As Long, i As Long, k As Long, erro As Long
+    Dim total As Long, lista() As Variant
+    On Error Resume Next
+    LerFixacoes = 0
+    Set gerente = estudo.LoadsAndRestraintsManager
+    If gerente Is Nothing Then Exit Function
+    total = gerente.Count
+    If total < 1 Then Exit Function
+    ReDim nomesDasFixacoes(total - 1)
+    ReDim tiposDasFixacoes(total - 1)
+    ReDim entidadesDasFixacoes(total - 1)
+    n = 0
+    For i = 0 To total - 1
+        erro = 0
+        Set item = Nothing
+        Set item = gerente.GetLoadsAndRestraints(i, erro)
+        If Not item Is Nothing Then
+            If TypeOf item Is CosmosWorksLib.CWRestraint Then
+                nomesDasFixacoes(n) = item.Name
+                tiposDasFixacoes(n) = item.RestraintType
+                If item.EntityCount > 0 Then
+                    ReDim lista(item.EntityCount - 1)
+                    For k = 0 To item.EntityCount - 1
+                        erro = 0
+                        Set lista(k) = item.GetEntityAt(k, erro)
+                    Next k
+                    entidadesDasFixacoes(n) = lista
+                Else
+                    entidadesDasFixacoes(n) = Empty
+                End If
+                n = n + 1
+            End If
+        End If
+        Err.Clear
+    Next i
+    LerFixacoes = n
+End Function
+
+Function UnidadeDaMalha(estudo As CosmosWorksLib.CWStudy) As Double
+    ' Unidade das coordenadas dos nos (swsLinearUnit_e) em metros; 1 se nao der para saber.
+    Dim u As Long
+    On Error Resume Next
+    UnidadeDaMalha = 1
+    u = -1
+    u = estudo.Mesh.Unit
+    Select Case u
+        Case 0: UnidadeDaMalha = 0.001
+        Case 1: UnidadeDaMalha = 0.01
+        Case 2: UnidadeDaMalha = 1
+        Case 3: UnidadeDaMalha = 0.0254
+        Case 4: UnidadeDaMalha = 0.3048
+    End Select
+    Err.Clear
+End Function
+
+Sub GravarFixacoes()
+    Dim i As Long, k As Long, ponto As Variant, entidade As Object, tipoDaEntidade As String
+    On Error Resume Next
+    For i = 0 To totalDeFixacoes - 1
+        If TemItens(entidadesDasFixacoes(i)) Then
+            For k = LBound(entidadesDasFixacoes(i)) To UBound(entidadesDasFixacoes(i))
+                Set entidade = Nothing
+                Set entidade = entidadesDasFixacoes(i)(k)
+                tipoDaEntidade = "?"
+                ponto = Empty
+                If Not entidade Is Nothing Then
+                    tipoDaEntidade = TypeName(entidade)
+                    If TypeOf entidade Is SldWorks.Vertex Then ponto = entidade.GetPoint
+                End If
+                If TemItens(ponto) Then
+                    Print #arquivo, nomesDasFixacoes(i) & ";" & tiposDasFixacoes(i) & ";" & _
+                        (UBound(entidadesDasFixacoes(i)) - LBound(entidadesDasFixacoes(i)) + 1) & ";" & _
+                        (k + 1) & ";" & tipoDaEntidade & ";" & NumLivre(ponto(0)) & ";" & _
+                        NumLivre(ponto(1)) & ";" & NumLivre(ponto(2))
+                Else
+                    Print #arquivo, nomesDasFixacoes(i) & ";" & tiposDasFixacoes(i) & ";" & _
+                        (UBound(entidadesDasFixacoes(i)) - LBound(entidadesDasFixacoes(i)) + 1) & ";" & _
+                        (k + 1) & ";" & tipoDaEntidade & ";;;"
+                End If
+                Err.Clear
+            Next k
+        Else
+            Print #arquivo, nomesDasFixacoes(i) & ";" & tiposDasFixacoes(i) & ";0;;;;;"
+        End If
+    Next i
+End Sub
+
+Sub GravarNos(estudo As CosmosWorksLib.CWStudy, nos As Variant)
+    ' 9 valores por no: no, Fx, Fy, Fz, F, Mx, My, Mz, M. So os nos com alguma reacao.
+    ' Malha com o tipo do Simulation: pelo Object (sem tipo) o GetNodeLocation devolveu 0, 0, 0
+    ' em todos os nos no SOLIDWORKS 2026 (as saidas ByRef nao voltaram).
+    Dim malha As CosmosWorksLib.CWMesh, b As Long, k As Long, no As Long
+    Dim x As Double, y As Double, z As Double, erroDaMalha As Long
+    Dim forca As Double, momento As Double
+    On Error Resume Next
+    If Not TemItens(nos) Then Exit Sub
+    Set malha = estudo.Mesh
+    b = LBound(nos)
+    For k = 0 To (UBound(nos) - b + 1) \ 9 - 1
+        forca = Abs(CDbl(nos(b + 9 * k + 4)))
+        momento = Abs(CDbl(nos(b + 9 * k + 8)))
+        If forca > 0.000001 Or momento > 0.000001 Then
+            no = CLng(nos(b + 9 * k))
+            x = 0: y = 0: z = 0
+            If Not malha Is Nothing Then erroDaMalha = malha.GetNodeLocation(no, x, y, z)
+            ' As coordenadas como a malha devolve (o SOLIDWORKS 2026 deu metro com a malha em mm): o
+            ' programa acha a escala pelo esqueleto.
+            Print #arquivo, no & ";" & NumLivre(x) & ";" & NumLivre(y) & ";" & _
+                NumLivre(z) & ";" & NumLivre(nos(b + 9 * k + 1)) & ";" & _
+                NumLivre(nos(b + 9 * k + 2)) & ";" & NumLivre(nos(b + 9 * k + 3)) & ";" & _
+                NumLivre(nos(b + 9 * k + 5)) & ";" & NumLivre(nos(b + 9 * k + 6)) & ";" & _
+                NumLivre(nos(b + 9 * k + 7))
+        End If
+        Err.Clear
+    Next k
+End Sub
+
+Sub GravarPorFixacao(resultados As CosmosWorksLib.CWResults)
+    ' A soma das reacoes nas entidades de cada fixacao (o primeiro bloco do segundo retorno).
+    Dim i As Long, porFixacao As Variant, cada As Variant, nos As Variant, erro As Long
+    On Error Resume Next
+    For i = 0 To totalDeFixacoes - 1
+        If TemItens(entidadesDasFixacoes(i)) Then
+            erro = 0
+            porFixacao = Empty
+            nos = resultados.GetReactionForcesAndMomentsWithSelections(1, Nothing, FORCA_EM_N, _
+                (entidadesDasFixacoes(i)), porFixacao, cada, erro)
+            If Err.Number = 0 And erro = 0 And TemItens(porFixacao) Then
+                Print #arquivo, nomesDasFixacoes(i) & ";" & NumLivre(porFixacao(LBound(porFixacao))) & ";" & _
+                    NumLivre(porFixacao(LBound(porFixacao) + 1)) & ";" & NumLivre(porFixacao(LBound(porFixacao) + 2)) & _
+                    ";" & NumLivre(porFixacao(LBound(porFixacao) + 4)) & ";" & _
+                    NumLivre(porFixacao(LBound(porFixacao) + 5)) & ";" & NumLivre(porFixacao(LBound(porFixacao) + 6))
+            Else
+                Print #arquivo, nomesDasFixacoes(i) & ";;;;;;"
+            End If
+        End If
+        Err.Clear
+    Next i
+End Sub
 
 Sub GravarReacoes(soma As Variant)
     Dim base As Long
