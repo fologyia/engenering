@@ -72,7 +72,7 @@
 ' configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v16"
+Const VERSAO_DA_MACRO As String = "v17"
 Const PECA As Long = 1          ' swDocPART
 Const CORPO_SOLIDO As Long = 0  ' swSolidBody
 Const UNIDADES_SI As Long = 0   ' swsUnitSI: N e N.m
@@ -214,15 +214,12 @@ Sub main()
     Set estudoAtual = estudo
     pastaOriginal = PastaDoEstudo(estudo)
     If InStr(1, pastaOriginal, "-LoadCaseManager", vbTextCompare) > 0 Then
-        ' A pasta ficou presa na de um caso (v11 a v13). A macro nao muda mais a pasta: trocar a
-        ' pasta de resultados com o gerenciador aberto fechou/travou o SOLIDWORKS 2026 (v14).
-        MsgBox "A pasta de resultados do estudo " & nomeDoEstudo & " esta presa na pasta de um caso:" & _
-            vbCrLf & pastaOriginal & vbCrLf & vbCrLf & "Conserte a mao: botao direito no estudo > " & _
-            "Propriedades > Pasta de resultados = " & Left(pastaOriginal, InStrRev(pastaOriginal, "\", _
-            InStr(1, pastaOriginal, "-LoadCaseManager", vbTextCompare)) - 1) & _
-            vbCrLf & vbCrLf & "Depois salve a peca, clique em Executar no gerenciador e rode a macro de novo.", _
-            vbExclamation
-        Exit Sub
+        ' v17: a pasta "na de um caso" (...-LoadCaseManager\Primary Load Case n) e o proprio
+        ' SOLIDWORKS 2024 apontando para o ultimo caso carregado (a v16 viu Case 1 numa rodada e Case 7
+        ' na seguinte). Nao e erro e a macro nao muda a pasta (trocar travou o SOLIDWORKS na v14): so
+        ' usa a pasta acima do gerenciador para achar os resultados.
+        pastaOriginal = Left(pastaOriginal, InStrRev(pastaOriginal, "\", _
+            InStr(1, pastaOriginal, "-LoadCaseManager", vbTextCompare)) - 1)
     End If
     pastaDoGerenciador = IIf(pastaOriginal = "", pasta, Barra(pastaOriginal)) & _
         NomeSemExtensao(swModel.GetPathName) & "-" & nomeDoEstudo & "-LoadCaseManager\"
@@ -460,7 +457,13 @@ Sub main()
         texto = texto & "."
     End If
     totalDeCasos = UBound(casos) - LBound(casos) + 1
-    If semResultados > 0 And semResultados = totalDeCasos Then
+    If semResultados > 0 And semResultados = totalDeCasos And Not baseTinhaResultados Then
+        ' v17: no SOLIDWORKS 2024 (teste do usuario, 27/10) os casos so entregam os resultados com o
+        ' estudo base rodado sozinho tambem.
+        texto = texto & vbCrLf & vbCrLf & "NENHUM CASO ENTREGOU OS RESULTADOS: o estudo " & _
+            nomeDoEstudo & " ainda nao foi rodado sozinho. Botao direito no estudo > Executar " & _
+            "(o estudo, nao o gerenciador), espere terminar e rode a macro de novo."
+    ElseIf semResultados > 0 And semResultados = totalDeCasos Then
         ' Curto: a caixa de mensagem corta perto de 1024 caracteres (o resto vai no diagnostico).
         texto = texto & vbCrLf & vbCrLf & "NENHUM CASO ENTREGOU OS RESULTADOS (o gerenciador carregou " & _
             "cada um, mas o Simulation devolveu vazio). Confira: 1) Vista de resultados, duplo clique no " & _
