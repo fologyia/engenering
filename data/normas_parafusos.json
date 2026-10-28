@@ -1,0 +1,58 @@
+{
+  "descricao": "Tabelas normativas das ligações parafusadas usadas por core/bolted_connection.py. Cada tabela traz a fonte (norma, item, de onde veio). Valores em mm; furos alongados como [largura, comprimento].",
+  "furos": {
+    "NBR8800_2025": {
+      "fonte": "ABNT NBR 8800:2025, Tabela 14 — Dimensões máximas de furos (foto enviada pelo usuário em 28/10/2026)",
+      "mm": {
+        "16": {"padrao": 18, "alargado": 20, "pouco_alongado": [18, 22], "muito_alongado": [18, 40]},
+        "20": {"padrao": 22, "alargado": 24, "pouco_alongado": [22, 26], "muito_alongado": [22, 50]},
+        "22": {"padrao": 24, "alargado": 28, "pouco_alongado": [24, 30], "muito_alongado": [24, 55]},
+        "24": {"padrao": 27, "alargado": 30, "pouco_alongado": [27, 32], "muito_alongado": [27, 60]},
+        "27": {"padrao": 30, "alargado": 35, "pouco_alongado": [30, 37], "muito_alongado": [30, 67]},
+        "30": {"padrao": 33, "alargado": 38, "pouco_alongado": [33, 40], "muito_alongado": [33, 75]}
+      },
+      "mm_regra_a_partir_de_36": "padrão d_b + 3; alargado d_b + 8; pouco alongado (d_b + 3) × (d_b + 10); muito alongado (d_b + 3) × 2,5 d_b",
+      "pol": {
+        "1/2": {"padrao": "9/16", "alargado": "5/8", "pouco_alongado": ["9/16", "11/16"], "muito_alongado": ["9/16", "1 1/4"]},
+        "5/8": {"padrao": "11/16", "alargado": "13/16", "pouco_alongado": ["11/16", "7/8"], "muito_alongado": ["11/16", "1 9/16"]},
+        "3/4": {"padrao": "13/16", "alargado": "15/16", "pouco_alongado": ["13/16", "1"], "muito_alongado": ["13/16", "1 7/8"]},
+        "7/8": {"padrao": "15/16", "alargado": "1 1/16", "pouco_alongado": ["15/16", "1 1/8"], "muito_alongado": ["15/16", "2 3/16"]},
+        "1": {"padrao": "1 1/8", "alargado": "1 1/4", "pouco_alongado": ["1 1/8", "1 5/16"], "muito_alongado": ["1 1/8", "2 1/2"]}
+      },
+      "pol_regra_a_partir_de_1_1_8": "padrão d_b + 1/8; alargado d_b + 5/16; pouco alongado (d_b + 1/8) × (d_b + 3/8); muito alongado (d_b + 1/8) × 2,5 d_b"
+    },
+    "NBR8800_2008": {
+      "fonte": "ABNT NBR 8800:2008, Tabela 12 — Dimensões máximas de furos (texto da norma conferido em 28/10/2026)",
+      "mm_ate_24": "padrão d_b + 1,5; alargado d_b + 5; pouco alongado (d_b + 1,5) × (d_b + 6); muito alongado (d_b + 1,5) × 2,5 d_b",
+      "mm_27": {"padrao": 28.5, "alargado": 33, "pouco_alongado": [28.5, 35], "muito_alongado": [28.5, 67.5]},
+      "mm_a_partir_de_30": "padrão d_b + 1,5; alargado d_b + 8; pouco alongado (d_b + 1,5) × (d_b + 9,5); muito alongado (d_b + 1,5) × 2,5 d_b",
+      "pol_ate_7_8": "padrão d_b + 1/16; alargado d_b + 3/16; pouco alongado (d_b + 1/16) × (d_b + 1/4); muito alongado (d_b + 1/16) × 2,5 d_b",
+      "pol_1": {"padrao": "1 1/16", "alargado": "1 1/4", "pouco_alongado": ["1 1/16", "1 5/16"], "muito_alongado": ["1 1/16", "2 1/2"]},
+      "pol_a_partir_de_1_1_8": "padrão d_b + 1/16; alargado d_b + 5/16; pouco alongado (d_b + 1/16) × (d_b + 3/8); muito alongado (d_b + 1/16) × 2,5 d_b"
+    }
+  },
+  "gama_e_deslizamento_elu": {
+    "NBR8800_2025": {
+      "fonte": "ABNT NBR 8800:2025, Tabela 13 — valores do prompt do usuário (28/10/2026); texto da tabela a confirmar",
+      "alargado": [1.20, 1.00],
+      "pouco_alongado_paralelo": [1.20, 1.00],
+      "muito_alongado": [1.40, 1.15],
+      "colunas": ["combinações normais, especiais ou de construção", "excepcionais"]
+    },
+    "NBR8800_2008": {
+      "fonte": "ABNT NBR 8800:2008, 6.3.4.3 (texto conferido): γ_e = 1,20 (normais, especiais ou de construção) e 1,00 (excepcionais); fator de furo C_h = 1,00 padrão, 0,85 alargado ou pouco alongado, 0,70 muito alongado",
+      "gama_e": [1.20, 1.00],
+      "C_h": {"padrao": 1.00, "alargado": 0.85, "pouco_alongado": 0.85, "muito_alongado": 0.70}
+    }
+  },
+  "incremento_de_borda": {
+    "NBR8800_2008": {
+      "fonte": "ABNT NBR 8800:2008, 6.3.11.2 (texto conferido): e_mín + β·d_b; β = 0 (alongado paralelo à borda), 0,12 (alargado), 0,20 (pouco alongado perpendicular à borda), 0,75 (muito alongado perpendicular à borda)",
+      "beta": {"alargado": 0.12, "pouco_alongado": 0.20, "muito_alongado": 0.75}
+    },
+    "NBR8800_2025": {
+      "fonte": "ABNT NBR 8800:2025, Tabela 17 — a confirmar (tabela não enviada)",
+      "a_confirmar": true
+    }
+  }
+}

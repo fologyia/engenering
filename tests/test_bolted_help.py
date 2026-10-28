@@ -86,7 +86,8 @@ def test_rotulos_avisos_e_referencias_da_norma_2024_nao_falam_em_valor_normativo
     for texto in textos:
         for frase in FRASES_PROIBIDAS:
             assert frase not in texto.lower(), texto
-    assert chk.NORMAS_ROTULOS["NBR8800_2024"] == "Projeto NBR 8800:2024"
+    # 28/10/2026: a NBR 8800:2025 é a versão oficial vigente (o código interno continua _2024).
+    assert chk.NORMAS_ROTULOS["NBR8800_2024"] == "ABNT NBR 8800:2025"
 
 
 def test_registro_da_norma_2024_nao_traz_o_aviso():
@@ -104,7 +105,8 @@ def test_registro_da_norma_2024_nao_traz_o_aviso():
     ).lower()
     for frase in FRASES_PROIBIDAS:
         assert frase not in texto
-    assert "Projeto de revisão ABNT NBR 8800" in " ".join(registro["referencias"])
+    assert "ABNT NBR 8800:2025" in " ".join(registro["referencias"])
+    assert chk.NOTA_DA_VERSAO not in texto  # a nota de versão fica só na página
 
 
 def test_nenhum_arquivo_do_programa_volta_a_falar_em_valor_normativo():

@@ -113,8 +113,11 @@ def test_axial_m16_grupo_soma_por_furo():
 
 def test_peca_u6_tracao_e_colapso_por_rasgamento():
     r = chk.verificar_ligacao(axial_m16())
-    assert perto(linha(r, "Tração da peça").resistente, 323.0, 0.002)
-    assert perto(linha(r, "Colapso por rasgamento").resistente, 233.3, 0.002)
+    # Furo-padrão da NBR 8800:2008 (Tab. 12): d_b + 1,5 = 17,5 mm (antes 18, o da 2025).
+    # A_n = 1542 − 2·(17,5 + 2)·5,08 = 1343,9 mm²; C_t·A_n·f_u/γ_a2 = 0,814·1343,9·400/1,35.
+    assert perto(linha(r, "Tração da peça").resistente, 324.24, 0.002)
+    # (0,6·250·1422,4 + 400·256,5)/1,35 com A_nt = (70 − 19,5)·5,08 (furo de 17,5 mm da 2008)
+    assert perto(linha(r, "Colapso por rasgamento").resistente, 234.06, 0.002)
     assert perto(r.intermediarios["C_t"], 1 - 13 / 70, 1e-9)
 
 
@@ -122,7 +125,7 @@ def test_regra_dos_75_por_cento_anglo_nao_ok():
     r = chk.verificar_ligacao(axial_m16())
     v = linha(r, "75%")
     assert v.status == "NÃO OK"
-    assert perto(v.solicitante, 242.3, 0.002) and perto(v.resistente, 196.6, 0.002)
+    assert perto(v.solicitante, 0.75 * 324.24, 0.002) and perto(v.resistente, 196.6, 0.002)
     assert r.status_geral == "NÃO OK"
 
 
@@ -420,7 +423,7 @@ def test_memorial_word_e_pdf_imprimem_a_tabela_de_verificacoes():
 
     pdf = gerar_relatorio_industrial_pdf(projeto, secoes_incluidas=["registros"])
     texto_pdf = "\n".join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)
-    for trecho in ("Deslizamento", "Aprov.", "NBR 6.3.4.4", "Cálculo e referência", "Não passou"):
+    for trecho in ("Deslizamento", "Aprov.", "6.3.4.4", "Cálculo e referência", "Não passou"):
         assert trecho in texto_pdf
     assert "Resultado: NÃO ATENDE." in texto_pdf
 
@@ -428,4 +431,4 @@ def test_memorial_word_e_pdf_imprimem_a_tabela_de_verificacoes():
         BytesIO(gerar_relatorio_industrial_word(projeto, secoes_incluidas=["registros"]))
     )
     textos_word = " ".join(c.text for t in word.tables for linha in t.rows for c in linha.cells)
-    assert "Deslizamento (ELS" in textos_word and "NBR 6.3.4.4" in textos_word
+    assert "Deslizamento (ELS" in textos_word and "NBR 8800:2008, 6.3.4.4" in textos_word

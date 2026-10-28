@@ -32,6 +32,14 @@ _MOM_EMENDA = "Emenda por sobreposição"
 _MOM_EXCENTRICIDADE = "Excentricidade a informada"
 _MOM_VALOR = "Momento M informado"
 
+_ESF_CORTANTE = "Só cortante"
+_ESF_TRACAO = "Só tração"
+_ESF_COMBINADO = "Combinado"
+
+_P_INFORMADO = "Informar p"
+_P_EXTREMO = "Parafuso da ponta"
+_P_INTERNO = "Parafuso do meio"
+
 _REVESTIMENTOS = {
     "galvanizado_fogo": "Galvanizado a fogo (padrão Anglo)",
     "zinco_aluminio": "Zn/Al (ASTM F1136, Dacromet)",
@@ -40,6 +48,8 @@ _REVESTIMENTOS = {
 
 
 def _avisos_fixos() -> None:
+    # A nota de versão fica só na página (não vai para o registro nem para o memorial).
+    st.info(chk.NOTA_DA_VERSAO, icon=":material/menu_book:")
     corpo = "\n".join(f"- {aviso}" for aviso in chk.AVISOS_FIXOS)
     st.warning(f"**Leia antes de usar:**\n\n{corpo}", icon=":material/gavel:")
     with st.expander("Valores da NBR 8800:2008 conferidos na norma", icon=":material/fact_check:"):
@@ -57,6 +67,7 @@ def _formulario() -> chk.EntradaLigacao | None:
             norma = st.selectbox(
                 "Norma",
                 list(bc.NORMAS),
+                index=list(bc.NORMAS).index("NBR8800_2024"),  # a NBR 8800:2025, vigente
                 format_func=lambda n: chk.NORMAS_ROTULOS[n],
                 key="ligest_norma",
                 persist_state="session",
@@ -90,19 +101,42 @@ def _formulario() -> chk.EntradaLigacao | None:
                 help=AJUDA["planos_corte"],
             )
         dados = bc.dados_parafuso(designacao)
-        extras = st.columns(3)
+        extras = st.columns(4)
         with extras[0]:
-            d_h = st.number_input(
-                "Furo d_h (mm)",
-                min_value=float(dados["d_b"]),
-                value=float(dados["d_h"]),
-                step=0.1,
-                format="%.1f",
-                key=f"ligest_dh_{designacao}",
-                help=AJUDA["furo"],
+            tipo_furo = st.selectbox(
+                "Tipo de furo",
+                list(bc.TIPOS_DE_FURO),
+                format_func=lambda tipo: bc.ROTULOS_DE_FURO[tipo],
+                key="ligest_tipo_furo",
                 persist_state="session",
+                help=AJUDA["tipo_furo"],
             )
+        # O furo-padrão da tabela da versão escolhida (a 2008 tem d_b + 1,5 mm).
+        furo_padrao = bc.dimensoes_do_furo(designacao, bc.FURO_PADRAO, norma)[0]
+        d_h = furo_padrao
         with extras[1]:
+            if tipo_furo == bc.FURO_PADRAO:
+                d_h = st.number_input(
+                    "Furo d_h (mm)",
+                    min_value=float(dados["d_b"]),
+                    value=round(float(furo_padrao), 1),
+                    step=0.1,
+                    format="%.1f",
+                    key=f"ligest_dh_{designacao}_{norma}",
+                    help=AJUDA["furo"],
+                    persist_state="session",
+                )
+            else:
+                largura, comprimento = bc.dimensoes_do_furo(designacao, tipo_furo, norma)
+                st.metric(
+                    "Furo (tabela da norma)",
+                    f"{largura:.1f} mm"
+                    if largura == comprimento
+                    else f"{largura:.1f} × {comprimento:.1f} mm",
+                    border=True,
+                    help=AJUDA["tipo_furo"],
+                )
+        with extras[2]:
             rosca_no_plano = st.toggle(
                 "Rosca no plano de corte",
                 value=True,
@@ -110,7 +144,7 @@ def _formulario() -> chk.EntradaLigacao | None:
                 help=AJUDA["rosca_plano"],
                 persist_state="session",
             )
-        with extras[2]:
+        with extras[3]:
             deformacao_limitada = st.toggle(
                 "Deformação do furo limitada",
                 value=True,
@@ -161,9 +195,11 @@ def _formulario() -> chk.EntradaLigacao | None:
         with chapas[1]:
             aco = st.selectbox(
                 "Aço das partes ligadas",
-                list(bc.ACOS),
+                [*bc.ACOS, chk.ACO_INFORMADO],
                 format_func=lambda nome: (
-                    f"{nome} (f_y {bc.ACOS[nome][0]} / f_u {bc.ACOS[nome][1]} MPa)"
+                    nome
+                    if nome == chk.ACO_INFORMADO
+                    else f"{nome} (f_y {bc.ACOS[nome][0]} / f_u {bc.ACOS[nome][1]} MPa)"
                 ),
                 key="ligest_aco",
                 persist_state="session",
@@ -180,6 +216,29 @@ def _formulario() -> chk.EntradaLigacao | None:
                 help=AJUDA["pega"],
                 persist_state="session",
             )
+        f_y = f_u = None
+        if aco == chk.ACO_INFORMADO:
+            resistencias = st.columns(2)
+            with resistencias[0]:
+                f_y = st.number_input(
+                    "f_y — escoamento (MPa)",
+                    min_value=1.0,
+                    value=250.0,
+                    step=5.0,
+                    key="ligest_fy",
+                    persist_state="session",
+                    help=AJUDA["f_y"],
+                )
+            with resistencias[1]:
+                f_u = st.number_input(
+                    "f_u — ruptura (MPa)",
+                    min_value=1.0,
+                    value=400.0,
+                    step=5.0,
+                    key="ligest_fu",
+                    persist_state="session",
+                    help=AJUDA["f_u"],
+                )
         if 0 < pega_mm < t:
             st.error(
                 "A pega (soma das espessuras) não pode ser menor que t.", icon=":material/error:"
@@ -307,9 +366,23 @@ def _formulario() -> chk.EntradaLigacao | None:
     # ------------------------------------------------------------------ 3. esforços
     with st.container(border=True):
         st.subheader("3. Esforços no centro do grupo", help=AJUDA["sec_est_3"])
+        modo_esforco = st.segmented_control(
+            "Como os parafusos trabalham",
+            [_ESF_CORTANTE, _ESF_TRACAO, _ESF_COMBINADO],
+            default=_ESF_CORTANTE,
+            required=True,
+            width="stretch",
+            key="ligest_modo_esforco",
+            persist_state="session",
+            help=AJUDA["modo_esforco"],
+        )
+        com_corte = modo_esforco != _ESF_TRACAO
+        com_tracao = modo_esforco != _ESF_CORTANTE
         st.caption(
-            "N atua ao longo das linhas de parafusos (direção x); V é transversal (direção y). "
-            "O ELU usa a força de cálculo; o deslizamento usa a de serviço (característica)."
+            "Esforços **do grupo** (o programa divide pelos parafusos). N atua ao longo das "
+            "linhas de parafusos (x) e V é transversal (y), no plano das chapas; N_t puxa os "
+            "parafusos pelo comprimento. O ELU usa a força de cálculo; o deslizamento, a de "
+            "serviço (característica)."
         )
         base = st.columns([2, 1, 1, 1])
         with base[0]:
@@ -321,24 +394,26 @@ def _formulario() -> chk.EntradaLigacao | None:
                 persist_state="session",
             )
         sufixo = "Sd" if valores_de_calculo else "k"
-        with base[1]:
-            N = st.number_input(
-                f"N_{sufixo} (kN)",
-                value=0.0,
-                step=1.0,
-                key="ligest_N",
-                persist_state="session",
-                help=AJUDA["N"],
-            )
-        with base[2]:
-            V = st.number_input(
-                f"V_{sufixo} (kN)",
-                value=32.0,
-                step=1.0,
-                key="ligest_V",
-                persist_state="session",
-                help=AJUDA["V"],
-            )
+        N = V = 0.0
+        if com_corte:
+            with base[1]:
+                N = st.number_input(
+                    f"N_{sufixo} (kN)",
+                    value=0.0,
+                    step=1.0,
+                    key="ligest_N",
+                    persist_state="session",
+                    help=AJUDA["N"],
+                )
+            with base[2]:
+                V = st.number_input(
+                    f"V_{sufixo} (kN)",
+                    value=32.0,
+                    step=1.0,
+                    key="ligest_V",
+                    persist_state="session",
+                    help=AJUDA["V"],
+                )
         with base[3]:
             gama_f = st.number_input(
                 "γ_f",
@@ -355,16 +430,18 @@ def _formulario() -> chk.EntradaLigacao | None:
             if geometria == _GEO_GRADE
             else [_MOM_NENHUM, _MOM_EXCENTRICIDADE, _MOM_VALOR]
         )
-        modo_momento = st.segmented_control(
-            "Momento no centro do grupo",
-            opcoes_momento,
-            default=_MOM_EMENDA if geometria == _GEO_GRADE else _MOM_NENHUM,
-            required=True,
-            width="stretch",
-            key=f"ligest_momento_{'g' if geometria == _GEO_GRADE else 'l'}",
-            persist_state="session",
-            help=AJUDA["momento"],
-        )
+        modo_momento = _MOM_NENHUM
+        if com_corte:
+            modo_momento = st.segmented_control(
+                "Momento no centro do grupo",
+                opcoes_momento,
+                default=_MOM_EMENDA if geometria == _GEO_GRADE else _MOM_NENHUM,
+                required=True,
+                width="stretch",
+                key=f"ligest_momento_{'g' if geometria == _GEO_GRADE else 'l'}",
+                persist_state="session",
+                help=AJUDA["momento"],
+            )
         M = 0.0
         excentricidade: float | None = None
         if modo_momento == _MOM_EMENDA:
@@ -388,6 +465,42 @@ def _formulario() -> chk.EntradaLigacao | None:
                 persist_state="session",
                 help=AJUDA["momento_valor"],
             )
+        N_t = M_t = 0.0
+        interacao_tabela = False
+        if com_tracao:
+            tracao = st.columns([1, 1, 2])
+            with tracao[0]:
+                N_t = st.number_input(
+                    f"N_t,{sufixo} do grupo — tração nos parafusos (kN)",
+                    min_value=0.0,
+                    value=10.0,
+                    step=1.0,
+                    key="ligest_Nt",
+                    persist_state="session",
+                    help=AJUDA["N_t"],
+                )
+            with tracao[1]:
+                M_t = st.number_input(
+                    f"M_t,{sufixo} fora do plano (kN·m)",
+                    value=0.0,
+                    step=0.5,
+                    key="ligest_Mt",
+                    persist_state="session",
+                    help=AJUDA["M_t"],
+                )
+            with tracao[2]:
+                if norma.startswith("NBR") and com_corte:
+                    interacao_tabela = st.toggle(
+                        "Ver também o limite tabelado da tração com corte",
+                        value=False,
+                        key="ligest_interacao_tabela",
+                        persist_state="session",
+                        help=AJUDA["interacao_tabela"],
+                    )
+
+    alavanca = dict(alavanca=False)
+    if com_tracao:
+        alavanca = _secao_alavanca(norma, t, d_h)
 
     # ------------------------------------------------------------------ 4. opções
     with st.container(border=True):
@@ -477,6 +590,49 @@ def _formulario() -> chk.EntradaLigacao | None:
                 help=AJUDA["ec"],
                 persist_state="session",
             )
+        chapa_largura = chapa_t = None
+        chapa_furos = None
+        if st.toggle(
+            "Verificar a chapa de ligação (gusset) tracionada",
+            value=False,
+            key="ligest_chapa",
+            persist_state="session",
+            help=AJUDA["chapa"],
+        ):
+            chapa = st.columns(3)
+            with chapa[0]:
+                chapa_largura = st.number_input(
+                    "Largura da chapa na seção (mm)",
+                    min_value=1.0,
+                    value=150.0,
+                    step=5.0,
+                    key="ligest_chapa_largura",
+                    persist_state="session",
+                    help=AJUDA["chapa_largura"],
+                )
+            with chapa[1]:
+                chapa_t = st.number_input(
+                    "Espessura da chapa (mm)",
+                    min_value=0.01,
+                    value=float(t),
+                    step=0.01,
+                    format="%.2f",
+                    key="ligest_chapa_t",
+                    persist_state="session",
+                    help=AJUDA["chapa_t"],
+                )
+            with chapa[2]:
+                chapa_furos = int(
+                    st.number_input(
+                        "Furos na seção",
+                        min_value=0,
+                        value=int(n_lin) if geometria == _GEO_GRADE else 1,
+                        step=1,
+                        key="ligest_chapa_furos",
+                        persist_state="session",
+                        help=AJUDA["chapa_furos"],
+                    )
+                )
 
     # ------------------------------------------------------------------ 6. Anglo
     with st.container(border=True):
@@ -525,11 +681,14 @@ def _formulario() -> chk.EntradaLigacao | None:
         valores_sao_de_calculo=valores_de_calculo,
         designacao=designacao,
         grau=grau,
-        d_h_mm=None if math.isclose(d_h, dados["d_h"], abs_tol=1e-9) else d_h,
+        d_h_mm=None if math.isclose(d_h, round(furo_padrao, 1), abs_tol=1e-9) else d_h,
+        tipo_furo=tipo_furo,
         rosca_no_plano=rosca_no_plano,
         n_planos=int(n_planos),
         t=t,
         aco=aco,
+        f_y=f_y,
+        f_u=f_u,
         pega=pega_mm if pega_mm > 0 else None,
         n_lin=n_lin,
         n_col=n_col,
@@ -550,7 +709,148 @@ def _formulario() -> chk.EntradaLigacao | None:
         peca_por_esbeltez=por_esbeltez,
         K_torque=K_torque,
         fora_do_escopo=tuple(fora or ()),
+        N_t=N_t,
+        M_t=M_t,
+        interacao_por_tabela=interacao_tabela,
+        chapa_largura=chapa_largura,
+        chapa_t=chapa_t,
+        chapa_furos=chapa_furos,
+        **alavanca,
     )
+
+
+def _secao_alavanca(norma: str, t: float, d_h: float) -> dict[str, object]:
+    """Os campos do efeito de alavanca (só com tração nos parafusos)."""
+    with st.container(border=True):
+        st.subheader("Efeito de alavanca", help=AJUDA["sec_est_alavanca"])
+        if not st.toggle(
+            "A tração passa por uma chapa que pode dobrar (chapa de topo, mesa, cantoneira)",
+            value=False,
+            key="ligest_alavanca",
+            persist_state="session",
+            help=AJUDA["alavanca"],
+        ):
+            return {"alavanca": False}
+        linha = st.columns(3)
+        with linha[0]:
+            a = st.number_input(
+                "a — parafuso até a borda livre (mm)",
+                min_value=0.1,
+                value=35.0,
+                step=1.0,
+                key="ligest_alav_a",
+                persist_state="session",
+                help=AJUDA["alav_a"],
+            )
+        with linha[1]:
+            b = st.number_input(
+                "b — parafuso até a face da alma (mm)",
+                min_value=0.1,
+                value=35.0,
+                step=1.0,
+                key="ligest_alav_b",
+                persist_state="session",
+                help=AJUDA["alav_b"],
+            )
+        with linha[2]:
+            modo_p = st.segmented_control(
+                "Largura tributária p",
+                [_P_INFORMADO, _P_EXTREMO, _P_INTERNO],
+                default=_P_INFORMADO,
+                required=True,
+                key="ligest_alav_modo_p",
+                persist_state="session",
+                help=AJUDA["alav_modo_p"],
+            )
+        if modo_p == _P_INFORMADO:
+            p = st.number_input(
+                "p (mm)",
+                min_value=0.1,
+                value=60.0,
+                step=1.0,
+                key="ligest_alav_p",
+                persist_state="session",
+                help=AJUDA["alav_p"],
+            )
+        else:
+            distancias = st.columns(2)
+            e_ext = None
+            if modo_p == _P_EXTREMO:
+                with distancias[0]:
+                    e_ext = st.number_input(
+                        "e_ext — até a borda (mm)",
+                        min_value=0.1,
+                        value=40.0,
+                        step=1.0,
+                        key="ligest_alav_e_ext",
+                        persist_state="session",
+                        help=AJUDA["alav_e_ext"],
+                    )
+            with distancias[1]:
+                e_int = st.number_input(
+                    "e_int — entre parafusos (mm)",
+                    min_value=0.1,
+                    value=80.0,
+                    step=1.0,
+                    key="ligest_alav_e_int",
+                    persist_state="session",
+                    help=AJUDA["alav_e_int"],
+                )
+            p = bc.largura_tributaria_alavanca(b, e_ext, e_int, extremo=modo_p == _P_EXTREMO)
+            st.caption(f"p = {p:.1f} mm")
+        outros = st.columns(3)
+        with outros[0]:
+            d_f = st.number_input(
+                "d_f — furo na direção de p (mm)",
+                min_value=0.0,
+                value=round(float(d_h), 1),
+                step=0.1,
+                format="%.1f",
+                key="ligest_alav_df",
+                persist_state="session",
+                help=AJUDA["alav_d_f"],
+            )
+        with outros[1]:
+            t_placa = st.number_input(
+                "Espessura da chapa que dobra (mm)",
+                min_value=0.01,
+                value=float(t),
+                step=0.01,
+                format="%.2f",
+                key="ligest_alav_t",
+                persist_state="session",
+                help=AJUDA["alav_t"],
+            )
+        with outros[2]:
+            F_t = st.number_input(
+                "F_t,Sd com alavanca, por parafuso (kN; 0 = não informada)",
+                min_value=0.0,
+                value=0.0,
+                step=0.5,
+                key="ligest_alav_Ft",
+                persist_state="session",
+                help=AJUDA["alav_F_t"],
+            )
+        plastico = True
+        if norma == "NBR8800_2008":
+            plastico = st.radio(
+                "Método da NBR 8800:2008 (6.3.5.2)",
+                ["a) Momento plástico, parafuso −33 %", "b) Momento elástico, parafuso −25 %"],
+                horizontal=True,
+                key="ligest_alav_metodo",
+                persist_state="session",
+                help=AJUDA["alav_metodo_2008"],
+            ).startswith("a)")
+    return {
+        "alavanca": True,
+        "alav_a": a,
+        "alav_b": b,
+        "alav_p": p,
+        "alav_d_f": d_f,
+        "alav_t": t_placa,
+        "alav_plastico": plastico,
+        "F_t_com_alavanca": F_t if F_t > 0 else None,
+    }
 
 
 _percentual = formatar_percentual
@@ -591,6 +891,13 @@ def _painel_resumo(entrada: chk.EntradaLigacao, resultado: chk.ResultadoLigacao)
                     f"{resultado.forcas['R_max_ELS_kN']:.2f} kN",
                     border=True,
                     help=AJUDA["res_critico_els"],
+                )
+            if "F_t_Sd_kN" in resultado.forcas:
+                st.metric(
+                    "Tração no parafuso crítico (ELU)",
+                    f"{resultado.forcas['F_t_Sd_kN']:.2f} kN",
+                    border=True,
+                    help=AJUDA["res_tracao"],
                 )
         st.markdown(f"**Verificação que governa:** {resultado.governante}")
         if resultado.forcas:
@@ -789,6 +1096,44 @@ def _registro(
         )
 
 
+def _memorial(
+    entrada: chk.EntradaLigacao, resultado: chk.ResultadoLigacao, menor: str | None
+) -> None:
+    """Word e PDF do memorial desta ligação, gerados só no clique."""
+    from core.project_store import obter_projeto_ativo
+
+    projeto = obter_projeto_ativo()
+    parafuso = entrada.designacao.replace('"', "pol")
+    nome = f"memorial_ligacao_{parafuso}_{entrada.grau}"
+    botoes = st.columns(2)
+    with botoes[0]:
+        st.download_button(
+            "Baixar o memorial desta ligação (Word)",
+            data=lambda: chk.memorial_da_ligacao(entrada, resultado, menor, projeto=projeto),
+            file_name=f"{nome}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            icon=":material/description:",
+            width="stretch",
+            on_click="ignore",
+            key="ligest_memorial_word",
+            help=AJUDA["btn_memorial_word"],
+        )
+    with botoes[1]:
+        st.download_button(
+            "Baixar o memorial desta ligação (PDF)",
+            data=lambda: chk.memorial_da_ligacao(
+                entrada, resultado, menor, projeto=projeto, formato="pdf"
+            ),
+            file_name=f"{nome}.pdf",
+            mime="application/pdf",
+            icon=":material/picture_as_pdf:",
+            width="stretch",
+            on_click="ignore",
+            key="ligest_memorial_pdf",
+            help=AJUDA["btn_memorial_pdf"],
+        )
+
+
 def mostrar_ligacao_estrutural() -> None:
     """Desenha o modo estrutural completo (entradas, resultados, varreduras e registro)."""
     st.info(
@@ -823,6 +1168,7 @@ def mostrar_ligacao_estrutural() -> None:
             key="ligest_baixar_csv",
             help=AJUDA["btn_csv"],
         )
+        _memorial(entrada, resultado, menor)
         with st.expander(
             "Fórmula e item da norma de cada verificação", icon=":material/functions:"
         ):
@@ -857,7 +1203,6 @@ def mostrar_ligacao_estrutural() -> None:
             width="stretch",
         )
     st.caption(
-        "Referências: ABNT NBR 8800:2008 e Projeto NBR 8800:2024; AISC 360 (J3, J4) e Design "
-        "Guide 29; RCSC (2004); Anglo American AA-BR-DPST-DR-0001, item 9.1. Confirme sempre a "
-        "edição vigente da norma aplicável."
+        "Referências: ABNT NBR 8800:2025 e NBR 8800:2008; AISC 360 (J3, J4) e Design Guide 29; "
+        "RCSC (2004); Anglo American AA-BR-DPST-DR-0001, item 9.1."
     )

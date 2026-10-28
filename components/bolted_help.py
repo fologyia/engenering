@@ -68,11 +68,22 @@ AJUDA: dict[str, str] = {
         "Mais planos = mais resistência ao corte e ao deslizamento."
     ),
     "furo": (
-        "Diâmetro do furo na chapa. Já vem preenchido com o **furo-padrão** da tabela (um pouco "
-        "maior que o parafuso). Só altere se o seu furo for diferente — por exemplo, para "
-        "reproduzir o AISC 360-10, que usa 27,0 mm no parafuso de 1″.\n\n"
-        "**Simplificação:** o programa só trata furo-padrão (não calcula furos alargados nem "
-        "alongados)."
+        "Diâmetro do furo na chapa. Já vem preenchido com o **furo-padrão** da tabela da norma "
+        "escolhida (a NBR 8800:2008 usa d_b + 1,5 mm, menor que a 2025 e a AISC). Só altere se o "
+        "seu furo for diferente — por exemplo, para reproduzir o AISC 360-10, que usa 27,0 mm no "
+        "parafuso de 1″.\n\n"
+        "**Simplificação:** o valor digitado vale só para o furo-padrão; nos furos alargados e "
+        "alongados, as medidas vêm da tabela da norma."
+    ),
+    "tipo_furo": (
+        "O formato do furo na chapa:\n\n"
+        "- **Padrão**: redondo, pouco maior que o parafuso.\n"
+        "- **Alargado**: redondo e bem maior (folga para montagem). Só em ligação por atrito.\n"
+        "- **Pouco/muito alongado**: oval (rasgo). **Paralelo à força** = o rasgo na direção em "
+        "que a força puxa; **transversal** = o rasgo atravessado.\n\n"
+        "Com furo alargado ou alongado paralelo, o deslizamento vira estado-limite último (a "
+        "ligação não pode escorregar nem sob carga de cálculo). As medidas vêm da Tab. 14 da NBR "
+        "8800:2025 (Tab. 12 na 2008)."
     ),
     "rosca_plano": (
         "A rosca é a parte “ranhurada” do parafuso. Se ela cai bem no plano onde as chapas se "
@@ -484,4 +495,114 @@ AJUDA: dict[str, str] = {
         "melhor."
     ),
     "mec_m_escoamento_max": "Margem contra escoar na tensão máxima do ciclo.",
+    # ------------------------------------------------------------------ tração, alavanca e chapa
+    "f_y": (
+        "Resistência ao **escoamento** do aço das partes ligadas (MPa): a tensão em que o aço "
+        "começa a deformar sem voltar. ASTM A36 = 250 MPa."
+    ),
+    "f_u": (
+        "Resistência à **ruptura** do aço (MPa): a tensão em que ele rompe. É sempre **maior** que "
+        "o f_y — ASTM A36 = 400 MPa. Se você digitar f_u igual ou menor que f_y, o programa para e "
+        "avisa."
+    ),
+    "modo_esforco": (
+        "Como os parafusos são carregados:\n\n"
+        "- **Só cortante**: as chapas tentam escorregar uma sobre a outra (emenda, chapa de "
+        "ligação).\n"
+        "- **Só tração**: a força puxa o parafuso pelo comprimento (chapa de topo, pendural).\n"
+        "- **Combinado**: os dois juntos — aparece a interação tração + corte e o deslizamento "
+        "fica menor, porque a tração alivia o aperto entre as chapas."
+    ),
+    "N_t": (
+        "Força que **puxa os parafusos pelo comprimento** (kN), perpendicular ao plano das chapas. "
+        "É a força do **grupo inteiro**: o programa divide pelos parafusos (com o momento fora do "
+        "plano, se houver) e mostra a força **por parafuso** na tabela. Característica ou de "
+        "cálculo, como o N e o V acima."
+    ),
+    "M_t": (
+        "Momento **fora do plano** das chapas (kN·m), que traciona os parafusos de um lado — o "
+        "de y maior — e alivia os do outro. Ex.: chapa de topo de uma viga. "
+        "**Simplificação:** o giro é em torno do centro do grupo; parafuso que ficaria comprimido "
+        "fica com tração zero."
+    ),
+    "interacao_tabela": (
+        "Além da equação da interação (F_t/F_t,Rd)² + (F_v/F_v,Rd)² ≤ 1, a norma aceita um limite "
+        "direto para a tração: F_t,Sd ≤ f_ub·A_b/γ_a2 − 1,9·F_v,Sd (ou 1,5·F_v,Sd com o plano de "
+        "corte fora da rosca). É a Tabela 12 da NBR 8800:2025 (Tabela 11 na 2008). Ligue para "
+        "ver também essa linha; as verificações isoladas de tração e de corte continuam."
+    ),
+    "res_tracao": (
+        "A força de tração **no parafuso mais tracionado** (de cálculo, kN), já com a alavanca se "
+        "você a informou — não é a do grupo."
+    ),
+    "sec_est_alavanca": (
+        "Quando a chapa tracionada pelos parafusos é fina, ela **dobra**: as pontas encostam na "
+        "outra peça e funcionam como uma alavanca, que aumenta a tração no parafuso. Aqui o "
+        "programa confere a espessura da chapa: rígida (sem alavanca) ou flexível (com alavanca, "
+        "pelos fatores β e α da NBR 8800:2025; na 2008, pela regra simplificada de 6.3.5.2)."
+    ),
+    "alavanca": (
+        "Ligue se a tração dos parafusos passa por uma chapa que pode **dobrar** entre o parafuso "
+        "e a alma ou a solda (chapa de topo, mesa de um T, cantoneira). Desligado, o programa "
+        "considera a chapa rígida."
+    ),
+    "alav_a": (
+        "Distância **a** (mm): do centro do parafuso até a **borda livre** da chapa, na direção "
+        "perpendicular à alma. No cálculo ela é limitada a 1,25·b."
+    ),
+    "alav_b": (
+        "Distância **b** (mm): do centro do parafuso até a **face da alma** (ou da solda) da peça "
+        "que puxa. Quanto maior, maior a dobra da chapa."
+    ),
+    "alav_modo_p": (
+        "**p** é a largura de chapa que trabalha com um parafuso, ao longo da alma. Informe direto "
+        "ou deixe o programa calcular: parafuso da ponta, p = mín(e_ext; 1,75b) + mín(0,5·e_int; "
+        "1,75b); parafuso do meio, p = mín(e_int; 3,5b)."
+    ),
+    "alav_p": "Largura tributária **p** de um parafuso (mm), medida ao longo da alma.",
+    "alav_e_ext": (
+        "Do centro do parafuso da ponta até a **borda** da chapa, ao longo da alma (mm)."
+    ),
+    "alav_e_int": "Distância entre os centros de dois parafusos vizinhos, ao longo da alma (mm).",
+    "alav_d_f": (
+        "Dimensão do furo medida na direção de p (mm). Já vem com o furo da ligação; troque se o "
+        "furo for alongado nessa direção."
+    ),
+    "alav_t": (
+        "Espessura da chapa que **dobra** (mm). Já vem com o t da ligação; troque se a chapa "
+        "fletida for outra."
+    ),
+    "alav_F_t": (
+        "Tração **por parafuso, de cálculo, com a alavanca** (kN), se você a calculou. Com a chapa "
+        "flexível, o programa usa esse valor na tração e na interação. 0 = não informada (aparece "
+        "um aviso). Não pode ser menor que a tração sem alavanca."
+    ),
+    "alav_metodo_2008": (
+        "Na NBR 8800:2008 (6.3.5.2), a alavanca fica coberta se a chapa for dimensionada com o "
+        "momento F_t·b: **plástico** (Z = p·t²/4) com a tração resistente dos parafusos reduzida "
+        "em 33 %, ou **elástico** (W = p·t²/6) com redução de 25 %. Exige também a ≥ b."
+    ),
+    "chapa": (
+        "Ligue para verificar a **chapa de ligação** (gusset) tracionada pela força N: escoamento "
+        "da seção bruta e ruptura da seção líquida, com A_e = A_n ≤ 0,85·A_g. O colapso por "
+        "rasgamento continua na seção da peça."
+    ),
+    "chapa_largura": (
+        "Largura da chapa na seção que atravessa a primeira fileira de furos (mm), "
+        "perpendicular à força."
+    ),
+    "chapa_t": "Espessura da chapa de ligação (mm). Já vem com o t da ligação.",
+    "chapa_furos": (
+        "Quantos furos a seção atravessa (a fileira mais carregada). Cada furo desconta "
+        "(furo + 2 mm) × espessura da área."
+    ),
+    "btn_memorial_word": (
+        "Baixa o memorial **só desta ligação** em Word, no padrão do memorial do projeto: dados, "
+        "tabela de verificações com fórmula e item da norma, e o resultado. Com projeto ativo, a "
+        "capa leva os dados dele; sem projeto, os campos ficam para preencher."
+    ),
+    "btn_memorial_pdf": (
+        "O mesmo memorial desta ligação, em PDF, pronto para enviar. Para juntar com os outros "
+        "cálculos do projeto, registre a ligação e use a Central de relatórios."
+    ),
 }

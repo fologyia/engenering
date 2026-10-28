@@ -38,7 +38,10 @@ def abrir(banco_isolado, **estado) -> AppTest:
 
 
 def estrutural(banco_isolado, **estado) -> AppTest:
-    return abrir(banco_isolado, **{"parafuso_modo": ESTRUTURAL, **estado})
+    """O modo estrutural pela NBR 8800:2008, a norma do caso real (a página abre na 2025)."""
+    return abrir(
+        banco_isolado, **{"parafuso_modo": ESTRUTURAL, "ligest_norma": "NBR8800_2008", **estado}
+    )
 
 
 def tabela(teste: AppTest) -> pd.DataFrame:
@@ -117,10 +120,11 @@ def test_axial_m16_peca_u6_e_regra_dos_75(banco_isolado):
         ligest_esbeltez=True,
     )
     assert linha(t, "Grupo de parafusos")["Resistente"] == pytest.approx(196.6, rel=0.002)
-    assert linha(t, "Tração da peça")["Resistente"] == pytest.approx(323.0, rel=0.002)
-    assert linha(t, "Colapso por rasgamento")["Resistente"] == pytest.approx(233.3, rel=0.002)
+    # Furo-padrão da NBR 8800:2008: d_b + 1,5 = 17,5 mm (ver test_bolted_joint_check).
+    assert linha(t, "Tração da peça")["Resistente"] == pytest.approx(324.24, rel=0.002)
+    assert linha(t, "Colapso por rasgamento")["Resistente"] == pytest.approx(234.06, rel=0.002)
     regra = linha(t, "75%")
-    assert regra["Solicitante"] == pytest.approx(242.3, rel=0.002)
+    assert regra["Solicitante"] == pytest.approx(0.75 * 324.24, rel=0.002)
     assert regra["Resistente"] == pytest.approx(196.6, rel=0.002)
     assert regra["Status"] == "NÃO OK"
 
@@ -130,7 +134,7 @@ def test_dg29_na_tela(banco_isolado):
         banco_isolado,
         ligest_norma="AISC360_LRFD",
         ligest_designacao='1"',
-        **{'ligest_dh_1"': 27.0},
+        **{'ligest_dh_1"_AISC360_LRFD': 27.0},
         ligest_t=9.525,
         ligest_n_lin=2,
         ligest_n_col=5,
@@ -306,6 +310,29 @@ def sem_ajuda(teste: AppTest) -> set[tuple[str, str]]:
             {"parafuso_modo": ESTRUTURAL, "ligest_geometria": "Coordenadas livres"},
             id="estrutural-coordenadas-livres",
         ),
+        pytest.param(
+            {
+                "parafuso_modo": ESTRUTURAL,
+                "ligest_modo_esforco": "Combinado",
+                "ligest_interacao_tabela": True,
+                "ligest_alavanca": True,
+                "ligest_alav_modo_p": "Parafuso da ponta",
+                "ligest_chapa": True,
+                "ligest_tipo_furo": "alargado",
+                "ligest_aco": "Informado (f_y e f_u)",
+            },
+            id="estrutural-combinado-alavanca-chapa-furo-aco",
+        ),
+        pytest.param(
+            {
+                "parafuso_modo": ESTRUTURAL,
+                "ligest_norma": "NBR8800_2008",
+                "ligest_modo_esforco": "Só tração",
+                "ligest_alavanca": True,
+                "ligest_alav_modo_p": "Parafuso do meio",
+            },
+            id="estrutural-tracao-alavanca-2008",
+        ),
         pytest.param({}, id="mecanico-padrao"),
         pytest.param(
             {
@@ -376,7 +403,64 @@ def test_tela_nao_diz_que_o_projeto_2024_nao_tem_valor_normativo(banco_isolado, 
     t = abrir(banco_isolado, parafuso_modo=modo, ligest_norma="NBR8800_2024")
     if modo == ESTRUTURAL:
         t.button(key="ligest_btn_comparar").click().run()  # abre a tabela das quatro normas
-        assert any("Projeto NBR 8800:2024" in str(d.value.to_dict()) for d in t.dataframe)
+        assert any("ABNT NBR 8800:2025" in str(d.value.to_dict()) for d in t.dataframe)
     texto = textos_da_tela(t)
     for frase in ("valor normativo", "sem valor", "não tem valor"):
         assert frase not in texto, frase
+
+
+# ------------------------------------------------------------------ tração, alavanca, chapa e memorial (28/10)
+def test_pagina_abre_na_2025_com_a_nota_de_versao(banco_isolado):
+    from core import bolted_joint_check as chk
+
+    t = abrir(banco_isolado, parafuso_modo=ESTRUTURAL)
+    assert t.session_state["ligest_norma"] == "NBR8800_2024"  # a NBR 8800:2025
+    assert any(chk.NOTA_DA_VERSAO == i.value for i in t.info)
+
+
+def test_so_tracao_mostra_a_forca_por_parafuso(banco_isolado):
+    t = estrutural(
+        banco_isolado,
+        ligest_norma="NBR8800_2024",
+        ligest_modo_esforco="Só tração",
+        ligest_Nt=20.0,
+    )
+    # 20 kN do grupo × 1,4 ÷ 4 parafusos = 7,00 kN por parafuso.
+    assert metrica(t, "Tração no parafuso crítico (ELU)") == "7.00 kN"
+    assert linha(t, "Tração no parafuso")["Solicitante"] == pytest.approx(7.0)
+    assert not tabela(t)["Verificação"].str.contains("Parafuso crítico").any()
+    assert not any(n.label.startswith("V_") for n in t.number_input)  # sem o campo de cortante
+
+
+def test_combinado_com_alavanca_e_chapa_na_tela(banco_isolado):
+    t = estrutural(
+        banco_isolado,
+        ligest_norma="NBR8800_2024",
+        ligest_modo_esforco="Combinado",
+        ligest_N=30.0,
+        ligest_alavanca=True,
+        ligest_chapa=True,
+        ligest_tipo_furo="alargado",
+    )
+    for trecho in (
+        "Tração + corte (interação",
+        "Alavanca — placa rígida",
+        "Chapa de ligação — ruptura",
+        "Deslizamento (ELU",
+        "Tipo de furo",
+    ):
+        assert tabela(t)["Verificação"].str.contains(trecho, regex=False).any(), trecho
+
+
+def test_aco_digitado_com_fu_igual_a_fy_e_erro(banco_isolado):
+    t = estrutural(
+        banco_isolado, ligest_aco="Informado (f_y e f_u)", ligest_fy=250.0, ligest_fu=250.0
+    )
+    assert any("A36" in e.value and "f_u" in e.value for e in t.error)
+
+
+def test_botoes_do_memorial_na_pagina(banco_isolado):
+    t = estrutural(banco_isolado)
+    rotulos = [b.label for b in t.get("download_button")]
+    assert "Baixar o memorial desta ligação (Word)" in rotulos
+    assert "Baixar o memorial desta ligação (PDF)" in rotulos
