@@ -12,6 +12,7 @@ from components.project_tools import (
     tratar_conflito_de_gravacao,
 )
 from components.ui import cabecalho_pagina
+from core import casos_de_aceite as ca
 from core.project_checklist import resumo_checklist
 from core.project_store import criar_item, salvar_projeto
 from core.project_validation import SEVERIDADES, validar_projeto
@@ -35,6 +36,30 @@ cabecalho_pagina(
         ("app_pages/central_relatorios.py", "Relatórios", ":material/description:"),
     ),
 )
+
+# Os casos de aceite dos cálculos não dependem de projeto: rodam a cada abertura (a versão web
+# não roda pytest; o CI roda os mesmos em tests/test_casos_de_aceite.py).
+_aceite = ca.rodar()
+_reprovados = sum(not r.passou for r in _aceite)
+with st.expander(
+    f"Casos de aceite dos cálculos — {len(_aceite) - _reprovados} de {len(_aceite)} conferem",
+    icon=":material/science:" if not _reprovados else ":material/error:",
+    expanded=bool(_reprovados),
+):
+    st.caption(
+        "Números que o programa tem de reproduzir (conta à mão, exemplos de norma, casos do "
+        "usuário), calculados agora. Diferença acima da tolerância (0,5 %) = o cálculo mudou."
+    )
+    st.dataframe(
+        pd.DataFrame(ca.linhas(_aceite), columns=list(ca.COLUNAS)),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Esperado": st.column_config.NumberColumn(format="%.3f"),
+            "Obtido": st.column_config.NumberColumn(format="%.3f"),
+            "Diferença (%)": st.column_config.NumberColumn(format="%.2f"),
+        },
+    )
 
 sincronizar_projeto_ativo()
 projeto = obter_projeto_ativo_para_edicao()
