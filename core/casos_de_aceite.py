@@ -246,6 +246,110 @@ def casos() -> tuple[CasoDeAceite, ...]:
             lambda: _caso_m22().resistencias["R_ligacao_anglo_kN"],
             fonte=FONTE_M22,
         ),
+        *_casos_de_solda(),
+    )
+
+
+FONTE_SOLDA = "Exercícios de solda enviados pelo usuário (29/10/2026): o valor da apostila"
+FONTE_SOLDA_NORMA = (
+    "Exercícios de solda (29/10/2026) refeitos pela NBR 8800:2025, conferidos à mão: a apostila "
+    "usa o metal-base pela face de fusão (0,60·d_w·L·f_y/γ_a1), que a Tabela 9 não pede no filete"
+)
+
+
+def _grandeza(r: Any, nome: str) -> float:
+    """O valor resistente (ou adotado) de uma linha do resultado da ligação, pelo começo do nome."""
+    linha = next(v for v in r.verificacoes if v.nome.startswith(nome))
+    return float(linha.resistente if linha.resistente is not None else linha.solicitante)
+
+
+def _casos_de_solda() -> tuple[CasoDeAceite, ...]:
+    from core import ligacoes as lg
+    from core import ligacoes_soldadas as ls
+    from core import soldas as sd
+
+    S = "Ligações soldadas"
+    ex1 = ls.EntradaBarraSoldada(
+        peca=ls.PECA_CHAPA, largura_mm=50.0, t_peca_mm=9.525, duas_pecas=True, t_no_mm=12.7,
+        perna_mm=8.0, n_t_sd_kN=40.0, com_apoio=False,
+    )  # fmt: skip
+    ex3 = ls.EntradaChapaNoApoio(
+        modo=ls.MODO_VERIFICAR, tipo_solda=ls.TIPO_TOTAL, intermitente=False, n_sd_kN=100.0
+    )
+    filete = lambda perna: 10 * sd.resistencia_filete_por_mm(perna, 485.0, 1.35)  # noqa: E731
+    return (
+        CasoDeAceite(
+            S,
+            "1 — duas talas sobrepostas",
+            "Filete de 8 mm, E70 (kN/cm)",
+            12.192,
+            lambda: filete(8.0),
+            fonte=FONTE_SOLDA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "1 — duas talas sobrepostas",
+            "Filete adotado (mm), com cobrimento ≥ 5·t",
+            50.0,
+            lambda: lg.calcular(ex1).grandezas["l_dorso_mm"],
+            fonte=FONTE_SOLDA_NORMA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "2 — filete intermitente",
+            "Segmento adotado (mm)",
+            40.0,
+            lambda: lg.calcular(ls.EntradaChapaNoApoio()).grandezas["segmento_mm"],
+            fonte=FONTE_SOLDA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "3 — penetração total",
+            "F_Rd = A_MB·f_y/γ_a1 (kN)",
+            288.636,
+            lambda: _grandeza(lg.calcular(ex3), "Penetração total: tração"),
+            fonte=FONTE_SOLDA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "4 — cantoneira na chapa de nó",
+            "Solda pelo metal da solda, 4 mm (mm)",
+            164.04,
+            lambda: 100.0 / (filete(4.0) / 10),
+            fonte=FONTE_SOLDA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "4 — cantoneira na chapa de nó",
+            "Largura mínima da chapa de nó (mm)",
+            55.0,
+            lambda: lg.calcular(ls.EntradaBarraSoldada()).grandezas["largura_minima_no_mm"],
+            fonte=FONTE_SOLDA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "4 — cantoneira na chapa de nó",
+            "Filete do dorso adotado (mm)",
+            120.0,
+            lambda: lg.calcular(ls.EntradaBarraSoldada()).grandezas["l_dorso_mm"],
+            fonte=FONTE_SOLDA_NORMA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "4 — cantoneira na chapa de nó",
+            "Filete da borda adotado (mm)",
+            50.0,
+            lambda: lg.calcular(ls.EntradaBarraSoldada()).grandezas["l_borda_mm"],
+            fonte=FONTE_SOLDA_NORMA,
+        ),  # fmt: skip
+        CasoDeAceite(
+            S,
+            "4 — chapa de nó no pilar",
+            "Solda adotada de cada lado (mm)",
+            50.0,
+            lambda: lg.calcular(ls.EntradaBarraSoldada()).grandezas["l_apoio_mm"],
+            fonte=FONTE_SOLDA_NORMA,
+        ),  # fmt: skip
     )
 
 

@@ -131,6 +131,8 @@ files = [
     "core/escada_lances.py",
     "core/longarina_escada.py",
     "core/ligacoes.py",
+    "core/ligacoes_soldadas.py",
+    "core/soldas.py",
     "core/beam_charts.py",
     "core/platform_loads.py",
     "core/project_assistant.py",

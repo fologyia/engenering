@@ -13,13 +13,16 @@ mostra como "o que passou / o que não passou"):
 2. **Ligação parafusada em perfil formado a frio**, NBR 14762:2010 (10.3, 10.4 e 9.6): corte do
    parafuso, rasgamento e esmagamento no perfil e na chapa, tração na seção líquida com o C_t do
    perfil ligado só pela alma, colapso por rasgamento, espaçamentos e a regra dos 50 % (10.1).
-3. **Grupo de soldas de filete**, NBR 8800 6.2 (Tabela 8, Tabela 10 e 6.2.6.2) — ou NBR 14762
-   10.2.3 quando a parte mais fina tem até 4,75 mm —, com força cortante, normal e momento no
-   plano pelo método elástico.
+3. **Grupo de soldas de filete**, NBR 8800 6.2 (tabela das soldas, perna mínima e 6.2.6.2) — ou
+   NBR 14762 10.2.3 quando a parte mais fina tem até 4,75 mm —, com força cortante, normal e
+   momento no plano: aumento pela direção da força (6.2.5.2 a e c) e centro instantâneo de rotação
+   (6.2.5.2 b), ou o método elástico, a favor da segurança. As regras das soldas estão em
+   :mod:`core.soldas`; a barra soldada na chapa de nó e a chapa soldada no apoio, em
+   :mod:`core.ligacoes_soldadas`.
 
-Os coeficientes conferidos nas normas (NBR 8800:2008, NBR 14762:2010); o Projeto de revisão da
-NBR 8800 (2024) muda os coeficientes do corte do parafuso (0,45/0,56), via
-:mod:`core.bolted_connection`. Casos especiais (ligações rígidas, chapa de extremidade com momento,
+Os coeficientes conferidos nas normas (NBR 8800:2008 e 2025, NBR 14762:2010); a 2025 muda os
+coeficientes do corte do parafuso (0,45/0,56), via :mod:`core.bolted_connection`, e o número das
+tabelas das soldas. Casos especiais (ligações rígidas, chapa de extremidade com momento,
 enrijecedores, ligações de perfis tubulares, efeito de alavanca) ficam fora: o programa cobre o caso
 comum e o caso específico é do projetista.
 
@@ -38,6 +41,7 @@ from PIL import Image, ImageDraw
 
 from core import bolted_connection as bc
 from core import section_catalog as sc
+from core import soldas as sd
 from core.beam_charts import ImagemDiagrama, _fonte
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import (
@@ -53,14 +57,11 @@ MODULO_TITULO = "Ligações estruturais"
 
 GAMMA_A1 = 1.10  # NBR 8800 4.8.2
 GAMMA_A2 = 1.35
-GAMMA_W2 = 1.35  # NBR 8800 Tabela 8, nota k (combinações normais)
+GAMMA_W2 = 1.35  # NBR 8800 tabela das soldas (nota de γ_w2), combinações normais
 FOLGA_FURO = 2.0  # NBR 8800 5.2.4.1: furo + 2 mm na área líquida
-NORMAS = ("NBR8800_2024", "NBR8800_2008")
-NORMAS_ROTULOS = {
-    "NBR8800_2024": "NBR 8800 (Projeto de revisão 2024)",
-    "NBR8800_2008": "NBR 8800:2008",
-}
-ELETRODOS = {"E60": 415.0, "E70": 485.0, "E80": 550.0}  # NBR 8800 Tabela A.4
+NORMAS = sd.NORMAS
+NORMAS_ROTULOS = sd.NORMAS_ROTULOS
+ELETRODOS = sd.ELETRODOS  # NBR 8800 Tabela A.4
 LIMITE_CHAPA_FINA = 4.75  # NBR 14762 10.2.1 e 10.3.1
 
 #: Aços das chapas finas com qualificação estrutural (NBR 14762 Tabela 1) e o limite para aço sem
@@ -139,6 +140,8 @@ class ResultadoLigacao:
     verificacoes: tuple[Verificacao, ...]
     grandezas: dict[str, float] = field(default_factory=dict)
     avisos: tuple[str, ...] = ()
+    #: No modo "dimensionar", a entrada com os comprimentos adotados (a figura sai dela).
+    adotada: Any = None
 
     @property
     def status(self) -> str:
@@ -164,63 +167,28 @@ class ResultadoLigacao:
 # =============================================================================================
 # Solda de filete: tabelas da NBR 8800
 # =============================================================================================
-def perna_minima(t_menor_mm: float) -> float:
-    """NBR 8800 Tabela 10 (pela parte menos espessa)."""
-    if t_menor_mm <= 6.35:
-        return 3.0
-    if t_menor_mm <= 12.5:
-        return 5.0
-    if t_menor_mm <= 19.0:
-        return 6.0
-    return 8.0
-
-
-def perna_maxima(t_borda_mm: float) -> float:
-    """NBR 8800 6.2.6.2.2: ao longo da borda de uma chapa."""
-    return t_borda_mm if t_borda_mm < 6.35 else t_borda_mm - 1.5
+perna_minima = sd.perna_minima  # Tabela 11 (2025) / Tabela 10 (2008)
+perna_maxima = sd.perna_maxima  # 6.2.6.2.2
 
 
 def _limites_do_filete(
-    perna: float, t_menor: float, t_borda: float | None, comprimento: float, rotulo: str = ""
+    perna: float,
+    t_menor: float,
+    t_borda: float | None,
+    comprimento: float,
+    rotulo: str = "",
+    norma: str = sd.NBR_2025,
 ) -> list[Verificacao]:
-    sufixo = f" ({rotulo})" if rotulo else ""
-    linhas = [
-        _minimo(
-            f"Solda: perna mínima{sufixo}",
-            perna_minima(t_menor),
-            perna,
-            "mm",
-            "NBR 8800 6.2.6.2.1, Tabela 10",
-            f"parte menos espessa t = {_n(t_menor, 1)} mm",
-        )
-    ]
-    if t_borda is not None:
-        linhas.append(
-            _maximo(
-                f"Solda: perna máxima na borda da chapa{sufixo}",
-                perna,
-                perna_maxima(t_borda),
-                "mm",
-                "NBR 8800 6.2.6.2.2",
-                "t < 6,35 mm: perna ≤ t; senão perna ≤ t − 1,5 mm",
-            )
-        )
-    linhas.append(
-        _minimo(
-            f"Solda: comprimento mínimo{sufixo}",
-            max(4 * perna, 40.0),
-            comprimento,
-            "mm",
-            "NBR 8800 6.2.6.2.3",
-            "L ≥ 4·perna e ≥ 40 mm",
-        )
-    )
-    return linhas
+    return sd.limites_do_filete(norma, perna, t_menor, t_borda, comprimento, rotulo)
 
 
 def resistencia_filete_por_mm(perna_mm: float, eletrodo: str) -> float:
-    """Metal da solda, por mm de filete (kN/mm): 0,60·f_w·(0,707·perna)/γ_w2 (Tabela 8)."""
-    return 0.60 * ELETRODOS[eletrodo] * 0.707 * perna_mm / GAMMA_W2 / 1000.0
+    """Metal da solda, por mm de filete (kN/mm): 0,60·f_w·(0,707·perna)/γ_w2, combinação normal."""
+    return sd.resistencia_filete_por_mm(perna_mm, ELETRODOS[eletrodo], GAMMA_W2)
+
+
+def _ref_metal_da_solda(norma: str) -> str:
+    return sd.ref(norma, f"6.2.5.1, {sd.tabela(norma, 'resistencia')}", vista_na_2025=True)
 
 
 # =============================================================================================
@@ -550,7 +518,7 @@ def calcular_chapa_simples(e: EntradaChapaSimples) -> ResultadoLigacao:
             f_solda * 10,
             r_solda * 10,
             "kN/cm",
-            "NBR 8800 6.2.5.1, Tabela 8",
+            _ref_metal_da_solda(e.norma),
             f"filetes de {_n(e.perna_solda_mm, 0)} mm × {_n(comprimento, 0)} mm, {e.eletrodo}; "
             "método elástico com V, N e M = V·a; 0,60·f_w·(0,707·perna)/γ_w2 por cm",
         )
@@ -566,7 +534,9 @@ def calcular_chapa_simples(e: EntradaChapaSimples) -> ResultadoLigacao:
             "(aço do apoio tomado igual ao da viga)",
         )
     )
-    linhas.extend(_limites_do_filete(e.perna_solda_mm, min(tp, e.t_apoio_mm), tp, comprimento))
+    linhas.extend(
+        _limites_do_filete(e.perna_solda_mm, min(tp, e.t_apoio_mm), tp, comprimento, norma=e.norma)
+    )
 
     # ------------------------------------------------------------------ geometria e disposições
     alma_livre = d - tf - (e.recorte_altura_mm if e.recorte else tf)
@@ -1192,11 +1162,23 @@ def calcular_perfil_frio(e: EntradaPerfilFrio) -> ResultadoLigacao:
 SOLDA = "solda"
 ARRANJO_UM = "um_filete"
 ARRANJO_PARALELOS = "dois_paralelos"
+ARRANJO_HORIZONTAIS = "dois_horizontais"
+ARRANJO_TRES_LADOS = "tres_lados"
 ARRANJO_CONTORNO = "contorno"
 ARRANJOS = {
     ARRANJO_UM: "Um filete (vertical)",
     ARRANJO_PARALELOS: "Dois filetes paralelos (verticais)",
+    ARRANJO_HORIZONTAIS: "Dois filetes horizontais (em cima e embaixo)",
+    ARRANJO_TRES_LADOS: "Três lados (vertical + dois horizontais, em C)",
     ARRANJO_CONTORNO: "Contorno retangular",
+}
+#: Filetes numa linha ou paralelos: valem para o aumento pela direção da força (6.2.5.2 a).
+ARRANJOS_EM_LINHA = (ARRANJO_UM, ARRANJO_PARALELOS, ARRANJO_HORIZONTAIS)
+METODO_DIRECAO = "direcao"
+METODO_ELASTICO = "elastico"
+METODOS_SOLDA = {
+    METODO_DIRECAO: "Pela direção da força e centro instantâneo (6.2.5.2)",
+    METODO_ELASTICO: "Elástico, sem o aumento pela direção (a favor da segurança)",
 }
 
 
@@ -1213,6 +1195,9 @@ class EntradaSolda:
     v_sd_kN: float = 40.0  # vertical, ao longo dos filetes
     n_sd_kN: float = 0.0  # horizontal, no plano
     m_sd_kNm: float = 0.0  # no plano (torção do grupo)
+    norma: str = sd.NBR_2025
+    combinacao: str = sd.COMBINACAO_NORMAL
+    metodo: str = METODO_DIRECAO
 
 
 def _segmentos(e: EntradaSolda) -> list[tuple[float, float, float, float]]:
@@ -1221,6 +1206,10 @@ def _segmentos(e: EntradaSolda) -> list[tuple[float, float, float, float]]:
         return [(0.0, 0.0, 0.0, h)]
     if e.arranjo == ARRANJO_PARALELOS:
         return [(0.0, 0.0, 0.0, h), (b, 0.0, b, h)]
+    if e.arranjo == ARRANJO_HORIZONTAIS:
+        return [(0.0, 0.0, b, 0.0), (0.0, h, b, h)]
+    if e.arranjo == ARRANJO_TRES_LADOS:
+        return [(0.0, 0.0, 0.0, h), (0.0, 0.0, b, 0.0), (0.0, h, b, h)]
     return [(0.0, 0.0, 0.0, h), (b, 0.0, b, h), (0.0, 0.0, b, 0.0), (0.0, h, b, h)]
 
 
@@ -1255,6 +1244,82 @@ def forca_por_mm_na_solda(e: EntradaSolda) -> tuple[float, float, float]:
     return pior[0], pior[1], total
 
 
+def _metal_da_solda_do_grupo(
+    e: EntradaSolda, f_elastica: float, q: float, avisos: list[str]
+) -> Verificacao:
+    """A linha do metal da solda: método elástico, 6.2.5.2 a), c) ou b) (centro instantâneo)."""
+    base = f"0,60·f_w·(0,707·perna)/γ_w2 = {_n(q * 10, 2)} kN/cm, {e.eletrodo} (f_w = {_n(ELETRODOS[e.eletrodo], 0)} MPa)"
+    ref_tabela = _ref_metal_da_solda(e.norma)
+    elastica = Verificacao(
+        "Solda: metal da solda", f_elastica * 10, q * 10, "kN/cm", ref_tabela,
+        f"{base}; método elástico, sem o aumento pela direção (a favor da segurança)",
+    )  # fmt: skip
+    p = math.hypot(e.n_sd_kN, e.v_sd_kN)
+    if e.metodo == METODO_ELASTICO or (p == 0 and e.m_sd_kNm == 0):
+        return elastica
+    segs = _segmentos(e)
+    if e.m_sd_kNm == 0:
+        if e.arranjo in ARRANJOS_EM_LINHA:
+            vertical = e.arranjo != ARRANJO_HORIZONTAIS
+            ao_longo, atraves = (e.v_sd_kN, e.n_sd_kN) if vertical else (e.n_sd_kN, e.v_sd_kN)
+            theta = math.degrees(math.atan2(abs(atraves), abs(ao_longo)))
+            k = sd.fator_direcao(theta)
+            return Verificacao(
+                "Solda: metal da solda", f_elastica * 10, q * k * 10, "kN/cm",
+                sd.ref(e.norma, "6.2.5.2 a)", vista_na_2025=True),
+                f"{base} × (1 + 0,5·sen^1,5 θ) = × {_n(k, 3)}; θ = {_n(theta, 1)}° entre a "
+                "resultante e o eixo dos filetes (carga pelo centro do grupo)",
+            )  # fmt: skip
+        if e.n_sd_kN == 0 or e.v_sd_kN == 0:
+            na_vertical = e.n_sd_kN == 0  # força vertical: os verticais são longitudinais
+            longitudinal = sum(
+                math.hypot(x2 - x1, y2 - y1) for x1, y1, x2, y2 in segs if (x1 == x2) == na_vertical
+            )
+            transversal = (
+                sum(math.hypot(x2 - x1, y2 - y1) for x1, y1, x2, y2 in segs) - longitudinal
+            )
+            f_l, f_t = q * longitudinal, q * transversal
+            return Verificacao(
+                "Solda: metal da solda", p, sd.combinacao_longitudinal_transversal(f_l, f_t), "kN",
+                sd.ref(e.norma, "6.2.5.2 c)"),
+                f"maior entre F_wl + F_wt e 0,85·F_wl + 1,5·F_wt; F_wl = {_n(f_l, 1)} kN "
+                f"({_n(longitudinal, 0)} mm longitudinais), F_wt = {_n(f_t, 1)} kN "
+                f"({_n(transversal, 0)} mm transversais); {base}",
+            )  # fmt: skip
+        avisos.append(
+            "Carga inclinada pelo centro de um grupo com filetes nas duas direções: o aumento de "
+            "6.2.5.2 a) vale só para filetes em linha ou paralelos — ficou o método elástico."
+        )
+        return elastica
+    try:
+        cir = sd.centro_instantaneo(
+            [sd.Segmento(*s) for s in segs], e.perna_mm, q, e.n_sd_kN, e.v_sd_kN, e.m_sd_kNm * 1000
+        )
+    except (ArithmeticError, ValueError):
+        cir = None
+    if cir is None or not cir.convergiu or cir.fator <= 0:
+        avisos.append(
+            "O centro instantâneo não convergiu para esta carga: ficou o método elástico, a favor "
+            "da segurança."
+        )
+        return elastica
+    if p > 0:
+        solicitante, unidade, carga = (
+            p,
+            "kN",
+            f"|P| = {_n(p, 2)} kN com M = {_n(e.m_sd_kNm, 2)} kN·m",
+        )
+    else:
+        solicitante, unidade, carga = abs(e.m_sd_kNm), "kN·m", "só o momento"
+    return Verificacao(
+        "Solda: metal da solda", solicitante, cir.capacidade_kN, unidade,
+        sd.ref(e.norma, "6.2.5.2 b)", vista_na_2025=True),
+        f"centro instantâneo de rotação a ({_n(cir.x_mm, 1)}; {_n(cir.y_mm, 1)}) mm do centro do "
+        f"grupo, {carga}; fator de capacidade {_n(cir.fator, 3)}; Δu e Δm do filete pelo ângulo "
+        f"de cada trecho (Δm do AISC 360-16 J2.4); {base}",
+    )  # fmt: skip
+
+
 def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
     if e.arranjo not in ARRANJOS:
         raise LigacaoInvalida(f"Arranjo desconhecido: {e.arranjo!r}.")
@@ -1262,6 +1327,8 @@ def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
         raise LigacaoInvalida(f"Eletrodo desconhecido: {e.eletrodo!r}.")
     if e.aco not in ACOS:
         raise LigacaoInvalida(f"Aço desconhecido: {e.aco!r}.")
+    if e.norma not in NORMAS or e.combinacao not in sd.COMBINACOES or e.metodo not in METODOS_SOLDA:
+        raise LigacaoInvalida("Escolha a norma, a combinação e o método da lista.")
     if min(e.comprimento_mm, e.perna_mm, e.t1_mm, e.t2_mm) <= 0 or (
         e.arranjo != ARRANJO_UM and e.largura_mm <= 0
     ):
@@ -1270,10 +1337,13 @@ def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
         )
     fy, fu = ACOS[e.aco]
     fw = ELETRODOS[e.eletrodo]
+    c = sd.coeficientes(e.combinacao)
     t_menor = min(e.t1_mm, e.t2_mm)
     f, _f_long, total = forca_por_mm_na_solda(e)
     linhas: list[Verificacao] = []
+    avisos: list[str] = []
     tef = 0.7 * e.perna_mm
+    perna_necessaria: float | None = None
     if t_menor <= LIMITE_CHAPA_FINA + 1e-9:
         # NBR 14762 10.2.3 — metal-base fino: o menor entre as direções (a favor da segurança)
         razao = e.comprimento_mm / t_menor
@@ -1306,32 +1376,30 @@ def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
                 )
             )
     else:
-        linhas.append(
-            Verificacao(
-                "Solda: metal da solda",
-                f * 10,
-                resistencia_filete_por_mm(e.perna_mm, e.eletrodo) * 10,
-                "kN/cm",
-                "NBR 8800 6.2.5.1, Tabela 8",
-                f"0,60·f_w·(0,707·perna)/γ_w2, {e.eletrodo} (f_w = {_n(fw, 0)} MPa); "
-                "aumento por direção (6.2.5.2) desprezado, a favor da segurança",
-            )
-        )
+        q = sd.resistencia_filete_por_mm(e.perna_mm, fw, c.w2)
+        metal = _metal_da_solda_do_grupo(e, f, q, avisos)
+        linhas.append(metal)
+        if metal.aproveitamento is not None:
+            perna_necessaria = e.perna_mm * metal.aproveitamento  # a capacidade é linear na perna
+        r_mb, texto_mb = sd.metal_base_ao_cisalhamento_por_mm(t_menor, fy, fu, c)
         linhas.append(
             Verificacao(
                 "Metal-base junto à solda (cisalhamento)",
                 f * 10,
-                0.60 * fy * t_menor / GAMMA_A1 / 1000 * 10,
+                r_mb * 10,
                 "kN/cm",
-                "NBR 8800 6.5.5 a)",
-                f"0,60·f_y·t/γ_a1 por cm, t = {_n(t_menor, 1)} mm (parte menos espessa)",
+                sd.ref(e.norma, "6.5.5"),
+                f"{texto_mb} por cm, t = {_n(t_menor, 2)} mm (parte menos espessa); força por cm "
+                "pelo método elástico",
             )
         )
-    linhas.extend(_limites_do_filete(e.perna_mm, t_menor, e.t1_mm, e.comprimento_mm))
+    menor_linha = min(math.hypot(x2 - x1, y2 - y1) for x1, y1, x2, y2 in _segmentos(e))
+    linhas.extend(_limites_do_filete(e.perna_mm, t_menor, e.t1_mm, menor_linha, norma=e.norma))
     titulo = f"Solda de filete — {ARRANJOS[e.arranjo].lower()}, perna {_n(e.perna_mm, 0)} mm"
-    return ResultadoLigacao(
-        SOLDA, titulo, e, tuple(linhas), {"forca_kN_cm": f * 10, "comprimento_total_mm": total}
-    )
+    grandezas = {"forca_kN_cm": f * 10, "comprimento_total_mm": total}
+    if perna_necessaria is not None:
+        grandezas["perna_necessaria_mm"] = perna_necessaria
+    return ResultadoLigacao(SOLDA, titulo, e, tuple(linhas), grandezas, tuple(avisos))
 
 
 # =============================================================================================
@@ -1716,6 +1784,11 @@ def figura_solda(e: EntradaSolda) -> ImagemDiagrama:
     )
 
 
+#: Os tipos da barra soldada e da chapa no apoio moram em :mod:`core.ligacoes_soldadas`.
+CHAPA_NO_APOIO = "chapa_no_apoio"
+BARRA_SOLDADA = "barra_soldada"
+TIPOS_SOLDADOS = (CHAPA_NO_APOIO, BARRA_SOLDADA)
+
 _ENTRADAS: dict[str, type] = {
     CHAPA_SIMPLES: EntradaChapaSimples,
     CANTONEIRA_DUPLA: EntradaCantoneiraDupla,
@@ -1724,7 +1797,19 @@ _ENTRADAS: dict[str, type] = {
 }
 
 
+def _classe_da_entrada(tipo: str) -> type:
+    if tipo in TIPOS_SOLDADOS:
+        from core import ligacoes_soldadas as ls
+
+        return ls.ENTRADAS[tipo]
+    return _ENTRADAS[tipo]
+
+
 def figura(r: ResultadoLigacao) -> ImagemDiagrama:
+    if r.tipo in TIPOS_SOLDADOS:
+        from core import ligacoes_soldadas as ls
+
+        return ls.figura(r.adotada if r.adotada is not None else r.entrada)
     if r.tipo == CHAPA_SIMPLES:
         return figura_chapa_simples(r.entrada)
     if r.tipo == CANTONEIRA_DUPLA:
@@ -1736,22 +1821,24 @@ def figura(r: ResultadoLigacao) -> ImagemDiagrama:
 
 def figura_gravada(dados: Mapping[str, Any]) -> ImagemDiagrama:
     """A figura a partir do que o registro gravou (``{"tipo", "entrada"}``)."""
-    classe = _ENTRADAS[str(dados["tipo"])]
+    classe = _classe_da_entrada(str(dados["tipo"]))
     nomes = {f.name for f in fields(classe)}
     entrada = classe(**{k: v for k, v in dict(dados["entrada"]).items() if k in nomes})
     return figura(ResultadoLigacao(str(dados["tipo"]), "", entrada, ()))
 
 
-def calcular(
-    entrada: EntradaChapaSimples | EntradaCantoneiraDupla | EntradaPerfilFrio | EntradaSolda,
-) -> ResultadoLigacao:
+def calcular(entrada: Any) -> ResultadoLigacao:
     if isinstance(entrada, EntradaChapaSimples):
         return calcular_chapa_simples(entrada)
     if isinstance(entrada, EntradaCantoneiraDupla):
         return calcular_cantoneira_dupla(entrada)
     if isinstance(entrada, EntradaPerfilFrio):
         return calcular_perfil_frio(entrada)
-    return calcular_solda(entrada)
+    if isinstance(entrada, EntradaSolda):
+        return calcular_solda(entrada)
+    from core import ligacoes_soldadas as ls
+
+    return ls.calcular(entrada)
 
 
 # =============================================================================================
@@ -1775,9 +1862,30 @@ _METODO = {
         "parafuso, tração na seção líquida com C_t e colapso por rasgamento."
     ),
     SOLDA: (
-        "Grupo de filetes no plano pelo método elástico (forças por unidade de comprimento): "
-        "metal da solda e metal-base pela NBR 8800 6.2 e 6.5, ou pela NBR 14762 10.2.3 quando a "
-        "parte mais fina tem até 4,75 mm; limites de perna e de comprimento da NBR 8800 6.2.6.2."
+        "Grupo de filetes no plano: metal da solda pela tabela das soldas da NBR 8800, com o "
+        "aumento pela direção da força (6.2.5.2 a) para filetes em linha ou paralelos, a combinação "
+        "de filetes longitudinais e transversais (6.2.5.2 c) e o centro instantâneo de rotação "
+        "(6.2.5.2 b) quando há momento — ou o método elástico, a favor da segurança; metal-base "
+        "pela 6.5.5, ou pela NBR 14762 10.2.3 quando a parte mais fina tem até 4,75 mm; limites de "
+        "perna e de comprimento da 6.2.6.2."
+    ),
+    CHAPA_NO_APOIO: (
+        "Chapa soldada no apoio (junta em T): a força normal à face do apoio, a cortante ao longo "
+        "da solda e o momento no plano da chapa passam pela solda — filete (contínuo ou "
+        "intermitente, de um ou dos dois lados), penetração total ou parcial, pela tabela das "
+        "soldas da NBR 8800 e 6.2.5.2 a) —, pela chapa junto à solda (6.5.3 a 6.5.5) e pelo apoio "
+        "(metal-base junto à solda e, na mesa de um perfil I ou H, 5.7.2 a 5.7.4). Forças por mm "
+        "pelo método elástico; no modo dimensionar, o menor comprimento que passa, no passo de "
+        "projeto."
+    ),
+    BARRA_SOLDADA: (
+        "Barra axial (cantoneira ou chapa sobreposta) soldada na chapa de nó por filetes "
+        "longitudinais no dorso e na borda — balanceados pelo centro geométrico da barra (6.1.8.1) "
+        "ou iguais (6.1.8.2) — e, se houver, transversal na ponta (6.2.5.2 c). Barra à tração pelo "
+        "item 5.2 com o C_t de 5.2.5; chapa de nó na seção de Whitmore (30° a partir do começo dos "
+        "filetes) à tração e à compressão (6.5.3, 6.5.4) e ao colapso por rasgamento (6.5.6); a "
+        "solda da chapa de nó no apoio com as componentes da força da barra. Força da ligação com "
+        "o mínimo de 45 kN (6.1.5.2) e, quando pedido, o critério Anglo, item 9.1."
     ),
 }
 _PREMISSAS = {
@@ -1800,20 +1908,55 @@ _PREMISSAS = {
         "Chapa com mais de 4,75 mm verificada pela NBR 8800 (NBR 14762 10.3.1).",
     ],
     SOLDA: [
-        "Método elástico (conservador frente ao do centro instantâneo de rotação, 6.2.5.2 b).",
-        "Sem o aumento de resistência pela direção da força (6.2.5.2 a), a favor da segurança.",
+        "Filetes de perna uniforme, no mesmo plano, com a carga no plano do grupo.",
+        "Centro instantâneo com a deformação Δm do AISC 360-16 J2.4 (o método da 6.2.5.2 b).",
+        "Metal-base pela força por mm do método elástico, na parte menos espessa.",
+    ],
+    CHAPA_NO_APOIO: [
+        "Forças por mm de solda pelo método elástico; com momento, sem o aumento pela direção.",
+        "A chapa junto à solda é verificada no comprimento soldado (a favor da segurança na "
+        "solda intermitente); a flambagem da chapa livre fica com o projetista.",
+        "Na mesa de um perfil, a força normal centrada na alma e k = t_f (sem o raio de "
+        "concordância); o perfil do apoio como um todo fica para o cálculo dele.",
+        "Penetração parcial: garganta efetiva informada pela profundidade do chanfro (Tabela 5 "
+        "da 2008).",
+    ],
+    BARRA_SOLDADA: [
+        "Os filetes começam na ponta da barra; o cobrimento da superposição é o maior filete, "
+        "salvo quando informado.",
+        "Com filete na ponta, ele trabalha na resistência da tabela, sem o aumento (primeira "
+        "expressão de 6.2.5.2 c).",
+        "C_t da cantoneira com ℓ_c = média dos filetes longitudinais (a favor da segurança).",
+        "A compressão da barra (flambagem) é do cálculo da barra; aqui só a chapa de nó.",
     ],
 }
 _REFERENCIAS = [
-    "ABNT NBR 8800:2008 — 6.2 (soldas), 6.3 (parafusos), 6.5 (elementos de ligação), Anexo A.",
+    "ABNT NBR 8800:2025 — Tabela 9 (soldas), 6.2.5.2, Tabelas 10 e 11.",
+    "ABNT NBR 8800:2008 — 5.2.5, 5.7, 6.1.5, 6.1.8, 6.2 (soldas), 6.3 (parafusos), 6.5 "
+    "(elementos de ligação), Anexo A.",
     "ABNT NBR 14762:2010 — 9.6 (tração), 10.2 (soldas), 10.3 (parafusos), 10.4 (colapso por rasgamento).",
-    "AISC Steel Construction Manual — Parte 9 (vigas recortadas) e Parte 10 (chapa simples).",
+    "AISC 360-16 — J2.4 (centro instantâneo de rotação dos filetes).",
+    "AISC Steel Construction Manual — Parte 9 (vigas recortadas, seção de Whitmore) e Parte 10 "
+    "(chapa simples).",
 ]
 
 
 def _entradas_do_registro(e: Any) -> dict[str, Any]:
-    dados = asdict(e)
-    return {k: v for k, v in dados.items() if v is not None and v != ""}
+    if isinstance(e, EntradaSolda):
+        dados = asdict(e)
+        dados["arranjo"] = ARRANJOS.get(e.arranjo, e.arranjo)
+        dados["metodo"] = METODOS_SOLDA.get(e.metodo, e.metodo)
+        dados["combinacao"] = sd.COMBINACOES.get(e.combinacao, e.combinacao)
+    elif type(e).__name__ in ("EntradaChapaNoApoio", "EntradaBarraSoldada"):
+        from core import ligacoes_soldadas as ls
+
+        dados = ls.campos_do_registro(e)
+    else:
+        dados = asdict(e)
+    saida = {k: v for k, v in dados.items() if v is not None and v != ""}
+    if "norma" in saida:
+        saida["norma"] = NORMAS_ROTULOS.get(str(saida["norma"]), saida["norma"])
+    return saida
 
 
 def destaque(r: ResultadoLigacao) -> str:
@@ -1837,6 +1980,7 @@ def registro_ligacao(
         "Não faz: ligações rígidas (com momento), chapa de extremidade, enrijecedores, efeito de "
         "alavanca e a verificação do apoio como um todo — casos específicos ficam com o projetista."
     )
+    desenho = r.adotada if r.adotada is not None else r.entrada
     return criar_registro_tecnico(
         modulo=MODULO_TITULO,
         modulo_id=MODULO_ID,
@@ -1849,7 +1993,7 @@ def registro_ligacao(
             "verificações": linhas_para_registro(list(r.verificacoes)),
             "utilizacao_maxima": numero_json(r.aproveitamento_maximo, 4),
             "destaque_memorial": texto,
-            "figura_ligacao": {"tipo": r.tipo, "entrada": asdict(r.entrada)},
+            "figura_ligacao": {"tipo": r.tipo, "entrada": asdict(desenho)},
         },
         metodo=_METODO[r.tipo],
         premissas=list(_PREMISSAS[r.tipo]),
@@ -1858,6 +2002,31 @@ def registro_ligacao(
         conclusao=texto,
         responsavel=responsavel,
     )
+
+
+def memorial_da_ligacao(
+    r: ResultadoLigacao, *, projeto: Mapping[str, Any] | None = None, formato: str = "word"
+) -> bytes:
+    """O memorial só desta ligação, em Word ou PDF, no padrão do memorial do projeto.
+
+    Com o projeto ativo, a capa e o controle levam os dados dele; sem projeto, ficam
+    "[a preencher]". Entra só o registro desta ligação (os outros cálculos do projeto não).
+    """
+    import importlib
+
+    from core.technical_records import normalizar_registro_tecnico
+
+    # O gerador do memorial ainda está fora da lista do mypy (adoção gradual): importado pelo nome
+    # para não arrastar os módulos dele para a verificação deste.
+    relatorio = importlib.import_module("core.project_report")
+    registro = normalizar_registro_tecnico(registro_ligacao(r))
+    base: dict[str, Any] = dict(projeto) if projeto else {"nome": MODULO_TITULO}
+    base["registros_tecnicos"] = [registro]
+    nome = (
+        "gerar_relatorio_industrial_pdf" if formato == "pdf" else "gerar_relatorio_industrial_word"
+    )
+    conteudo: bytes = getattr(relatorio, nome)(base, secoes_incluidas=["registros"])
+    return conteudo
 
 
 def linhas_resumo(verificacoes: Sequence[Verificacao]) -> list[str]:

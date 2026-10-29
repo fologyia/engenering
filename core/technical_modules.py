@@ -322,9 +322,10 @@ def _registrar_padrao() -> None:
             ordem=10,
             icone=":material/link:",
             descricao=(
-                "Chapa simples viga–viga e viga–pilar (NBR 8800), perfil formado a frio "
-                "parafusado (NBR 14762) e grupo de soldas de filete, com a figura da ligação e as "
-                "verificações para o memorial."
+                "Chapa simples e dupla cantoneira viga–viga e viga–pilar (NBR 8800), perfil "
+                "formado a frio parafusado (NBR 14762) e ligações soldadas — grupo de filetes, "
+                "barra na chapa de nó e chapa no apoio (filete, penetração total ou parcial) —, "
+                "com a figura da ligação, as verificações e o memorial."
             ),
             aliases=(
                 "Ligação viga-viga",
@@ -332,6 +333,8 @@ def _registrar_padrao() -> None:
                 "Chapa simples",
                 "Ligação parafusada perfil frio",
                 "Solda de filete",
+                "Solda de penetração",
+                "Cantoneira soldada",
             ),
         ),
         ModuloTecnico(

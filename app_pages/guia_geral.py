@@ -2575,9 +2575,28 @@ elif modulo == "Ligações estruturais":
               com o C_t do perfil ligado só pela alma, colapso por rasgamento, espaçamentos e a
               regra dos 50 % para barras de treliça e contraventamento. Peça com mais de 4,75 mm
               segue a NBR 8800.
-            - **Solda de filete:** um filete, dois paralelos ou o contorno de um retângulo, com V,
-              N e momento no plano; metal da solda e metal-base pela NBR 8800 — ou pela NBR 14762
-              quando a chapa mais fina tem até 4,75 mm.
+            - **Grupo de filetes no plano:** um filete, dois paralelos (verticais ou
+              horizontais), três lados em C ou o contorno de um retângulo, com V, N e momento no
+              plano. O metal da solda pela Tabela 9 da NBR 8800:2025 com o aumento pela direção da
+              força (6.2.5.2 a), a regra dos filetes longitudinais e transversais (6.2.5.2 c) e o
+              centro instantâneo de rotação quando há momento (6.2.5.2 b) — ou pelo método
+              elástico, a favor da segurança; o metal-base pela 6.5.5, ou pela NBR 14762 quando a
+              chapa mais fina tem até 4,75 mm. Mostra a perna necessária.
+            - **Barra soldada na chapa de nó:** cantoneira ou tala, de um lado ou dos dois, com
+              os filetes do dorso e da borda balanceados (ou iguais) e, se quiser, o da ponta. No
+              modo *dimensionar* o programa acha os comprimentos; verifica a barra à tração (com o
+              C_t), a chapa de nó na seção de Whitmore (tração e flambagem) e ao colapso por
+              rasgamento, e a solda da chapa de nó no apoio com a força inclinada da barra. Aplica
+              a força mínima de 45 kN (6.1.5.2), o cobrimento mínimo de 5·t (6.2.6.2.5) e, se
+              pedido, o critério Anglo.
+            - **Chapa soldada no apoio (junta em T):** filete (contínuo ou intermitente), solda
+              de penetração total ou parcial; força normal ao apoio, cortante ao longo da solda e
+              momento no plano da chapa; a chapa junto à solda e o apoio — e, na mesa de um perfil
+              I ou H, a flexão local da mesa, o escoamento local e o enrugamento da alma (5.7).
+            - **Exemplos resolvidos:** quatro exercícios de solda (talas sobrepostas, filete
+              intermitente, penetração total e a cantoneira de contraventamento no pilar)
+              preenchem a página com um clique; os mesmos números estão na Central de validação.
+            - **Memorial desta ligação:** Word e PDF só da ligação, no padrão do memorial.
             - **Fora do programa:** ligação rígida (com momento), chapa de extremidade,
               enrijecedores, efeito de alavanca e o apoio como um todo — o caso específico é do
               projetista.

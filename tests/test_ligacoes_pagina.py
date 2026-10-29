@@ -10,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 from components.ligacoes_help import AJUDA
 from core import ligacoes as lg
+from core import ligacoes_soldadas as ls
 from core.project_store import obter_projeto_ativo
 from core.technical_modules import listar_modulos
 from tests.test_esforcos_modelo_pagina import TIPOS_COM_AJUDA, _ajuda, _rotulo
@@ -50,7 +51,13 @@ def test_modulo_registrado_em_dimensionamento_complementar():
         {"lig_tipo": lg.CHAPA_SIMPLES},
         {"lig_tipo": lg.PERFIL_FRIO, "lig_f_perfil": lg.PERFIL_A_MAO},
         {"lig_tipo": lg.SOLDA},
+        {"lig_tipo": lg.SOLDA, "lig_s_m": 2.0, "lig_s_arranjo": lg.ARRANJO_TRES_LADOS},
         {"lig_tipo": lg.CANTONEIRA_DUPLA},
+        {"lig_tipo": lg.BARRA_SOLDADA},
+        {"lig_tipo": lg.BARRA_SOLDADA, "lig_b_nc": 60.0, "lig_b_apoio": ls.APOIO_PERFIL},
+        {"lig_tipo": lg.CHAPA_NO_APOIO},
+        {"lig_tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_PARCIAL},
+        {"lig_tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_TOTAL},
     ],
 )
 def test_cada_tipo_abre_com_ajuda_em_tudo_e_figura(banco_isolado, estado):
@@ -109,3 +116,32 @@ def test_trazer_a_reacao_de_um_calculo_registrado(banco_com_projeto):
     t.button(key="lig_usar_reacao").click().run()
     assert not t.exception
     assert t.number_input(key="lig_v").value == pytest.approx(round(viga.reacao_calculo_kN, 2))
+
+
+def test_exemplo_resolvido_preenche_e_calcula(banco_isolado):
+    t = abrir()
+    exemplo = next(n for n in t.selectbox(key="lig_exemplo").options if n.startswith("Exemplo 3"))
+    t.selectbox(key="lig_exemplo").set_value(exemplo).run()
+    t.button(key="lig_preencher_exemplo").click().run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    assert t.session_state["lig_tipo"] == lg.CHAPA_NO_APOIO
+    assert t.selectbox(key="lig_c2_tipo").value == ls.TIPO_TOTAL
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Governa"].startswith("Penetração total")
+    assert not t.warning
+
+
+def test_dimensionar_a_barra_mostra_os_filetes_adotados(banco_isolado):
+    t = abrir(lig_tipo=lg.BARRA_SOLDADA)
+    r = lg.calcular(ls.EntradaBarraSoldada())
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Filete do dorso"] == f"{r.grandezas['l_dorso_mm']:.0f} mm"
+    assert metricas["Solda no apoio"].startswith(f"{r.grandezas['l_apoio_mm']:.0f} mm")
+    assert metricas["Status"] == r.status
+
+
+def test_memorial_da_ligacao_na_pagina(banco_isolado):
+    t = abrir(lig_tipo=lg.CHAPA_NO_APOIO)
+    chaves = {b.proto.id.split("-")[-1] for b in t.get("download_button")}
+    assert any("lig_memorial_word" in b.proto.id for b in t.get("download_button")), chaves
+    assert any("lig_memorial_pdf" in b.proto.id for b in t.get("download_button")), chaves
