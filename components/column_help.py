@@ -466,4 +466,14 @@ AJUDA: dict[str, str] = {
         "Grava esta verificação no projeto ativo e a leva ao memorial, com a tabela completa."
     ),
     "reg_comparar": "Guarda este cenário para comparar com outros (outro perfil, outro comprimento).",
+    "sec_word": (
+        "Um arquivo do Word, editável, com tudo o que esta página mostra — para copiar os dados "
+        "para outro documento."
+    ),
+    "btn_word": (
+        "Gera o Word com o que a página não faz, todos os dados de entrada e as propriedades da "
+        "seção, o resumo (N_c,Rd, λ, N_e, χ, Q, B₁, momentos e interação), os avisos, a curva de "
+        "flambagem, a tabela de verificações com a fórmula e o item, as paredes da seção, a mesma "
+        "coluna nas três normas e as regras adotadas. As tabelas saem como tabelas do Word."
+    ),
 }

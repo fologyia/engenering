@@ -2593,9 +2593,9 @@ elif modulo == "Ligações estruturais":
               de penetração total ou parcial; força normal ao apoio, cortante ao longo da solda e
               momento no plano da chapa; a chapa junto à solda e o apoio — e, na mesa de um perfil
               I ou H, a flexão local da mesa, o escoamento local e o enrugamento da alma (5.7).
-            - **Exemplos resolvidos:** quatro exercícios de solda (talas sobrepostas, filete
-              intermitente, penetração total e a cantoneira de contraventamento no pilar)
-              preenchem a página com um clique; os mesmos números estão na Central de validação.
+            - **Casos de aceite:** quatro exercícios de solda (talas sobrepostas, filete
+              intermitente, penetração total e a cantoneira de contraventamento no pilar) são
+              conferidos na Central de validação.
             - **Memorial desta ligação:** Word e PDF só da ligação, no padrão do memorial.
             - **Fora do programa:** ligação rígida (com momento), chapa de extremidade,
               enrijecedores, efeito de alavanca e o apoio como um todo — o caso específico é do

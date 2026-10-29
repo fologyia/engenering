@@ -118,19 +118,6 @@ def test_trazer_a_reacao_de_um_calculo_registrado(banco_com_projeto):
     assert t.number_input(key="lig_v").value == pytest.approx(round(viga.reacao_calculo_kN, 2))
 
 
-def test_exemplo_resolvido_preenche_e_calcula(banco_isolado):
-    t = abrir()
-    exemplo = next(n for n in t.selectbox(key="lig_exemplo").options if n.startswith("Exemplo 3"))
-    t.selectbox(key="lig_exemplo").set_value(exemplo).run()
-    t.button(key="lig_preencher_exemplo").click().run()
-    assert not t.exception, [str(e.value) for e in t.exception]
-    assert t.session_state["lig_tipo"] == lg.CHAPA_NO_APOIO
-    assert t.selectbox(key="lig_c2_tipo").value == ls.TIPO_TOTAL
-    metricas = {m.label: m.value for m in t.metric}
-    assert metricas["Governa"].startswith("Penetração total")
-    assert not t.warning
-
-
 def test_dimensionar_a_barra_mostra_os_filetes_adotados(banco_isolado):
     t = abrir(lig_tipo=lg.BARRA_SOLDADA)
     r = lg.calcular(ls.EntradaBarraSoldada())

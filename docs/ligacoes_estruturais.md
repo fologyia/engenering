@@ -119,11 +119,11 @@ penetração total ou parcial. Forças por mm pelo método elástico na linha de
 | Apoio | metal-base junto à solda (a parcela ao longo da solda); na mesa de perfil I/H: flexão local da mesa (dispensada com atuação < 0,15·b_f), escoamento local e enrugamento da alma, k = t_f | 6.5.5; 5.7.2 a 5.7.4 |
 | Intermitente | só quando a contínua de perna mínima já sobra; segmento ≥ 4·perna e 40 mm; os segmentos cabem na junta | 6.2.6.2.4 |
 
-## Exemplos resolvidos e casos de aceite
+## Casos de aceite
 
-A página traz quatro exemplos de solda (talas sobrepostas, filete intermitente, penetração total e a
-cantoneira de contraventamento na chapa de nó e no pilar) que preenchem os campos com um clique. Os
-mesmos números estão nos casos de aceite da Central de validação (`core/casos_de_aceite.py`). Onde a
+Quatro exercícios de solda (talas sobrepostas, filete intermitente, penetração total e a cantoneira
+de contraventamento na chapa de nó e no pilar) são conferidos nos casos de aceite da Central de
+validação (`core/casos_de_aceite.py`). Onde a
 apostila verifica o "metal-base" do filete pela face de fusão (0,60·d_w·L·f_y/γ_a1, critério antigo),
 a norma pede a 6.5 na espessura das peças — e os comprimentos adotados mudam (exercício 4: filetes de
 120 e 50 mm em vez de 130 e 55; solda no pilar de 50 mm em vez de 70). No exercício 1 a norma pede

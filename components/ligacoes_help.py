@@ -11,15 +11,6 @@ AJUDA: dict[str, str] = {
         "Versão da NBR 8800. A 2025 é a vigente; a 2008 serve para conferir projetos antigos. "
         "Na 2025 o corte do parafuso usa 0,45 e 0,56 (0,40 e 0,50 na 2008)."
     ),
-    "exemplo": (
-        "Quatro exemplos resolvidos de solda: duas talas sobrepostas, chapa com filete "
-        "intermitente, chapa com penetração total e a cantoneira de contraventamento soldada na "
-        "chapa de nó e no pilar. Escolha um e clique em Preencher."
-    ),
-    "preencher_exemplo": (
-        "Troca o tipo de ligação e preenche os campos com o exemplo escolhido. Os outros campos "
-        "ficam como estão; confira tudo antes de usar o resultado."
-    ),
     # ------------------------------------------------------------------ chapa simples
     "sec_viga": "A viga que chega na ligação (a apoiada) e onde ela se apoia.",
     "perfil": "O perfil da viga apoiada; a alma dela recebe os parafusos.",

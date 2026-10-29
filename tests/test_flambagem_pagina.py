@@ -515,6 +515,13 @@ def test_csv_e_escopo(banco_isolado):
     assert any("Cantoneira simples" in w.value for w in t.warning)  # fora do escopo, sempre visível
 
 
+def test_word_com_todos_os_dados_no_fim_da_pagina(banco_isolado):
+    t = abrir(banco_isolado)
+    botoes = list(t.get("download_button"))
+    assert [b.proto.label for b in botoes][-1] == "Gerar o Word desta coluna"  # o último da página
+    assert botoes[-1].proto.help
+
+
 def test_norma_2008_lista_os_valores_conferidos(banco_isolado):
     def itens_a_conferir(teste: AppTest) -> bool:
         return any("Tabela E.1 de K" in m.value for m in teste.markdown)

@@ -66,12 +66,12 @@ LARGURAS_VERIFICACAO = [1950, 950, 950, 520, 760, 4230]
 CABECALHOS_APOIO = ["Grandeza", "Valor", "Un.", "Cálculo e referência"]
 LARGURAS_APOIO = [2900, 1100, 560, 4800]
 
-# O número logo depois de "Anglo ", "item ", "NBR ", "AISC ", "RCSC ", "Tab. " ou "§", ou colado a
-# uma letra ("J3.3"), é um item do critério ou da norma ("Anglo 10.2", "AISC J3.6", "RCSC 5.1"), não
-# um decimal.
+# O número logo depois de "Anglo ", "item ", "NBR ", "AISC ", "RCSC ", "Tab. ", "§" ou "8800 ", ou
+# colado a uma letra ("J3.3"), é um item do critério ou da norma ("Anglo 10.2", "AISC J3.6",
+# "RCSC 5.1", "NBR 8800 4.7"), não um decimal.
 _DECIMAL_COM_PONTO = re.compile(
     r"(?<![\d.,])(?<![A-Za-z])(?<!Anglo )(?<!item )(?<!itens )(?<!NBR )(?<!AISC )(?<!RCSC )"
-    r"(?<!Tab\. )(?<!Tabela )(?<!§)(\d+)\.(\d+)(?![\d.])"
+    r"(?<!Tab\. )(?<!Tabela )(?<!§)(?<!8800 )(\d+)\.(\d+)(?![\d.])"
 )
 _IDENTIFICADOR = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
 

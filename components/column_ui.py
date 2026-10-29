@@ -24,6 +24,7 @@ from core import column_buckling as cb
 from core import material_catalog as mat
 from core import section_catalog as catalogo_perfis
 from core.column_design import E_ACO, ESPESSURA_MIN_ANGLO, G_ACO, Secao
+from core.coluna_word import gerar_word_coluna
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
 from core.verificacao import csv_verificacoes, formatar_percentual
@@ -1608,13 +1609,9 @@ def mostrar_flambagem_colunas() -> None:
     _comparar_normas(entrada)
     _regras(entrada)
     fronteira_modelo(list(cb.FORA_DO_ESCOPO))
-    _registro(
-        entrada,
-        resultado,
-        _contexto_do_registro(secao, comprimentos, cargas, flexao, mao_francesa),
-        material.material_id,
-        _equacoes_de_carga(cargas, mao_francesa),
-    )
+    contexto = _contexto_do_registro(secao, comprimentos, cargas, flexao, mao_francesa)
+    equacoes = _equacoes_de_carga(cargas, mao_francesa)
+    _registro(entrada, resultado, contexto, material.material_id, equacoes)
 
     with st.container(border=True):
         st.subheader("Precisa de ajuda para preencher ou interpretar?")
@@ -1634,3 +1631,32 @@ def mostrar_flambagem_colunas() -> None:
         "AISC 360-16, com o critério da Anglo. Para a estrutura completa (pórtico, B₂, cargas "
         "nocionais, ligações e placa de base), use Estruturas de aço."
     )
+    _documento_word(entrada, resultado, contexto, equacoes)
+
+
+def _documento_word(
+    entrada: cb.EntradaColuna,
+    resultado: cb.ResultadoColuna,
+    contexto: Mapping[str, Any],
+    equacoes: list[str],
+) -> None:
+    """Fim da página: o Word editável com tudo o que a página mostra (gerado só no clique)."""
+    projeto = obter_projeto_ativo()
+
+    def gerar() -> bytes:
+        return gerar_word_coluna(
+            entrada, resultado, contexto=contexto, equacoes_de_carga=equacoes, projeto=projeto
+        )
+
+    with st.container(border=True):
+        st.subheader("Documento Word com todos os dados", help=AJUDA["sec_word"])
+        st.download_button(
+            "Gerar o Word desta coluna",
+            data=gerar,
+            file_name="flambagem_coluna_dados.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            icon=":material/description:",
+            on_click="ignore",
+            key="col_baixar_word",
+            help=AJUDA["btn_word"],
+        )

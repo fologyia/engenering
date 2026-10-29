@@ -56,67 +56,6 @@ PERFIS_DE_APOIO = ls.perfis_de_apoio()
 CANTONEIRAS = list(ct.CATALOGO_CANTONEIRAS)
 LADOS = {2: "Dos dois lados", 1: "De um lado só"}
 
-#: Os exemplos resolvidos de solda: cada um preenche os campos do seu tipo.
-EXEMPLOS: dict[str, dict[str, object]] = {
-    "Exemplo 1 — duas talas soldadas sobrepostas (40 kN)": {
-        "lig_tipo": lg.BARRA_SOLDADA,
-        "lig_b_modo": ls.MODO_DIMENSIONAR,
-        "lig_b_peca": ls.PECA_CHAPA,
-        "lig_b_larg": 50.0,
-        "lig_b_t": 9.525,
-        "lig_b_duas": True,
-        "lig_b_tno": 12.7,
-        "lig_b_perna": 8.0,
-        "lig_b_ponta": False,
-        "lig_b_nt": 40.0,
-        "lig_b_nc": 0.0,
-        "lig_b_com_apoio": False,
-    },
-    "Exemplo 2 — chapa com filete intermitente dos dois lados (40 kN)": {
-        "lig_tipo": lg.CHAPA_NO_APOIO,
-        "lig_c2_modo": ls.MODO_DIMENSIONAR,
-        "lig_c2_tipo": ls.TIPO_FILETE,
-        "lig_c2_lados": 2,
-        "lig_c2_t": 12.7,
-        "lig_c2_l": 100.0,
-        "lig_c2_perna": 5.0,
-        "lig_c2_inter": True,
-        "lig_c2_seg": 40.0,
-        "lig_c2_n": 40.0,
-        "lig_c2_v": 0.0,
-        "lig_c2_m": 0.0,
-    },
-    "Exemplo 3 — chapa com solda de penetração total (resistência)": {
-        "lig_tipo": lg.CHAPA_NO_APOIO,
-        "lig_c2_modo": ls.MODO_VERIFICAR,
-        "lig_c2_tipo": ls.TIPO_TOTAL,
-        "lig_c2_t": 12.7,
-        "lig_c2_l": 100.0,
-        "lig_c2_inter": False,
-        "lig_c2_n": 100.0,
-        "lig_c2_v": 0.0,
-        "lig_c2_m": 0.0,
-    },
-    "Exemplo 4 — cantoneira de contraventamento na chapa de nó e no pilar (100 kN)": {
-        "lig_tipo": lg.BARRA_SOLDADA,
-        "lig_b_modo": ls.MODO_DIMENSIONAR,
-        "lig_b_peca": ls.PECA_CANTONEIRA,
-        "lig_b_cant": PADRAO_BARRA.cantoneira,
-        "lig_b_duas": False,
-        "lig_b_tno": 8.0,
-        "lig_b_perna": 4.0,
-        "lig_b_ponta": False,
-        "lig_b_nt": 100.0,
-        "lig_b_nc": 0.0,
-        "lig_b_com_apoio": True,
-        "lig_b_theta": 60.0,
-        "lig_b_lapoio": 115.0,
-        "lig_b_perna_apoio": 6.0,
-        "lig_b_t_apoio": 19.0,
-        "lig_b_aco_apoio": "ASTM A572 Gr 50",
-    },
-}
-
 
 def _indice(opcoes: list[str], valor: str) -> int:
     return opcoes.index(valor) if valor in opcoes else 0
@@ -190,17 +129,6 @@ tipo = st.segmented_control(
     help=AJUDA["tipo"],
 )
 tipo = tipo or lg.CHAPA_SIMPLES
-with st.expander("Exemplos resolvidos de solda", icon=":material/menu_book:"):
-    c = st.columns([3, 1], vertical_alignment="bottom")
-    exemplo = c[0].selectbox("Exemplo", list(EXEMPLOS), key="lig_exemplo", help=AJUDA["exemplo"])
-    c[1].button(
-        "Preencher",
-        icon=":material/edit_note:",
-        key="lig_preencher_exemplo",
-        help=AJUDA["preencher_exemplo"],
-        on_click=st.session_state.update,
-        args=(EXEMPLOS[exemplo],),
-    )
 entrada: object
 
 if tipo == lg.CHAPA_SIMPLES:
