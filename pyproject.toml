@@ -114,6 +114,7 @@ files = [
     "core/contraventamento_ufm.py",
     "core/degrau_escada.py",
     "core/degrau_registro.py",
+    "core/degrau_word.py",
     "core/espelho_remoto.py",
     "core/fatigue_report.py",
     "core/load_combinations.py",

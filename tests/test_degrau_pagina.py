@@ -311,11 +311,17 @@ def test_piso_imposto_nao_e_corrigido_em_silencio(banco_isolado):
     assert metrica(t, "Espelho h × piso b (mm)") == "180 × 100"
 
 
-def test_baixar_tem_tres_arquivos_com_ajuda(banco_isolado):
+def test_baixar_tem_quatro_arquivos_com_ajuda_e_o_word_no_fim(banco_isolado):
     t = abrir(banco_isolado)
     botoes = list(t.get("download_button"))
-    rotulos = {b.proto.label for b in botoes}
-    assert rotulos == {"Verificações em CSV", "Os 64 modelos em CSV", "Relatório em PDF"}
+    rotulos = [b.proto.label for b in botoes]
+    assert set(rotulos) == {
+        "Verificações em CSV",
+        "Os 64 modelos em CSV",
+        "Relatório em PDF",
+        "Gerar o Word desta escada",
+    }
+    assert rotulos[-1] == "Gerar o Word desta escada"  # o último elemento da página
     assert all(b.proto.help for b in botoes)
 
 

@@ -324,6 +324,16 @@ AJUDA: dict[str, str] = {
     ),
     "btn_csv_verificacoes": "Baixa a tabela das 38 verificações em CSV (abre no Excel).",
     "btn_csv_catalogo": "Baixa a tabela dos 64 modelos em CSV (abre no Excel).",
+    "sec_word": (
+        "Um arquivo do Word, editável, com tudo o que esta página mostra — para copiar os dados "
+        "para outro documento."
+    ),
+    "btn_word": (
+        "Gera o Word com a identificação, todos os dados de entrada, o quadro-resumo, as 38 "
+        "verificações, a geometria, os lances e patamares (com o esquemático e a escada em 3D), o "
+        "memorial do modelo adotado, a longarina com cargas, trechos, reações, verificações e "
+        "diagramas, os 64 modelos, a requisição e os avisos. As tabelas saem como tabelas do Word."
+    ),
     "btn_pdf": (
         "Gera o relatório em PDF: resumo, verificações com o item da norma, memorial do modelo "
         "adotado, os 64 modelos, a requisição e os avisos."

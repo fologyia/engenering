@@ -31,6 +31,7 @@ from core import portico_plano as pp
 from core import section_catalog as sc
 from core.contraventamento_barras import ACOS
 from core.degrau_relatorio import gerar_pdf_degrau
+from core.degrau_word import gerar_word_degrau
 
 OPCOES_SELECAO = {de.SELECAO_AUTOMATICA: "Automática", de.SELECAO_MANUAL: "Manual"}
 MODELOS = [m.nome for m in de.catalogo()]
@@ -1442,3 +1443,41 @@ def mostrar_degrau_de_escada() -> None:
         _aba_requisicao(resultado, ident, escada, calculo_longarina, escada_3d)
     _blocos_fixos(resultado)
     _registrar(resultado, ident, escada, calculo_longarina, escada_3d)
+    _documento_word(resultado, ident, escada, calculo_longarina, escada_3d)
+
+
+def _documento_word(
+    r: de.ResultadoEscada,
+    ident: Identificacao,
+    escada: el.EscadaComPatamares,
+    longarina: le.ResultadoLongarina | None,
+    escada_3d: dict[str, Any] | None = None,
+) -> None:
+    """Fim da página: o Word editável com tudo o que a página mostra (gerado só no clique)."""
+
+    def gerar() -> bytes:
+        return gerar_word_degrau(
+            r,
+            {
+                "obra": ident.obra,
+                "tag": ident.tag,
+                "responsavel": ident.responsavel,
+                "data": ident.data,
+            },
+            escada=escada,
+            longarina=longarina,
+            escada_3d=escada_3d,
+        )
+
+    with st.container(border=True):
+        st.subheader("Documento Word com todos os dados", help=AJUDA["sec_word"])
+        st.download_button(
+            "Gerar o Word desta escada",
+            data=gerar,
+            file_name="degrau_escada_dados.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            icon=":material/description:",
+            on_click="ignore",
+            key="dg_baixar_word",
+            help=AJUDA["btn_word"],
+        )
