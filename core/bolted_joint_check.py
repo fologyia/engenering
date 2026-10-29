@@ -40,12 +40,21 @@ from core.verificacao import (
     status_geral,
 )
 
+#: A designação de cada norma — a única fonte: título, campo Norma, referências das linhas e
+#: lista de referências do memorial saem daqui (a chave interna NBR8800_2024 é a edição de 2025,
+#: confirmada pelo usuário em 28/10/2026).
 NORMAS_ROTULOS = {
     "NBR8800_2008": "ABNT NBR 8800:2008",
     "NBR8800_2024": "ABNT NBR 8800:2025",
     "AISC360_LRFD": "AISC 360 (LRFD)",
     "RCSC2004": "RCSC 2004 (LRFD)",
 }
+
+
+def _nbr_curta(norma: str) -> str:
+    """A designação central sem o "ABNT " ("NBR 8800:2025"), para a referência de cada linha."""
+    return NORMAS_ROTULOS[norma].removeprefix("ABNT ")
+
 
 SUPERFICIES_ROTULOS = {
     "galvanizada_sem_tratamento": "Galvanizada a fogo, sem tratamento (padrão Anglo)",
@@ -159,6 +168,9 @@ class ResultadoLigacao:
     torque_referencia_Nm: float | None
     coordenadas: tuple[tuple[float, float], ...] = field(default_factory=tuple)
     forcas_parafusos: tuple[tuple[float, float, float], ...] = field(default_factory=tuple)
+    #: As equações do método que valem para esta ligação, com os coeficientes escolhidos e os
+    #: valores substituídos (o memorial as imprime; nada de equação que não se aplica).
+    equacoes: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -384,6 +396,15 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
     )
     Fc_min = bc.resist_contato(d_b, t, f_u, lf_min, norma, entrada.deformacao_limitada, perp)
     R_bolt = min(Fv, Fc_min)
+    # O texto da equação sai dos mesmos coeficientes que o cálculo usou.
+    k1, k2 = bc.coeficientes_contato(entrada.deformacao_limitada, perp)
+    contato_txt = _equacao_contato(norma, k1, k2, lf_min, d_b, t, f_u, Fc_min)
+    equacoes: list[str] = [
+        _equacao_corte(entrada, d_b, Fv),
+        f"Contato e rasgamento ({_motivo_do_contato(entrada)}; ℓ_f crítico = {lf_min:.1f} mm, "
+        f"t da parte mais fina): {contato_txt} "
+        f"({_ref(norma, '6.3.3.3', '6.3.3.3', 'AISC J3.10')})",
+    ]
     intermediarios: dict[str, float] = {}
     resistencias: dict[str, float] = {
         "F_v_Rd_kN": Fv,
@@ -410,6 +431,12 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
     }
     if a_mm is not None:
         forcas["excentricidade_mm"] = a_mm
+    if V_Sd != 0 or M_Sd != 0:
+        equacoes.append(
+            "Grupo excêntrico (método elástico): F_x,i = N/n − M·y_i/J; F_y,i = V/n + M·x_i/J; "
+            f"J = Σ(x_i² + y_i²) = {elu['J']:.0f} mm²; parafuso crítico R_max = "
+            f"{elu['R_max']:.2f} kN (ELU) e {els['R_max']:.2f} kN (serviço)"
+        )
 
     # Tração em cada parafuso (de cálculo e característica) e o efeito de alavanca.
     tem_tracao = N_t_Sd > 0 or M_t_Sd != 0
@@ -420,6 +447,9 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
     if tem_tracao:
         F_t_Rd = bc.resist_tracao_parafuso(d_b, entrada.grau, norma)
         resistencias["F_t_Rd_kN"] = F_t_Rd
+        intermediarios["A_b_mm2"] = bc.area_bruta(d_b)
+        if bc._nbr(norma):
+            intermediarios["A_be_mm2"] = bc.area_efetiva(d_b)
         F_t0 = max(ft_elu)
         forcas["N_t_Sd_kN"] = N_t_Sd
         forcas["M_t_Sd_kNm"] = M_t_Sd
@@ -494,7 +524,8 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
                 R_bolt,
                 "kN",
                 "NBR 6.3.3.2 e 6.3.3.3 / AISC J3.6 e J3.10",
-                f"R_max (ELU, elástico) ≤ min(F_v,Rd = {Fv:.1f}; F_c,Rd = {Fc_min:.1f}); "
+                f"R_max (ELU, elástico) ≤ mín(F_v,Rd = {Fv:.2f}; F_c,Rd = {Fc_min:.2f}) = "
+                f"{R_bolt:.2f} kN; F_c,Rd com {_motivo_do_contato(entrada)}: {contato_txt}; "
                 f"J = {elu['J']:.0f} mm²",
             )
         )
@@ -560,7 +591,7 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
 
     # --- 6. Peça: tração, shear lag e colapso por rasgamento ---
     N_t_Rd: float | None = None
-    R_lig_tracao: float | None = None
+    F_r: float | None = None
     tracao_peca = abs(N_Sd) > 0 or entrada.peca_por_esbeltez
     if tracao_peca and not grid:
         linhas.append(
@@ -653,9 +684,23 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
         )
         R_grupo_axial = bc.resist_grupo_axial(n_lin, n_col, Fv, Fc_ext, Fc_int)
         resistencias.setdefault("R_grupo_axial_kN", R_grupo_axial)
-        R_lig_tracao = min(R_grupo_axial, F_r)
+    if V_Sd != 0 and entrada.A_g is not None:
+        linhas.append(
+            _linha(
+                "Peça — cisalhamento pela força V (a confirmar)",
+                None,
+                None,
+                "kN",
+                _ref(norma, "6.5.5", "6.5.5 (a confirmar)", "AISC J4.2"),
+                f"V_Sd = {abs(V_Sd):.2f} kN atravessa a peça, mas a seção dela que resiste a V "
+                "(comprimento × espessura, com os furos) não foi informada: escoamento "
+                "0,60·A_gv·f_y/γ_a1 e ruptura 0,60·A_nv·f_u/γ_a2 da peça ficam a confirmar. A "
+                "tração da peça e o colapso por rasgamento acima usam só N.",
+                "ALERTA",
+            )
+        )
 
-    # --- Chapa de ligação (gusset) tracionada ---
+    # --- Chapa de ligação (gusset): tração por N e cisalhamento por V ---
     if entrada.chapa_largura is not None:
         _chapa_de_ligacao(
             entrada,
@@ -663,6 +708,7 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
             resistencias,
             intermediarios,
             N_Sd,
+            V_Sd,
             d_hy,
             f_y,
             f_u,
@@ -692,6 +738,29 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
     )
 
     # --- 8. Critério Anglo ---
+    # Capacidade da ligação para a regra dos 75%: a menor entre corte × n, contato × n (o parafuso
+    # crítico, conservador), colapso por rasgamento, chapa de ligação e deslizamento × n.
+    componentes: list[tuple[str, float]] = [
+        (f"corte {n}·F_v,Rd", n * Fv),
+        (f"contato {n}·F_c,Rd", n * Fc_min),
+    ]
+    if F_r is not None:
+        componentes.append(("colapso por rasgamento", F_r))
+    if "chapa_escoamento_kN" in resistencias:
+        componentes.append(("chapa de ligação (escoamento)", resistencias["chapa_escoamento_kN"]))
+        componentes.append(("chapa de ligação (ruptura)", resistencias["chapa_ruptura_kN"]))
+    for chave, nome in (("F_f_Rk_kN", "F_f,Rk"), ("F_f_Rd_kN", "F_f,Rd")):
+        if chave in resistencias:
+            componentes.append((f"deslizamento {n}·{nome}", n * resistencias[chave]))
+    regra_calculavel = tracao_peca and grid and N_t_Rd is not None
+    R_lig_tracao = min(valor for _, valor in componentes) if regra_calculavel else None
+    if entrada.peca_por_esbeltez and R_lig_tracao is not None:
+        resistencias["R_ligacao_anglo_kN"] = R_lig_tracao
+        equacoes.append(
+            "Regra dos 75% (Anglo 9.1, peça por esbeltez ou sem esforço indicado): R_lig = mín(corte "
+            "× n; contato × n; colapso por rasgamento; chapa de ligação; deslizamento × n) ≥ "
+            "máx(0,75·N_t,Rd; 3 tf)"
+        )
     linhas.extend(
         bc.criterio_anglo(
             n,
@@ -702,6 +771,7 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
             entrada.peca_por_esbeltez,
             R_lig_tracao,
             N_t_Rd,
+            componentes,
         )
     )
 
@@ -745,16 +815,82 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
         tuple(coords),
         forcas_parafusos,
         torque,
+        tuple(equacoes),
     )
 
 
 def _ref(norma: str, nbr_2008: str, nbr_2025: str, aisc: str) -> str:
     """O item da norma escolhida (cada versão com o seu)."""
     if norma == "NBR8800_2008":
-        return f"NBR 8800:2008, {nbr_2008}"
+        return f"{_nbr_curta(norma)}, {nbr_2008}"
     if norma == "NBR8800_2024":
-        return f"NBR 8800:2025, {nbr_2025}"
+        return f"{_nbr_curta(norma)}, {nbr_2025}"
     return aisc
+
+
+def _t_minimo(t_mm: float) -> str:
+    """A espessura mínima que a força exige; abaixo de 1 mm o número não informa nada."""
+    if t_mm < 1.0:
+        return "t mínimo desprezível para esta carga (< 1 mm)"
+    return f"t mínimo = {t_mm:.2f} mm"
+
+
+def _equacao_corte(entrada: EntradaLigacao, d_b: float, Fv: float) -> str:
+    """F_v,Rd com o coeficiente da rosca e os valores substituídos."""
+    norma, n_s = entrada.norma, entrada.n_planos
+    A_b = bc.area_bruta(d_b)
+    na_rosca = entrada.rosca_no_plano or entrada.grau == "A307"
+    rosca = "rosca no plano de corte" if na_rosca else "rosca fora do plano de corte"
+    if bc._nbr(norma):
+        alfa = bc._P[norma]["alfa_N" if na_rosca else "alfa_X"]
+        f_ub = bc.fub(entrada.grau, d_b, norma)
+        g_a2 = bc._P[norma]["g_a2"]
+        return (
+            f"Corte ({rosca}): F_v,Rd = n_s·α_v·A_b·f_ub/γ_a2 = {n_s}·{alfa:g}·{A_b:.1f}·"
+            f"{f_ub:g}/{g_a2:g} = {Fv:.2f} kN ({_ref(norma, '6.3.3.2', '6.3.3.2', '')})"
+        )
+    grau = bc.GRAUS[entrada.grau]
+    if norma == "AISC360_LRFD":
+        F_n, nome, ref = grau.Fnv_AISC[0 if na_rosca else 1], "F_nv", "AISC J3.6"
+    else:
+        assert grau.Fn_RCSC is not None
+        F_n, nome, ref = grau.Fn_RCSC[0 if na_rosca else 1], "F_n", "RCSC 5.1"
+    return f"Corte ({rosca}): φ·{nome}·A_b·n_s = 0,75·{F_n:g}·{A_b:.1f}·{n_s} = {Fv:.2f} kN ({ref})"
+
+
+def _equacao_contato(
+    norma: str,
+    k1: float,
+    k2: float,
+    l_f: float,
+    d_b: float,
+    t: float,
+    f_u: float,
+    Fc: float,
+) -> str:
+    """F_c,Rd com os coeficientes que o cálculo usou (1,2/2,4; 1,5/3,0; 1,0/2,0), substituídos."""
+    rasg = k1 * l_f * t * f_u / 1000
+    esmag = k2 * d_b * t * f_u / 1000
+    k1_txt, k2_txt = f"{k1:.1f}".replace(".", ","), f"{k2:.1f}".replace(".", ",")
+    if bc._nbr(norma):
+        g_a2 = bc._P[norma]["g_a2"]
+        return (
+            f"F_c,Rd = mín({k1_txt}·ℓ_f·t·f_u; {k2_txt}·d_b·t·f_u)/γ_a2 = mín({k1:.1f}·{l_f:.1f}·"
+            f"{t:g}·{f_u:g}; {k2:.1f}·{d_b:g}·{t:g}·{f_u:g})/{g_a2:g} = mín({rasg / g_a2:.2f}; "
+            f"{esmag / g_a2:.2f}) = {Fc:.2f} kN"
+        )
+    return (
+        f"φ·R_n = 0,75·mín({k1_txt}·ℓ_f·t·F_u; {k2_txt}·d_b·t·F_u) = 0,75·mín({k1:.1f}·{l_f:.1f}·"
+        f"{t:g}·{f_u:g}; {k2:.1f}·{d_b:g}·{t:g}·{f_u:g}) = {Fc:.2f} kN"
+    )
+
+
+def _motivo_do_contato(entrada: EntradaLigacao) -> str:
+    if entrada.tipo_furo == bc.FURO_MUITO_TRANSVERSAL:
+        return "furo muito alongado perpendicular à força"
+    if entrada.deformacao_limitada:
+        return "deformação do furo limitada"
+    return "deformação do furo não limitada"
 
 
 def _alavanca(
@@ -802,6 +938,7 @@ def _alavanca(
                 _linha("Alavanca — a ≥ b", entrada.alav_b, entrada.alav_a, "mm", r.metodo, r.aviso)
             )
         assert r.F_t_Rd_reduzida_kN is not None
+        intermediarios["F_t_Rd_com_alavanca_kN"] = r.F_t_Rd_reduzida_kN
         return r.F_t_Rd_reduzida_kN, 1.0
     if norma != "NBR8800_2024":
         linhas.append(
@@ -829,7 +966,7 @@ def _alavanca(
         F_t_Rd=F_t_Rd,
     )
     intermediarios["t_rigida_mm"] = r.t_rigida_mm
-    ref = "NBR 8800:2025, 6.3.5 (a confirmar)"
+    ref = _ref(norma, "6.3.5", "6.3.5 (a confirmar)", "")
     linhas.append(
         _linha(
             "Alavanca — placa rígida (t para não haver alavanca)",
@@ -955,6 +1092,9 @@ def _tracao_e_interacao(
     ]
     i = max(range(len(razoes)), key=lambda k: razoes[k])
     intermediarios["interacao_tracao_corte"] = razoes[i]
+    intermediarios["interacao_F_t_Sd_kN"] = tracoes[i]
+    intermediarios["interacao_F_v_Sd_kN"] = cortes[i]
+    intermediarios["interacao_F_t_Rd_kN"] = F_t_Rd
     linhas.append(
         _linha(
             "Tração + corte (interação, por parafuso)",
@@ -966,7 +1106,7 @@ def _tracao_e_interacao(
             f"({cortes[i]:.2f}/{Fv:.1f})² = {razoes[i]:.3f} no parafuso crítico",
         )
     )
-    if entrada.interacao_por_tabela and bc._nbr(norma):
+    if bc._nbr(norma):
         limites = [
             bc.limite_tracao_tabela(d_b, entrada.grau, norma, entrada.rosca_no_plano, fv)
             for fv in cortes
@@ -974,6 +1114,12 @@ def _tracao_e_interacao(
         j = min(range(len(limites)), key=lambda k: limites[k] - tracoes[k])
         k = bc.coeficiente_tabela_interacao(entrada.grau, entrada.rosca_no_plano)
         tabela = bc.TABELA_INTERACAO[norma]
+        # O limite da tabela vai para o memorial mesmo sem a opção marcada (só informa).
+        intermediarios["limite_tabela_kN"] = limites[j]
+        intermediarios["limite_tabela_coef"] = k
+        intermediarios["limite_tabela_F_v_Sd_kN"] = cortes[j]
+        intermediarios["limite_tabela_F_t_Sd_kN"] = tracoes[j]
+    if entrada.interacao_por_tabela and bc._nbr(norma):
         linhas.append(
             _linha(
                 f"Tração com corte ({tabela}, alternativa)",
@@ -1013,7 +1159,7 @@ def _deslizamento(
                     None,
                     None,
                     "—",
-                    "NBR 8800:2008, 6.3.4.3",
+                    _ref(norma, "6.3.4.3", "", ""),
                     "A 2008 não tem o fator C_e (chapas de enchimento): usa o fator de furo C_h "
                     f"= {fator:g}. O C_e informado ({entrada.C_e:g}) foi ignorado.",
                     "INFO",
@@ -1073,15 +1219,19 @@ def _chapa_de_ligacao(
     resistencias: dict[str, float],
     intermediarios: dict[str, float],
     N_Sd: float,
+    V_Sd: float,
     d_hy: float,
     f_y: float,
     f_u: float,
     furos_padrao: int,
 ) -> None:
+    """Chapa de ligação: tração por N (6.5.3) e cisalhamento por V (6.5.5) na seção transversal
+    informada (largura × t, com os furos da seção), cada esforço verificado separado."""
     norma = entrada.norma
     assert entrada.chapa_largura is not None
     t_c = entrada.chapa_t if entrada.chapa_t is not None else entrada.t
     n_furos = entrada.chapa_furos if entrada.chapa_furos is not None else furos_padrao
+    folga = bc._P[norma]["folga"]
     c = bc.chapa_de_ligacao(entrada.chapa_largura, t_c, n_furos, d_hy, f_y, f_u, norma, N_Sd)
     resistencias.update(chapa_escoamento_kN=c.escoamento_kN, chapa_ruptura_kN=c.ruptura_kN)
     intermediarios.update(chapa_A_g_mm2=c.A_g, chapa_A_n_mm2=c.A_n, chapa_A_e_mm2=c.A_e)
@@ -1098,29 +1248,77 @@ def _chapa_de_ligacao(
                 "INFO",
             )
         )
+    else:
+        linhas.append(
+            _linha(
+                "Chapa de ligação — escoamento da seção bruta",
+                abs(N_Sd),
+                c.escoamento_kN,
+                "kN",
+                ref,
+                f"A_g·f_y/γ_a1; A_g = {entrada.chapa_largura:g} × {t_c:g} = {c.A_g:.1f} mm²; "
+                + _t_minimo(c.t_min_escoamento_mm),
+            )
+        )
+        governa = "A_n" if c.A_n <= 0.85 * c.A_g else "0,85·A_g"
+        linhas.append(
+            _linha(
+                "Chapa de ligação — ruptura da seção líquida",
+                abs(N_Sd),
+                c.ruptura_kN,
+                "kN",
+                ref,
+                f"A_e·f_u/γ_a2 com A_e = mín(A_n; 0,85·A_g) = mín({c.A_n:.1f}; {0.85 * c.A_g:.1f}) = "
+                f"{c.A_e:.1f} mm² (governa {governa}); A_n = A_g − {n_furos}·({d_hy:g} + "
+                f"{folga:g})·{t_c:g}; {_t_minimo(c.t_min_ruptura_mm)}; C_t não se aplica à chapa "
+                "de ligação",
+            )
+        )
+    if V_Sd == 0:
         return
+    v = bc.chapa_ao_cisalhamento(entrada.chapa_largura, t_c, n_furos, d_hy, f_y, f_u, norma)
+    resistencias.update(
+        chapa_cisalhamento_escoamento_kN=v.escoamento_kN,
+        chapa_cisalhamento_ruptura_kN=v.ruptura_kN,
+    )
+    intermediarios.update(chapa_A_gv_mm2=v.A_gv, chapa_A_nv_mm2=v.A_nv)
+    ref_v = _ref(norma, "6.5.5", "6.5.5 (a confirmar)", "AISC J4.2")
+    if norma == "NBR8800_2008":
+        separado = (
+            f"a {_nbr_curta(norma)}, 6.5.5, não traz interação com a tração: N e V verificados "
+            "separadamente"
+        )
+    elif norma == "NBR8800_2024":
+        separado = "N e V verificados separadamente (interação no 6.5.5 da 2025: a confirmar)"
+    else:
+        separado = "a AISC J4.2 não traz interação com a J4.1: N e V verificados separadamente"
+    secao = (
+        f"seção de cisalhamento = a seção transversal da chapa informada (b = "
+        f"{entrada.chapa_largura:g} mm, {n_furos} furo{'s' if n_furos != 1 else ''}), a mesma da "
+        "tração, ao longo da qual V atua; outra seção — a confirmar com a geometria"
+    )
+    fator_esc = "/γ_a1" if bc._nbr(norma) else "·φ (φ = 1,00)"
+    fator_rup = "/γ_a2" if bc._nbr(norma) else "·φ (φ = 0,75)"
     linhas.append(
         _linha(
-            "Chapa de ligação — escoamento da seção bruta",
-            abs(N_Sd),
-            c.escoamento_kN,
+            "Chapa de ligação — escoamento por cisalhamento (V)",
+            abs(V_Sd),
+            v.escoamento_kN,
             "kN",
-            ref,
-            f"A_g·f_y/γ_a1; A_g = {entrada.chapa_largura:g} × {t_c:g} = {c.A_g:.1f} mm²; "
-            f"t mínimo = {c.t_min_escoamento_mm:.2f} mm",
+            ref_v,
+            f"0,60·A_gv·f_y{fator_esc}; A_gv = {entrada.chapa_largura:g} × {t_c:g} = "
+            f"{v.A_gv:.1f} mm²; {secao}; {separado}",
         )
     )
-    governa = "A_n" if c.A_n <= 0.85 * c.A_g else "0,85·A_g"
     linhas.append(
         _linha(
-            "Chapa de ligação — ruptura da seção líquida",
-            abs(N_Sd),
-            c.ruptura_kN,
+            "Chapa de ligação — ruptura por cisalhamento (V)",
+            abs(V_Sd),
+            v.ruptura_kN,
             "kN",
-            ref,
-            f"A_e·f_u/γ_a2 com A_e = mín(A_n; 0,85·A_g) = mín({c.A_n:.1f}; {0.85 * c.A_g:.1f}) = "
-            f"{c.A_e:.1f} mm² (governa {governa}); A_n = A_g − {n_furos}·({d_hy:g} + 2)·{t_c:g}; "
-            f"t mínimo = {c.t_min_ruptura_mm:.2f} mm; C_t não se aplica à chapa de ligação",
+            ref_v,
+            f"0,60·A_nv·f_u{fator_rup}; A_nv = A_gv − {n_furos}·({d_hy:g} + {folga:g})·{t_c:g} = "
+            f"{v.A_nv:.1f} mm²",
         )
     )
 
@@ -1151,7 +1349,8 @@ def _furo_alargado_ou_alongado(
                 "mm",
                 _ref(norma, "", "Tabela 17 (a confirmar)", "AISC J3.4 e Tab. J3.5"),
                 "O incremento da distância mínima à borda para este furo não foi aplicado: "
-                "confira na tabela da norma (a da NBR 8800:2025 ainda não foi conferida).",
+                f"confira na tabela da norma (a da {_nbr_curta('NBR8800_2024')} ainda não foi "
+                "conferida).",
                 "ALERTA",
             )
         )
@@ -1169,7 +1368,7 @@ def _furo_alargado_ou_alongado(
                 e_min + acrescimo,
                 distancia,
                 "mm",
-                "NBR 8800:2008, 6.3.11.2",
+                _ref(norma, "6.3.11.2", "", ""),
                 f"e_mín + β·d_b = {e_min:g} + {acrescimo:.1f} mm",
             )
         )
@@ -1184,6 +1383,7 @@ def _fechar(
     coords: tuple[tuple[float, float], ...],
     forcas_parafusos: tuple[tuple[float, float, float], ...],
     torque: float | None,
+    equacoes: tuple[str, ...] = (),
 ) -> ResultadoLigacao:
     aproveitamento, governante = _aproveitamento_governante(linhas)
     return ResultadoLigacao(
@@ -1198,6 +1398,7 @@ def _fechar(
         torque_referencia_Nm=torque,
         coordenadas=coords,
         forcas_parafusos=forcas_parafusos,
+        equacoes=equacoes,
     )
 
 
@@ -1262,15 +1463,201 @@ def comparar_normas(entrada: EntradaLigacao) -> list[dict[str, Any]]:
 # Registro técnico (entra no memorial Word/PDF com a tabela completa de verificações)
 # ---------------------------------------------------------------------------------------------
 REFERENCIAS_NORMA = {
-    "NBR8800_2008": "ABNT NBR 8800:2008, itens 5.2, 6.3 e 6.5.6; Tabelas 14, 16, 19 e A.3.",
-    "NBR8800_2024": "ABNT NBR 8800:2025: itens 5.2, 6.3, 6.5 e 6.8; Tabelas 3, 14, 16, 19 e A.3.",
+    "NBR8800_2008": (
+        f"{NORMAS_ROTULOS['NBR8800_2008']}, itens 5.2, 6.3, 6.5.3, 6.5.5 e 6.5.6; "
+        "Tabelas 14, 16, 19 e A.3."
+    ),
+    "NBR8800_2024": (
+        f"{NORMAS_ROTULOS['NBR8800_2024']}, itens 5.2, 6.3, 6.5 e 6.8; Tabelas 3, 14, 16, 19 e A.3."
+    ),
     "AISC360_LRFD": "ANSI/AISC 360, capítulos D, J3 e J4 (LRFD), e AISC Design Guide 29.",
     "RCSC2004": "RCSC Specification for Structural Joints Using ASTM A325 or A490 Bolts (2004), §5 e §8.",
 }
 
+#: Casas decimais das colunas Solicitante e Resistente do memorial desta ligação (uniformes).
+CASAS_DECIMAIS_DO_MEMORIAL = 2
+
 
 def _nome_curto_norma(norma: str) -> str:
     return NORMAS_ROTULOS[norma].split(" (")[0]
+
+
+def _num(valor: float, casas: int = 2) -> str:
+    return f"{valor:.{casas}f}".replace(".", ",")
+
+
+def tabela_da_tracao(entrada: EntradaLigacao, resultado: ResultadoLigacao) -> dict[str, Any] | None:
+    """A seção "Tração, interação e efeito de alavanca" do memorial; ``None`` sem tração no
+    parafuso (F_t,Sd = 0): o memorial só a mostra quando a tração existe."""
+    from core.memorial_verificacoes import decimal_ptbr
+
+    F_t_Sd = resultado.forcas.get("F_t_Sd_kN", 0.0)
+    F_t_Rd = resultado.resistencias.get("F_t_Rd_kN")
+    if not F_t_Sd > 0 or F_t_Rd is None:
+        return None
+    norma = entrada.norma
+    nbr = bc._nbr(norma)
+    im = resultado.intermediarios
+    d_b = bc.dados_parafuso(entrada.designacao)["d_b"]
+    A_b = im.get("A_b_mm2", bc.area_bruta(d_b))
+    linhas: list[list[str]] = [
+        ["Área bruta do parafuso A_b", _num(A_b), "mm²", f"π·d_b²/4 = π·{d_b:g}²/4"],
+    ]
+    if nbr:
+        A_be = im.get("A_be_mm2", bc.area_efetiva(d_b))
+        f_ub = bc.fub(entrada.grau, d_b, norma)
+        g_a2 = bc._P[norma]["g_a2"]
+        linhas.append(
+            [
+                "Área efetiva à tração A_be",
+                _num(A_be),
+                "mm²",
+                f"A_be = 0,75·A_b = 0,75·{A_b:.2f} ({_ref(norma, '6.3.2.2', '6.3.2.2', '')})",
+            ]
+        )
+        linhas.append(
+            [
+                "Tração resistente F_t,Rd",
+                _num(F_t_Rd),
+                "kN",
+                f"F_t,Rd = A_be·f_ub/γ_a2 = {A_be:.2f}·{f_ub:g}/{g_a2:g} "
+                f"({_ref(norma, '6.3.3.1', '6.3.3.1', '')})",
+            ]
+        )
+    else:
+        linhas.append(
+            [
+                "Tração resistente φ·R_n",
+                _num(F_t_Rd),
+                "kN",
+                f"0,75·F_nt·A_b = 0,75·{bc.GRAUS[entrada.grau].Fnt_AISC:g}·{A_b:.2f} "
+                "(AISC J3.6 / RCSC 5.1)",
+            ]
+        )
+    if "F_t_Rd_com_alavanca_kN" in im:
+        linhas.append(
+            [
+                "Tração resistente com alavanca",
+                _num(im["F_t_Rd_com_alavanca_kN"]),
+                "kN",
+                f"F_t,Rd reduzida pela alavanca ({_ref(norma, '6.3.5.2', '', '')})",
+            ]
+        )
+    linhas.append(
+        [
+            "Tração no parafuso mais tracionado F_t,Sd",
+            _num(F_t_Sd),
+            "kN",
+            f"N_t,Sd = {resultado.forcas.get('N_t_Sd_kN', 0.0):.2f} kN e M_t,Sd = "
+            f"{resultado.forcas.get('M_t_Sd_kNm', 0.0):.2f} kN·m distribuídos pelos parafusos "
+            "(eixo neutro no centro do grupo)"
+            + (
+                f"; com alavanca (F_t,0,Sd = {resultado.forcas.get('F_t0_Sd_kN', 0.0):.2f} kN)"
+                if F_t_Sd > resultado.forcas.get("F_t0_Sd_kN", F_t_Sd) + 1e-9
+                else ""
+            ),
+        ]
+    )
+    if "interacao_tracao_corte" in im:
+        linhas.append(
+            [
+                "Interação tração + corte",
+                _num(im["interacao_tracao_corte"], 3),
+                "—",
+                f"(F_t,Sd/F_t,Rd)² + (F_v,Sd/F_v,Rd)² = ({im['interacao_F_t_Sd_kN']:.2f}/"
+                f"{im.get('interacao_F_t_Rd_kN', F_t_Rd):.2f})² + ({im['interacao_F_v_Sd_kN']:.2f}/"
+                f"{resultado.resistencias['F_v_Rd_kN']:.2f})² ≤ 1,0 no parafuso crítico "
+                f"({_ref(norma, '6.3.3.4', '6.3.3.4', 'RCSC 5.2')})",
+            ]
+        )
+    elif nbr:
+        linhas.append(
+            ["Interação tração + corte", "-", "—", "Sem corte no parafuso: não se aplica."]
+        )
+    else:
+        linhas.append(
+            [
+                "Interação tração + corte",
+                "-",
+                "—",
+                "AISC J3.7: F'_nt reduzido, na tabela de verificações.",
+            ]
+        )
+    if "limite_tabela_kN" in im:
+        k = im["limite_tabela_coef"]
+        tabela = bc.TABELA_INTERACAO[norma]
+        usada = "usada como verificação" if entrada.interacao_por_tabela else "só informativa"
+        linhas.append(
+            [
+                f"Limite da {tabela} (alternativa)",
+                _num(im["limite_tabela_kN"]),
+                "kN",
+                f"f_ub·A_b/γ_a2 − {k:g}·F_v,Sd = {im['limite_tabela_kN'] + k * im['limite_tabela_F_v_Sd_kN']:.2f}"
+                f" − {k:g}·{im['limite_tabela_F_v_Sd_kN']:.2f}, com F_t,Sd = "
+                f"{im['limite_tabela_F_t_Sd_kN']:.2f} kN ({usada}; "
+                f"{_ref(norma, '6.3.3.4 e Tabela 11', '6.3.3.4 e Tabela 12', '')})",
+            ]
+        )
+    if "t_rigida_mm" in im:
+        t_placa = entrada.alav_t if entrada.alav_t is not None else entrada.t
+        linhas.append(
+            [
+                "Placa rígida: t mínimo (sem alavanca)",
+                _num(im["t_rigida_mm"]),
+                "mm",
+                f"√[4·(b − 0,5·d_b)·F_t,0,Sd·γ_a1/(p·f_u)] com a = {entrada.alav_a:g}, b = "
+                f"{entrada.alav_b:g}, p = {entrada.alav_p:g} mm; t da placa = {t_placa:g} mm "
+                f"({_ref(norma, '6.3.5', '6.3.5 (a confirmar)', '')})",
+            ]
+        )
+    elif "t_alavanca_req_mm" in im:
+        linhas.append(
+            [
+                "Chapa fletida: t requerido",
+                _num(im["t_alavanca_req_mm"]),
+                "mm",
+                f"M = F_t,Sd·b na largura p ({_ref(norma, '6.3.5.2', '', '')})",
+            ]
+        )
+    else:
+        linhas.append(
+            [
+                "Efeito de alavanca",
+                "-",
+                "-",
+                "Não verificado: a geometria da chapa fletida (a, b, p) não foi informada.",
+            ]
+        )
+    return {
+        "subtitulo": "Tração, interação e efeito de alavanca",
+        "legenda": "Valores da tração no parafuso (aparecem só quando há F_t,Sd > 0).",
+        "cabecalhos": ["Grandeza", "Valor", "Un.", "Cálculo e referência"],
+        "linhas": [[a, b, c, decimal_ptbr(d)] for a, b, c, d in linhas],
+        "larguras": [2600, 1000, 560, 5200],
+        "fonte": 7.2,
+    }
+
+
+def _premissas(entrada: EntradaLigacao, resultado: ResultadoLigacao) -> list[str]:
+    premissas = [
+        "Tração do grupo distribuída pelos parafusos com o eixo neutro no centro do grupo; "
+        "fadiga fora do escopo.",
+        "Torque de aperto é estimativa; instalar por rotação da porca, chave calibrada ou "
+        "indicador de tração.",
+        "t = espessura da parte ligada mais fina (nunca a soma).",
+    ]
+    if resultado.forcas.get("V_Sd_kN", 0.0) != 0:
+        if entrada.chapa_largura is None:
+            premissas.append(
+                "Verificações da peça e do gusset consideram apenas N; V transversal não é "
+                "verificado na chapa (largura da chapa de ligação não informada)."
+            )
+        else:
+            premissas.append(
+                "Cisalhamento por V verificado na seção transversal da chapa de ligação informada "
+                "(largura × espessura, com os furos), separado da tração por N."
+            )
+    return premissas
 
 
 def registro_ligacao(
@@ -1293,7 +1680,11 @@ def registro_ligacao(
         "tracao_resistente_F_t_Rd_kN": resultado.resistencias.get("F_t_Rd_kN"),
         "torque_estimado_Nm": resultado.torque_referencia_Nm,
         "verificações": linhas_para_registro(resultado.verificacoes),
+        "casas_decimais_da_tabela": CASAS_DECIMAIS_DO_MEMORIAL,
     }
+    tracao = tabela_da_tracao(entrada, resultado)
+    if tracao is not None:
+        resultados["tabelas_memorial"] = [tracao]
     if pior is not None and math.isfinite(pior):
         resultados["utilizacao_maxima"] = pior
     resultados = {chave: valor for chave, valor in resultados.items() if valor is not None}
@@ -1305,7 +1696,8 @@ def registro_ligacao(
     grade = entrada.coordenadas is None
     entradas: dict[str, Any] = {
         "modo": "Ligação estrutural de aço",
-        "norma": entrada.norma,
+        # A designação da tabela central (a mesma do título e das referências), não o código.
+        "norma": NORMAS_ROTULOS[entrada.norma],
         "parafuso": entrada.designacao,
         "grau": entrada.grau,
         "furo_dh_mm": entrada.d_h_mm,
@@ -1316,8 +1708,9 @@ def registro_ligacao(
         "aco": entrada.aco,
         "n_lin": entrada.n_lin if grade else None,
         "n_col": entrada.n_col if grade else None,
-        "passo_s_mm": entrada.s if grade else None,
-        "gabarito_g_mm": entrada.g if grade else None,
+        # Passo e gabarito só com mais de uma coluna/linha: numa linha só, g não existe.
+        "passo_s_mm": entrada.s if grade and entrada.n_col > 1 else None,
+        "gabarito_g_mm": entrada.g if grade and entrada.n_lin > 1 else None,
         "coordenadas_mm": None if grade else [list(par) for par in entrada.coordenadas or ()],
         "borda_e_mm": entrada.e,
         "borda_vertical_ev_mm": entrada.e_v,
@@ -1347,6 +1740,9 @@ def registro_ligacao(
         "F_t_com_alavanca_kN": entrada.F_t_com_alavanca,
         "chapa_de_ligacao_largura_mm": entrada.chapa_largura,
         "chapa_de_ligacao_t_mm": entrada.chapa_t,
+        "chapa_de_ligacao_furos": entrada.chapa_furos
+        if entrada.chapa_largura is not None
+        else None,
         "f_y_MPa": entrada.f_y if entrada.aco == ACO_INFORMADO else None,
         "f_u_MPa": entrada.f_u if entrada.aco == ACO_INFORMADO else None,
     }
@@ -1368,38 +1764,20 @@ def registro_ligacao(
         entradas=entradas,
         resultados=resultados,
         metodo=(
-            "Funções de cálculo de core.bolted_connection (validadas contra o AISC Design Guide 29 "
-            "e a planilha de referência) orquestradas em core.bolted_joint_check; grupo excêntrico "
-            "pelo método elástico."
+            "Grupo de parafusos pelo método elástico (Kulak, Fisher & Struik, cap. 13), "
+            "conservador frente ao centro instantâneo de rotação; resistências pela "
+            f"{NORMAS_ROTULOS[entrada.norma]}, com o item em cada linha da tabela de "
+            "verificações. O cálculo é conferido por testes automáticos com os exemplos do AISC "
+            "Design Guide 29 (págs. 157–159 e 185–186) e por casos conferidos à mão."
         ),
-        equacoes=[
-            "Corte: F_v,Rd = α_v·A_b·f_ub/γ_a2 (NBR 6.3.3.2) ou φ·F_nv·A_b (AISC J3.6 / RCSC 5.1)",
-            "Contato e rasgamento: F_c,Rd = min(1,2·ℓ_f·t·f_u; 2,4·d_b·t·f_u)/γ_a2, "
-            "ℓ_f medido a partir do furo, t da parte mais fina",
-            "Grupo excêntrico: F_x,i = N/n − M·y_i/J; F_y,i = V/n + M·x_i/J; J = Σ(x_i² + y_i²)",
-            "Deslizamento (serviço): F_f,Rk = 0,80·μ·C_e·F_Tb·n_s·(1 − F_t,Sk/(0,80·F_Tb))",
-            "Deslizamento (ELU, furo alargado/alongado): "
-            "F_f,Rd = 1,13·μ·C_e·F_Tb·n_s/γ_e·(1 − F_t,Sd/(1,13·F_Tb)) (2008: C_h no lugar de C_e)",
-            "Tração no parafuso: F_t,Rd = A_be·f_ub/γ_a2, A_be = 0,75·A_b (NBR 6.3.3.1)",
-            "Tração + corte: (F_t,Sd/F_t,Rd)² + (F_v,Sd/F_v,Rd)² ≤ 1,0, por parafuso (NBR 6.3.3.4)",
-            "Chapa de ligação: min(A_g·f_y/γ_a1; A_e·f_u/γ_a2), A_e = A_n ≤ 0,85·A_g (NBR 6.5.3)",
-            "Tração da peça: N_t,Rd = min(A_g·f_y/γ_a1; C_t·A_n·f_u/γ_a2), C_t = 1 − e_c/ℓ_c",
-            "Colapso por rasgamento: min(0,6·f_u·A_nv + C_ts·f_u·A_nt; "
-            "0,6·f_y·A_gv + C_ts·f_u·A_nt)/γ_a2",
-        ],
+        equacoes=list(resultado.equacoes),
         criterios=[
             "ELU: força de cálculo (γ_f·F_k) ≤ resistência de cálculo.",
             "Deslizamento: força de serviço (característica) ≤ F_f,Rk.",
             "Disposições: NBR 6.3.7 a 6.3.12 (Tab. 16) e AISC J3.3 a J3.5.",
             "Anglo AA-BR-DPST-DR-0001, item 9.1.",
         ],
-        premissas=[
-            "Tração do grupo distribuída pelos parafusos com o eixo neutro no centro do grupo; "
-            "fadiga fora do escopo.",
-            "Torque de aperto é estimativa; instalar por rotação da porca, chave calibrada ou "
-            "indicador de tração.",
-            "t = espessura da parte ligada mais fina (nunca a soma).",
-        ],
+        premissas=_premissas(entrada, resultado),
         alertas=alertas,
         referencias=[
             REFERENCIAS_NORMA[entrada.norma],

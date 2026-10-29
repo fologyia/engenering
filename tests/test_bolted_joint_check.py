@@ -125,7 +125,10 @@ def test_regra_dos_75_por_cento_anglo_nao_ok():
     r = chk.verificar_ligacao(axial_m16())
     v = linha(r, "75%")
     assert v.status == "NÃO OK"
-    assert perto(v.solicitante, 0.75 * 324.24, 0.002) and perto(v.resistente, 196.6, 0.002)
+    # R_lig = mín(corte 4·49,15 = 196,6; contato 4·57,8 = 231,2; rasgamento 234,06;
+    # deslizamento 4·14,56 = 58,24) — a capacidade inclui o deslizamento (pedido de 28/10/2026).
+    assert perto(v.solicitante, 0.75 * 324.24, 0.002) and perto(v.resistente, 4 * 14.56, 0.002)
+    assert "deslizamento 4·F_f,Rk = 58.24" in v.formula and "corte 4·F_v,Rd = 196." in v.formula
     assert r.status_geral == "NÃO OK"
 
 

@@ -66,9 +66,13 @@ LARGURAS_VERIFICACAO = [1950, 950, 950, 520, 760, 4230]
 CABECALHOS_APOIO = ["Grandeza", "Valor", "Un.", "Cálculo e referência"]
 LARGURAS_APOIO = [2900, 1100, 560, 4800]
 
-# O número logo depois de "Anglo " ou "item " é um item do critério ou da norma ("Anglo 10.2"), não
+# O número logo depois de "Anglo ", "item ", "NBR ", "AISC ", "RCSC ", "Tab. " ou "§", ou colado a
+# uma letra ("J3.3"), é um item do critério ou da norma ("Anglo 10.2", "AISC J3.6", "RCSC 5.1"), não
 # um decimal.
-_DECIMAL_COM_PONTO = re.compile(r"(?<![\d.,])(?<!Anglo )(?<!item )(?<!itens )(\d+)\.(\d+)(?![\d.])")
+_DECIMAL_COM_PONTO = re.compile(
+    r"(?<![\d.,])(?<![A-Za-z])(?<!Anglo )(?<!item )(?<!itens )(?<!NBR )(?<!AISC )(?<!RCSC )"
+    r"(?<!Tab\. )(?<!Tabela )(?<!§)(\d+)\.(\d+)(?![\d.])"
+)
 _IDENTIFICADOR = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
 
 
@@ -76,8 +80,9 @@ def decimal_ptbr(texto: str) -> str:
     """Troca o ponto decimal por vírgula nos números soltos de um texto de cálculo.
 
     As fórmulas do módulo saem em notação de máquina ("0.270·1.000·1963·250/1.10 = 120.71 kN"); o
-    memorial é em português. Números de item ("5.3.2", "Anglo 10.2"), siglas ("A.3") e números já
-    com vírgula não mudam: só vira vírgula o ponto que fica entre dois grupos de dígitos isolados.
+    memorial é em português. Números de item ("5.3.2", "Anglo 10.2", "AISC J3.3", "RCSC 5.1"),
+    siglas ("A.3") e números já com vírgula não mudam: só vira vírgula o ponto que fica entre dois
+    grupos de dígitos isolados.
     """
     return _DECIMAL_COM_PONTO.sub(r"\1,\2", texto)
 
@@ -299,6 +304,25 @@ def contagens(registro: Mapping[str, Any]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------------------------
 # Tabelas
 # ---------------------------------------------------------------------------------------------
+def formatador_de_casas(casas: int, formatar: Formatador) -> Formatador:
+    """Números com ``casas`` decimais fixas (vírgula); o resto passa pelo formatador do memorial."""
+
+    def _formatar(valor: Any) -> str:
+        if isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor):
+            return f"{valor:.{casas}f}".replace(".", ",")
+        return formatar(valor)
+
+    return _formatar
+
+
+def _formatador_da_tabela(registro: Mapping[str, Any], formatar: Formatador) -> Formatador:
+    resultados = registro.get("resultados")
+    casas = resultados.get("casas_decimais_da_tabela") if isinstance(resultados, Mapping) else None
+    if isinstance(casas, int) and not isinstance(casas, bool) and 0 <= casas <= 6:
+        return formatador_de_casas(casas, formatar)
+    return formatar
+
+
 def _valor_celula(valor: Any, formatar: Formatador) -> str:
     if _texto(valor) == "":
         return "-"
@@ -528,7 +552,22 @@ _ENTRADAS_PARAFUSOS: tuple[_Entrada, ...] = (
     ("e_c_peca_mm", "Excentricidade da peça ec [mm]", "se_preenchido"),
     ("ligacao_principal_anglo", "Ligação principal (Anglo)", "sempre"),
     ("revestimento", "Revestimento", "se_preenchido"),
-    ("peca_por_esbeltez", "Peça dimensionada por esbeltez", "se_preenchido"),
+    (
+        "peca_por_esbeltez",
+        "Peça de treliça/contraventamento por esbeltez ou sem esforço indicado (Anglo 9.1, 75%)",
+        "sempre",
+    ),
+    ("tipo_de_furo", "Tipo de furo", "se_preenchido"),
+    ("N_t_grupo_kN", "Tração do grupo N_t [kN]", "se_preenchido"),
+    ("M_t_fora_do_plano_kNm", "Momento fora do plano M_t [kN·m]", "se_preenchido"),
+    ("interacao_pela_tabela", "Interação pela tabela alternativa", "se_preenchido"),
+    ("alavanca_a_b_p_mm", "Alavanca: a; b; p [mm]", "se_preenchido"),
+    ("F_t_com_alavanca_kN", "Tração por parafuso com alavanca [kN]", "se_preenchido"),
+    ("chapa_de_ligacao_largura_mm", "Chapa de ligação: largura [mm]", "se_preenchido"),
+    ("chapa_de_ligacao_t_mm", "Chapa de ligação: espessura [mm]", "se_preenchido"),
+    ("chapa_de_ligacao_furos", "Chapa de ligação: furos na seção", "se_preenchido"),
+    ("f_y_MPa", "Aço: f_y [MPa]", "se_preenchido"),
+    ("f_u_MPa", "Aço: f_u [MPa]", "se_preenchido"),
     ("fora_do_escopo_marcado", "Itens marcados como fora do escopo", "se_preenchido"),
 )
 
@@ -832,6 +871,10 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "forca_parafuso_critico_ELS_kN",
         "momento_polar_J_mm2",
         "torque_estimado_Nm",
+        "casas_decimais_da_tabela",
+        # a seção "Tração, interação e efeito de alavanca" já traz estes dois
+        "tracao_parafuso_critico_ELU_kN",
+        "tracao_resistente_F_t_Rd_kN",
         # vento nas estruturas
         "destaque_memorial",
         "tabelas_memorial",
@@ -1059,6 +1102,7 @@ def _bloco_nao_passou(
     registro: Mapping[str, Any], linhas: Sequence[Linha], resumo: Resumo, formatar: Formatador
 ) -> list[dict[str, Any]]:
     """O fim do capítulo: o que não passou, o que pede atenção e o que o módulo manda conferir."""
+    formatar = _formatador_da_tabela(registro, formatar)
     blocos: list[dict[str, Any]] = []
     livres = alertas_livres(registro, linhas)
     if resumo.reprovadas:
@@ -1176,6 +1220,7 @@ def capitulo_de_verificacoes(
     blocos.append(
         {"tipo": "subtitulo", "texto": f"O que passou ({len(resumo.passaram)})", "tom": "ok"}
     )
+    formatar_tabela = _formatador_da_tabela(registro, formatar)
     if resumo.passaram:
         blocos.append(
             {
@@ -1184,7 +1229,7 @@ def capitulo_de_verificacoes(
                     resumo.passaram,
                     legenda="Aprov. = solicitante ÷ resistente; até 100% a verificação passa.",
                     tom="ok",
-                    formatar=formatar,
+                    formatar=formatar_tabela,
                 ),
             }
         )
@@ -1197,7 +1242,7 @@ def capitulo_de_verificacoes(
                 **tabela_de_apoio(
                     resumo.informativas,
                     legenda="Valores de apoio ao cálculo (sem critério de aceitação).",
-                    formatar=formatar,
+                    formatar=formatar_tabela,
                 ),
             }
         )
@@ -1205,7 +1250,7 @@ def capitulo_de_verificacoes(
     paredes = resultados.get("esbeltez_paredes") if isinstance(resultados, Mapping) else None
     if isinstance(paredes, Sequence) and not isinstance(paredes, (str, bytes)) and paredes:
         blocos.append({"tipo": "tabela", **_tabela_de_paredes(paredes, formatar)})
-    blocos.extend({"tipo": "tabela", **tabela} for tabela in tabelas_do_registro(registro))
+    blocos.extend(_blocos_das_tabelas(registro))
     outros = pares_de_resultados(registro, formatar, rotular)
     if outros:
         blocos.append(
@@ -1276,7 +1321,7 @@ def capitulo_de_calculo(
         blocos.append({"tipo": "tabela", **tabela_de_entradas(pares, legenda="Dados de entrada.")})
     blocos.extend(_base_do_calculo(registro, equacoes_gerais(registro, ()), None))
     blocos.extend({"tipo": "imagem", **imagem} for imagem in imagens)
-    blocos.extend({"tipo": "tabela", **tabela} for tabela in tabelas_do_registro(registro))
+    blocos.extend(_blocos_das_tabelas(registro))
     outros = pares_de_resultados(registro, formatar, rotular)
     if outros:
         blocos.append(
@@ -1295,6 +1340,17 @@ def capitulo_de_calculo(
     if conclusao and conclusao != destaque:  # o destaque já abre o capítulo
         blocos.append({"tipo": "paragrafo", "texto": f"Conclusão: {decimal_ptbr(conclusao)}"})
     return {"titulo": titulo, "nivel": nivel, "blocos": blocos}
+
+
+def _blocos_das_tabelas(registro: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """As tabelas do módulo; a que traz ``subtitulo`` abre uma seção própria no capítulo."""
+    blocos: list[dict[str, Any]] = []
+    for tabela in tabelas_do_registro(registro):
+        subtitulo = tabela.pop("subtitulo", "")
+        if subtitulo:
+            blocos.append({"tipo": "subtitulo", "texto": subtitulo})
+        blocos.append({"tipo": "tabela", **tabela})
+    return blocos
 
 
 def tabelas_do_registro(registro: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -1333,6 +1389,7 @@ def tabelas_do_registro(registro: Mapping[str, Any]) -> list[dict[str, Any]]:
             larguras = [round(9360 / n)] * n
         tabelas.append(
             {
+                "subtitulo": str(item.get("subtitulo") or "").strip(),
                 "legenda": decimal_ptbr(str(item.get("legenda") or "")),
                 "cabecalhos": [str(c) for c in cabecalhos],
                 "linhas": linhas_texto or [["-"] * n],

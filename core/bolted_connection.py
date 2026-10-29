@@ -23,6 +23,7 @@ Sem dependências externas.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -222,6 +223,17 @@ def lf_entre_furos(s: float, d_h: float) -> float:
     return s - d_h
 
 
+def coeficientes_contato(
+    deformacao_limitada: bool = True, furo_muito_alongado_perp: bool = False
+) -> tuple[float, float]:
+    """(k_1, k_2) do contato: 1,2/2,4 com a deformação do furo limitada, 1,5/3,0 sem limite e
+    1,0/2,0 no furo muito alongado perpendicular à força (NBR 6.3.3.3; AISC J3.10). O cálculo e o
+    texto do memorial usam esta mesma escolha."""
+    if furo_muito_alongado_perp:
+        return 1.0, 2.0
+    return (1.2, 2.4) if deformacao_limitada else (1.5, 3.0)
+
+
 def resist_contato(
     d_b: float,
     t: float,
@@ -238,11 +250,7 @@ def resist_contato(
     t = espessura da chapa considerada (NUNCA a soma das chapas); f_u = ruptura do aço da CHAPA.
     l_f = None → não há borda/furo na direção da força (só esmagamento; ver DG29 ex. 5.8).
     """
-    k1, k2 = (
-        (1.0, 2.0)
-        if furo_muito_alongado_perp
-        else ((1.2, 2.4) if deformacao_limitada else (1.5, 3.0))
-    )
+    k1, k2 = coeficientes_contato(deformacao_limitada, furo_muito_alongado_perp)
     esmag = k2 * d_b * t * f_u
     rasg = math.inf if l_f is None else k1 * l_f * t * f_u
     return min(rasg, esmag) * _fator_ruptura(norma) / 1000
@@ -488,7 +496,11 @@ def criterio_anglo(
     regra_75: bool = False,
     R_ligacao_tracao: float | None = None,
     N_t_Rd_peca: float | None = None,
+    componentes: Sequence[tuple[str, float]] = (),
 ) -> list[Verificacao]:
+    """Critério Anglo (item 9.1). A regra dos 75% vale só para a peça de treliça/contraventamento
+    dimensionada pela esbeltez ou sem esforço indicado; ``componentes`` são as parcelas da
+    capacidade da ligação (nome, kN) — R_ligacao_tracao é a menor delas."""
     out: list[Verificacao] = [
         Verificacao(
             "Mínimo de 2 parafusos",
@@ -527,6 +539,11 @@ def criterio_anglo(
             status="OK" if d_b <= 25.4 else "ALERTA",
         )
     )
+    ref_75 = "Anglo 9.1 (peça por esbeltez ou sem esforço indicado)"
+    condicao = (
+        "Vale só para a peça de treliça/contraventamento dimensionada pela esbeltez ou sem "
+        "esforço indicado."
+    )
     if regra_75 and (N_t_Rd_peca is None or R_ligacao_tracao is None):
         # Guarda: sem a resistência da peça (A_g, e_c) a regra não é calculável — não omitir.
         out.append(
@@ -535,22 +552,29 @@ def criterio_anglo(
                 None,
                 None,
                 "kN",
-                "Anglo 9.1 (treliças/contraventamentos por esbeltez)",
-                "Informe A_g e e_c da peça para calcular a regra dos 75%.",
+                ref_75,
+                f"{condicao} Informe A_g e e_c da peça para calcular a regra dos 75%.",
                 "ALERTA",
             )
         )
     elif regra_75:
         assert N_t_Rd_peca is not None and R_ligacao_tracao is not None
         req = max(0.75 * N_t_Rd_peca, 3 * TF_KN)
+        parcelas = (
+            "; ".join(f"{nome} = {valor:.2f}" for nome, valor in componentes)
+            if componentes
+            else f"grupo e colapso por rasgamento = {R_ligacao_tracao:.2f}"
+        )
         out.append(
             Verificacao(
                 "Capacidade ≥ 75% da tração da peça e ≥ 3 tf",
                 req,
                 R_ligacao_tracao,
                 "kN",
-                "Anglo 9.1 (treliças/contraventamentos por esbeltez)",
-                "R_lig = min(grupo, colapso por rasgamento) ≥ max(0,75 N_t,Rd ; 29,42 kN)",
+                ref_75,
+                f"{condicao} R_lig = menor entre: {parcelas} → R_lig = {R_ligacao_tracao:.2f} kN "
+                f"≥ máx(0,75·N_t,Rd = 0,75·{N_t_Rd_peca:.2f} = {0.75 * N_t_Rd_peca:.2f}; "
+                f"3 tf = {3 * TF_KN:.2f}) = {req:.2f} kN",
             )
         )
     return out
@@ -1003,3 +1027,36 @@ def chapa_de_ligacao(
     util = min(largura - n_furos * (d_furo + folga), 0.85 * largura)
     t_rup = math.inf if util <= 0 else F / (util * f_u * _fator_ruptura(norma))
     return ChapaDeLigacao(A_g, A_n, A_e, escoamento, ruptura, t_esc, t_rup)
+
+
+@dataclass(frozen=True)
+class ChapaAoCisalhamento:
+    A_gv: float  # mm²: comprimento da seção × t
+    A_nv: float  # A_gv − n·(d_furo + folga)·t
+    escoamento_kN: float  # 0,60·A_gv·f_y/γ_a1 (AISC J4.2: φ = 1,00)
+    ruptura_kN: float  # 0,60·A_nv·f_u/γ_a2 (AISC J4.2: φ = 0,75)
+
+
+def chapa_ao_cisalhamento(
+    comprimento: float,
+    t: float,
+    n_furos: int,
+    d_furo: float,
+    f_y: float,
+    f_u: float,
+    norma: str,
+) -> ChapaAoCisalhamento:
+    """Elemento de ligação ao cisalhamento (NBR 8800:2008, 6.5.5, conferido; AISC J4.2):
+    escoamento 0,60·A_g·f_y/γ_a1 e ruptura 0,60·A_nv·f_u/γ_a2, A_nv descontando (d_furo + 2 mm)·t
+    por furo da seção (1/16" na AISC). A norma não traz interação com a tração: N e V separados."""
+    if comprimento <= 0 or t <= 0 or n_furos < 0:
+        raise ValueError("Cisalhamento da chapa: comprimento e espessura > 0.")
+    A_gv = comprimento * t
+    A_nv = A_gv - n_furos * (d_furo + _P[norma]["folga"]) * t
+    if _nbr(norma):
+        f_esc, f_rup = 1 / _P[norma]["g_a1"], 1 / _P[norma]["g_a2"]
+    else:
+        f_esc, f_rup = _P[norma]["phi_vy"], _P[norma]["phi"]
+    escoamento = 0.60 * A_gv * f_y * f_esc / 1000
+    ruptura = 0.60 * max(A_nv, 0.0) * f_u * f_rup / 1000
+    return ChapaAoCisalhamento(A_gv, A_nv, escoamento, ruptura)

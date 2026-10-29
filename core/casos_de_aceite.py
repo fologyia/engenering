@@ -10,7 +10,8 @@ Sem Streamlit.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Any
 
 from core import bolted_connection as bc
 from core import bolted_joint_check as chk
@@ -66,6 +67,36 @@ def _caso_a() -> chk.ResultadoLigacao:
             superficie="galvanizada_sem_tratamento",
         )
     )
+
+
+FONTE_M22 = "Caso M22 do usuário (memorial de 28/10/2026), conferido à mão"
+
+
+def _caso_m22(**mudancas: Any) -> chk.ResultadoLigacao:
+    """M22 A325, A36, t = 6,35, 2 planos, 1 × 2, s = 60, e = 35, N = 0,2, V = 17, γ_f = 1,4."""
+    base = chk.EntradaLigacao(
+        norma=NBR_2025,
+        N=0.2,
+        V=17.0,
+        gama_f=1.4,
+        designacao="M22",
+        grau="A325",
+        n_planos=2,
+        t=6.35,
+        aco="ASTM A36",
+        n_lin=1,
+        n_col=2,
+        s=60.0,
+        e=35.0,
+        deformacao_limitada=False,
+        superficie="galvanizada_sem_tratamento",
+        A_g=548.0,
+        e_c=13.0,
+        chapa_largura=108.0,
+        chapa_furos=1,
+        peca_por_esbeltez=True,
+    )
+    return chk.verificar_ligacao(replace(base, **mudancas))
 
 
 def _alavanca(f_u: float) -> float:
@@ -174,6 +205,46 @@ def casos() -> tuple[CasoDeAceite, ...]:
             "Ruptura com A_n (kN)",
             94.1,
             lambda: _chapa().ruptura_kN,
+        ),
+        CasoDeAceite(
+            P,
+            "M22 — 2 planos, 1×2, A36",
+            "F_v,Rd (kN)",
+            210.3,
+            lambda: _caso_m22().resistencias["F_v_Rd_kN"],
+            fonte=FONTE_M22,
+        ),
+        CasoDeAceite(
+            P,
+            "M22 — 2 planos, 1×2, A36",
+            "F_c,Rd, deformação não limitada (kN)",
+            64.91,
+            lambda: _caso_m22().resistencias["F_c_Rd_critico_kN"],
+            fonte=FONTE_M22,
+        ),
+        CasoDeAceite(
+            P,
+            "M22 — 2 planos, 1×2, A36",
+            "F_c,Rd, deformação limitada (kN)",
+            51.93,
+            lambda: _caso_m22(deformacao_limitada=True).resistencias["F_c_Rd_critico_kN"],
+            fonte=FONTE_M22,
+        ),
+        CasoDeAceite(
+            P,
+            "M22 — 2 planos, 1×2, A36",
+            "F_f,Rk com 1 plano (kN)",
+            28.16,
+            lambda: _caso_m22(n_planos=1).resistencias["F_f_Rk_kN"],
+            fonte=FONTE_M22,
+        ),
+        CasoDeAceite(
+            P,
+            "M22 — 2 planos, 1×2, A36",
+            "Regra dos 75%: R_lig (kN)",
+            112.64,
+            lambda: _caso_m22().resistencias["R_ligacao_anglo_kN"],
+            fonte=FONTE_M22,
         ),
     )
 

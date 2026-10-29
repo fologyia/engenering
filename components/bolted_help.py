@@ -267,10 +267,11 @@ AJUDA: dict[str, str] = {
         "O A490 **não pode** ser galvanizado a fogo: use Zn/Al (ASTM F1136 ou Dacromet)."
     ),
     "esbeltez": (
-        "Barras de treliça e contraventamento dimensionadas pela esbeltez (e não pela força) têm "
-        "pouca força calculada. Para elas, a Anglo manda a ligação resistir a pelo menos **75% da "
-        "resistência à tração da peça** e a no mínimo **3 tf**.\n\n"
-        "Se ligar, preencha A_g e e_c na seção 5."
+        "Ligue **só** para barra de treliça ou contraventamento dimensionada pela esbeltez ou sem "
+        "esforço indicado no projeto — é a condição da Anglo (item 9.1). Nesse caso a ligação tem "
+        "de resistir a pelo menos **75% da resistência à tração da peça** e a no mínimo **3 tf**.\n\n"
+        "A capacidade da ligação é a menor entre: corte × n, contato × n, colapso por rasgamento, "
+        "chapa de ligação e deslizamento × n. Se ligar, preencha A_g e e_c na seção 5."
     ),
     # ------------------------------------------------------------------ resultados
     "res_status": (
@@ -583,9 +584,10 @@ AJUDA: dict[str, str] = {
         "em 33 %, ou **elástico** (W = p·t²/6) com redução de 25 %. Exige também a ≥ b."
     ),
     "chapa": (
-        "Ligue para verificar a **chapa de ligação** (gusset) tracionada pela força N: escoamento "
-        "da seção bruta e ruptura da seção líquida, com A_e = A_n ≤ 0,85·A_g. O colapso por "
-        "rasgamento continua na seção da peça."
+        "Ligue para verificar a **chapa de ligação** (gusset): tração pela força N (escoamento "
+        "da seção bruta e ruptura da seção líquida, com A_e = A_n ≤ 0,85·A_g) e cisalhamento "
+        "pela força V (0,60·f_y·A_g e 0,60·f_u·A_nv) na mesma seção, cada um separado. O colapso "
+        "por rasgamento continua na seção da peça."
     ),
     "chapa_largura": (
         "Largura da chapa na seção que atravessa a primeira fileira de furos (mm), "

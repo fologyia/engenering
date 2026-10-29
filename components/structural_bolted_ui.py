@@ -664,7 +664,7 @@ def _formulario() -> chk.EntradaLigacao | None:
             )
         with anglo[2]:
             por_esbeltez = st.toggle(
-                "Peça de treliça/contraventamento dimensionada por esbeltez",
+                "Peça de treliça/contraventamento por esbeltez ou sem esforço indicado",
                 value=False,
                 key="ligest_esbeltez",
                 help=AJUDA["esbeltez"],

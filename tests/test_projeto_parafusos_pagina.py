@@ -125,7 +125,8 @@ def test_axial_m16_peca_u6_e_regra_dos_75(banco_isolado):
     assert linha(t, "Colapso por rasgamento")["Resistente"] == pytest.approx(234.06, rel=0.002)
     regra = linha(t, "75%")
     assert regra["Solicitante"] == pytest.approx(0.75 * 324.24, rel=0.002)
-    assert regra["Resistente"] == pytest.approx(196.6, rel=0.002)
+    # A capacidade inclui o deslizamento × n (pedido de 28/10/2026): 4·14,56 governa.
+    assert regra["Resistente"] == pytest.approx(4 * 14.56, rel=0.002)
     assert regra["Status"] == "NÃO OK"
 
 
