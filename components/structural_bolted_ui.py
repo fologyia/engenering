@@ -152,6 +152,15 @@ def _formulario() -> chk.EntradaLigacao | None:
                 help=AJUDA["deformacao_furo"],
                 persist_state="session",
             )
+        furo_broca = False
+        if norma.startswith("NBR"):  # o AISC soma sempre 1/16"
+            furo_broca = st.toggle(
+                "Furos feitos com broca (área líquida sem os 2 mm)",
+                value=False,
+                key="ligest_broca",
+                help=AJUDA["furo_broca"],
+                persist_state="session",
+            )
         with st.container(horizontal=True):
             st.metric(
                 "Diâmetro d_b", f"{dados['d_b']:.1f} mm", border=True, help=AJUDA["m_diametro"]
@@ -683,6 +692,7 @@ def _formulario() -> chk.EntradaLigacao | None:
         grau=grau,
         d_h_mm=None if math.isclose(d_h, round(furo_padrao, 1), abs_tol=1e-9) else d_h,
         tipo_furo=tipo_furo,
+        furo_com_broca=furo_broca,
         rosca_no_plano=rosca_no_plano,
         n_planos=int(n_planos),
         t=t,

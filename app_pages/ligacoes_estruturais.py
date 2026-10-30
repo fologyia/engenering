@@ -308,6 +308,13 @@ if tipo == lg.CHAPA_SIMPLES:
             persist_state="session",
             help=AJUDA["rosca"],
         )
+        broca = st.toggle(
+            "Furos feitos com broca (área líquida sem os 2 mm)",
+            value=False,
+            key="lig_broca",
+            persist_state="session",
+            help=AJUDA["furo_broca"],
+        )
         c = st.columns(5)
         valores = {}
         for coluna, (chave, rotulo, padrao, ajuda) in zip(
@@ -459,6 +466,7 @@ if tipo == lg.CHAPA_SIMPLES:
         parafuso=parafuso,
         grau=grau,
         rosca_no_plano=bool(rosca),
+        furo_com_broca=bool(broca),
         n_parafusos=int(n_par),
         passo_mm=float(valores["passo"]),
         borda_vertical_mm=float(valores["borda_v"]),
@@ -561,6 +569,10 @@ elif tipo == lg.CANTONEIRA_DUPLA:
             "Rosca no plano de corte", value=True, key="lig_c_rosca", persist_state="session",
             help=AJUDA["rosca"],
         )  # fmt: skip
+        broca_c = st.toggle(
+            "Furos feitos com broca (área líquida sem os 2 mm)", value=False, key="lig_c_broca",
+            persist_state="session", help=AJUDA["furo_broca"],
+        )  # fmt: skip
         c = st.columns(5)
         borda_v = c[0].number_input(
             "Borda vertical (mm)", 1.0, 1000.0, PADRAO_CANT.borda_vertical_mm, 5.0,
@@ -624,6 +636,7 @@ elif tipo == lg.CANTONEIRA_DUPLA:
         parafuso=parafuso,
         grau=grau,
         rosca_no_plano=bool(rosca),
+        furo_com_broca=bool(broca_c),
         n_parafusos=int(n_par),
         passo_mm=float(passo),
         borda_vertical_mm=float(borda_v),

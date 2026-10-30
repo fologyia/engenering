@@ -174,6 +174,9 @@ AJUDA: dict[str, str] = {
     "passo": "Distância entre parafusos vizinhos (mm). A norma pede no mínimo 2,7 diâmetros.",
     "borda": "Distância do último furo à ponta da barra (mm). Mínimo da Tabela 16 da NBR 8800.",
     "rosca": "Ligado: a rosca passa no plano de corte (resistência menor, a favor da segurança).",
+    "furo_broca": (
+        "Ligue só se dá para garantir que os furos serão feitos com broca (furadeira), e não puncionados. Aí a NBR 8800 (5.2.4.1 a, na 2008 e na 2025) deixa usar na área líquida a largura do próprio furo, sem somar os 2 mm. Desligado, o programa soma os 2 mm, a favor da segurança. No AISC não há essa opção: ele soma sempre 1/16 de polegada (1,6 mm)."
+    ),
     "comp_solda": (
         "Comprimento de cada cordão de solda ao longo da barra (mm). Na cantoneira, dois cordões; "
         "no tubo, quatro."

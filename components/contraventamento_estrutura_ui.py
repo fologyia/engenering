@@ -960,6 +960,11 @@ def _sistema(
                     valor=True,
                     alvo=linha[2],
                 )
+                broca = _toggle(
+                    "Furos feitos com broca (área líquida sem os 2 mm)",
+                    f"broca{sufixo}",
+                    AJUDA["furo_broca"],
+                )
                 diagonal = cb.Diagonal(
                     familia=familia,
                     perfil=perfil,
@@ -968,6 +973,7 @@ def _sistema(
                     parafuso=parafuso,
                     grau=grau,
                     rosca_no_plano=rosca,
+                    furo_com_broca=broca,
                     n_parafusos=n_par,
                     passo_mm=passo,
                     borda_mm=borda,

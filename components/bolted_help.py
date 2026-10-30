@@ -75,6 +75,9 @@ AJUDA: dict[str, str] = {
         "**Simplificação:** o valor digitado vale só para o furo-padrão; nos furos alargados e "
         "alongados, as medidas vêm da tabela da norma."
     ),
+    "furo_broca": (
+        "Ligue só se dá para garantir que os furos serão feitos com broca (furadeira), e não puncionados. Aí a NBR 8800 (5.2.4.1 a, na 2008 e na 2025) deixa usar na área líquida a largura do próprio furo, sem somar os 2 mm. Desligado, o programa soma os 2 mm, a favor da segurança. No AISC não há essa opção: ele soma sempre 1/16 de polegada (1,6 mm)."
+    ),
     "tipo_furo": (
         "O formato do furo na chapa:\n\n"
         "- **Padrão**: redondo, pouco maior que o parafuso.\n"

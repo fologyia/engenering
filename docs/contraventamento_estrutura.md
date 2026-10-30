@@ -128,7 +128,8 @@ meio painel).
 ## Verificação das diagonais (NBR 8800:2025)
 
 * **Cantoneira simples ligada por uma aba**: tração com `A_n = A_g − (d_h + 2)·t` e
-  `C_t = 1 − e_c/ℓ_c ≥ A_c/A_g` (5.2.4 e 5.2.5-c); compressão por 5.3.5.4 (`L_x1,eq = 72·r_x1 +
+  `C_t = 1 − e_c/ℓ_c ≥ A_c/A_g` (5.2.4 e 5.2.5-c; com "Furos feitos com broca", A_n sem os 2 mm
+  do furo, 5.2.4.1 a); compressão por 5.3.5.4 (`L_x1,eq = 72·r_x1 +
   0,75·L_x1` ou `32·r_x1 + 1,25·L_x1`, `N_ex = π²·E·I_x1/L_eq²`, Q do grupo 3); esbeltez
   equivalente ≤ 200; parafusos (6.3.3.2 e 6.3.3.3), colapso por rasgamento da aba (6.5.6), passo ≥
   2,7·d (6.3.9) e borda ≥ Tabela 16 (6.3.11).

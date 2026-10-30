@@ -46,7 +46,8 @@ validade da norma, que o usuário mandou retirar, não volta (um teste trava).
    furo C_h (1,00 / 0,85 / 0,70) e γ_e 1,20 — sem C_e. A tração reduz: F_t,Sk no serviço, F_t,Sd
    no ELU. AISC J3.8: φ 1,00 / 0,85 / 0,70.
 7. **Chapa de ligação (gusset)**: tração por N — escoamento A_g·f_y/γ_a1 e ruptura A_e·f_u/γ_a2
-   com **A_e = mín(A_n; 0,85·A_g)** (NBR 8800:2008, 6.5.3, conferido), A_n = A_g − Σ(d_h + 2)·t;
+   com **A_e = mín(A_n; 0,85·A_g)** (NBR 8800:2008, 6.5.3, conferido), A_n = A_g − Σ(d_h + 2)·t (sem os 2 mm com a opção
+   "Furos feitos com broca", NBR 5.2.4.1 a, nas duas edições; o AISC soma sempre 1/16");
    C_t não se aplica à chapa de ligação; t mínimo abaixo de 1 mm sai como "desprezível". E
    **cisalhamento por V** (6.5.5, conferido na 2008): 0,60·A_g·f_y/γ_a1 e 0,60·A_nv·f_u/γ_a2 na
    mesma seção transversal da chapa (largura × t, com os furos), separado de N — a norma não traz

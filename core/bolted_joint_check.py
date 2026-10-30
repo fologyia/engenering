@@ -100,6 +100,7 @@ class EntradaLigacao:
     designacao: str = "M22"
     grau: str = "A325"
     d_h_mm: float | None = None  # furo; None usa o furo-padrão da tabela (AISC 360-16 / NBR)
+    furo_com_broca: bool = False  # NBR 5.2.4.1 a): área líquida sem os 2 mm (não vale no AISC)
     rosca_no_plano: bool = True
     n_planos: int = 1
     # Partes ligadas
@@ -620,7 +621,7 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
                 )
             )
         else:
-            A_n = bc.area_liquida(entrada.A_g, n_lin, d_hy, t, norma)
+            A_n = bc.area_liquida(entrada.A_g, n_lin, d_hy, t, norma, broca=entrada.furo_com_broca)
             l_c = (n_col - 1) * entrada.s
             C_t = bc.coef_Ct(entrada.e_c, l_c, norma)
             if A_n <= 0:
@@ -661,7 +662,8 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
                         N_t_Rd,
                         "kN",
                         "NBR 5.2.2 e 5.2.5 / AISC D2",
-                        f"min(A_g·f_y/γ_a1; C_t·A_n·f_u/γ_a2); A_n = {A_n:.0f} mm², "
+                        f"min(A_g·f_y/γ_a1; C_t·A_n·f_u/γ_a2); A_n = {A_n:.0f} mm²"
+                        f"{_nota_da_broca(entrada)}, "
                         f"C_t = 1 − {entrada.e_c:g}/{l_c:g} = {C_t:.3f}"
                         + (
                             " (limitado a 0,90, 5.2.5 c da 2008)"
@@ -686,7 +688,16 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
                         )
                     )
         A_gv, A_nv, A_nt = bc.areas_bloco_central(
-            entrada.e, entrada.s, entrada.g, n_lin, n_col, t, d_h, norma, d_h_tracao=d_hy
+            entrada.e,
+            entrada.s,
+            entrada.g,
+            n_lin,
+            n_col,
+            t,
+            d_h,
+            norma,
+            d_h_tracao=d_hy,
+            broca=entrada.furo_com_broca,
         )
         F_r = bc.resist_colapso_rasgamento(A_gv, A_nv, A_nt, f_y, f_u, norma)
         resistencias["F_r_Rd_kN"] = F_r
@@ -699,7 +710,8 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
                 "kN",
                 "NBR 6.5.6 / AISC J4.3",
                 "min(0,6·f_u·A_nv + C_ts·f_u·A_nt; 0,6·f_y·A_gv + C_ts·f_u·A_nt)/γ_a2; "
-                f"A_gv = {A_gv:.0f}, A_nv = {A_nv:.0f}, A_nt = {A_nt:.0f} mm²{nota_nt}",
+                f"A_gv = {A_gv:.0f}, A_nv = {A_nv:.0f}, A_nt = {A_nt:.0f} mm²{nota_nt}"
+                f"{_nota_da_broca(entrada)}",
             )
         )
         R_grupo_axial = bc.resist_grupo_axial(n_lin, n_col, Fv, Fc_ext, Fc_int)
@@ -1233,6 +1245,13 @@ def _deslizamento(
     )
 
 
+def _nota_da_broca(entrada: EntradaLigacao) -> str:
+    """O aviso na fórmula quando a área líquida vai sem os 2 mm (furos feitos com broca)."""
+    if entrada.furo_com_broca and bc.folga_do_furo(entrada.norma, True) == 0.0:
+        return "; furos feitos com broca: sem os 2 mm (NBR 5.2.4.1 a)"
+    return ""
+
+
 def _chapa_de_ligacao(
     entrada: EntradaLigacao,
     linhas: list[Verificacao],
@@ -1251,8 +1270,11 @@ def _chapa_de_ligacao(
     assert entrada.chapa_largura is not None
     t_c = entrada.chapa_t if entrada.chapa_t is not None else entrada.t
     n_furos = entrada.chapa_furos if entrada.chapa_furos is not None else furos_padrao
-    folga = bc._P[norma]["folga"]
-    c = bc.chapa_de_ligacao(entrada.chapa_largura, t_c, n_furos, d_hy, f_y, f_u, norma, N_Sd)
+    broca = entrada.furo_com_broca
+    folga = bc.folga_do_furo(norma, broca)
+    c = bc.chapa_de_ligacao(
+        entrada.chapa_largura, t_c, n_furos, d_hy, f_y, f_u, norma, N_Sd, broca=broca
+    )
     resistencias.update(chapa_escoamento_kN=c.escoamento_kN, chapa_ruptura_kN=c.ruptura_kN)
     intermediarios.update(chapa_A_g_mm2=c.A_g, chapa_A_n_mm2=c.A_n, chapa_A_e_mm2=c.A_e)
     ref = _ref(norma, "6.5.3", "6.5.3", "AISC J4.1")
@@ -1296,7 +1318,9 @@ def _chapa_de_ligacao(
         )
     if V_Sd == 0:
         return
-    v = bc.chapa_ao_cisalhamento(entrada.chapa_largura, t_c, n_furos, d_hy, f_y, f_u, norma)
+    v = bc.chapa_ao_cisalhamento(
+        entrada.chapa_largura, t_c, n_furos, d_hy, f_y, f_u, norma, broca=broca
+    )
     resistencias.update(
         chapa_cisalhamento_escoamento_kN=v.escoamento_kN,
         chapa_cisalhamento_ruptura_kN=v.ruptura_kN,

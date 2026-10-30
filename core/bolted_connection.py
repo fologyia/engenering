@@ -311,9 +311,20 @@ def resist_deslizamento(
 # ---------------------------------------------------------------------------------------------
 # PEÇA LIGADA: tração, shear lag e colapso por rasgamento
 # ---------------------------------------------------------------------------------------------
-def area_liquida(A_g: float, n_furos_secao: int, d_h: float, t: float, norma: str) -> float:
-    """A_n (mm²) = A_g − n · (d_h + folga) · t. Folga: NBR 2 mm (5.2.4.1); AISC/RCSC 1/16" (B4.3)."""
-    return A_g - n_furos_secao * (d_h + _P[norma]["folga"]) * t
+def folga_do_furo(norma: str, broca: bool = False) -> float:
+    """O que se soma ao furo na área líquida: 2 mm na NBR, ou nada quando se garante que os
+    furos são feitos com broca (5.2.4.1 a, na 2008 e na 2025); 1/16" no AISC/RCSC, sempre (B4.3b).
+    """
+    if broca and _nbr(norma):
+        return 0.0
+    return _P[norma]["folga"]
+
+
+def area_liquida(
+    A_g: float, n_furos_secao: int, d_h: float, t: float, norma: str, *, broca: bool = False
+) -> float:
+    """A_n (mm²) = A_g − n · (d_h + folga) · t (folga: :func:`folga_do_furo`)."""
+    return A_g - n_furos_secao * (d_h + folga_do_furo(norma, broca)) * t
 
 
 def coef_Ct(e_c: float, l_c: float, norma: str) -> float | None:
@@ -342,13 +353,16 @@ def areas_bloco_central(
     d_h: float,
     norma: str,
     d_h_tracao: float | None = None,
+    *,
+    broca: bool = False,
 ) -> tuple[float, float, float]:
     """Áreas do bloco entre as linhas externas (n_lin ≥ 2), 2 planos de cisalhamento (mm²).
     Para cantoneiras/peças com 1 linha e tração até a borda livre l_eh: use g = 2·l_eh (equivalente).
     d_h: o furo ao longo da força (planos de cisalhamento); d_h_tracao: atravessando a força (plano
     de tração) — diferentes só nos furos alongados; None = d_h."""
-    dhl = d_h + _P[norma]["folga"]
-    dht = (d_h if d_h_tracao is None else d_h_tracao) + _P[norma]["folga"]
+    folga = folga_do_furo(norma, broca)
+    dhl = d_h + folga
+    dht = (d_h if d_h_tracao is None else d_h_tracao) + folga
     L = e + (n_col - 1) * s
     A_gv = 2 * L * t
     A_nv = 2 * (L - (n_col - 0.5) * dhl) * t
@@ -1007,6 +1021,8 @@ def chapa_de_ligacao(
     f_u: float,
     norma: str,
     F_Sd: float = 0.0,
+    *,
+    broca: bool = False,
 ) -> ChapaDeLigacao:
     """Chapa de ligação tracionada: escoamento da seção bruta e ruptura da seção líquida efetiva,
     com A_e = A_n ≤ 0,85·A_g (NBR 8800:2008, 6.5.3, conferido; AISC J4.1 b). A_n desconta
@@ -1016,7 +1032,7 @@ def chapa_de_ligacao(
     if largura <= 0 or t <= 0 or n_furos < 0:
         raise ValueError("Chapa de ligação: largura e espessura > 0.")
     A_g = largura * t
-    folga = _P[norma]["folga"]
+    folga = folga_do_furo(norma, broca)
     A_n = A_g - n_furos * (d_furo + folga) * t
     A_e = min(A_n, 0.85 * A_g)
     escoamento = A_g * f_y * _fator_escoamento(norma) / 1000
@@ -1045,6 +1061,8 @@ def chapa_ao_cisalhamento(
     f_y: float,
     f_u: float,
     norma: str,
+    *,
+    broca: bool = False,
 ) -> ChapaAoCisalhamento:
     """Elemento de ligação ao cisalhamento (NBR 8800:2008, 6.5.5, conferido; AISC J4.2):
     escoamento 0,60·A_g·f_y/γ_a1 e ruptura 0,60·A_nv·f_u/γ_a2, A_nv descontando (d_furo + 2 mm)·t
@@ -1052,7 +1070,7 @@ def chapa_ao_cisalhamento(
     if comprimento <= 0 or t <= 0 or n_furos < 0:
         raise ValueError("Cisalhamento da chapa: comprimento e espessura > 0.")
     A_gv = comprimento * t
-    A_nv = A_gv - n_furos * (d_furo + _P[norma]["folga"]) * t
+    A_nv = A_gv - n_furos * (d_furo + folga_do_furo(norma, broca)) * t
     if _nbr(norma):
         f_esc, f_rup = 1 / _P[norma]["g_a1"], 1 / _P[norma]["g_a2"]
     else:

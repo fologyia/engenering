@@ -40,6 +40,9 @@ AJUDA: dict[str, str] = {
     "sec_parafusos": "Os parafusos da chapa: diâmetro, grau, quantidade e posição dos furos.",
     "parafuso": "Diâmetro do parafuso; o furo-padrão e a distância mínima à borda vêm dele.",
     "grau": "Grau do parafuso: A325 (alta resistência), A490 ou A307 (comum).",
+    "furo_broca": (
+        "Ligue só se dá para garantir que os furos serão feitos com broca (furadeira), e não puncionados. Aí a NBR 8800 (5.2.4.1 a, na 2008 e na 2025) deixa usar na área líquida a largura do próprio furo, sem somar os 2 mm. Desligado, o programa soma os 2 mm, a favor da segurança. No AISC não há essa opção: ele soma sempre 1/16 de polegada (1,6 mm)."
+    ),
     "rosca": (
         "Ligado: a rosca fica no plano de corte (o mais comum e a favor da segurança). "
         "Desligado: só a parte lisa do corpo passa pelo plano de corte, e o parafuso resiste mais."

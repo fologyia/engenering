@@ -66,7 +66,7 @@ MODULO_TITULO = "Ligações estruturais"
 GAMMA_A1 = 1.10  # NBR 8800 4.8.2
 GAMMA_A2 = 1.35
 GAMMA_W2 = 1.35  # NBR 8800 tabela das soldas (nota de γ_w2), combinações normais
-FOLGA_FURO = 2.0  # NBR 8800 5.2.4.1: furo + 2 mm na área líquida
+FOLGA_FURO = 2.0  # NBR 8800 5.2.4.1 a): furo + 2 mm na área líquida (0 com furo de broca)
 NORMAS = sd.NORMAS
 NORMAS_ROTULOS = sd.NORMAS_ROTULOS
 ELETRODOS = sd.ELETRODOS  # NBR 8800 Tabela A.4
@@ -225,6 +225,7 @@ class EntradaChapaSimples:
     parafuso: str = '3/4"'
     grau: str = "A325"
     rosca_no_plano: bool = True
+    furo_com_broca: bool = False  # 5.2.4.1 a): área líquida sem os 2 mm
     n_parafusos: int = 3
     passo_mm: float = 70.0
     borda_vertical_mm: float = 35.0  # na chapa, do furo ao topo e à base da chapa
@@ -377,6 +378,24 @@ def _alma_da_viga(
     return linhas
 
 
+def _furo_de_broca(broca: bool, dh: float) -> list[Verificacao]:
+    """A linha que diz que a área líquida vai sem os 2 mm (furos feitos com broca)."""
+    if not broca:
+        return []
+    return [
+        Verificacao(
+            "Furo na área líquida",
+            dh,
+            None,
+            "mm",
+            "NBR 8800 5.2.4.1 a)",
+            "furos feitos com broca: a largura do próprio furo, sem somar os 2 mm",
+            status="INFO",
+            tipo="informativo",
+        )
+    ]
+
+
 def calcular_chapa_simples(e: EntradaChapaSimples) -> ResultadoLigacao:
     _validar_chapa(e)
     try:
@@ -388,12 +407,12 @@ def calcular_chapa_simples(e: EntradaChapaSimples) -> ResultadoLigacao:
     fy_c, fu_c = ACOS[e.aco_chapa]
     par = bc.dados_parafuso(e.parafuso)
     db, dh, emin = float(par["d_b"]), float(par["d_h"]), float(par["e_min"])
-    dhl = dh + FOLGA_FURO
+    dhl = dh + (0.0 if e.furo_com_broca else FOLGA_FURO)
     n, s, tp = e.n_parafusos, e.passo_mm, e.t_chapa_mm
     hp, a = e.altura_chapa_mm, e.distancia_solda_furo_mm
     v, nt = e.v_sd_kN, e.n_sd_kN
     m_kNm = v * a / 1000.0
-    linhas: list[Verificacao] = []
+    linhas: list[Verificacao] = _furo_de_broca(e.furo_com_broca, dh)
 
     # ------------------------------------------------------------------ parafusos
     coords = [(0.0, k * s) for k in range(n)]
@@ -639,6 +658,7 @@ class EntradaCantoneiraDupla:
     parafuso: str = '3/4"'
     grau: str = "A325"
     rosca_no_plano: bool = True
+    furo_com_broca: bool = False  # 5.2.4.1 a): área líquida sem os 2 mm
     n_parafusos: int = 3  # por linha vertical (na alma; no apoio, a mesma quantidade em cada aba)
     passo_mm: float = 70.0
     borda_vertical_mm: float = 35.0  # na cantoneira, do furo à ponta
@@ -694,13 +714,13 @@ def calcular_cantoneira_dupla(e: EntradaCantoneiraDupla) -> ResultadoLigacao:
     _fy_s, fu_s = ACOS[e.aco_apoio]
     par = bc.dados_parafuso(e.parafuso)
     db, dh, emin = float(par["d_b"]), float(par["d_h"]), float(par["e_min"])
-    dhl = dh + FOLGA_FURO
+    dhl = dh + (0.0 if e.furo_com_broca else FOLGA_FURO)
     n, s, v, comp = e.n_parafusos, e.passo_mm, e.v_sd_kN, e.comprimento_mm
     if e.borda_vertical_mm * 2 + (n - 1) * s > comp + 1e-6:
         raise LigacaoInvalida(
             "Os furos não cabem na cantoneira: comprimento ≥ 2·borda + (n − 1)·passo."
         )
-    linhas: list[Verificacao] = []
+    linhas: list[Verificacao] = _furo_de_broca(e.furo_com_broca, dh)
 
     # ------------------------------------------------------------------ parafusos na alma (corte duplo)
     coords = [(0.0, k * s) for k in range(n)]

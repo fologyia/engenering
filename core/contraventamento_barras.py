@@ -68,6 +68,7 @@ class Diagonal:
     parafuso: str = '5/8"'
     grau: str = "A325"
     rosca_no_plano: bool = True
+    furo_com_broca: bool = False  # 5.2.4.1 a): área líquida sem os 2 mm
     n_parafusos: int = 3  # numa linha, na direção da força
     passo_mm: float = 50.0
     borda_mm: float = 30.0  # do último furo à ponta da barra
@@ -440,9 +441,15 @@ def _tracao_cantoneira(
     ag = cant.area_mm2
     if d.ligacao == LIGACAO_PARAFUSADA:
         dh = bc.PARAFUSOS[d.parafuso][1]
-        an = ag - (dh + 2.0) * cant.t_mm
+        folga = 0.0 if d.furo_com_broca else 2.0
+        an = ag - (dh + folga) * cant.t_mm
         lc = (d.n_parafusos - 1) * d.passo_mm
-        origem_an = f"A_n = A_g − (d_h + 2)·t = {_n(ag, 0)} − ({_n(dh)} + 2)·{_n(cant.t_mm, 2)}"
+        origem_an = (
+            f"A_n = A_g − d_h·t = {_n(ag, 0)} − {_n(dh)}·{_n(cant.t_mm, 2)} (furo de broca, "
+            "5.2.4.1 a)"
+            if d.furo_com_broca
+            else f"A_n = A_g − (d_h + 2)·t = {_n(ag, 0)} − ({_n(dh)} + 2)·{_n(cant.t_mm, 2)}"
+        )
     else:
         an = ag
         lc = d.comprimento_solda_mm
@@ -571,7 +578,7 @@ def _parafusos_cantoneira(
         )
     )
     g = d.gabarito_mm or ct.gabarito_usual_mm(cant.b_mm)
-    dhl = dh + 2.0
+    dhl = dh + (0.0 if d.furo_com_broca else 2.0)
     comprimento = d.borda_mm + (d.n_parafusos - 1) * d.passo_mm
     agv = comprimento * cant.t_mm
     anv = (comprimento - (d.n_parafusos - 0.5) * dhl) * cant.t_mm

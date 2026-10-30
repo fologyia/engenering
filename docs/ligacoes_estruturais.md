@@ -24,6 +24,14 @@ A página tem duas partes, escolhidas no alto (`lig_parte`): **Ligações parafu
 2; a solda da chapa simples no apoio é verificada junto) e **Ligações soldadas** (seções 3 a 5). Cada parte tem o seu seletor
 de tipo (`lig_tipo_parafuso`, `lig_tipo_solda`): voltar a uma parte reencontra o tipo escolhido nela.
 
+**Furos feitos com broca (opção, desligada por padrão).** A NBR 8800, 5.2.4.1 a) — na 2008 e na
+2025 —, soma 2,0 mm ao furo na área líquida, mas deixa usar a largura do próprio furo quando se
+garante que os furos são feitos com broca. Na chapa simples (`lig_broca`) e na cantoneira dupla
+(`lig_c_broca`) a opção tira os 2 mm de todas as áreas líquidas (cisalhamento, rasgamento, tração) e
+aparece no Detalhamento adotado como "Furo na área líquida". O mesmo vale no Projeto de parafusos
+(`ligest_broca`, só nas normas NBR: o AISC soma sempre 1/16") e nas diagonais parafusadas do
+Contraventamento (`bolted_connection.folga_do_furo`).
+
 **Tela (30/10/2026).** Só aparecem os campos que valem para o caso escolhido (tala × cantoneira,
 comprimentos só no modo verificar e o passo só no dimensionar, K e comprimento livre da chapa de nó só
 com compressão, a solda no apoio só quando pedida, espessura do apoio × perfil, posição na mesa e
