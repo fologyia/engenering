@@ -1,11 +1,19 @@
 """Textos dos “?” da página Ligações estruturais, em linguagem simples (um teste exige cada um)."""
 
 AJUDA: dict[str, str] = {
-    "tipo": (
-        "Qual ligação calcular: a chapa simples ou a dupla cantoneira que liga uma viga em outra "
-        "viga ou num pilar (NBR 8800), a ligação parafusada de um perfil dobrado de chapa fina "
-        "(NBR 14762), um grupo de filetes no plano, a barra (cantoneira ou tala) soldada na chapa "
-        "de nó, ou uma chapa soldada num apoio com filete ou solda de penetração."
+    "parte": (
+        "Escolha se a ligação é feita com parafusos ou com solda; os tipos de cada uma aparecem "
+        "logo abaixo. A chapa simples é parafusada na viga e soldada no apoio: está nas "
+        "parafusadas, que verificam também essa solda."
+    ),
+    "tipo_parafusada": (
+        "Qual ligação parafusada calcular: a chapa simples ou a dupla cantoneira que liga uma "
+        "viga em outra viga ou num pilar (NBR 8800), ou a ligação de um perfil dobrado de chapa "
+        "fina (NBR 14762)."
+    ),
+    "tipo_soldada": (
+        "Qual ligação soldada calcular: um grupo de filetes no plano, a barra (cantoneira ou tala) "
+        "soldada na chapa de nó, ou uma chapa soldada num apoio com filete ou solda de penetração."
     ),
     "norma": (
         "Versão da NBR 8800. A 2025 é a vigente; a 2008 serve para conferir projetos antigos. "

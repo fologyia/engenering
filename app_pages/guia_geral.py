@@ -2555,7 +2555,9 @@ elif modulo == "Ligações estruturais":
         "Os casos comuns de ligação do mezanino e da escada, cada um com a figura, a tabela de "
         "verificações (norma e item em cada linha) e o registro para o memorial. Os esforços "
         "entram **já de cálculo** (combinação ELU) — por exemplo a reação da viga de piso ou da "
-        "longarina."
+        "longarina. A página tem duas partes: **Ligações parafusadas** (chapa simples, dupla "
+        "cantoneira e perfil formado a frio) e **Ligações soldadas** (grupo de filetes, barra na "
+        "chapa de nó e chapa no apoio)."
     )
     with st.container(border=True):
         st.markdown(

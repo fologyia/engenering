@@ -21,9 +21,9 @@ from core.verificacao import csv_verificacoes
 configurar_pagina("Ligações estruturais", ":material/link:")
 cabecalho_pagina(
     "Ligações estruturais",
-    "Os casos comuns do mezanino e da escada: chapa simples e dupla cantoneira ligando viga em "
-    "viga ou em pilar (NBR 8800), perfil formado a frio parafusado (NBR 14762) e as ligações "
-    "soldadas — grupo de filetes, barra na chapa de nó e chapa no apoio (filete, penetração total "
+    "Os casos comuns do mezanino e da escada, em duas partes. Parafusadas: chapa simples e dupla "
+    "cantoneira ligando viga em viga ou em pilar (NBR 8800) e perfil formado a frio (NBR 14762). "
+    "Soldadas: grupo de filetes, barra na chapa de nó e chapa no apoio (filete, penetração total "
     "ou parcial). Casos especiais (ligação rígida, chapa de extremidade, enrijecedores) ficam com "
     "o projetista.",
     categoria="Dimensionamento complementar",
@@ -32,10 +32,15 @@ cabecalho_pagina(
     ajuda_modulo="Ligações estruturais",
 )
 
-TIPOS = {
+PARAFUSADAS = "parafusadas"
+SOLDADAS = "soldadas"
+PARTES = {PARAFUSADAS: "Ligações parafusadas", SOLDADAS: "Ligações soldadas"}
+TIPOS_PARAFUSADOS = {
     lg.CHAPA_SIMPLES: "Chapa simples (viga–viga e viga–pilar)",
     lg.CANTONEIRA_DUPLA: "Dupla cantoneira (viga–viga e viga–pilar)",
     lg.PERFIL_FRIO: "Perfil formado a frio (NBR 14762)",
+}
+TIPOS_SOLDADOS = {
     lg.SOLDA: "Grupo de filetes no plano",
     lg.BARRA_SOLDADA: "Barra soldada na chapa de nó",
     lg.CHAPA_NO_APOIO: "Chapa soldada no apoio",
@@ -119,16 +124,39 @@ def _apoio_da_solda(prefixo: str, padrao: ls.EntradaChapaNoApoio | ls.EntradaBar
     }
 
 
-tipo = st.segmented_control(
-    "Tipo de ligação",
-    list(TIPOS),
-    format_func=TIPOS.get,
-    default=lg.CHAPA_SIMPLES,
-    key="lig_tipo",
+parte = st.segmented_control(
+    "Parte",
+    list(PARTES),
+    format_func=PARTES.get,
+    default=PARAFUSADAS,
+    key="lig_parte",
     persist_state="session",
-    help=AJUDA["tipo"],
+    help=AJUDA["parte"],
 )
-tipo = tipo or lg.CHAPA_SIMPLES
+# Um seletor de tipo por parte, cada um com a sua chave: voltar a uma parte reencontra o tipo
+# que estava escolhido nela.
+if parte == SOLDADAS:
+    tipo = st.segmented_control(
+        "Tipo de ligação soldada",
+        list(TIPOS_SOLDADOS),
+        format_func=TIPOS_SOLDADOS.get,
+        default=lg.SOLDA,
+        key="lig_tipo_solda",
+        persist_state="session",
+        help=AJUDA["tipo_soldada"],
+    )
+    tipo = tipo or lg.SOLDA
+else:
+    tipo = st.segmented_control(
+        "Tipo de ligação parafusada",
+        list(TIPOS_PARAFUSADOS),
+        format_func=TIPOS_PARAFUSADOS.get,
+        default=lg.CHAPA_SIMPLES,
+        key="lig_tipo_parafuso",
+        persist_state="session",
+        help=AJUDA["tipo_parafusada"],
+    )
+    tipo = tipo or lg.CHAPA_SIMPLES
 entrada: object
 
 if tipo == lg.CHAPA_SIMPLES:

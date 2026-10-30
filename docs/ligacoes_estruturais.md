@@ -10,6 +10,10 @@ ainda não visto no texto sai com "(a confirmar)" na referência (segue a 2008).
 estão em `core/soldas.py` (regras) e `core/ligacoes_soldadas.py` (barra na chapa de nó e chapa no
 apoio).
 
+A página tem duas partes, escolhidas no alto (`lig_parte`): **Ligações parafusadas** (seções 1, 1b e
+2; a solda da chapa simples no apoio é verificada junto) e **Ligações soldadas** (seções 3 a 5). Cada parte tem o seu seletor
+de tipo (`lig_tipo_parafuso`, `lig_tipo_solda`): voltar a uma parte reencontra o tipo escolhido nela.
+
 ## 1. Chapa simples (viga–viga e viga–pilar) — NBR 8800
 
 Chapa soldada no apoio (alma da viga principal, mesa ou alma do pilar) com dois filetes e parafusada

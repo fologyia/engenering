@@ -18,9 +18,20 @@ from tests.test_esforcos_modelo_pagina import TIPOS_COM_AJUDA, _ajuda, _rotulo
 RAIZ = Path(__file__).resolve().parent.parent
 APP = str(RAIZ / "app.py")
 PAGINA = "app_pages/ligacoes_estruturais.py"
+SOLDADAS = (lg.SOLDA, lg.BARRA_SOLDADA, lg.CHAPA_NO_APOIO)
+PARAFUSADAS = (lg.CHAPA_SIMPLES, lg.CANTONEIRA_DUPLA, lg.PERFIL_FRIO)
 
 
-def abrir(**estado) -> AppTest:
+def _escolher(tipo: str) -> dict[str, str]:
+    """O estado que escolhe o tipo: a parte (parafusadas ou soldadas) e o tipo dentro dela."""
+    if tipo in SOLDADAS:
+        return {"lig_parte": "soldadas", "lig_tipo_solda": tipo}
+    return {"lig_parte": "parafusadas", "lig_tipo_parafuso": tipo}
+
+
+def abrir(tipo: str | None = None, **estado) -> AppTest:
+    if tipo is not None:
+        estado = {**_escolher(tipo), **estado}
     t = AppTest.from_file(APP, default_timeout=180)
     t.run()
     t.switch_page(PAGINA)
@@ -48,16 +59,16 @@ def test_modulo_registrado_em_dimensionamento_complementar():
 @pytest.mark.parametrize(
     "estado",
     [
-        {"lig_tipo": lg.CHAPA_SIMPLES},
-        {"lig_tipo": lg.PERFIL_FRIO, "lig_f_perfil": lg.PERFIL_A_MAO},
-        {"lig_tipo": lg.SOLDA},
-        {"lig_tipo": lg.SOLDA, "lig_s_m": 2.0, "lig_s_arranjo": lg.ARRANJO_TRES_LADOS},
-        {"lig_tipo": lg.CANTONEIRA_DUPLA},
-        {"lig_tipo": lg.BARRA_SOLDADA},
-        {"lig_tipo": lg.BARRA_SOLDADA, "lig_b_nc": 60.0, "lig_b_apoio": ls.APOIO_PERFIL},
-        {"lig_tipo": lg.CHAPA_NO_APOIO},
-        {"lig_tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_PARCIAL},
-        {"lig_tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_TOTAL},
+        {"tipo": lg.CHAPA_SIMPLES},
+        {"tipo": lg.PERFIL_FRIO, "lig_f_perfil": lg.PERFIL_A_MAO},
+        {"tipo": lg.SOLDA},
+        {"tipo": lg.SOLDA, "lig_s_m": 2.0, "lig_s_arranjo": lg.ARRANJO_TRES_LADOS},
+        {"tipo": lg.CANTONEIRA_DUPLA},
+        {"tipo": lg.BARRA_SOLDADA},
+        {"tipo": lg.BARRA_SOLDADA, "lig_b_nc": 60.0, "lig_b_apoio": ls.APOIO_PERFIL},
+        {"tipo": lg.CHAPA_NO_APOIO},
+        {"tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_PARCIAL},
+        {"tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_TOTAL},
     ],
 )
 def test_cada_tipo_abre_com_ajuda_em_tudo_e_figura(banco_isolado, estado):
@@ -71,6 +82,22 @@ def test_cada_tipo_abre_com_ajuda_em_tudo_e_figura(banco_isolado, estado):
     assert len(t.get("image")) == 1
 
 
+def test_parafusadas_e_soldadas_separadas(banco_isolado):
+    t = abrir()
+    assert t.segmented_control(key="lig_parte").value == "parafusadas"
+    tipos = t.segmented_control(key="lig_tipo_parafuso")
+    assert len(tipos.options) == len(PARAFUSADAS)
+    assert all("lig_tipo_solda" not in s.id for s in t.segmented_control)
+    t.segmented_control(key="lig_tipo_parafuso").set_value(lg.CANTONEIRA_DUPLA).run()
+    t.segmented_control(key="lig_parte").set_value("soldadas").run()
+    assert not t.exception
+    assert len(t.segmented_control(key="lig_tipo_solda").options) == len(SOLDADAS)
+    assert all("lig_tipo_parafuso" not in s.id for s in t.segmented_control)
+    assert t.selectbox(key="lig_s_metodo").value in lg.METODOS_SOLDA
+    t.segmented_control(key="lig_parte").set_value("parafusadas").run()
+    assert t.segmented_control(key="lig_tipo_parafuso").value == lg.CANTONEIRA_DUPLA
+
+
 def test_numeros_da_chapa_simples_iguais_ao_nucleo(banco_isolado):
     t = abrir()
     r = lg.calcular(lg.EntradaChapaSimples())
@@ -80,7 +107,7 @@ def test_numeros_da_chapa_simples_iguais_ao_nucleo(banco_isolado):
 
 
 def test_entrada_impossivel_vira_erro_claro(banco_isolado):
-    t = abrir(lig_tipo=lg.PERFIL_FRIO, lig_f_perfil=lg.PERFIL_A_MAO, lig_f_x=500.0)
+    t = abrir(tipo=lg.PERFIL_FRIO, lig_f_perfil=lg.PERFIL_A_MAO, lig_f_x=500.0)
     assert not t.exception
 
 
@@ -119,7 +146,7 @@ def test_trazer_a_reacao_de_um_calculo_registrado(banco_com_projeto):
 
 
 def test_dimensionar_a_barra_mostra_os_filetes_adotados(banco_isolado):
-    t = abrir(lig_tipo=lg.BARRA_SOLDADA)
+    t = abrir(tipo=lg.BARRA_SOLDADA)
     r = lg.calcular(ls.EntradaBarraSoldada())
     metricas = {m.label: m.value for m in t.metric}
     assert metricas["Filete do dorso"] == f"{r.grandezas['l_dorso_mm']:.0f} mm"
@@ -128,7 +155,7 @@ def test_dimensionar_a_barra_mostra_os_filetes_adotados(banco_isolado):
 
 
 def test_memorial_da_ligacao_na_pagina(banco_isolado):
-    t = abrir(lig_tipo=lg.CHAPA_NO_APOIO)
+    t = abrir(tipo=lg.CHAPA_NO_APOIO)
     chaves = {b.proto.id.split("-")[-1] for b in t.get("download_button")}
     assert any("lig_memorial_word" in b.proto.id for b in t.get("download_button")), chaves
     assert any("lig_memorial_pdf" in b.proto.id for b in t.get("download_button")), chaves
