@@ -6,17 +6,18 @@ Regras puras, sem Streamlit, usadas pelas ligações soldadas (:mod:`core.ligaco
 Fontes:
 
 * **NBR 8800:2025** (chave interna ``NBR8800_2024``) — vistos no texto que o usuário mandou
-  (fotos de 29/10/2026 e o PDF de 30/10/2026): Tabela 9 com as notas a–j (força resistente de
-  cálculo das soldas e compatibilidade), 6.2.5.2 a), b) e c) (aumento pela direção da força, centro
-  instantâneo com Δu e Δm, filetes longitudinais e transversais), Tabela 10 (garganta mínima da
-  penetração parcial), Tabela 11 (perna mínima do filete), 6.1.5 (45 kN), 6.1.8 (disposição das
-  soldas), 6.1.9 (parafusos com soldas) e 6.5.3 a 6.5.6 (elementos de ligação). O que ainda não
-  foi visto (6.2.2, 6.2.6, 5.2, 5.7 e o conteúdo da Tabela 8, os grupos de compatibilidade) segue
-  o texto da 2008 e vai marcado "a confirmar" na referência.
+  (fotos de 29/10/2026 e os PDFs de 30/10/2026): 5.2.1 a 5.2.3 (tração), 5.3 (compressão), 5.7
+  (forças localizadas), 6.1.5, 6.1.8, 6.1.9, 6.2.2 (áreas efetivas, β e o teto de 180·d_w do
+  filete longo, Tabela 6 da garganta da penetração parcial), 6.2.3, 6.2.4, Tabela 8
+  (compatibilidade), Tabela 9 com as notas a–j, 6.2.5, 6.2.6 (limites, Tabelas 10 e 11) e 6.5.3 a
+  6.5.6. O que ainda não foi visto (5.2.4 e 5.2.5, o C_t) segue o texto da 2008 e vai marcado
+  "a confirmar" na referência.
 * **NBR 8800:2008** — texto conferido: 4.8.2 (Tabela 3), 5.2.5, 5.7.2 a 5.7.4, 6.1.5, 6.1.8,
   6.2.2, 6.2.5, 6.2.6, 6.5 e Tabelas 5, 7, 8, 9, 10 e A.4.
 
-Na 2025 as tabelas mudaram de número (Tabela 8 → 9, 9 → 10, 10 → 11). Os limites 6,3 (6,35 na 2008),
+Na 2025 as tabelas mudaram de número (5 → 6, 7 → 8, 8 → 9, 9 → 10, 10 → 11). Duas regras mudaram:
+o comprimento efetivo do filete longo para em 180·d_w quando L > 300·d_w (6.2.2.2 d) e a perna
+máxima na borda passa a t − 1,5 mm a partir de 6,3 mm (6,35 na 2008). Os limites 6,3 (6,35 na 2008),
 12,5 e 19 mm das faixas de espessura são as chapas comerciais de 1/4", 1/2" e 3/4": a chapa de
 1/2" (12,7 mm) fica na faixa "até 12,5", como no AISC 360 (Tabela J2.4) e no critério Anglo.
 """
@@ -59,7 +60,8 @@ TABELAS = {
         "resistencia": "Tabela 9",
         "garganta": "Tabela 10",
         "perna": "Tabela 11",
-        "compatibilidade": "Tabela 8",  # nota b da Tabela 9; o conteúdo ainda não foi visto
+        "compatibilidade": "Tabela 8",
+        "garganta_efetiva": "Tabela 6",  # garganta efetiva da penetração parcial
         "nota_w1": "nota h",
         "nota_w2": "nota i",
     },
@@ -68,6 +70,7 @@ TABELAS = {
         "garganta": "Tabela 9",
         "perna": "Tabela 10",
         "compatibilidade": "Tabela 7",
+        "garganta_efetiva": "Tabela 5",
         "nota_w1": "nota j",
         "nota_w2": "nota k",
     },
@@ -89,7 +92,11 @@ def norma_curta(norma: str) -> str:
 
 #: Itens da NBR 8800:2025 já vistos no texto (um item vale com os subitens: "6.5.5" cobre
 #: "6.5.5 a)"). Confirmar mais um item é só acrescentá-lo aqui.
-ITENS_VISTOS_NA_2025 = ("6.1.5", "6.1.8", "6.1.9", "6.2.5.2", "6.5.3", "6.5.4", "6.5.5", "6.5.6")
+ITENS_VISTOS_NA_2025 = (
+    "5.2.1", "5.2.2", "5.2.3", "5.3", "5.7",
+    "6.1.5", "6.1.8", "6.1.9", "6.2.2", "6.2.3", "6.2.4", "6.2.5", "6.2.6",
+    "6.5.3", "6.5.4", "6.5.5", "6.5.6",
+)  # fmt: skip
 MARCA_A_CONFIRMAR = "(a confirmar)"
 _ITEM = re.compile(r"\d+(?:\.\d+)+")
 
@@ -161,9 +168,14 @@ def perna_minima(t_menor_mm: float) -> float:
     return 8.0
 
 
-def perna_maxima(t_borda_mm: float) -> float:
-    """6.2.6.2.2: ao longo da borda de uma chapa, t (t < 6,35 mm) ou t − 1,5 mm."""
-    return t_borda_mm if t_borda_mm < CHAPA_QUARTO_DE_POLEGADA else t_borda_mm - 1.5
+#: 6.2.6.2.2: espessura a partir da qual a perna máxima na borda é t − 1,5 mm.
+LIMITE_DA_PERNA_MAXIMA = {NBR_2025: 6.3, NBR_2008: 6.35}
+
+
+def perna_maxima(t_borda_mm: float, norma: str = NBR_2025) -> float:
+    """6.2.6.2.2: ao longo da borda de uma chapa, t (t < 6,3 mm; 6,35 na 2008) ou t − 1,5 mm."""
+    limite = LIMITE_DA_PERNA_MAXIMA[norma]
+    return t_borda_mm if t_borda_mm < limite - 1e-9 else t_borda_mm - 1.5
 
 
 def garganta_minima(t_menor_mm: float, norma: str) -> float:
@@ -200,6 +212,31 @@ def cobrimento_minimo(t_menor_mm: float) -> float:
 def beta_filete_longo(comprimento_mm: float, perna_mm: float) -> float:
     """6.2.2.2 d): filete longitudinal na extremidade de barra axial, β = 1,2 − 0,002·L/d_w ∈ [0,6; 1]."""
     return min(1.0, max(0.6, 1.2 - 0.002 * comprimento_mm / perna_mm))
+
+
+#: 6.2.2.2 d) da 2025: com L > 300·d_w, o comprimento efetivo é 180·d_w (a 2008 não tem o teto).
+RAZAO_DO_FILETE_MUITO_LONGO = 300.0
+EFETIVO_DO_FILETE_MUITO_LONGO = 180.0
+
+
+def comprimento_efetivo_longitudinal(comprimento_mm: float, perna_mm: float, norma: str) -> float:
+    """6.2.2.2 d): β·L; na 2025, com L > 300·d_w, 180·d_w (o filete mais longo não rende mais)."""
+    if norma == NBR_2025 and comprimento_mm > RAZAO_DO_FILETE_MUITO_LONGO * perna_mm + 1e-9:
+        return EFETIVO_DO_FILETE_MUITO_LONGO * perna_mm
+    return beta_filete_longo(comprimento_mm, perna_mm) * comprimento_mm
+
+
+def texto_comprimento_efetivo(comprimento_mm: float, perna_mm: float, norma: str) -> str:
+    """O trecho da fórmula que explica o comprimento efetivo ("" quando L inteiro vale)."""
+    efetivo = comprimento_efetivo_longitudinal(comprimento_mm, perna_mm, norma)
+    if efetivo >= comprimento_mm - 1e-9:
+        return ""
+    if norma == NBR_2025 and comprimento_mm > RAZAO_DO_FILETE_MUITO_LONGO * perna_mm + 1e-9:
+        return (
+            f"; L > 300·d_w: comprimento efetivo 180·d_w = {_n(efetivo, 0)} mm (filete longo, "
+            "6.2.2.2 d)"
+        )
+    return f"; β = {_n(efetivo / comprimento_mm, 3)} (filete longo, 6.2.2.2 d)"
 
 
 def adotar(valor_mm: float, passo_mm: float = 5.0) -> float:
@@ -542,10 +579,11 @@ def limites_do_filete(
             linha_maximo(
                 f"Solda: perna máxima na borda da chapa{sufixo}",
                 perna_mm,
-                perna_maxima(t_borda_mm),
+                perna_maxima(t_borda_mm, norma),
                 "mm",
                 ref(norma, "6.2.6.2.2"),
-                f"t = {_n(t_borda_mm, 2)} mm: t < 6,35 mm → perna ≤ t; senão perna ≤ t − 1,5 mm",
+                f"t = {_n(t_borda_mm, 2)} mm: t < {_n(LIMITE_DA_PERNA_MAXIMA[norma])} mm → perna ≤ t; "
+                "senão perna ≤ t − 1,5 mm",
             )
         )
     linhas.append(

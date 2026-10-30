@@ -54,7 +54,7 @@ G = 9.80665
 CATEGORIA_PP = "Peso próprio de estrutura metálica"
 CATEGORIA_PE = "Elementos construtivos industrializados (grades, pisos, guarda-corpos)"
 CATEGORIA_SC = "Sobrecarga de uso — predominância de equipamentos fixos ou concentração de pessoas"
-CATEGORIA_EQ = "Peso próprio de equipamentos (Projeto NBR 8800:2024)"
+CATEGORIA_EQ = "Peso próprio de equipamentos (NBR 8800:2025)"
 
 
 class VigaInvalida(ValueError):
@@ -409,7 +409,7 @@ def registro_viga(
             "Carga concentrada no meio do vão (pior posição para momento e flecha).",
             "Flecha elástica sem contraflecha.",
         ],
-        referencias=["ABNT NBR 8800 (Projeto 2024 e edição 2008): 5.4 e Anexo C."]
+        referencias=["ABNT NBR 8800 (edições de 2025 e 2008): 5.4 e Anexo C."]
         + ([f"{ca.REFERENCIA}: 5.7, 7 (Tabela 3), 8.8 e 9.1."] if e.anglo else []),
         conclusao=destaque,
         responsavel=responsavel,

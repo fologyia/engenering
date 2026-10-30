@@ -7,7 +7,7 @@ configurar_pagina("Contraventamento de estruturas abertas", ":material/grid_on:"
 cabecalho_pagina(
     "Contraventamento de estruturas abertas",
     "Plataformas, mezaninos e pipe racks • vento por reticulados (NBR 6123:2023, cap. 8) • "
-    "combinações, forças nocionais e B₂ (NBR 8800:2024) • diagonais e ligações",
+    "combinações, forças nocionais e B₂ (NBR 8800:2025) • diagonais e ligações",
     categoria="Dimensionamento",
     icone=":material/grid_on:",
     cor="blue",

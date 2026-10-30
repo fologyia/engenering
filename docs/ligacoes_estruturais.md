@@ -4,12 +4,15 @@ Página **Ligações estruturais** (`app_pages/ligacoes_estruturais.py`), núcle
 Os esforços entram **de cálculo** (combinação ELU) — por exemplo a reação da viga de piso ou da
 longarina. Unidades: mm, MPa, kN e kN·m. Os coeficientes foram conferidos no texto da NBR 8800:2008
 e da NBR 14762:2010 e, nas soldas, no texto da NBR 8800:2025 que o usuário mandou (fotos de 29/10 e
-PDF de 30/10/2026: Tabela 9 com as notas a–j, 6.1.5, 6.1.8, 6.1.9, 6.2.5.2 a, b e c, Tabelas 10 e 11,
-6.5.3 a 6.5.6; a lista fica em `soldas.ITENS_VISTOS_NA_2025`). A 2025 (chave interna `NBR8800_2024`) muda o coeficiente do corte do parafuso (0,45/0,56), via
-`core/bolted_connection.py`, e o número das tabelas das soldas (8 → 9, 9 → 10, 10 → 11). Item da 2025
-ainda não visto no texto (6.2.2, 6.2.6, 5.2, 5.7 e os grupos da Tabela 8) sai com "(a confirmar)" na
-referência (segue a 2008) e a página conta essas referências logo abaixo da frase do resultado. As
-ligações soldadas
+dois PDFs de 30/10/2026: 5.2.1 a 5.2.3, 5.3, 5.7, 6.1.5, 6.1.8, 6.1.9, 6.2.2 a 6.2.6 com as Tabelas 6,
+8, 9 e notas, 10 e 11, 6.5.3 a 6.5.6; a lista fica em `soldas.ITENS_VISTOS_NA_2025`). A 2025 (chave
+interna `NBR8800_2024`) muda o coeficiente do corte do parafuso (0,45/0,56), via
+`core/bolted_connection.py`, e o número das tabelas das soldas (5 → 6, 7 → 8, 8 → 9, 9 → 10,
+10 → 11). Nas soldas a 2025 mudou duas regras: o filete longitudinal com L > 300·d_w tem comprimento
+efetivo 180·d_w (6.2.2.2 d; a 2008 só tem o β ≥ 0,6), e a perna máxima na borda é t − 1,5 mm a
+partir de 6,3 mm (6,35 na 2008). Item da 2025 ainda não visto no texto (5.2.4 e 5.2.5, o C_t) sai
+com "(a confirmar)" na referência (segue a 2008) e a página conta essas referências logo abaixo da
+frase do resultado. As ligações soldadas
 estão em `core/soldas.py` (regras) e `core/ligacoes_soldadas.py` (barra na chapa de nó e chapa no
 apoio).
 
@@ -123,7 +126,7 @@ nó, com filetes longitudinais no dorso e na borda e, se pedido, transversal na 
 | Verificação | Fórmula | Item |
 |---|---|---|
 | Força da ligação | máx(N_t,Sd; N_c,Sd); ≥ 45 kN (exceções da norma); Anglo: ≥ 75 % de A_g·f_y/γ_a1 da barra e 3 t | 6.1.5.2; Anglo 9.1 |
-| Filetes do dorso e da borda | balanceados: F₁ = N·(C − x̄)/C − F₃/2, F₂ = N·x̄/C − F₃/2 (6.1.8.1); ou iguais (6.1.8.2, cantoneira sem fadiga); por mm, o menor entre o metal da solda, o metal-base da barra e o da chapa de nó (dividido pelas peças nas mesmas linhas); β do filete longo | 6.2.5.1, 6.5.5, 6.2.2.2 d) |
+| Filetes do dorso e da borda | balanceados: F₁ = N·(C − x̄)/C − F₃/2, F₂ = N·x̄/C − F₃/2 (6.1.8.1); ou iguais (6.1.8.2, cantoneira sem fadiga); por mm, o menor entre o metal da solda, o metal-base da barra e o da chapa de nó (dividido pelas peças nas mesmas linhas); β do filete longo e, na 2025, comprimento efetivo de 180·d_w quando L > 300·d_w | 6.2.5.1, 6.5.5, 6.2.2.2 d) |
 | Filete na ponta | F₃ = q·C (primeira expressão de 6.2.5.2 c); grupo: o maior entre F_wl + F_wt e 0,85·F_wl + 1,5·F_wt | 6.2.5.2 c) |
 | Perna, comprimento, cobrimento | Tabela 11; t − 1,5 mm na borda; ≥ 4·perna e 40 mm; cobrimento ≥ 5·t e 25 mm; tala só com filetes longitudinais: cada filete ≥ largura | 6.2.6.2 |
 | Barra à tração | A_g·f_y/γ_a1; C_t·A_g·f_u/γ_a2, cantoneira C_t = 1 − x̄/ℓ_c (ℓ_c = média dos filetes) ∈ [0,60; 0,90]; tala 1,00/0,87/0,75 por ℓ_w/b | 5.2.2, 5.2.5 |

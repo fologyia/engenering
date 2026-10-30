@@ -1,4 +1,4 @@
-"""Cantoneiras (seção idealizada) e verificação das diagonais pela NBR 8800:2024."""
+"""Cantoneiras (seção idealizada) e verificação das diagonais pela NBR 8800:2025."""
 
 from __future__ import annotations
 

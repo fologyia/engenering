@@ -2,7 +2,7 @@
 
 A página **Flambagem de colunas** verifica a barra inteira numa rodada: dois eixos, todos os modos
 de flambagem elástica, flambagem local, flexão em x e em y e a interação N + Mx + My, pela
-ABNT NBR 8800:2008, pelo Projeto NBR 8800:2024 ou pelo AISC 360-16, com o critério da Anglo
+ABNT NBR 8800:2008, pela NBR 8800:2025 ou pelo AISC 360-16, com o critério da Anglo
 (AA-BR-DPST-DR-0001). Este documento registra o que o módulo faz, o que ele recusa fazer e como
 cada decisão foi conferida.
 

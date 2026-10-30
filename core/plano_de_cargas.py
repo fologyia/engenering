@@ -27,7 +27,7 @@ from core import load_combinations as comb
 
 CATEGORIA_PP = "Peso próprio de estrutura metálica"
 CATEGORIA_PE = "Elementos construtivos industrializados (grades, pisos, guarda-corpos)"
-CATEGORIA_EQ = "Peso próprio de equipamentos (Projeto NBR 8800:2024)"
+CATEGORIA_EQ = "Peso próprio de equipamentos (NBR 8800:2025)"
 CATEGORIA_SC = "Sobrecarga de uso — predominância de equipamentos fixos ou concentração de pessoas"
 CATEGORIA_VENTO = "Vento (NBR 6123)"
 CATEGORIA_TEMPERATURA = "Variação de temperatura"
@@ -327,8 +327,8 @@ def _numero_gravado(valor: Any, padrao: float) -> float:
 def _categoria_gravada(valor: Any, codigo: str) -> str:
     """A categoria da NBR 8800 gravada; desconhecida, a padrão do código (ou sobrecarga)."""
     rotulos = {c.rotulo for c in comb.CATEGORIAS_NBR8800}
-    if isinstance(valor, str) and valor in rotulos:
-        return valor
+    if isinstance(valor, str) and comb.rotulo_atual(valor) in rotulos:
+        return comb.rotulo_atual(valor)
     if codigo in CODIGOS_POR_NOME:
         return CODIGOS_POR_NOME[codigo].categoria
     return CATEGORIA_SC

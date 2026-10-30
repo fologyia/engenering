@@ -1,4 +1,4 @@
-"""Verificação das diagonais de contraventamento pela NBR 8800 (Projeto de revisão de 2024).
+"""Verificação das diagonais de contraventamento pela NBR 8800:2025.
 
 Três famílias, as usuais em plataformas e estruturas abertas:
 
@@ -32,7 +32,7 @@ from core import steel_sections as ss
 from core.verificacao import Verificacao
 
 NORMA = "NBR8800_2024"
-REF = "NBR 8800:2024"
+REF = "NBR 8800:2025"
 E_MPA = 200_000.0
 G_MPA = 77_000.0
 GAMMA_A1 = nbr8800.GAMMA_A1

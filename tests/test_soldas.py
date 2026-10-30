@@ -53,7 +53,7 @@ def test_coeficientes_por_combinacao_e_direcao_da_forca():
 
 def test_referencias_marcam_o_que_falta_conferir_na_2025():
     assert sd.ref(sd.NBR_2008, "6.5.5") == "NBR 8800:2008 6.5.5"
-    assert sd.ref(sd.NBR_2025, "6.2.6.2.2") == "NBR 8800:2025 6.2.6.2.2 (a confirmar)"
+    assert sd.ref(sd.NBR_2025, "5.2.5") == "NBR 8800:2025 5.2.5 (a confirmar)"
     assert sd.ref(sd.NBR_2025, "6.5.5 a)") == "NBR 8800:2025 6.5.5 a)"  # visto no texto (30/10)
     assert sd.ref(sd.NBR_2025, "6.2.5.2 a)", vista_na_2025=True) == "NBR 8800:2025 6.2.5.2 a)"
     assert sd.tabela(sd.NBR_2025, "resistencia") == "Tabela 9"

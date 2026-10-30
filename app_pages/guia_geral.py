@@ -1333,13 +1333,13 @@ elif modulo == "Flambagem de colunas":
         "rodada verifica a **barra inteira**: os dois eixos, todos os modos de "
         "flambagem, a flambagem local, a flexão em x e em y e a interação "
         "**N + M_x + M_y numa equação só**, pela **NBR 8800:2008**, pelo **Projeto "
-        "NBR 8800:2024** ou pelo **AISC 360-16**, mais o critério da Anglo."
+        "NBR 8800:2025** ou pelo **AISC 360-16**, mais o critério da Anglo."
     )
     mostrar_tabela_campos(
         [
             [
                 "Norma",
-                "NBR 8800:2008 (fator Q), Projeto NBR 8800:2024 (área efetiva A_ef) ou AISC 360-16 (A_ef e φ = 0,90). “Comparar normas” mostra as três lado a lado",
+                "NBR 8800:2008 (fator Q), NBR 8800:2025 (área efetiva A_ef) ou AISC 360-16 (A_ef e φ = 0,90). “Comparar normas” mostra as três lado a lado",
                 "Contrato ou critério do projeto",
             ],
             [
@@ -1466,7 +1466,7 @@ elif modulo == "Flambagem de colunas":
             - **N_e (Anexo E):** a menor força de flambagem elástica entre flexão
               em x, flexão em y, torção (N_ez) e o modo acoplado das seções
               monossimétricas (U, T). Perfis abertos podem torcer antes de fletir.
-            - **Q (NBR 2008) e A_ef (Projeto 2024 e AISC):** a flambagem local
+            - **Q (NBR 2008) e A_ef (NBR 8800:2025 e AISC):** a flambagem local
               reduz a área que trabalha quando alguma parede (mesa, alma, tubo) é
               esbelta. A tabela “Paredes da seção” mostra b/t e o limite de cada uma.
             - **λ_0 e χ:** χ = 0,658^(λ_0²) até λ_0 = 1,5 e 0,877/λ_0² acima — já
@@ -1791,7 +1791,7 @@ elif modulo == "Projeto de parafusos":
         [
             [
                 "Norma",
-                "NBR 8800:2008, Projeto 2024, AISC 360 LRFD ou RCSC 2004",
+                "NBR 8800:2008, NBR 8800:2025, AISC 360 LRFD ou RCSC 2004",
                 "Contrato / cliente",
             ],
             ["Parafuso e grau", "Designação (M16, M22, 7/8″…), A325, A490 ou A307", "Projeto"],

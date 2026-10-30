@@ -107,7 +107,7 @@ AJUDA: dict[str, str] = {
         "Cb e o B₂ da segunda ordem global. Uma barra pode ter os seus na tabela das barras."
     ),
     "norma": (
-        "Norma da verificação: o Projeto de revisão da NBR 8800 (2024), a NBR 8800:2008 ou o AISC "
+        "Norma da verificação: a NBR 8800:2025, a NBR 8800:2008 ou o AISC "
         "360-16. É o mesmo motor da página Flambagem de colunas."
     ),
     "btn_gravar_parametros": "Grava a norma e os parâmetros por tipo no projeto ativo.",

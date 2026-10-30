@@ -33,7 +33,7 @@ AJUDA: dict[str, str] = {
         "**y** (o eixo fraco). Cada um tem o seu comprimento destravado e a sua condição de apoio "
         "— o programa verifica os dois de uma vez e o pior governa.\n\n"
         "**Simplificação:** o K da Tabela E.1 vale para pórticos de pré-projeto. Na análise direta "
-        "(Projeto 2024 e AISC) o comprimento efetivo é o real (K = 1) e a estrutura é analisada "
+        "(NBR 8800:2025 e AISC) o comprimento efetivo é o real (K = 1) e a estrutura é analisada "
         "com imperfeições — isso é feito na análise da estrutura, não aqui."
     ),
     "sec_4": (
@@ -60,7 +60,7 @@ AJUDA: dict[str, str] = {
         "jeito a flambagem global, mas diferem na flambagem local e nos coeficientes:\n\n"
         "- **NBR 8800:2008**: a vigente. Flambagem local pelo fator Q; resistência dividida por "
         "γ_a1 = 1,10.\n"
-        "- **Projeto NBR 8800:2024**: a revisão. Flambagem local pela área efetiva A_ef.\n"
+        "- **ABNT NBR 8800:2025**: a edição vigente. Flambagem local pela área efetiva A_ef.\n"
         "- **AISC 360-16**: norma americana. A_ef e resistência multiplicada por φ = 0,90."
     ),
     "material": (
@@ -423,7 +423,7 @@ AJUDA: dict[str, str] = {
     ),
     "res_q": (
         "**NBR 2008**: fator Q = Q_s·Q_a, que reduz a resistência quando as paredes são "
-        "esbeltas. **Projeto 2024 e AISC**: A_ef/A_g, a fração da área que trabalha. "
+        "esbeltas. **NBR 8800:2025 e AISC**: A_ef/A_g, a fração da área que trabalha. "
         "1,0 = sem flambagem local."
     ),
     "res_b1": (

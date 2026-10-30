@@ -13,7 +13,7 @@ NBR 8800 e, quando ligado, pelo critério Anglo American AA-BR-DPST-DR-0001 Rev.
 | Vão, largura de influência | A faixa de piso que a viga carrega (em geral a distância entre vigas vizinhas). |
 | Mesa travada | Com a grade travando a mesa comprimida, L_b = espaçamento dos pontos travados e C_b = 1; sem travamento, L_b = vão e C_b do diagrama de momentos (5.4.2.3, R_m = 1). |
 | Cargas | Piso e acessórios (kN/m²), sobrecarga (kN/m², da base técnica), carga linear permanente (kN/m) e equipamento no meio do vão (kN). O peso próprio do perfil entra sozinho. |
-| Norma | Projeto NBR 8800:2024 (padrão), NBR 8800:2008 ou AISC 360-16 (motor da Flambagem de colunas). |
+| Norma | NBR 8800:2025 (padrão), NBR 8800:2008 ou AISC 360-16 (motor da Flambagem de colunas). |
 
 ## Cálculo (`calcular`)
 

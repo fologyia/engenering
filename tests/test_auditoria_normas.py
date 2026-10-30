@@ -1,8 +1,8 @@
-"""Pontos do programa conferidos contra as normas e o texto do Projeto NBR 8800:2024.
+"""Pontos do programa conferidos contra as normas e o texto do NBR 8800:2025.
 
 Cada teste trava um número que a auditoria de 2026-10-07 leu na norma e que o programa usa:
 
-* Tabelas 1 e 2 do Projeto NBR 8800:2024 (γ_f e ψ das ações), no que muda em relação a 2008 —
+* Tabelas 1 e 2 do NBR 8800:2025 (γ_f e ψ das ações), no que muda em relação a 2008 —
   o peso próprio de equipamentos passa a valer 1,25 e a sobrecarga de cobertura entra com ψ₀ = 0,8;
 * 4.10.4.5: com a rigidez reduzida a 80 %, os limites de deslocabilidade viram 1,13 e 1,55;
 * Tabela B.1: H/300 em galpões e edificações de um pavimento, H/400 nas de dois ou mais.
@@ -18,14 +18,14 @@ from core import load_combinations as comb
 from core import structural_2d as estrutural
 
 # ------------------------------------------------------------------ Tabelas 1 e 2 (combinações)
-EQUIPAMENTOS_2024 = "Peso próprio de equipamentos (Projeto NBR 8800:2024)"
-COBERTURA_2024 = "Sobrecarga de cobertura (Projeto NBR 8800:2024)"
+EQUIPAMENTOS_2024 = "Peso próprio de equipamentos (NBR 8800:2025)"
+COBERTURA_2024 = "Sobrecarga de cobertura (NBR 8800:2025)"
 
 
 def test_peso_proprio_de_equipamentos_vale_1_25_no_projeto_2024_e_1_50_em_2008():
     novo = comb.categoria_nbr(EQUIPAMENTOS_2024)
     assert (novo.tipo, novo.gamma, novo.gamma_favoravel) == ("Permanente", 1.25, 1.00)
-    assert "Projeto NBR 8800:2024" in novo.referencia
+    assert "NBR 8800:2025" in novo.referencia
     antigo = comb.categoria_nbr("Elementos construtivos em geral e equipamentos")
     assert (antigo.gamma, antigo.gamma_favoravel) == (1.50, 1.00)  # a edição de 2008 continua
 

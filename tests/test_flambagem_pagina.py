@@ -290,10 +290,10 @@ def test_regras_ficam_a_vista_abaixo_da_tabela(banco_isolado):
     assert any("N_e é calculado com o comprimento real" in x for x in textos)
     assert any("Perfil soldado: 4,75 mm" in x and "Placa de base: 16 mm" in x for x in textos)
     flt = next(x for x in textos if "FLT na NBR 8800:2008" in x)
-    assert "- **FLT na NBR 8800:2008" in flt and "- FLT no Projeto 2024" in flt
+    assert "- **FLT na NBR 8800:2008" in flt and "- FLT na NBR 8800:2025" in flt
     outra = abrir(banco_isolado, col_norma="NBR8800_2024")
-    flt_2024 = next(m.value for m in outra.markdown if "FLT no Projeto 2024" in m.value)
-    assert "- **FLT no Projeto 2024" in flt_2024 and "- FLT na NBR 8800:2008" in flt_2024
+    flt_2024 = next(m.value for m in outra.markdown if "FLT na NBR 8800:2025" in m.value)
+    assert "- **FLT na NBR 8800:2025" in flt_2024 and "- FLT na NBR 8800:2008" in flt_2024
 
 
 def test_geometria_idealizada_avisa_em_i_e_u_por_dimensoes(banco_isolado):

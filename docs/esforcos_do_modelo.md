@@ -334,7 +334,7 @@ momento fraco, cortante (resultante de V1 e V2) e torque. CSV com ponto e vírgu
 **Parâmetros por tipo** (Pilar, Viga, Diagonal, Contraventamento, Outro; gravados no projeto): aço,
 comprimentos de flambagem K·L em torno do eixo forte (`Lx`) e do fraco (`Ly`), comprimento
 destravado `Lb` (vazio = `Ly`), `Cb` e `B₂`. A **tabela das barras** pode mudar o aço e os
-comprimentos de uma barra. Norma: Projeto NBR 8800:2024 (padrão), NBR 8800:2008 ou AISC 360-16.
+comprimentos de uma barra. Norma: NBR 8800:2025 (padrão), NBR 8800:2008 ou AISC 360-16.
 
 Para cada barra, com as combinações **ELU** escolhidas (as de serviço ficam de fora):
 

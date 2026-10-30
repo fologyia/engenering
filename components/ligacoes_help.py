@@ -334,7 +334,7 @@ AJUDA: dict[str, str] = {
     "menos_3mm": (
         "Ligue quando a garganta efetiva é a profundidade do chanfro menos 3 mm: chanfro em "
         "bisel de 45° com eletrodo revestido em qualquer posição, ou com arame (MIG/MAG, arame "
-        "tubular) na vertical ou sobrecabeça (Tabela 5 da 2008)."
+        "tubular) na vertical ou sobrecabeça (Tabela 6 da NBR 8800:2025; Tabela 5 da 2008)."
     ),
     "intermitente": (
         "Filete em segmentos, com intervalos. A norma só deixa usar quando a solda contínua de "

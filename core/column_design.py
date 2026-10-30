@@ -9,8 +9,8 @@ Seções: I/H (laminado ou soldado), U, tubo retangular, tubo circular, barra ma
 retangular, e seção genérica de catálogo. Normas (parâmetro ``norma``):
 
     "NBR8800_2008"     ABNT NBR 8800:2008 (vigente) — flambagem local pelo fator Q = Qs·Qa (Anexo F)
-    "NBR8800_2024"     Projeto de revisão ABNT NBR 8800 (maio/2024, Rev6) — área efetiva A_ef (5.3.4)
-    "AISC360_16_LRFD"  AISC 360-16, LRFD (φ_c = φ_b = 0,90) — mesmas equações do Projeto 2024
+    "NBR8800_2024"     ABNT NBR 8800:2025 — área efetiva A_ef (5.3.4)
+    "AISC360_16_LRFD"  AISC 360-16, LRFD (φ_c = φ_b = 0,90) — mesmas equações do NBR 8800:2025
 
 Critério de cliente: Anglo American AA-BR-DPST-DR-0001 (8.3 esbeltez limite; 8.8 espessuras mínimas;
 5.9 combinações pela NBR 8800 e/ou AISC 360-16).
@@ -219,7 +219,7 @@ def secao_I(
     Ix = (bf * d**3 - (bf - tw) * hw**3) / 12
     Iy = 2 * tf * bf**3 / 12 + hw * tw**3 / 12
     J = (2 * bf * tf**3 + hw * tw**3) / 3
-    Cw = Iy * (d - tf) ** 2 / 4  # Projeto NBR D.2.8 a)
+    Cw = Iy * (d - tf) ** 2 / 4  # NBR 8800:2025 D.2.8 a)
     kc = min(0.76, max(0.35, 4 / math.sqrt(h / tw)))
     grupo_mesa = 5 if soldado else 4
     el: list[dict[str, Any]] = [
@@ -275,7 +275,7 @@ def secao_U(
     b_, h_ = bf - 0.5 * tw, d - tf
     Cw = (
         tf * b_**3 * h_**2 / 12 * (3 * b_ * tf + 2 * h_ * tw) / (6 * b_ * tf + h_ * tw)
-    )  # Projeto NBR D.2.8 a)
+    )  # NBR 8800:2025 D.2.8 a)
     e0 = (
         3 * tf * b_**2 / (6 * b_ * tf + h_ * tw)
     )  # CC a partir do eixo da alma (lado oposto às mesas)
@@ -394,7 +394,7 @@ def fator_chi(lambda0: float) -> float:
 # FLAMBAGEM LOCAL
 # ---------------------------------------------------------------------------------------------
 def bt_lim(el: dict[str, Any], fy: float, E: float = E_ACO) -> float:
-    """(b/t)_lim — Projeto NBR Tabela 4 (= NBR 2008 Tabela F.1)."""
+    """(b/t)_lim — NBR 8800:2025 Tabela 4 (= NBR 2008 Tabela F.1)."""
     g = el["grupo"]
     if g == 5:
         return 0.64 * math.sqrt(E / (fy / el["kc"]))
@@ -478,7 +478,7 @@ def fator_Q_2008(sec: Secao, fy: float, chi_Q1: float, E: float = E_ACO) -> dict
 
 
 def bef_2024(el: dict[str, Any], fy: float, chi: float, E: float = E_ACO) -> float:
-    """Projeto NBR 8800:2024 5.3.4.2 (= AISC 360-16 E7.1): c1/c2 da Tabela 5."""
+    """NBR 8800:2025 5.3.4.2 (= AISC 360-16 E7.1): c1/c2 da Tabela 5."""
     b, t = el["b"], el["t"]
     lim = bt_lim(el, fy, E)
     if b / t <= lim / math.sqrt(chi):
@@ -549,7 +549,7 @@ def resist_compressao(
 
 
 # ---------------------------------------------------------------------------------------------
-# FLEXÃO (Projeto NBR Anexo D, Tabela D.1; NBR 2008 Anexo G, conferido; AISC F2/F3/F6/F11)
+# FLEXÃO (NBR 8800:2025 Anexo D, Tabela D.1; NBR 2008 Anexo G, conferido; AISC F2/F3/F6/F11)
 # ---------------------------------------------------------------------------------------------
 def _interp(Mpl: float, Mr: float, lam: float, lp: float, lr: float) -> float:
     return Mpl - (Mpl - Mr) * (lam - lp) / (lr - lp)
@@ -628,7 +628,7 @@ def momento_resistente(
             lp_a, lr_a = 3.76 * math.sqrt(E / fy), 5.70 * math.sqrt(E / fy)
             if hw > lr_a:
                 raise NotImplementedError(
-                    "Alma esbelta (h/t_w > 5,70√(E/f_y)): vigas de alma esbelta — Anexo E (2024) / H (2008)."
+                    "Alma esbelta (h/t_w > 5,70√(E/f_y)): vigas de alma esbelta — Anexo E (2025) / H (2008)."
                 )
             res["FLA"] = Mpl if hw <= lp_a else _interp(Mpl, fy * W, hw, lp_a, lr_a)
             # FLT
@@ -639,7 +639,7 @@ def momento_resistente(
             lp = 1.76 * math.sqrt(E / fy)
             Mr = (fy - sig_r) * W
             b1 = (fy - sig_r) * W / (E * J)
-            cb_r = Cb if nova else 1.0  # Projeto 2024: λr e M_cr com C_b (D.2.8 a)
+            cb_r = Cb if nova else 1.0  # NBR 8800:2025: λr e M_cr com C_b (D.2.8 a)
             lr = (
                 1.38
                 * cb_r

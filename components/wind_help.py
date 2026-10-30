@@ -307,7 +307,7 @@ AJUDA: dict[str, str] = {
     ),
     "p_limite": (
         "Limite do deslocamento horizontal do topo dos pilares como fração da altura (H/…). A "
-        "tabela de deslocamentos máximos da NBR 8800 (Tabela B.1 do Projeto 2024) dá **H/300** "
+        "tabela de deslocamentos máximos da NBR 8800 (Tabela B.1 da 2025) dá **H/300** "
         "para galpões e edificações de um pavimento e **H/400** para as de dois ou mais "
         "pavimentos; o vento entra com o valor característico, sem majorar. Em galpão com "
         "parede de alvenaria, limite também o deslocamento para que a fissura na base da parede "

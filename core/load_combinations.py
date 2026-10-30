@@ -1,4 +1,4 @@
-"""Combinações de ações por estados-limite (NBR 8681 e NBR 8800, 4.8.7 do Projeto de 2024).
+"""Combinações de ações por estados-limite (NBR 8681 e NBR 8800, 4.8.7 da 2025).
 
 Dois modos, sobre as mesmas ações:
 
@@ -130,7 +130,7 @@ def _variavel(
 
 # Tabelas 1 e 2 da NBR 8800 (combinações normais, especiais ou de construção e excepcionais), que
 # remetem à NBR 8681. As permanentes trazem o γ favorável (1,0); as variáveis, os fatores ψ. Duas
-# categorias vêm da revisão de 2024 — equipamentos com 1,25, junto com a estrutura de aço, e a
+# categorias vêm da NBR 8800:2025 — equipamentos com 1,25, junto com a estrutura de aço, e a
 # sobrecarga de cobertura na linha de bibliotecas e depósitos (ψ0 = 0,8) — e estão com a edição no
 # nome para a escolha ser consciente.
 CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
@@ -142,7 +142,7 @@ CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
         1.35,
         1.25,
         1.15,
-        "NBR 8800:2008 Tab. 1 (na de 2024 é 1,30: use a categoria de 2024)",
+        "NBR 8800:2008 Tab. 1 (na de 2025 é 1,30: use a categoria de 2025)",
     ),
     _permanente(
         "Elementos construtivos industrializados com adições in loco",
@@ -183,32 +183,32 @@ CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
         "NBR 6120 + NBR 8800 Tab. 2",
     ),
     _permanente(
-        "Peso próprio de equipamentos (Projeto NBR 8800:2024)",
+        "Peso próprio de equipamentos (NBR 8800:2025)",
         1.25,
         1.15,
         1.10,
-        "Projeto NBR 8800:2024, Tab. 1",
+        "NBR 8800:2025, Tab. 1",
     ),
     _permanente(
-        "Elementos construtivos industrializados (NBR 8800:2024: grades, pisos, guarda-corpos)",
+        "Elementos construtivos industrializados (NBR 8800:2025: grades, pisos, guarda-corpos)",
         1.30,
         1.20,
         1.15,
-        "NBR 8800:2024, Tab. 1 (na coluna das pré-moldadas; era 1,35 em 2008)",
+        "NBR 8800:2025, Tab. 1 (na coluna das pré-moldadas; era 1,35 em 2008)",
     ),
     _variavel(
-        "Temperatura gerada por equipamentos (NBR 8800:2024)",
+        "Temperatura gerada por equipamentos (NBR 8800:2025)",
         1.50,
         1.30,
         (0.6, 0.5, 0.3),
-        "NBR 8800:2024, Tab. 1 e 2",
+        "NBR 8800:2025, Tab. 1 e 2",
     ),
     _variavel(
-        "Sobrecarga de cobertura (Projeto NBR 8800:2024)",
+        "Sobrecarga de cobertura (NBR 8800:2025)",
         1.50,
         1.30,
         (0.8, 0.7, 0.6),
-        "Projeto NBR 8800:2024, Tab. 1 e 2",
+        "NBR 8800:2025, Tab. 1 e 2",
     ),
     _variavel("Vento (NBR 6123)", 1.40, 1.20, (0.6, 0.3, 0.0), "NBR 8800 Tab. 1 e 2"),
     _variavel("Variação de temperatura", 1.20, 1.00, (0.6, 0.5, 0.3), "NBR 8800 Tab. 1 e 2"),
@@ -231,21 +231,21 @@ CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
         1.50,
         1.30,
         (0.6, 0.4, 0.3),
-        "Projeto NBR 8800:2024, Tab. 2",
+        "NBR 8800:2025, Tab. 2",
     ),
     _variavel(
         "Pontes rolantes — vigas de rolamento",
         1.50,
         1.30,
         (1.0, 0.8, 0.5),
-        "Projeto NBR 8800:2024, Tab. 2",
+        "NBR 8800:2025, Tab. 2",
     ),
     _variavel(
         "Pontes rolantes — pilares e subestruturas das vigas de rolamento",
         1.50,
         1.30,
         (0.7, 0.6, 0.4),
-        "Projeto NBR 8800:2024, Tab. 2",
+        "NBR 8800:2025, Tab. 2",
     ),
     CategoriaAcao(
         "Ação excepcional (impacto, explosão, incêndio)",
@@ -263,8 +263,29 @@ CATEGORIAS_NBR8800: tuple[CategoriaAcao, ...] = (
 
 CATEGORIA_PERSONALIZADA = "— personalizada (γ e ψ informados) —"
 
+#: Rótulos das categorias gravados em projetos de antes de 30/10/2026, quando a NBR 8800:2025
+#: ainda aparecia com o nome do projeto de revisão de 2024: são lidos como os atuais.
+ROTULOS_ANTIGOS = {
+    "Peso próprio de equipamentos (Projeto NBR 8800:2024)": (
+        "Peso próprio de equipamentos (NBR 8800:2025)"
+    ),
+    "Elementos construtivos industrializados (NBR 8800:2024: grades, pisos, guarda-corpos)": (
+        "Elementos construtivos industrializados (NBR 8800:2025: grades, pisos, guarda-corpos)"
+    ),
+    "Temperatura gerada por equipamentos (NBR 8800:2024)": (
+        "Temperatura gerada por equipamentos (NBR 8800:2025)"
+    ),
+    "Sobrecarga de cobertura (Projeto NBR 8800:2024)": "Sobrecarga de cobertura (NBR 8800:2025)",
+}
+
+
+def rotulo_atual(rotulo: str) -> str:
+    """O rótulo da categoria com o nome atual da norma (um rótulo antigo vira o atual)."""
+    return ROTULOS_ANTIGOS.get(rotulo, rotulo)
+
 
 def categoria_nbr(rotulo: str) -> CategoriaAcao:
+    rotulo = rotulo_atual(rotulo)
     for categoria in CATEGORIAS_NBR8800:
         if categoria.rotulo == rotulo:
             return categoria

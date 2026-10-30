@@ -326,7 +326,7 @@ _NORMAS_COM_AREA_EFETIVA = ("NBR8800_2024", "AISC360_16_LRFD")
 # Rótulo da norma gravada no registro de Flambagem de colunas (``entradas["norma"]``).
 _ROTULOS_NORMA_FLAMBAGEM = {
     "NBR8800_2008": "NBR 8800:2008",
-    "NBR8800_2024": "Projeto NBR 8800:2024",
+    "NBR8800_2024": "ABNT NBR 8800:2025",
     "AISC360_16_LRFD": "AISC 360-16",
 }
 
@@ -484,7 +484,7 @@ def imagens_flambagem(
 
     from core.column_design import fator_chi
 
-    # NBR 2008: λ_0 = √(Q·A·f_y/N_e). Projeto 2024 e AISC: λ_0 = √(A·f_y/N_e) e a redução vem da
+    # NBR 2008: λ_0 = √(Q·A·f_y/N_e). NBR 8800:2025 e AISC: λ_0 = √(A·f_y/N_e) e a redução vem da
     # área efetiva (A_ef/A = fator_q do registro).
     q_em_lambda = 1.0 if entradas.get("norma") in _NORMAS_COM_AREA_EFETIVA else fator_q
 

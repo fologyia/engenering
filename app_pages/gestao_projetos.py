@@ -920,7 +920,7 @@ with abas[2], secao_protegida("aba 3"):
             placeholder="ABNT NBR 8800",
         )
         edicao_norma = n2.text_input(
-            "Edição", value=criterios["normativo"]["edicao"], placeholder="2024"
+            "Edição", value=criterios["normativo"]["edicao"], placeholder="2025"
         )
         criterio_aceitacao = st.text_input(
             "Critério de aceitação (descrição)",
@@ -1111,11 +1111,11 @@ with abas[4], secao_protegida("aba 5"):
                 [
                     {
                         "Código / título": "ABNT NBR 8800",
-                        "Edição": "2024",
+                        "Edição": "2025",
                         "Aplicação no projeto": "Dimensionamento das barras e das ligações da estrutura de suporte",
                         "Obrigatória": True,
                         "Conferida": True,
-                        "PDF / fonte": "normas_pdf/NBR8800-2024.pdf",
+                        "PDF / fonte": "normas_pdf/NBR8800-2025.pdf",
                     }
                 ]
             ),
@@ -1135,7 +1135,7 @@ with abas[4], secao_protegida("aba 5"):
             {
                 **criar_item(),
                 "codigo": "ABNT NBR 8800",
-                "edicao": "2024",
+                "edicao": "2025",
                 "escopo": "Dimensionamento das barras e das ligações da estrutura de suporte",
                 "obrigatoria": True,
                 "conferida": False,

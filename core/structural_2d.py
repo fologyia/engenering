@@ -84,12 +84,12 @@ class ResultadoEstrutural:
 
 
 # Limites da classificação quanto à sensibilidade a deslocamentos laterais
-# (NBR 8800, 4.9.4.1; 4.10.4 no Projeto de 2024): razão entre o deslocamento lateral de 2ª e de 1ª
+# (NBR 8800, 4.9.4.1; 4.10.4 na 2025): razão entre o deslocamento lateral de 2ª e de 1ª
 # ordem, calculados sem as imperfeições iniciais de material.
 LIMITE_PEQUENA_DESLOCABILIDADE = 1.10
 LIMITE_MEDIA_DESLOCABILIDADE = 1.40
 # Com as imperfeições de material consideradas (rigidez reduzida a 80 %, 4.10.7.1.2), a norma muda
-# os limites para 1,13 e 1,55 (4.10.4.5 do Projeto de 2024): é a mesma amplificação, medida na
+# os limites para 1,13 e 1,55 (4.10.4.5 da 2025): é a mesma amplificação, medida na
 # estrutura mais flexível.
 REDUCAO_DE_RIGIDEZ_DO_LIMITE_NORMATIVO = 0.80
 LIMITE_PEQUENA_DESLOCABILIDADE_RIGIDEZ_REDUZIDA = 1.13
@@ -634,7 +634,7 @@ def verificar_deslocamento_horizontal(
     """Deslocamento horizontal do topo contra ``H/divisor`` (Anexo C da NBR 8800:2008).
 
     Usa o deslocamento de segunda ordem quando ele existe. A tabela de deslocamentos máximos da
-    norma (Tabela B.1 do Projeto de 2024) dá ``H/300`` para galpões e edificações de um pavimento
+    norma (Tabela B.1 da 2025) dá ``H/300`` para galpões e edificações de um pavimento
     e ``H/400`` para edificações de dois ou mais pavimentos; ``H/400`` é também o que os
     critérios de cliente costumam pedir em plataformas. O critério do projeto prevalece.
     """

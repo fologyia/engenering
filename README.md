@@ -555,7 +555,7 @@ Estruturas de aço em todo o catálogo de perfis):
   flexo-torção das seções monossimétricas e a raiz da cúbica nas assimétricas; adota-se o menor
   `N_e` (NBR 5.3.5; AISC E3/E4);
 - **três normas**, escolhidas na página: **NBR 8800:2008** (`N_c,Rd = χ·Q·A_g·f_y/γ_a1`, fator `Q`
-  do Anexo F), **Projeto NBR 8800:2024** e **AISC 360-16** (área efetiva `A_ef` com `c₁` e `c₂` das
+  do Anexo F), **NBR 8800:2025** e **AISC 360-16** (área efetiva `A_ef` com `c₁` e `c₂` das
   Tabelas 4 e 5; `φ = 0,90` no AISC). *Comparar normas* mostra a mesma coluna nas três, e uma norma
   que bloqueia o cálculo aparece com o motivo;
 - seções: perfil do catálogo (com as propriedades da tabela), barra circular ou retangular maciça,
@@ -608,7 +608,7 @@ A página tem dois modos, escolhidos no topo:
 **Ligação estrutural de aço** — verificação pela norma (`core/bolted_connection.py`,
 conferido contra os exemplos do AISC Design Guide 29 e um caso real de planilha):
 
-- NBR 8800:2008, Projeto NBR 8800:2024, AISC 360 LRFD e
+- NBR 8800:2008, NBR 8800:2025, AISC 360 LRFD e
   RCSC 2004, com **Comparar normas** lado a lado;
 - parafusos ASTM A325, A490 e A307 (rosca no plano ou fora, n planos de corte), com
   **Testar todos** para achar o menor que atende;

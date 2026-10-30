@@ -76,7 +76,7 @@ cargas que vão para o modelo.
 | --- | --- | --- |
 | PP | Peso próprio da estrutura | peso próprio de estrutura metálica |
 | PE | Permanentes de elementos construtivos | elementos construtivos industrializados |
-| EQ | Equipamentos (vazios) | peso próprio de equipamentos (Projeto 2024) |
+| EQ | Equipamentos (vazios) | peso próprio de equipamentos (NBR 8800:2025) |
 | EO | Equipamentos em operação (conteúdo) | sobrecarga de uso — depósitos |
 | SC | Sobrecarga de uso | sobrecarga de uso |
 | W0, W90, W180, W270 | Vento nas quatro direções | vento — grupo exclusivo "Vento" |

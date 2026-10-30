@@ -31,7 +31,7 @@ LARGURA_UTIL_DXA = 9360
 REFERENCIAS = [
     "ABNT NBR 6123:2023 — Forças devidas ao vento em edificações (capítulo 8, 7.2.4; Figuras 12 e "
     "14; Tabelas 27 e 28).",
-    "ABNT NBR 8800 — Projeto de revisão (maio de 2024): 4.8.7 (combinações), Tabelas 1 e 2, 4.10.4 e "
+    "ABNT NBR 8800:2025: 4.8.7 (combinações), Tabelas 1 e 2, 4.10.4 e "
     "4.10.7 (deslocabilidade e forças nocionais), Anexo C (B₂), 5.2, 5.3.5.4, 6.2.5, 6.3 e 6.5.6, "
     "Anexo B (deslocamentos).",
     "ABNT NBR 8681:2003 — Ações e segurança nas estruturas.",

@@ -6,7 +6,7 @@ Uma única rodada calcula, para a mesma barra:
   monossimétrica e, para seção assimétrica, a menor raiz da equação cúbica — e adota o menor
   ``N_e`` (NBR 5.3.5; AISC E3/E4);
 * **flambagem local** pelo fator ``Q = Q_s·Q_a`` (NBR 8800:2008, Anexo F) ou pela área efetiva
-  ``A_ef`` (Projeto NBR 8800:2024 e AISC 360-16, Tabelas 4 e 5) e a resistência
+  ``A_ef`` (NBR 8800:2025 e AISC 360-16, Tabelas 4 e 5) e a resistência
   ``N_c,Rd = χ·Q·A_g·f_y/γ_a1`` (ou ``χ·A_ef·f_y·φ``);
 * **flexão** em x e em y — FLT, FLM e FLA, com o limite ``1,5·W·f_y`` — e os momentos
   amplificados por ``B_1`` com o comprimento real da barra no plano de flexão (K = 1);
@@ -53,7 +53,7 @@ from core.verificacao import (
 NORMAS = cd.NORMAS
 NORMAS_ROTULOS = {
     "NBR8800_2008": "ABNT NBR 8800:2008",
-    "NBR8800_2024": "Projeto NBR 8800:2024",
+    "NBR8800_2024": "ABNT NBR 8800:2025",
     "AISC360_16_LRFD": "AISC 360-16 (LRFD)",
 }
 GAMMA_A1 = 1.10  # escoamento, flambagem e instabilidade (NBR 8800 Tabela 3)
@@ -320,7 +320,7 @@ EXPLICACAO_FLT = {
         "depende de C_b (G.2.1 b)."
     ),
     "NBR8800_2024": (
-        "FLT no Projeto 2024: C_b entra em λ_r e no M_cr; a interpolação não é multiplicada por C_b."
+        "FLT na NBR 8800:2025: C_b entra em λ_r e no M_cr; a interpolação não é multiplicada por C_b."
     ),
     "AISC360_16_LRFD": (
         "FLT no AISC 360-16 (F2): C_b multiplica a interpolação e o M_cr, como na NBR 2008; este "
@@ -334,7 +334,7 @@ REFERENCIAS_NORMA = {
         "(interação) e Anexos D (B₁), E (K, N_e) e F (flambagem local)."
     ),
     "NBR8800_2024": (
-        "Projeto de revisão ABNT NBR 8800 (maio/2024, Rev6): 5.3.2–5.3.7, Tabelas 4 e 5, 5.4.2, "
+        "ABNT NBR 8800:2025: 5.3.2–5.3.7, Tabelas 4 e 5, 5.4.2, "
         "Anexo C (C.2.2, B₁), Anexo D (Tabela D.1, D.2.8) e 5.5.1.2."
     ),
     "AISC360_16_LRFD": "ANSI/AISC 360-16 — Capítulos E, F e H (LRFD) e AISC Design Guide 29.",
@@ -917,7 +917,7 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
     bloqueios: list[str] = []
     ref_norma = {
         "NBR8800_2008": "NBR 8800:2008",
-        "NBR8800_2024": "Projeto NBR 8800:2024",
+        "NBR8800_2024": "ABNT NBR 8800:2025",
         "AISC360_16_LRFD": "AISC 360-16",
     }[norma]
 
@@ -958,7 +958,7 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         """Critério Anglo (esbeltez e espessuras) e o aviso sobre K nas normas mais novas."""
         ref_esbeltez = {
             "NBR8800_2008": "Anglo 8.3; NBR 8800:2008 5.3.4.1",
-            "NBR8800_2024": "Anglo 8.3; Projeto NBR 5.3.7 (recomendação)",
+            "NBR8800_2024": "Anglo 8.3; NBR 8800:2025 5.3.7 (recomendação)",
             "AISC360_16_LRFD": "Anglo 8.3; AISC E2 (recomendação)",
         }[norma]
         anglo = cd.criterio_anglo(

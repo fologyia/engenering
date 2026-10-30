@@ -2104,8 +2104,10 @@ _PREMISSAS = {
         "solda intermitente); a flambagem da chapa livre fica com o projetista.",
         "Na mesa de um perfil, a força normal centrada na alma e k = t_f (sem o raio de "
         "concordância); o perfil do apoio como um todo fica para o cálculo dele.",
-        "Penetração parcial: garganta efetiva informada pela profundidade do chanfro (Tabela 5 "
-        "da 2008).",
+        "Penetração parcial: garganta efetiva informada pela profundidade do chanfro (Tabela 6 "
+        "da 2025; Tabela 5 da 2008).",
+        "Penetração total em junta em T com chapa de espera não retirada: metal da solda com "
+        "tenacidade Charpy de pelo menos 27 J, ensaiada a 4 °C ou menos (6.2.4.2).",
     ],
     BARRA_SOLDADA: [
         "Os filetes começam na ponta da barra; o cobrimento da superposição é o maior filete, "

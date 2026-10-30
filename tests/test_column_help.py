@@ -70,7 +70,7 @@ def test_textos_de_ajuda_sao_curtos_e_sem_marcas_de_rascunho():
         ("res_status", ("OK", "NÃO OK", "ALERTA")),
         ("res_q", ("Q_s·Q_a", "A_ef")),
         ("res_interacao", ("mesma", "N/N_Rd")),
-        ("norma", ("NBR 8800:2008", "Projeto NBR 8800:2024", "AISC 360-16")),
+        ("norma", ("NBR 8800:2008", "NBR 8800:2025", "AISC 360-16")),
         ("sec_2", ("Simplificação",)),
         ("sec_3", ("Simplificação", "análise direta")),
         ("sec_4", ("Simplificação", "B₁", "B₂")),

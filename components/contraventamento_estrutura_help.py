@@ -119,7 +119,7 @@ AJUDA: dict[str, str] = {
         "quando ela acompanha o vento."
     ),
     "cat_equip": (
-        "Categoria do peso dos equipamentos: o Projeto de 2024 junta equipamentos com a estrutura "
+        "Categoria do peso dos equipamentos: a NBR 8800:2025 junta equipamentos com a estrutura "
         "de aço (γ = 1,25); a edição de 2008 usava 1,50."
     ),
     "equipamentos": (

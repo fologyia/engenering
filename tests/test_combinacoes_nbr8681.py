@@ -1,6 +1,6 @@
 """Combinações de ações (NBR 8800 4.8.7 / NBR 8681): lista explícita e envoltória rigorosa.
 
-Valores conferidos à mão com as equações de 4.8.7.2 e 4.8.7.3 do Projeto NBR 8800:2024 e as
+Valores conferidos à mão com as equações de 4.8.7.2 e 4.8.7.3 do NBR 8800:2025 e as
 Tabelas 1 e 2.
 """
 

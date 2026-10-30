@@ -37,7 +37,7 @@ AJUDA: dict[str, str] = {
         "Liga as exigências do critério Anglo: flecha L/350 ou L/300 (Tabela 3), espessura mínima "
         "de 4,8 mm (8.8) e a capacidade mínima da ligação (9.1). Vem da base técnica."
     ),
-    "norma": "Norma da flexão (FLT, FLM e FLA): Projeto NBR 8800:2024, NBR 8800:2008 ou AISC.",
+    "norma": "Norma da flexão (FLT, FLM e FLA): NBR 8800:2025, NBR 8800:2008 ou AISC.",
     "res_status": "OK quando todas as verificações passam; NÃO OK se alguma reprova.",
     "res_aproveitamento": "A maior razão solicitante ÷ resistente (flexão, cortante ou flecha).",
     "res_momento": "Momento de cálculo no meio do vão e o momento resistente da viga.",

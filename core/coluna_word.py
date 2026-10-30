@@ -271,7 +271,7 @@ def gerar_word_coluna(
         )  # fmt: skip
         doc.paragrafo(
             "Esbelto = b/t acima do limite da Tabela 4. Na NBR 2008, Q_s vale para elemento livre "
-            "(AL) e b_ef para elemento apoiado (AA); no Projeto 2024 e no AISC todos usam b_ef.",
+            "(AL) e b_ef para elemento apoiado (AA); no NBR 8800:2025 e no AISC todos usam b_ef.",
             legenda=True,
         )
 
@@ -321,7 +321,7 @@ def gerar_word_coluna(
     doc.paragrafo("Referências", negrito=True)
     doc.itens(list(registro.get("referencias") or []))
     doc.paragrafo(
-        "Verificação de barra isolada pela NBR 8800:2008, pelo Projeto NBR 8800:2024 ou pelo "
+        "Verificação de barra isolada pela NBR 8800:2008, pela NBR 8800:2025 ou pelo "
         "AISC 360-16, com o critério da Anglo. Para a estrutura completa (pórtico, B₂, cargas "
         "nocionais, ligações e placa de base), use Estruturas de aço.",
         legenda=True,

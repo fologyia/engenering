@@ -159,12 +159,12 @@ No pórtico, a estabilidade global segue a NBR 8800, 4.9:
 - **classificação da deslocabilidade** por `Δ₂/Δ₁` (4.9.4.1): pequena
   (≤ 1,1), média (≤ 1,4) ou grande, com aviso pedindo a **rigidez reduzida a
   80 %** (4.9.7.1.2) na média deslocabilidade. Com a rigidez reduzida a 80 %
-  os limites passam a **1,13 e 1,55** (4.10.4.5 do Projeto de 2024), e a
+  os limites passam a **1,13 e 1,55** (4.10.4.5 da NBR 8800:2025), e a
   classificação os usa;
 - **coeficiente B₂** (4.9.4.6) com `R_s = 0,85`, para comparação com a
   amplificação exata;
 - **deslocamento horizontal** contra `H/400` ou outro divisor — a tabela de
-  deslocamentos máximos da norma (Anexo C em 2008; Tabela B.1 do Projeto de 2024)
+  deslocamentos máximos da norma (Anexo C em 2008; Tabela B.1 da 2025)
   dá `H/300` para galpões e edificações de um pavimento e `H/400` para as de
   dois ou mais pavimentos —, com a altura de referência informada ou a altura
   total dos nós.

@@ -1381,7 +1381,7 @@ def _paredes(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
         )
         st.caption(
             "Esbelto = b/t acima do limite da Tabela 4. Na NBR 2008, Q_s vale para elemento livre "
-            "(AL) e b_ef para elemento apoiado (AA); no Projeto 2024 e no AISC todos usam b_ef."
+            "(AL) e b_ef para elemento apoiado (AA); no NBR 8800:2025 e no AISC todos usam b_ef."
         )
 
 
@@ -1627,7 +1627,7 @@ def mostrar_flambagem_colunas() -> None:
             width="stretch",
         )
     st.caption(
-        "Verificação de barra isolada pela NBR 8800:2008, pelo Projeto NBR 8800:2024 ou pelo "
+        "Verificação de barra isolada pela NBR 8800:2008, pela NBR 8800:2025 ou pelo "
         "AISC 360-16, com o critério da Anglo. Para a estrutura completa (pórtico, B₂, cargas "
         "nocionais, ligações e placa de base), use Estruturas de aço."
     )

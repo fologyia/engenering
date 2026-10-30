@@ -1,6 +1,6 @@
 """Contraventamento de estruturas abertas: ações, combinações, B₂, forças nas diagonais e registro.
 
-As contas de referência seguem as equações da NBR 8800 (Projeto de 2024): 4.8.7.2 (combinações),
+As contas de referência seguem as equações da NBR 8800:2025: 4.8.7.2 (combinações),
 4.10.7.1 (força nocional de 0,3 %), Anexo C (B₂ com R_s = 1) e Tabela B.1 (deslocamentos).
 """
 

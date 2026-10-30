@@ -1,5 +1,5 @@
 """Contraventamento vertical de estruturas abertas — plataformas, mezaninos, pipe racks — pela
-NBR 8800 (Projeto de revisão de 2024), com o vento da NBR 6123:2023 (capítulo 8).
+NBR 8800:2025, com o vento da NBR 6123:2023 (capítulo 8).
 
 Da geometria e das cargas à diagonal verificada, sem precisar montar o modelo:
 
@@ -37,7 +37,7 @@ from core import load_combinations as comb
 from core import vento_estrutura_aberta as va
 from core.verificacao import Verificacao, status_geral
 
-REF = "NBR 8800:2024"
+REF = "NBR 8800:2025"
 FATOR_NOCIONAL = 0.003
 RIGIDEZ_REDUZIDA = 0.80
 LIMITE_PEQUENA = 1.10
@@ -56,7 +56,7 @@ TIPOS: dict[str, str] = {
 
 CATEGORIA_PP = "Peso próprio de estrutura metálica"
 CATEGORIA_PISO = "Elementos construtivos industrializados (grades, pisos, guarda-corpos)"
-CATEGORIA_EQUIPAMENTOS = "Peso próprio de equipamentos (Projeto NBR 8800:2024)"
+CATEGORIA_EQUIPAMENTOS = "Peso próprio de equipamentos (NBR 8800:2025)"
 CATEGORIA_SOBRECARGA = (
     "Sobrecarga de uso — predominância de equipamentos fixos ou concentração de pessoas"
 )
@@ -240,9 +240,9 @@ def validar_entrada(e: EntradaContraventamento) -> list[str]:
     ):
         if not (math.isfinite(valor) and valor >= 0):
             erros.append(f"{nome} não pode ser negativo.")
-    if c.categoria_sobrecarga not in CATEGORIAS_DE_SOBRECARGA:
+    if comb.rotulo_atual(c.categoria_sobrecarga) not in CATEGORIAS_DE_SOBRECARGA:
         erros.append(f"Categoria de sobrecarga desconhecida: {c.categoria_sobrecarga!r}.")
-    if c.categoria_equipamentos not in CATEGORIAS_DE_EQUIPAMENTO:
+    if comb.rotulo_atual(c.categoria_equipamentos) not in CATEGORIAS_DE_EQUIPAMENTO:
         erros.append(f"Categoria de equipamentos desconhecida: {c.categoria_equipamentos!r}.")
     nomes = set()
     for f in c.forcas_horizontais:

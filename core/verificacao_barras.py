@@ -716,8 +716,7 @@ def registro_das_barras(
             "Ruptura da seção líquida e ligações verificadas à parte; torção não verificada.",
         ],
         referencias=[
-            "ABNT NBR 8800 (Projeto de revisão 2024 e edição de 2008): 5.2, 5.3, 5.4, 5.5.1.2 e "
-            "Anexo D.",
+            "ABNT NBR 8800 (edições de 2025 e 2008): 5.2, 5.3, 5.4, 5.5.1.2 e Anexo D.",
         ],
         conclusao=destaque,
         responsavel=responsavel,

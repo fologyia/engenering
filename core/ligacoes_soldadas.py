@@ -155,7 +155,7 @@ class EntradaChapaNoApoio:
     comprimento_mm: float = 100.0  # da junta (disponível no modo dimensionar)
     perna_mm: float = 5.0
     profundidade_mm: float = 5.0  # penetração parcial: profundidade do chanfro S
-    descontar_3mm: bool = False  # Tabela 5 (2008): garganta = S − 3 mm
+    descontar_3mm: bool = False  # Tabela 6 (2025; Tabela 5 da 2008): garganta = S − 3 mm
     eletrodo: str = "E70"
     intermitente: bool = True
     segmento_mm: float = 40.0
@@ -456,7 +456,8 @@ def _verificar_chapa_no_apoio(
         cap_corte = 0.60 * fw * garganta * lados / c.w2 / 1000
         texto_g = (
             f"garganta efetiva {_n(garganta, 1)} mm "
-            f"({'S − 3 mm' if e.descontar_3mm else 'S'}, Tabela 5 da 2008), {lados} lado(s)"
+            f"({'S − 3 mm' if e.descontar_3mm else 'S'}, {sd.tabela(norma, 'garganta_efetiva')}), "
+            f"{lados} lado(s)"
         )
         if f_v == 0:
             cap, texto = (
@@ -670,11 +671,12 @@ def _compatibilidade(e: EntradaChapaNoApoio, n: float, v: float, t_apoio: float)
     passa: bool | None = True if True in testes else (None if None in testes else False)
     if norma == sd.NBR_2008:
         referencia = sd.ref(norma, sd.tabela(norma, "compatibilidade"))
-    else:  # a coluna de compatibilidade da Tabela 9 foi vista; os grupos da Tabela 8, ainda não
-        referencia = (
-            sd.ref(norma, f"{sd.tabela(norma, 'resistencia')}, compatibilidade", vista_na_2025=True)
-            + f"; {sd.ref(norma, sd.tabela(norma, 'compatibilidade'))}, grupos do aço pela "
-            "Tabela 7 da 2008"
+    else:  # a coluna de compatibilidade da Tabela 9 e os grupos da Tabela 8
+        referencia = sd.ref(
+            norma,
+            f"{sd.tabela(norma, 'resistencia')}, compatibilidade, e "
+            f"{sd.tabela(norma, 'compatibilidade')}",
+            vista_na_2025=True,
         )
     texto = f"{e.eletrodo} com {e.aco_chapa} e {e.aco_apoio}; {regra}"
     if passa is None:
@@ -969,10 +971,17 @@ def _parcelas(
     return longitudinal / 2, longitudinal / 2
 
 
-def _comprimento_necessario(forca: float, r_por_mm: float, perna: float) -> float:
-    """O menor L com r·β(L)·L ≥ F (β do filete longo, 6.2.2.2 d)."""
+def _comprimento_necessario(forca: float, r_por_mm: float, perna: float, norma: str) -> float:
+    """O menor L com r·β(L)·L ≥ F (β do filete longo, 6.2.2.2 d).
+
+    Na 2025 o comprimento efetivo para em 180·d_w (L > 300·d_w): quando nem isso basta, devolve
+    300·d_w — mais comprimento não ajuda — e a verificação mostra que não passa.
+    """
     if forca <= 0:
         return 0.0
+    teto = sd.EFETIVO_DO_FILETE_MUITO_LONGO * perna
+    if norma == sd.NBR_2025 and forca > r_por_mm * teto + 1e-9:
+        return sd.RAZAO_DO_FILETE_MUITO_LONGO * perna
     comprimento = forca / r_por_mm
     for _ in range(60):
         novo = forca / (r_por_mm * sd.beta_filete_longo(comprimento, perna))
@@ -992,8 +1001,8 @@ def _dimensionar_filetes(
     if e.peca == PECA_CHAPA and not e.solda_na_ponta:
         minimo = max(minimo, barra.largura)  # 6.2.6.2.3: cada filete ≥ distância entre eles
     passo = e.passo_arredondamento_mm if e.passo_arredondamento_mm > 0 else 5.0
-    a = sd.adotar(max(_comprimento_necessario(f1, r, e.perna_mm), minimo), passo)
-    b = sd.adotar(max(_comprimento_necessario(f2, r, e.perna_mm), minimo), passo)
+    a = sd.adotar(max(_comprimento_necessario(f1, r, e.perna_mm, e.norma), minimo), passo)
+    b = sd.adotar(max(_comprimento_necessario(f2, r, e.perna_mm, e.norma), minimo), passo)
     if e.cobrimento_mm <= 0:  # o cobrimento é o maior filete: 6.2.6.2.5
         cobrimento = sd.adotar(sd.cobrimento_minimo(min(barra.t, e.t_no_mm)), passo)
         if max(a, b) < cobrimento:
@@ -1086,7 +1095,8 @@ def calcular_barra_soldada(e: EntradaBarraSoldada) -> ResultadoLigacao:
     t_menor = min(barra.t, e.t_no_mm)
     largura = barra.largura
     # ------------------------------------------------------------------ filetes da barra
-    beta_a, beta_b = sd.beta_filete_longo(a, e.perna_mm), sd.beta_filete_longo(b, e.perna_mm)
+    ef_a = sd.comprimento_efetivo_longitudinal(a, e.perna_mm, norma)
+    ef_b = sd.comprimento_efetivo_longitudinal(b, e.perna_mm, norma)
     r_ponta = q * largura if e.solda_na_ponta else 0.0
     f1, f2 = _parcelas(e, barra, forcas.n_peca, r_ponta)
     texto_r = (
@@ -1107,16 +1117,16 @@ def calcular_barra_soldada(e: EntradaBarraSoldada) -> ResultadoLigacao:
         )
     else:
         ref_filete = sd.ref(norma, "6.5.5")
-    for nome, forca, comp, beta, texto in (
-        ("Filete do dorso (longitudinal)", f1, a, beta_a, texto_f),
-        ("Filete da borda (longitudinal)", f2, b, beta_b, texto_f2),
+    for nome, forca, comp, efetivo, texto in (
+        ("Filete do dorso (longitudinal)", f1, a, ef_a, texto_f),
+        ("Filete da borda (longitudinal)", f2, b, ef_b, texto_f2),
     ):
-        extra = f"; β = {_n(beta, 3)} (filete longo, 6.2.2.2 d)" if beta < 1 else ""
+        extra = sd.texto_comprimento_efetivo(comp, e.perna_mm, norma)
         linhas.append(
             Verificacao(
                 nome,
                 forca,
-                r * beta * comp,
+                r * efetivo,
                 "kN",
                 ref_filete,
                 f"{texto}{por_peca}; L = {_n(comp, 0)} mm × {texto_r}{extra}"
@@ -1129,7 +1139,7 @@ def calcular_barra_soldada(e: EntradaBarraSoldada) -> ResultadoLigacao:
             )
         )
     if r_ponta:
-        r_long = r * (beta_a * a + beta_b * b)
+        r_long = r * (ef_a + ef_b)
         linhas.append(
             Verificacao(
                 "Filetes da barra: grupo longitudinal + transversal",
@@ -1274,7 +1284,7 @@ def _barra_a_tracao(
             n,
             ct_ * barra.area * fu / c.a2 / 1000,
             "kN",
-            sd.ref(e.norma, "5.2.2 b)"),
+            sd.ref(e.norma, "5.2.2 b) e 5.2.5"),
             f"A_e·f_u/γ_a2, A_e = C_t·A_n, A_n = A_g (sem furos), C_t = {_n(ct_, 3)} — {texto_ct}",
         ),  # fmt: skip
     ]
@@ -1365,7 +1375,7 @@ def _chapa_de_no(
             resistencia = chi * area * fy / c.a1 / 1000
             texto = (
                 f"KL/r = {_n(esbeltez, 1)} > 25: χ·A_g·f_y/γ_a1 pelo item 5.3, λ₀ = {_n(lambda_0, 3)}, "
-                f"χ = {_n(chi, 3)}, Q = 1"
+                f"χ = {_n(chi, 3)}, " + ("A_ef = A_g (5.3.4)" if norma == sd.NBR_2025 else "Q = 1")
             )
             item = "6.5.4 b) e item 5.3"
         linhas.append(

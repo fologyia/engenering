@@ -6,7 +6,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 configurar_pagina("Flambagem de colunas", ":material/architecture:")
 cabecalho_pagina(
     "Flambagem de colunas",
-    "Barra inteira • NBR 8800:2008, Projeto NBR 8800:2024 e AISC 360-16 • N + Mx + My • critério Anglo",
+    "Barra inteira • NBR 8800:2008, NBR 8800:2025 e AISC 360-16 • N + Mx + My • critério Anglo",
     categoria="Análises",
     icone=":material/architecture:",
     cor="blue",

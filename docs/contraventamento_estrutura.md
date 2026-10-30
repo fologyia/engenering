@@ -93,7 +93,7 @@ SolidWorks exportou — para o que não é grade (duas colunas, escada, balanço
 | --- | --- | --- |
 | Estrutura | peso próprio de estrutura metálica (1,25 / 1,0) | gravidade acima do andar + nocional |
 | Piso | elementos construtivos industrializados (1,35 / 1,0) | idem |
-| Equipamentos | peso de equipamentos (Projeto 2024: 1,25; ou 1,50) | idem |
+| Equipamentos | peso de equipamentos (NBR 8800:2025: 1,25; ou 1,50 na 2008) | idem |
 | Sobrecarga | sobrecarga de uso (1,50; ψ por tipo de uso) | idem |
 | Vento +X, −X, +Y, −Y (grade) ou W0 … W315 (viga a viga) | vento (1,40; ψ 0,6 / 0,3 / 0) — **grupo exclusivo** | cortante do andar |
 | Forças horizontais | equipamentos em operação, truncada, ponte rolante ou excepcional | cortante dos andares abaixo do nível |
@@ -125,7 +125,7 @@ padrão, como a NBR 6123 6.1.4). Diagonais ativas por painel: X só tração 1 (
 desprezada); X tração e compressão 2; diagonal simples 1 (inverte); V invertido 2 (cada uma vence
 meio painel).
 
-## Verificação das diagonais (NBR 8800:2024)
+## Verificação das diagonais (NBR 8800:2025)
 
 * **Cantoneira simples ligada por uma aba**: tração com `A_n = A_g − (d_h + 2)·t` e
   `C_t = 1 − e_c/ℓ_c ≥ A_c/A_g` (5.2.4 e 5.2.5-c); compressão por 5.3.5.4 (`L_x1,eq = 72·r_x1 +

@@ -25,14 +25,19 @@ def linha(r: lg.ResultadoLigacao, inicio: str):
 # ------------------------------------------------------------------ referências da 2025
 @pytest.mark.parametrize(
     "texto",
-    ["6.1.5.2", "6.1.8.2", "6.2.5.2 c)", "6.5.3 a)", "6.5.3 e 6.5.4", "6.5.5 b)", "6.5.6"],
-)
+    [
+        "6.1.5.2", "6.1.8.2", "6.2.5.2 c)", "6.5.3 a)", "6.5.3 e 6.5.4", "6.5.5 b)", "6.5.6",
+        # parte 2 do texto (30/10/2026)
+        "6.2.2.2 d)", "6.2.6.2.2", "6.2.6.2.5", "5.2.2 a)", "5.3", "5.7.2.1", "6.5.4 b) e item 5.3",
+    ],
+)  # fmt: skip
 def test_itens_vistos_no_texto_da_2025_saem_sem_marca(texto):
     assert not sd.a_confirmar(sd.ref(sd.NBR_2025, texto))
 
 
 @pytest.mark.parametrize(
-    "texto", ["6.2.6.2.2", "6.2.6.2.5", "5.2.2 a)", "5.7.2.1", "6.5.4 b) e item 5.3", "Tabela 8"]
+    "texto",
+    ["5.2.5", "5.2.4 a)", "5.2.2 b) e 5.2.5", "Tabela 8"],  # 5.2.4 e 5.2.5 não vieram
 )
 def test_itens_ainda_nao_vistos_ficam_a_confirmar(texto):
     assert sd.a_confirmar(sd.ref(sd.NBR_2025, texto))
@@ -49,7 +54,7 @@ def test_deformacao_na_tensao_maxima_e_da_propria_nbr():
 def test_compatibilidade_aponta_a_tabela_8_da_2025():
     r = lg.calcular(ls.EntradaChapaNoApoio(tipo_solda=ls.TIPO_TOTAL, modo=ls.MODO_VERIFICAR))
     ref = linha(r, "Penetração total: metal da solda compatível").referencia
-    assert "Tabela 9, compatibilidade" in ref and "Tabela 8 (a confirmar)" in ref
+    assert ref == "NBR 8800:2025 Tabela 9, compatibilidade, e Tabela 8"  # Tabela 8 vista
     antiga = lg.calcular(
         ls.EntradaChapaNoApoio(tipo_solda=ls.TIPO_TOTAL, modo=ls.MODO_VERIFICAR, norma=sd.NBR_2008)
     )
@@ -228,3 +233,52 @@ def test_frase_e_referencias_pendentes():
 def test_figuras_com_legenda_saem_em_png(entrada):
     desenho = lg.figura(lg.calcular(entrada))
     assert desenho.png.startswith(b"\x89PNG") and desenho.largura_px >= 900
+
+
+# ------------------------------------------------------------------ parte 2 do texto da 2025
+def test_perna_maxima_na_borda_a_partir_de_6_3_mm_na_2025():
+    # 6.2.6.2.2: "inferior a 6,3 mm" na 2025 (6,35 na 2008)
+    assert sd.perna_maxima(6.3) == pytest.approx(4.8)
+    assert sd.perna_maxima(6.3, sd.NBR_2008) == 6.3
+    assert sd.perna_maxima(6.0) == 6.0 and sd.perna_maxima(6.35) == pytest.approx(4.85)
+    r = lg.calcular(lg.EntradaSolda(perna_mm=5.0, t1_mm=6.3, t2_mm=6.3))
+    assert linha(r, "Solda: perna máxima").status == "NÃO OK"
+    antiga = lg.calcular(lg.EntradaSolda(perna_mm=5.0, t1_mm=6.3, t2_mm=6.3, norma=sd.NBR_2008))
+    assert linha(antiga, "Solda: perna máxima").status == "OK"
+
+
+def test_filete_muito_longo_para_em_180_pernas_na_2025():
+    # 6.2.2.2 d) da 2025: L > 300·d_w → comprimento efetivo 180·d_w (a 2008 fica em 0,6·L)
+    assert sd.comprimento_efetivo_longitudinal(1200.0, 4.0, sd.NBR_2025) == pytest.approx(720.0)
+    assert sd.comprimento_efetivo_longitudinal(2000.0, 4.0, sd.NBR_2025) == pytest.approx(720.0)
+    assert sd.comprimento_efetivo_longitudinal(2000.0, 4.0, sd.NBR_2008) == pytest.approx(1200.0)
+    e = ls.EntradaBarraSoldada(
+        modo=ls.MODO_VERIFICAR, com_apoio=False, l_dorso_mm=2000.0, l_borda_mm=2000.0
+    )
+    r = lg.calcular(e)
+    dorso = linha(r, "Filete do dorso")
+    q = dorso.resistente / 720.0  # resistência por mm no comprimento efetivo
+    assert "180·d_w" in dorso.formula
+    antiga = linha(lg.calcular(replace(e, norma=sd.NBR_2008)), "Filete do dorso")
+    assert antiga.resistente == pytest.approx(q * 1200.0)
+
+
+def test_dimensionar_nao_passa_de_300_pernas_quando_nem_180_bastam():
+    e = ls.EntradaBarraSoldada(n_t_sd_kN=1500.0, com_apoio=False, perna_mm=4.0, t_no_mm=25.0)
+    r = lg.calcular(e)
+    assert r.grandezas["l_dorso_mm"] <= 300 * 4.0 + 5.0
+    assert linha(r, "Filete do dorso").status == "NÃO OK"
+
+
+def test_garganta_da_penetracao_parcial_pela_tabela_6_da_2025():
+    e = ls.EntradaChapaNoApoio(tipo_solda=ls.TIPO_PARCIAL, modo=ls.MODO_VERIFICAR)
+    nova = linha(lg.calcular(e), "Solda: metal da solda (penetração parcial)")
+    antiga = linha(
+        lg.calcular(replace(e, norma=sd.NBR_2008)), "Solda: metal da solda (penetração parcial)"
+    )
+    assert "Tabela 6" in nova.formula and "Tabela 5" in antiga.formula
+
+
+def test_ct_da_barra_continua_a_confirmar():
+    r = lg.calcular(ls.EntradaBarraSoldada())
+    assert lg.referencias_pendentes(r) == ["NBR 8800:2025 5.2.2 b) e 5.2.5 (a confirmar)"]

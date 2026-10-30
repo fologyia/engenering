@@ -193,7 +193,7 @@ def _registrar_padrao() -> None:
             icone=":material/architecture:",
             descricao=(
                 "Barra inteira comprimida ou flexocomprimida pela NBR 8800:2008, pelo Projeto "
-                "NBR 8800:2024 e pelo AISC 360-16: todos os modos, B_1, interação N + Mx + My "
+                "NBR 8800:2025 e pelo AISC 360-16: todos os modos, B_1, interação N + Mx + My "
                 "e critério Anglo."
             ),
             aliases=(

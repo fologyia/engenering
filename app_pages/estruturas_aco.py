@@ -58,7 +58,7 @@ st.session_state.setdefault("estrutura_comprimento_m", 3.0)
 
 st.warning(
     "Ferramenta de pré-dimensionamento. Os coeficientes normativos são "
-    "editáveis e devem ser conferidos na NBR 8800:2024, NBR 8681:2025 e "
+    "editáveis e devem ser conferidos na NBR 8800:2025, NBR 8681:2025 e "
     "demais normas aplicáveis. A responsabilidade do projeto permanece com "
     "profissional habilitado.",
     icon=":material/gavel:",
@@ -1315,9 +1315,7 @@ elif modulo == "3. Combinações":
             "Ações do mesmo grupo exclusivo não atuam juntas; na envoltória, variável favorável fica de fora.",
         ],
         alertas=["Os máximos independentes do envelope podem pertencer a combinações diferentes."],
-        referencias=[
-            "ABNT NBR 8800 (Projeto de revisão 2024), 4.8.7 e Tabelas 1 e 2 (γ_f e ψ), e ABNT NBR 8681:2003."
-        ],
+        referencias=["ABNT NBR 8800:2025, 4.8.7 e Tabelas 1 e 2 (γ_f e ψ), e ABNT NBR 8681:2003."],
         conclusao="Combinações geradas; selecionar casos simultâneos governantes para cada verificação.",
     )
     botao_registrar_calculo(
@@ -2650,7 +2648,7 @@ else:
                 key="estrutura_2d_divisor_h",
                 persist_state="session",
                 help=(
-                    "Tabela de deslocamentos máximos da NBR 8800 (Anexo C; Tabela B.1 do Projeto 2024): "
+                    "Tabela de deslocamentos máximos da NBR 8800 (Anexo C da 2008; Tabela B.1 da 2025): "
                     "H/300 em galpões e edificações de um pavimento, H/400 em edificações de "
                     "dois ou mais pavimentos. Critérios de cliente costumam pedir H/400 em plataformas."
                 ),
@@ -3067,6 +3065,6 @@ else:
         )
 
 st.caption(
-    "Referências de escopo: ABNT NBR 8800:2024, ABNT NBR 8681:2025, "
+    "Referências de escopo: ABNT NBR 8800:2025, ABNT NBR 8681:2025, "
     "ABNT NBR 6120:2019 e ABNT NBR 6123:2023."
 )
