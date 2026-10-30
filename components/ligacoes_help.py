@@ -369,6 +369,13 @@ AJUDA: dict[str, str] = {
         "Quando passa de 100 %, mostra quanto excede."
     ),
     "res_figura": "O desenho da ligação com as medidas informadas, para conferir antes de olhar os números.",
+    "giro_desenho": (
+        "Gira só o desenho, para ele ficar na posição em que a ligação está na sua estrutura — "
+        "por exemplo, com a força na diagonal, deitada ou para baixo. Valores positivos giram no "
+        "sentido anti-horário; negativos, no horário. As contas não mudam: as forças continuam "
+        "nas direções da própria ligação (no grupo de filetes, os eixos x e y da chapa aparecem "
+        "no canto do desenho). O memorial e o registro saem com o desenho girado do mesmo jeito."
+    ),
     "res_verificacoes": (
         "As verificações em grupos (solda, metal-base, barra, chapa de nó, limites), com o "
         "solicitante, o resistente ou limite, o aproveitamento e a situação. A fórmula com os "

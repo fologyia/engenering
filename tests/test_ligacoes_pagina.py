@@ -82,6 +82,18 @@ def test_cada_tipo_abre_com_ajuda_em_tudo_e_figura(banco_isolado, estado):
     assert len(t.get("image")) == 1
 
 
+def test_girar_o_desenho_so_nas_soldadas_e_sem_mudar_o_calculo(banco_isolado):
+    t = abrir(lg.BARRA_SOLDADA)
+    girar = [s for s in t.slider if s.label == "Girar o desenho"]
+    assert len(girar) == 1 and girar[0].value == 0 and girar[0].help == AJUDA["giro_desenho"]
+    antes = [(m.label, m.value) for m in t.metric]
+    girar[0].set_value(90).run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    assert [(m.label, m.value) for m in t.metric] == antes  # só o desenho gira
+    parafusada = abrir(lg.CHAPA_SIMPLES)
+    assert not [s for s in parafusada.slider if s.label == "Girar o desenho"]
+
+
 def test_parafusadas_e_soldadas_separadas(banco_isolado):
     t = abrir()
     assert t.segmented_control(key="lig_parte").value == "parafusadas"

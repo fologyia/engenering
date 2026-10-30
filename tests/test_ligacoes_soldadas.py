@@ -99,8 +99,12 @@ def test_exercicio_1_talas_sobrepostas_com_cobrimento_e_minimo_de_45_kN():
     assert linha(r, "Solda: cobrimento").solicitante == pytest.approx(47.625)
     curta = lg.calcular(replace(e, modo=ls.MODO_VERIFICAR, l_dorso_mm=40, l_borda_mm=40))
     assert linha(curta, "Solda: cobrimento").status == "NÃO OK"
-    assert linha(curta, "Solda: cada filete").status == "NÃO OK"
-    assert linha(curta, "Barra: ligação permitida").status == "NÃO OK"  # ℓ_w < b (5.2.5 d)
+    assert linha(curta, "Solda: cada filete").status == "NÃO OK"  # 6.2.6.2.3
+    # a 2008 proíbe ainda pelo C_t (ℓ_w < b, 5.2.5 d); a 2025 tem fórmula, sem proibição
+    antiga = lg.calcular(
+        replace(e, modo=ls.MODO_VERIFICAR, l_dorso_mm=40, l_borda_mm=40, norma=sd.NBR_2008)
+    )
+    assert linha(antiga, "Barra: ligação permitida").status == "NÃO OK"
 
 
 # ------------------------------------------------------------------ exercícios 2 e 3

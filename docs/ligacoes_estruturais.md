@@ -3,16 +3,20 @@
 Página **Ligações estruturais** (`app_pages/ligacoes_estruturais.py`), núcleo em `core/ligacoes.py`.
 Os esforços entram **de cálculo** (combinação ELU) — por exemplo a reação da viga de piso ou da
 longarina. Unidades: mm, MPa, kN e kN·m. Os coeficientes foram conferidos no texto da NBR 8800:2008
-e da NBR 14762:2010 e, nas soldas, no texto da NBR 8800:2025 que o usuário mandou (fotos de 29/10 e
-dois PDFs de 30/10/2026: 5.2.1 a 5.2.3, 5.3, 5.7, 6.1.5, 6.1.8, 6.1.9, 6.2.2 a 6.2.6 com as Tabelas 6,
-8, 9 e notas, 10 e 11, 6.5.3 a 6.5.6; a lista fica em `soldas.ITENS_VISTOS_NA_2025`). A 2025 (chave
+e da NBR 14762:2010 e, nas soldas, no texto da NBR 8800:2025 que o usuário mandou (fotos de 29/10,
+dois PDFs de 30/10/2026 e as fotos de 5.2.4 e 5.2.5 do mesmo dia: 5.2, 5.3, 5.7, 6.1.5, 6.1.8, 6.1.9,
+6.2.2 a 6.2.6 com as Tabelas 6, 8, 9 e notas, 10 e 11, 6.5.3 a 6.5.6; a lista fica em
+`soldas.ITENS_VISTOS_NA_2025`). A 2025 (chave
 interna `NBR8800_2024`) muda o coeficiente do corte do parafuso (0,45/0,56), via
 `core/bolted_connection.py`, e o número das tabelas das soldas (5 → 6, 7 → 8, 8 → 9, 9 → 10,
-10 → 11). Nas soldas a 2025 mudou duas regras: o filete longitudinal com L > 300·d_w tem comprimento
-efetivo 180·d_w (6.2.2.2 d; a 2008 só tem o β ≥ 0,6), e a perna máxima na borda é t − 1,5 mm a
-partir de 6,3 mm (6,35 na 2008). Item da 2025 ainda não visto no texto (5.2.4 e 5.2.5, o C_t) sai
-com "(a confirmar)" na referência (segue a 2008) e a página conta essas referências logo abaixo da
-frase do resultado. As ligações soldadas
+10 → 11). Nas soldas a 2025 mudou: o filete longitudinal com L > 300·d_w tem comprimento efetivo
+180·d_w (6.2.2.2 d; a 2008 só tem o β ≥ 0,6); a perna máxima na borda é t − 1,5 mm a partir de
+6,3 mm (6,35 na 2008); e o C_t (5.2.5) — na seção aberta sai o teto de 0,90 e a proibição abaixo de
+0,60, e o C_t não precisa ficar abaixo de A_c/A_g; na chapa ligada só por filetes longitudinais nas
+bordas, `C_t = 3ℓ_c²/(3ℓ_c² + b²)·(1 − t/(2ℓ_c))` com ℓ_c = média dos dois filetes, no lugar dos
+degraus 1,00/0,87/0,75 (o filete ≥ largura continua, em 6.2.6.2.3). Item da 2025 que não esteja na
+lista sai com "(a confirmar)" na referência e a página conta essas referências logo abaixo da frase
+do resultado (nas soldas não sobrou nenhum). As ligações soldadas
 estão em `core/soldas.py` (regras) e `core/ligacoes_soldadas.py` (barra na chapa de nó e chapa no
 apoio).
 
@@ -29,7 +33,16 @@ reaparece (`_valor` na página). O texto do escopo fica num expansor. Os resulta
 frase (`frase_do_resultado`), as métricas Status, Aproveitamento e Margem restante, a linha
 "Governa" em texto completo, o **Detalhamento adotado** (`detalhamento_adotado`: o que vai para o
 desenho, sem cortar o texto) e a figura, com chamadas numeradas e legenda (solda vermelha, chapas
-azuis, barra cinza, Whitmore tracejado, forças laranja). As verificações aparecem em tabelas de cinco
+azuis, barra cinza, Whitmore tracejado, forças laranja). Nas soldas, **Girar o desenho** (`lig_giro`,
+−180° a 180°, positivo anti-horário) gira só o desenho, para ficar como a ligação está na estrutura
+(força na diagonal, deitada); o cálculo não muda, o texto fica de pé e as cotas acompanham
+(`_Tela` com giro, `_rotulo`, `_cota_alinhada` em `core/ligacoes.py`). No grupo de filetes, girado,
+os eixos x e y da chapa aparecem no canto e a legenda diz as forças por eles. O giro vai para o
+registro (`figura_ligacao.giro_graus`) e para o memorial. No desenho da barra na chapa de nó
+(`_desenho_da_barra`), a chapa só encosta no apoio no trecho soldado, a ponta da barra fica afastada
+da face, o eixo da barra (traço e ponto) passa pelo centro geométrico a x̄ do dorso e sai do ponto de
+trabalho, com o arco de θ e a excentricidade cotada; a cantoneira mostra a aba saliente no dorso e a
+barra termina numa linha de interrupção. As verificações aparecem em tabelas de cinco
 colunas por grupo (`verificacoes_por_grupo`: solda, metal-base, barra, chapa de nó, solda no apoio,
 limites) e, num expansor, a fórmula com os números e o item da norma de cada linha
 (`components/verification_table.py`, `mostrar_verificacoes_resumidas`).
@@ -129,7 +142,7 @@ nó, com filetes longitudinais no dorso e na borda e, se pedido, transversal na 
 | Filetes do dorso e da borda | balanceados: F₁ = N·(C − x̄)/C − F₃/2, F₂ = N·x̄/C − F₃/2 (6.1.8.1); ou iguais (6.1.8.2, cantoneira sem fadiga); por mm, o menor entre o metal da solda, o metal-base da barra e o da chapa de nó (dividido pelas peças nas mesmas linhas); β do filete longo e, na 2025, comprimento efetivo de 180·d_w quando L > 300·d_w | 6.2.5.1, 6.5.5, 6.2.2.2 d) |
 | Filete na ponta | F₃ = q·C (primeira expressão de 6.2.5.2 c); grupo: o maior entre F_wl + F_wt e 0,85·F_wl + 1,5·F_wt | 6.2.5.2 c) |
 | Perna, comprimento, cobrimento | Tabela 11; t − 1,5 mm na borda; ≥ 4·perna e 40 mm; cobrimento ≥ 5·t e 25 mm; tala só com filetes longitudinais: cada filete ≥ largura | 6.2.6.2 |
-| Barra à tração | A_g·f_y/γ_a1; C_t·A_g·f_u/γ_a2, cantoneira C_t = 1 − x̄/ℓ_c (ℓ_c = média dos filetes) ∈ [0,60; 0,90]; tala 1,00/0,87/0,75 por ℓ_w/b | 5.2.2, 5.2.5 |
+| Barra à tração | A_g·f_y/γ_a1; C_t·A_n·f_u/γ_a2 com A_n = A_g (sem furos, 5.2.4.2); cantoneira C_t = 1 − x̄/ℓ_c (ℓ_c = média dos filetes): na 2025 ≥ A_c/A_g (aba ligada), na 2008 ≤ 0,90 e < 0,60 proibido; tala só com filetes longitudinais: na 2025 3ℓ_c²/(3ℓ_c² + b²)·(1 − t/(2ℓ_c)), na 2008 1,00/0,87/0,75 por ℓ_w/b | 5.2.2, 5.2.4.2, 5.2.5 |
 | Chapa de nó | seção de Whitmore b_W = C + (L_dorso + L_borda)·tg 30° (limitada à largura da chapa): tração (escoamento e ruptura), compressão (KL/r ≤ 25 ou χ da 5.3, r = t/√12, K informado); colapso por rasgamento com A_gv = t·(L_dorso + L_borda), A_nt = t·C | 6.5.3, 6.5.4, 6.5.6 |
 | Chapa de nó no apoio | o caso 5 com a força da barra: H = N·sen θ normal ao apoio, V = N·cos θ ao longo da solda, M = H·e | — |
 

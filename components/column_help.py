@@ -207,6 +207,27 @@ AJUDA: dict[str, str] = {
     "m_rx": "Raio de giração em torno de x: √(I_x/A).",
     "m_ry": "Raio de giração em torno de y: √(I_y/A).",
     "m_J": "Constante de torção de Saint-Venant.",
+    "sec_desenhos": (
+        "Dois desenhos para conferir o que foi informado. A seção, em escala: o aço em corte, "
+        "os eixos x e y pelo centro geométrico G, o centro de cisalhamento (CC) quando fica fora "
+        "de G (U, C e T), as medidas e a elipse de giração (o lado mais estreito mostra para "
+        "onde a coluna flamba por flexão mais fácil). E a coluna em pé, em duas vistas: a "
+        "frontal (plano x–z, flexão em torno de y) e a lateral (plano y–z, flexão em torno de "
+        "x), cada uma com o apoio, o K e os travamentos do seu plano e, quando incluída, a "
+        "mão-francesa no plano em que ela age. Em cima de cada vista aparece a seção e a seta "
+        "de onde se olha. O Word desta coluna leva os dois desenhos."
+    ),
+    "ver_desenhos": (
+        "Mostra ou esconde os desenhos da seção e da coluna em pé. Fechados, eles não ocupam a "
+        "tela; o cálculo e o Word são os mesmos."
+    ),
+    "giro_secao": (
+        "Gira só o desenho da seção, para ele ficar na posição em que o perfil está montado na "
+        "sua estrutura — por exemplo, com a alma deitada ou o perfil inclinado. Valores "
+        "positivos giram no sentido anti-horário; negativos, no horário. As contas não mudam: os "
+        "eixos x e y giram junto com o perfil e continuam sendo os eixos dele. O Word desta "
+        "coluna sai com o desenho girado do mesmo jeito."
+    ),
     # ------------------------------------------------------------------ 3. comprimentos e apoio
     "L_total": (
         "Altura real da coluna, de apoio a apoio. É o comprimento usado no efeito local da "

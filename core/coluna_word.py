@@ -21,6 +21,8 @@ from typing import Any
 from core import column_buckling as cb
 from core import memorial_verificacoes as mv
 from core.column_design import ESPESSURA_MIN_ANGLO
+from core.desenho_da_coluna import ColunaEmPe, figura_da_coluna
+from core.desenho_da_secao import figura_da_secao
 from core.verificacao import formatar_percentual
 from core.word_documento import DocumentoWord, numero_pt
 
@@ -153,9 +155,13 @@ def gerar_word_coluna(
     contexto: Mapping[str, Any] | None = None,
     equacoes_de_carga: Sequence[str] = (),
     projeto: Mapping[str, Any] | None = None,
+    giro_da_secao: float = 0.0,
+    coluna_em_pe: ColunaEmPe | None = None,
 ) -> bytes:
     """O .docx com todas as informações da página (``contexto`` e ``equacoes_de_carga`` como no
-    registro; ``projeto`` dá o nome e o código do projeto ativo, quando houver)."""
+    registro; ``projeto`` dá o nome e o código do projeto ativo, quando houver; o desenho da
+    seção sai com ``giro_da_secao``, o mesmo giro da tela; ``coluna_em_pe`` acrescenta as vistas
+    da coluna em pé, com os apoios e a mão-francesa)."""
     registro = _registro(entrada, resultado, contexto, equacoes_de_carga)
     norma = cb.NORMAS_ROTULOS[entrada.norma]
     comp = resultado.compressao
@@ -186,6 +192,11 @@ def gerar_word_coluna(
     doc.tabela(["Dado", "Valor"], dados_de_entrada(registro), [140, 133], fonte=8.5)
     doc.paragrafo("Propriedades da seção", negrito=True)
     doc.tabela(["Propriedade", "Valor", "Un."], propriedades_da_secao(entrada), [120, 100, 53])
+    desenho = figura_da_secao(entrada.secao, giro_graus=giro_da_secao)
+    doc.figura(desenho.png, desenho.legenda, 170)
+    if coluna_em_pe is not None:
+        vistas = figura_da_coluna(coluna_em_pe)
+        doc.figura(vistas.png, vistas.legenda, 170)
     if equacoes_de_carga:
         doc.paragrafo("Ações de cálculo", negrito=True)
         doc.itens(list(equacoes_de_carga))

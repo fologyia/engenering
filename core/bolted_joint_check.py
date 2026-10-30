@@ -662,9 +662,29 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
                         "kN",
                         "NBR 5.2.2 e 5.2.5 / AISC D2",
                         f"min(A_g·f_y/γ_a1; C_t·A_n·f_u/γ_a2); A_n = {A_n:.0f} mm², "
-                        f"C_t = 1 − {entrada.e_c:g}/{l_c:g} = {C_t:.3f}",
+                        f"C_t = 1 − {entrada.e_c:g}/{l_c:g} = {C_t:.3f}"
+                        + (
+                            " (limitado a 0,90, 5.2.5 c da 2008)"
+                            if C_t < 1 - entrada.e_c / l_c - 1e-9
+                            else ""
+                        ),
                     )
                 )
+                if norma == "NBR8800_2008" and 1 - entrada.e_c / l_c < 0.60 - 1e-9:
+                    linhas.append(
+                        Verificacao(
+                            "Tração da peça: ligação permitida pelo C_t",
+                            1 - entrada.e_c / l_c,
+                            0.60,
+                            "—",
+                            "NBR 5.2.5 c",
+                            f"C_t = 1 − e_c/ℓ_c = {1 - entrada.e_c / l_c:.3f} < 0,60: a NBR "
+                            "8800:2008 não permite a ligação (aumente ℓ_c, a distância entre o "
+                            "primeiro e o último parafuso).",
+                            "NÃO OK",
+                            tipo="limite",
+                        )
+                    )
         A_gv, A_nv, A_nt = bc.areas_bloco_central(
             entrada.e, entrada.s, entrada.g, n_lin, n_col, t, d_h, norma, d_h_tracao=d_hy
         )

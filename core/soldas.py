@@ -6,18 +6,21 @@ Regras puras, sem Streamlit, usadas pelas ligações soldadas (:mod:`core.ligaco
 Fontes:
 
 * **NBR 8800:2025** (chave interna ``NBR8800_2024``) — vistos no texto que o usuário mandou
-  (fotos de 29/10/2026 e os PDFs de 30/10/2026): 5.2.1 a 5.2.3 (tração), 5.3 (compressão), 5.7
-  (forças localizadas), 6.1.5, 6.1.8, 6.1.9, 6.2.2 (áreas efetivas, β e o teto de 180·d_w do
-  filete longo, Tabela 6 da garganta da penetração parcial), 6.2.3, 6.2.4, Tabela 8
-  (compatibilidade), Tabela 9 com as notas a–j, 6.2.5, 6.2.6 (limites, Tabelas 10 e 11) e 6.5.3 a
-  6.5.6. O que ainda não foi visto (5.2.4 e 5.2.5, o C_t) segue o texto da 2008 e vai marcado
+  (fotos de 29/10/2026, os PDFs de 30/10/2026 e as fotos de 5.2.4 e 5.2.5 do mesmo dia): 5.2
+  (tração, com a área líquida e o C_t), 5.3 (compressão), 5.7 (forças localizadas), 6.1.5, 6.1.8,
+  6.1.9, 6.2.2 (áreas efetivas, β e o teto de 180·d_w do filete longo, Tabela 6 da garganta da
+  penetração parcial), 6.2.3, 6.2.4, Tabela 8 (compatibilidade), Tabela 9 com as notas a–j, 6.2.5,
+  6.2.6 (limites, Tabelas 10 e 11) e 6.5.3 a 6.5.6. Um item que não esteja nessa lista vai marcado
   "a confirmar" na referência.
 * **NBR 8800:2008** — texto conferido: 4.8.2 (Tabela 3), 5.2.5, 5.7.2 a 5.7.4, 6.1.5, 6.1.8,
   6.2.2, 6.2.5, 6.2.6, 6.5 e Tabelas 5, 7, 8, 9, 10 e A.4.
 
-Na 2025 as tabelas mudaram de número (5 → 6, 7 → 8, 8 → 9, 9 → 10, 10 → 11). Duas regras mudaram:
-o comprimento efetivo do filete longo para em 180·d_w quando L > 300·d_w (6.2.2.2 d) e a perna
-máxima na borda passa a t − 1,5 mm a partir de 6,3 mm (6,35 na 2008). Os limites 6,3 (6,35 na 2008),
+Na 2025 as tabelas mudaram de número (5 → 6, 7 → 8, 8 → 9, 9 → 10, 10 → 11). Regras que mudaram:
+o comprimento efetivo do filete longo para em 180·d_w quando L > 300·d_w (6.2.2.2 d); a perna
+máxima na borda passa a t − 1,5 mm a partir de 6,3 mm (6,35 na 2008); e o C_t (5.2.5) da seção
+aberta perde os limites de 0,90 e 0,60 e não precisa ficar abaixo de A_c/A_g, e o da chapa ligada
+só por filetes longitudinais passa a 3ℓ_c²/(3ℓ_c² + b²)·(1 − t/(2ℓ_c)) no lugar dos degraus 1,00,
+0,87 e 0,75. Os limites 6,3 (6,35 na 2008),
 12,5 e 19 mm das faixas de espessura são as chapas comerciais de 1/4", 1/2" e 3/4": a chapa de
 1/2" (12,7 mm) fica na faixa "até 12,5", como no AISC 360 (Tabela J2.4) e no critério Anglo.
 """
@@ -93,7 +96,7 @@ def norma_curta(norma: str) -> str:
 #: Itens da NBR 8800:2025 já vistos no texto (um item vale com os subitens: "6.5.5" cobre
 #: "6.5.5 a)"). Confirmar mais um item é só acrescentá-lo aqui.
 ITENS_VISTOS_NA_2025 = (
-    "5.2.1", "5.2.2", "5.2.3", "5.3", "5.7",
+    "5.2", "5.3", "5.7",
     "6.1.5", "6.1.8", "6.1.9", "6.2.2", "6.2.3", "6.2.4", "6.2.5", "6.2.6",
     "6.5.3", "6.5.4", "6.5.5", "6.5.6",
 )  # fmt: skip

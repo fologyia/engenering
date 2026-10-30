@@ -1310,9 +1310,22 @@ detalhamento = lg.detalhamento_adotado(resultado)
 if detalhamento:
     st.subheader("Detalhamento adotado", help=AJUDA["res_adotado"])
     st.table(pd.DataFrame(detalhamento, columns=["Item", "Valor"]).set_index("Item"))
+giro = 0  # o giro do desenho (só o das soldas gira); vai também para o memorial
 with secao_protegida("Figura da ligação"):
     st.subheader("A ligação", help=AJUDA["res_figura"])
-    desenho = lg.figura(resultado)
+    if resultado.tipo in lg.TIPOS_QUE_GIRAM:
+        giro = st.slider(
+            "Girar o desenho",
+            min_value=-180,
+            max_value=180,
+            value=0,
+            step=5,
+            format="%d°",
+            key="lig_giro",
+            persist_state="session",
+            help=AJUDA["giro_desenho"],
+        )
+    desenho = lg.figura(resultado, giro_graus=giro)
     st.image(desenho.png, caption=desenho.legenda, width="stretch")
 st.subheader("Verificações", help=AJUDA["res_verificacoes"])
 mostrar_verificacoes_resumidas(lg.verificacoes_por_grupo(resultado), nome=lg.nome_no_grupo)
@@ -1331,7 +1344,7 @@ with st.container(border=True), secao_protegida("Memorial desta ligação"):
     botoes = st.columns(2)
     botoes[0].download_button(
         "Baixar o memorial (Word)",
-        data=lambda: lg.memorial_da_ligacao(resultado, projeto=projeto_ativo),
+        data=lambda: lg.memorial_da_ligacao(resultado, projeto=projeto_ativo, giro_graus=giro),
         file_name=f"memorial_ligacao_{resultado.tipo}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         icon=":material/description:",
@@ -1342,7 +1355,9 @@ with st.container(border=True), secao_protegida("Memorial desta ligação"):
     )
     botoes[1].download_button(
         "Baixar o memorial (PDF)",
-        data=lambda: lg.memorial_da_ligacao(resultado, projeto=projeto_ativo, formato="pdf"),
+        data=lambda: lg.memorial_da_ligacao(
+            resultado, projeto=projeto_ativo, formato="pdf", giro_graus=giro
+        ),
         file_name=f"memorial_ligacao_{resultado.tipo}.pdf",
         mime="application/pdf",
         icon=":material/picture_as_pdf:",
@@ -1354,7 +1369,7 @@ with st.container(border=True), secao_protegida("Memorial desta ligação"):
 with st.container(border=True), secao_protegida("Registrar no projeto"):
     st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
     botao_registrar_calculo(
-        lg.registro_ligacao(resultado),
+        lg.registro_ligacao(resultado, giro_graus=giro),
         key="registrar_ligacao",
         rotulo="Registrar a ligação no projeto ativo",
     )

@@ -35,6 +35,17 @@ from core import nbr8800 as nb
 from core import section_catalog as sc
 from core import soldas as sd
 from core.beam_charts import ImagemDiagrama, _fonte
+from core.desenho_girado import Tela as _Tela
+from core.desenho_girado import angulo_do_giro, texto_do_giro
+from core.desenho_girado import arco_entre as _arco_entre
+from core.desenho_girado import cota_alinhada as _cota_alinhada
+from core.desenho_girado import fora_de as _fora_de
+from core.desenho_girado import legenda as _legenda
+from core.desenho_girado import mais as _mais
+from core.desenho_girado import rotulo as _rotulo
+from core.desenho_girado import seta as _seta_px
+from core.desenho_girado import tracejado as _tracejado
+from core.desenho_girado import traco_ponto as _traco_ponto
 from core.ligacoes import (
     _APOIO,
     _BARRA,
@@ -51,10 +62,7 @@ from core.ligacoes import (
     LigacaoInvalida,
     ResultadoLigacao,
     _chamada,
-    _cota_vertical,
-    _legenda,
     _png,
-    _tracejado,
 )
 from core.verificacao import Verificacao
 
@@ -861,6 +869,7 @@ class _Barra:
     t: float
     area: float
     x_barra: float  # do dorso ao centro geométrico (e_c de 5.2.5)
+    area_conectada: float  # A_c de 5.2.5: a aba ligada da cantoneira; a chapa inteira
 
 
 def _barra(e: EntradaBarraSoldada) -> _Barra:
@@ -869,9 +878,12 @@ def _barra(e: EntradaBarraSoldada) -> _Barra:
             cant = ct.obter_cantoneira(e.cantoneira)
         except (KeyError, ValueError):
             raise LigacaoInvalida(f"Cantoneira desconhecida: {e.cantoneira!r}.") from None
-        return _Barra(cant.nome, cant.b_mm, cant.t_mm, cant.area_mm2, cant.x_barra_mm)
+        return _Barra(
+            cant.nome, cant.b_mm, cant.t_mm, cant.area_mm2, cant.x_barra_mm, cant.area_aba_mm2
+        )
     nome = f"Chapa {_n(e.largura_mm, 1)} × {_n(e.t_peca_mm, 2)} mm"
-    return _Barra(nome, e.largura_mm, e.t_peca_mm, e.largura_mm * e.t_peca_mm, e.largura_mm / 2)
+    area = e.largura_mm * e.t_peca_mm
+    return _Barra(nome, e.largura_mm, e.t_peca_mm, area, e.largura_mm / 2, area)
 
 
 def _validar_barra(e: EntradaBarraSoldada) -> None:
@@ -1233,7 +1245,12 @@ def calcular_barra_soldada(e: EntradaBarraSoldada) -> ResultadoLigacao:
 def _coeficiente_ct(
     e: EntradaBarraSoldada, barra: _Barra, a: float, b: float
 ) -> tuple[float, str, bool | None]:
-    """C_t (5.2.5) e o texto; o terceiro valor diz se a ligação é permitida (C_t ≥ 0,60, l ≥ b)."""
+    """C_t (5.2.5) e o texto; o terceiro valor diz se a ligação é permitida.
+
+    Só a 2008 proíbe ligação por ela: C_t < 0,60 na seção aberta e ℓ_w < b na chapa. Na 2025 a
+    seção aberta não tem limite (o C_t não precisa ficar abaixo de A_c/A_g) e a chapa tem fórmula
+    própria; o ℓ_w ≥ b da chapa continua, mas em 6.2.6.2.3 (linha dos limites dos filetes).
+    """
     if e.peca == PECA_CHAPA:
         if e.solda_na_ponta:
             return (
@@ -1241,7 +1258,16 @@ def _coeficiente_ct(
                 "5.2.5 a): força transmitida a toda a chapa (filetes nas bordas e na ponta)",
                 True,
             )
-        lw, largura = min(a, b), barra.largura
+        largura = barra.largura
+        if e.norma == sd.NBR_2025:
+            lc = (a + b) / 2
+            valor = 3 * lc**2 / (3 * lc**2 + largura**2) * (1 - barra.t / (2 * lc))
+            texto = (
+                f"5.2.5 d): 3ℓ_c²/(3ℓ_c² + b²)·(1 − t/(2ℓ_c)), ℓ_c = (ℓ_w1 + ℓ_w2)/2 = "
+                f"{_n(lc, 1)} mm, b = {_n(largura, 1)} mm, t = {_n(barra.t, 2)} mm"
+            )
+            return valor, texto, True
+        lw = min(a, b)
         if lw >= 2 * largura:
             return 1.0, f"5.2.5 d): ℓ_w = {_n(lw, 0)} ≥ 2b", True
         if lw >= 1.5 * largura:
@@ -1251,12 +1277,15 @@ def _coeficiente_ct(
         return 0.75, f"5.2.5 d): ℓ_w = {_n(lw, 0)} < b = {_n(largura, 0)} mm não é permitido", False
     lc = (a + b) / 2
     bruto = 1 - barra.x_barra / lc
-    valor = min(bruto, 0.90)
     texto = (
         f"5.2.5 c): 1 − e_c/ℓ_c, e_c = x̄ = {_n(barra.x_barra, 2)} mm, ℓ_c = média dos filetes "
-        f"longitudinais = {_n(lc, 1)} mm (a favor da segurança); limite 0,90"
+        f"longitudinais = {_n(lc, 1)} mm (a favor da segurança)"
     )
-    return valor, texto, bruto >= 0.60 - 1e-9
+    if e.norma == sd.NBR_2025:
+        piso = barra.area_conectada / barra.area
+        texto += f"; não menor que A_c/A_g = {_n(piso, 3)} (A_c: a aba ligada)"
+        return min(1.0, max(bruto, piso)), texto, True
+    return min(bruto, 0.90), texto + "; limite 0,90", bruto >= 0.60 - 1e-9
 
 
 def _barra_a_tracao(
@@ -1284,8 +1313,9 @@ def _barra_a_tracao(
             n,
             ct_ * barra.area * fu / c.a2 / 1000,
             "kN",
-            sd.ref(e.norma, "5.2.2 b) e 5.2.5"),
-            f"A_e·f_u/γ_a2, A_e = C_t·A_n, A_n = A_g (sem furos), C_t = {_n(ct_, 3)} — {texto_ct}",
+            sd.ref(e.norma, "5.2.2 b), 5.2.4.2 e 5.2.5"),
+            f"A_e·f_u/γ_a2, A_e = C_t·A_n, A_n = A_g (sem furos, 5.2.4.2), C_t = {_n(ct_, 3)} — "
+            f"{texto_ct}",
         ),  # fmt: skip
     ]
     if permitido is not True:
@@ -1294,9 +1324,9 @@ def _barra_a_tracao(
                 "Barra: ligação permitida pelo C_t",
                 permitido,
                 ref_ct,
-                "C_t < 0,60 não é permitido (5.2.5 c): alongue os filetes"
+                "C_t < 0,60 não é permitido (5.2.5 c da 2008): alongue os filetes"
                 if e.peca == PECA_CANTONEIRA
-                else "cada filete precisa ter pelo menos a largura da chapa",
+                else "cada filete precisa ter pelo menos a largura da chapa (5.2.5 d da 2008)",
             )
         )
     return linhas
@@ -1394,17 +1424,7 @@ def _chapa_de_no(
 # =============================================================================================
 # Figuras
 # =============================================================================================
-def _seta(dr: ImageDraw.ImageDraw, x1: float, y1: float, x2: float, y2: float, cor: str) -> None:
-    """Seta de (x1, y1) para (x2, y2), em px."""
-    dr.line([(x1, y1), (x2, y2)], fill=cor, width=3 * _ESC)
-    ang = math.atan2(y2 - y1, x2 - x1)
-    ponta = 12 * _ESC
-    for lado in (-0.45, 0.45):
-        dr.line(
-            [(x2, y2), (x2 - ponta * math.cos(ang + lado), y2 - ponta * math.sin(ang + lado))],
-            fill=cor,
-            width=3 * _ESC,
-        )
+_ABA_SALIENTE = "#9ca3af"  # a aba da cantoneira que sai da chapa de nó (vista de topo)
 
 
 def _envoltoria(pontos: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -1429,23 +1449,26 @@ def _envoltoria(pontos: list[tuple[float, float]]) -> list[tuple[float, float]]:
     return baixo[:-1] + cima[:-1]
 
 
-class _Tela:
-    """Leva pontos em mm (x para a direita, y para baixo) para a área de desenho, em px."""
-
-    def __init__(self, pontos: list[tuple[float, float]], caixa: tuple[int, int, int, int]) -> None:
-        x0, y0, x1, y1 = caixa
-        xs, ys = [p[0] for p in pontos], [p[1] for p in pontos]
-        largura, altura = max(max(xs) - min(xs), 1.0), max(max(ys) - min(ys), 1.0)
-        self.esc = min((x1 - x0) / largura, (y1 - y0) / altura) * _ESC
-        self.ox = x0 * _ESC + ((x1 - x0) * _ESC - largura * self.esc) / 2 - min(xs) * self.esc
-        self.oy = y0 * _ESC + ((y1 - y0) * _ESC - altura * self.esc) / 2 - min(ys) * self.esc
-
-    def __call__(self, x: float, y: float) -> tuple[float, float]:
-        return (self.ox + x * self.esc, self.oy + y * self.esc)
+def _corta_na_face_do_apoio(poligono: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """A parte do polígono com x ≥ 0: a chapa de nó termina na face do apoio, não a atravessa."""
+    saida: list[tuple[float, float]] = []
+    for i, p in enumerate(poligono):
+        q = poligono[(i + 1) % len(poligono)]
+        if p[0] >= 0:
+            saida.append(p)
+        if (p[0] >= 0) != (q[0] >= 0):
+            t = p[0] / (p[0] - q[0])
+            saida.append((0.0, p[1] + t * (q[1] - p[1])))
+    return saida
 
 
-def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
-    """Vista lateral (a junta, com os segmentos de solda), corte (filete ou penetração) e legenda."""
+def figura_chapa_no_apoio(e: EntradaChapaNoApoio, giro_graus: float = 0.0) -> ImagemDiagrama:
+    """Vista lateral (a junta, com os segmentos de solda), corte (filete ou penetração) e legenda.
+
+    ``giro_graus`` gira só a vista lateral (anti-horário), para ela ficar como está na estrutura;
+    o corte é um detalhe da solda e fica de pé.
+    """
+    giro = angulo_do_giro(giro_graus)
     largura_px, altura_px = 980, 440
     imagem = Image.new("RGB", (largura_px * _ESC, altura_px * _ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
@@ -1459,75 +1482,56 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
     )
     # ------------------------------------------------------------------ vista lateral
     balanco = 0.9 * comprimento
+    x_apoio, topo, base = -0.18 * comprimento, -0.12 * comprimento, 1.12 * comprimento
+    seta_mm = 0.35 * comprimento  # a seta da força normal, para fora da chapa
     tela = _Tela(
-        [(-0.25 * comprimento, -0.15 * comprimento), (balanco, 1.15 * comprimento)],
-        (80, 80, 440, 400),
+        [
+            (x_apoio - 0.1 * comprimento, topo),
+            (balanco + seta_mm + 0.05 * comprimento, base),
+        ],
+        (80, 80, 450, 400),
+        giro,
     )
-    dr.rectangle(
-        [tela(-0.18 * comprimento, -0.12 * comprimento), tela(0, 1.12 * comprimento)],
-        fill=_APOIO,
-        outline=_LINHA,
-        width=2 * _ESC,
-    )
-    dr.rectangle(
-        [tela(0, 0), tela(balanco, comprimento)], fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC
-    )
+    apoio = [tela(x_apoio, topo), tela(0, topo), tela(0, base), tela(x_apoio, base)]
+    dr.polygon(apoio, fill=_APOIO, outline=_LINHA, width=2 * _ESC)
+    chapa = [tela(0, 0), tela(balanco, 0), tela(balanco, comprimento), tela(0, comprimento)]
+    dr.polygon(chapa, fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC)
     for a, b in trechos:
         dr.line([tela(0, a), tela(0, b)], fill=_SOLDA, width=7 * _ESC)
-    _cota_vertical(
-        dr,
-        tela(-0.18 * comprimento, 0)[0] - 22 * _ESC,
-        tela(0, 0)[1],
-        tela(0, comprimento)[1],
-        _n(comprimento, 0),
+    esquerda, direita = tela.direcao(-1.0, 0.0), tela.direcao(1.0, 0.0)
+    baixo = tela.direcao(0.0, 1.0)
+    _cota_alinhada(
+        dr, tela(x_apoio, 0), tela(x_apoio, comprimento), esquerda, _n(comprimento, 0), 14 * _ESC
     )
     if intermitente:
         a, b = trechos[0]
-        dr.text(
-            (tela(0, 0)[0] + 10 * _ESC, tela(0, (a + b) / 2)[1]),
-            f"segmento {_n(b - a, 0)}",
-            fill=_SOLDA,
-            font=fonte,
-            anchor="lm",
+        _rotulo(
+            dr, tela(0, (a + b) / 2), direita, 10 * _ESC, f"segmento {_n(b - a, 0)}", _SOLDA, fonte
         )
-    xm, ym = tela(balanco, comprimento / 2)
     if e.n_sd_kN:
+        perto = _mais(tela(balanco, comprimento / 2), direita, 8 * _ESC)
+        longe = tela(balanco + seta_mm, comprimento / 2)
         if e.n_sd_kN > 0:
-            _seta(dr, xm + 8 * _ESC, ym, xm + 70 * _ESC, ym, _FORCA)
+            _seta_px(dr, perto, longe, _FORCA)
         else:
-            _seta(dr, xm + 70 * _ESC, ym, xm + 8 * _ESC, ym, _FORCA)
-        dr.text(
-            (xm + 10 * _ESC, ym - 16 * _ESC),
-            f"N = {_n(e.n_sd_kN, 1)} kN",
-            fill=_FORCA,
-            font=fonte,
-            anchor="lm",
-        )
+            _seta_px(dr, longe, perto, _FORCA)
+        _rotulo(dr, longe, direita, 6 * _ESC, f"N = {_n(e.n_sd_kN, 1)} kN", _FORCA, fonte)
     if e.v_sd_kN:
-        xv, _ = tela(balanco * 0.6, 0)
-        y_alto, y_baixo = tela(0, comprimento * 0.25)[1], tela(0, comprimento * 0.75)[1]
+        alto, embaixo = (
+            tela(balanco * 0.6, comprimento * 0.25),
+            tela(balanco * 0.6, comprimento * 0.75),
+        )
         if e.v_sd_kN > 0:
-            _seta(dr, xv, y_alto, xv, y_baixo, _FORCA)
+            _seta_px(dr, alto, embaixo, _FORCA)
         else:
-            _seta(dr, xv, y_baixo, xv, y_alto, _FORCA)
-        dr.text(
-            (xv + 8 * _ESC, y_baixo),
-            f"V = {_n(e.v_sd_kN, 1)} kN",
-            fill=_FORCA,
-            font=fonte,
-            anchor="lm",
-        )
+            _seta_px(dr, embaixo, alto, _FORCA)
+        _rotulo(dr, embaixo, direita, 8 * _ESC, f"V = {_n(e.v_sd_kN, 1)} kN", _FORCA, fonte)
     if e.m_sd_kNm:
-        x_m, y_m = tela(balanco * 0.3, comprimento)
-        dr.text(
-            (x_m, y_m + 16 * _ESC),
-            f"M = {_n(e.m_sd_kNm, 2)} kN·m",
-            fill=_FORCA,
-            font=fonte,
-            anchor="lm",
-        )
-    x_t, y_t = tela(-0.18 * comprimento, -0.12 * comprimento)
-    dr.text((x_t, y_t - 18 * _ESC), "Vista lateral", fill=_COTA, font=fonte)
+        _rotulo(
+            dr, tela(balanco * 0.3, comprimento), baixo, 12 * _ESC,
+            f"M = {_n(e.m_sd_kNm, 2)} kN·m", _FORCA, fonte,
+        )  # fmt: skip
+    dr.text((80 * _ESC, 62 * _ESC), "Vista lateral", fill=_COTA, font=fonte)
     # ------------------------------------------------------------------ corte
     t = e.t_chapa_mm
     escala = min(90 * _ESC / max(t, 1.0), 10 * _ESC)
@@ -1584,18 +1588,18 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
         cordao = f"{len(trechos)} × {_n(trechos[0][1] - trechos[0][0], 0)} mm por linha"
     else:
         cordao = f"{_n(comprimento, 0)} mm"
-    apoio = f"Apoio: {e.perfil_apoio}" if e.apoio == APOIO_PERFIL and e.perfil_apoio else "Apoio"
-    _legenda(
-        dr,
-        740 * _ESC,
-        110 * _ESC,
-        [
-            ("linha", _SOLDA, f"Solda: {cordao}"),
-            ("area", _CHAPA_AZUL, f"Chapa soldada ({_n(t, 1)} mm)"),
-            ("area", _APOIO, apoio),
-            ("seta", _FORCA, "Forças de cálculo na chapa"),
-        ],
+    apoio_texto = (
+        f"Apoio: {e.perfil_apoio}" if e.apoio == APOIO_PERFIL and e.perfil_apoio else "Apoio"
     )
+    itens: list[tuple[str, str, str]] = [
+        ("linha", _SOLDA, f"Solda: {cordao}"),
+        ("area", _CHAPA_AZUL, f"Chapa soldada ({_n(t, 1)} mm)"),
+        ("area", _APOIO, apoio_texto),
+        ("seta", _FORCA, "Forças de cálculo na chapa"),
+    ]
+    if giro:
+        itens += [("", _COTA, "Vista lateral girada"), ("", _COTA, texto_do_giro(giro))]
+    _legenda(dr, 740 * _ESC, 110 * _ESC, itens)
     dr.text((18 * _ESC, 14 * _ESC), titulo, fill=_TEXTO, font=_fonte(16 * _ESC))
     dr.text(
         (18 * _ESC, 38 * _ESC),
@@ -1615,118 +1619,209 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
     return ImagemDiagrama(titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px)  # fmt: skip
 
 
-def _afastado(
-    alvo: tuple[float, float], direcao: tuple[float, float], distancia_px: float
-) -> tuple[float, float]:
-    """O ponto a ``distancia_px`` de ``alvo`` na direção dada (px; a direção é normalizada)."""
-    comprimento = math.hypot(*direcao) or 1.0
-    return (
-        alvo[0] + direcao[0] / comprimento * distancia_px,
-        alvo[1] + direcao[1] / comprimento * distancia_px,
+@dataclass(frozen=True)
+class _DesenhoDaBarra:
+    """A geometria da figura da barra na chapa de nó, em mm (x para a direita, y para baixo).
+
+    O apoio fica à esquerda, com a face soldada em x = 0. A chapa de nó cabe os filetes e a seção
+    de Whitmore, só encosta no apoio no trecho soldado (0 ≤ y ≤ ℓ_apoio) e a ponta da barra fica
+    a ``folga`` da face.
+    """
+
+    barra: _Barra
+    ux: float  # ao longo da barra, saindo do apoio (y para baixo)
+    uy: float
+    y_trabalho: float  # onde o eixo da barra encontra a face do apoio
+    folga: float
+    s_ponta: float  # a ponta da barra, ao longo do eixo a partir da face
+    s_corte: float  # onde a barra é interrompida no desenho
+    k: float  # o "Z" da linha de interrupção
+    chapa: tuple[tuple[float, float], ...]
+    contorno_da_barra: tuple[tuple[float, float], ...]
+    apoio: tuple[tuple[float, float], ...]
+    largura_apoio: float
+    enquadrar: tuple[
+        tuple[float, float], ...
+    ]  # tudo o que precisa caber, chamadas e cotas inclusive
+
+    def mm(self, s: float, n: float) -> tuple[float, float]:
+        """s ao longo do eixo a partir da face do apoio, n do dorso para a borda (mm)."""
+        d = n - self.barra.x_barra  # o eixo passa pelo centro geométrico, a x̄ do dorso
+        return (s * self.ux + d * self.uy, self.y_trabalho + s * self.uy - d * self.ux)
+
+
+def _desenho_da_barra(e: EntradaBarraSoldada) -> _DesenhoDaBarra:
+    barra = _barra(e)
+    a, b, c_, xb = e.l_dorso_mm, e.l_borda_mm, barra.largura, barra.x_barra
+    sobre = max(a, b)
+    abre_a, abre_b = a * TAN_30, b * TAN_30
+    theta = math.radians(e.theta_graus) if e.com_apoio else math.pi / 2
+    ux, uy = math.sin(theta), math.cos(theta)
+    l_apoio = e.l_apoio_mm if e.com_apoio else 0.0
+    folga = max(15.0, 2.0 * e.t_no_mm)  # da barra e da chapa (fora da solda) até a face do apoio
+    m_lado = max(10.0, 2.5 * e.perna_mm)  # chapa além das bordas da barra (onde ficam os filetes)
+    m_fim = max(15.0, 0.12 * sobre)  # chapa além do fim dos filetes
+    m_w = max(8.0, 0.06 * sobre)  # chapa além das pontas da seção de Whitmore
+    if e.com_apoio:
+        # a chapa só encosta no apoio no trecho soldado: a ponta da barra e o canto da chapa
+        # junto da seção de Whitmore ficam a ``folga`` da face
+        s_ponta = max((folga + xb * uy) / ux, m_w + (folga + (abre_a + m_w + xb) * uy) / ux)
+    else:
+        s_ponta = 0.0
+    s_fim = s_ponta + sobre + m_fim
+    s_corte = s_fim + 0.45 * sobre + 25.0
+    k = 0.12 * c_ + 3.0
+    g = _DesenhoDaBarra(
+        barra, ux, uy, l_apoio / 2 + e.excentricidade_mm if e.com_apoio else 0.0, folga,
+        s_ponta, s_corte, k, (), (), (), 0.0, (),
+    )  # fmt: skip
+    mm = g.mm
+    pontos_da_chapa = [
+        mm(s_ponta - m_w, -abre_a - m_w),
+        mm(s_ponta - m_w, c_ + abre_b + m_w),
+        mm(s_fim, -m_lado),
+        mm(s_fim, c_ + m_lado),
+    ]
+    if e.com_apoio:
+        pontos_da_chapa += [(0.0, 0.0), (0.0, l_apoio)]
+    chapa = _envoltoria(pontos_da_chapa)
+    if e.com_apoio:
+        chapa = _corta_na_face_do_apoio(chapa)
+    contorno_da_barra = [
+        mm(s_ponta, 0), mm(s_corte, 0), mm(s_corte, 0.38 * c_), mm(s_corte + k, 0.46 * c_),
+        mm(s_corte - k, 0.54 * c_), mm(s_corte, 0.62 * c_), mm(s_corte, c_), mm(s_ponta, c_),
+    ]  # fmt: skip
+    margem = 0.3 * sobre + 25.0  # espaço para as chamadas, fora da chapa
+    enquadrar = [
+        *chapa,
+        *contorno_da_barra,
+        mm(s_corte + k + 0.3 * sobre + 38.0, xb),  # a seta da força
+        mm(s_ponta + 0.6 * a, -abre_a * 0.45 - margem),
+        mm(s_ponta + 0.6 * b, c_ + abre_b * 0.45 + margem),
+        mm(s_ponta - m_w, -abre_a - m_w - 0.6 * margem),
+    ]
+    apoio: list[tuple[float, float]] = []
+    largura_apoio = 0.0
+    if e.com_apoio:
+        ys = [y for x, y in chapa if abs(x) < 1e-6] + [0.0, l_apoio]
+        alto, baixo = min(ys), max(ys)
+        sobra = 0.12 * (baixo - alto) + 12.0
+        largura_apoio = max(12.0, 0.06 * s_corte)
+        apoio = [
+            (-largura_apoio, alto - sobra), (0.0, alto - sobra),
+            (0.0, baixo + sobra), (-largura_apoio, baixo + sobra),
+        ]  # fmt: skip
+        enquadrar += [*apoio, (-largura_apoio - 0.3 * sobre - 20.0, l_apoio / 2)]
+    return replace(
+        g,
+        chapa=tuple(chapa),
+        contorno_da_barra=tuple(contorno_da_barra),
+        apoio=tuple(apoio),
+        largura_apoio=largura_apoio,
+        enquadrar=tuple(enquadrar),
     )
 
 
-def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
-    """A barra sobre a chapa de nó, os filetes, a seção de Whitmore, o apoio e a legenda.
+def figura_barra_soldada(e: EntradaBarraSoldada, giro_graus: float = 0.0) -> ImagemDiagrama:
+    """A barra sobre a chapa de nó: filetes, seção de Whitmore, eixo da barra, apoio e legenda.
 
-    Os comprimentos vão por chamadas numeradas, com o texto na legenda ao lado: no desenho os
-    rótulos não se sobrepõem, qualquer que seja o ângulo da barra.
+    Vista da face da chapa de nó, com o apoio à esquerda e a barra a θ da face (a geometria vem de
+    :func:`_desenho_da_barra`). O eixo da barra (a linha da força) passa pelo centro geométrico,
+    a x̄ do dorso; na cantoneira, a aba saliente aparece no dorso. Os comprimentos vão por
+    chamadas numeradas, com o texto na legenda. ``giro_graus`` gira só o desenho (anti-horário),
+    para ficar como está na estrutura.
     """
-    largura_px, altura_px = 1000, 520
+    giro = angulo_do_giro(giro_graus)
+    largura_px, altura_px = 1000, 540
     imagem = Image.new("RGB", (largura_px * _ESC, altura_px * _ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
     fonte = _fonte(12 * _ESC)
-    barra = _barra(e)
-    a, b, c_ = e.l_dorso_mm, e.l_borda_mm, barra.largura
+    g = _desenho_da_barra(e)
+    barra, mm = g.barra, g.mm
+    a, b, c_, xb = e.l_dorso_mm, e.l_borda_mm, barra.largura, barra.x_barra
     sobre = max(a, b)
-    l_apoio = e.l_apoio_mm if e.com_apoio else 0.0
-    theta = math.radians(e.theta_graus) if e.com_apoio else math.pi / 2
-    ux, uy = math.sin(theta), math.cos(theta)  # do apoio para a barra (y para baixo)
-    nx, ny = uy, -ux  # do dorso para a borda
-    folga = 0.25 * sobre + 15.0  # do apoio à ponta da barra
-    fim = folga + sobre + 0.8 * sobre + 40.0
-    y_eixo = l_apoio / 2 + (e.excentricidade_mm if e.com_apoio else 0.0)
-
-    def mm(s: float, n: float) -> tuple[float, float]:
-        """s ao longo da barra (do apoio), n do dorso para a borda; o eixo da barra em n = C/2."""
-        return (s * ux + (n - c_ / 2) * nx, y_eixo + s * uy + (n - c_ / 2) * ny)
-
     abre_a, abre_b = a * TAN_30, b * TAN_30
-    chapa_mm = [
-        mm(folga - 12, -abre_a - 12),
-        mm(folga - 12, c_ + abre_b + 12),
-        mm(folga + sobre + 14, -14),
-        mm(folga + sobre + 14, c_ + 14),
-    ]
-    if e.com_apoio:
-        chapa_mm += [(0.0, 0.0), (0.0, l_apoio)]
-    margem = 0.35 * sobre + 30  # espaço para as chamadas, fora da chapa de nó
-    tudo = [
-        *chapa_mm,
-        mm(fim + 60, c_ / 2),
-        mm(fim, 0),
-        mm(fim, c_),
-        mm(folga + a / 2, -abre_a - margem),
-        mm(folga + b / 2, c_ + abre_b + margem),
-    ]
-    if e.com_apoio:
-        tudo += [(-0.12 * max(l_apoio, sobre), -0.1 * l_apoio - 20), (0.0, 1.1 * l_apoio + 20)]
-    tela = _Tela(tudo, (70, 70, 640, 500))
-    dr.polygon(
-        [tela(*q) for q in _envoltoria(chapa_mm)], fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC
-    )
-    if e.com_apoio:
-        largura_apoio = 0.12 * max(l_apoio, sobre)
-        dr.rectangle(
-            [tela(-largura_apoio, -0.1 * l_apoio - 20), tela(0, 1.1 * l_apoio + 20)],
-            fill=_APOIO,
-            outline=_LINHA,
-            width=2 * _ESC,
-        )
-        dr.line([tela(0, 0), tela(0, l_apoio)], fill=_SOLDA, width=7 * _ESC)
-        _cota_vertical(
-            dr,
-            tela(-largura_apoio, 0)[0] - 20 * _ESC,
-            tela(0, 0)[1],
-            tela(0, l_apoio)[1],
-            _n(l_apoio, 0),
-        )
-    dr.polygon(
-        [tela(*mm(folga, 0)), tela(*mm(fim, 0)), tela(*mm(fim, c_)), tela(*mm(folga, c_))],
-        fill=_BARRA,
-        outline=_LINHA,
-        width=2 * _ESC,
-    )
-    dr.line([tela(*mm(folga, 0)), tela(*mm(folga + a, 0))], fill=_SOLDA, width=7 * _ESC)
-    dr.line([tela(*mm(folga, c_)), tela(*mm(folga + b, c_))], fill=_SOLDA, width=7 * _ESC)
-    if e.solda_na_ponta:
-        dr.line([tela(*mm(folga, 0)), tela(*mm(folga, c_))], fill=_SOLDA, width=7 * _ESC)
+    ux, uy, nx, ny = g.ux, g.uy, g.uy, -g.ux  # n: do dorso para a borda
+    l_apoio = e.l_apoio_mm if e.com_apoio else 0.0
+    y_trabalho, s_ponta, s_corte, k = g.y_trabalho, g.s_ponta, g.s_corte, g.k
+    largura_apoio = g.largura_apoio
+    chapa_mm, barra_mm, apoio_mm = g.chapa, g.contorno_da_barra, g.apoio
+    seta_inicio, seta_fim = s_corte + k + 8.0, s_corte + k + 8.0 + 0.3 * sobre + 20.0
+    tela = _Tela(g.enquadrar, (60, 80, 630, 520), giro)
+    # ------------------------------------------------------------------ peças
+    chapa = [tela(*q) for q in chapa_mm]
+    dr.polygon(chapa, fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC)
+    apoio = [tela(*q) for q in apoio_mm]
+    if apoio:
+        dr.polygon(apoio, fill=_APOIO, outline=_LINHA, width=2 * _ESC)
+    dr.polygon([tela(*q) for q in barra_mm], fill=_BARRA, outline=_LINHA, width=2 * _ESC)
+    if e.peca == PECA_CANTONEIRA:  # a aba que sai da chapa, vista de topo, no dorso
+        aba = [mm(s_ponta, 0), mm(s_corte, 0), mm(s_corte, barra.t), mm(s_ponta, barra.t)]
+        dr.polygon([tela(*q) for q in aba], fill=_ABA_SALIENTE, outline=_LINHA, width=_ESC)
     # Whitmore: 30° do começo de cada filete (lado da barra) até a ponta, tracejado
-    w_dorso, w_borda = tela(*mm(folga, -abre_a)), tela(*mm(folga, c_ + abre_b))
-    _tracejado(dr, tela(*mm(folga + a, 0)), w_dorso, _WHITMORE, largura=_ESC, traco=5 * _ESC)
-    _tracejado(dr, tela(*mm(folga + b, c_)), w_borda, _WHITMORE, largura=_ESC, traco=5 * _ESC)
+    w_dorso, w_borda = tela(*mm(s_ponta, -abre_a)), tela(*mm(s_ponta, c_ + abre_b))
+    _tracejado(dr, tela(*mm(s_ponta + a, 0)), w_dorso, _WHITMORE, largura=_ESC, traco=5 * _ESC)
+    _tracejado(dr, tela(*mm(s_ponta + b, c_)), w_borda, _WHITMORE, largura=_ESC, traco=5 * _ESC)
     _tracejado(dr, w_dorso, w_borda, _WHITMORE, largura=2 * _ESC)
-    # chamadas numeradas, para fora da chapa de nó; o texto vai na legenda
-    _chamada(
-        dr, tela(*mm(folga + 0.7 * a, 0)), tela(*mm(folga + 0.7 * a, -abre_a / 2 - 0.8 * margem)), 1,
-        _SOLDA,
-    )  # fmt: skip
-    _chamada(
-        dr, tela(*mm(folga + b / 2, c_)), tela(*mm(folga + b / 2, c_ + abre_b / 2 + 0.8 * margem)),
-        2, _SOLDA,
-    )  # fmt: skip
-    _chamada(dr, w_dorso, _afastado(w_dorso, (-ux - nx, -uy - ny), 34 * _ESC), 3, _WHITMORE)
+    # os filetes
+    dr.line([tela(*mm(s_ponta, 0)), tela(*mm(s_ponta + a, 0))], fill=_SOLDA, width=7 * _ESC)
+    dr.line([tela(*mm(s_ponta, c_)), tela(*mm(s_ponta + b, c_))], fill=_SOLDA, width=7 * _ESC)
+    if e.solda_na_ponta:
+        dr.line([tela(*mm(s_ponta, 0)), tela(*mm(s_ponta, c_))], fill=_SOLDA, width=7 * _ESC)
+    if e.com_apoio:
+        dr.line([tela(0, 0), tela(0, l_apoio)], fill=_SOLDA, width=7 * _ESC)
+    # ------------------------------------------------------------------ eixo, ângulo e cotas
+    ao_longo = tela.direcao(ux, uy)
+    inicio_eixo = tela(*mm(0.0, xb)) if e.com_apoio else tela(*mm(s_ponta - 20.0, xb))
+    _traco_ponto(dr, inicio_eixo, tela(*mm(s_corte + 2 * k, xb)), _COTA)
+    if e.com_apoio:
+        trabalho = tela(0.0, y_trabalho)
+        dr.ellipse(
+            [trabalho[0] - 4 * _ESC, trabalho[1] - 4 * _ESC, trabalho[0] + 4 * _ESC, trabalho[1] + 4 * _ESC],
+            fill=_COTA,
+        )  # fmt: skip
+        meio = _arco_entre(dr, trabalho, 38 * _ESC, tela.direcao(0.0, 1.0), ao_longo, _COTA)
+        texto_theta = f"θ = {_n(e.theta_graus, 0)}°"
+        _rotulo(dr, trabalho, meio, 50 * _ESC, texto_theta, _COTA, fonte, fundo=True)
+        esquerda = tela.direcao(-1.0, 0.0)
+        afastamento = largura_apoio * tela.esc + 14 * _ESC
+        if e.excentricidade_mm:  # a excentricidade mais perto; a solda por fora dela
+            _cota_alinhada(
+                dr, tela(0, l_apoio / 2), trabalho, esquerda,
+                f"e = {_n(e.excentricidade_mm, 0)}", afastamento,
+            )  # fmt: skip
+            afastamento += 60 * _ESC
+        _cota_alinhada(dr, tela(0, 0), tela(0, l_apoio), esquerda, _n(l_apoio, 0), afastamento)
+    # a força na barra, depois da interrupção
+    perto, longe = tela(*mm(seta_inicio, xb)), tela(*mm(seta_fim, xb))
+    if e.n_t_sd_kN > 0:
+        _seta_px(dr, perto, longe, _FORCA)
+        if e.n_c_sd_kN > 0:  # tração e compressão: ponta nos dois lados
+            _seta_px(dr, longe, perto, _FORCA)
+    else:
+        _seta_px(dr, longe, perto, _FORCA)
+    _rotulo(dr, longe, ao_longo, 8 * _ESC, "N", _FORCA, fonte)
+    # ------------------------------------------------------------------ chamadas numeradas
+    obstaculos = [chapa, apoio] if apoio else [chapa]
+    para_o_dorso, para_a_borda = tela.direcao(-nx, -ny), tela.direcao(nx, ny)
+    alvo = tela(*mm(s_ponta + 0.6 * a, 0))
+    _chamada(dr, alvo, _fora_de(alvo, para_o_dorso, obstaculos, 26 * _ESC), 1, _SOLDA)
+    alvo = tela(*mm(s_ponta + 0.6 * b, c_))
+    _chamada(dr, alvo, _fora_de(alvo, para_a_borda, obstaculos, 26 * _ESC), 2, _SOLDA)
+    rumo = tela.direcao(-nx + 0.8 * ux, -ny + 0.8 * uy)  # para longe do apoio
+    _chamada(dr, w_dorso, _fora_de(w_dorso, rumo, obstaculos, 26 * _ESC), 3, _WHITMORE)
     largura_w = _largura_whitmore(e, barra, a, b)
     itens: list[tuple[str, str, str]] = [
         ("numero:1", _SOLDA, f"Filete do dorso: {_n(a, 0)} mm"),
         ("numero:2", _SOLDA, f"Filete da borda: {_n(b, 0)} mm"),
-        ("numero:3", _WHITMORE, f"Seção de Whitmore: {_n(largura_w, 0)} mm"),
     ]
     if e.solda_na_ponta:
-        itens.insert(2, ("linha", _SOLDA, f"Filete na ponta da barra: {_n(c_, 0)} mm"))
+        itens.append(("linha", _SOLDA, f"Filete na ponta da barra: {_n(c_, 0)} mm"))
+    itens.append(("numero:3", _WHITMORE, f"Seção de Whitmore: {_n(largura_w, 0)} mm"))
     if e.com_apoio:
-        alvo = tela(0, l_apoio * 0.3)
-        _chamada(dr, alvo, _afastado(alvo, (1.0, -1.6), 46 * _ESC), 4, _SOLDA)
+        alvo = tela(0, l_apoio * 0.2)
+        rumo = tela.direcao(-0.6, -1.0)
+        _chamada(dr, alvo, _fora_de(alvo, rumo, obstaculos, 24 * _ESC), 4, _SOLDA)
         itens.append(
             (
                 "numero:4",
@@ -1734,10 +1829,7 @@ def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
                 f"Solda no apoio: dois filetes de {_n(e.perna_apoio_mm, 0)} × {_n(l_apoio, 0)} mm",
             )
         )
-    x1, y1 = tela(*mm(fim + 8, c_ / 2))
-    x2, y2 = tela(*mm(fim + 60, c_ / 2))
-    _seta(dr, x1, y1, x2, y2, _FORCA)
-    dr.text((x2, y2 - 16 * _ESC), "N", fill=_FORCA, font=fonte, anchor="mm")
+    # ------------------------------------------------------------------ legenda
     if e.n_t_sd_kN > 0:
         forca = f"N = {_n(e.n_t_sd_kN, 1)} kN de tração"
         if e.n_c_sd_kN > 0:
@@ -1750,10 +1842,13 @@ def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
         ("area", _CHAPA_AZUL, f"Chapa de nó ({_n(e.t_no_mm, 1)} mm)"),
         ("area", _BARRA, f"Barra: {barra.nome}"),
     ]
+    if e.peca == PECA_CANTONEIRA:
+        itens.append(("area", _ABA_SALIENTE, "Aba saliente da cantoneira (no dorso)"))
     if e.com_apoio:
         itens.append(("area", _APOIO, "Apoio"))
     itens += [
         ("tracejado", _WHITMORE, "Seção de Whitmore (30° do começo dos filetes)"),
+        ("eixo", _COTA, "Eixo da barra: a linha da força (a x̄ do dorso)"),
         ("seta", _FORCA, forca),
     ]
     if e.com_apoio:
@@ -1763,7 +1858,9 @@ def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
         itens.append(
             ("", _TEXTO, f"θ = {_n(e.theta_graus, 0)}° entre a barra e o apoio{excentrico}")
         )
-    _legenda(dr, 660 * _ESC, 90 * _ESC, itens)
+    if giro:
+        itens.append(("", _COTA, f"Desenho girado {texto_do_giro(giro)}"))
+    _legenda(dr, 660 * _ESC, 84 * _ESC, itens)
     titulo = "Barra soldada na chapa de nó"
     pecas = " (duas peças, uma de cada lado)" if e.duas_pecas else ""
     dr.text((18 * _ESC, 14 * _ESC), titulo, fill=_TEXTO, font=_fonte(16 * _ESC))
@@ -1865,7 +1962,10 @@ def calcular(entrada: EntradaChapaNoApoio | EntradaBarraSoldada) -> ResultadoLig
     return calcular_barra_soldada(entrada)
 
 
-def figura(entrada: EntradaChapaNoApoio | EntradaBarraSoldada) -> ImagemDiagrama:
+def figura(
+    entrada: EntradaChapaNoApoio | EntradaBarraSoldada, giro_graus: float = 0.0
+) -> ImagemDiagrama:
+    """O desenho da ligação; ``giro_graus`` gira só o desenho (anti-horário)."""
     if isinstance(entrada, EntradaChapaNoApoio):
-        return figura_chapa_no_apoio(entrada)
-    return figura_barra_soldada(entrada)
+        return figura_chapa_no_apoio(entrada, giro_graus)
+    return figura_barra_soldada(entrada, giro_graus)

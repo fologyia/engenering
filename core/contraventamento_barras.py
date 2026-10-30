@@ -634,13 +634,14 @@ def _tracao_tubo(
     t = perfil.espessura_alma_mm
     an = ag - 2.0 * t * (d.t_chapa_no_mm + FOLGA_DO_RASGO_MM)
     lc = d.comprimento_solda_mm
+    meia_chapa = d.t_chapa_no_mm / 2.0  # o plano de cisalhamento é a face da chapa (Figuras 6 e 7)
     if ss.e_tubo_circular(perfil):
-        ec = perfil.altura_mm / math.pi
-        origem = "e_c = D/π"
+        ec = perfil.altura_mm / math.pi - meia_chapa
+        origem = "e_c = D/π − t_c/2"
     else:
         h, b = perfil.altura_mm, perfil.largura_mm
-        ec = max((h**2 + 2 * h * b), (b**2 + 2 * h * b)) / (4.0 * (h + b))
-        origem = "e_c = (h² + 2hb)/[4(h + b)] (maior das duas orientações)"
+        ec = max((h**2 + 2 * h * b), (b**2 + 2 * h * b)) / (4.0 * (h + b)) - meia_chapa
+        origem = "e_c = (h² + 2hb)/[4(h + b)] − t_c/2 (maior das duas orientações)"
     coef = (1.0 + (ec / lc) ** 3.2) ** -10.0
     escoamento = ag * fy / GAMMA_A1 / 1e3
     ruptura = coef * an * fu / GAMMA_A2 / 1e3

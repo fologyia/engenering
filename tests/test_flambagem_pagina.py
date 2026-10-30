@@ -195,6 +195,23 @@ def test_u_laminado_de_4_5_mm_reprova_na_espessura_minima(banco_isolado):
     assert linha(ok, "Espessura mínima")["Status"] == "OK"
 
 
+def test_desenhos_so_com_o_botao_e_girar_nao_muda_o_calculo(banco_isolado):
+    fechado = abrir(banco_isolado, col_tipo_secao=ui.SEC_U)
+    assert not [s for s in fechado.slider if s.label == "Girar o desenho da seção"]
+    assert fechado.toggle(key="col_ver_desenhos").value is False
+    t = abrir(banco_isolado, col_tipo_secao=ui.SEC_U, col_ver_desenhos=True, col_mf_incluir=True)
+    girar = [s for s in t.slider if s.label == "Girar o desenho da seção"]
+    assert len(girar) == 1 and girar[0].value == 0 and girar[0].help
+    antes = tabela(t)
+    girar[0].set_value(90).run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    pd.testing.assert_frame_equal(tabela(t), antes)  # só o desenho gira
+    # fechar os desenhos também não muda nada
+    t.toggle(key="col_ver_desenhos").set_value(False).run()
+    assert not [s for s in t.slider if s.label == "Girar o desenho da seção"]
+    pd.testing.assert_frame_equal(tabela(t), antes)
+
+
 # ------------------------------------------------------------------ bloqueios e alertas
 def test_tubo_circular_muito_fino_bloqueia_e_nao_estima(banco_isolado):
     t = abrir(banco_isolado, col_tipo_secao=ui.SEC_TUBO_C, col_tc_D=200.0, col_tc_t=0.5)

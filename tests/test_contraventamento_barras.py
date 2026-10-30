@@ -195,7 +195,8 @@ def test_tubo_com_chapa_concentrica_soldada():
     )
     p = sc.obter_perfil(nome)
     an = p.area_mm2 - 2 * p.espessura_alma_mm * (9.5 + 2.0)
-    coef = (1 + (p.altura_mm / math.pi / 120.0) ** 3.2) ** -10
+    ec = p.altura_mm / math.pi - 9.5 / 2  # e_c = D/π − t_c/2 (Figura 7 da 2025)
+    coef = (1 + (ec / 120.0) ** 3.2) ** -10
     esperado = min(p.area_mm2 * 250 / 1.10, coef * an * 400 / 1.35) / 1e3
     assert _linha(r, "tração da diagonal").resistente == pytest.approx(esperado)
     assert _linha(r, "solda da diagonal").resistente == pytest.approx(

@@ -18,6 +18,7 @@ import streamlit as st
 
 from components.column_help import AJUDA
 from components.project_tools import botao_registrar_calculo
+from components.robustez import secao_protegida
 from components.ui import comparador_cenarios, fronteira_modelo
 from components.verification_table import COR_BADGE, estilizar, mostrar_tabela_verificacoes
 from core import column_buckling as cb
@@ -25,6 +26,8 @@ from core import material_catalog as mat
 from core import section_catalog as catalogo_perfis
 from core.column_design import E_ACO, ESPESSURA_MIN_ANGLO, G_ACO, Secao
 from core.coluna_word import gerar_word_coluna
+from core.desenho_da_coluna import ColunaEmPe, MaoFrancesaNoDesenho, figura_da_coluna
+from core.desenho_da_secao import figura_da_secao
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
 from core.verificacao import csv_verificacoes, formatar_percentual
@@ -1125,6 +1128,69 @@ def formulario_mao_francesa(secao: Secao, comprimento_mm: float) -> DadosMaoFran
 
 
 # ---------------------------------------------------------------------------
+# Desenhos: a seção e a coluna em pé (só quando pedidos)
+# ---------------------------------------------------------------------------
+
+
+def _coluna_em_pe(
+    secao: Secao, comprimentos: DadosComprimentos, mao_francesa: DadosMaoFrancesa
+) -> ColunaEmPe:
+    mf = None
+    if mao_francesa.esforcos is not None and mao_francesa.eixo:
+        e = mao_francesa.esforcos
+        mf = MaoFrancesaNoDesenho(
+            e.forca_N / 1e3, e.angulo_graus, e.altura_no_mm, mao_francesa.eixo,
+            e.excentricidade_mm,
+        )  # fmt: skip
+    return ColunaEmPe(
+        secao,
+        comprimentos.L_total_mm,
+        comprimentos.Lx_mm,
+        comprimentos.Ly_mm,
+        comprimentos.kx,
+        comprimentos.ky,
+        comprimentos.apoio_x,
+        comprimentos.apoio_y,
+        mf,
+    )
+
+
+def mostrar_desenhos(
+    secao: Secao, comprimentos: DadosComprimentos, mao_francesa: DadosMaoFrancesa
+) -> tuple[float, ColunaEmPe]:
+    """O botão que mostra os desenhos (a seção, que gira, e a coluna em pé com a mão-francesa).
+
+    Devolve o giro da seção e a coluna em pé, que o Word usa mesmo com os desenhos fechados.
+    """
+    coluna = _coluna_em_pe(secao, comprimentos, mao_francesa)
+    with st.container(border=True), secao_protegida("Desenhos da coluna"):
+        st.subheader("Desenhos da seção e da coluna em pé", help=AJUDA["sec_desenhos"])
+        if st.toggle(
+            "Ver os desenhos",
+            value=False,
+            key="col_ver_desenhos",
+            persist_state="session",
+            help=AJUDA["ver_desenhos"],
+        ):
+            giro = st.slider(
+                "Girar o desenho da seção",
+                min_value=-180,
+                max_value=180,
+                value=0,
+                step=5,
+                format="%d°",
+                key="col_giro",
+                persist_state="session",
+                help=AJUDA["giro_secao"],
+            )
+            desenho = figura_da_secao(secao, giro_graus=giro)
+            st.image(desenho.png, caption=desenho.legenda, width="stretch")
+            vistas = figura_da_coluna(coluna)
+            st.image(vistas.png, caption=vistas.legenda, width="stretch")
+    return float(st.session_state.get("col_giro") or 0), coluna
+
+
+# ---------------------------------------------------------------------------
 # 6. Critério Anglo
 # ---------------------------------------------------------------------------
 
@@ -1580,6 +1646,7 @@ def mostrar_flambagem_colunas() -> None:
     comprimentos = formulario_comprimentos()
     cargas, flexao = formulario_esforcos()
     mao_francesa = formulario_mao_francesa(secao.secao, comprimentos.L_total_mm)
+    giro, coluna_em_pe = mostrar_desenhos(secao.secao, comprimentos, mao_francesa)
     espessuras = formulario_anglo(secao.secao, secao.soldado)
 
     entrada = montar_entrada(
@@ -1631,7 +1698,7 @@ def mostrar_flambagem_colunas() -> None:
         "AISC 360-16, com o critério da Anglo. Para a estrutura completa (pórtico, B₂, cargas "
         "nocionais, ligações e placa de base), use Estruturas de aço."
     )
-    _documento_word(entrada, resultado, contexto, equacoes)
+    _documento_word(entrada, resultado, contexto, equacoes, giro, coluna_em_pe)
 
 
 def _documento_word(
@@ -1639,13 +1706,21 @@ def _documento_word(
     resultado: cb.ResultadoColuna,
     contexto: Mapping[str, Any],
     equacoes: list[str],
+    giro_da_secao: float = 0.0,
+    coluna_em_pe: ColunaEmPe | None = None,
 ) -> None:
     """Fim da página: o Word editável com tudo o que a página mostra (gerado só no clique)."""
     projeto = obter_projeto_ativo()
 
     def gerar() -> bytes:
         return gerar_word_coluna(
-            entrada, resultado, contexto=contexto, equacoes_de_carga=equacoes, projeto=projeto
+            entrada,
+            resultado,
+            contexto=contexto,
+            equacoes_de_carga=equacoes,
+            projeto=projeto,
+            giro_da_secao=giro_da_secao,
+            coluna_em_pe=coluna_em_pe,
         )
 
     with st.container(border=True):

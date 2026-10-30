@@ -43,6 +43,14 @@ from core import bolted_connection as bc
 from core import section_catalog as sc
 from core import soldas as sd
 from core.beam_charts import ImagemDiagrama, _fonte
+from core.desenho_girado import Tela as _Tela
+from core.desenho_girado import angulo_do_giro, texto_do_giro
+from core.desenho_girado import cota_alinhada as _cota_alinhada
+from core.desenho_girado import eixos_da_peca as _eixos_da_peca
+from core.desenho_girado import legenda as _legenda
+from core.desenho_girado import mais as _mais
+from core.desenho_girado import rotulo as _rotulo
+from core.desenho_girado import seta as _seta_px
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import (
     STATUS_REGISTRO,
@@ -1478,30 +1486,6 @@ def _cota_horizontal(d: ImageDraw.ImageDraw, y: float, x1: float, x2: float, tex
     d.text(((x1 + x2) / 2, y + 4 * _ESC), texto, fill=_COTA, font=fonte, anchor="mt")
 
 
-def _tracejado(
-    d: ImageDraw.ImageDraw,
-    a: tuple[float, float],
-    b: tuple[float, float],
-    cor: str,
-    largura: int = 2 * _ESC,
-    traco: float = 9 * _ESC,
-) -> None:
-    """Linha tracejada de a até b (px)."""
-    comprimento = math.hypot(b[0] - a[0], b[1] - a[1])
-    if comprimento <= 0:
-        return
-    ux, uy = (b[0] - a[0]) / comprimento, (b[1] - a[1]) / comprimento
-    s = 0.0
-    while s < comprimento:
-        fim = min(s + traco, comprimento)
-        d.line(
-            [(a[0] + ux * s, a[1] + uy * s), (a[0] + ux * fim, a[1] + uy * fim)],
-            fill=cor,
-            width=largura,
-        )
-        s += 2 * traco
-
-
 def _chamada(
     d: ImageDraw.ImageDraw,
     alvo: tuple[float, float],
@@ -1521,53 +1505,6 @@ def _chamada(
     x, y = rotulo
     d.ellipse([x - raio, y - raio, x + raio, y + raio], fill="#ffffff", outline=cor, width=2 * _ESC)
     d.text((x, y), str(numero), fill=cor, font=_fonte(12 * _ESC), anchor="mm")
-
-
-def _legenda(
-    d: ImageDraw.ImageDraw, x: float, y: float, itens: Sequence[tuple[str, str, str]]
-) -> None:
-    """Quadro de legenda a partir de (x, y) px: cada item é (forma, cor, texto).
-
-    Formas: "linha" (cordão de solda), "area" (chapa, barra, apoio), "tracejado" (seção de
-    Whitmore), "seta" (força), "ponto" (centro geométrico) e "numero:<n>" (chamada do desenho).
-    """
-    fonte = _fonte(11 * _ESC)
-    passo = 22 * _ESC
-    for k, (forma, cor, texto) in enumerate(itens):
-        yy = y + k * passo
-        x1, x2 = x, x + 26 * _ESC
-        if forma == "linha":
-            d.line([(x1, yy), (x2, yy)], fill=cor, width=6 * _ESC)
-        elif forma == "area":
-            d.rectangle(
-                [x1, yy - 7 * _ESC, x2, yy + 7 * _ESC], fill=cor, outline=_LINHA, width=_ESC
-            )
-        elif forma == "tracejado":
-            _tracejado(d, (x1, yy), (x2, yy), cor, traco=5 * _ESC)
-        elif forma == "seta":
-            d.line([(x1, yy), (x2 - 4 * _ESC, yy)], fill=cor, width=3 * _ESC)
-            d.polygon(
-                [(x2, yy), (x2 - 9 * _ESC, yy - 5 * _ESC), (x2 - 9 * _ESC, yy + 5 * _ESC)], fill=cor
-            )
-        elif forma == "ponto":
-            cx = (x1 + x2) / 2
-            d.ellipse(
-                [cx - 6 * _ESC, yy - 6 * _ESC, cx + 6 * _ESC, yy + 6 * _ESC],
-                outline=cor,
-                width=2 * _ESC,
-            )
-            d.line([(cx - 9 * _ESC, yy), (cx + 9 * _ESC, yy)], fill=cor, width=_ESC)
-            d.line([(cx, yy - 9 * _ESC), (cx, yy + 9 * _ESC)], fill=cor, width=_ESC)
-        elif forma.startswith("numero:"):
-            cx, raio = (x1 + x2) / 2, 10 * _ESC
-            d.ellipse(
-                [cx - raio, yy - raio, cx + raio, yy + raio],
-                fill="#ffffff",
-                outline=cor,
-                width=2 * _ESC,
-            )
-            d.text((cx, yy), forma.split(":", 1)[1], fill=cor, font=_fonte(12 * _ESC), anchor="mm")
-        d.text((x2 + 8 * _ESC, yy), texto, fill=_TEXTO, font=fonte, anchor="lm")
 
 
 def figura_chapa_simples(e: EntradaChapaSimples) -> ImagemDiagrama:
@@ -1848,31 +1785,22 @@ def figura_perfil_frio(e: EntradaPerfilFrio) -> ImagemDiagrama:
     )
 
 
-def _seta_px(
-    d: ImageDraw.ImageDraw, a: tuple[float, float], b: tuple[float, float], cor: str
-) -> None:
-    """Seta de a para b (px), com a ponta cheia."""
-    d.line([a, b], fill=cor, width=3 * _ESC)
-    ang = math.atan2(b[1] - a[1], b[0] - a[0])
-    ponta = 13 * _ESC
-    d.polygon(
-        [
-            b,
-            (b[0] - ponta * math.cos(ang - 0.4), b[1] - ponta * math.sin(ang - 0.4)),
-            (b[0] - ponta * math.cos(ang + 0.4), b[1] - ponta * math.sin(ang + 0.4)),
-        ],
-        fill=cor,
-    )
-
-
 def _momento_px(
-    d: ImageDraw.ImageDraw, centro: tuple[float, float], raio: float, anti_horario: bool
+    d: ImageDraw.ImageDraw,
+    centro: tuple[float, float],
+    raio: float,
+    anti_horario: bool,
+    giro_graus: float = 0.0,
 ) -> None:
     """Arco de 270° com a ponta no sentido do momento (na tela, y para baixo)."""
     cx, cy = centro
-    d.arc([cx - raio, cy - raio, cx + raio, cy + raio], 200, 110 + 360, fill=_FORCA, width=3 * _ESC)
+    inicio = 200.0 - giro_graus  # o desenho girado leva o arco junto
+    d.arc(
+        [cx - raio, cy - raio, cx + raio, cy + raio], inicio, inicio + 270, fill=_FORCA,
+        width=3 * _ESC,
+    )  # fmt: skip
     # o PIL mede o ângulo no sentido horário da tela: o arco vai de 200° a 470° (= 110°)
-    t = math.radians(200.0 if anti_horario else 110.0)
+    t = math.radians(inicio if anti_horario else inicio + 270.0)
     px, py = cx + raio * math.cos(t), cy + raio * math.sin(t)
     tx, ty = (math.sin(t), -math.cos(t)) if anti_horario else (-math.sin(t), math.cos(t))
     nx, ny = -ty, tx
@@ -1887,59 +1815,89 @@ def _momento_px(
     )
 
 
-def figura_solda(e: EntradaSolda) -> ImagemDiagrama:
-    """O grupo de filetes na chapa, o centro geométrico, as forças nele e a legenda."""
+def figura_solda(e: EntradaSolda, giro_graus: float = 0.0) -> ImagemDiagrama:
+    """O grupo de filetes na chapa, o centro geométrico, as forças nele e a legenda.
+
+    ``giro_graus`` gira só o desenho (anti-horário), para a ligação ficar como está na estrutura:
+    as forças continuam nos eixos x e y da chapa, que aparecem no canto.
+    """
+    giro = angulo_do_giro(giro_graus)
     largura_px, altura_px = 900, 480
     h = e.comprimento_mm
     b = e.largura_mm if e.arranjo != ARRANJO_UM else 60.0
-    esc = min((560 - 260) / max(b, 1), (altura_px - 190) / h) * _ESC
     imagem = Image.new("RGB", (largura_px * _ESC, altura_px * _ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
-    x0, y0 = 170 * _ESC, 110 * _ESC
+    # y da chapa para cima; na tela, para baixo
+    tela = _Tela([(-10.0, -(h + 10.0)), (b + 10.0, 10.0)], (150, 110, 490, 400), giro)
 
     def p(x: float, y: float) -> tuple[float, float]:
-        return (x0 + x * esc, y0 + (h - y) * esc)
+        return tela(x, -y)
 
-    dr.rectangle([p(-10, h + 10), p(b + 10, -10)], fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC)
+    chapa = [p(-10, -10), p(b + 10, -10), p(b + 10, h + 10), p(-10, h + 10)]
+    dr.polygon(chapa, fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC)
     segs = _segmentos(e)
     for x1, y1, x2, y2 in segs:
         dr.line([p(x1, y1), p(x2, y2)], fill=_SOLDA, width=6 * _ESC)
     # cotas fora da chapa (fora da região carregada)
-    _cota_vertical(dr, p(-10, 0)[0] - 30 * _ESC, p(0, h)[1], p(0, 0)[1], f"L = {_n(h, 0)}")
+    esquerda, baixo = tela.direcao(-1.0, 0.0), tela.direcao(0.0, 1.0)
+    _cota_alinhada(dr, p(-10, 0), p(-10, h), esquerda, f"L = {_n(h, 0)}", 20 * _ESC)
     if e.arranjo != ARRANJO_UM:
-        _cota_horizontal(dr, p(0, -10)[1] + 22 * _ESC, p(0, 0)[0], p(b, 0)[0], f"b = {_n(b, 0)}")
+        _cota_alinhada(dr, p(0, -10), p(b, -10), baixo, f"b = {_n(b, 0)}", 12 * _ESC)
     # centro geométrico do grupo de linhas
     comp = [math.hypot(x2 - x1, y2 - y1) for x1, y1, x2, y2 in segs]
     total = sum(comp)
     xc = sum((x1 + x2) / 2 * c for (x1, _a, x2, _b), c in zip(segs, comp, strict=True)) / total
     yc = sum((y1 + y2) / 2 * c for (_a, y1, _b, y2), c in zip(segs, comp, strict=True)) / total
-    cx, cy = p(xc, yc)
+    centro = p(xc, yc)
     dr.ellipse(
-        [cx - 6 * _ESC, cy - 6 * _ESC, cx + 6 * _ESC, cy + 6 * _ESC], outline=_TEXTO, width=2 * _ESC
+        [centro[0] - 6 * _ESC, centro[1] - 6 * _ESC, centro[0] + 6 * _ESC, centro[1] + 6 * _ESC],
+        outline=_TEXTO,
+        width=2 * _ESC,
     )
-    dr.line([(cx - 10 * _ESC, cy), (cx + 10 * _ESC, cy)], fill=_TEXTO, width=_ESC)
-    dr.line([(cx, cy - 10 * _ESC), (cx, cy + 10 * _ESC)], fill=_TEXTO, width=_ESC)
+    eixo_x, eixo_y = tela.direcao(1.0, 0.0), tela.direcao(0.0, -1.0)  # +x e +y da chapa
+    for eixo in (eixo_x, eixo_y):
+        dr.line([_mais(centro, eixo, -10 * _ESC), _mais(centro, eixo, 10 * _ESC)], fill=_TEXTO, width=_ESC)  # fmt: skip
     # forças de cálculo aplicadas no centro geométrico
     fonte = _fonte(12 * _ESC)
     forcas: list[str] = []
     if e.v_sd_kN:
-        s = 1 if e.v_sd_kN > 0 else -1  # como no cálculo: V positivo para cima (+y)
-        _seta_px(dr, (cx, cy - s * 14 * _ESC), (cx, cy - s * 78 * _ESC), _FORCA)
-        dr.text((cx + 10 * _ESC, cy - s * 70 * _ESC), "V", fill=_FORCA, font=fonte, anchor="lm")
-        forcas.append(f"V = {_n(e.v_sd_kN, 1)} kN ({'para cima' if s > 0 else 'para baixo'})")
-    if e.n_sd_kN:
-        s = 1 if e.n_sd_kN > 0 else -1  # N positivo para a direita (+x)
-        _seta_px(dr, (cx + s * 14 * _ESC, cy), (cx + s * 82 * _ESC, cy), _FORCA)
-        dr.text((cx + s * 76 * _ESC, cy - 14 * _ESC), "N", fill=_FORCA, font=fonte, anchor="mm")
-        forcas.append(
-            f"N = {_n(e.n_sd_kN, 1)} kN ({'para a direita' if s > 0 else 'para a esquerda'})"
+        s = 1 if e.v_sd_kN > 0 else -1  # como no cálculo: V positivo para +y (para cima)
+        sentido = (s * eixo_y[0], s * eixo_y[1])
+        _seta_px(dr, _mais(centro, sentido, 14 * _ESC), _mais(centro, sentido, 78 * _ESC), _FORCA)
+        _rotulo(
+            dr, _mais(centro, sentido, 66 * _ESC), eixo_x, 10 * _ESC, "V", _FORCA, fonte, fundo=True
         )
+        if giro:
+            direcao_v = "+y da chapa" if s > 0 else "−y da chapa"
+        else:
+            direcao_v = "para cima" if s > 0 else "para baixo"
+        forcas.append(f"V = {_n(e.v_sd_kN, 1)} kN ({direcao_v})")
+    if e.n_sd_kN:
+        s = 1 if e.n_sd_kN > 0 else -1  # N positivo para +x (para a direita)
+        sentido = (s * eixo_x[0], s * eixo_x[1])
+        _seta_px(dr, _mais(centro, sentido, 14 * _ESC), _mais(centro, sentido, 82 * _ESC), _FORCA)
+        _rotulo(
+            dr, _mais(centro, sentido, 70 * _ESC), eixo_y, 12 * _ESC, "N", _FORCA, fonte, fundo=True
+        )
+        if giro:
+            direcao_n = "+x da chapa" if s > 0 else "−x da chapa"
+        else:
+            direcao_n = "para a direita" if s > 0 else "para a esquerda"
+        forcas.append(f"N = {_n(e.n_sd_kN, 1)} kN ({direcao_n})")
     if e.m_sd_kNm:
-        _momento_px(dr, (cx, cy), 34 * _ESC, e.m_sd_kNm > 0)
-        dr.text((cx - 30 * _ESC, cy - 30 * _ESC), "M", fill=_FORCA, font=fonte, anchor="mm")
+        _momento_px(dr, centro, 34 * _ESC, e.m_sd_kNm > 0, giro)
+        canto = (-eixo_x[0] + eixo_y[0], -eixo_x[1] + eixo_y[1])
+        _rotulo(dr, centro, canto, 44 * _ESC, "M", _FORCA, fonte, fundo=True)
         forcas.append(
             f"M = {_n(abs(e.m_sd_kNm), 2)} kN·m ({'anti-horário' if e.m_sd_kNm > 0 else 'horário'})"
         )
+    itens_do_giro: list[tuple[str, str, str]] = []
+    if giro:  # os eixos da chapa num canto fixo da figura
+        _eixos_da_peca(dr, (70 * _ESC, 430 * _ESC), tela)
+        itens_do_giro = [
+            ("", _COTA, f"Desenho girado {texto_do_giro(giro)}:"),
+            ("", _COTA, "   x e y são os eixos da chapa (canto do desenho)"),
+        ]
     titulo = "Grupo de soldas de filete"
     dr.text((18 * _ESC, 14 * _ESC), titulo, fill=_TEXTO, font=_fonte(16 * _ESC))
     dr.text(
@@ -1958,6 +1916,7 @@ def figura_solda(e: EntradaSolda) -> ImagemDiagrama:
             ("ponto", _TEXTO, "Centro geométrico do grupo"),
             ("seta", _FORCA, "Forças de cálculo, no centro geométrico:"),
             *(("", _FORCA, f"   {texto}") for texto in forcas),
+            *itens_do_giro,
         ],
     )
     legenda = (
@@ -1974,6 +1933,8 @@ def figura_solda(e: EntradaSolda) -> ImagemDiagrama:
 CHAPA_NO_APOIO = "chapa_no_apoio"
 BARRA_SOLDADA = "barra_soldada"
 TIPOS_SOLDADOS = (CHAPA_NO_APOIO, BARRA_SOLDADA)
+#: As ligações cujo desenho pode girar (só o desenho: o cálculo não muda).
+TIPOS_QUE_GIRAM = (SOLDA, CHAPA_NO_APOIO, BARRA_SOLDADA)
 
 _ENTRADAS: dict[str, type] = {
     CHAPA_SIMPLES: EntradaChapaSimples,
@@ -1991,26 +1952,28 @@ def _classe_da_entrada(tipo: str) -> type:
     return _ENTRADAS[tipo]
 
 
-def figura(r: ResultadoLigacao) -> ImagemDiagrama:
+def figura(r: ResultadoLigacao, giro_graus: float = 0.0) -> ImagemDiagrama:
+    """O desenho da ligação; ``giro_graus`` gira o das soldas (os outros não giram)."""
     if r.tipo in TIPOS_SOLDADOS:
         from core import ligacoes_soldadas as ls
 
-        return ls.figura(r.adotada if r.adotada is not None else r.entrada)
+        return ls.figura(r.adotada if r.adotada is not None else r.entrada, giro_graus)
     if r.tipo == CHAPA_SIMPLES:
         return figura_chapa_simples(r.entrada)
     if r.tipo == CANTONEIRA_DUPLA:
         return figura_cantoneira_dupla(r.entrada)
     if r.tipo == PERFIL_FRIO:
         return figura_perfil_frio(r.entrada)
-    return figura_solda(r.entrada)
+    return figura_solda(r.entrada, giro_graus)
 
 
 def figura_gravada(dados: Mapping[str, Any]) -> ImagemDiagrama:
-    """A figura a partir do que o registro gravou (``{"tipo", "entrada"}``)."""
+    """A figura a partir do que o registro gravou (``{"tipo", "entrada"}`` e o giro, se houver)."""
     classe = _classe_da_entrada(str(dados["tipo"]))
     nomes = {f.name for f in fields(classe)}
     entrada = classe(**{k: v for k, v in dict(dados["entrada"]).items() if k in nomes})
-    return figura(ResultadoLigacao(str(dados["tipo"]), "", entrada, ()))
+    giro = float(dados.get("giro_graus") or 0.0)
+    return figura(ResultadoLigacao(str(dados["tipo"]), "", entrada, ()), giro)
 
 
 def calcular(entrada: Any) -> ResultadoLigacao:
@@ -2114,7 +2077,10 @@ _PREMISSAS = {
         "salvo quando informado.",
         "Com filete na ponta, ele trabalha na resistência da tabela, sem o aumento (primeira "
         "expressão de 6.2.5.2 c).",
-        "C_t da cantoneira com ℓ_c = média dos filetes longitudinais (a favor da segurança).",
+        "C_t da cantoneira com ℓ_c = média dos filetes longitudinais (a favor da segurança); "
+        "na 2025, sem os limites 0,90 e 0,60 da 2008 e não menor que A_c/A_g (5.2.5 c).",
+        "C_t da chapa só com filetes longitudinais: na 2025, 3ℓ_c²/(3ℓ_c² + b²)·(1 − t/(2ℓ_c)) "
+        "com ℓ_c = média dos dois filetes (5.2.5 d); na 2008, 1,00, 0,87 ou 0,75 pelo menor filete.",
         "A compressão da barra (flambagem) é do cálculo da barra; aqui só a chapa de nó.",
     ],
 }
@@ -2157,8 +2123,13 @@ def destaque(r: ResultadoLigacao) -> str:
 
 
 def registro_ligacao(
-    r: ResultadoLigacao, *, contexto: Mapping[str, Any] | None = None, responsavel: str = ""
+    r: ResultadoLigacao,
+    *,
+    contexto: Mapping[str, Any] | None = None,
+    responsavel: str = "",
+    giro_graus: float = 0.0,
 ) -> dict[str, Any]:
+    """O registro técnico da ligação; ``giro_graus`` é o giro do desenho no memorial."""
     geral = r.status
     texto = destaque(r)
     entradas = _entradas_do_registro(r.entrada)
@@ -2170,6 +2141,10 @@ def registro_ligacao(
         "alavanca e a verificação do apoio como um todo — casos específicos ficam com o projetista."
     )
     desenho = r.adotada if r.adotada is not None else r.entrada
+    figura_ligacao: dict[str, Any] = {"tipo": r.tipo, "entrada": asdict(desenho)}
+    giro = angulo_do_giro(giro_graus) if r.tipo in TIPOS_QUE_GIRAM else 0.0
+    if giro:
+        figura_ligacao["giro_graus"] = giro
     return criar_registro_tecnico(
         modulo=MODULO_TITULO,
         modulo_id=MODULO_ID,
@@ -2182,7 +2157,7 @@ def registro_ligacao(
             "verificações": linhas_para_registro(list(r.verificacoes)),
             "utilizacao_maxima": numero_json(r.aproveitamento_maximo, 4),
             "destaque_memorial": texto,
-            "figura_ligacao": {"tipo": r.tipo, "entrada": asdict(desenho)},
+            "figura_ligacao": figura_ligacao,
         },
         metodo=_METODO[r.tipo],
         premissas=list(_PREMISSAS[r.tipo]),
@@ -2194,12 +2169,17 @@ def registro_ligacao(
 
 
 def memorial_da_ligacao(
-    r: ResultadoLigacao, *, projeto: Mapping[str, Any] | None = None, formato: str = "word"
+    r: ResultadoLigacao,
+    *,
+    projeto: Mapping[str, Any] | None = None,
+    formato: str = "word",
+    giro_graus: float = 0.0,
 ) -> bytes:
     """O memorial só desta ligação, em Word ou PDF, no padrão do memorial do projeto.
 
     Com o projeto ativo, a capa e o controle levam os dados dele; sem projeto, ficam
-    "[a preencher]". Entra só o registro desta ligação (os outros cálculos do projeto não).
+    "[a preencher]". Entra só o registro desta ligação (os outros cálculos do projeto não). O
+    desenho sai com o mesmo giro da tela.
     """
     import importlib
 
@@ -2208,7 +2188,7 @@ def memorial_da_ligacao(
     # O gerador do memorial ainda está fora da lista do mypy (adoção gradual): importado pelo nome
     # para não arrastar os módulos dele para a verificação deste.
     relatorio = importlib.import_module("core.project_report")
-    registro = normalizar_registro_tecnico(registro_ligacao(r))
+    registro = normalizar_registro_tecnico(registro_ligacao(r, giro_graus=giro_graus))
     base: dict[str, Any] = dict(projeto) if projeto else {"nome": MODULO_TITULO}
     base["registros_tecnicos"] = [registro]
     nome = (

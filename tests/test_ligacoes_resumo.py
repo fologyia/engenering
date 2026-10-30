@@ -13,6 +13,7 @@ from dataclasses import replace
 import pytest
 
 from core import bolted_joint_check as chk
+from core import cantoneiras as ct
 from core import ligacoes as lg
 from core import ligacoes_soldadas as ls
 from core import soldas as sd
@@ -29,6 +30,8 @@ def linha(r: lg.ResultadoLigacao, inicio: str):
         "6.1.5.2", "6.1.8.2", "6.2.5.2 c)", "6.5.3 a)", "6.5.3 e 6.5.4", "6.5.5 b)", "6.5.6",
         # parte 2 do texto (30/10/2026)
         "6.2.2.2 d)", "6.2.6.2.2", "6.2.6.2.5", "5.2.2 a)", "5.3", "5.7.2.1", "6.5.4 b) e item 5.3",
+        # fotos de 5.2.4 e 5.2.5 (30/10/2026)
+        "5.2.5", "5.2.4 a)", "5.2.2 b), 5.2.4.2 e 5.2.5",
     ],
 )  # fmt: skip
 def test_itens_vistos_no_texto_da_2025_saem_sem_marca(texto):
@@ -37,7 +40,7 @@ def test_itens_vistos_no_texto_da_2025_saem_sem_marca(texto):
 
 @pytest.mark.parametrize(
     "texto",
-    ["5.2.5", "5.2.4 a)", "5.2.2 b) e 5.2.5", "Tabela 8"],  # 5.2.4 e 5.2.5 não vieram
+    ["Tabela 8", "6.3.5", "5.4.2.1"],  # tabela sem marca explícita e itens que não vieram
 )
 def test_itens_ainda_nao_vistos_ficam_a_confirmar(texto):
     assert sd.a_confirmar(sd.ref(sd.NBR_2025, texto))
@@ -279,6 +282,92 @@ def test_garganta_da_penetracao_parcial_pela_tabela_6_da_2025():
     assert "Tabela 6" in nova.formula and "Tabela 5" in antiga.formula
 
 
-def test_ct_da_barra_continua_a_confirmar():
-    r = lg.calcular(ls.EntradaBarraSoldada())
-    assert lg.referencias_pendentes(r) == ["NBR 8800:2025 5.2.2 b) e 5.2.5 (a confirmar)"]
+# ------------------------------------------------------------------ 5.2.4 e 5.2.5 da 2025 (fotos)
+FU_A36 = 400.0
+
+
+def _sem_linha(r: lg.ResultadoLigacao, inicio: str) -> bool:
+    return not any(v.nome.startswith(inicio) for v in r.verificacoes)
+
+
+@pytest.mark.parametrize(
+    "entrada",
+    [ls.EntradaBarraSoldada(), ls.EntradaBarraSoldada(peca=ls.PECA_CHAPA, com_apoio=False)],
+)
+def test_barra_soldada_sem_referencia_pendente(entrada):
+    r = lg.calcular(entrada)
+    assert lg.referencias_pendentes(r) == []
+    ruptura = linha(r, "Barra: tração (ruptura")
+    assert ruptura.referencia == "NBR 8800:2025 5.2.2 b), 5.2.4.2 e 5.2.5"
+    assert "A_n = A_g (sem furos, 5.2.4.2)" in ruptura.formula
+
+
+def test_ct_da_chapa_so_com_filetes_longitudinais_pela_formula_da_2025():
+    # 5.2.5 d) da 2025: C_t = 3ℓ_c²/(3ℓ_c² + b²)·(1 − t/(2ℓ_c)), ℓ_c = média dos dois filetes
+    e = ls.EntradaBarraSoldada(
+        peca=ls.PECA_CHAPA, largura_mm=50.0, t_peca_mm=9.525, com_apoio=False,
+        modo=ls.MODO_VERIFICAR, l_dorso_mm=60.0, l_borda_mm=80.0,
+    )  # fmt: skip
+    area, lc = 50.0 * 9.525, 70.0
+    ct_ = 3 * lc**2 / (3 * lc**2 + 50.0**2) * (1 - 9.525 / (2 * lc))
+    nova = linha(lg.calcular(e), "Barra: tração (ruptura")
+    assert nova.resistente == pytest.approx(ct_ * area * FU_A36 / 1.35 / 1000)
+    # a 2008 fica nos degraus, pelo menor filete: 1,5b > 60 ≥ b → 0,75
+    antiga = linha(lg.calcular(replace(e, norma=sd.NBR_2008)), "Barra: tração (ruptura")
+    assert antiga.resistente == pytest.approx(0.75 * area * FU_A36 / 1.35 / 1000)
+
+
+def test_chapa_com_filete_menor_que_a_largura_reprova_por_6_2_6_2_3():
+    e = ls.EntradaBarraSoldada(
+        peca=ls.PECA_CHAPA, largura_mm=50.0, t_peca_mm=9.525, com_apoio=False,
+        modo=ls.MODO_VERIFICAR, l_dorso_mm=40.0, l_borda_mm=40.0,
+    )  # fmt: skip
+    nova = lg.calcular(e)
+    assert linha(nova, "Solda: cada filete").status == "NÃO OK"
+    assert _sem_linha(nova, "Barra: ligação permitida")  # a 2025 não proíbe pelo C_t
+    antiga = lg.calcular(replace(e, norma=sd.NBR_2008))
+    assert linha(antiga, "Barra: ligação permitida").status == "NÃO OK"  # 5.2.5 d) da 2008
+
+
+def test_ct_da_cantoneira_sem_o_teto_de_0_90_na_2025():
+    cant = ct.obter_cantoneira('L 2" × 1/4"')
+    e = ls.EntradaBarraSoldada(
+        modo=ls.MODO_VERIFICAR, com_apoio=False, l_dorso_mm=300.0, l_borda_mm=300.0
+    )
+    bruto = 1 - cant.x_barra_mm / 300.0
+    assert bruto > 0.90
+    nova = linha(lg.calcular(e), "Barra: tração (ruptura")
+    assert nova.resistente == pytest.approx(bruto * cant.area_mm2 * FU_A36 / 1.35 / 1000)
+    antiga = linha(lg.calcular(replace(e, norma=sd.NBR_2008)), "Barra: tração (ruptura")
+    assert antiga.resistente == pytest.approx(0.90 * cant.area_mm2 * FU_A36 / 1.35 / 1000)
+
+
+def test_ct_da_cantoneira_curta_fica_em_ac_sobre_ag_na_2025():
+    # "não precisa ser considerado menor que A_c/A_g" (seções abertas); a 2008 proíbe C_t < 0,60
+    cant = ct.obter_cantoneira('L 2" × 1/4"')
+    e = ls.EntradaBarraSoldada(
+        modo=ls.MODO_VERIFICAR, com_apoio=False, l_dorso_mm=30.0, l_borda_mm=30.0
+    )
+    piso = cant.area_aba_mm2 / cant.area_mm2
+    assert 1 - cant.x_barra_mm / 30.0 < piso
+    nova = lg.calcular(e)
+    resistente = piso * cant.area_mm2 * FU_A36 / 1.35 / 1000
+    assert linha(nova, "Barra: tração (ruptura").resistente == pytest.approx(resistente)
+    assert _sem_linha(nova, "Barra: ligação permitida")
+    antiga = lg.calcular(replace(e, norma=sd.NBR_2008))
+    assert linha(antiga, "Barra: ligação permitida").status == "NÃO OK"
+
+
+def test_parafusos_com_ct_abaixo_de_0_60_so_e_proibido_na_2008():
+    base = chk.EntradaLigacao(designacao="M16", N=44.8, valores_sao_de_calculo=True, A_g=1542.0)
+    l_c = (base.n_col - 1) * base.s
+    curta = replace(base, e_c=0.5 * l_c, norma="NBR8800_2008")
+    antiga = chk.verificar_ligacao(curta)
+    proibida = next(v for v in antiga.verificacoes if v.nome.endswith("permitida pelo C_t"))
+    assert proibida.status == "NÃO OK" and proibida.tipo == "limite"
+    nova = chk.verificar_ligacao(replace(curta, norma="NBR8800_2024"))
+    assert not any(v.nome.endswith("permitida pelo C_t") for v in nova.verificacoes)
+    # o teto de 0,90 da 2008 aparece na fórmula quando corta
+    longa = chk.verificar_ligacao(replace(base, e_c=1.0, norma="NBR8800_2008"))
+    tracao = next(v for v in longa.verificacoes if v.nome == "Tração da peça (N_t,Rd)")
+    assert "limitado a 0,90" in tracao.formula

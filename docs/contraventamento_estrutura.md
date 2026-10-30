@@ -133,7 +133,8 @@ meio painel).
   equivalente ≤ 200; parafusos (6.3.3.2 e 6.3.3.3), colapso por rasgamento da aba (6.5.6), passo ≥
   2,7·d (6.3.9) e borda ≥ Tabela 16 (6.3.11).
 * **Tubo** com chapa concêntrica soldada num rasgo: `A_n` sem o rasgo, `C_t = [1 + (e_c/ℓ_c)^3,2]^−10`
-  (5.2.5-e; no tubo retangular, o maior `e_c` das duas orientações), compressão pela 5.3 e solda de
+  (5.2.5-e) com `e_c = D/π − t_c/2` no circular e `(h² + 2hb)/[4(h + b)] − t_c/2` no retangular
+  (Figuras 6 e 7 da 2025; o maior das duas orientações), compressão pela 5.3 e solda de
   quatro cordões (6.2.5, γ_w2 = 1,35).
 * **Barra redonda rosqueada** (tirante): `N_t,Rd = mín(0,75·A_b·f_u/γ_a2; A_b·f_y/γ_a1)` (5.2.7 e
   6.3.3.1); só em X só tração.

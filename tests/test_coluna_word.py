@@ -8,6 +8,7 @@ import pytest
 from docx import Document
 
 from core import column_buckling as cb
+from core import desenho_da_coluna as dc
 from core import section_catalog as sc
 from core.coluna_word import gerar_word_coluna, linhas_do_resumo
 
@@ -67,7 +68,25 @@ def test_word_traz_todas_as_secoes_da_pagina(coluna):
     assert "γ_a1 = 1,10" in cheio and "N_c,Rd = 835,24 kN" in cheio  # vírgula decimal
     assert "NBR 8800 4.7" in cheio  # item da norma não vira decimal
     documento = Document(BytesIO(conteudo))
-    assert len(documento.inline_shapes) == 1  # a curva de flambagem
+    assert len(documento.inline_shapes) == 2  # o desenho da seção e a curva de flambagem
+    assert "W 250 x 32,7: perfil I laminado" in cheio  # a legenda do desenho da seção
+
+
+def test_word_leva_o_desenho_da_secao_girado(coluna):
+    entrada, resultado = coluna
+    girado = texto(gerar_word_coluna(entrada, resultado, giro_da_secao=90))
+    assert "desenho girado 90° no sentido anti-horário" in girado
+
+
+def test_word_leva_a_coluna_em_pe_com_a_mao_francesa(coluna):
+    entrada, resultado = coluna
+    em_pe = dc.ColunaEmPe(
+        entrada.secao, 4000.0, 4000.0, 2000.0, 1.0, 1.0, "Biapoiada (pino-pino)",
+        "Biapoiada (pino-pino)", dc.MaoFrancesaNoDesenho(20.0, 45.0, 3000.0, "x", 120.0),
+    )  # fmt: skip
+    conteudo = gerar_word_coluna(entrada, resultado, coluna_em_pe=em_pe)
+    assert len(Document(BytesIO(conteudo)).inline_shapes) == 3  # seção, coluna em pé e curva
+    assert "mão-francesa a 3000 mm da base" in texto(conteudo)
 
 
 def test_resumo_igual_ao_da_pagina(coluna):
