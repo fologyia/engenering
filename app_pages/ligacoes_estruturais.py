@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from components.ligacoes_help import AJUDA
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
-from components.verification_table import mostrar_tabela_verificacoes
+from components.verification_table import mostrar_verificacoes_resumidas, texto_markdown
 from core import bolted_connection as bc
 from core import cantoneiras as ct
 from core import ligacoes as lg
@@ -21,16 +22,29 @@ from core.verificacao import csv_verificacoes
 configurar_pagina("Ligações estruturais", ":material/link:")
 cabecalho_pagina(
     "Ligações estruturais",
-    "Os casos comuns do mezanino e da escada, em duas partes. Parafusadas: chapa simples e dupla "
-    "cantoneira ligando viga em viga ou em pilar (NBR 8800) e perfil formado a frio (NBR 14762). "
-    "Soldadas: grupo de filetes, barra na chapa de nó e chapa no apoio (filete, penetração total "
-    "ou parcial). Casos especiais (ligação rígida, chapa de extremidade, enrijecedores) ficam com "
-    "o projetista.",
+    "Dimensionamento e verificação das ligações parafusadas e soldadas usuais de mezaninos e "
+    "escadas, conforme a NBR 8800 e a NBR 14762.",
     categoria="Dimensionamento complementar",
     icone=":material/link:",
     cor="blue",
     ajuda_modulo="Ligações estruturais",
 )
+
+with st.expander("Escopo, premissas e casos não verificados", icon=":material/info:"):
+    st.markdown(
+        "- **Ligações parafusadas:** chapa simples e dupla cantoneira ligando viga em viga ou em "
+        "pilar (NBR 8800) e a ligação de perfil formado a frio (NBR 14762). A chapa simples "
+        "também verifica a solda dela no apoio.\n"
+        "- **Ligações soldadas:** grupo de filetes no plano, barra (cantoneira ou tala) soldada na "
+        "chapa de nó e chapa soldada no apoio, com filete, penetração total ou parcial "
+        "(NBR 8800:2025; a 2008 para conferir projetos antigos).\n"
+        "- **Premissas:** forças de cálculo (combinação ELU) informadas; ligações flexíveis "
+        "(rotuladas); o apoio é verificado só junto à ligação — o perfil do apoio como um todo é "
+        "do cálculo dele. As premissas de cada caso vão no memorial.\n"
+        "- **Não verificados aqui (ficam com o projetista):** ligação rígida (com momento na "
+        "viga), chapa de extremidade, enrijecedores, efeito de alavanca em ligação soldada, "
+        "fadiga e a flambagem da barra (só a da chapa de nó entra)."
+    )
 
 PARAFUSADAS = "parafusadas"
 SOLDADAS = "soldadas"
@@ -66,6 +80,15 @@ def _indice(opcoes: list[str], valor: str) -> int:
     return opcoes.index(valor) if valor in opcoes else 0
 
 
+def _valor(chave: str, padrao: object) -> object:
+    """O valor de um campo que não aparece no caso escolhido: o guardado (persist_state) ou o padrão.
+
+    Os campos que não se aplicam somem da tela; o cálculo não os usa, mas a entrada leva o último
+    valor digitado, que volta quando o campo reaparece.
+    """
+    return st.session_state.get(chave, padrao)
+
+
 def _norma_e_combinacao(colunas: list, prefixo: str) -> tuple[str, str]:
     """Norma e combinação (os γ) das ligações soldadas."""
     normas = list(sd.NORMAS)
@@ -81,44 +104,53 @@ def _norma_e_combinacao(colunas: list, prefixo: str) -> tuple[str, str]:
     return norma, combinacao
 
 
-def _apoio_da_solda(prefixo: str, padrao: ls.EntradaChapaNoApoio | ls.EntradaBarraSoldada, desligado: bool = False) -> dict[str, object]:  # fmt: skip
-    """O apoio da chapa soldada: uma chapa qualquer ou a mesa de um perfil I/H do catálogo."""
-    c = st.columns(4)
+def _apoio_da_solda(prefixo: str, padrao: ls.EntradaChapaNoApoio | ls.EntradaBarraSoldada) -> dict[str, object]:  # fmt: skip
+    """O apoio da chapa soldada: uma chapa qualquer ou a mesa de um perfil I/H do catálogo.
+
+    Só aparecem os campos do apoio escolhido: espessura para a chapa; perfil, posição na mesa e
+    proximidade da ponta para o perfil.
+    """
+    colunas = iter(st.columns(4))
     apoios = list(ls.APOIOS)
-    apoio = c[0].selectbox(
+    apoio = next(colunas).selectbox(
         "O apoio", apoios, format_func=ls.APOIOS.get, key=f"{prefixo}_apoio",
-        persist_state="session", help=AJUDA["apoio_solda"], disabled=desligado,
+        persist_state="session", help=AJUDA["apoio_solda"],
     )  # fmt: skip
     perfil = apoio == ls.APOIO_PERFIL
-    t_apoio = c[1].number_input(
-        "Espessura do apoio (mm)", 1.0, 200.0, padrao.t_apoio_mm, 0.5, key=f"{prefixo}_t_apoio",
-        persist_state="session", help=AJUDA["t_apoio_solda"], disabled=desligado or perfil,
-    )  # fmt: skip
     acos = list(lg.ACOS)
-    aco_apoio = c[2].selectbox(
+    aco_apoio = next(colunas).selectbox(
         "Aço do apoio", acos, index=_indice(acos, padrao.aco_apoio), key=f"{prefixo}_aco_apoio",
-        persist_state="session", help=AJUDA["aco_apoio_solda"], disabled=desligado,
+        persist_state="session", help=AJUDA["aco_apoio_solda"],
     )  # fmt: skip
-    perfil_apoio = c[3].selectbox(
-        "Perfil do apoio", PERFIS_DE_APOIO, key=f"{prefixo}_perfil_apoio",
-        persist_state="session", help=AJUDA["perfil_apoio"], disabled=desligado or not perfil,
-    )  # fmt: skip
-    c = st.columns(4)
-    orientacoes = list(ls.ORIENTACOES)
-    orientacao = c[0].selectbox(
-        "Posição da chapa na mesa", orientacoes, format_func=ls.ORIENTACOES.get,
-        key=f"{prefixo}_orient", persist_state="session", help=AJUDA["orientacao"],
-        disabled=desligado or not perfil,
-    )  # fmt: skip
-    perto = c[1].toggle(
-        "Perto da ponta do perfil", key=f"{prefixo}_perto", persist_state="session",
-        help=AJUDA["perto_extremidade"], disabled=desligado or not perfil,
-    )  # fmt: skip
+    if perfil:
+        perfil_apoio = next(colunas).selectbox(
+            "Perfil do apoio", PERFIS_DE_APOIO, key=f"{prefixo}_perfil_apoio",
+            persist_state="session", help=AJUDA["perfil_apoio"],
+        )  # fmt: skip
+        t_apoio = _valor(f"{prefixo}_t_apoio", padrao.t_apoio_mm)
+        colunas = iter(st.columns(4))
+        orientacoes = list(ls.ORIENTACOES)
+        orientacao = next(colunas).selectbox(
+            "Posição da chapa na mesa", orientacoes, format_func=ls.ORIENTACOES.get,
+            key=f"{prefixo}_orient", persist_state="session", help=AJUDA["orientacao"],
+        )  # fmt: skip
+        perto = next(colunas).toggle(
+            "Perto da ponta do perfil", key=f"{prefixo}_perto", persist_state="session",
+            help=AJUDA["perto_extremidade"],
+        )  # fmt: skip
+    else:
+        t_apoio = next(colunas).number_input(
+            "Espessura do apoio (mm)", 1.0, 200.0, padrao.t_apoio_mm, 0.5,
+            key=f"{prefixo}_t_apoio", persist_state="session", help=AJUDA["t_apoio_solda"],
+        )  # fmt: skip
+        perfil_apoio = ""
+        orientacao = _valor(f"{prefixo}_orient", padrao.orientacao)
+        perto = _valor(f"{prefixo}_perto", False)
     return {
         "apoio": apoio,
         "t_apoio_mm": float(t_apoio),
         "aco_apoio": aco_apoio,
-        "perfil_apoio": perfil_apoio if perfil else "",
+        "perfil_apoio": perfil_apoio,
         "orientacao": orientacao,
         "perto_da_extremidade": bool(perto),
     }
@@ -206,28 +238,30 @@ if tipo == lg.CHAPA_SIMPLES:
             persist_state="session",
             help=AJUDA["recorte"],
         )
-        rec_h = c[1].number_input(
-            "Altura do recorte (mm)",
-            1.0,
-            500.0,
-            PADRAO_CHAPA.recorte_altura_mm,
-            5.0,
-            key="lig_rec_h",
-            persist_state="session",
-            help=AJUDA["recorte_altura"],
-            disabled=not recorte,
-        )
-        rec_c = c[2].number_input(
-            "Comprimento do recorte (mm)",
-            1.0,
-            2000.0,
-            PADRAO_CHAPA.recorte_comprimento_mm,
-            5.0,
-            key="lig_rec_c",
-            persist_state="session",
-            help=AJUDA["recorte_comprimento"],
-            disabled=not recorte,
-        )
+        if recorte:
+            rec_h = c[1].number_input(
+                "Altura do recorte (mm)",
+                1.0,
+                500.0,
+                PADRAO_CHAPA.recorte_altura_mm,
+                5.0,
+                key="lig_rec_h",
+                persist_state="session",
+                help=AJUDA["recorte_altura"],
+            )
+            rec_c = c[2].number_input(
+                "Comprimento do recorte (mm)",
+                1.0,
+                2000.0,
+                PADRAO_CHAPA.recorte_comprimento_mm,
+                5.0,
+                key="lig_rec_c",
+                persist_state="session",
+                help=AJUDA["recorte_comprimento"],
+            )
+        else:
+            rec_h = _valor("lig_rec_h", PADRAO_CHAPA.recorte_altura_mm)
+            rec_c = _valor("lig_rec_c", PADRAO_CHAPA.recorte_comprimento_mm)
         normas = list(lg.NORMAS)
         norma = c[3].selectbox(
             "Norma",
@@ -472,16 +506,19 @@ elif tipo == lg.CANTONEIRA_DUPLA:
             "Mesa superior recortada", value=PADRAO_CANT.recorte, key="lig_c_recorte",
             persist_state="session", help=AJUDA["recorte"],
         )  # fmt: skip
-        rec_h = c[2].number_input(
-            "Altura do recorte (mm)", 1.0, 500.0, PADRAO_CANT.recorte_altura_mm, 5.0,
-            key="lig_c_rec_h", persist_state="session", help=AJUDA["recorte_altura"],
-            disabled=not recorte,
-        )  # fmt: skip
-        rec_c = c[3].number_input(
-            "Comprimento do recorte (mm)", 1.0, 2000.0, PADRAO_CANT.recorte_comprimento_mm, 5.0,
-            key="lig_c_rec_c", persist_state="session", help=AJUDA["recorte_comprimento"],
-            disabled=not recorte,
-        )  # fmt: skip
+        if recorte:
+            rec_h = c[2].number_input(
+                "Altura do recorte (mm)", 1.0, 500.0, PADRAO_CANT.recorte_altura_mm, 5.0,
+                key="lig_c_rec_h", persist_state="session", help=AJUDA["recorte_altura"],
+            )  # fmt: skip
+            rec_c = c[3].number_input(
+                "Comprimento do recorte (mm)", 1.0, 2000.0, PADRAO_CANT.recorte_comprimento_mm,
+                5.0, key="lig_c_rec_c", persist_state="session",
+                help=AJUDA["recorte_comprimento"],
+            )  # fmt: skip
+        else:
+            rec_h = _valor("lig_c_rec_h", PADRAO_CANT.recorte_altura_mm)
+            rec_c = _valor("lig_c_rec_c", PADRAO_CANT.recorte_comprimento_mm)
         normas = list(lg.NORMAS)
         norma = c[4].selectbox(
             "Norma", normas, format_func=lg.NORMAS_ROTULOS.get, key="lig_c_norma",
@@ -808,11 +845,13 @@ elif tipo == lg.SOLDA:
             "Comprimento L (mm)", 5.0, 5000.0, PADRAO_SOLDA.comprimento_mm, 5.0,
             key="lig_s_l", persist_state="session", help=AJUDA["comprimento_solda"],
         )  # fmt: skip
-        largura = c[2].number_input(
-            "Largura b (mm)", 5.0, 5000.0, PADRAO_SOLDA.largura_mm, 5.0, key="lig_s_b",
-            persist_state="session", help=AJUDA["largura_solda"],
-            disabled=arranjo == lg.ARRANJO_UM,
-        )  # fmt: skip
+        if arranjo == lg.ARRANJO_UM:
+            largura = _valor("lig_s_b", PADRAO_SOLDA.largura_mm)
+        else:
+            largura = c[2].number_input(
+                "Largura b (mm)", 5.0, 5000.0, PADRAO_SOLDA.largura_mm, 5.0, key="lig_s_b",
+                persist_state="session", help=AJUDA["largura_solda"],
+            )  # fmt: skip
         perna = c[3].number_input(
             "Perna (mm)", 1.0, 25.0, PADRAO_SOLDA.perna_mm, 1.0, key="lig_s_perna",
             persist_state="session", help=AJUDA["perna_solda"],
@@ -887,27 +926,32 @@ elif tipo == lg.BARRA_SOLDADA:
         )  # fmt: skip
         norma_b, comb_b = _norma_e_combinacao(c[1:], "lig_b")
         dimensionar = modo_b == ls.MODO_DIMENSIONAR
-        c = st.columns(5)
+        colunas = iter(st.columns(4))
         pecas = list(ls.PECAS)
-        peca = c[0].selectbox(
+        peca = next(colunas).selectbox(
             "A barra", pecas, format_func=ls.PECAS.get, key="lig_b_peca",
             persist_state="session", help=AJUDA["peca"],
         )  # fmt: skip
         e_cant = peca == ls.PECA_CANTONEIRA
-        cantoneira = c[1].selectbox(
-            "Cantoneira", CANTONEIRAS, index=_indice(CANTONEIRAS, P.cantoneira), key="lig_b_cant",
-            persist_state="session", help=AJUDA["cantoneira_barra"], disabled=not e_cant,
-        )  # fmt: skip
-        largura_b = c[2].number_input(
-            "Largura da chapa (mm)", 5.0, 1000.0, P.largura_mm, 5.0, key="lig_b_larg",
-            persist_state="session", help=AJUDA["largura_barra"], disabled=e_cant,
-        )  # fmt: skip
-        t_b = c[3].number_input(
-            "Espessura da chapa (mm)", 1.0, 100.0, P.t_peca_mm, 0.5, key="lig_b_t",
-            persist_state="session", help=AJUDA["t_barra"], disabled=e_cant,
-        )  # fmt: skip
+        if e_cant:
+            cantoneira = next(colunas).selectbox(
+                "Cantoneira", CANTONEIRAS, index=_indice(CANTONEIRAS, P.cantoneira),
+                key="lig_b_cant", persist_state="session", help=AJUDA["cantoneira_barra"],
+            )  # fmt: skip
+            largura_b = _valor("lig_b_larg", P.largura_mm)
+            t_b = _valor("lig_b_t", P.t_peca_mm)
+        else:
+            cantoneira = _valor("lig_b_cant", P.cantoneira)
+            largura_b = next(colunas).number_input(
+                "Largura da chapa (mm)", 5.0, 1000.0, P.largura_mm, 5.0, key="lig_b_larg",
+                persist_state="session", help=AJUDA["largura_barra"],
+            )  # fmt: skip
+            t_b = next(colunas).number_input(
+                "Espessura da chapa (mm)", 1.0, 100.0, P.t_peca_mm, 0.5, key="lig_b_t",
+                persist_state="session", help=AJUDA["t_barra"],
+            )  # fmt: skip
         acos_b = list(lg.ACOS)
-        aco_b = c[4].selectbox(
+        aco_b = next(colunas).selectbox(
             "Aço da barra", acos_b, index=_indice(acos_b, P.aco_peca), key="lig_b_aco",
             persist_state="session", help=AJUDA["aco_barra"],
         )  # fmt: skip
@@ -930,44 +974,53 @@ elif tipo == lg.BARRA_SOLDADA:
         )  # fmt: skip
     with st.container(border=True), secao_protegida("2. Os filetes da barra"):
         st.subheader("2. Os filetes da barra", help=AJUDA["sec_filetes_barra"])
-        c = st.columns(4)
-        perna_b = c[0].number_input(
+        colunas = iter(st.columns(4))
+        perna_b = next(colunas).number_input(
             "Perna (mm)", 1.0, 25.0, P.perna_mm, 1.0, key="lig_b_perna",
             persist_state="session", help=AJUDA["perna_barra"],
         )  # fmt: skip
         eletrodos = list(lg.ELETRODOS)
-        eletrodo_b = c[1].selectbox(
+        eletrodo_b = next(colunas).selectbox(
             "Eletrodo", eletrodos, index=_indice(eletrodos, P.eletrodo), key="lig_b_eletrodo",
             persist_state="session", help=AJUDA["eletrodo"],
         )  # fmt: skip
         distribuicoes = list(ls.DISTRIBUICOES)
-        distribuicao = c[2].selectbox(
-            "Comprimentos no dorso e na borda", distribuicoes, format_func=ls.DISTRIBUICOES.get,
-            key="lig_b_dist", persist_state="session", help=AJUDA["distribuicao"],
-            disabled=not e_cant,
-        )  # fmt: skip
-        ponta = c[3].toggle(
+        if e_cant:
+            distribuicao = next(colunas).selectbox(
+                "Comprimentos no dorso e na borda", distribuicoes,
+                format_func=ls.DISTRIBUICOES.get, key="lig_b_dist", persist_state="session",
+                help=AJUDA["distribuicao"],
+            )  # fmt: skip
+        else:
+            distribuicao = _valor("lig_b_dist", P.distribuicao)
+        ponta = next(colunas).toggle(
             "Filete também na ponta da barra", key="lig_b_ponta", persist_state="session",
             help=AJUDA["solda_na_ponta"],
         )  # fmt: skip
-        c = st.columns(4)
-        l_dorso = c[0].number_input(
-            "Filete do dorso (mm)", 5.0, 3000.0, P.l_dorso_mm, 5.0, key="lig_b_la",
-            persist_state="session", help=AJUDA["l_dorso"], disabled=dimensionar,
-        )  # fmt: skip
-        l_borda = c[1].number_input(
-            "Filete da borda (mm)", 5.0, 3000.0, P.l_borda_mm, 5.0, key="lig_b_lb",
-            persist_state="session", help=AJUDA["l_borda"], disabled=dimensionar,
-        )  # fmt: skip
-        cobrimento = c[2].number_input(
+        colunas = iter(st.columns(4))
+        if dimensionar:
+            l_dorso = _valor("lig_b_la", P.l_dorso_mm)
+            l_borda = _valor("lig_b_lb", P.l_borda_mm)
+        else:
+            l_dorso = next(colunas).number_input(
+                "Filete do dorso (mm)", 5.0, 3000.0, P.l_dorso_mm, 5.0, key="lig_b_la",
+                persist_state="session", help=AJUDA["l_dorso"],
+            )  # fmt: skip
+            l_borda = next(colunas).number_input(
+                "Filete da borda (mm)", 5.0, 3000.0, P.l_borda_mm, 5.0, key="lig_b_lb",
+                persist_state="session", help=AJUDA["l_borda"],
+            )  # fmt: skip
+        cobrimento = next(colunas).number_input(
             "Cobrimento da superposição (mm)", 0.0, 3000.0, P.cobrimento_mm, 5.0,
             key="lig_b_cob", persist_state="session", help=AJUDA["cobrimento"],
         )  # fmt: skip
-        passo_b = c[3].number_input(
-            "Arredondar para (mm)", 1.0, 50.0, P.passo_arredondamento_mm, 1.0,
-            key="lig_b_passo", persist_state="session", help=AJUDA["passo_arredondamento"],
-            disabled=not dimensionar,
-        )  # fmt: skip
+        if dimensionar:
+            passo_b = next(colunas).number_input(
+                "Arredondar para (mm)", 1.0, 50.0, P.passo_arredondamento_mm, 1.0,
+                key="lig_b_passo", persist_state="session", help=AJUDA["passo_arredondamento"],
+            )  # fmt: skip
+        else:
+            passo_b = _valor("lig_b_passo", P.passo_arredondamento_mm)
     with st.container(border=True), secao_protegida("3. Esforços de cálculo"):
         st.subheader("3. Esforços de cálculo", help=AJUDA["sec_esforcos_barra"])
         c = st.columns(4)
@@ -987,43 +1040,58 @@ elif tipo == lg.BARRA_SOLDADA:
             "Critério Anglo American", key="lig_b_anglo", persist_state="session",
             help=AJUDA["anglo_barra"],
         )  # fmt: skip
-        c = st.columns(4)
-        k_no = c[0].number_input(
-            "K da chapa de nó", 0.5, 3.0, P.k_no, 0.05, key="lig_b_k", persist_state="session",
-            help=AJUDA["k_no"], disabled=n_c <= 0,
-        )  # fmt: skip
-        l_livre = c[1].number_input(
-            "Comprimento livre da chapa de nó (mm)", 1.0, 3000.0, P.l_livre_no_mm, 5.0,
-            key="lig_b_lliv", persist_state="session", help=AJUDA["l_livre_no"],
-            disabled=n_c <= 0,
-        )  # fmt: skip
+        if n_c > 0:  # a flambagem da chapa de nó só entra com compressão
+            c = st.columns(4)
+            k_no = c[0].number_input(
+                "K da chapa de nó", 0.5, 3.0, P.k_no, 0.05, key="lig_b_k",
+                persist_state="session", help=AJUDA["k_no"],
+            )  # fmt: skip
+            l_livre = c[1].number_input(
+                "Comprimento livre da chapa de nó (mm)", 1.0, 3000.0, P.l_livre_no_mm, 5.0,
+                key="lig_b_lliv", persist_state="session", help=AJUDA["l_livre_no"],
+            )  # fmt: skip
+        else:
+            k_no = _valor("lig_b_k", P.k_no)
+            l_livre = _valor("lig_b_lliv", P.l_livre_no_mm)
     with st.container(border=True), secao_protegida("4. A chapa de nó soldada no apoio"):
         st.subheader("4. A chapa de nó soldada no apoio", help=AJUDA["sec_apoio_barra"])
         com_apoio = st.toggle(
             "Verificar a solda da chapa de nó no apoio", value=True, key="lig_b_com_apoio",
             persist_state="session", help=AJUDA["com_apoio"],
         )  # fmt: skip
-        c = st.columns(4)
-        theta = c[0].number_input(
-            "Ângulo θ entre a barra e o apoio (°)", 1.0, 90.0, P.theta_graus, 1.0,
-            key="lig_b_theta", persist_state="session", help=AJUDA["theta"],
-            disabled=not com_apoio,
-        )  # fmt: skip
-        l_apoio = c[1].number_input(
-            "Comprimento da solda no apoio (mm)" if not dimensionar else "Comprimento disponível no apoio (mm)",
-            5.0, 5000.0, P.l_apoio_mm, 5.0, key="lig_b_lapoio", persist_state="session",
-            help=AJUDA["l_apoio"], disabled=not com_apoio,
-        )  # fmt: skip
-        perna_apoio = c[2].number_input(
-            "Perna no apoio (mm)", 1.0, 25.0, P.perna_apoio_mm, 1.0, key="lig_b_perna_apoio",
-            persist_state="session", help=AJUDA["perna_apoio"], disabled=not com_apoio,
-        )  # fmt: skip
-        excentricidade = c[3].number_input(
-            "Excentricidade no apoio (mm)", -2000.0, 2000.0, P.excentricidade_mm, 5.0,
-            key="lig_b_exc", persist_state="session", help=AJUDA["excentricidade"],
-            disabled=not com_apoio,
-        )  # fmt: skip
-        apoio_b = _apoio_da_solda("lig_b", P, desligado=not com_apoio)
+        if com_apoio:
+            c = st.columns(4)
+            theta = c[0].number_input(
+                "Ângulo θ entre a barra e o apoio (°)", 1.0, 90.0, P.theta_graus, 1.0,
+                key="lig_b_theta", persist_state="session", help=AJUDA["theta"],
+            )  # fmt: skip
+            l_apoio = c[1].number_input(
+                "Comprimento disponível no apoio (mm)" if dimensionar else "Comprimento da solda no apoio (mm)",
+                5.0, 5000.0, P.l_apoio_mm, 5.0, key="lig_b_lapoio", persist_state="session",
+                help=AJUDA["l_apoio"],
+            )  # fmt: skip
+            perna_apoio = c[2].number_input(
+                "Perna no apoio (mm)", 1.0, 25.0, P.perna_apoio_mm, 1.0, key="lig_b_perna_apoio",
+                persist_state="session", help=AJUDA["perna_apoio"],
+            )  # fmt: skip
+            excentricidade = c[3].number_input(
+                "Excentricidade no apoio (mm)", -2000.0, 2000.0, P.excentricidade_mm, 5.0,
+                key="lig_b_exc", persist_state="session", help=AJUDA["excentricidade"],
+            )  # fmt: skip
+            apoio_b = _apoio_da_solda("lig_b", P)
+        else:
+            theta = _valor("lig_b_theta", P.theta_graus)
+            l_apoio = _valor("lig_b_lapoio", P.l_apoio_mm)
+            perna_apoio = _valor("lig_b_perna_apoio", P.perna_apoio_mm)
+            excentricidade = _valor("lig_b_exc", P.excentricidade_mm)
+            apoio_b = {
+                "apoio": _valor("lig_b_apoio", P.apoio),
+                "t_apoio_mm": float(_valor("lig_b_t_apoio", P.t_apoio_mm)),
+                "aco_apoio": _valor("lig_b_aco_apoio", P.aco_apoio),
+                "perfil_apoio": "",
+                "orientacao": _valor("lig_b_orient", P.orientacao),
+                "perto_da_extremidade": bool(_valor("lig_b_perto", False)),
+            }
     entrada = ls.EntradaBarraSoldada(
         norma=norma_b,
         combinacao=comb_b,
@@ -1075,45 +1143,63 @@ else:
         )  # fmt: skip
         filete = tipo_solda == ls.TIPO_FILETE
         parcial = tipo_solda == ls.TIPO_PARCIAL
-        c = st.columns(4)
-        lados = c[0].selectbox(
-            "Lados da chapa com solda", [2, 1], format_func=LADOS.get, key="lig_c2_lados",
-            persist_state="session",
-            help=AJUDA["lados"], disabled=tipo_solda == ls.TIPO_TOTAL,
-        )  # fmt: skip
-        perna_t = c[1].number_input(
-            "Perna do filete (mm)", 1.0, 25.0, T.perna_mm, 1.0, key="lig_c2_perna",
-            persist_state="session", help=AJUDA["perna_chapa"], disabled=not filete,
-        )  # fmt: skip
-        profundidade = c[2].number_input(
-            "Profundidade do chanfro S (mm)", 1.0, 100.0, T.profundidade_mm, 0.5,
-            key="lig_c2_prof", persist_state="session", help=AJUDA["profundidade"],
-            disabled=not parcial,
-        )  # fmt: skip
-        menos3 = c[3].toggle(
-            "Garganta = S − 3 mm", key="lig_c2_menos3", persist_state="session",
-            help=AJUDA["menos_3mm"], disabled=not parcial,
-        )  # fmt: skip
-        c = st.columns(4)
+        dimensionar_t = modo_t == ls.MODO_DIMENSIONAR
+        colunas = iter(st.columns(4))
+        if tipo_solda == ls.TIPO_TOTAL:
+            lados = _valor("lig_c2_lados", 2)
+        else:
+            lados = next(colunas).selectbox(
+                "Lados da chapa com solda", [2, 1], format_func=LADOS.get, key="lig_c2_lados",
+                persist_state="session", help=AJUDA["lados"],
+            )  # fmt: skip
+        if filete:
+            perna_t = next(colunas).number_input(
+                "Perna do filete (mm)", 1.0, 25.0, T.perna_mm, 1.0, key="lig_c2_perna",
+                persist_state="session", help=AJUDA["perna_chapa"],
+            )  # fmt: skip
+        else:
+            perna_t = _valor("lig_c2_perna", T.perna_mm)
+        if parcial:
+            profundidade = next(colunas).number_input(
+                "Profundidade do chanfro S (mm)", 1.0, 100.0, T.profundidade_mm, 0.5,
+                key="lig_c2_prof", persist_state="session", help=AJUDA["profundidade"],
+            )  # fmt: skip
+            menos3 = next(colunas).toggle(
+                "Garganta = S − 3 mm", key="lig_c2_menos3", persist_state="session",
+                help=AJUDA["menos_3mm"],
+            )  # fmt: skip
+        else:
+            profundidade = _valor("lig_c2_prof", T.profundidade_mm)
+            menos3 = _valor("lig_c2_menos3", False)
         eletrodos = list(lg.ELETRODOS)
-        eletrodo_t = c[0].selectbox(
+        eletrodo_t = next(colunas).selectbox(
             "Eletrodo", eletrodos, index=_indice(eletrodos, T.eletrodo), key="lig_c2_eletrodo",
             persist_state="session", help=AJUDA["eletrodo"],
         )  # fmt: skip
-        intermitente = c[1].toggle(
-            "Filete intermitente", value=T.intermitente, key="lig_c2_inter",
-            persist_state="session", help=AJUDA["intermitente"], disabled=not filete,
-        )  # fmt: skip
-        inter = filete and intermitente
-        segmento = c[2].number_input(
-            "Segmento (mm)", 5.0, 1000.0, T.segmento_mm, 5.0, key="lig_c2_seg",
-            persist_state="session", help=AJUDA["segmento"], disabled=not inter,
-        )  # fmt: skip
-        n_seg = c[3].number_input(
-            "Segmentos por linha", 1, 50, T.n_segmentos, 1, key="lig_c2_nseg",
-            persist_state="session", help=AJUDA["n_segmentos"],
-            disabled=not inter or modo_t == ls.MODO_DIMENSIONAR,
-        )  # fmt: skip
+        if filete:
+            intermitente = next(colunas).toggle(
+                "Filete intermitente", value=T.intermitente, key="lig_c2_inter",
+                persist_state="session", help=AJUDA["intermitente"],
+            )  # fmt: skip
+        else:
+            intermitente = _valor("lig_c2_inter", T.intermitente)
+        inter = filete and bool(intermitente)
+        if inter:
+            colunas = iter(st.columns(4))
+            segmento = next(colunas).number_input(
+                "Segmento (mm)", 5.0, 1000.0, T.segmento_mm, 5.0, key="lig_c2_seg",
+                persist_state="session", help=AJUDA["segmento"],
+            )  # fmt: skip
+            if dimensionar_t:
+                n_seg = _valor("lig_c2_nseg", T.n_segmentos)
+            else:
+                n_seg = next(colunas).number_input(
+                    "Segmentos por linha", 1, 50, T.n_segmentos, 1, key="lig_c2_nseg",
+                    persist_state="session", help=AJUDA["n_segmentos"],
+                )  # fmt: skip
+        else:
+            segmento = _valor("lig_c2_seg", T.segmento_mm)
+            n_seg = _valor("lig_c2_nseg", T.n_segmentos)
     with st.container(border=True), secao_protegida("2. A chapa e o apoio"):
         st.subheader("2. A chapa e o apoio", help=AJUDA["sec_chapa_e_apoio"])
         c = st.columns(4)
@@ -1130,11 +1216,13 @@ else:
             "Comprimento da junta (mm)", 5.0, 5000.0, T.comprimento_mm, 5.0, key="lig_c2_l",
             persist_state="session", help=AJUDA["comprimento_junta"],
         )  # fmt: skip
-        passo_t = c[3].number_input(
-            "Arredondar para (mm)", 1.0, 50.0, T.passo_arredondamento_mm, 1.0,
-            key="lig_c2_passo", persist_state="session", help=AJUDA["passo_arredondamento"],
-            disabled=modo_t != ls.MODO_DIMENSIONAR,
-        )  # fmt: skip
+        if dimensionar_t:
+            passo_t = c[3].number_input(
+                "Arredondar para (mm)", 1.0, 50.0, T.passo_arredondamento_mm, 1.0,
+                key="lig_c2_passo", persist_state="session", help=AJUDA["passo_arredondamento"],
+            )  # fmt: skip
+        else:
+            passo_t = _valor("lig_c2_passo", T.passo_arredondamento_mm)
         apoio_t = _apoio_da_solda("lig_c2", T)
     with st.container(border=True), secao_protegida("3. Esforços de cálculo"):
         st.subheader("3. Esforços de cálculo", help=AJUDA["sec_esforcos_chapa"])
@@ -1186,6 +1274,20 @@ except lg.LigacaoInvalida as erro:
     st.stop()
 
 st.header("Resultados")
+mensagem = {"OK": st.success, "NÃO OK": st.error}.get(resultado.status, st.warning)
+mensagem(
+    lg.frase_do_resultado(resultado),
+    icon={"OK": ":material/check_circle:", "NÃO OK": ":material/error:"}.get(
+        resultado.status, ":material/warning:"
+    ),
+)
+pendentes = lg.referencias_pendentes(resultado)
+if pendentes:
+    st.caption(
+        f"{len(pendentes)} referência(s) da NBR 8800:2025 ainda pendente(s) de confirmação no "
+        "texto da norma (seguem a 2008): aparecem com “(a confirmar)” nas fórmulas e itens da "
+        "norma, abaixo das tabelas."
+    )
 c = st.columns(3)
 c[0].metric("Status", resultado.status, help=AJUDA["res_status"])
 c[1].metric(
@@ -1193,38 +1295,27 @@ c[1].metric(
     f"{100 * resultado.aproveitamento_maximo:.0f} %",
     help=AJUDA["res_aproveitamento"],
 )
+margem = 100 * (1 - resultado.aproveitamento_maximo)
+c[2].metric(
+    "Margem restante",
+    f"{margem:.0f} %" if margem >= 0 else f"excede {-margem:.0f} %",
+    help=AJUDA["res_margem"],
+)
 governante = resultado.governante
-c[2].metric("Governa", governante.nome if governante else "—", help=AJUDA["res_governa"])
-g = resultado.grandezas
-adotados: list[tuple[str, str]] = []
-if "perna_necessaria_mm" in g:
-    adotados.append(("Perna necessária", f"{g['perna_necessaria_mm']:.1f} mm".replace(".", ",")))
-if resultado.tipo == lg.BARRA_SOLDADA:
-    adotados += [
-        ("Filete do dorso", f"{g['l_dorso_mm']:.0f} mm"),
-        ("Filete da borda", f"{g['l_borda_mm']:.0f} mm"),
-        ("Seção de Whitmore", f"{g['largura_whitmore_mm']:.0f} mm"),
-    ]
-    if "l_apoio_mm" in g:
-        adotados.append(("Solda no apoio", f"{g['l_apoio_mm']:.0f} mm de cada lado"))
-if resultado.tipo == lg.CHAPA_NO_APOIO:
-    if "n_segmentos" in g:
-        texto = f"{g['n_segmentos']:.0f} × {g['segmento_mm']:.0f} mm por linha"
-    else:
-        texto = f"{g['comprimento_efetivo_mm']:.0f} mm"
-    adotados.append(("Solda", texto))
-if adotados:
-    c = st.columns(len(adotados))
-    for coluna, (rotulo, valor) in zip(c, adotados, strict=True):
-        coluna.metric(rotulo, valor, help=AJUDA["res_adotado"])
+if governante is not None:
+    st.markdown(f"**Governa:** {texto_markdown(governante.nome)}", help=AJUDA["res_governa"])
 for aviso in resultado.avisos:
     st.warning(aviso, icon=":material/warning:")
+detalhamento = lg.detalhamento_adotado(resultado)
+if detalhamento:
+    st.subheader("Detalhamento adotado", help=AJUDA["res_adotado"])
+    st.table(pd.DataFrame(detalhamento, columns=["Item", "Valor"]).set_index("Item"))
 with secao_protegida("Figura da ligação"):
     st.subheader("A ligação", help=AJUDA["res_figura"])
     desenho = lg.figura(resultado)
     st.image(desenho.png, caption=desenho.legenda, width="stretch")
 st.subheader("Verificações", help=AJUDA["res_verificacoes"])
-mostrar_tabela_verificacoes(list(resultado.verificacoes))
+mostrar_verificacoes_resumidas(lg.verificacoes_por_grupo(resultado), nome=lg.nome_no_grupo)
 st.download_button(
     "Verificações (CSV)",
     data=csv_verificacoes(list(resultado.verificacoes)),

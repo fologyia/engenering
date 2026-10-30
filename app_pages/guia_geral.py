@@ -2583,7 +2583,8 @@ elif modulo == "Ligações estruturais":
               força (6.2.5.2 a), a regra dos filetes longitudinais e transversais (6.2.5.2 c) e o
               centro instantâneo de rotação quando há momento (6.2.5.2 b) — ou pelo método
               elástico, a favor da segurança; o metal-base pela 6.5.5, ou pela NBR 14762 quando a
-              chapa mais fina tem até 4,75 mm. Mostra a perna necessária.
+              chapa mais fina tem até 4,75 mm. Mostra a perna mínima estimada pela resistência
+              e a perna comercial com que todas as verificações, refeitas, atendem.
             - **Barra soldada na chapa de nó:** cantoneira ou tala, de um lado ou dos dois, com
               os filetes do dorso e da borda balanceados (ou iguais) e, se quiser, o da ponta. No
               modo *dimensionar* o programa acha os comprimentos; verifica a barra à tração (com o

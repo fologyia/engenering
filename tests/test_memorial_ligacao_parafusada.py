@@ -229,7 +229,8 @@ def test_chapa_ao_cisalhamento_por_v():
     assert perto(rup.resistente, 0.60 * 520.7 * 400 / 1.35 / 1000, 1e-6)
     assert perto(esc.solicitante, 23.8, 1e-9) and esc.status == "OK"
     assert "verificados separadamente" in esc.formula
-    assert "6.5.5 (a confirmar)" in esc.referencia
+    assert esc.referencia == "NBR 8800:2025, 6.5.5"  # 6.5.5 visto no texto da 2025 (30/10)
+    assert "não traz interação com a tração" in esc.formula
 
 
 def test_chapa_ao_cisalhamento_na_2008_cita_o_item_conferido():

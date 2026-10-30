@@ -691,7 +691,7 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
                 None,
                 None,
                 "kN",
-                _ref(norma, "6.5.5", "6.5.5 (a confirmar)", "AISC J4.2"),
+                _ref(norma, "6.5.5", "6.5.5", "AISC J4.2"),
                 f"V_Sd = {abs(V_Sd):.2f} kN atravessa a peça, mas a seção dela que resiste a V "
                 "(comprimento × espessura, com os furos) não foi informada: escoamento "
                 "0,60·A_gv·f_y/γ_a1 e ruptura 0,60·A_nv·f_u/γ_a2 da peça ficam a confirmar. A "
@@ -1235,7 +1235,7 @@ def _chapa_de_ligacao(
     c = bc.chapa_de_ligacao(entrada.chapa_largura, t_c, n_furos, d_hy, f_y, f_u, norma, N_Sd)
     resistencias.update(chapa_escoamento_kN=c.escoamento_kN, chapa_ruptura_kN=c.ruptura_kN)
     intermediarios.update(chapa_A_g_mm2=c.A_g, chapa_A_n_mm2=c.A_n, chapa_A_e_mm2=c.A_e)
-    ref = _ref(norma, "6.5.3", "6.5.3 (a confirmar)", "AISC J4.1")
+    ref = _ref(norma, "6.5.3", "6.5.3", "AISC J4.1")
     if N_Sd == 0:
         linhas.append(
             _linha(
@@ -1282,14 +1282,12 @@ def _chapa_de_ligacao(
         chapa_cisalhamento_ruptura_kN=v.ruptura_kN,
     )
     intermediarios.update(chapa_A_gv_mm2=v.A_gv, chapa_A_nv_mm2=v.A_nv)
-    ref_v = _ref(norma, "6.5.5", "6.5.5 (a confirmar)", "AISC J4.2")
-    if norma == "NBR8800_2008":
+    ref_v = _ref(norma, "6.5.5", "6.5.5", "AISC J4.2")
+    if bc._nbr(norma):
         separado = (
             f"a {_nbr_curta(norma)}, 6.5.5, não traz interação com a tração: N e V verificados "
             "separadamente"
         )
-    elif norma == "NBR8800_2024":
-        separado = "N e V verificados separadamente (interação no 6.5.5 da 2025: a confirmar)"
     else:
         separado = "a AISC J4.2 não traz interação com a J4.1: N e V verificados separadamente"
     secao = (

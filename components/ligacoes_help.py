@@ -176,9 +176,19 @@ AJUDA: dict[str, str] = {
     "t1": "Espessura da chapa soldada (a solda corre na borda dela), em mm.",
     "t2": "Espessura da peça que recebe a solda, em mm.",
     "aco_solda": "O aço das chapas soldadas (o mais fraco dos dois).",
-    "v_solda": "Força de cálculo ao longo dos filetes verticais, em kN.",
-    "n_solda": "Força de cálculo perpendicular aos filetes verticais, no plano, em kN.",
-    "m_solda": "Momento de cálculo no plano do grupo de solda (torção do grupo), em kN·m.",
+    "v_solda": (
+        "Força de cálculo ao longo dos filetes verticais, em kN, aplicada no centro do grupo: "
+        "positiva para cima no desenho, negativa para baixo. O sinal só importa junto com o "
+        "momento."
+    ),
+    "n_solda": (
+        "Força de cálculo perpendicular aos filetes verticais, no plano, em kN: positiva para a "
+        "direita no desenho."
+    ),
+    "m_solda": (
+        "Momento de cálculo no plano do grupo de solda (torção do grupo), em kN·m: positivo no "
+        "sentido anti-horário do desenho."
+    ),
     # ------------------------------------------------------------------ barra soldada
     "sec_barra": (
         "A barra que chega (cantoneira ou tala de chapa), a chapa de nó em que ela é soldada e o "
@@ -354,11 +364,21 @@ AJUDA: dict[str, str] = {
     "res_status": "OK: tudo passa. NÃO OK: alguma verificação reprova. ALERTA: ressalva para conferir.",
     "res_aproveitamento": "A maior razão solicitante ÷ resistente entre as verificações; até 100 % passa.",
     "res_governa": "A verificação com o maior aproveitamento: é ela que define a ligação.",
+    "res_margem": (
+        "Quanto ainda sobra até 100 % na verificação que governa (100 % − aproveitamento). "
+        "Quando passa de 100 %, mostra quanto excede."
+    ),
     "res_figura": "O desenho da ligação com as medidas informadas, para conferir antes de olhar os números.",
-    "res_verificacoes": "Todas as verificações, com a norma e o item, os valores e a situação.",
+    "res_verificacoes": (
+        "As verificações em grupos (solda, metal-base, barra, chapa de nó, limites), com o "
+        "solicitante, o resistente ou limite, o aproveitamento e a situação. A fórmula com os "
+        "números e o item da norma de cada uma ficam no quadro abaixo das tabelas."
+    ),
     "res_adotado": (
-        "O que o cálculo adotou ou pede: comprimentos dos filetes, a seção de Whitmore da chapa "
-        "de nó, a perna necessária. São esses que vão para o desenho."
+        "O que vai para o desenho, em texto completo: eletrodo, pernas, comprimentos dos "
+        "filetes, a seção de Whitmore, a solda no apoio. No grupo de filetes, a perna mínima "
+        "estimada pela resistência e a perna comercial com que todas as verificações, refeitas, "
+        "atendem."
     ),
     "btn_csv": "Baixa a tabela de verificações para abrir no Excel.",
     "sec_memorial": (

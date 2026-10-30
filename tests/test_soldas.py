@@ -53,7 +53,8 @@ def test_coeficientes_por_combinacao_e_direcao_da_forca():
 
 def test_referencias_marcam_o_que_falta_conferir_na_2025():
     assert sd.ref(sd.NBR_2008, "6.5.5") == "NBR 8800:2008 6.5.5"
-    assert sd.ref(sd.NBR_2025, "6.5.5") == "NBR 8800:2025 6.5.5 (a confirmar)"
+    assert sd.ref(sd.NBR_2025, "6.2.6.2.2") == "NBR 8800:2025 6.2.6.2.2 (a confirmar)"
+    assert sd.ref(sd.NBR_2025, "6.5.5 a)") == "NBR 8800:2025 6.5.5 a)"  # visto no texto (30/10)
     assert sd.ref(sd.NBR_2025, "6.2.5.2 a)", vista_na_2025=True) == "NBR 8800:2025 6.2.5.2 a)"
     assert sd.tabela(sd.NBR_2025, "resistencia") == "Tabela 9"
     assert sd.tabela(sd.NBR_2008, "perna") == "Tabela 10"
@@ -147,8 +148,8 @@ def test_grupo_de_filetes_pela_direcao_da_forca():
     linha = contorno.verificacoes[0]
     assert "6.2.5.2 c)" in linha.referencia
     assert linha.resistente == pytest.approx(0.85 * Q * 300 + 1.5 * Q * 200)
-    # a perna necessária é proporcional: a capacidade é linear na perna
-    assert contorno.grandezas["perna_necessaria_mm"] == pytest.approx(6.0 * linha.aproveitamento)
+    # a perna estimada é proporcional: a capacidade é linear na perna
+    assert contorno.grandezas["perna_estimada_mm"] == pytest.approx(6.0 * linha.aproveitamento)
 
 
 def test_grupo_inclinado_com_filetes_nas_duas_direcoes_fica_elastico():

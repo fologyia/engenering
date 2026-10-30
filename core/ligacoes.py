@@ -1316,11 +1316,46 @@ def _metal_da_solda_do_grupo(
         sd.ref(e.norma, "6.2.5.2 b)", vista_na_2025=True),
         f"centro instantâneo de rotação a ({_n(cir.x_mm, 1)}; {_n(cir.y_mm, 1)}) mm do centro do "
         f"grupo, {carga}; fator de capacidade {_n(cir.fator, 3)}; Δu e Δm do filete pelo ângulo "
-        f"de cada trecho (Δm do AISC 360-16 J2.4); {base}",
+        f"de cada trecho (6.2.5.2 b); {base}",
     )  # fmt: skip
 
 
+#: Pernas de filete usuais na fabricação (mm), para a perna sugerida.
+PERNAS_COMERCIAIS = (3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0)
+
+
+def _atende_tudo(r: ResultadoLigacao) -> bool:
+    return all(v.status not in ("NÃO OK", "ALERTA") for v in r.verificacoes)
+
+
+def perna_sugerida(e: EntradaSolda, perna_estimada_mm: float) -> float | None:
+    """A menor perna comercial, a partir da estimada, com que TODAS as verificações atendem.
+
+    A estimativa (perna × aproveitamento do metal da solda) olha só a resistência da solda; a
+    perna mínima e a máxima, o metal-base e uma troca do que governa só aparecem refazendo o
+    cálculo com a perna comercial. ``None`` quando nenhuma perna da lista atende (o metal-base ou
+    a perna máxima na borda não melhoram com a perna).
+    """
+    for perna in PERNAS_COMERCIAIS:
+        if perna < perna_estimada_mm - 1e-9:
+            continue
+        if _atende_tudo(_calcular_solda(replace(e, perna_mm=perna))):
+            return perna
+    return None
+
+
 def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
+    """O grupo de filetes e, quando a resistência da solda dá a estimativa, a perna sugerida."""
+    r = _calcular_solda(e)
+    estimada = r.grandezas.get("perna_estimada_mm")
+    if estimada is not None:
+        sugerida = perna_sugerida(e, estimada)
+        if sugerida is not None:
+            r.grandezas["perna_sugerida_mm"] = sugerida
+    return r
+
+
+def _calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
     if e.arranjo not in ARRANJOS:
         raise LigacaoInvalida(f"Arranjo desconhecido: {e.arranjo!r}.")
     if e.eletrodo not in ELETRODOS:
@@ -1343,7 +1378,7 @@ def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
     linhas: list[Verificacao] = []
     avisos: list[str] = []
     tef = 0.7 * e.perna_mm
-    perna_necessaria: float | None = None
+    perna_estimada: float | None = None
     if t_menor <= LIMITE_CHAPA_FINA + 1e-9:
         # NBR 14762 10.2.3 — metal-base fino: o menor entre as direções (a favor da segurança)
         razao = e.comprimento_mm / t_menor
@@ -1380,7 +1415,7 @@ def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
         metal = _metal_da_solda_do_grupo(e, f, q, avisos)
         linhas.append(metal)
         if metal.aproveitamento is not None:
-            perna_necessaria = e.perna_mm * metal.aproveitamento  # a capacidade é linear na perna
+            perna_estimada = e.perna_mm * metal.aproveitamento  # a capacidade é linear na perna
         r_mb, texto_mb = sd.metal_base_ao_cisalhamento_por_mm(t_menor, fy, fu, c)
         linhas.append(
             Verificacao(
@@ -1397,8 +1432,8 @@ def calcular_solda(e: EntradaSolda) -> ResultadoLigacao:
     linhas.extend(_limites_do_filete(e.perna_mm, t_menor, e.t1_mm, menor_linha, norma=e.norma))
     titulo = f"Solda de filete — {ARRANJOS[e.arranjo].lower()}, perna {_n(e.perna_mm, 0)} mm"
     grandezas = {"forca_kN_cm": f * 10, "comprimento_total_mm": total}
-    if perna_necessaria is not None:
-        grandezas["perna_necessaria_mm"] = perna_necessaria
+    if perna_estimada is not None:
+        grandezas["perna_estimada_mm"] = perna_estimada
     return ResultadoLigacao(SOLDA, titulo, e, tuple(linhas), grandezas, tuple(avisos))
 
 
@@ -1414,6 +1449,10 @@ _FURO = "#ffffff"
 _TEXTO = "#0f172a"
 _COTA = "#475569"
 _FORCA = "#b45309"
+_CHAPA_AZUL = "#bfdbfe"  # chapas soldadas (legenda: azul)
+_BARRA = "#d1d5db"  # barra (legenda: cinza)
+_APOIO = "#e2e8f0"
+_WHITMORE = "#1d4ed8"  # seção de Whitmore (tracejado)
 
 
 def _png(imagem: Image.Image, largura: int, altura: int) -> bytes:
@@ -1437,6 +1476,98 @@ def _cota_horizontal(d: ImageDraw.ImageDraw, y: float, x1: float, x2: float, tex
     for x in (x1, x2):
         d.line([(x, y - 5 * _ESC), (x, y + 5 * _ESC)], fill=_COTA, width=_ESC)
     d.text(((x1 + x2) / 2, y + 4 * _ESC), texto, fill=_COTA, font=fonte, anchor="mt")
+
+
+def _tracejado(
+    d: ImageDraw.ImageDraw,
+    a: tuple[float, float],
+    b: tuple[float, float],
+    cor: str,
+    largura: int = 2 * _ESC,
+    traco: float = 9 * _ESC,
+) -> None:
+    """Linha tracejada de a até b (px)."""
+    comprimento = math.hypot(b[0] - a[0], b[1] - a[1])
+    if comprimento <= 0:
+        return
+    ux, uy = (b[0] - a[0]) / comprimento, (b[1] - a[1]) / comprimento
+    s = 0.0
+    while s < comprimento:
+        fim = min(s + traco, comprimento)
+        d.line(
+            [(a[0] + ux * s, a[1] + uy * s), (a[0] + ux * fim, a[1] + uy * fim)],
+            fill=cor,
+            width=largura,
+        )
+        s += 2 * traco
+
+
+def _chamada(
+    d: ImageDraw.ImageDraw,
+    alvo: tuple[float, float],
+    rotulo: tuple[float, float],
+    numero: int,
+    cor: str,
+) -> None:
+    """Linha de chamada do ponto ``alvo`` até um círculo numerado em ``rotulo`` (px).
+
+    O texto fica na legenda, pelo número: assim os rótulos não se sobrepõem no desenho.
+    """
+    raio = 10 * _ESC
+    d.line([alvo, rotulo], fill=cor, width=_ESC)
+    d.ellipse(
+        [alvo[0] - 3 * _ESC, alvo[1] - 3 * _ESC, alvo[0] + 3 * _ESC, alvo[1] + 3 * _ESC], fill=cor
+    )
+    x, y = rotulo
+    d.ellipse([x - raio, y - raio, x + raio, y + raio], fill="#ffffff", outline=cor, width=2 * _ESC)
+    d.text((x, y), str(numero), fill=cor, font=_fonte(12 * _ESC), anchor="mm")
+
+
+def _legenda(
+    d: ImageDraw.ImageDraw, x: float, y: float, itens: Sequence[tuple[str, str, str]]
+) -> None:
+    """Quadro de legenda a partir de (x, y) px: cada item é (forma, cor, texto).
+
+    Formas: "linha" (cordão de solda), "area" (chapa, barra, apoio), "tracejado" (seção de
+    Whitmore), "seta" (força), "ponto" (centro geométrico) e "numero:<n>" (chamada do desenho).
+    """
+    fonte = _fonte(11 * _ESC)
+    passo = 22 * _ESC
+    for k, (forma, cor, texto) in enumerate(itens):
+        yy = y + k * passo
+        x1, x2 = x, x + 26 * _ESC
+        if forma == "linha":
+            d.line([(x1, yy), (x2, yy)], fill=cor, width=6 * _ESC)
+        elif forma == "area":
+            d.rectangle(
+                [x1, yy - 7 * _ESC, x2, yy + 7 * _ESC], fill=cor, outline=_LINHA, width=_ESC
+            )
+        elif forma == "tracejado":
+            _tracejado(d, (x1, yy), (x2, yy), cor, traco=5 * _ESC)
+        elif forma == "seta":
+            d.line([(x1, yy), (x2 - 4 * _ESC, yy)], fill=cor, width=3 * _ESC)
+            d.polygon(
+                [(x2, yy), (x2 - 9 * _ESC, yy - 5 * _ESC), (x2 - 9 * _ESC, yy + 5 * _ESC)], fill=cor
+            )
+        elif forma == "ponto":
+            cx = (x1 + x2) / 2
+            d.ellipse(
+                [cx - 6 * _ESC, yy - 6 * _ESC, cx + 6 * _ESC, yy + 6 * _ESC],
+                outline=cor,
+                width=2 * _ESC,
+            )
+            d.line([(cx - 9 * _ESC, yy), (cx + 9 * _ESC, yy)], fill=cor, width=_ESC)
+            d.line([(cx, yy - 9 * _ESC), (cx, yy + 9 * _ESC)], fill=cor, width=_ESC)
+        elif forma.startswith("numero:"):
+            cx, raio = (x1 + x2) / 2, 10 * _ESC
+            d.ellipse(
+                [cx - raio, yy - raio, cx + raio, yy + raio],
+                fill="#ffffff",
+                outline=cor,
+                width=2 * _ESC,
+            )
+            d.text((cx, yy), forma.split(":", 1)[1], fill=cor, font=_fonte(12 * _ESC), anchor="mm")
+        d.text((x2 + 8 * _ESC, yy), texto, fill=_TEXTO, font=fonte, anchor="lm")
 
 
 def figura_chapa_simples(e: EntradaChapaSimples) -> ImagemDiagrama:
@@ -1717,54 +1848,97 @@ def figura_perfil_frio(e: EntradaPerfilFrio) -> ImagemDiagrama:
     )
 
 
+def _seta_px(
+    d: ImageDraw.ImageDraw, a: tuple[float, float], b: tuple[float, float], cor: str
+) -> None:
+    """Seta de a para b (px), com a ponta cheia."""
+    d.line([a, b], fill=cor, width=3 * _ESC)
+    ang = math.atan2(b[1] - a[1], b[0] - a[0])
+    ponta = 13 * _ESC
+    d.polygon(
+        [
+            b,
+            (b[0] - ponta * math.cos(ang - 0.4), b[1] - ponta * math.sin(ang - 0.4)),
+            (b[0] - ponta * math.cos(ang + 0.4), b[1] - ponta * math.sin(ang + 0.4)),
+        ],
+        fill=cor,
+    )
+
+
+def _momento_px(
+    d: ImageDraw.ImageDraw, centro: tuple[float, float], raio: float, anti_horario: bool
+) -> None:
+    """Arco de 270° com a ponta no sentido do momento (na tela, y para baixo)."""
+    cx, cy = centro
+    d.arc([cx - raio, cy - raio, cx + raio, cy + raio], 200, 110 + 360, fill=_FORCA, width=3 * _ESC)
+    # o PIL mede o ângulo no sentido horário da tela: o arco vai de 200° a 470° (= 110°)
+    t = math.radians(200.0 if anti_horario else 110.0)
+    px, py = cx + raio * math.cos(t), cy + raio * math.sin(t)
+    tx, ty = (math.sin(t), -math.cos(t)) if anti_horario else (-math.sin(t), math.cos(t))
+    nx, ny = -ty, tx
+    ponta = 12 * _ESC
+    d.polygon(
+        [
+            (px + tx * ponta * 0.7, py + ty * ponta * 0.7),
+            (px - tx * ponta * 0.5 + nx * ponta * 0.55, py - ty * ponta * 0.5 + ny * ponta * 0.55),
+            (px - tx * ponta * 0.5 - nx * ponta * 0.55, py - ty * ponta * 0.5 - ny * ponta * 0.55),
+        ],
+        fill=_FORCA,
+    )
+
+
 def figura_solda(e: EntradaSolda) -> ImagemDiagrama:
-    largura_px, altura_px = 700, 460
+    """O grupo de filetes na chapa, o centro geométrico, as forças nele e a legenda."""
+    largura_px, altura_px = 900, 480
     h = e.comprimento_mm
     b = e.largura_mm if e.arranjo != ARRANJO_UM else 60.0
-    esc = min((largura_px - 300) / max(b, 1), (altura_px - 170) / h) * _ESC
+    esc = min((560 - 260) / max(b, 1), (altura_px - 190) / h) * _ESC
     imagem = Image.new("RGB", (largura_px * _ESC, altura_px * _ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
-    x0, y0 = 180 * _ESC, 100 * _ESC
+    x0, y0 = 170 * _ESC, 110 * _ESC
 
     def p(x: float, y: float) -> tuple[float, float]:
         return (x0 + x * esc, y0 + (h - y) * esc)
 
-    dr.rectangle([p(-10, h + 10), p(b + 10, -10)], fill=_CHAPA, outline=_LINHA, width=2 * _ESC)
-    for x1, y1, x2, y2 in _segmentos(e):
+    dr.rectangle([p(-10, h + 10), p(b + 10, -10)], fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC)
+    segs = _segmentos(e)
+    for x1, y1, x2, y2 in segs:
         dr.line([p(x1, y1), p(x2, y2)], fill=_SOLDA, width=6 * _ESC)
+    # cotas fora da chapa (fora da região carregada)
     _cota_vertical(dr, p(-10, 0)[0] - 30 * _ESC, p(0, h)[1], p(0, 0)[1], f"L = {_n(h, 0)}")
     if e.arranjo != ARRANJO_UM:
-        _cota_horizontal(dr, p(0, 0)[1] + 26 * _ESC, p(0, 0)[0], p(b, 0)[0], f"b = {_n(b, 0)}")
+        _cota_horizontal(dr, p(0, -10)[1] + 22 * _ESC, p(0, 0)[0], p(b, 0)[0], f"b = {_n(b, 0)}")
+    # centro geométrico do grupo de linhas
+    comp = [math.hypot(x2 - x1, y2 - y1) for x1, y1, x2, y2 in segs]
+    total = sum(comp)
+    xc = sum((x1 + x2) / 2 * c for (x1, _a, x2, _b), c in zip(segs, comp, strict=True)) / total
+    yc = sum((y1 + y2) / 2 * c for (_a, y1, _b, y2), c in zip(segs, comp, strict=True)) / total
+    cx, cy = p(xc, yc)
+    dr.ellipse(
+        [cx - 6 * _ESC, cy - 6 * _ESC, cx + 6 * _ESC, cy + 6 * _ESC], outline=_TEXTO, width=2 * _ESC
+    )
+    dr.line([(cx - 10 * _ESC, cy), (cx + 10 * _ESC, cy)], fill=_TEXTO, width=_ESC)
+    dr.line([(cx, cy - 10 * _ESC), (cx, cy + 10 * _ESC)], fill=_TEXTO, width=_ESC)
+    # forças de cálculo aplicadas no centro geométrico
     fonte = _fonte(12 * _ESC)
-    cx, cy = p(b / 2, h / 2)
+    forcas: list[str] = []
     if e.v_sd_kN:
-        dr.line([(cx, cy - 70 * _ESC), (cx, cy - 6 * _ESC)], fill=_FORCA, width=3 * _ESC)
-        dr.polygon(
-            [(cx, cy), (cx - 7 * _ESC, cy - 14 * _ESC), (cx + 7 * _ESC, cy - 14 * _ESC)],
-            fill=_FORCA,
-        )
-        dr.text(
-            (cx + 10 * _ESC, cy - 56 * _ESC),
-            f"V = {_n(e.v_sd_kN, 1)} kN",
-            fill=_FORCA,
-            font=fonte,
-            anchor="lm",
-        )
+        s = 1 if e.v_sd_kN > 0 else -1  # como no cálculo: V positivo para cima (+y)
+        _seta_px(dr, (cx, cy - s * 14 * _ESC), (cx, cy - s * 78 * _ESC), _FORCA)
+        dr.text((cx + 10 * _ESC, cy - s * 70 * _ESC), "V", fill=_FORCA, font=fonte, anchor="lm")
+        forcas.append(f"V = {_n(e.v_sd_kN, 1)} kN ({'para cima' if s > 0 else 'para baixo'})")
     if e.n_sd_kN:
-        dr.text(
-            (cx + 10 * _ESC, cy + 16 * _ESC),
-            f"N = {_n(e.n_sd_kN, 1)} kN",
-            fill=_FORCA,
-            font=fonte,
-            anchor="lm",
+        s = 1 if e.n_sd_kN > 0 else -1  # N positivo para a direita (+x)
+        _seta_px(dr, (cx + s * 14 * _ESC, cy), (cx + s * 82 * _ESC, cy), _FORCA)
+        dr.text((cx + s * 76 * _ESC, cy - 14 * _ESC), "N", fill=_FORCA, font=fonte, anchor="mm")
+        forcas.append(
+            f"N = {_n(e.n_sd_kN, 1)} kN ({'para a direita' if s > 0 else 'para a esquerda'})"
         )
     if e.m_sd_kNm:
-        dr.text(
-            (cx + 10 * _ESC, cy + 36 * _ESC),
-            f"M = {_n(e.m_sd_kNm, 2)} kN·m",
-            fill=_FORCA,
-            font=fonte,
-            anchor="lm",
+        _momento_px(dr, (cx, cy), 34 * _ESC, e.m_sd_kNm > 0)
+        dr.text((cx - 30 * _ESC, cy - 30 * _ESC), "M", fill=_FORCA, font=fonte, anchor="mm")
+        forcas.append(
+            f"M = {_n(abs(e.m_sd_kNm), 2)} kN·m ({'anti-horário' if e.m_sd_kNm > 0 else 'horário'})"
         )
     titulo = "Grupo de soldas de filete"
     dr.text((18 * _ESC, 14 * _ESC), titulo, fill=_TEXTO, font=_fonte(16 * _ESC))
@@ -1774,10 +1948,22 @@ def figura_solda(e: EntradaSolda) -> ImagemDiagrama:
         fill=_COTA,
         font=_fonte(11 * _ESC),
     )
+    _legenda(
+        dr,
+        600 * _ESC,
+        130 * _ESC,
+        [
+            ("linha", _SOLDA, f"Cordões de solda (perna {_n(e.perna_mm, 0)} mm)"),
+            ("area", _CHAPA_AZUL, "Chapa soldada"),
+            ("ponto", _TEXTO, "Centro geométrico do grupo"),
+            ("seta", _FORCA, "Forças de cálculo, no centro geométrico:"),
+            *(("", _FORCA, f"   {texto}") for texto in forcas),
+        ],
+    )
     legenda = (
         f"{ARRANJOS[e.arranjo]}: L = {_n(h, 0)} mm"
         + (f", b = {_n(b, 0)} mm" if e.arranjo != ARRANJO_UM else "")
-        + f"; perna {_n(e.perna_mm, 0)} mm."
+        + f"; perna {_n(e.perna_mm, 0)} mm; forças aplicadas no centro geométrico do grupo."
     )
     return ImagemDiagrama(
         titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px
@@ -1909,7 +2095,7 @@ _PREMISSAS = {
     ],
     SOLDA: [
         "Filetes de perna uniforme, no mesmo plano, com a carga no plano do grupo.",
-        "Centro instantâneo com a deformação Δm do AISC 360-16 J2.4 (o método da 6.2.5.2 b).",
+        "Centro instantâneo de rotação pela 6.2.5.2 b): Δu e Δm de cada trecho pelo ângulo da força.",
         "Metal-base pela força por mm do método elástico, na parte menos espessa.",
     ],
     CHAPA_NO_APOIO: [
@@ -1931,7 +2117,8 @@ _PREMISSAS = {
     ],
 }
 _REFERENCIAS = [
-    "ABNT NBR 8800:2025 — Tabela 9 (soldas), 6.2.5.2, Tabelas 10 e 11.",
+    "ABNT NBR 8800:2025 — 6.1.5, 6.1.8, Tabela 9 (soldas), 6.2.5.2, Tabelas 10 e 11, 6.5.3 a "
+    "6.5.6.",
     "ABNT NBR 8800:2008 — 5.2.5, 5.7, 6.1.5, 6.1.8, 6.2 (soldas), 6.3 (parafusos), 6.5 "
     "(elementos de ligação), Anexo A.",
     "ABNT NBR 14762:2010 — 9.6 (tração), 10.2 (soldas), 10.3 (parafusos), 10.4 (colapso por rasgamento).",
@@ -2032,6 +2219,216 @@ def memorial_da_ligacao(
 def linhas_resumo(verificacoes: Sequence[Verificacao]) -> list[str]:
     """As linhas que não passaram, em texto curto (para avisos da página)."""
     return [f"{v.nome}: {v.formula}" for v in verificacoes if v.status == "NÃO OK"]
+
+
+# =============================================================================================
+# Resumo para a tela: frase do resultado, detalhamento adotado e verificações por grupo
+# =============================================================================================
+GRUPO_SOLDA = "Resistência da solda"
+GRUPO_METAL_BASE = "Metal-base e chapa junto à solda"
+GRUPO_PARAFUSOS = "Parafusos e contato"
+GRUPO_BARRA = "Barra"
+GRUPO_CHAPA_DE_NO = "Chapa de nó"
+GRUPO_SOLDA_NO_APOIO = "Solda da chapa de nó no apoio"
+GRUPO_VIGA = "Viga apoiada"
+GRUPO_LIMITES = "Limites geométricos e de detalhe"
+GRUPO_OUTROS = "Ligação"
+#: Prefixo das linhas da solda da chapa de nó no apoio (barra soldada).
+PREFIXO_SOLDA_NO_APOIO = "Chapa de nó no apoio — "
+
+
+def grupo_da_verificacao(v: Verificacao) -> str:
+    """Em que grupo a linha aparece na tabela da tela (só para ler: o cálculo não muda)."""
+    nome = v.nome
+    if nome.startswith(PREFIXO_SOLDA_NO_APOIO):
+        return GRUPO_SOLDA_NO_APOIO
+    if v.tipo == "limite":
+        return GRUPO_LIMITES
+    if nome.startswith("Barra"):
+        return GRUPO_BARRA
+    if nome.startswith("Chapa de nó"):
+        return GRUPO_CHAPA_DE_NO
+    if "metal-base" in nome.lower() or nome.startswith(("Apoio", "Chapa junto à solda")):
+        return GRUPO_METAL_BASE
+    if nome.startswith(("Solda", "Filete", "Penetração")):
+        return GRUPO_SOLDA
+    if nome.startswith(("Parafuso", "Rasgamento", "Esmagamento", "Pressão de contato")):
+        return GRUPO_PARAFUSOS
+    if nome.startswith(("Alma da viga", "Alma recortada")):
+        return GRUPO_VIGA
+    if ":" in nome:
+        return nome.split(":", 1)[0]
+    return GRUPO_OUTROS
+
+
+def nome_no_grupo(v: Verificacao) -> str:
+    """O nome da linha dentro do grupo, sem repetir o que o título do grupo já diz."""
+    nome = v.nome.removeprefix(PREFIXO_SOLDA_NO_APOIO)
+    nome = nome.removeprefix(f"{grupo_da_verificacao(v)}: ")
+    return nome[:1].upper() + nome[1:]
+
+
+def verificacoes_por_grupo(r: ResultadoLigacao) -> list[tuple[str, list[Verificacao]]]:
+    """As verificações (sem as linhas só informativas) em grupos, para a tabela da tela."""
+    grupos: dict[str, list[Verificacao]] = {}
+    for v in r.verificacoes:
+        if v.tipo == "informativo":
+            continue
+        grupos.setdefault(grupo_da_verificacao(v), []).append(v)
+
+    # na ordem em que o cálculo os traz; os limites geométricos e de detalhe no fim
+    nomes = sorted(grupos, key=lambda nome: nome == GRUPO_LIMITES)
+    return [(nome, grupos[nome]) for nome in nomes]
+
+
+def referencias_pendentes(r: ResultadoLigacao) -> list[str]:
+    """As referências da edição atual ainda não vistas no texto (marcadas "a confirmar")."""
+    return list(dict.fromkeys(v.referencia for v in r.verificacoes if sd.a_confirmar(v.referencia)))
+
+
+def frase_do_resultado(r: ResultadoLigacao) -> str:
+    """O resultado numa frase, para o topo dos resultados."""
+    aproveitamento = f"{_n(100 * r.aproveitamento_maximo, 0)} %"
+    if r.status == "NÃO OK":
+        reprovadas = [v for v in r.verificacoes if v.status == "NÃO OK"]
+        quais = "verificação" if len(reprovadas) == 1 else "verificações"
+        return (
+            f"Não atende: {len(reprovadas)} {quais} não passa{'m' if len(reprovadas) > 1 else ''} "
+            f"(maior aproveitamento {aproveitamento})."
+        )
+    if r.status == "ALERTA":
+        return (
+            f"Atende às resistências (aproveitamento máximo {aproveitamento}), com ressalva para "
+            "conferir nas verificações marcadas ALERTA."
+        )
+    return f"Atende às verificações executadas — aproveitamento máximo de {aproveitamento}."
+
+
+def _mm(valor: float, casas: int = 0) -> str:
+    return f"{_n(valor, casas)} mm"
+
+
+def _detalhes_do_tipo(r: ResultadoLigacao) -> list[tuple[str, str]]:
+    e = r.adotada if r.adotada is not None else r.entrada
+    g = r.grandezas
+    if r.tipo == SOLDA:
+        linhas = [
+            ("Arranjo", ARRANJOS[e.arranjo]),
+            ("Eletrodo", e.eletrodo),
+            ("Perna dos filetes (informada)", _mm(e.perna_mm, 0)),
+            ("Comprimento total de solda", _mm(g.get("comprimento_total_mm", 0.0))),
+        ]
+        if "perna_estimada_mm" in g:
+            linhas.append(
+                ("Perna mínima estimada pela resistência", _mm(g["perna_estimada_mm"], 1))
+            )
+            sugerida = g.get("perna_sugerida_mm")
+            if sugerida is None:
+                linhas.append(
+                    (
+                        "Perna comercial que atende",
+                        "nenhuma até 16 mm atende todas as verificações: o que reprova não "
+                        "melhora com a perna (metal-base ou perna máxima na borda)",
+                    )
+                )
+            elif abs(sugerida - e.perna_mm) < 1e-9:
+                linhas.append(("Perna adotada", f"{_mm(sugerida)} — todas as verificações atendem"))
+            else:
+                linhas.append(
+                    (
+                        "Perna comercial que atende",
+                        f"{_mm(sugerida)} — com ela, todas as verificações refeitas atendem",
+                    )
+                )
+        return linhas
+    if r.tipo == BARRA_SOLDADA:
+        from core import ligacoes_soldadas as ls
+
+        barra = ls._barra(e)
+        linhas = [
+            ("Barra", barra.nome + (" (uma de cada lado da chapa de nó)" if e.duas_pecas else "")),
+            ("Eletrodo", e.eletrodo),
+            ("Perna dos filetes da barra", _mm(e.perna_mm, 0)),
+            ("Filete do dorso", _mm(e.l_dorso_mm)),
+            ("Filete da borda", _mm(e.l_borda_mm)),
+        ]
+        if e.solda_na_ponta:
+            linhas.append(("Filete na ponta da barra", _mm(barra.largura)))
+        linhas.append(("Seção de Whitmore", _mm(g.get("largura_whitmore_mm", 0.0))))
+        if e.com_apoio and "l_apoio_mm" in g:
+            linhas.append(
+                (
+                    "Solda da chapa de nó no apoio",
+                    f"dois filetes de {_mm(e.perna_apoio_mm, 0)} × {_mm(g['l_apoio_mm'])}"
+                    + (
+                        f" (disponível {_mm(r.entrada.l_apoio_mm)})"
+                        if r.entrada.modo == ls.MODO_DIMENSIONAR
+                        else ""
+                    ),
+                )
+            )
+        if "n_ligacao_kN" in g:
+            linhas.append(("Força de cálculo da ligação", f"{_n(g['n_ligacao_kN'], 1)} kN"))
+        return linhas
+    if r.tipo == CHAPA_NO_APOIO:
+        from core import ligacoes_soldadas as ls
+
+        linhas = [("Tipo de solda", ls.TIPOS_DE_SOLDA[e.tipo_solda]), ("Eletrodo", e.eletrodo)]
+        lados = "dois lados" if e.lados == 2 else "um lado"
+        if e.tipo_solda == ls.TIPO_FILETE:
+            linhas.append(("Perna do filete", f"{_mm(e.perna_mm, 0)}, {lados} da chapa"))
+        elif e.tipo_solda == ls.TIPO_PARCIAL:
+            linhas.append(("Profundidade do chanfro S", f"{_mm(e.profundidade_mm, 1)}, {lados}"))
+        if "n_segmentos" in g:
+            solda = f"{g['n_segmentos']:.0f} × {_mm(g['segmento_mm'])} por linha (intermitente)"
+        else:
+            solda = f"{_mm(g.get('comprimento_efetivo_mm', e.comprimento_mm))} contínuo"
+        linhas.append(("Solda", f"{solda}, em {_mm(e.comprimento_mm)} de junta"))
+        linhas.append(("Chapa", f"{_mm(e.t_chapa_mm, 1)} ({e.aco_chapa})"))
+        return linhas
+    if r.tipo == CHAPA_SIMPLES:
+        return [
+            (
+                "Chapa",
+                f"{_n(e.t_chapa_mm, 1)} × {_n(g.get('largura_chapa_mm', 0.0), 0)} × "
+                f"{_n(g.get('altura_chapa_mm', 0.0), 0)} mm ({e.aco_chapa})",
+            ),
+            ("Parafusos", f"{e.n_parafusos} × {e.parafuso} {e.grau}"),
+            (
+                "Solda da chapa no apoio",
+                f"dois filetes de {_mm(e.perna_solda_mm, 0)} ({e.eletrodo})",
+            ),
+        ]
+    if r.tipo == CANTONEIRA_DUPLA:
+        return [
+            ("Cantoneiras", f"2 × {e.cantoneira} de {_mm(e.comprimento_mm)} ({e.aco_cantoneira})"),
+            ("Parafusos na alma", f"{e.n_parafusos} × {e.parafuso} {e.grau}, corte duplo"),
+            ("Parafusos no apoio", f"{2 * e.n_parafusos} × {e.parafuso} {e.grau}, corte simples"),
+        ]
+    if r.tipo == PERFIL_FRIO:
+        return [
+            (
+                "Parafusos",
+                f"{e.n_linhas} linha(s) × {e.n_por_linha} = {e.n_linhas * e.n_por_linha} × "
+                f"{e.parafuso} {e.especificacao}",
+            ),
+            ("Chapa", _mm(e.t_chapa_mm, 2)),
+        ]
+    return []
+
+
+def detalhamento_adotado(r: ResultadoLigacao) -> list[tuple[str, str]]:
+    """O que vai para o desenho, em texto completo, mais as linhas só informativas do cálculo."""
+    linhas = _detalhes_do_tipo(r)
+    for v in r.verificacoes:
+        if v.tipo != "informativo" or "adotad" in v.nome:  # "adotados" já vêm nas linhas do tipo
+            continue
+        if v.solicitante is not None:
+            texto = f"{_n(v.solicitante, 1)} {v.unidade} — {v.formula}"
+        else:
+            texto = v.formula
+        linhas.append((v.nome, texto))
+    return linhas
 
 
 # =============================================================================================

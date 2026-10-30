@@ -5,15 +5,16 @@ Regras puras, sem Streamlit, usadas pelas ligações soldadas (:mod:`core.ligaco
 
 Fontes:
 
-* **NBR 8800:2025** (chave interna ``NBR8800_2024``) — vistos nas fotos do usuário (29/10/2026):
-  Tabela 9 (força resistente de cálculo das soldas), 6.2.5.2 a) e b) (aumento pela direção da
-  força e centro instantâneo), Tabela 10 (garganta mínima da penetração parcial) e Tabela 11 (perna
-  mínima do filete). O que a foto não mostrou (notas da Tabela 9, 6.2.2, 6.2.5.2 c), 6.2.6, 6.1.5
-  e 6.5) segue o texto da 2008 e vai marcado "a confirmar" na referência.
+* **NBR 8800:2025** (chave interna ``NBR8800_2024``) — vistos no texto que o usuário mandou
+  (fotos de 29/10/2026 e o PDF de 30/10/2026): Tabela 9 com as notas a–j (força resistente de
+  cálculo das soldas e compatibilidade), 6.2.5.2 a), b) e c) (aumento pela direção da força, centro
+  instantâneo com Δu e Δm, filetes longitudinais e transversais), Tabela 10 (garganta mínima da
+  penetração parcial), Tabela 11 (perna mínima do filete), 6.1.5 (45 kN), 6.1.8 (disposição das
+  soldas), 6.1.9 (parafusos com soldas) e 6.5.3 a 6.5.6 (elementos de ligação). O que ainda não
+  foi visto (6.2.2, 6.2.6, 5.2, 5.7 e o conteúdo da Tabela 8, os grupos de compatibilidade) segue
+  o texto da 2008 e vai marcado "a confirmar" na referência.
 * **NBR 8800:2008** — texto conferido: 4.8.2 (Tabela 3), 5.2.5, 5.7.2 a 5.7.4, 6.1.5, 6.1.8,
   6.2.2, 6.2.5, 6.2.6, 6.5 e Tabelas 5, 7, 8, 9, 10 e A.4.
-* **AISC 360-16 J2.4 b)** — a deformação do filete na tensão máxima, Δm = 0,209·(θ + 2)^−0,32·d_w,
-  que o texto da 2008 não traz por inteiro (o método é o mesmo).
 
 Na 2025 as tabelas mudaram de número (Tabela 8 → 9, 9 → 10, 10 → 11). Os limites 6,3 (6,35 na 2008),
 12,5 e 19 mm das faixas de espessura são as chapas comerciais de 1/4", 1/2" e 3/4": a chapa de
@@ -23,6 +24,7 @@ Na 2025 as tabelas mudaram de número (Tabela 8 → 9, 9 → 10, 10 → 11). Os 
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -57,7 +59,7 @@ TABELAS = {
         "resistencia": "Tabela 9",
         "garganta": "Tabela 10",
         "perna": "Tabela 11",
-        "compatibilidade": "compatibilidade da Tabela 9",
+        "compatibilidade": "Tabela 8",  # nota b da Tabela 9; o conteúdo ainda não foi visto
         "nota_w1": "nota h",
         "nota_w2": "nota i",
     },
@@ -85,10 +87,31 @@ def norma_curta(norma: str) -> str:
     return NORMAS_ROTULOS[norma].removeprefix("ABNT ")
 
 
+#: Itens da NBR 8800:2025 já vistos no texto (um item vale com os subitens: "6.5.5" cobre
+#: "6.5.5 a)"). Confirmar mais um item é só acrescentá-lo aqui.
+ITENS_VISTOS_NA_2025 = ("6.1.5", "6.1.8", "6.1.9", "6.2.5.2", "6.5.3", "6.5.4", "6.5.5", "6.5.6")
+MARCA_A_CONFIRMAR = "(a confirmar)"
+_ITEM = re.compile(r"\d+(?:\.\d+)+")
+
+
+def item_visto_na_2025(texto: str) -> bool:
+    """Todos os itens numerados do texto (ex.: "6.5.3 e 6.5.4") já foram vistos na 2025?"""
+    itens = _ITEM.findall(texto)
+    return bool(itens) and all(
+        any(item == visto or item.startswith(visto + ".") for visto in ITENS_VISTOS_NA_2025)
+        for item in itens
+    )
+
+
 def ref(norma: str, texto: str, *, vista_na_2025: bool = False) -> str:
-    """Referência com a edição; na 2025, o item que a foto não mostrou leva "(a confirmar)"."""
-    marca = "" if norma == NBR_2008 or vista_na_2025 else " (a confirmar)"
-    return f"{norma_curta(norma)} {texto}{marca}"
+    """Referência com a edição; na 2025, o item ainda não visto no texto leva "(a confirmar)"."""
+    visto = norma == NBR_2008 or vista_na_2025 or item_visto_na_2025(texto)
+    return f"{norma_curta(norma)} {texto}" + ("" if visto else f" {MARCA_A_CONFIRMAR}")
+
+
+def a_confirmar(referencia: str) -> bool:
+    """A referência traz um item da edição atual ainda não visto no texto?"""
+    return MARCA_A_CONFIRMAR in referencia
 
 
 def tabela(norma: str, chave: str) -> str:
@@ -349,7 +372,7 @@ def deformacao_ultima(theta_graus: float, perna_mm: float) -> float:
 
 
 def deformacao_na_tensao_maxima(theta_graus: float, perna_mm: float) -> float:
-    """Δm = 0,209·(θ + 2)^−0,32·d_w (AISC 360-16 J2.4 b)."""
+    """Δm = 0,209·(θ + 2)^−0,32·d_w (6.2.5.2 b; igual ao AISC 360-16 J2.4)."""
     return 0.209 * (theta_graus + 2.0) ** -0.32 * perna_mm
 
 

@@ -3,16 +3,33 @@
 Página **Ligações estruturais** (`app_pages/ligacoes_estruturais.py`), núcleo em `core/ligacoes.py`.
 Os esforços entram **de cálculo** (combinação ELU) — por exemplo a reação da viga de piso ou da
 longarina. Unidades: mm, MPa, kN e kN·m. Os coeficientes foram conferidos no texto da NBR 8800:2008
-e da NBR 14762:2010 e, nas soldas, nas fotos da NBR 8800:2025 (Tabela 9, 6.2.5.2 a e b, Tabelas 10 e
-11). A 2025 (chave interna `NBR8800_2024`) muda o coeficiente do corte do parafuso (0,45/0,56), via
+e da NBR 14762:2010 e, nas soldas, no texto da NBR 8800:2025 que o usuário mandou (fotos de 29/10 e
+PDF de 30/10/2026: Tabela 9 com as notas a–j, 6.1.5, 6.1.8, 6.1.9, 6.2.5.2 a, b e c, Tabelas 10 e 11,
+6.5.3 a 6.5.6; a lista fica em `soldas.ITENS_VISTOS_NA_2025`). A 2025 (chave interna `NBR8800_2024`) muda o coeficiente do corte do parafuso (0,45/0,56), via
 `core/bolted_connection.py`, e o número das tabelas das soldas (8 → 9, 9 → 10, 10 → 11). Item da 2025
-ainda não visto no texto sai com "(a confirmar)" na referência (segue a 2008). As ligações soldadas
+ainda não visto no texto (6.2.2, 6.2.6, 5.2, 5.7 e os grupos da Tabela 8) sai com "(a confirmar)" na
+referência (segue a 2008) e a página conta essas referências logo abaixo da frase do resultado. As
+ligações soldadas
 estão em `core/soldas.py` (regras) e `core/ligacoes_soldadas.py` (barra na chapa de nó e chapa no
 apoio).
 
 A página tem duas partes, escolhidas no alto (`lig_parte`): **Ligações parafusadas** (seções 1, 1b e
 2; a solda da chapa simples no apoio é verificada junto) e **Ligações soldadas** (seções 3 a 5). Cada parte tem o seu seletor
 de tipo (`lig_tipo_parafuso`, `lig_tipo_solda`): voltar a uma parte reencontra o tipo escolhido nela.
+
+**Tela (30/10/2026).** Só aparecem os campos que valem para o caso escolhido (tala × cantoneira,
+comprimentos só no modo verificar e o passo só no dimensionar, K e comprimento livre da chapa de nó só
+com compressão, a solda no apoio só quando pedida, espessura do apoio × perfil, posição na mesa e
+ponta; na chapa no apoio, lados, perna, chanfro, intermitente e segmentos pelo tipo de solda). Os
+campos usam `persist_state="session"`: o valor escondido continua guardado e volta quando o campo
+reaparece (`_valor` na página). O texto do escopo fica num expansor. Os resultados abrem com uma
+frase (`frase_do_resultado`), as métricas Status, Aproveitamento e Margem restante, a linha
+"Governa" em texto completo, o **Detalhamento adotado** (`detalhamento_adotado`: o que vai para o
+desenho, sem cortar o texto) e a figura, com chamadas numeradas e legenda (solda vermelha, chapas
+azuis, barra cinza, Whitmore tracejado, forças laranja). As verificações aparecem em tabelas de cinco
+colunas por grupo (`verificacoes_por_grupo`: solda, metal-base, barra, chapa de nó, solda no apoio,
+limites) e, num expansor, a fórmula com os números e o item da norma de cada linha
+(`components/verification_table.py`, `mostrar_verificacoes_resumidas`).
 
 ## 1. Chapa simples (viga–viga e viga–pilar) — NBR 8800
 
@@ -83,13 +100,17 @@ com V, N e momento no plano, perna uniforme. Chapa mais fina acima de 4,75 mm, N
 | Método elástico (opção, a favor da segurança) | maior força por mm ≤ 0,60·f_w·(0,707·d_w)/γ_w2 | Tabela 9 / 8 |
 | Carga pelo centro, filetes em linha ou paralelos | × (1 + 0,5·sen^1,5 θ), θ entre a resultante e o eixo dos filetes | 6.2.5.2 a) |
 | Carga pelo centro, filetes longitudinais e transversais (V ou N puro) | o maior entre F_wl + F_wt e 0,85·F_wl + 1,5·F_wt | 6.2.5.2 c) |
-| Com momento | centro instantâneo de rotação: Δu = 1,087·(θ + 6)^−0,65·d_w ≤ 0,17·d_w, Δm = 0,209·(θ + 2)^−0,32·d_w (AISC 360-16 J2.4), f(p) = [p·(1,9 − 0,9·p)]^0,3; o elemento crítico limitado pela ponta | 6.2.5.2 b) |
+| Com momento | centro instantâneo de rotação: Δu = 1,087·(θ + 6)^−0,65·d_w ≤ 0,17·d_w, Δm = 0,209·(θ + 2)^−0,32·d_w (6.2.5.2 b da 2025; igual ao AISC 360-16 J2.4), f(p) = [p·(1,9 − 0,9·p)]^0,3; o elemento crítico limitado pela ponta | 6.2.5.2 b) |
 
 Carga inclinada pelo centro num grupo com filetes nas duas direções fica no método elástico (6.2.5.2 a
 vale para filetes em linha ou paralelos). O metal-base pela força por mm do método elástico,
 0,60·f_y·t/γ_a1 e 0,60·f_u·t/γ_a2 na parte menos espessa (6.5.5). Até 4,75 mm: NBR 14762 10.2.3
 (metal-base fino pela direção mais desfavorável e, com t > 2,5 mm, 0,75·t_ef·f_w/1,65). A
-capacidade é linear na perna, então a página mostra a **perna necessária** = perna × aproveitamento.
+capacidade é linear na perna, então a página mostra a **perna mínima estimada pela resistência** =
+perna × aproveitamento do metal da solda — só uma estimativa: o programa refaz **todas** as
+verificações com as pernas comerciais (3, 4, 5, 6, 8, 10, 12, 14, 16 mm) a partir dela e mostra a
+menor com que tudo atende (`perna_sugerida`; a perna mínima, a máxima na borda e o metal-base entram).
+Se nenhuma atende, diz que o que reprova não melhora com a perna.
 Combinação normal/especial/de construção (γ_a1 1,10, γ_a2 1,35, γ_w1 1,25, γ_w2 1,35) ou excepcional
 (1,00, 1,15, 1,05, 1,15).
 
@@ -118,7 +139,7 @@ penetração total ou parcial. Forças por mm pelo método elástico na linha de
 |---|---|---|
 | Filete | sem momento: × (1 + 0,5·sen^1,5 θ); com momento: sem o aumento (a carga fica fora do plano dos filetes) | Tabela 9, 6.2.5.2 a) |
 | Penetração total | A_MB·f_y/γ_a1 à tração ou compressão normal (com momento: N/N_Rd + M/M_Rd, Z = t·L²/4), 0,60·A_MB·f_y/γ_a1 ao cisalhamento; metal da solda compatível (tração: só a maior classe do grupo; compressão na 2025: até 70 MPa abaixo) | Tabela 9; Tabela 7 (2008) |
-| Penetração parcial | 0,60·A_w·f_w/γ_w1 (normal), /γ_w2 (cisalhamento; combinado pela resultante com γ_w2); garganta S ou S − 3 mm (Tabela 5 da 2008); garganta mínima | Tabela 9, Tabela 10 |
+| Penetração parcial | força normal: o menor entre o metal-base A_MB·f_y/γ_a1 (A_MB = comprimento × espessura menos espessa; com momento, soma linear com Z = t·L²/4) e o metal da solda 0,60·A_w·f_w/γ_w1; cisalhamento 0,60·A_w·f_w/γ_w2 (combinado pela resultante com γ_w2); garganta S ou S − 3 mm (Tabela 5 da 2008); garganta mínima | Tabela 9, Tabela 10 |
 | Chapa junto à solda | tração (escoamento e ruptura), compressão, N + M linear, cisalhamento (escoamento e ruptura) no comprimento soldado | 6.5.3 a 6.5.5 |
 | Apoio | metal-base junto à solda (a parcela ao longo da solda); na mesa de perfil I/H: flexão local da mesa (dispensada com atuação < 0,15·b_f), escoamento local e enrugamento da alma, k = t_f | 6.5.5; 5.7.2 a 5.7.4 |
 | Intermitente | só quando a contínua de perna mínima já sobra; segmento ≥ 4·perna e 40 mm; os segmentos cabem na junta | 6.2.6.2.4 |

@@ -145,13 +145,95 @@ def test_trazer_a_reacao_de_um_calculo_registrado(banco_com_projeto):
     assert t.number_input(key="lig_v").value == pytest.approx(round(viga.reacao_calculo_kN, 2))
 
 
+def _detalhamento(t: AppTest) -> dict[str, str]:
+    tabela = t.table[0].value
+    return {
+        str(item): str(valor) for item, valor in zip(tabela.index, tabela["Valor"], strict=True)
+    }
+
+
 def test_dimensionar_a_barra_mostra_os_filetes_adotados(banco_isolado):
     t = abrir(tipo=lg.BARRA_SOLDADA)
     r = lg.calcular(ls.EntradaBarraSoldada())
+    detalhes = _detalhamento(t)
+    assert detalhes == dict(lg.detalhamento_adotado(r))
+    assert detalhes["Filete do dorso"] == f"{r.grandezas['l_dorso_mm']:.0f} mm"
+    assert detalhes["Solda da chapa de nó no apoio"].startswith("dois filetes de")
     metricas = {m.label: m.value for m in t.metric}
-    assert metricas["Filete do dorso"] == f"{r.grandezas['l_dorso_mm']:.0f} mm"
-    assert metricas["Solda no apoio"].startswith(f"{r.grandezas['l_apoio_mm']:.0f} mm")
     assert metricas["Status"] == r.status
+    assert metricas["Margem restante"] == f"{100 * (1 - r.aproveitamento_maximo):.0f} %"
+    assert any(m.value.startswith("Atende às verificações executadas") for m in t.success)
+
+
+def _chaves_na_tela(t: AppTest) -> set[str]:
+    return {
+        e.key
+        for tipo in ("number_input", "selectbox", "toggle")
+        for e in t.get(tipo)
+        if getattr(e, "key", None)
+    }
+
+
+def test_barra_mostra_so_os_campos_que_se_aplicam(banco_isolado):
+    t = abrir(tipo=lg.BARRA_SOLDADA)  # cantoneira, dimensionar, sem compressão, com apoio
+    chaves = _chaves_na_tela(t)
+    assert {"lig_b_cant", "lig_b_dist", "lig_b_passo", "lig_b_theta"} <= chaves
+    assert not {"lig_b_larg", "lig_b_t", "lig_b_la", "lig_b_lb", "lig_b_k", "lig_b_lliv"} & chaves
+    assert "lig_b_t_apoio" in chaves and "lig_b_perfil_apoio" not in chaves
+    t.selectbox(key="lig_b_peca").set_value(ls.PECA_CHAPA).run()
+    t.selectbox(key="lig_b_modo").set_value(ls.MODO_VERIFICAR).run()
+    t.number_input(key="lig_b_nc").set_value(50.0).run()
+    t.toggle(key="lig_b_com_apoio").set_value(False).run()
+    assert not t.exception
+    chaves = _chaves_na_tela(t)
+    assert {"lig_b_larg", "lig_b_t", "lig_b_la", "lig_b_lb", "lig_b_k", "lig_b_lliv"} <= chaves
+    assert not {"lig_b_cant", "lig_b_dist", "lig_b_passo", "lig_b_theta", "lig_b_apoio"} & chaves
+
+
+def test_campo_escondido_guarda_o_valor(banco_isolado):
+    t = abrir(tipo=lg.BARRA_SOLDADA, lig_b_peca=ls.PECA_CHAPA)
+    t.number_input(key="lig_b_larg").set_value(77.0).run()
+    t.selectbox(key="lig_b_peca").set_value(ls.PECA_CANTONEIRA).run()
+    assert "lig_b_larg" not in _chaves_na_tela(t)
+    t.selectbox(key="lig_b_peca").set_value(ls.PECA_CHAPA).run()
+    assert t.number_input(key="lig_b_larg").value == 77.0
+
+
+@pytest.mark.parametrize(
+    "estado, aparecem, somem",
+    [
+        ({}, {"lig_c2_lados", "lig_c2_perna", "lig_c2_inter", "lig_c2_seg", "lig_c2_passo"},
+         {"lig_c2_prof", "lig_c2_menos3", "lig_c2_nseg"}),
+        ({"lig_c2_tipo": ls.TIPO_TOTAL}, {"lig_c2_eletrodo"},
+         {"lig_c2_lados", "lig_c2_perna", "lig_c2_prof", "lig_c2_inter", "lig_c2_seg"}),
+        ({"lig_c2_tipo": ls.TIPO_PARCIAL, "lig_c2_modo": ls.MODO_VERIFICAR},
+         {"lig_c2_lados", "lig_c2_prof", "lig_c2_menos3"},
+         {"lig_c2_perna", "lig_c2_inter", "lig_c2_passo"}),
+        ({"lig_c2_apoio": ls.APOIO_PERFIL}, {"lig_c2_perfil_apoio", "lig_c2_orient", "lig_c2_perto"},
+         {"lig_c2_t_apoio"}),
+    ],
+)  # fmt: skip
+def test_chapa_no_apoio_mostra_so_os_campos_que_se_aplicam(banco_isolado, estado, aparecem, somem):
+    t = abrir(tipo=lg.CHAPA_NO_APOIO, **estado)
+    chaves = _chaves_na_tela(t)
+    assert aparecem <= chaves and not somem & chaves
+
+
+def test_tabela_resumida_e_detalhes_das_verificacoes(banco_isolado):
+    t = abrir(tipo=lg.BARRA_SOLDADA)
+    r = lg.calcular(ls.EntradaBarraSoldada())
+    grupos = lg.verificacoes_por_grupo(r)
+    tabelas = t.dataframe
+    assert len(tabelas) == len(grupos)
+    for tabela, (_, linhas) in zip(tabelas, grupos, strict=True):
+        assert list(tabela.value.columns) == [
+            "Verificação", "Solicitante", "Resistente / limite", "Aproveitamento", "Status",
+        ]  # fmt: skip
+        assert len(tabela.value) == len(linhas)
+    # o AppTest lista o expansor com ícone como "status"
+    rotulos = [e.label for e in (*t.expander, *t.status)]
+    assert any(r.startswith("Fórmulas e itens da norma") for r in rotulos), rotulos
+    assert any(r.startswith("Escopo, premissas") for r in rotulos), rotulos
 
 
 def test_memorial_da_ligacao_na_pagina(banco_isolado):

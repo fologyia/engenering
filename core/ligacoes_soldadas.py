@@ -36,19 +36,25 @@ from core import section_catalog as sc
 from core import soldas as sd
 from core.beam_charts import ImagemDiagrama, _fonte
 from core.ligacoes import (
-    _CHAPA,
+    _APOIO,
+    _BARRA,
+    _CHAPA_AZUL,
     _COTA,
     _ESC,
     _FORCA,
     _LINHA,
     _SOLDA,
     _TEXTO,
+    _WHITMORE,
     ACOS,
     ELETRODOS,
     LigacaoInvalida,
     ResultadoLigacao,
+    _chamada,
     _cota_vertical,
+    _legenda,
     _png,
+    _tracejado,
 )
 from core.verificacao import Verificacao
 
@@ -335,6 +341,48 @@ def _verificacoes_do_apoio_perfil(
     return linhas
 
 
+def _texto_metal_base(t_menor: float, comprimento: float, fy: float) -> str:
+    return (
+        f"A_MB = {_n(t_menor, 2)} × {_n(comprimento, 0)} mm (menor espessura × comprimento), "
+        f"f_y = {_n(fy, 0)} MPa (o menor dos metais-base)"
+    )
+
+
+def _metal_base_normal(
+    prefixo: str,
+    n: float,
+    m_kNm: float,
+    t_menor: float,
+    comprimento: float,
+    fy: float,
+    c: sd.Coeficientes,
+    referencia: str,
+) -> Verificacao:
+    """Tabela 9, penetração total e parcial: metal-base A_MB·f_y/γ_a1 sob a força normal à solda."""
+    n_rd = t_menor * comprimento * fy / c.a1 / 1000
+    texto_mb = _texto_metal_base(t_menor, comprimento, fy)
+    sentido = "tração" if n >= 0 else "compressão"
+    if abs(m_kNm) > 0:
+        m_rd = t_menor * comprimento**2 / 4 * fy / c.a1 / 1e6
+        return Verificacao(
+            f"{prefixo}: {sentido} normal e momento (metal-base)",
+            abs(n) / n_rd + abs(m_kNm) / m_rd,
+            1.0,
+            "—",
+            referencia,
+            f"|N|/(A_MB·f_y/γ_a1) + M/(Z·f_y/γ_a1) ≤ 1, Z = t·L²/4 (soma linear, a favor da "
+            f"segurança); N_Rd = {_n(n_rd, 1)} kN, M_Rd = {_n(m_rd, 2)} kN·m; {texto_mb}",
+        )
+    return Verificacao(
+        f"{prefixo}: {sentido} normal (metal-base)",
+        abs(n),
+        n_rd,
+        "kN",
+        referencia,
+        f"A_MB·f_y/γ_a1; {texto_mb}",
+    )
+
+
 def _verificar_chapa_no_apoio(
     e: EntradaChapaNoApoio, trechos: list[tuple[float, float]], forcas: tuple[float, float, float]
 ) -> list[Verificacao]:
@@ -396,6 +444,13 @@ def _verificar_chapa_no_apoio(
                 )  # fmt: skip
             )
     elif e.tipo_solda == TIPO_PARCIAL:
+        if n != 0 or m > 0:  # Tabela 9: o menor entre o metal-base a) e o metal da solda b)
+            linhas.append(
+                _metal_base_normal(
+                    "Penetração parcial", n, m_kNm, t_menor, geo.efetivo_mm,
+                    min(fy_c, fy_s), c, sd.ref(norma, tabela, vista_na_2025=True),
+                )
+            )  # fmt: skip
         garganta = e.profundidade_mm - (3.0 if e.descontar_3mm else 0.0)
         cap_normal = 0.60 * fw * garganta * lados / c.w1 / 1000
         cap_corte = 0.60 * fw * garganta * lados / c.w2 / 1000
@@ -441,37 +496,15 @@ def _verificar_chapa_no_apoio(
         )
     else:  # penetração total
         fy = min(fy_c, fy_s)
-        a_mb = t_menor * geo.efetivo_mm
-        n_rd = a_mb * fy / c.a1 / 1000
-        m_rd = t_menor * geo.efetivo_mm**2 / 4 * fy / c.a1 / 1e6
-        texto_mb = (
-            f"A_MB = {_n(t_menor, 2)} × {_n(geo.efetivo_mm, 0)} mm (menor espessura × comprimento), "
-            f"f_y = {_n(fy, 0)} MPa (o menor dos metais-base)"
-        )
-        sentido = "tração" if n >= 0 else "compressão"
-        if m > 0:
+        n_rd = t_menor * geo.efetivo_mm * fy / c.a1 / 1000
+        texto_mb = _texto_metal_base(t_menor, geo.efetivo_mm, fy)
+        if n != 0 or m > 0:
             linhas.append(
-                Verificacao(
-                    f"Penetração total: {sentido} normal e momento (metal-base)",
-                    abs(n) / n_rd + abs(m_kNm) / m_rd,
-                    1.0,
-                    "—",
+                _metal_base_normal(
+                    "Penetração total", n, m_kNm, t_menor, geo.efetivo_mm, fy, c,
                     sd.ref(norma, tabela, vista_na_2025=True),
-                    f"|N|/(A_MB·f_y/γ_a1) + M/(Z·f_y/γ_a1) ≤ 1, Z = t·L²/4 (soma linear, a favor da "
-                    f"segurança); N_Rd = {_n(n_rd, 1)} kN, M_Rd = {_n(m_rd, 2)} kN·m; {texto_mb}",
                 )
-            )
-        elif n != 0:
-            linhas.append(
-                Verificacao(
-                    f"Penetração total: {sentido} normal (metal-base)",
-                    abs(n),
-                    n_rd,
-                    "kN",
-                    sd.ref(norma, tabela, vista_na_2025=True),
-                    f"A_MB·f_y/γ_a1; {texto_mb}",
-                )
-            )
+            )  # fmt: skip
         if v != 0:
             linhas.append(
                 Verificacao(
@@ -635,9 +668,14 @@ def _compatibilidade(e: EntradaChapaNoApoio, n: float, v: float, t_apoio: float)
             else "compatibilidade total"
         )
     passa: bool | None = True if True in testes else (None if None in testes else False)
-    referencia = sd.ref(norma, f"{sd.tabela(norma, 'compatibilidade')}", vista_na_2025=True) + (
-        "" if norma == sd.NBR_2008 else " e Tabela 7 da 2008"
-    )
+    if norma == sd.NBR_2008:
+        referencia = sd.ref(norma, sd.tabela(norma, "compatibilidade"))
+    else:  # a coluna de compatibilidade da Tabela 9 foi vista; os grupos da Tabela 8, ainda não
+        referencia = (
+            sd.ref(norma, f"{sd.tabela(norma, 'resistencia')}, compatibilidade", vista_na_2025=True)
+            + f"; {sd.ref(norma, sd.tabela(norma, 'compatibilidade'))}, grupos do aço pela "
+            "Tabela 7 da 2008"
+        )
     texto = f"{e.eletrodo} com {e.aco_chapa} e {e.aco_apoio}; {regra}"
     if passa is None:
         texto += "; aço fora da tabela de compatibilidade: confirme o eletrodo"
@@ -1397,8 +1435,8 @@ class _Tela:
 
 
 def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
-    """Vista lateral (a junta, com os segmentos de solda) e corte (filete ou penetração)."""
-    largura_px, altura_px = 760, 440
+    """Vista lateral (a junta, com os segmentos de solda), corte (filete ou penetração) e legenda."""
+    largura_px, altura_px = 980, 440
     imagem = Image.new("RGB", (largura_px * _ESC, altura_px * _ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
     fonte = _fonte(12 * _ESC)
@@ -1417,12 +1455,12 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
     )
     dr.rectangle(
         [tela(-0.18 * comprimento, -0.12 * comprimento), tela(0, 1.12 * comprimento)],
-        fill="#e2e8f0",
+        fill=_APOIO,
         outline=_LINHA,
         width=2 * _ESC,
     )
     dr.rectangle(
-        [tela(0, 0), tela(balanco, comprimento)], fill=_CHAPA, outline=_LINHA, width=2 * _ESC
+        [tela(0, 0), tela(balanco, comprimento)], fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC
     )
     for a, b in trechos:
         dr.line([tela(0, a), tela(0, b)], fill=_SOLDA, width=7 * _ESC)
@@ -1487,13 +1525,13 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
     meia = t / 2 * escala
     dr.rectangle(
         [face - 24 * _ESC, meio - 110 * _ESC, face, meio + 110 * _ESC],
-        fill="#e2e8f0",
+        fill=_APOIO,
         outline=_LINHA,
         width=2 * _ESC,
     )
     dr.rectangle(
         [face, meio - meia, face + 150 * _ESC, meio + meia],
-        fill=_CHAPA,
+        fill=_CHAPA_AZUL,
         outline=_LINHA,
         width=2 * _ESC,
     )
@@ -1532,6 +1570,22 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
     )
     titulo = "Chapa soldada no apoio"
     rotulo = TIPOS_DE_SOLDA[e.tipo_solda].lower() + (" intermitente" if intermitente else "")
+    if intermitente:
+        cordao = f"{len(trechos)} × {_n(trechos[0][1] - trechos[0][0], 0)} mm por linha"
+    else:
+        cordao = f"{_n(comprimento, 0)} mm"
+    apoio = f"Apoio: {e.perfil_apoio}" if e.apoio == APOIO_PERFIL and e.perfil_apoio else "Apoio"
+    _legenda(
+        dr,
+        740 * _ESC,
+        110 * _ESC,
+        [
+            ("linha", _SOLDA, f"Solda: {cordao}"),
+            ("area", _CHAPA_AZUL, f"Chapa soldada ({_n(t, 1)} mm)"),
+            ("area", _APOIO, apoio),
+            ("seta", _FORCA, "Forças de cálculo na chapa"),
+        ],
+    )
     dr.text((18 * _ESC, 14 * _ESC), titulo, fill=_TEXTO, font=_fonte(16 * _ESC))
     dr.text(
         (18 * _ESC, 38 * _ESC),
@@ -1551,9 +1605,24 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio) -> ImagemDiagrama:
     return ImagemDiagrama(titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px)  # fmt: skip
 
 
+def _afastado(
+    alvo: tuple[float, float], direcao: tuple[float, float], distancia_px: float
+) -> tuple[float, float]:
+    """O ponto a ``distancia_px`` de ``alvo`` na direção dada (px; a direção é normalizada)."""
+    comprimento = math.hypot(*direcao) or 1.0
+    return (
+        alvo[0] + direcao[0] / comprimento * distancia_px,
+        alvo[1] + direcao[1] / comprimento * distancia_px,
+    )
+
+
 def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
-    """A barra sobre a chapa de nó, com os filetes, a seção de Whitmore e, se houver, o apoio."""
-    largura_px, altura_px = 760, 500
+    """A barra sobre a chapa de nó, os filetes, a seção de Whitmore, o apoio e a legenda.
+
+    Os comprimentos vão por chamadas numeradas, com o texto na legenda ao lado: no desenho os
+    rótulos não se sobrepõem, qualquer que seja o ângulo da barra.
+    """
+    largura_px, altura_px = 1000, 520
     imagem = Image.new("RGB", (largura_px * _ESC, altura_px * _ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
     fonte = _fonte(12 * _ESC)
@@ -1581,18 +1650,26 @@ def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
     ]
     if e.com_apoio:
         chapa_mm += [(0.0, 0.0), (0.0, l_apoio)]
-    tudo = [*chapa_mm, mm(fim + 60, c_ / 2), mm(fim, 0), mm(fim, c_)]
+    margem = 0.35 * sobre + 30  # espaço para as chamadas, fora da chapa de nó
+    tudo = [
+        *chapa_mm,
+        mm(fim + 60, c_ / 2),
+        mm(fim, 0),
+        mm(fim, c_),
+        mm(folga + a / 2, -abre_a - margem),
+        mm(folga + b / 2, c_ + abre_b + margem),
+    ]
     if e.com_apoio:
         tudo += [(-0.12 * max(l_apoio, sobre), -0.1 * l_apoio - 20), (0.0, 1.1 * l_apoio + 20)]
-    tela = _Tela(tudo, (90, 80, 700, 470))
+    tela = _Tela(tudo, (70, 70, 640, 500))
     dr.polygon(
-        [tela(*q) for q in _envoltoria(chapa_mm)], fill="#e2e8f0", outline=_LINHA, width=2 * _ESC
+        [tela(*q) for q in _envoltoria(chapa_mm)], fill=_CHAPA_AZUL, outline=_LINHA, width=2 * _ESC
     )
     if e.com_apoio:
         largura_apoio = 0.12 * max(l_apoio, sobre)
         dr.rectangle(
             [tela(-largura_apoio, -0.1 * l_apoio - 20), tela(0, 1.1 * l_apoio + 20)],
-            fill="#cbd5e1",
+            fill=_APOIO,
             outline=_LINHA,
             width=2 * _ESC,
         )
@@ -1606,7 +1683,7 @@ def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
         )
     dr.polygon(
         [tela(*mm(folga, 0)), tela(*mm(fim, 0)), tela(*mm(fim, c_)), tela(*mm(folga, c_))],
-        fill=_CHAPA,
+        fill=_BARRA,
         outline=_LINHA,
         width=2 * _ESC,
     )
@@ -1614,38 +1691,69 @@ def figura_barra_soldada(e: EntradaBarraSoldada) -> ImagemDiagrama:
     dr.line([tela(*mm(folga, c_)), tela(*mm(folga + b, c_))], fill=_SOLDA, width=7 * _ESC)
     if e.solda_na_ponta:
         dr.line([tela(*mm(folga, 0)), tela(*mm(folga, c_))], fill=_SOLDA, width=7 * _ESC)
-    # Whitmore: 30° do começo de cada filete (lado da barra) até a ponta
-    dr.line([tela(*mm(folga + a, 0)), tela(*mm(folga, -abre_a))], fill=_COTA, width=_ESC)
-    dr.line([tela(*mm(folga + b, c_)), tela(*mm(folga, c_ + abre_b))], fill=_COTA, width=_ESC)
-    dr.line([tela(*mm(folga, -abre_a)), tela(*mm(folga, c_ + abre_b))], fill=_COTA, width=2 * _ESC)
-    xw, yw = tela(*mm(folga, c_ + abre_b))
-    dr.text((xw + 6 * _ESC, yw + 6 * _ESC), "Whitmore", fill=_COTA, font=_fonte(10 * _ESC))
-    xa, ya = tela(*mm(folga + a / 2, -0.45 * c_))
-    dr.text((xa, ya), f"dorso {_n(a, 0)}", fill=_SOLDA, font=fonte, anchor="mm")
-    xb, yb = tela(*mm(folga + b / 2, 1.45 * c_))
-    dr.text((xb, yb), f"borda {_n(b, 0)}", fill=_SOLDA, font=fonte, anchor="mm")
+    # Whitmore: 30° do começo de cada filete (lado da barra) até a ponta, tracejado
+    w_dorso, w_borda = tela(*mm(folga, -abre_a)), tela(*mm(folga, c_ + abre_b))
+    _tracejado(dr, tela(*mm(folga + a, 0)), w_dorso, _WHITMORE, largura=_ESC, traco=5 * _ESC)
+    _tracejado(dr, tela(*mm(folga + b, c_)), w_borda, _WHITMORE, largura=_ESC, traco=5 * _ESC)
+    _tracejado(dr, w_dorso, w_borda, _WHITMORE, largura=2 * _ESC)
+    # chamadas numeradas, para fora da chapa de nó; o texto vai na legenda
+    _chamada(
+        dr, tela(*mm(folga + 0.7 * a, 0)), tela(*mm(folga + 0.7 * a, -abre_a / 2 - 0.8 * margem)), 1,
+        _SOLDA,
+    )  # fmt: skip
+    _chamada(
+        dr, tela(*mm(folga + b / 2, c_)), tela(*mm(folga + b / 2, c_ + abre_b / 2 + 0.8 * margem)),
+        2, _SOLDA,
+    )  # fmt: skip
+    _chamada(dr, w_dorso, _afastado(w_dorso, (-ux - nx, -uy - ny), 34 * _ESC), 3, _WHITMORE)
+    largura_w = _largura_whitmore(e, barra, a, b)
+    itens: list[tuple[str, str, str]] = [
+        ("numero:1", _SOLDA, f"Filete do dorso: {_n(a, 0)} mm"),
+        ("numero:2", _SOLDA, f"Filete da borda: {_n(b, 0)} mm"),
+        ("numero:3", _WHITMORE, f"Seção de Whitmore: {_n(largura_w, 0)} mm"),
+    ]
+    if e.solda_na_ponta:
+        itens.insert(2, ("linha", _SOLDA, f"Filete na ponta da barra: {_n(c_, 0)} mm"))
+    if e.com_apoio:
+        alvo = tela(0, l_apoio * 0.3)
+        _chamada(dr, alvo, _afastado(alvo, (1.0, -1.6), 46 * _ESC), 4, _SOLDA)
+        itens.append(
+            (
+                "numero:4",
+                _SOLDA,
+                f"Solda no apoio: dois filetes de {_n(e.perna_apoio_mm, 0)} × {_n(l_apoio, 0)} mm",
+            )
+        )
     x1, y1 = tela(*mm(fim + 8, c_ / 2))
     x2, y2 = tela(*mm(fim + 60, c_ / 2))
     _seta(dr, x1, y1, x2, y2, _FORCA)
-    n_rotulo = e.n_t_sd_kN if e.n_t_sd_kN > 0 else e.n_c_sd_kN
-    dr.text(
-        (x2 - 40 * _ESC, y2 + 18 * _ESC),
-        f"N = {_n(n_rotulo, 1)} kN",
-        fill=_FORCA,
-        font=fonte,
-        anchor="lm",
-    )
+    dr.text((x2, y2 - 16 * _ESC), "N", fill=_FORCA, font=fonte, anchor="mm")
+    if e.n_t_sd_kN > 0:
+        forca = f"N = {_n(e.n_t_sd_kN, 1)} kN de tração"
+        if e.n_c_sd_kN > 0:
+            forca += f" e {_n(e.n_c_sd_kN, 1)} kN de compressão"
+    else:
+        forca = f"N = {_n(e.n_c_sd_kN, 1)} kN de compressão"
+    itens += [
+        ("", _TEXTO, ""),
+        ("linha", _SOLDA, f"Cordões de solda (perna {_n(e.perna_mm, 1)} mm na barra)"),
+        ("area", _CHAPA_AZUL, f"Chapa de nó ({_n(e.t_no_mm, 1)} mm)"),
+        ("area", _BARRA, f"Barra: {barra.nome}"),
+    ]
+    if e.com_apoio:
+        itens.append(("area", _APOIO, "Apoio"))
+    itens += [
+        ("tracejado", _WHITMORE, "Seção de Whitmore (30° do começo dos filetes)"),
+        ("seta", _FORCA, forca),
+    ]
     if e.com_apoio:
         excentrico = (
-            f"; excentricidade {_n(e.excentricidade_mm, 0)} mm" if e.excentricidade_mm else ""
+            f", excentricidade {_n(e.excentricidade_mm, 0)} mm" if e.excentricidade_mm else ""
         )
-        dr.text(
-            (18 * _ESC, (altura_px - 22) * _ESC),
-            f"θ = {_n(e.theta_graus, 0)}° entre a barra e o apoio{excentrico}",
-            fill=_COTA,
-            font=fonte,
-            anchor="lm",
+        itens.append(
+            ("", _TEXTO, f"θ = {_n(e.theta_graus, 0)}° entre a barra e o apoio{excentrico}")
         )
+    _legenda(dr, 660 * _ESC, 90 * _ESC, itens)
     titulo = "Barra soldada na chapa de nó"
     pecas = " (duas peças, uma de cada lado)" if e.duas_pecas else ""
     dr.text((18 * _ESC, 14 * _ESC), titulo, fill=_TEXTO, font=_fonte(16 * _ESC))
