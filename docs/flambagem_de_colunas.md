@@ -83,6 +83,29 @@ conferidos na norma antes de emitir documentos**:
 
 ## Fora do escopo
 
-Cantoneira simples (NBR 5.3.5.4), barras compostas (NBR 5.3.6), cisalhamento (5.4.3), efeitos
-globais de segunda ordem (`B₂`), deslocabilidade do pórtico e cargas nocionais — que pertencem à
-análise da estrutura, em Estruturas de aço —, fadiga, cargas dinâmicas e perfis formados a frio.
+Cantoneira simples (NBR 5.3.5.4), barras compostas (NBR 5.3.6), cisalhamento (5.4.3), o `B₂` de
+um andar com várias colunas (ΣN_Sd, ΣH_Sd e Δh, Anexo D) — que pertence à análise da estrutura,
+em Estruturas de aço —, fadiga, cargas dinâmicas e perfis formados a frio.
+
+## Coluna deslocável (31/10/2026)
+
+No plano em que uma ponta se desloca de lado — em balanço, ou com translação (Tabela E.1, casos
+d a f), ou com K informado maior que 1 — o `B₁` (K = 1) não pega o efeito P-Δ. Nesse plano o
+programa:
+
+- soma o **desaprumo**: força nocional `H_n` de 0,3 % de `N_Sd` no topo (h/333, NBR 8800:2008
+  4.9.7.1.1; 0,2 % no AISC 360-16, C2.2b), com `M_imp = H_n·K·L/2` (balanço: `H_n·L`;
+  biengastada com translação: `H_n·L/2`). A 12.3.3.1.1 da 2025 (pilar aprumado até 1:500) é a
+  tolerância de montagem, não esta imperfeição da análise, e é menor que ela;
+- amplia pelo **B₂ da coluna isolada**, `B₂ = 1/(1 − N_Sd/N_e2)`, `N_e2 = π²·E·I/(K·L)²` — o
+  equivalente, para uma coluna só, ao `Δh/h·ΣN/ΣH` da D.2.3 (em balanço com `R_s` = 0,85 dá
+  `N·L²/(2,55·E·I)`; o K de 2,0 a 2,1 dá de 2,47 a 2,24 no lugar de 2,55, a favor da segurança);
+- usa `M_Sd = máx(B₁; B₂)·(M₁ + M_imp)`, porque não sabe que parte de `M₁` vem do deslocamento
+  lateral (com `K ≥ 1`, `B₂ ≥ B₁`);
+- classifica pelo `B₂` com `E·I`: até 1,1 pequena; até 1,4 média, e então `B₁` e `B₂` com
+  `0,8·E·I` (4.9.7.1.2); acima, grande deslocabilidade — ALERTA pedindo análise rigorosa
+  (4.9.7.2); `N_Sd ≥ N_e2` bloqueia.
+
+Se os momentos já vêm de uma análise de 2ª ordem com as imperfeições, a opção “já são de 2ª
+ordem” deixa só o `B₁`. O vínculo da mão-francesa segue o apoio do eixo que ela flete
+(`vinculo_do_apoio`); com “Informar K” ele é escolhido.

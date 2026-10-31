@@ -1,4 +1,4 @@
-"""Placas de base dos pilares do modelo: NBR 8800 6.6.5 e AISC Design Guide 1, esforços combinados.
+"""Placas de base dos pilares do modelo: NBR 8800:2025 6.6.5 e AISC Design Guide 1, esforços combinados.
 
 Para cada pilar do quadro das fundações (:mod:`core.quadro_fundacoes`), os esforços da base de cada
 caso são combinados com os fatores ELU do plano de cargas; em cada combinação a placa e os
@@ -208,7 +208,7 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
             r.pressao_atuante_MPa,
             r.pressao_maxima_MPa,
             "MPa",
-            "AISC DG1 3.4; NBR 8800 6.6.5",
+            "AISC DG1 3.4; NBR 8800:2025 6.6.5",
             f"momento grande: o concreto trabalha em f_p,máx num comprimento Y = "
             f"{_n(r.comprimento_contato_mm)} mm{excentricidade} e o resto vai para os chumbadores; "
             "a placa atende ao contato se Y existir",
@@ -221,8 +221,8 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
             r.pressao_atuante_MPa,
             r.pressao_maxima_MPa,
             "MPa",
-            "AISC DG1; AISC J8",
-            f"f_p,máx = φ_c·0,85·f_ck·√(A₂/A₁); {r.caso}; comprimento de contato Y = "
+            "AISC DG1; NBR 8800:2025 6.6.5",
+            f"σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c; {r.caso}; comprimento de contato Y = "
             f"{_n(r.comprimento_contato_mm)} mm{excentricidade}",
         )
     linhas = [
@@ -247,7 +247,7 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
                 r.tracao_por_chumbador_N / 1e3,
                 r.resistencia_tracao_chumbador_N / 1e3,
                 "kN",
-                "NBR 8800 6.3.3.1",
+                "NBR 8800:2025 6.3.3.1",
                 "0,75·A_b·f_u/γ_a2 por chumbador do lado tracionado (barra rosqueada)",
             )
         )
@@ -258,8 +258,8 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
                 r.cisalhamento_por_chumbador_N / 1e3,
                 r.resistencia_cisalhamento_chumbador_N / 1e3,
                 "kN",
-                "NBR 8800 6.3.3.2",
-                "0,40·A_b·f_u/γ_a2 (rosca no plano de corte), dividido por todos os chumbadores",
+                "NBR 8800:2025 6.3.3.2 a)",
+                "0,45·A_b·f_u/γ_a2 (rosca no plano de corte), dividido por todos os chumbadores",
             )
         )
     if r.cisalhamento_por_chumbador_N > 0 and r.tracao_por_chumbador_N > 0:
@@ -269,7 +269,7 @@ def _linhas_da_placa(r: bp.ResultadoPlacaBase) -> list[Verificacao]:
                 r.utilizacao_interacao_chumbador,
                 1.0,
                 "—",
-                "NBR 8800 6.3.3.4",
+                "NBR 8800:2025 6.3.3.4",
                 "(F_t,Sd/F_t,Rd)² + (F_v,Sd/F_v,Rd)² ≤ 1",
             )
         )

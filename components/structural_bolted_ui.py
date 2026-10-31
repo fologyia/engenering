@@ -22,6 +22,7 @@ from components.verification_table import (
 )
 from core import bolted_connection as bc
 from core import bolted_joint_check as chk
+from core.desenho_parafusos import figura_parafusos
 from core.verificacao import csv_verificacoes, formatar_percentual
 
 _GEO_GRADE = "Grade retangular"
@@ -1059,21 +1060,20 @@ def _distribuicao(resultado: chk.ResultadoLigacao) -> None:
             )
         ]
         tabela = pd.DataFrame(linhas)
-        visual, dados = st.columns([1, 1.4])
-        with visual:
-            st.scatter_chart(tabela, x="x (mm)", y="y (mm)", size="Resultante (kN)")
-        with dados:
-            st.dataframe(
-                tabela,
-                hide_index=True,
-                column_config={
-                    "x (mm)": st.column_config.NumberColumn(format="%.1f"),
-                    "y (mm)": st.column_config.NumberColumn(format="%.1f"),
-                    "F_x (kN)": st.column_config.NumberColumn(format="%.2f"),
-                    "F_y (kN)": st.column_config.NumberColumn(format="%.2f"),
-                    "Resultante (kN)": st.column_config.NumberColumn(format="%.2f"),
-                },
-            )
+        desenho = figura_parafusos(resultado)
+        if desenho is not None:
+            st.image(desenho.png, caption=desenho.legenda, width="stretch")
+        st.dataframe(
+            tabela,
+            hide_index=True,
+            column_config={
+                "x (mm)": st.column_config.NumberColumn(format="%.1f"),
+                "y (mm)": st.column_config.NumberColumn(format="%.1f"),
+                "F_x (kN)": st.column_config.NumberColumn(format="%.2f"),
+                "F_y (kN)": st.column_config.NumberColumn(format="%.2f"),
+                "Resultante (kN)": st.column_config.NumberColumn(format="%.2f"),
+            },
+        )
 
 
 def _registro(

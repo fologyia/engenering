@@ -9,6 +9,7 @@ from components.project_tools import botao_registrar_calculo, construir_registro
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import material_catalog as mat
 from core import static_analysis as est
+from core.desenho_tensoes import figura_dos_elementos
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
 
@@ -262,6 +263,11 @@ if resultado_estatica:
         st.warning("Margem contra escoamento baixa: n < 1,5.", icon=":material/warning:")
     else:
         st.success("O estado informado permanece abaixo do limite de escoamento.")
+
+    with st.container(border=True):
+        st.subheader("Elementos de tensão")
+        elementos = figura_dos_elementos(sigma_x, sigma_y, tau_xy)
+        st.image(elementos.png, caption=elementos.legenda, width="stretch")
 
     grafico_esforcos, grafico_mohr = st.columns(2)
     with grafico_esforcos:

@@ -10,6 +10,7 @@ from components.project_tools import (
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import additional_load_models as modelos
 from core import load_to_stress as cargas
+from core.desenho_tensoes import figura_dos_elementos
 
 configurar_pagina("Assistente de cargas", ":material/manufacturing:")
 
@@ -1415,6 +1416,8 @@ if estado is not None:
         st.metric("σx", f"{estado.sigma_x:.3f} MPa", border=True)
         st.metric("σy", f"{estado.sigma_y:.3f} MPa", border=True)
         st.metric("τxy", f"{estado.tau_xy:.3f} MPa", border=True)
+    elementos = figura_dos_elementos(estado.sigma_x, estado.sigma_y, estado.tau_xy)
+    st.image(elementos.png, caption=elementos.legenda, width="stretch")
 
     if alerta_flambagem:
         st.warning(

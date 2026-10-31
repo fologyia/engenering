@@ -656,6 +656,7 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     """Figuras que qualquer módulo pode gravar no registro, redesenhadas aqui.
 
     * ``figura_ligacao`` — o desenho da ligação (:mod:`core.ligacoes`);
+    * ``figura_base_de_pilar`` — a planta e o corte da base (:mod:`core.desenho_placa_base`);
     * ``esquematico_escada`` — a vista lateral da escada (:mod:`core.escada_lances`);
     * ``figuras_portico`` — lista de ``{"titulo", "caso", "modelo", "modelo_deformada",
       "caso_deformada"}``: o modelo do núcleo de pórtico plano (:mod:`core.portico_plano`) é
@@ -672,6 +673,13 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
         from core import ligacoes as lg
 
         figuras.append((lg.figura_gravada(ligacao), LARGURA_DESENHO_MM))
+    base_de_pilar = resultados.get("figura_base_de_pilar")
+    if isinstance(base_de_pilar, Mapping) and isinstance(base_de_pilar.get("entrada"), Mapping):
+        from core import base_de_pilar as bp
+        from core.desenho_placa_base import figura_da_base
+
+        resultado = bp.calcular(bp.entrada_de_dicionario(base_de_pilar["entrada"]))
+        figuras.append((figura_da_base(resultado), LARGURA_DESENHO_MM))
     esquematico = resultados.get("esquematico_escada")
     if isinstance(esquematico, Mapping):
         figuras.append(

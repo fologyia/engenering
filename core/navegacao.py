@@ -175,8 +175,8 @@ MENU: tuple[GrupoMenu, ...] = (
     GrupoMenu(
         "Ligações e bases",
         ":material/link:",
-        "Ligações viga–viga e viga–pilar, perfis formados a frio, soldas, parafusos e "
-        "contraventamento (placas de base: em Esforços do modelo).",
+        "Ligações viga–viga e viga–pilar, perfis formados a frio, soldas, parafusos, "
+        "contraventamento e placas de base pela NBR 8800:2025.",
         (
             ItemMenu(
                 "app_pages/ligacoes_estruturais.py",
@@ -195,6 +195,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Ligação de contraventamento",
                 ":material/hub:",
                 "Dimensionar a ligação de contraventamento (chapa de nó, UFM)",
+            ),
+            ItemMenu(
+                "app_pages/placa_de_base.py",
+                "Placas de base",
+                ":material/anchor:",
+                "Dimensionar a placa de base e os chumbadores de um pilar",
             ),
         ),
     ),

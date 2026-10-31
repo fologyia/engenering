@@ -330,11 +330,9 @@ def _uma_vista(
         meio = dg.arco_entre(
             dr, no, 30 * ESC, vertical, (math.sin(theta), -math.cos(theta)), _FORCA
         )
-        # o θ à direita do arco, sem cobrir a coluna
-        dg.rotulo(
-            dr, dg.mais(no, meio, 30 * ESC), (1.0, -0.15), 5 * ESC, f"θ = {_n(mf.angulo_graus)}°",
-            _FORCA, fonte, fundo=True,
-        )  # fmt: skip
+        # só o θ, na abertura do arco (o valor está na legenda): “θ = 45°” não cabe entre a
+        # coluna e a barra e encostava no F
+        dg.rotulo(dr, dg.mais(no, meio, 30 * ESC), meio, 3 * ESC, "θ", _FORCA, fonte, fundo=True)
         dr.ellipse(
             [no[0] - 4 * ESC, no[1] - 4 * ESC, no[0] + 4 * ESC, no[1] + 4 * ESC], fill=_FORCA
         )

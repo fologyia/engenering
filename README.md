@@ -545,6 +545,19 @@ Anglo**, a tabela ganha chapa ≥ 8 mm, parafusos A325 de 5/8" a 1", ao menos 2 
 mínimo da Tabela 6. O registro leva as forças nas interfaces e a geometria para o memorial. Não
 verifica a barra nem a chapa de topo parafusada.
 
+### Placas de base
+
+A base de um pilar de perfil I ou H pela **ABNT NBR 8800:2025, Subseção 6.7** (`core/base_de_pilar.py`;
+detalhes em `docs/placas_de_base.md`): base tipo 1 (4 a 8 chumbadores fora das mesas), tipo 2 (4
+entre as mesas), rotulada (2 internos) ou com internos e externos (4 + 4, pelo método geral); o
+chumbador reto com porca, guarda-chuva, químico ou parabolt, de A36, F1554, A193 B7 ou SAE 1020, com a
+ancoragem no concreto pela ACI 318-19 (arrancamento, cone e borda); o caso pela força normal e pela
+excentricidade (C1 a C3, T1 a T3), com momento também no eixo fraco pela flexão oblíqua, espessura mínima
+da placa, diâmetro mínimo do chumbador, pressão no concreto (6.6.5, com A₂/A₁ pelo bloco), cortante
+por atrito, placa de cisalhamento ou arruelas soldadas e as disposições da Tabela 18. Desenho em planta
+e corte (`core/desenho_placa_base.py`), a **base mais leve** que atende (chumbador e espessura
+comercial) com o botão para adotá-la, CSV, memorial desta base em Word ou PDF e registro no projeto.
+
 ### Flambagem de colunas
 
 Verifica a **barra inteira numa só rodada** (`core/column_buckling.py`, com as fórmulas em
@@ -801,6 +814,7 @@ mecanica_toolkit/
 │   ├── vento_estrutura_aberta.py
 │   ├── contraventamento_estrutura.py
 │   ├── ligacao_contraventamento.py
+│   ├── placa_de_base.py
 │   ├── viga_de_piso.py
 │   ├── estruturas_aco.py
 │   ├── catalogo_materiais.py
@@ -819,6 +833,8 @@ mecanica_toolkit/
 │   ├── verificacao_barras.py
 │   ├── quadro_fundacoes.py
 │   ├── placa_base_pilares.py
+│   ├── base_de_pilar.py
+│   ├── desenho_placa_base.py
 │   ├── lista_de_material.py
 │   ├── viga_de_piso.py
 │   ├── beam_analysis.py

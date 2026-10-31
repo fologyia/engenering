@@ -51,6 +51,12 @@ AJUDA: dict[str, str] = {
         "Grades vêm galvanizadas e não entram."
     ),
     "res_pendentes": "Itens sem massa por falta de dado (comprimento, medidas ou kg/m).",
+    "sec_quadro": (
+        "A massa de cada perfil e de cada espessura de chapa em barras, na mesma escala, com a "
+        "parte do total e, nos perfis, quantas barras de comprimento comercial eles consomem. Os "
+        "maiores vêm primeiro; a partir de 12, o resto aparece junto em Outros. A conta é a dos "
+        "itens, sem o acréscimo de soldas, parafusos e perdas."
+    ),
     "sec_perfis": (
         "Cada perfil com o comprimento total, a massa e as barras comerciais (estimativa sem "
         "otimização de corte nem perdas)."

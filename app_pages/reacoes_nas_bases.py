@@ -17,6 +17,7 @@ from core import lista_de_material as lm
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import reacoes_nas_bases as rb
+from core.desenho_reacoes import figura_das_reacoes
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Reações nas bases", ":material/foundation:")
@@ -163,6 +164,17 @@ with secao_protegida("Reações nas bases"):
                 "ou a direção da seção dos pilares).",
                 icon=":material/info:",
             )
+        if reacoes.casos and any(pe.ponto is not None for pe in reacoes.pes):
+            caso_desenho = st.selectbox(
+                "Caso no desenho",
+                list(reacoes.casos),
+                key="rb_caso_desenho",
+                persist_state="session",
+                help=AJUDA["caso_desenho"],
+            )
+            desenho = figura_das_reacoes(reacoes, caso_desenho)
+            if desenho is not None:
+                st.image(desenho.png, caption=desenho.legenda, width="stretch")
         with st.expander("Locação dos pés e natureza de cada caso"):
             st.dataframe(
                 pd.DataFrame(rb.linhas_da_locacao(reacoes, eixos), columns=rb.COLUNAS_LOCACAO),

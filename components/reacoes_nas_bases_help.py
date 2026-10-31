@@ -32,6 +32,12 @@ AJUDA: dict[str, str] = {
         "fundação — a reação com o sinal trocado. N é a compressão (positiva; negativa é "
         "arrancamento), H a força horizontal resultante. A última coluna diz de onde veio o número."
     ),
+    "caso_desenho": (
+        "O caso de carga que aparece na planta: cada pé no seu lugar, com a força vertical N "
+        "(círculo azul de compressão ou vermelho de arrancamento, com a área crescendo com N), a "
+        "horizontal H como seta e o momento, quando há. São as ações da estrutura na fundação, "
+        "características e sem combinar, nos eixos da fundação."
+    ),
     "eixos": (
         "Eixos da fundação: X e Y na planta e Z para cima, como o engenheiro civil costuma usar — o "
         "X é o do SolidWorks e o Y é o −Z do SolidWorks (a vista Superior com o Y para cima). Eixos "

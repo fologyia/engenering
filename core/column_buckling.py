@@ -110,6 +110,21 @@ CONDICOES_APOIO_RECOMENDADAS: dict[str, float] = {
 # em pórtico muito deslocável; fora disso quase sempre é erro de digitação.
 K_MINIMO, K_MAXIMO = 0.5, 3.0
 
+# Apoios em que uma ponta se desloca lateralmente (Tabela E.1, casos d a f): a coluna é deslocável
+# no plano e o momento precisa do B₂ (P-Δ) e do desaprumo, que o B₁ (K = 1) não pega.
+APOIOS_DESLOCAVEIS: tuple[str, ...] = (
+    "Engastada-livre (em balanço)",
+    "Biengastada com translação (deslocável)",
+    "Engastada-pino com translação (deslocável)",
+)
+
+# Desaprumo da coluna deslocável como força nocional horizontal, em fração de N_Sd: h/333 = 0,3 %
+# (NBR 8800:2008 4.9.7.1.1; o item da análise na 2025 não foi visto — a 12.3.3.1.1 da 2025, 1:500,
+# é a tolerância de montagem, não esta imperfeição) e 0,2 % no AISC 360-16 (C2.2b e Apêndice 7).
+DESAPRUMO = {"NBR8800_2008": 0.003, "NBR8800_2024": 0.003, "AISC360_16_LRFD": 0.002}
+# B₂ (com EI) que separa pequena, média e grande deslocabilidade (NBR 8800:2008 4.9.4).
+B2_PEQUENA, B2_MEDIA = 1.1, 1.4
+
 
 def _positivo(nome: str, valor: float) -> float:
     valor = float(valor)
@@ -181,6 +196,24 @@ VINCULOS_MAO_FRANCESA: tuple[str, ...] = (
     "Biapoiada (pino na base, topo travado)",
     "Engastada na base, topo apoiado",
 )
+
+
+# O vínculo para o momento da mão-francesa que cada apoio da Tabela E.1 impõe. Biengastada vai
+# para engaste com topo apoiado (momento maior em qualquer altura do nó); com translação, o topo
+# não segura a força H e a coluna trabalha em balanço.
+_VINCULO_DO_APOIO = {
+    "Biapoiada (pino-pino)": VINCULOS_MAO_FRANCESA[1],
+    "Engastada-livre (em balanço)": VINCULOS_MAO_FRANCESA[0],
+    "Engastada-pino": VINCULOS_MAO_FRANCESA[2],
+    "Biengastada": VINCULOS_MAO_FRANCESA[2],
+    "Biengastada com translação (deslocável)": VINCULOS_MAO_FRANCESA[0],
+    "Engastada-pino com translação (deslocável)": VINCULOS_MAO_FRANCESA[0],
+}
+
+
+def vinculo_do_apoio(apoio: str) -> str | None:
+    """O vínculo da mão-francesa que combina com o apoio do eixo; None para o K informado."""
+    return _VINCULO_DO_APOIO.get(apoio)
 
 
 def _momento_forca_horizontal(h: float, a: float, l: float, vinculo: str) -> tuple[float, str]:
@@ -288,8 +321,8 @@ FORA_DO_ESCOPO = (
     "Cantoneira simples, com regras próprias de esbeltez e excentricidade (NBR 5.3.5.4).",
     "Barras compostas (NBR 5.3.6, N_e,m).",
     "Cisalhamento na barra (NBR 5.4.3): só é avisado quando há mão-francesa ou força transversal.",
-    "Efeitos globais de segunda ordem (B₂), deslocabilidade do pórtico e cargas nocionais — "
-    "pertencem à análise da estrutura.",
+    "B₂ de um andar com várias colunas (ΣN_Sd, ΣH_Sd e Δh, Anexo D): aqui o B₂ e o desaprumo são "
+    "os da coluna isolada, pelo apoio escolhido; num pórtico, use os da análise da estrutura.",
     "Barra tracionada (λ ≤ 300, Anglo 8.3): verifique em Estruturas de aço (NBR 5.2).",
     "Fadiga, cargas dinâmicas e de impacto.",
     "Perfis formados a frio (NBR 14762).",
@@ -311,7 +344,15 @@ REGRAS_B1 = (
     "(conservador).",
     "B₁ ≥ 1,0; em tração, B₁ = 1.",
     "N_Sd,1 ≥ N_e: a barra é instável no plano de flexão e o cálculo é bloqueado.",
-    "B₂ (efeitos globais) continua na análise da estrutura.",
+    "Coluna deslocável no plano (balanço ou ponta que se desloca, Tabela E.1 d a f): soma-se o "
+    "desaprumo, força nocional de 0,3 % de N_Sd (0,2 % no AISC) no topo, M_imp = H_n·K·L/2, e o "
+    "momento é ampliado por B₂ = 1/(1 − N_Sd/N_e2), N_e2 = π²·E·I/(K·L)² — o B₂ da coluna "
+    "isolada (Anexo D, D.2.3). M_Sd = máx(B₁; B₂)·(M₁ + M_imp), porque o programa não separa a "
+    "parte do momento que vem do deslocamento lateral.",
+    "B₂ > 1,1 (média deslocabilidade): B₁ e B₂ com 0,8·E·I (4.9.7.1.2); B₂ > 1,4 (grande): "
+    "pede análise rigorosa (4.9.7.2) e o resultado fica em ALERTA.",
+    "Momentos que já vêm de uma análise de 2ª ordem com as imperfeições: marque a opção e só o "
+    "B₁ é aplicado.",
 )
 
 EXPLICACAO_FLT = {
@@ -777,6 +818,9 @@ class EntradaColuna:
     secao_compacta_confirmada: bool = False
     espessuras_anglo: Mapping[str, float] | None = None
     com_mao_francesa: bool = False
+    deslocavel_x: bool = False  # flexão em torno de x com uma ponta que se desloca (B₂, desaprumo)
+    deslocavel_y: bool = False
+    momentos_de_segunda_ordem: bool = False  # já com P-Δ e imperfeições: só o B₁
 
 
 @dataclass(frozen=True)
@@ -804,6 +848,10 @@ class ResultadoColuna:
     avisos: tuple[str, ...]
     cb_usado: float
     lb_usado_mm: float
+    b2_x: float = 1.0  # 1,0 no plano indeslocável
+    b2_y: float = 1.0
+    momento_x_imperfeicao_kNm: float = 0.0  # desaprumo, já somado ao momento de 1ª ordem
+    momento_y_imperfeicao_kNm: float = 0.0
 
     @property
     def reprovadas(self) -> tuple[Verificacao, ...]:
@@ -1216,20 +1264,35 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         cb = 1.0
 
     momentos: dict[str, dict[str, Any]] = {}
-    for eixo, m1, comprimento, cm, inercia in (
-        ("x", mx1, lx, cm_x, sec.Ix),
-        ("y", my1, ly, cm_y, sec.Iy),
+    delta = DESAPRUMO[norma]
+    ref_b2 = "NBR Anexo D (D.2.3) e 4.9.7 / AISC Apêndice 8"
+    for eixo, m1_informado, comprimento, cm, inercia, k_plano, deslocavel in (
+        ("x", mx1, lx, cm_x, sec.Ix, entrada.kx, entrada.deslocavel_x),
+        ("y", my1, ly, cm_y, sec.Iy, entrada.ky, entrada.deslocavel_y),
     ):
+        # Coluna deslocável no plano: o desaprumo (força nocional no topo) soma momento mesmo sem
+        # momento informado, e o deslocamento lateral amplia o momento por B₂ (P-Δ).
+        desloca = deslocavel and not entrada.momentos_de_segunda_ordem and n_sd > 0
+        m_imp = delta * n_sd * k_plano * comprimento / 2 / 1000.0 if desloca else 0.0
+        m1 = m1_informado + m_imp
         dados: dict[str, Any] = dict(
-            m1=m1, b1=1.0, amplificado=0.0, mrd=None, flexao=None, completo=m1 <= 0
-        )
+            m1=m1, m_imp=m_imp, b1=1.0, b2=1.0, amplificado=0.0, mrd=None, flexao=None,
+            completo=m1 <= 0,
+        )  # fmt: skip
         momentos[eixo] = dados
         if m1 <= 0:
             continue
+        rigidez = 1.0  # 0,8 na média e na grande deslocabilidade (4.9.7.1.2)
+        n_e2 = math.pi**2 * e_mod * inercia / (k_plano * comprimento) ** 2 / 1000.0
+        b2_com_ei = 1.0
+        if desloca:
+            b2_com_ei = 1 / (1 - n_sd / n_e2) if n_sd < n_e2 else math.inf
+            if b2_com_ei > B2_PEQUENA:
+                rigidez = 0.8
         # B1 com o comprimento real no plano de flexão
-        n_e_real = math.pi**2 * e_mod * inercia / comprimento**2 / 1000.0
+        n_e_real = math.pi**2 * rigidez * e_mod * inercia / comprimento**2 / 1000.0
         try:
-            dados["b1"] = cd.coef_B1(n_sd, inercia, comprimento, cm, e_mod)
+            dados["b1"] = cd.coef_B1(n_sd, rigidez * inercia, comprimento, cm, e_mod)
         except ValueError as erro:
             bloquear(
                 f"Amplificação B₁ em {eixo}",
@@ -1240,7 +1303,71 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
             dados["b1"] = math.inf
             dados["amplificado"] = math.inf
             continue
-        dados["amplificado"] = m1 * dados["b1"]
+        texto_ei = "" if rigidez == 1.0 else "0,8·"
+        if desloca:
+            n_e2_usado = rigidez * n_e2
+            if n_sd >= n_e2_usado:  # o B₁ fica calculado; só o B₂ e o momento divergem
+                bloquear(
+                    f"Amplificação B₂ em {eixo} (coluna deslocável)",
+                    ref_b2,
+                    f"N_Sd = {n_sd:.1f} kN ≥ N_e2 = π²·{texto_ei}E·I/(K·L)² = {n_e2_usado:.1f} "
+                    "kN: a coluna é instável com o deslocamento lateral neste plano.",
+                )
+                dados.update(b2=math.inf, amplificado=math.inf)
+                continue
+            dados["b2"] = 1 / (1 - n_sd / n_e2_usado)
+            classe = (
+                "pequena"
+                if b2_com_ei <= B2_PEQUENA
+                else ("média" if b2_com_ei <= B2_MEDIA else "grande")
+            )
+            linhas.append(
+                _linha_info(
+                    f"Desaprumo da coluna deslocável — momento em torno de {eixo}",
+                    None,
+                    m_imp,
+                    "kN·m",
+                    "NBR 4.9.7.1.1 / AISC C2.2b",
+                    f"M_imp = H_n·K·L/2, H_n = {100 * delta:.1f} %·N_Sd = "
+                    f"{delta * n_sd:.3f} kN no topo: {delta * n_sd:.3f}·{k_plano:g}·"
+                    f"{comprimento:.0f}/2 = {m_imp:.3f} kN·m (somado a M₁ = "
+                    f"{m1_informado:.3f} kN·m)",
+                )
+            )
+            linhas.append(
+                _linha_info(
+                    f"B₂{eixo} — coluna deslocável em torno de {eixo} (P-Δ)",
+                    dados["b2"],
+                    None,
+                    "—",
+                    ref_b2,
+                    f"1/(1 − N_Sd/N_e2) = 1/(1 − {n_sd:.1f}/{n_e2_usado:.1f}), N_e2 = "
+                    f"π²·{texto_ei}E·I/(K·L)² com K·L = {k_plano * comprimento:.0f} mm; com E·I, "
+                    f"B₂ = {b2_com_ei:.3f}: {classe} deslocabilidade"
+                    + ("" if rigidez == 1.0 else " (B₁ e B₂ com 0,8·E·I, 4.9.7.1.2)"),
+                )
+            )
+            if b2_com_ei > B2_MEDIA:
+                linhas.append(
+                    _linha_alerta(
+                        f"Grande deslocabilidade em torno de {eixo}",
+                        "NBR 8800:2008 4.9.7.2",
+                        f"B₂ = {b2_com_ei:.3f} > 1,4 (com E·I): a norma pede análise rigorosa, com "
+                        "as não linearidades geométrica e do material. O B₂ da coluna isolada é só "
+                        "uma estimativa — enrijeça ou trave a coluna.",
+                    )
+                )
+        fator_2a = max(dados["b1"], dados["b2"])
+        dados["amplificado"] = m1 * fator_2a
+        if desloca:
+            texto_m = (
+                f"M{eixo},Sd = máx(B₁; B₂)·(M₁ + M_imp) = {fator_2a:.3f}·{m1:.3f} = "
+                f"{dados['amplificado']:.3f} kN·m"
+            )
+        else:
+            texto_m = (
+                f"M{eixo},Sd = B₁·M₁ = {dados['b1']:.3f}·{m1:.3f} = {dados['amplificado']:.3f} kN·m"
+            )
         linhas.append(
             _linha_info(
                 f"B₁{eixo} — amplificação do momento em torno de {eixo}",
@@ -1248,8 +1375,9 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
                 None,
                 "—",
                 "NBR Anexo D (D.2.2) / Projeto C.2.2",
-                f"C_m/(1 − N_Sd/N_e{eixo}) = {cm:.2f}/(1 − {n_sd:.1f}/{n_e_real:.1f}); "
-                f"M{eixo},Sd = B₁·M₁ = {dados['b1']:.3f}·{m1:.3f} = {dados['amplificado']:.3f} kN·m",
+                f"C_m/(1 − N_Sd/N_e{eixo}) = {cm:.2f}/(1 − {n_sd:.1f}/{n_e_real:.1f})"
+                + (f", N_e{eixo} com 0,8·E·I" if rigidez != 1.0 else "")
+                + f"; {texto_m}",
             )
         )
         # M_Rd
@@ -1425,8 +1553,9 @@ def _fechar(
         flexao_y=momentos["y"]["flexao"],
         mrd_x_kNm=momentos["x"]["mrd"],
         mrd_y_kNm=momentos["y"]["mrd"],
-        momento_x_primeira_ordem_kNm=mx1,
-        momento_y_primeira_ordem_kNm=my1,
+        # 1ª ordem com o desaprumo da coluna deslocável (a força nocional também é de 1ª ordem)
+        momento_x_primeira_ordem_kNm=momentos["x"].get("m1", mx1),
+        momento_y_primeira_ordem_kNm=momentos["y"].get("m1", my1),
         cm_x=cm_x,
         cm_y=cm_y,
         b1_x=momentos["x"]["b1"],
@@ -1442,6 +1571,10 @@ def _fechar(
         avisos=tuple(dict.fromkeys(avisos)),
         cb_usado=cb_usado,
         lb_usado_mm=lb_usado,
+        b2_x=momentos["x"].get("b2", 1.0),
+        b2_y=momentos["y"].get("b2", 1.0),
+        momento_x_imperfeicao_kNm=momentos["x"].get("m_imp", 0.0),
+        momento_y_imperfeicao_kNm=momentos["y"].get("m_imp", 0.0),
     )
 
 
@@ -1578,6 +1711,9 @@ def registro_coluna(
         "razao_M1_M2_y": entrada.razao_m1_m2_y,
         "forcas_transversais_x": entrada.forcas_transversais_x,
         "forcas_transversais_y": entrada.forcas_transversais_y,
+        "deslocavel_x": entrada.deslocavel_x or None,
+        "deslocavel_y": entrada.deslocavel_y or None,
+        "momentos_de_segunda_ordem": entrada.momentos_de_segunda_ordem or None,
         "comprimento_destravado_FLT_mm": resultado.lb_usado_mm,
         "cb": resultado.cb_usado,
         "MRd_x_informado_kNm": entrada.MRd_x_informado_kNm,
@@ -1608,6 +1744,10 @@ def registro_coluna(
         "momento_y_amplificado_kNm": numero_json(resultado.momento_y_amplificado_kNm)
         if resultado.momento_y_primeira_ordem_kNm > 0
         else None,
+        "b2_x": numero_json(resultado.b2_x) if resultado.b2_x != 1.0 else None,
+        "b2_y": numero_json(resultado.b2_y) if resultado.b2_y != 1.0 else None,
+        "momento_imperfeicao_x_kNm": resultado.momento_x_imperfeicao_kNm or None,
+        "momento_imperfeicao_y_kNm": resultado.momento_y_imperfeicao_kNm or None,
         "momento_resistente_x_kNm": resultado.mrd_x_kNm,
         "momento_resistente_y_kNm": resultado.mrd_y_kNm,
         "atende": resultado.atende,
@@ -1682,12 +1822,14 @@ def registro_coluna(
                 if norma == "NBR8800_2008"
                 else "A_ef com c₁ e c₂ (Tabelas 4 e 5)"
             )
-            + "; momentos amplificados por B₁ com K = 1 no plano de flexão; M_Rd pelo menor entre FLT, "
+            + "; momentos amplificados por B₁ com K = 1 no plano de flexão (e, na coluna deslocável, "
+            "pelo B₂ da coluna isolada, com o desaprumo somado); M_Rd pelo menor entre FLT, "
             "FLM e FLA, limitado a 1,5·W·f_y; interação 5.5.1.2 com M_x e M_y na mesma equação."
         ),
         premissas=[
-            "Barra prismática isolada, com efeitos de 2ª ordem locais (B₁); B₂ e a deslocabilidade do "
-            "pórtico ficam na análise global.",
+            "Barra prismática isolada, com efeitos de 2ª ordem locais (B₁); no plano em que uma "
+            "ponta se desloca, B₂ e desaprumo da coluna isolada; o B₂ de um andar com várias "
+            "colunas fica na análise da estrutura.",
             (
                 "Esforços de cálculo informados (ações já majoradas)."
                 if not equacoes_de_carga

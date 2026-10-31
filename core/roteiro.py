@@ -197,6 +197,8 @@ PASSOS: tuple[Passo, ...] = (
             "Registre a verificação, o quadro das fundações e as placas no projeto.",
             "Na página Reações nas bases, baixe o Excel com a força e o momento de cada pé, caso a "
             "caso, para quem projeta a fundação.",
+            "Para detalhar uma base pela NBR 8800:2025 (6.7), leve os esforços de cálculo do pé do "
+            "pilar à página Placas de base: placa, chumbadores, cortante e Tabela 18.",
         ),
         "Nenhuma barra sem dados; o que não passa tem motivo entendido.",
     ),

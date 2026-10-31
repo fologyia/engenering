@@ -15,6 +15,7 @@ from core import beam_analysis as vigas
 from core import beam_script as escrita
 from core import materials as materiais_base
 from core import section_catalog as catalogo_perfis
+from core.desenho_da_viga import figura_da_viga
 from core.materials_registry import avaliar_material
 from core.project_criteria import normalizar_criterios_projeto
 from core.project_store import obter_projeto_ativo
@@ -37,16 +38,6 @@ CORES = {
     "flecha": "#7c3aed",
     "torque": "#ea580c",
     "tensao": "#0891b2",
-}
-
-FORMAS_APOIO = {
-    "pino": "triangle-up",
-    "rolete": "circle",
-    "engaste": "square",
-    "engaste deslizante": "diamond",
-    "apoio horizontal": "cross",
-    "mola": "triangle-down",
-    "livre": "stroke",
 }
 
 TIPOS_CARGA = (
@@ -724,136 +715,8 @@ for aviso in resultado.avisos:
 
 with st.container(border=True), secao_protegida("2. Esquema do modelo"):
     st.subheader("2. Esquema do modelo")
-    camadas = [
-        alt.Chart(pd.DataFrame({"x": [0.0, comprimento_m], "y": [0.0, 0.0]}))
-        .mark_line(color="#334155", strokeWidth=4)
-        .encode(x=alt.X("x:Q", title="x (m)"), y=alt.Y("y:Q", title="", axis=None))
-    ]
-
-    apoios_df = pd.DataFrame(
-        [
-            {
-                "x": reacao.x_mm / 1_000.0,
-                "y": 0.0,
-                "Apoio": reacao.tipo,
-                "Reação Fy (kN)": reacao.fy_N / 1_000.0,
-            }
-            for reacao in resultado.reacoes
-        ]
-    )
-    camadas.append(
-        alt.Chart(apoios_df)
-        .mark_point(size=260, filled=True, opacity=0.95, yOffset=12)
-        .encode(
-            x="x:Q",
-            y="y:Q",
-            shape=alt.Shape(
-                "Apoio:N",
-                scale=alt.Scale(domain=list(FORMAS_APOIO), range=list(FORMAS_APOIO.values())),
-                legend=alt.Legend(title="Apoio"),
-            ),
-            color=alt.value("#0f172a"),
-            tooltip=["Apoio", "x:Q", "Reação Fy (kN)"],
-        )
-    )
-
-    if modelo.rotulas:
-        rotulas_df = pd.DataFrame(
-            [{"x": r.x_mm / 1_000.0, "y": 0.0, "Elemento": "Rótula"} for r in modelo.rotulas]
-        )
-        camadas.append(
-            alt.Chart(rotulas_df)
-            .mark_point(size=140, shape="circle", filled=False, strokeWidth=3, color="#b91c1c")
-            .encode(x="x:Q", y="y:Q", tooltip=["Elemento", "x:Q"])
-        )
-
-    if modelo.cargas_distribuidas:
-        faixas = []
-        for indice, carga in enumerate(modelo.cargas_distribuidas):
-            faixas.append(
-                {
-                    "x": carga.x_inicial_mm / 1_000.0,
-                    "y": carga.w_inicial_N_mm,
-                    "carga": f"q{indice + 1}",
-                    "ordem": 0,
-                }
-            )
-            faixas.append(
-                {
-                    "x": carga.x_final_mm / 1_000.0,
-                    "y": carga.w_final,
-                    "carga": f"q{indice + 1}",
-                    "ordem": 1,
-                }
-            )
-        camadas.append(
-            alt.Chart(pd.DataFrame(faixas))
-            .mark_area(opacity=0.28, color="#2563eb", line={"color": "#2563eb"})
-            .encode(
-                x="x:Q",
-                y=alt.Y("y:Q", title=""),
-                detail="carga:N",
-                order="ordem:O",
-                tooltip=[alt.Tooltip("y:Q", title="q (N/mm)"), "x:Q"],
-            )
-        )
-
-    marcadores = []
-    for carga in modelo.cargas_pontuais:
-        marcadores.append(
-            {
-                "x": carga.x_mm / 1_000.0,
-                "rotulo": f"P = {carga.fy_N / 1_000.0:g} kN",
-                "Tipo": "Força",
-            }
-        )
-    for momento in modelo.momentos:
-        marcadores.append(
-            {
-                "x": momento.x_mm / 1_000.0,
-                "rotulo": f"M = {momento.mz_Nmm / 1e6:g} kN·m",
-                "Tipo": "Momento",
-            }
-        )
-    for torque in modelo.torques:
-        marcadores.append(
-            {
-                "x": torque.x_mm / 1_000.0,
-                "rotulo": f"T = {torque.t_Nmm / 1e6:g} kN·m",
-                "Tipo": "Torque",
-            }
-        )
-    for carga in modelo.cargas_axiais:
-        marcadores.append(
-            {
-                "x": carga.x_mm / 1_000.0,
-                "rotulo": f"N = {carga.fx_N / 1_000.0:g} kN",
-                "Tipo": "Axial",
-            }
-        )
-    if marcadores:
-        marcadores_df = pd.DataFrame(marcadores)
-        camadas.append(
-            alt.Chart(marcadores_df)
-            .mark_point(size=180, shape="triangle-down", filled=True, yOffset=-14)
-            .encode(
-                x="x:Q",
-                y=alt.value(0),
-                color=alt.Color("Tipo:N", legend=alt.Legend(title="Carga")),
-                tooltip=["Tipo", "rotulo", "x:Q"],
-            )
-        )
-        camadas.append(
-            alt.Chart(marcadores_df)
-            .mark_text(dy=-30, fontSize=11, color="#334155")
-            .encode(x="x:Q", y=alt.value(0), text="rotulo:N")
-        )
-
-    st.altair_chart(
-        alt.layer(*camadas)
-        .resolve_scale(y="independent", color="independent")
-        .properties(height=200)
-    )
+    esquema = figura_da_viga(modelo)
+    st.image(esquema.png, caption=esquema.legenda, width="stretch")
     detalhes = st.columns(4)
     detalhes[0].metric("Comprimento", f"{comprimento_m:g} m", border=True)
     detalhes[1].metric("Seção", secao.nome, border=True, help=secao.descricao)

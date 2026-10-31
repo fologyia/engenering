@@ -1019,3 +1019,81 @@ class TestTabelaERegistro:
         assert (
             lido["entradas"]["I_mm4"] == pytest.approx(4e5) and lido["entradas"]["L_mm"] == 3_000.0
         )
+
+
+# ---------------------------------------------------------------------------
+# Coluna deslocável: desaprumo e B₂ (pedido de 31/10/2026: "considera todos os momentos
+# relevantes?" — em balanço o B₁ com K = 1 não pega o P-Δ)
+# ---------------------------------------------------------------------------
+
+W250 = cb.secao_de_perfil(catalogo.obter_perfil("W 250 x 32,7"))
+BALANCO = cb.EntradaColuna(
+    secao=W250, fy_MPa=345.0, Lx_mm=4000.0, Ly_mm=4000.0, kx=2.1, ky=2.1, N_Sd_kN=150.0,
+    Mx_kNm=20.0, deslocavel_x=True,
+)  # fmt: skip
+
+
+def test_balanco_soma_o_desaprumo_e_amplia_por_b2_conta_de_mao():
+    r = cb.verificar_coluna(BALANCO)
+    e_i = 200_000.0 * W250.Ix
+    n_e2 = math.pi**2 * e_i / (2.1 * 4000.0) ** 2 / 1000.0  # 1381 kN
+    assert 1 / (1 - 150.0 / n_e2) == pytest.approx(1.1218, abs=1e-4)  # > 1,1: média
+    b2 = 1 / (1 - 150.0 / (0.8 * n_e2))  # 0,8·E·I (4.9.7.1.2)
+    b1 = 1 / (1 - 150.0 / (math.pi**2 * 0.8 * e_i / 4000.0**2 / 1000.0))
+    m_imp = 0.003 * 150.0 * 2.1 * 4000.0 / 2 / 1000.0  # 1,89 kN·m
+    assert r.momento_x_imperfeicao_kNm == pytest.approx(m_imp)
+    assert r.momento_x_primeira_ordem_kNm == pytest.approx(20.0 + m_imp)
+    assert r.b2_x == pytest.approx(b2) and r.b1_x == pytest.approx(b1)
+    assert r.momento_x_amplificado_kNm == pytest.approx(b2 * (20.0 + m_imp))
+    assert r.momento_x_amplificado_kNm == pytest.approx(25.329, abs=1e-3)
+    assert r.b2_y == 1.0 and r.momento_y_imperfeicao_kNm == 0.0  # y não foi marcado deslocável
+
+
+def test_indeslocavel_e_momentos_de_segunda_ordem_ficam_so_com_b1():
+    sem = cb.verificar_coluna(replace(BALANCO, deslocavel_x=False))
+    segunda = cb.verificar_coluna(replace(BALANCO, momentos_de_segunda_ordem=True))
+    for r in (sem, segunda):
+        assert r.b2_x == 1.0 and r.momento_x_imperfeicao_kNm == 0.0
+        assert r.momento_x_amplificado_kNm == pytest.approx(r.b1_x * 20.0)
+        assert not any("B₂" in v.nome or "Desaprumo" in v.nome for v in r.verificacoes)
+
+
+def test_so_compressao_em_balanco_ja_tem_momento_do_desaprumo():
+    r = cb.verificar_coluna(replace(BALANCO, Mx_kNm=0.0))
+    assert r.momento_x_amplificado_kNm == pytest.approx(r.b2_x * 1.89)
+    assert r.indice_interacao is not None
+
+
+def test_pequena_deslocabilidade_usa_e_i_inteiro_e_aisc_usa_0_2_por_cento():
+    leve = replace(BALANCO, N_Sd_kN=60.0)
+    r = cb.verificar_coluna(leve)
+    n_e2 = math.pi**2 * 200_000.0 * W250.Ix / (2.1 * 4000.0) ** 2 / 1000.0
+    assert r.b2_x == pytest.approx(1 / (1 - 60.0 / n_e2))  # ≤ 1,1: sem 0,8
+    assert r.b2_x <= cb.B2_PEQUENA
+    aisc = cb.verificar_coluna(replace(leve, norma="AISC360_16_LRFD"))
+    assert aisc.momento_x_imperfeicao_kNm == pytest.approx(0.002 * 60.0 * 2.1 * 4000.0 / 2 / 1000.0)
+
+
+def test_grande_deslocabilidade_fica_em_alerta_e_instavel_bloqueia():
+    grande = cb.verificar_coluna(replace(BALANCO, N_Sd_kN=450.0))
+    alerta = [v for v in grande.verificacoes if v.nome.startswith("Grande deslocabilidade")]
+    assert alerta and alerta[0].status == "ALERTA"
+    assert grande.status_geral != "OK"
+    instavel = cb.verificar_coluna(replace(BALANCO, N_Sd_kN=1200.0))
+    assert math.isinf(instavel.momento_x_amplificado_kNm) and math.isinf(instavel.b2_x)
+    assert math.isfinite(instavel.b1_x)  # o B₁ não diverge: só o B₂ (antes saía ∞ nos dois)
+    assert any("B₂" in b for b in instavel.bloqueios) and instavel.status_geral == "NÃO OK"
+
+
+def test_vinculo_da_mao_francesa_pelo_apoio():
+    assert cb.vinculo_do_apoio("Engastada-livre (em balanço)") == cb.VINCULOS_MAO_FRANCESA[0]
+    assert cb.vinculo_do_apoio("Biapoiada (pino-pino)") == cb.VINCULOS_MAO_FRANCESA[1]
+    assert cb.vinculo_do_apoio("Informar K") is None
+    # biengastada usa engaste + topo apoiado, que dá momento maior em qualquer altura do nó
+    for a in (300.0, 1000.0, 1500.0, 2500.0, 2900.0):
+        apoiado = cb.esforcos_mao_francesa(10_000.0, 45.0, a, 3000.0, cb.VINCULOS_MAO_FRANCESA[2])
+        h, b, l = apoiado.componente_horizontal_N, 3000.0 - a, 3000.0
+        biengastada = max(h * a * b**2 / l**2, h * a**2 * b / l**2, 2 * h * a**2 * b**2 / l**3)
+        assert apoiado.momento_Nmm >= biengastada - 1e-6
+    for apoio in cb.APOIOS_DESLOCAVEIS:  # o topo que se desloca não segura a força H
+        assert cb.vinculo_do_apoio(apoio) == cb.VINCULOS_MAO_FRANCESA[0]

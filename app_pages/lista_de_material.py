@@ -13,6 +13,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 from core import esforcos_modelo as em
 from core import lista_de_material as lm
 from core import plano_de_cargas as pc
+from core.desenho_lista_material import figura_da_massa
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Lista de material", ":material/inventory_2:")
@@ -267,6 +268,10 @@ with st.container(border=True), secao_protegida("3. Resumo"):
             f"{linha.pendencia}.",
             icon=":material/warning:",
         )
+    quadro = figura_da_massa(resumo)
+    if quadro is not None:
+        st.subheader("Quadro de massa", help=AJUDA["sec_quadro"])
+        st.image(quadro.png, caption=quadro.legenda, width="stretch")
     if resumo.perfis:
         st.subheader("Por perfil", help=AJUDA["sec_perfis"])
         st.dataframe(

@@ -167,9 +167,21 @@ def test_pressao_no_concreto_pela_nbr_8800_6_6_5_e_o_padrao():
         fy_placa_MPa=250.0, fck_MPa=25.0, forca_axial_N=100e3, razao_areas_a2_a1=2.0,
     )  # fmt: skip
     nbr = bp.verificar_placa_base(**comum)
-    assert nbr.pressao_maxima_MPa == pytest.approx(25 / 1.96 * math.sqrt(2))
+    assert nbr.pressao_maxima_MPa == pytest.approx(0.85 * 25 / 1.4 * math.sqrt(2))  # 2025
     aisc = bp.verificar_placa_base(**comum, norma=bp.NORMA_AISC)
     assert aisc.pressao_maxima_MPa == pytest.approx(0.65 * 0.85 * 25 * math.sqrt(2))
-    assert nbr.pressao_maxima_MPa < aisc.pressao_maxima_MPa  # a NBR é mais conservadora
+    assert aisc.pressao_maxima_MPa < nbr.pressao_maxima_MPa  # φ_c = 0,65 < 1/γ_c = 0,714
     teto = bp.verificar_placa_base(**{**comum, "razao_areas_a2_a1": 9.0})
-    assert teto.pressao_maxima_MPa == pytest.approx(25.0)  # σ_c,Rd ≤ f_ck
+    assert teto.pressao_maxima_MPa == pytest.approx(1.7 * 25 / 1.4)  # σ_c,Rd ≤ 1,7·f_ck/γ_c
+
+
+def test_corte_do_chumbador_pela_nbr_8800_2025_6_3_3_2_a():
+    import math
+
+    r = bp.verificar_placa_base(
+        profundidade_coluna_mm=200.0, largura_mesa_mm=100.0, espessura_mesa_mm=8.0,
+        comprimento_placa_mm=350.0, largura_placa_mm=300.0, espessura_placa_mm=25.0,
+        fy_placa_MPa=250.0, fck_MPa=25.0, forca_axial_N=100e3, cortante_N=40e3,
+    )  # fmt: skip
+    area = math.pi * 19.05**2 / 4
+    assert r.resistencia_cisalhamento_chumbador_N == pytest.approx(0.45 * area * 400 / 1.35)

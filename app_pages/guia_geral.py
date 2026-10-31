@@ -98,6 +98,7 @@ opcoes = [
     "Vento em estruturas abertas",
     "Contraventamento de estruturas abertas",
     "Ligação de contraventamento",
+    "Placas de base",
     "Normas técnicas",
     "Estruturas de aço",
 ]
@@ -1488,8 +1489,9 @@ elif modulo == "Flambagem de colunas":
             """
         )
     st.warning(
-        "Verificação de barra isolada: os efeitos globais de 2ª ordem (B_2, "
-        "deslocabilidade), as cargas nocionais e as ligações pertencem à análise "
+        "Verificação de barra isolada: na coluna em balanço ou com uma ponta que se "
+        "desloca, o programa soma o desaprumo e amplia o momento pelo B₂ da coluna "
+        "isolada; o B₂ de um andar com várias colunas e as ligações pertencem à análise "
         "da estrutura — módulo Estruturas de aço (pórtico 2D, placa de base). "
         "Cantoneira simples, barras compostas, perfis formados a frio, fadiga e "
         "cisalhamento também ficam de fora.",
@@ -2226,7 +2228,7 @@ elif modulo == "Esforços do modelo":
            Excel, CSV e registro.
         10. Em **Placas de base dos pilares**, informe a placa padrão (N, B, espessura, f_ck e os
            chumbadores) e grave: o programa combina os esforços da base de cada pilar e verifica
-           a placa e os chumbadores (concreto pela NBR 8800 6.6.5, placa e chumbadores pelo
+           a placa e os chumbadores (concreto pela NBR 8800:2025 6.6.5, placa e chumbadores pelo
            Design Guide 1 do AISC), com as exigências da Anglo
            (placa ≥ 16 mm, chumbador ≥ 5/8" e o furo, a arruela e o graute do item 8.7).
         """
@@ -2919,6 +2921,149 @@ elif modulo == "Ligação de contraventamento":
     link_modulo("app_pages/ligacao_contraventamento.py", "Abrir Ligação de contraventamento")
 
 
+elif modulo == "Placas de base":
+    from dataclasses import replace as _replace
+
+    from core import base_de_pilar as _bp
+
+    st.header("Placas de base")
+    st.markdown(
+        "A base do pilar de perfil I ou H pela **ABNT NBR 8800:2025, Subseção 6.7**: placa "
+        "retangular soldada no pilar, chumbadores de aço ASTM A36 e argamassa expansiva por baixo. "
+        "A página acha o **caso** da norma pela força normal e pelo momento, calcula a "
+        "**espessura mínima da placa**, o **diâmetro mínimo do chumbador** e a **cortante** "
+        "resistente, confere as **disposições da Tabela 18**, desenha a base em planta e corte e "
+        "procura a **base mais leve** que atende."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Pilar", "Perfil W, HP ou I do catálogo", "Desenho da estrutura / modelo"],
+            [
+                "Disposição",
+                "Tipo 1 (externos, 4 a 8), tipo 2 (4 internos), rotulada (2 internos) ou 4 + 4",
+                "Desenho da base / padrão do cliente",
+            ],
+            [
+                "Chumbadores",
+                "Ø 3/4″ a 2″, aço, tipo (porca, guarda-chuva, químico, parabolt); a₁ e a₂",
+                "Desenho da base",
+            ],
+            ["Placa", "Espessura e aço (ASTM A36, A572 Gr 50 ou A588)", "Lista de material"],
+            [
+                "Concreto",
+                "f_ck do bloco e o bloco (ou A₂/A₁); argamassa e_n",
+                "Projeto de fundação (engenheiro civil)",
+            ],
+            [
+                "Esforços",
+                "N_Sd (+ compressão), M_Sd no eixo forte e V_Sd, já de cálculo",
+                "Reações nas bases / Esforços do modelo",
+            ],
+        ]
+    )
+    with st.container(border=True):
+        st.subheader("Os casos da norma (6.7.1.4)")
+        st.markdown(
+            """
+            - **C1** compressão centrada; **C2** compressão com pequena excentricidade (a placa
+              inteira no concreto, sem tração nos chumbadores); **C3** grande excentricidade (parte
+              da placa comprime o concreto no trecho ℓ_c e os chumbadores do outro lado tracionam).
+            - **T1** tração centrada; **T2** tração com e ≤ a (todos os chumbadores tracionados,
+              sem contato); **T3** e > a (um lado traciona, o outro aperta o concreto).
+            - A base **tipo 2** só cobre C1, C2, T1 e T2; nos outros o programa pede a tipo 1.
+            """
+        )
+    with st.container(border=True):
+        st.subheader("Disposições e tipos de chumbador")
+        st.markdown(
+            """
+            - **Externos (tipo 1)** e **internos (tipo 2)** são os da Figura 21. A **rotulada** (2
+              internos, um de cada lado da alma) e a de **internos e externos** (4 + 4) vão pelo
+              método geral: a mesma pressão σ_c,Rd no trecho ℓ_c e a força em cada chumbador
+              proporcional à distância à borda comprimida (placa rígida). Com uma só linha
+              tracionada, dá exatamente a conta da norma. A rotulada quase não tem momento: os
+              chumbadores ficam no eixo e só o concreto faz braço.
+            - **Reto com porca e chapa na ponta:** o da Tabela 18. Ligando **Verificar a ancoragem
+              no concreto**, entram o arrancamento da cabeça (8·A_brg·f_c), o cone de concreto do
+              grupo tracionado e o arrancamento lateral junto à borda (ACI 318-19, Capítulo 17).
+            - **Guarda-chuva (gancho em J ou L):** o gancho arranca com 0,9·f_c·e_h·d_b, bem menos
+              que a cabeça — com tração ele quase sempre governa.
+            - **Químico** e **parabolt (expansão):** pós-instalados; a resistência à tração de um
+              chumbador vem da ficha do fabricante (ETA ou ICC-ES) e o cone usa k_c = 7.
+            - **Cone de concreto:** no bloco mínimo da Tabela 18 e sem armadura, o cone costuma não
+              passar; com **armadura de ancoragem** que costura o cone, ele sai como informação e a
+              armadura vai para o projeto do bloco.
+            - **Aço do chumbador:** A36 ou F1554 Gr 36 são os da norma; Gr 55, Gr 105, A193 B7 e SAE
+              1020 mudam o diâmetro mínimo pelo f_u e pedem a ancoragem conferida.
+            - **Momento no eixo fraco (M_Sd,y):** as fórmulas da 6.7 são só do eixo forte; com
+              ele a base vai pelo mesmo método em duas direções (flexão oblíqua): zona comprimida
+              além de uma linha neutra inclinada e chumbadores em proporção à distância a ela.
+            """
+        )
+    st.subheader("Passo a passo")
+    st.markdown(
+        """
+        1. Escolha o perfil, a disposição, o número e o diâmetro dos chumbadores, depois o
+           tipo e o aço do chumbador.
+        2. Deixe **a₁ e a₂ da Tabela 18** ligado para a menor placa; desligue para afastar os
+           chumbadores (por exemplo para ℓy ≥ b_f + 25 mm).
+        3. Informe a espessura e o aço da placa, o f_ck e, se souber, o tamanho do bloco.
+        4. Entre com N_Sd, M_Sd e V_Sd **de cálculo** (ELU) no pé do pilar.
+        5. Escolha como a cortante passa: atrito, placa de cisalhamento ou arruelas soldadas.
+        6. Leia o caso, o status e as tabelas; use **Adotar** para a base mais leve que atende.
+        7. Baixe o memorial desta base ou **registre** no projeto.
+        """
+    )
+
+    def _virgula(valor: float) -> str:
+        return f"{valor:.1f}".replace(".", ",")
+
+    _e = _bp.EntradaBase()
+    _r = _bp.calcular(_e)
+    _r3 = _bp.calcular(_replace(_e, n_chumbadores=6, m_sd_kNm=150.0, t_placa_mm=40.0))
+    mostrar_exemplo(
+        [
+            ["Pilar e base", f"{_e.perfil}, tipo 1, {_e.n_chumbadores} chumbadores Ø 1″"],
+            [
+                "Placa e concreto",
+                f"{_virgula(_e.t_placa_mm)} mm ASTM A36; f_ck = 25 MPa, A₂/A₁ = 1",
+            ],
+            ["Esforços", "N_Sd = 300 kN, M_Sd = 0, V_Sd = 20 kN"],
+        ],
+        f"Resultado esperado: caso {_r.caso}, placa {_r.geometria.lx:.0f} × "
+        f"{_r.geometria.ly:.0f} mm, σ_c,Rd = {_virgula(_r.sigma_c_rd)} MPa, t_p,min = "
+        f"{_virgula(_r.t_p_min)} mm ({100 * _r.aproveitamento_maximo:.0f} %). Com 6 "
+        f"chumbadores, M_Sd = 150 kN·m e placa de 40 mm o caso passa a {_r3.caso}: F_t = "
+        f"{_virgula(_r3.f_t_sd / 1e3)} kN por chumbador e t_p,min = {_virgula(_r3.t_p_min)} mm.",
+    )
+    with st.container(border=True):
+        st.subheader("Como interpretar")
+        st.markdown(
+            """
+            - **Pressão no concreto:** σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c (6.6.5),
+              com A₂ a área do bloco homotética à placa.
+            - **Placa:** a espessura mínima vem da flexão da placa em balanço fora do pilar (m, n e
+              λ·n₀) e, com chumbadores tracionados, da flexão entre o chumbador e a mesa.
+            - **Chumbador:** d_b,min = √(4·F_t,Sd/(0,75·π·f_ub/γ_a2)), com f_ub = 400 MPa (A36).
+            - **Cortante:** o atrito (μ = 0,45) só existe com pressão de contato; em T1 e T2, ou
+              quando não basta, use placa de cisalhamento ou arruelas soldadas — e então só o
+              dispositivo resiste (6.7.2.3). Nas arruelas soldadas, cada chumbador vale o menor
+              entre o corte (0,45·A_b·f_ub/γ_a2, 6.3.3.2) e o contato no furo da arruela (6.3.3.3).
+            - **Tabela 18 e notas:** a₁, a₂ (no tipo 2, o a₁ de ℓx vai de 10 mm ao da tabela),
+              ancoragem h₁, furo, arruela de f_y = 345 MPa com furo d_b + 1,5 mm, argamassa, f_ck
+              mínimo junto à porca, bloco mínimo N_b × B_b e a armadura; vale para chumbadores
+              de A36, de 4 a 8 por base.
+            """
+        )
+    st.info(
+        "A página Esforços do modelo também verifica as placas de base, pilar a pilar, pelo AISC "
+        "Design Guide 1 (pressão pela 6.6.5 e critério Anglo): use esta página para uma base pela NBR "
+        "8800:2025.",
+        icon=":material/info:",
+    )
+    link_modulo("app_pages/placa_de_base.py", "Abrir Placas de base")
+
+
 elif modulo == "Normas técnicas":
     st.header("Biblioteca de normas técnicas")
     st.markdown(
@@ -3117,7 +3262,7 @@ else:
         )
         st.markdown(
             """
-            **Placa de base** (NBR 8800 6.6.5 no concreto; AISC Design Guide 1 na placa e
+            **Placa de base** (NBR 8800:2025 6.6.5 no concreto; AISC Design Guide 1 na placa e
             nos chumbadores): informe o perfil da coluna,
             N × B × t_p, f_y, f_ck e A₂/A₁ do pedestal, os esforços P (+ compressão),
             M e V na base e os chumbadores (quantidade, lado tracionado, diâmetro,

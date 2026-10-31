@@ -164,7 +164,8 @@ def analisar_estado_plano(
     theta_tau_negativo = _normalizar_angulo_180(theta_p1 + 45.0)
 
     von_mises = math.sqrt(sigma_x**2 - sigma_x * sigma_y + sigma_y**2 + 3.0 * tau_xy**2)
-    principais_3d = tuple(sorted((sigma_1, sigma_2, 0.0), reverse=True))
+    maior, meio, menor = sorted((sigma_1, sigma_2, 0.0), reverse=True)
+    principais_3d = (maior, meio, menor)
     tau_max_absoluta = (principais_3d[0] - principais_3d[2]) / 2.0
 
     return ResultadoEstadoPlano(
@@ -273,7 +274,11 @@ def analisar_estado_tridimensional(
     ordem = np.argsort(autovalores)[::-1]
     principais_array = autovalores[ordem]
     direcoes = _orientar_autovetores(autovetores[:, ordem])
-    principais = tuple(float(valor) for valor in principais_array)
+    principais = (
+        float(principais_array[0]),
+        float(principais_array[1]),
+        float(principais_array[2]),
+    )
 
     I1 = float(np.trace(tensor))
     I2 = float(0.5 * (I1**2 - np.trace(tensor @ tensor)))

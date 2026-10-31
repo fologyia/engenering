@@ -383,6 +383,27 @@ def _registrar_padrao() -> None:
             ),
         ),
         ModuloTecnico(
+            id="placa_de_base",
+            titulo="Placas de base",
+            versao="1.0",
+            pagina="app_pages/placa_de_base.py",
+            grupo_navegacao="Ligações e bases",
+            ordem=40,
+            icone=":material/anchor:",
+            descricao=(
+                "Base de pilar de perfil I ou H pela NBR 8800:2025 (6.7): casos C1 a T3, espessura "
+                "da placa, chumbadores, cortante por atrito, placa de cisalhamento ou arruelas "
+                "soldadas, Tabela 18, desenho em planta e corte e a base mais leve que atende."
+            ),
+            aliases=(
+                "Placa de base",
+                "Base de pilar",
+                "Chumbadores",
+                "Chumbador",
+                "Placa de base NBR 8800",
+            ),
+        ),
+        ModuloTecnico(
             id="estruturas_aco",
             titulo="Estruturas de aço",
             versao="1.1",

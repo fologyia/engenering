@@ -825,6 +825,28 @@ ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
         ("norma", "Norma", "sempre"),
         ("criterio_do_cliente", "Critério do cliente", "se_preenchido"),
     ),
+    "placa_de_base": (
+        ("obra", "Obra", "se_preenchido"),
+        ("tag", "TAG", "se_preenchido"),
+        ("perfil", "Pilar", "sempre"),
+        ("tipo_de_base", "Tipo de base", "sempre"),
+        ("placa", "Placa", "sempre"),
+        ("chumbadores", "Chumbadores", "sempre"),
+        ("ancoragem", "Tipo do chumbador", "sempre"),
+        ("ancoragem_no_concreto", "Ancoragem no concreto", "se_preenchido"),
+        ("a1_mm", "a₁ [mm]", "sempre"),
+        ("a1_x_mm", "a₁ na direção ℓx, tipo 2 [mm]", "se_preenchido"),
+        ("a2_mm", "a₂ [mm]", "sempre"),
+        ("fck_MPa", "f_ck do bloco [MPa]", "sempre"),
+        ("razao_A2_A1", "A₂/A₁", "sempre"),
+        ("bloco_mm", "Bloco [mm]", "se_preenchido"),
+        ("N_Sd_kN", "N_Sd [kN] (+ compressão)", "sempre"),
+        ("M_Sd_kNm", "M_Sd [kN·m]", "se_preenchido"),
+        ("M_Sd_y_kNm", "M_Sd,y no eixo fraco [kN·m] (flexão oblíqua)", "se_preenchido"),
+        ("V_Sd_kN", "V_Sd [kN]", "se_preenchido"),
+        ("combinacao", "Combinação", "sempre"),
+        ("cortante_resistida_por", "Cortante resistida por", "sempre"),
+    ),
     "cargas_esqueleto": (
         ("obra", "Obra", "se_preenchido"),
         ("eixos_x_m", "Eixos em X (m)", "sempre"),
@@ -946,6 +968,7 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "reacao_de_calculo_kN",
         "reacao_minima_da_ligacao_kN",
         "figura_ligacao",
+        "figura_base_de_pilar",
     }
 )
 

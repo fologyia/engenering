@@ -343,26 +343,74 @@ def test_escopo_cita_a_barra_tracionada(banco_isolado):
 
 
 # ------------------------------------------------------------------ mão-francesa, K, C_b
+MAO_FRANCESA = dict(
+    col_tipo_secao=ui.SEC_I,
+    col_L=3000.0,
+    col_modo_carga=ui.MODO_CALCULO,
+    col_nsd=100.0,
+    col_mf_incluir=True,
+    col_mf_gamma="Já é de cálculo (γ = 1,00)",
+    col_mf_eixo="x",
+    col_mf_e_x=0.0,
+)
+
+
 def test_mao_francesa_soma_o_momento_e_avisa_do_cisalhamento(banco_isolado):
-    t = abrir(
-        banco_isolado,
-        col_tipo_secao=ui.SEC_I,
-        col_L=3000.0,
-        col_modo_carga=ui.MODO_CALCULO,
-        col_nsd=100.0,
-        col_mf_incluir=True,
-        col_mf_gamma="Já é de cálculo (γ = 1,00)",
-        col_mf_vinculo=cb.VINCULOS_MAO_FRANCESA[0],
-        col_mf_eixo="x",
-        col_mf_e_x=0.0,
-    )
+    t = abrir(banco_isolado, **MAO_FRANCESA, col_apoio_x="Engastada-livre (em balanço)")
     esforcos = cb.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, cb.VINCULOS_MAO_FRANCESA[0])
     assert metrica(t, "H = F·sen θ") == f"{esforcos.componente_horizontal_N / 1e3:.2f} kN"
     assert metrica(t, "M_x,Sd da mão-francesa") == f"{esforcos.momento_Nmm / 1e6:.3f} kN·m"
     assert numero(metrica(t, "M_x,Sd amplificado")) > esforcos.momento_Nmm / 1e6
     assert tem_metrica(t, "B₁ em x") and not tem_metrica(t, "B₁ em y")
+    assert tem_metrica(t, "B₂ em x")  # em balanço a coluna é deslocável no plano da mão-francesa
     assert linha(t, "Cisalhamento")["Status"] == "ALERTA"
     assert tem_metrica(t, "Índice de interação")
+
+
+@pytest.mark.parametrize(
+    "apoio, vinculo",
+    [
+        ("Biapoiada (pino-pino)", cb.VINCULOS_MAO_FRANCESA[1]),
+        ("Engastada-pino", cb.VINCULOS_MAO_FRANCESA[2]),
+        ("Engastada-pino com translação (deslocável)", cb.VINCULOS_MAO_FRANCESA[0]),
+    ],
+)
+def test_vinculo_da_mao_francesa_segue_o_apoio_do_eixo(banco_isolado, apoio, vinculo):
+    # escolher outro vínculo à mão não vale: o momento não pode sair menor que o do apoio
+    t = abrir(
+        banco_isolado, **MAO_FRANCESA, col_apoio_x=apoio, col_mf_vinculo=cb.VINCULOS_MAO_FRANCESA[1]
+    )
+    esforcos = cb.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, vinculo)
+    assert metrica(t, "M_x,Sd da mão-francesa") == f"{esforcos.momento_Nmm / 1e6:.3f} kN·m"
+
+
+def test_com_k_informado_o_vinculo_da_mao_francesa_e_escolhido(banco_isolado):
+    t = abrir(
+        banco_isolado,
+        **MAO_FRANCESA,
+        col_apoio_x=ui.APOIO_MANUAL,
+        col_kx_manual=1.0,
+        col_mf_vinculo=cb.VINCULOS_MAO_FRANCESA[2],
+    )
+    esforcos = cb.esforcos_mao_francesa(20_000.0, 45.0, 800.0, 3_000.0, cb.VINCULOS_MAO_FRANCESA[2])
+    assert metrica(t, "M_x,Sd da mão-francesa") == f"{esforcos.momento_Nmm / 1e6:.3f} kN·m"
+    assert not tem_metrica(t, "B₂ em x")  # K = 1: indeslocável
+
+
+def test_coluna_em_balanco_tem_desaprumo_e_b2_que_a_opcao_de_2a_ordem_desliga(banco_isolado):
+    base = dict(
+        col_tipo_secao=ui.SEC_I,
+        col_L=3000.0,
+        col_modo_carga=ui.MODO_CALCULO,
+        col_nsd=100.0,
+        col_apoio_x="Engastada-livre (em balanço)",
+    )
+    t = abrir(banco_isolado, **base)
+    assert tem_metrica(t, "B₂ em x") and numero(metrica(t, "B₂ em x")) > 1.0
+    assert linha(t, "Desaprumo da coluna deslocável")["Status"] == "INFO"
+    assert numero(metrica(t, "M_x,Sd amplificado")) > 0  # só o desaprumo já flete a coluna
+    segunda = abrir(banco_isolado, **base, col_segunda_ordem=True)
+    assert not tem_metrica(segunda, "B₂ em x") and not tem_linha(segunda, "Desaprumo")
 
 
 def test_sem_mao_francesa_nao_ha_alerta_de_cisalhamento(banco_isolado):
@@ -433,6 +481,7 @@ def test_mao_francesa_no_eixo_y_soma_o_momento_em_y(banco_isolado):
         col_mf_eixo="y",
         col_mf_e_y=0.0,
         col_mf_gamma="Já é de cálculo (γ = 1,00)",
+        col_apoio_y="Engastada-livre (em balanço)",
     )
     h_vezes_a = 20.0 * math.sin(math.radians(45.0)) * 800.0 / 1e3  # balanço: M = H·a
     assert metrica(t, "M_y,Sd da mão-francesa") == f"{h_vezes_a:.3f} kN·m"

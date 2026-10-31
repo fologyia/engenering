@@ -6,17 +6,17 @@ roteiro fechado para isso; a prática brasileira usa o Design Guide 1 da
 AISC, que é o que está aqui, com os fatores de resistência explícitos e
 editáveis:
 
-* pressão de contato no concreto pela **NBR 8800 6.6.5** (padrão):
-  ``σ_c,Rd = f_ck/(γ_c·γ_n)·√(A₂/A₁) ≤ f_ck``, com ``γ_c = γ_n = 1,40``; ou, à escolha, pela
+* pressão de contato no concreto pela **NBR 8800:2025 6.6.5** (padrão):
+  ``σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c``, com ``γ_c = 1,40``; ou, à escolha, pela
   AISC J8 do DG1, ``f_p,max = φ_c·0,85·f_c·√(A₂/A₁)`` com ``√(A₂/A₁) ≤ 2`` e ``φ_c = 0,65``
-  (cerca de 8 % acima da NBR);
+  (cerca de 9 % abaixo da NBR);
 * flexão da placa em regime plástico, ``φ_b = 0,90``, cantiléveres
   ``m = (N − 0,95d)/2``, ``n = (B − 0,8b_f)/2`` e ``λn' = λ√(d·b_f)/4``;
 * compressão pura (DG1 3.1), momento pequeno com ``e ≤ e_crit`` (DG1 3.3),
   momento grande com tração nos chumbadores (DG1 3.4, ``Y`` pela equação
   do 2º grau) e arrancamento (tração na base, DG1 3.2);
-* chumbadores pela NBR 8800 6.3.3 (padrão: ``0,75·A_b·f_u/γ_a2`` à tração, ``0,40·A_b·f_u/γ_a2``
-  ao corte, interação 6.3.3.4) ou, à escolha, à tração ``φ_t·0,75·F_u·A_b`` e ao cisalhamento
+* chumbadores pela NBR 8800:2025 6.3.3 (padrão: ``0,75·A_b·f_u/γ_a2`` à tração,
+  ``0,45·A_b·f_u/γ_a2`` ao corte com a rosca no plano, 6.3.3.2 a, interação 6.3.3.4) ou, à escolha, à tração ``φ_t·0,75·F_u·A_b`` e ao cisalhamento
   ``φ_v·0,45·F_u·A_b`` (rosca no plano de corte), com a interação de AISC
   J3.7, ``φ = 0,75``.
 
@@ -35,13 +35,13 @@ FATOR_CONTATO_CONCRETO = 0.65  # φ_c, AISC J8
 FATOR_FLEXAO_PLACA = 0.90  # φ_b
 FATOR_CHUMBADOR = 0.75  # φ para tração e cisalhamento (AISC J3)
 LIMITE_CONFINAMENTO = 2.0  # √(A₂/A₁) ≤ 2
-GAMMA_C = 1.40  # NBR 6118 / NBR 8800 6.6.5
+GAMMA_C = 1.40  # NBR 6118 / NBR 8800:2025 6.6.5
 GAMMA_A2 = 1.35  # NBR 8800 Tabela 3
-GAMMA_N = 1.40  # coeficiente de comportamento, NBR 8800 6.6.5
+ALFA_V_NBR = 0.45  # corte do chumbador com a rosca no plano, NBR 8800:2025 6.3.3.2 a)
 NORMA_NBR = "NBR8800"
 NORMA_AISC = "AISC"
 NORMAS = {
-    NORMA_NBR: "NBR 8800 (concreto 6.6.5; chumbadores 6.3.3) — padrão",
+    NORMA_NBR: "NBR 8800:2025 (concreto 6.6.5; chumbadores 6.3.3) — padrão",
     NORMA_AISC: "AISC J8 e J3 (Design Guide 1)",
 }
 PRESSAO_NBR, PRESSAO_AISC = NORMA_NBR, NORMA_AISC  # nomes antigos
@@ -166,10 +166,10 @@ def verificar_placa_base(
     area_placa = comprimento * largura
     if norma == NORMA_NBR:
         confinamento = math.sqrt(razao)
-        f_p_max = min(fc / (GAMMA_C * GAMMA_N) * confinamento, fc)
+        f_p_max = min(0.85 * fc / GAMMA_C * confinamento, 1.7 * fc / GAMMA_C)
         texto_pressao = (
-            f"σ_c,Rd = f_ck/(γ_c·γ_n)·√(A₂/A₁) ≤ f_ck = {fc:.1f}/(1,40 × 1,40) × "
-            f"{confinamento:.3f} = {f_p_max:.3f} MPa (NBR 8800 6.6.5)"
+            f"σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c = mín(0,85 × {fc:.1f}/1,40 × "
+            f"{confinamento:.3f}; 1,7 × {fc:.1f}/1,40) = {f_p_max:.3f} MPa (NBR 8800:2025 6.6.5)"
         )
     elif norma == NORMA_AISC:
         confinamento = min(math.sqrt(razao), LIMITE_CONFINAMENTO)
@@ -314,15 +314,16 @@ def verificar_placa_base(
     tracao_por_chumbador = tracao_total / n_lado if tracao_total > 0 else 0.0
     cisalhamento_por_chumbador = v_u / n_ch
     if norma == NORMA_NBR:
-        # NBR 8800 6.3.3.1 (barra rosqueada, A_be = 0,75·A_b), 6.3.3.2 a) e 6.3.3.4.
+        # NBR 8800:2025 6.3.3.1 (barra rosqueada, A_be = 0,75·A_b), 6.3.3.2 a) e 6.3.3.4.
         resistencia_tracao = 0.75 * area_chumbador * fu_ch / GAMMA_A2
-        resistencia_cisalhamento = 0.40 * area_chumbador * fu_ch / GAMMA_A2
+        resistencia_cisalhamento = ALFA_V_NBR * area_chumbador * fu_ch / GAMMA_A2
         utilizacao_tracao = tracao_por_chumbador / resistencia_tracao
         utilizacao_cisalhamento = cisalhamento_por_chumbador / resistencia_cisalhamento
         utilizacao_interacao = utilizacao_tracao**2 + utilizacao_cisalhamento**2
         texto_resistencias = (
             f"F_t,Rd = 0,75·A_b·f_u/γ_a2 = {resistencia_tracao / 1e3:.2f} kN; F_v,Rd = "
-            f"0,40·A_b·f_u/γ_a2 = {resistencia_cisalhamento / 1e3:.2f} kN por chumbador (NBR 8800 6.3.3)"
+            f"0,45·A_b·f_u/γ_a2 = {resistencia_cisalhamento / 1e3:.2f} kN por chumbador "
+            "(NBR 8800:2025 6.3.3.2 a, rosca no plano de corte)"
         )
         texto_interacao = (
             f"interação 6.3.3.4: (F_t/F_t,Rd)² + (F_v/F_v,Rd)² = {utilizacao_interacao:.3f}"

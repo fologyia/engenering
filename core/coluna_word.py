@@ -110,13 +110,17 @@ def linhas_do_resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -
         linhas.append(["χ", _n(comp["chi"], 3)])
         rotulo_q = "Q = Q_s·Q_a" if entrada.norma == "NBR8800_2008" else "A_ef/A_g"
         linhas.append([rotulo_q, _n(comp["Q"], 3)])
-    for eixo, momento, b1, amplificado, mrd, da_norma in (
-        ("x", resultado.momento_x_primeira_ordem_kNm, resultado.b1_x, resultado.momento_x_amplificado_kNm, resultado.mrd_x_kNm, resultado.flexao_x is not None),
-        ("y", resultado.momento_y_primeira_ordem_kNm, resultado.b1_y, resultado.momento_y_amplificado_kNm, resultado.mrd_y_kNm, resultado.flexao_y is not None),
+    for eixo, momento, b1, b2, imperfeicao, amplificado, mrd, da_norma in (
+        ("x", resultado.momento_x_primeira_ordem_kNm, resultado.b1_x, resultado.b2_x, resultado.momento_x_imperfeicao_kNm, resultado.momento_x_amplificado_kNm, resultado.mrd_x_kNm, resultado.flexao_x is not None),
+        ("y", resultado.momento_y_primeira_ordem_kNm, resultado.b1_y, resultado.b2_y, resultado.momento_y_imperfeicao_kNm, resultado.momento_y_amplificado_kNm, resultado.mrd_y_kNm, resultado.flexao_y is not None),
     ):  # fmt: skip
         if momento <= 0:
             continue
+        if imperfeicao > 0:
+            linhas.append([f"Desaprumo (momento em {eixo})", _n(imperfeicao, 3, " kN·m")])
         linhas.append([f"B₁ em {eixo}", _n(b1, 3)])
+        if b2 != 1.0:
+            linhas.append([f"B₂ em {eixo} (coluna deslocável)", _n(b2, 3)])
         linhas.append([f"M_{eixo},Sd amplificado", _n(amplificado, 3, " kN·m")])
         origem = "" if da_norma else " (informado)"
         linhas.append([f"M_{eixo},Rd", "—" if mrd is None else _n(mrd, 3, " kN·m") + origem])
@@ -301,7 +305,7 @@ def gerar_word_coluna(
     )
 
     doc.titulo("6. Regras adotadas nesta verificação", 1)
-    doc.paragrafo("Efeito B₁ (momentos amplificados)", negrito=True)
+    doc.paragrafo("Efeitos B₁ e B₂ (momentos amplificados)", negrito=True)
     doc.itens(list(cb.REGRAS_B1))
     doc.paragrafo("Flambagem lateral com torção (FLT): diferença entre as versões", negrito=True)
     doc.itens(

@@ -14,6 +14,7 @@ from components.project_tools import (
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import mohr_analysis as mohr
+from core.desenho_tensoes import figura_dos_elementos
 
 configurar_pagina("Círculo de Mohr", ":material/donut_large:")
 
@@ -608,6 +609,18 @@ if modo == "Estado plano (2D)":
                 **Plano de +τmáx:** θ = {resultado_2d.theta_tau_positivo_graus:.2f}°
                 """
             )
+
+    with st.container(border=True):
+        st.subheader(
+            "Elementos de tensão",
+            help=(
+                "O elemento nos eixos x e y, girado do ângulo θ escolhido, nas direções principais "
+                "(σ1 e σ2, sem cisalhamento) e no cisalhamento máximo (τmáx com a tensão média). "
+                "Tração para fora da face, compressão para dentro, cisalhamento ao longo dela."
+            ),
+        )
+        elementos = figura_dos_elementos(sigma_x, sigma_y, tau_xy, theta_graus)
+        st.image(elementos.png, caption=elementos.legenda, width="stretch")
 
     with st.container(border=True):
         st.subheader("Mapa das transformações")

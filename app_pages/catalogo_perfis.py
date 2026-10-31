@@ -3,8 +3,10 @@ import streamlit as st
 
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
+from core import column_buckling as cb
 from core import section_catalog as catalogo
 from core import steel_sections as secoes
+from core.desenho_da_secao import figura_da_secao
 
 configurar_pagina("Catálogo de perfis", ":material/view_in_ar:")
 
@@ -74,6 +76,27 @@ with st.container(border=True), secao_protegida("1. O que já está disponível"
         width="stretch",
         key="perfis_baixar",
     )
+
+with st.container(border=True), secao_protegida("Desenho do perfil"):
+    st.subheader(
+        "Desenho do perfil",
+        help=(
+            "A seção do perfil escolhido, em escala: o aço em corte, os eixos x e y pelo centro "
+            "geométrico G, o centro de cisalhamento quando fica fora de G e as medidas. A elipse "
+            "tracejada mostra os raios de giração (o lado mais estreito é o da flambagem mais fácil)."
+        ),
+    )
+    nomes = list(visao["nome"]) or list(completo["nome"])
+    escolhido_desenho = st.selectbox(
+        "Perfil",
+        nomes,
+        key="perfis_desenho",
+        persist_state="session",
+        help="Escolha o perfil (a lista segue o filtro e a busca acima).",
+    )
+    perfil_desenho = catalogo.obter_perfil(escolhido_desenho)
+    desenho = figura_da_secao(cb.secao_de_perfil(perfil_desenho))
+    st.image(desenho.png, caption=desenho.legenda, width="stretch")
 
 
 # ---------------------------------------------------------------------------

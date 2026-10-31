@@ -10,6 +10,7 @@ from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import base_plate as placa_base
 from core import base_tecnica as base_tec
 from core import bolt_design as parafusos
+from core import column_buckling as secao_da_coluna
 from core import load_combinations as combinacoes
 from core import nbr8800, platform_loads, wind_load
 from core import plano_de_cargas as plano_cargas
@@ -18,6 +19,7 @@ from core import steel_connections as ligacoes
 from core import steel_member_design as barras
 from core import steel_sections as secoes
 from core import structural_2d as estrutural
+from core.desenho_da_secao import figura_da_secao
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Estruturas de aço", ":material/domain:")
@@ -278,6 +280,8 @@ if modulo == "1. Perfis":
             st.metric("Ix", f"{perfil.ix_mm4 / 1e4:.1f} cm⁴", border=True)
             st.metric("Iy", f"{perfil.iy_mm4 / 1e4:.1f} cm⁴", border=True)
             st.metric("Zx", f"{perfil.zx_mm3 / 1e3:.1f} cm³", border=True)
+        desenho_perfil = figura_da_secao(secao_da_coluna.secao_de_perfil(perfil))
+        st.image(desenho_perfil.png, caption=desenho_perfil.legenda, width="stretch")
         propriedades = pd.DataFrame(
             {
                 "Propriedade": [
@@ -2055,10 +2059,11 @@ elif modulo == "4. Ligações":
 
     elif tipo_ligacao == "Placa de base":
         st.caption(
-            "Pressão de contato no concreto pela NBR 8800 6.6.5 (f_ck/1,96·√(A₂/A₁) ≤ f_ck); "
-            "AISC Design Guide 1 (2ª ed.) para o resto: "
-            "placa em flexão plástica (m, n, λn'), momento pequeno (Y = N − 2e) ou grande "
-            "(tração nos chumbadores) e chumbadores por AISC J3. P positivo = compressão."
+            "Pressão de contato no concreto pela NBR 8800:2025 6.6.5 (0,85·f_ck/γ_c·√(A₂/A₁) ≤ "
+            "1,7·f_ck/γ_c); AISC Design Guide 1 (2ª ed.) na placa: "
+            "flexão plástica (m, n, λn'), momento pequeno (Y = N − 2e) ou grande "
+            "(tração nos chumbadores); chumbadores pela NBR 8800:2025 6.3.3. P positivo = "
+            "compressão."
         )
         colunas_col = st.columns([3, 1, 1, 1])
         nomes_perfis_base = list(catalogo_perfis.listar_perfis())
@@ -2318,11 +2323,13 @@ elif modulo == "4. Ligações":
                     and (not isinstance(valor, float) or math.isfinite(valor))
                 },
                 metodo=(
-                    "Pressão no concreto pela NBR 8800 6.6.5: σ_c,Rd = f_ck/(γ_c·γ_n)·√(A₂/A₁) ≤ f_ck; "
+                    "Pressão no concreto pela NBR 8800:2025 6.6.5: σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ "
+                    "1,7·f_ck/γ_c; "
                     "AISC Design Guide 1 (2ª ed.): "
                     "placa em flexão plástica com cantiléveres m, n e λn'; casos de compressão, "
                     "momento pequeno (Y = N − 2e) e grande (Y pela equação do 2º grau, T = q_max·Y − P); "
-                    "chumbadores pela NBR 8800 6.3.3 (0,75·A_b·f_u/γ_a2 à tração, 0,40·A_b·f_u/γ_a2 ao corte, "
+                    "chumbadores pela NBR 8800:2025 6.3.3 (0,75·A_b·f_u/γ_a2 à tração, 0,45·A_b·f_u/γ_a2 "
+                    "ao corte com a rosca no plano, "
                     "interação 6.3.3.4)."
                 ),
                 equacoes=list(resultado_base.memoria),

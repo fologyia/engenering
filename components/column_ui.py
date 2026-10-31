@@ -610,6 +610,14 @@ class DadosComprimentos:
     k_recomendado: bool
     Lz_mm: float | None
     kz: float | None
+    deslocavel_x: bool = False
+    deslocavel_y: bool = False
+    segunda_ordem: bool = False
+
+
+def _deslocavel(apoio: str, k: float) -> bool:
+    """Uma ponta se desloca no plano: balanço ou translação (Tabela E.1 d a f) ou K > 1."""
+    return apoio in cb.APOIOS_DESLOCAVEIS or (apoio == APOIO_MANUAL and k > 1.0)
 
 
 def _apoio(eixo: str, k_recomendado: bool) -> tuple[str, float]:
@@ -693,6 +701,30 @@ def formulario_comprimentos() -> DadosComprimentos:
             f"({'K recomendado para projeto' if k_recomendado else 'K teórico'}, "
             "exceto onde o K foi informado)."
         )
+        deslocavel_x, deslocavel_y = _deslocavel(apoio_x, kx), _deslocavel(apoio_y, ky)
+        segunda_ordem = False
+        if deslocavel_x or deslocavel_y:
+            planos = " e ".join(
+                f"em torno de {eixo}"
+                for eixo, sim in (("x", deslocavel_x), ("y", deslocavel_y))
+                if sim
+            )
+            segunda_ordem = st.toggle(
+                "Os momentos do item 4 já são de 2ª ordem, com as imperfeições (análise P-Δ)",
+                value=False,
+                key="col_segunda_ordem",
+                persist_state="session",
+                help=AJUDA["segunda_ordem"],
+            )
+            st.caption(
+                f"Coluna deslocável na flexão {planos} (uma ponta se desloca de lado): "
+                + (
+                    "só o B₁ é aplicado, como você indicou."
+                    if segunda_ordem
+                    else "o momento ganha o desaprumo (força nocional no topo) e é ampliado "
+                    "pelo B₂ da coluna isolada (efeito P-Δ)."
+                )
+            )
         torcao_propria = st.toggle(
             "Torção com travamento próprio (informar K_z e L_z)",
             value=False,
@@ -717,7 +749,10 @@ def formulario_comprimentos() -> DadosComprimentos:
             lz = _numero(
                 "L_z (mm)", "col_Lz", max(lx, ly), AJUDA["Lz"], passo=100.0, alvo=torcao[1]
             )
-    return DadosComprimentos(comprimento, lx, ly, kx, ky, apoio_x, apoio_y, k_recomendado, lz, kz)
+    return DadosComprimentos(
+        comprimento, lx, ly, kx, ky, apoio_x, apoio_y, k_recomendado, lz, kz,
+        deslocavel_x, deslocavel_y, segunda_ordem,
+    )  # fmt: skip
 
 
 # ---------------------------------------------------------------------------
@@ -985,7 +1020,8 @@ def _distancia_fibra(secao: Secao, eixo: str) -> float:
     return inercia / modulo if modulo else 0.0
 
 
-def formulario_mao_francesa(secao: Secao, comprimento_mm: float) -> DadosMaoFrancesa:
+def formulario_mao_francesa(secao: Secao, comprimentos: DadosComprimentos) -> DadosMaoFrancesa:
+    comprimento_mm = comprimentos.L_total_mm
     with st.container(border=True):
         st.subheader("5. Mão-francesa (força inclinada chegando na coluna)", help=AJUDA["sec_5"])
         st.caption(
@@ -1045,21 +1081,33 @@ def formulario_mao_francesa(secao: Secao, comprimento_mm: float) -> DadosMaoFran
             passo=50.0,
             alvo=linha[3],
         )
-        detalhes = st.columns([2, 1, 1, 1])
-        vinculo = detalhes[0].selectbox(
-            "Vínculo da coluna no plano da mão-francesa",
-            list(cb.VINCULOS_MAO_FRANCESA),
-            key="col_mf_vinculo",
-            persist_state="session",
-            help=AJUDA["mf_vinculo"],
-        )
-        eixo = detalhes[1].selectbox(
+        detalhes = st.columns([1, 2, 1, 1])
+        eixo = detalhes[0].selectbox(
             "Eixo que ela flete",
             ["x", "y"],
             key="col_mf_eixo",
             persist_state="session",
             help=AJUDA["mf_eixo"],
         )
+        apoio = comprimentos.apoio_x if eixo == "x" else comprimentos.apoio_y
+        vinculo_do_apoio = cb.vinculo_do_apoio(apoio)
+        if vinculo_do_apoio is None:  # K informado: o vínculo é escolhido aqui
+            vinculo = detalhes[1].selectbox(
+                "Vínculo da coluna no plano da mão-francesa",
+                list(cb.VINCULOS_MAO_FRANCESA),
+                key="col_mf_vinculo",
+                persist_state="session",
+                help=AJUDA["mf_vinculo"],
+            )
+        else:
+            vinculo = vinculo_do_apoio
+            detalhes[1].text_input(
+                "Vínculo da coluna no plano da mão-francesa",
+                vinculo,
+                disabled=True,
+                key=f"col_mf_vinculo_do_apoio_{eixo}",
+                help=AJUDA["mf_vinculo_do_apoio"],
+            )
         padrao_excentricidade = round(_distancia_fibra(secao, eixo), 1)
         _acompanhar_padrao(f"col_mf_e_{eixo}", padrao_excentricidade)
         excentricidade = _numero(
@@ -1301,6 +1349,9 @@ def montar_entrada(
         secao_compacta_confirmada=secao.confirmada,
         espessuras_anglo=dict(espessuras) or None,
         com_mao_francesa=mf is not None,
+        deslocavel_x=comprimentos.deslocavel_x,
+        deslocavel_y=comprimentos.deslocavel_y,
+        momentos_de_segunda_ordem=comprimentos.segunda_ordem,
     )
 
 
@@ -1351,13 +1402,15 @@ def _resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
         tem_my = resultado.momento_y_primeira_ordem_kNm > 0
         if tem_mx or tem_my:
             with st.container(horizontal=True):
-                for eixo, tem, b1, amplificado, mrd, da_norma in (
-                    ("x", tem_mx, resultado.b1_x, resultado.momento_x_amplificado_kNm, resultado.mrd_x_kNm, resultado.flexao_x is not None),
-                    ("y", tem_my, resultado.b1_y, resultado.momento_y_amplificado_kNm, resultado.mrd_y_kNm, resultado.flexao_y is not None),
+                for eixo, tem, b1, b2, amplificado, mrd, da_norma in (
+                    ("x", tem_mx, resultado.b1_x, resultado.b2_x, resultado.momento_x_amplificado_kNm, resultado.mrd_x_kNm, resultado.flexao_x is not None),
+                    ("y", tem_my, resultado.b1_y, resultado.b2_y, resultado.momento_y_amplificado_kNm, resultado.mrd_y_kNm, resultado.flexao_y is not None),
                 ):  # fmt: skip
                     if not tem:
                         continue
                     st.metric(f"B₁ em {eixo}", _fmt(b1), border=True, help=AJUDA["res_b1"])
+                    if b2 != 1.0:
+                        st.metric(f"B₂ em {eixo}", _fmt(b2), border=True, help=AJUDA["res_b2"])
                     st.metric(
                         f"M_{eixo},Sd amplificado",
                         _fmt(amplificado, 3, " kN·m"),
@@ -1510,7 +1563,7 @@ def _regras(entrada: cb.EntradaColuna) -> None:
     """B₁, a diferença da FLT entre as versões e as espessuras da Anglo, à vista."""
     with st.container(border=True):
         st.subheader("Regras adotadas nesta verificação", help=AJUDA["res_regras"])
-        st.markdown("**Efeito B₁ (momentos amplificados)**")
+        st.markdown("**Efeitos B₁ e B₂ (momentos amplificados)**")
         st.markdown("\n".join(f"- {regra}" for regra in cb.REGRAS_B1))
         st.markdown("**Flambagem lateral com torção (FLT): diferença entre as versões**")
         st.markdown(
@@ -1645,7 +1698,7 @@ def mostrar_flambagem_colunas() -> None:
     secao = formulario_secao()
     comprimentos = formulario_comprimentos()
     cargas, flexao = formulario_esforcos()
-    mao_francesa = formulario_mao_francesa(secao.secao, comprimentos.L_total_mm)
+    mao_francesa = formulario_mao_francesa(secao.secao, comprimentos)
     giro, coluna_em_pe = mostrar_desenhos(secao.secao, comprimentos, mao_francesa)
     espessuras = formulario_anglo(secao.secao, secao.soldado)
 

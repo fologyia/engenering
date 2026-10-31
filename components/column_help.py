@@ -34,7 +34,9 @@ AJUDA: dict[str, str] = {
         "— o programa verifica os dois de uma vez e o pior governa.\n\n"
         "**Simplificação:** o K da Tabela E.1 vale para pórticos de pré-projeto. Na análise direta "
         "(NBR 8800:2025 e AISC) o comprimento efetivo é o real (K = 1) e a estrutura é analisada "
-        "com imperfeições — isso é feito na análise da estrutura, não aqui."
+        "com imperfeições.\n\n"
+        "**Coluna deslocável** (em balanço ou com uma ponta que se desloca de lado): o programa "
+        "soma ao momento o desaprumo da coluna e o amplia pelo B₂ (efeito P-Δ), que o B₁ não pega."
     ),
     "sec_4": (
         "Informe os esforços **de cálculo** (já majorados) que chegam à coluna: a força de "
@@ -382,6 +384,17 @@ AJUDA: dict[str, str] = {
         "Distância da base da coluna ao ponto onde a mão-francesa é ligada. É o braço da "
         "componente horizontal."
     ),
+    "segunda_ordem": (
+        "Ligue só se os momentos do item 4 saíram de uma análise de 2ª ordem (P-Δ) que já "
+        "incluiu o desaprumo da coluna (força nocional de 0,3 % das cargas verticais). Assim o "
+        "programa não soma o desaprumo nem aplica o B₂ de novo. Momentos de uma análise linear "
+        "comum (como a do SolidWorks Simulation) são de 1ª ordem: deixe desligado."
+    ),
+    "mf_vinculo_do_apoio": (
+        "O vínculo da coluna no plano da mão-francesa segue o apoio escolhido no item 3 para esse eixo, "
+        "para o momento da força H não sair menor que o real. Em balanço ou com o topo que se "
+        "desloca, a coluna trabalha em balanço. Para escolher aqui, use “Informar K” no item 3."
+    ),
     "mf_vinculo": (
         "Como a coluna está presa no plano da mão-francesa. Define como a força horizontal H "
         "vira momento: **engaste na base** (M = H·a), **pino-pino** (M = H·a·(L − a)/L) ou "
@@ -446,6 +459,12 @@ AJUDA: dict[str, str] = {
         "**NBR 2008**: fator Q = Q_s·Q_a, que reduz a resistência quando as paredes são "
         "esbeltas. **NBR 8800:2025 e AISC**: A_ef/A_g, a fração da área que trabalha. "
         "1,0 = sem flambagem local."
+    ),
+    "res_b2": (
+        "Fator B₂ (≥ 1) da coluna deslocável: o topo anda de lado e a compressão N, fora do "
+        "eixo, aumenta o momento na base (efeito P-Δ). B₂ = 1/(1 − N_Sd/N_e2), com N_e2 pelo "
+        "comprimento de flambagem K·L. Acima de 1,1 usa 0,8·E·I; acima de 1,4 pede análise "
+        "rigorosa."
     ),
     "res_b1": (
         "Fator B₁ (≥ 1) que amplifica o momento porque a compressão aumenta a flexão ao longo "
