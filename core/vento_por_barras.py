@@ -18,7 +18,9 @@ esqueleto do modelo e em cada direção, sem supor a forma da estrutura:
   com ``C_a = 2,0`` e sem proteção;
 * **vento a 45°, 135°, 225° e 315°** (opcional): verificação a mais, a favor da segurança — cada
   barra com ``C_a = 2,0`` (o maior valor da Figura 12) e sem proteção;
-* ``q`` de cada barra é o da cota do seu ponto mais alto, medida a partir do terreno;
+* ``q`` de cada barra é o da cota do seu ponto mais alto, medida a partir do terreno, com a classe
+  (A, B ou C, 5.3.2) da superfície frontal daquela direção: a maior entre a largura que o vento vê
+  e a altura;
 * guarda-corpos, escadas e painéis que não estão no esqueleto entram como reticulados planos com o
   seu ``φ`` (sem proteção); equipamentos como caixa (``C_a = 2,0``) ou cilindro vertical (Tabelas
   27 e 28). A força de cada um vai para as barras que o apoiam.
@@ -489,6 +491,9 @@ class VentoNaDirecao:
     planos: tuple[PlanoDoVento, ...]
     momento_tombamento_kNm: float
     torcao_kNm: float  # em torno do eixo vertical pelo centro da planta
+    #: Classe da superfície frontal que este vento vê (5.3.2) e a largura dela (m).
+    classe: str = ""
+    largura_frontal_m: float = 0.0
 
     @property
     def codigo(self) -> str:
@@ -527,7 +532,7 @@ class ResultadoPorBarras:
     entrada: EntradaPorBarras
     cota_do_terreno_m: float
     altura_m: float  # do terreno ao ponto mais alto
-    classe: str
+    classe: str  # a mais severa das direções (a do q no topo); cada direção tem a sua
     centro_m: tuple[float, float]
     direcoes: tuple[VentoNaDirecao, ...]
     vento_no_topo: vb.VentoNoLocal
@@ -819,6 +824,22 @@ def terreno_dos_pilares(barras: Sequence[BarraAoVento]) -> float | None:
     return min(pes) if pes else None
 
 
+def _pontos_em_planta(e: EntradaPorBarras) -> list[tuple[float, float]]:
+    """(x, y) das pontas das barras e dos elementos — o que a largura frontal enxerga."""
+    pontos = [(p[0], p[1]) for b in e.barras for p in (b.inicio, b.fim)]
+    for el in e.elementos:
+        pontos.extend((p[0], p[1]) for p in (el.ponto_1, el.ponto_2) if p is not None)
+    return pontos
+
+
+def largura_frontal(e: EntradaPorBarras, angulo: int) -> float:
+    """Largura da estrutura vista pelo vento a ``angulo``: a extensão das pontas na direção
+    perpendicular a ele, em planta (m)."""
+    lateral = _lateral(angulo)
+    projecoes = [x * lateral[0] + y * lateral[1] for x, y in _pontos_em_planta(e)]
+    return max(projecoes) - min(projecoes)
+
+
 def _limites(e: EntradaPorBarras) -> tuple[float, float, float, float, float, float]:
     xs, ys, zs = [], [], []
     for b in e.barras:
@@ -858,12 +879,15 @@ def calcular(e: EntradaPorBarras) -> ResultadoPorBarras:
             "A cota do terreno está acima de toda a estrutura: confira o valor (no modelo, a cota "
             "do pé dos pilares)."
         )
-    classe = vb.classe_da_edificacao(max(x1 - x0, y1 - y0, altura, 0.1))
-    pressao = _PressaoPorCota(e.parametros, classe)
+    # Classe por direção (5.3.2): a maior medida da superfície frontal que aquele vento vê.
+    pressoes: dict[str, _PressaoPorCota] = {}
     centro = ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
     por_nome = {b.nome: b for b in e.barras}
     direcoes: list[VentoNaDirecao] = []
     for angulo in sorted(set(e.direcoes)):
+        frontal = largura_frontal(e, angulo)
+        classe = vb.classe_da_edificacao(max(frontal, altura, 0.1))
+        pressao = pressoes.setdefault(classe, _PressaoPorCota(e.parametros, classe))
         w = vento(angulo)
         perpendicular = angulo % 90 == 0
         larguras: dict[str, float] = {}
@@ -924,10 +948,17 @@ def calcular(e: EntradaPorBarras) -> ResultadoPorBarras:
                 planos=tuple(planos),
                 momento_tombamento_kNm=tombamento,
                 torcao_kNm=torcao,
+                classe=classe,
+                largura_frontal_m=frontal,
             )
         )
-    topo = pressao(altura)
+    # q no topo com a classe mais severa (A < B < C: a de menor letra dá mais q).
+    classe = min(d.classe for d in direcoes)
+    topo = pressoes[classe](altura)
     avisos: list[str] = list(topo.avisos)
+    aviso_v0 = vb.aviso_do_v0(e.parametros.v0_m_s)
+    if aviso_v0:
+        avisos.insert(0, aviso_v0)
     for d in direcoes:
         avisos.extend(f.aviso for f in d.elementos if f.aviso)
     # Plano de uma barra só tem φ ≈ 1 por definição: o aviso é para painéis de verdade (> 1 m).

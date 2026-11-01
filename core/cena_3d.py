@@ -357,6 +357,7 @@ class PainelCena:
     cor: str = "#c9d6e6"
     opacidade: float = 0.35
     grupo: str = ""
+    sombra: bool = True  # False: a cor exata (mapa de cores lido pela escala, sem luz)
 
 
 @dataclass(frozen=True)
@@ -626,7 +627,10 @@ def _pontos_da_cena(cena: Cena) -> list[Ponto]:
 
 
 def eixos_do_modelo(eixo_vertical: str) -> tuple[tuple[str, Ponto], ...]:
-    """Os eixos do SolidWorks na planta (para o triedro): com o Y para cima, Z do modelo = −Y."""
+    """Os eixos do SolidWorks na planta (para o triedro): com o Y para cima, Z do modelo = −Y.
+    Sem eixo vertical (``""``) a cena não é de um modelo do SolidWorks: sem triedro."""
+    if not eixo_vertical:
+        return ()
     if eixo_vertical == "Y":
         return (("X", (1.0, 0.0, 0.0)), ("Y", (0.0, 0.0, 1.0)), ("Z", (0.0, -1.0, 0.0)))
     return (("X", (1.0, 0.0, 0.0)), ("Y", (0.0, 1.0, 0.0)), ("Z", (0.0, 0.0, 1.0)))
@@ -784,9 +788,9 @@ def projetar(
                 camera.profundidade(centro),
                 Poligono2D(
                     tuple(t(q) for q in p.pontos),
-                    sombrear(p.cor, abs(_dot(normal, luz))),
-                    "#7d8fa6",
-                    0.4,
+                    sombrear(p.cor, abs(_dot(normal, luz))) if p.sombra else p.cor,
+                    "#7d8fa6" if p.sombra else "#5b6675",
+                    0.4 if p.sombra else 0.8,
                     max(0.05, min(1.0, p.opacidade)),
                 ),
             )
@@ -940,7 +944,7 @@ def cena_para_dicionario(cena: Cena) -> dict[str, object]:
              b.destaque, b.grupo]
             for b in cena.barras
         ],
-        "paineis": [[p.nome, [_p(q) for q in p.pontos], p.cor, _r(p.opacidade), p.grupo]
+        "paineis": [[p.nome, [_p(q) for q in p.pontos], p.cor, _r(p.opacidade), p.grupo, p.sombra]
                     for p in cena.paineis],
         "setas": [[_p(s.ponto), _p(s.vetor), s.rotulo, s.cor, s.reacao, s.grupo, s.larga,
                    s.comprimento_relativo] for s in cena.setas],
@@ -997,11 +1001,12 @@ def cena_de_dicionario(dados: object) -> Cena:
     paineis = []
     for item in lista("paineis"):
         try:
-            nome, pontos, cor, opacidade, grupo = item
+            # Registros antigos têm 5 campos (sem a sombra): sombreados, como eram desenhados.
+            nome, pontos, cor, opacidade, grupo, *resto = item
             lidos = [q for q in (_ponto_lido(q) for q in pontos) if q is not None]
             if len(lidos) >= 3 and len(lidos) == len(pontos):
                 paineis.append(PainelCena(str(nome), tuple(lidos), str(cor), float(opacidade),
-                                          str(grupo)))  # fmt: skip
+                                          str(grupo), bool(resto[0]) if resto else True))  # fmt: skip
         except (TypeError, ValueError):
             continue
     setas = []
@@ -1056,8 +1061,9 @@ def cena_de_dicionario(dados: object) -> Cena:
         for item in lista("legenda")
         if isinstance(item, (list, tuple)) and len(item) == 2
     )
+    eixo = dados.get("eixo_vertical")  # "" = cena sem triedro (não é um modelo do SolidWorks)
     return Cena(
         tuple(barras), tuple(paineis), tuple(setas), tuple(distribuidas), tuple(apoios),
         tuple(textos), str(dados.get("titulo") or ""), str(dados.get("subtitulo") or ""),
-        legenda, escala, str(dados.get("eixo_vertical") or "Y"),
+        legenda, escala, eixo if isinstance(eixo, str) else "Y",
     )  # fmt: skip

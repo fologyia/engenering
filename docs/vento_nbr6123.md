@@ -13,9 +13,10 @@ pórtico. O núcleo não depende do Streamlit.
 | `core/vento_arrasto_dados.py` | `C_a` das Figuras 4 e 5, digitalizado dos gráficos (gerado) |
 | `core/vento_edificio.py` | geometria, zonas, casos de vento, vedações, arrasto, verificações |
 | `core/vento_portico.py` | cargas por metro do pórtico e solução pelo solver 2D |
-| `core/vento_registro.py` | registro técnico e tabelas do memorial |
+| `core/vento_edificio_desenho.py` | polígonos das zonas (cena 3D), faixas de `c_pe` médio, modelo do pórtico para as figuras |
+| `core/vento_registro.py` | registro técnico, tabelas e figuras do memorial |
 | `core/wind_load.py` | camada de compatibilidade (peça isolada: plataforma, barra, painel) |
-| `components/wind_ui.py`, `wind_help.py`, `wind_figures.py` | interface, textos dos “?” e desenho da planta |
+| `components/wind_ui.py`, `wind_help.py`, `wind_figures.py` | interface, textos dos “?”, planta das zonas e mapa das vedações |
 | `scripts/digitalizar_arrasto_nbr6123.py` | regenera `vento_arrasto_dados.py` a partir do PDF da norma |
 
 ## O que a edição de 2023 mudou, e o programa segue
@@ -30,6 +31,8 @@ pórtico. O núcleo não depende do Streamlit.
 * **`S₃` estatístico (Anexo B)**: `0,54·[−ln(1 − P_m)/m_a]^(−0,157)`, nunca abaixo do mínimo do grupo.
 * **Fator de vizinhança `f_v`** (6.4) e **excentricidade da força de arrasto** de 7,5 % (15 % com
   vizinhança) do lado da planta (6.1.4).
+* **`V₀` do mapa** (Figura 1): de 30 a 50 m/s. Fora disso a verificação "V₀ dentro do mapa de
+  isopletas" vira **ALERTA** (só com estudo do local; ou o valor foi digitado em km/h).
 
 ## Convenções
 
@@ -58,7 +61,17 @@ pórtico. O núcleo não depende do Streamlit.
 | `C_e` por zona | Tabelas 6, 7 e 8 | transcritos das páginas da norma, linha a linha, com as notas de interpolação |
 | resultante das zonas | `Σ −Δp·A·n` | a pressão interna não altera a resultante horizontal (teste); simetria; áreas cobrem a superfície |
 | `C_a` | Figuras 4 e 5 | **lido do gráfico**, incerteza ±0,03; confere nos cruzamentos das isolinhas |
-| pórtico | `Δp × espaçamento` | equilíbrio das reações com as cargas, sinal dos deslocamentos |
+| pórtico | `Δp × espaçamento` | equilíbrio das reações com as cargas, sinal dos deslocamentos; o mesmo pórtico resolvido pelo núcleo de pórtico plano dá as mesmas reações (até 10⁻⁶ kN) |
+| arrasto | `F_a = q·C_a·A_e·f_v` | `A_e` é a **área de sombra**: a 0° a empena inteira (com o triângulo do telhado); a 90° o comprimento `a` vezes a altura do topo |
+| desenhos | mesma geometria do cálculo | a soma das áreas dos polígonos de cada zona (3D) é a área da zona usada na força; faixas de `c_pe` médio dentro do telhado e sem sobreposição |
+
+### Força do contraventamento e torção
+
+A norma dá duas contas para a força perpendicular à fachada: o **arrasto pelo `C_a`** (6.1.2) e a
+**soma das pressões das zonas** (6.1.1). Elas costumam diferir 20 a 30 %. O programa adota a
+**maior** para a torção (`M_t = F·e`, 6.1.4) e soma o **atrito** (6.1.5, que se acrescenta às forças
+de 6.1.1): a linha "Força horizontal para o contraventamento" é o que o contraventamento e a
+fundação recebem (característica).
 
 ## O que não está aqui
 
@@ -81,6 +94,19 @@ O resultado é uma tabela de `C_a` por `(h/ℓ₁, ℓ₁/ℓ₂)` (`core/vento_
 bilinearmente em escala logarítmica. Fora do gráfico (h/ℓ₁ < 0,5, por exemplo) vale o contorno e o
 programa avisa.
 
+## Desenhos
+
+* **Zonas em 3D** (aba Pressões por zona): a parede de barlavento, uma lateral e o telhado, cada zona
+  pintada pelo `C_e` (azul = sucção, branco = 0, vermelho = pressão) com o `C_e` e o `Δp` do caso
+  escolhido e a seta do vento. A vista é a do caso (a −90° vista do outro lado). Só as faces de
+  frente são desenhadas — num sólido convexo elas não se cobrem.
+* **Planta** com as cotas onde o `C_e` muda (`x`, `a/2`, `b/2` ou `c₁`) e o `Δp` em cada zona.
+* **Vedações**: as faixas de `c_pe` médio numeradas (empenas, cantos, beiral, cumeeira; H1/H2/L1/L2/
+  He/Le na uma água; junto aos cantos das paredes, `mín(0,2·b; h)`), com a lista do `c_pe` e da pior
+  `Δp`. Fora delas vale o `C_e` da zona.
+* **Pórtico transversal**: o caso escolhido no núcleo de pórtico plano, com as figuras do Ftool —
+  cargas normais aos elementos, reações, N, V, M e deformada.
+
 ## Memorial
 
 O registro entra no memorial como as demais análises com tabela de verificações: **Resultado**
@@ -88,4 +114,6 @@ O registro entra no memorial como as demais análises com tabela de verificaçõ
 tabelas), **valores de apoio** (V_k, q, C_a, forças), as tabelas de pressões por zona, de vedações
 e do pórtico e, no fim, **o que não passou** e o que conferir antes de emitir. As tabelas vêm de
 `resultados["tabelas_memorial"]` (qualquer módulo pode usá-las) e o destaque, de
-`resultados["destaque_memorial"]`.
+`resultados["destaque_memorial"]`. As figuras são redesenhadas em PNG a partir do registro: as zonas
+em 3D a 0° e a 90° (`figuras_3d`) e, quando o pórtico foi resolvido na página, as cargas, o momento
+fletor e a deformada dele (`figuras_portico`, com `"figuras": ["estrutura", "M", "deformada"]`).

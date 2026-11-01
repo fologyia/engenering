@@ -259,22 +259,26 @@ AJUDA: dict[str, str] = {
         "Cada zona tem um **C_e** (coeficiente de forma externo). **Δp = q · (f_v · C_e − c_pi)** é a "
         "pressão que atua na superfície: **positiva empurra para dentro** (parede de barlavento), "
         "**negativa puxa para fora** (sucção em telhados e paredes laterais). A força é Δp "
-        "vezes a área da zona."
+        "vezes a área da zona. Na vista **3D** cada zona aparece pintada no lugar dela (azul = "
+        "sucção, vermelho = pressão); na **planta** estão as cotas onde o C_e muda (x, a/2, c₁)."
     ),
     "res_vedacoes": (
         "Pressão para dimensionar **telhas, painéis, terças, travessas e fixações**. Usa q da "
         "classe A e, nas faixas de altas sucções (arestas e cantos), o **c_pe médio**, que é "
-        "mais severo que o C_e das zonas comuns."
+        "mais severo que o C_e das zonas comuns. O desenho numera essas faixas e dá a largura "
+        "delas (y no telhado, mín(0,2·b; h) junto a cada canto das paredes)."
     ),
     "res_globais": (
         "Resultantes sobre a edificação inteira. A **força de arrasto F_a = q · C_a · A_e** vem do "
-        "gráfico da norma; a **soma das zonas** vem das tabelas de C_e. Para o contraventamento "
-        "e a fundação use o **maior** dos dois."
+        "gráfico da norma, com **A_e = área de sombra** (a empena inteira a 0°, o comprimento "
+        "vezes a altura do topo a 90°); a **soma das zonas** vem das tabelas de C_e. A coluna "
+        "**Contraventamento** já traz o **maior** dos dois mais o atrito: é a força do "
+        "contraventamento e da fundação."
     ),
     "res_torcao": (
         "A força de arrasto não passa pelo centro da planta: a norma manda considerar uma "
         "**excentricidade** de 7,5 % do lado (15 % com vizinhança), o que gera um momento de "
-        "torção M_t = F_a · e."
+        "torção M_t = F · e, com F o maior entre o arrasto e a soma das zonas."
     ),
     "res_portico": (
         "Cargas por metro num pórtico transversal, **normais** ao pilar ou à água do telhado: "
@@ -322,6 +326,12 @@ AJUDA: dict[str, str] = {
         "Forças que as bases exercem sobre o pórtico (Rh horizontal, Rv vertical, M momento), em "
         "kN e kN·m, nos eixos da tela (y para a direita, z para cima). Reação vertical negativa "
         "é o chumbador **segurando** o pórtico contra o levantamento."
+    ),
+    "res_p_figuras": (
+        "O pórtico do caso escolhido desenhado como no Ftool: as **cargas** do vento normais a "
+        "cada elemento, as **reações**, os diagramas de **N, V e M** e a **deformada**. O momento "
+        "fica do lado tracionado. Resolvido pelo núcleo de pórtico plano do programa — as "
+        "reações conferem com a tabela abaixo."
     ),
     "res_p_esforcos": (
         "Esforços nas pontas de cada elemento (N normal, V cortante, M momento), do pilar da "

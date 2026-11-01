@@ -12,7 +12,9 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from core import portico_plano as pp
 from core import vento_coeficientes as coef
+from core import vento_edificio_desenho as desenho
 from core import vento_portico as portico
 from core.technical_records import criar_registro_tecnico
 from core.vento_edificio import (
@@ -196,8 +198,14 @@ def registro_edificacao(
     casos_do_portico: Sequence[portico.CasoPortico] = (),
     solucao: portico.SolucaoPortico | None = None,
     contexto: Mapping[str, Any] | None = None,
+    modelo_do_portico: pp.Portico | None = None,
 ) -> dict[str, Any]:
-    """Registro técnico v2 do vento na edificação (uma análise = um registro)."""
+    """Registro técnico v2 do vento na edificação (uma análise = um registro).
+
+    O memorial redesenha as zonas em 3D (vento a 0° e a 90°, primeiro ``c_pi`` de cada) e, com
+    ``modelo_do_portico`` (o caso resolvido na página), o pórtico com as cargas, o momento fletor
+    e a deformada (figuras do núcleo de pórtico plano).
+    """
     g = resultado.geometria
     e = resultado.entrada
     verificacoes = list(resultado.verificacoes)
@@ -211,7 +219,9 @@ def registro_edificacao(
         f"{resultado.classe_por_alpha[90]}); vedações: q = "
         f"{_n(resultado.vento_vedacoes.q_kN_m2, 3)} kN/m². Força de arrasto F_a = "
         f"{_n(resultado.arrasto[0].forca_kN, 1)} kN a 0° e {_n(resultado.arrasto[90].forca_kN, 1)} kN "
-        "a 90°."
+        "a 90°; para o contraventamento (a maior entre F_a e a soma das zonas, mais o atrito): "
+        f"{_n(resultado.arrasto[0].forca_para_contraventamento_kN, 1)} kN a 0° e "
+        f"{_n(resultado.arrasto[90].forca_para_contraventamento_kN, 1)} kN a 90°."
     )
     tabelas = [*tabelas_de_pressoes(resultado), tabela_de_vedacoes(resultado)]
     if casos_do_portico:
@@ -236,13 +246,29 @@ def registro_edificacao(
         "arrasto_global": {
             str(alpha): {
                 "ca": _finito(r.ca.valor),
+                "area_de_sombra_m2": _finito(r.area_frontal_m2),
                 "forca_kN": _finito(r.forca_kN),
                 "torsor_kNm": _finito(r.torsor_kNm),
                 "soma_das_zonas_kN": _finito(r.soma_das_zonas_kN),
+                "atrito_kN": _finito(r.atrito.total_kN),
+                "forca_para_contraventamento_kN": _finito(r.forca_para_contraventamento_kN),
             }
             for alpha, r in resultado.arrasto.items()
         },
     }
+    resultados["figuras_3d"] = [
+        desenho.figura_das_zonas_para_o_registro(resultado, resultado.casos_do_angulo(alpha)[0])
+        for alpha in (0, 90)
+    ]
+    if modelo_do_portico is not None and solucao is not None:
+        resultados["figuras_portico"] = [
+            {
+                "titulo": "Pórtico transversal",
+                "caso": desenho.rotulo_do_caso_do_portico(solucao.caso),
+                "modelo": pp.para_dicionario(modelo_do_portico),
+                "figuras": ["estrutura", "M", "deformada"],
+            }
+        ]
     if casos_do_portico:
         resultados["cargas_do_portico"] = portico.tabela_do_portico(list(casos_do_portico))
     if solucao is not None:

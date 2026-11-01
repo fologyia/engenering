@@ -43,11 +43,19 @@ convenção do plano de cargas e da exportação: W0 sopra para +X, W90 para +Y 
    `C_a = 2,0` (o maior da Figura 12) e sem proteção. Costuma dar mais força que os perpendiculares
    por isso; a NBR 6123 (8.5) pede só os perpendiculares para estruturas reticuladas retangulares.
 4. **q** de cada barra é o da cota do seu ponto mais alto, medida do terreno (o pé dos pilares, ou a
-   cota informada). `F = C_a·η·q·A`; a carga é uniforme na barra, `F/ℓ` em kN/m, na direção do vento,
-   com as componentes X e Y.
+   cota informada), com a **classe de cada direção** (5.3.2): A, B ou C pela maior medida da
+   superfície frontal que aquele vento vê — a largura das pontas projetada na direção perpendicular a
+   ele, ou a altura. (Antes a maior medida da planta valia para todas as direções e subestimava o q na
+   direção estreita.) `F = C_a·η·q·A`; a carga é uniforme na barra, `F/ℓ` em kN/m, na direção do
+   vento, com as componentes X e Y.
 
-Na grade regular, o resultado bate com o método dos pórticos a menos de 5 % (o contorno de cada
-plano inclui a meia largura das barras; teste `test_grade_regular_da_o_mesmo_que_os_porticos`).
+Na grade regular sem diagonais nas faces paralelas ao vento, o resultado bate com o método dos
+pórticos a menos de 5 % (o contorno de cada plano inclui a meia largura das barras; teste
+`test_grade_regular_da_o_mesmo_que_os_porticos`). Com contraventamento em X nas faces, o barra a
+barra fica de 10 a 15 % acima: as diagonais das faces **paralelas** ao vento aparecem na sombra
+(`ℓ·sen θ·c`) e entram com `C_a = 2,0`, enquanto a grade as zera (8.5, faces paralelas ao vento).
+Tirando essas diagonais, sobra menos de 5 % (o q do topo de cada barra contra o do topo de cada
+faixa) — teste `test_grade_e_barra_a_barra_concordam_na_mesma_plataforma`. É a favor da segurança.
 
 ## Guarda-corpos, escadas, painéis e equipamentos
 
@@ -111,15 +119,22 @@ dizem isso.
 ## Saídas
 
 - Resumo por direção (barras, elementos, F_x, F_y, tombamento, torção em torno do centro da planta).
-- A força em cada nível (acima), na página e no memorial.
+- A força em cada nível (acima), na página e no memorial, com o **desenho em elevação**: a mais
+  forte em X (W0 ou W180) e em Y (W90 ou W270), a seta de cada nível do tamanho da força, a
+  cortante de cada andar em degraus (o que o contraventamento do andar leva), a base que vai à
+  fundação e o momento na base `Σ F·z` — igual ao tombamento barra a barra, porque metade de cada
+  barra em cada ponta (e a alavanca) não muda o momento (teste).
 - Desenhos: estrutura em 3D com a cor da carga de cada barra e as setas; planta com a alma dos
-  pilares, os planos (R1 = barlavento) e o η; "o que o vento vê" (as sombras, com os planos).
+  pilares, os planos (R1 = barlavento) e o η; "o que o vento vê" (as sombras, com os planos). A
+  cena 3D fica no núcleo (`core/vento_aberto_desenho.py`), a mesma na página e no memorial.
 - Tabelas: barra a barra, elementos, reticulados; CSV.
 - **Enviar ao plano de cargas**: W0, W90, W180, W270 (e W45, W135, W225, W315 se calculados) na
   forma escolhida (barra a barra ou simplificada); o CSV segue a forma. Enviar de novo só os
   perpendiculares tira os diagonais antigos.
 - **Registrar**: o memorial traz o resumo, a força em cada nível, os reticulados, a carga de cada
-  barra em cada direção e os elementos.
+  barra em cada direção e os elementos e, como figuras, a estrutura em 3D com a carga de cada barra
+  (a direção mais forte em X, a mais forte em Y e a que mais carrega, se for diagonal) e o desenho
+  da força em cada nível.
 
 ## Fora do escopo
 

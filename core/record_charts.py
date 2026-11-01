@@ -640,6 +640,15 @@ def _figuras_3d(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
         cena = c3.cena_de_dicionario(dict(gravada["cena"]))
         legenda = str(gravada.get("legenda") or "Modelo em 3D.")
         figuras.append((imagem_da_cena(cena, gravada, legenda), LARGURA_DESENHO_MM))
+    # ``figuras_3d``: várias cenas no mesmo formato (as zonas do vento em cada direção).
+    varias = resultados.get("figuras_3d")
+    for item in varias if isinstance(varias, list) else []:
+        if isinstance(item, Mapping) and isinstance(item.get("cena"), Mapping):
+            from core import cena_3d as c3
+
+            cena = c3.cena_de_dicionario(dict(item["cena"]))
+            legenda = str(item.get("legenda") or "Desenho em 3D.")
+            figuras.append((imagem_da_cena(cena, item, legenda), LARGURA_DESENHO_MM))
     escada = resultados.get("escada_3d")
     if isinstance(escada, Mapping):
         from core import cena_escada as ce
@@ -657,10 +666,14 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
 
     * ``figura_ligacao`` — o desenho da ligação (:mod:`core.ligacoes`);
     * ``figura_base_de_pilar`` — a planta e o corte da base (:mod:`core.desenho_placa_base`);
+    * ``figura_forcas_por_nivel`` — a elevação com a força do vento em cada nível
+      (:func:`core.vento_aberto_desenho.niveis_para_o_registro`);
     * ``esquematico_escada`` — a vista lateral da escada (:mod:`core.escada_lances`);
     * ``figuras_portico`` — lista de ``{"titulo", "caso", "modelo", "modelo_deformada",
       "caso_deformada"}``: o modelo do núcleo de pórtico plano (:mod:`core.portico_plano`) é
-      resolvido de novo e sai com estrutura, reações, N, V, M, tensão e deformada (Ftool).
+      resolvido de novo e sai com estrutura, reações, N, V, M, tensão e deformada (Ftool); a chave
+      opcional ``"figuras"`` (lista: "estrutura", "reacoes", "N", "V", "M", "tensao",
+      "deformada") escolhe quais.
     """
     from core import escada_lances as el
     from core import portico_figuras as pf
@@ -680,6 +693,23 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
 
         resultado = bp.calcular(bp.entrada_de_dicionario(base_de_pilar["entrada"]))
         figuras.append((figura_da_base(resultado), LARGURA_DESENHO_MM))
+    niveis = resultados.get("figura_forcas_por_nivel")
+    if isinstance(niveis, Mapping):
+        from core import cena_3d_png
+        from core import vento_aberto_desenho as vad
+
+        colunas, titulo, subtitulo = vad.niveis_do_registro(niveis)
+        if colunas:
+            desenho = vad.desenho_das_forcas_por_nivel(colunas, titulo=titulo, subtitulo=subtitulo)
+            imagem = ImagemDiagrama(
+                desenho.titulo,
+                "Força característica do vento em cada nível, cortante de cada andar e momento na "
+                "base (NBR 6123:2023, capítulo 8).",
+                cena_3d_png.png_da_cena(desenho, escala=2.0),
+                round(desenho.largura * 2),
+                round(desenho.altura * 2),
+            )
+            figuras.append((imagem, LARGURA_DESENHO_MM))
     esquematico = resultados.get("esquematico_escada")
     if isinstance(esquematico, Mapping):
         figuras.append(
@@ -692,6 +722,7 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
         principal = pp.resolver(pp.de_dicionario(item["modelo"]))
         servico = item.get("modelo_deformada")
         deformada = pp.resolver(pp.de_dicionario(servico)) if isinstance(servico, Mapping) else None
+        escolhidas = item.get("figuras")
         figuras.extend(
             (figura, LARGURA_DIAGRAMA_MM)
             for figura in pf.figuras_do_portico(
@@ -700,6 +731,7 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
                 caso=str(item.get("caso") or ""),
                 deformada=deformada,
                 caso_deformada=str(item.get("caso_deformada") or ""),
+                apenas=[str(c) for c in escolhidas] if isinstance(escolhidas, list) else None,
             )
         )
     return figuras

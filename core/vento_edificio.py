@@ -31,6 +31,7 @@ from core.vento_nbr6123 import (
     ALTURA_GRADIENTE_M,
     LIMITE_ANEXO_A_M,
     VentoNoLocal,
+    aviso_do_v0,
     calcular_vento_no_local,
     classe_da_edificacao,
     intervalo_de_tempo_anexo_a,
@@ -316,14 +317,34 @@ class ArrastoGlobal:
     l1_m: float
     l2_m: float
     h_m: float
+    #: área de sombra: a projeção da edificação inteira (com a empena ou o telhado) num plano
+    #: perpendicular ao vento (4.3.3)
     area_frontal_m2: float
     ca: coef.ArrastoCa
     fv: float
+    #: F_a = q·C_a·A_e·f_v (6.1.2)
     forca_kN: float
     excentricidade_m: float
+    #: M_t = F·e com a força horizontal adotada (a maior das duas contas)
     torsor_kNm: float
     atrito: coef.ForcaAtrito
+    #: resultante horizontal das pressões externas das zonas (6.1.1)
     soma_das_zonas_kN: float
+
+    @property
+    def forca_horizontal_kN(self) -> float:
+        """A maior das duas contas da norma para a força perpendicular à fachada: o arrasto pelo
+        C_a (6.1.2) e a soma das pressões das zonas (6.1.1)."""
+        return max(self.forca_kN, self.soma_das_zonas_kN)
+
+    @property
+    def governa(self) -> str:
+        return "C_a" if self.forca_kN >= self.soma_das_zonas_kN else "zonas"
+
+    @property
+    def forca_para_contraventamento_kN(self) -> float:
+        """Força horizontal + atrito (6.1.5 soma-se às de 6.1.1): o que o contraventamento leva."""
+        return self.forca_horizontal_kN + self.atrito.total_kN
 
 
 @dataclass(frozen=True, slots=True)
@@ -1087,7 +1108,9 @@ def calcular_edificacao(entrada: EntradaEdificio) -> ResultadoEdificio:
         ca = coef.coeficiente_arrasto_paralelepipedo(
             h_ca, l1, l2, alta_turbulencia=alta_por_alpha[alpha]
         )
-        a_e = l1 * h_ca
+        # A_e é a área de sombra (4.3.3): a 0° a empena inteira (com o triângulo do telhado); a
+        # 90° o comprimento a vezes a altura do topo (o telhado visto de lado).
+        a_e = g.area_da_parede_curta_m2(0.0, b) if alpha == 0 else a * g.h_topo_m
         forca = q * ca.valor * a_e * fv_paredes
         excentricidade = e_b if alpha == 0 else e_a
         primeiro = next(c for c in casos if c.alpha == alpha)
@@ -1104,7 +1127,7 @@ def calcular_edificacao(entrada: EntradaEdificio) -> ResultadoEdificio:
             fv=fv_paredes,
             forca_kN=forca,
             excentricidade_m=excentricidade,
-            torsor_kNm=forca * excentricidade,
+            torsor_kNm=max(forca, componente) * excentricidade,
             atrito=coef.forca_de_atrito(q * 1e3, entrada.ct_atrito, h_ca, l1, l2),
             soma_das_zonas_kN=componente,
         )
@@ -1147,6 +1170,7 @@ def calcular_edificacao(entrada: EntradaEdificio) -> ResultadoEdificio:
 # ---------------------------------------------------------------------------
 
 REF_6123 = "NBR 6123:2023"
+_ORIGEM_DA_FORCA = {"C_a": "governa o arrasto pelo C_a", "zonas": "governa a soma das zonas"}
 
 
 def _limite(
@@ -1249,6 +1273,15 @@ def _verificacoes(
                 f"balanço = {numero_ptbr(entrada.beiral_m, 2)} m; 0,1·b = {numero_ptbr(limite, 2)} m",
             )
         )
+    aviso_v0 = aviso_do_v0(entrada.v0_m_s)
+    linhas.append(
+        _limite(
+            "V₀ dentro do mapa de isopletas (30 a 50 m/s)",
+            aviso_v0 is None,
+            f"{REF_6123}, 5.1 e Figura 1",
+            aviso_v0 or f"V₀ = {numero_ptbr(entrada.v0_m_s, 1)} m/s",
+        )
+    )
     zg = ALTURA_GRADIENTE_M[entrada.categoria]
     linhas.append(
         _limite(
@@ -1377,8 +1410,21 @@ def _verificacoes(
                 r.torsor_kNm,
                 "kN·m",
                 f"{REF_6123}, 6.1.4",
-                f"M_t = F_a·e = {numero_ptbr(r.forca_kN, 1)} × {numero_ptbr(r.excentricidade_m, 2)} = "
-                f"{numero_ptbr(r.torsor_kNm, 1)} kN·m",
+                f"M_t = F·e = {numero_ptbr(r.forca_horizontal_kN, 1)} × "
+                f"{numero_ptbr(r.excentricidade_m, 2)} = {numero_ptbr(r.torsor_kNm, 1)} kN·m "
+                f"(F = a maior entre F_a e a soma das zonas: {_ORIGEM_DA_FORCA[r.governa]})",
+            )
+        )
+        linhas.append(
+            _info(
+                f"Força horizontal para o contraventamento, vento a {alpha}°",
+                r.forca_para_contraventamento_kN,
+                "kN",
+                f"{REF_6123}, 6.1.1, 6.1.2 e 6.1.5",
+                f"máx(F_a = {numero_ptbr(r.forca_kN, 1)}; soma das zonas = "
+                f"{numero_ptbr(r.soma_das_zonas_kN, 1)}) + atrito F_t = "
+                f"{numero_ptbr(r.atrito.total_kN, 1)} → {numero_ptbr(r.forca_para_contraventamento_kN, 1)} "
+                "kN, característica",
             )
         )
         if r.atrito.aplica:
@@ -1444,11 +1490,18 @@ def _memoria(
     linhas.append("Vento nas vedações — classe A, topo: " + "; ".join(vento_ved.memoria[2:]))
     for alpha in (0, 90):
         r = arrasto[alpha]
+        sombra = (
+            "a empena inteira"
+            if alpha == 0
+            else f"a × altura do topo = {numero_ptbr(g.a_m, 2)} × {numero_ptbr(g.h_topo_m, 2)}"
+        )
         linhas.append(
-            f"Arrasto a {alpha}°: C_a = {numero_ptbr(r.ca.valor, 2)} ({r.ca.figura}); "
-            f"A_e = ℓ₁·h = {numero_ptbr(r.l1_m, 2)} × {numero_ptbr(r.h_m, 2)} = "
+            f"Arrasto a {alpha}°: C_a = {numero_ptbr(r.ca.valor, 2)} ({r.ca.figura}, h/ℓ₁ = "
+            f"{numero_ptbr(r.h_m, 2)}/{numero_ptbr(r.l1_m, 2)}); A_e = área de sombra ({sombra}) = "
             f"{numero_ptbr(r.area_frontal_m2, 1)} m²; F_a = q·C_a·A_e·f_v = "
-            f"{numero_ptbr(r.forca_kN, 1)} kN; M_t = F_a·e = {numero_ptbr(r.torsor_kNm, 1)} kN·m"
+            f"{numero_ptbr(r.forca_kN, 1)} kN; soma das zonas = {numero_ptbr(r.soma_das_zonas_kN, 1)} "
+            f"kN; M_t = F·e = {numero_ptbr(r.torsor_kNm, 1)} kN·m; para o contraventamento "
+            f"{numero_ptbr(r.forca_para_contraventamento_kN, 1)} kN (com o atrito)"
         )
     return linhas
 

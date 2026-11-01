@@ -248,10 +248,18 @@ def test_desenho_da_planta_e_um_svg_valido_para_cada_direcao(cobertura):
 
 def test_cores_vao_do_azul_da_sucao_ao_vermelho_da_pressao():
     assert cor_do_ce(-2.0) != cor_do_ce(-0.2) != cor_do_ce(0.0) != cor_do_ce(0.7)
-    assert cor_do_ce(0.0) == "rgb(255,255,255)"
+    assert cor_do_ce(0.0) == "#ffffff"
     azul = cor_do_ce(-2.0)
     vermelho = cor_do_ce(1.0)
-    assert azul.endswith(",255)") and vermelho.startswith("rgb(255,")
+    assert azul == "#5087ff" and vermelho == "#ff6969"
+    # A escala da vista 3D passa pelas mesmas cores: a planta e o 3D pintam o C_e igual.
+    from core import cena_3d as c3
+    from core import vento_edificio_desenho as vd
+
+    for ce in (-2.0, -1.3, -0.5, 0.0, 0.4, 1.0):
+        fracao = (ce - vd.CE_MINIMO_DA_ESCALA) / (vd.CE_MAXIMO_DA_ESCALA - vd.CE_MINIMO_DA_ESCALA)
+        escala, mapa = c3._rgb(c3.cor_da_escala(fracao, vd.PALETA_CE)), c3._rgb(cor_do_ce(ce))
+        assert all(abs(x - y) <= 1 for x, y in zip(escala, mapa, strict=True)), ce
 
 
 # ------------------------------------------------------------------------------- auxiliares

@@ -32,7 +32,9 @@ verificada, sem montar o modelo estrutural. O núcleo não depende do Streamlit.
 * **Equipamentos**: cilindro vertical pelas Tabelas 27 (C_a por Reynolds) e 28 (fator K, com a
   base no piso obstruída — ℓ/d dobra, 8.1.3); caixa ou painel com C_a = 2,0 ou o informado.
 * As forças vão aos pisos por **faixas de influência** (meia altura do andar de baixo e de cima); a
-  metade inferior do primeiro andar vai à fundação. `q` de cada faixa é o do seu topo.
+  metade inferior do primeiro andar vai à fundação. `q` de cada faixa é o do seu topo, com a
+  classe (A, B ou C, 5.3.2) da superfície frontal **de cada direção**: o vento em X vê `L_y` × altura;
+  o em Y, `L_x` × altura.
 * Simplificação a favor da segurança: barras circulares também usam a Figura 12 (1,6 a 2,0 contra
   1,1 da Figura 13).
 
@@ -162,7 +164,13 @@ montagem com protensão (8.2, Tabela 5), diâmetros mínimos de tirante e parafu
 ## Desenhos e saídas para o modelo
 
 A aba **Desenhos** mostra a planta com as linhas contraventadas, a elevação de cada linha com as
-diagonais e as forças, o vento nos pórticos e o gráfico do cortante por andar. A aba **Vento** traz as
+diagonais e as forças, o vento nos pórticos e o gráfico do cortante por andar. O **vento nos
+pórticos** é a plataforma em 3D (`core/vento_aberto_desenho.py`, `cena_dos_porticos`) com uma seta
+para **cada pórtico em cada nível** — o de barlavento cheio, os de trás com o η —, o total de cada
+nível, a faixa da base (cinza, vai à fundação) e o φ, o C_a e o η de cada pórtico. Na página
+**Vento em estruturas abertas**, a aba Forças por nível mostra também a **elevação** com a força de
+cada nível nas duas direções, a cortante de cada andar e o momento na base; as duas figuras vão ao
+memorial (`figuras_3d` e `figura_forcas_por_nivel`). A aba **Vento** traz as
 forças nos nós por pórtico e o botão que envia W0, W90, W180 e W270 ao **Plano de cargas**; a página
 **Vento em estruturas abertas** usa os mesmos campos para quem só quer as forças (ver
 `docs/fluxo_do_projeto.md`).

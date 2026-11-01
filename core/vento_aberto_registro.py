@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from core import plano_de_cargas as pc
+from core import vento_aberto_desenho as vad
 from core import vento_estrutura_aberta as va
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import numero_json
@@ -371,6 +372,9 @@ def registro_vento_aberto(
             "momento_na_base_X_kNm": numero_json(r.x.momento_na_base_kNm),
             "momento_na_base_Y_kNm": numero_json(r.y.momento_na_base_kNm),
             "q_no_topo_kN_m2": numero_json(r.vento_no_topo.q_N_m2 / 1e3, 4),
+            # Figuras que o memorial redesenha: os pórticos com as forças e a força por nível.
+            "figuras_3d": [vad.figura_dos_porticos_para_o_registro(g, d) for d in (r.x, r.y)],
+            "figura_forcas_por_nivel": vad.niveis_para_o_registro(vad.forcas_da_grade(r)),
         },
         metodo=(
             "Cada pórtico perpendicular ao vento é um reticulado plano: F = C_a·q·A_e, com C_a da "

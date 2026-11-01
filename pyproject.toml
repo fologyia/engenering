@@ -172,6 +172,8 @@ files = [
     "core/vento_arrasto_dados.py",
     "core/vento_coeficientes.py",
     "core/vento_edificio.py",
+    "core/vento_edificio_desenho.py",
+    "core/vento_aberto_desenho.py",
     "core/vento_aberto_registro.py",
     "core/vento_estrutura_aberta.py",
     "core/vento_nbr6123.py",

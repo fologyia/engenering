@@ -277,7 +277,13 @@ def test_arrasto_global_e_torcao_conferidos_a_mao():
         assert arrasto.forca_kN == pytest.approx(q * ca * l1 * 10.0)
         excentricidade = 0.075 * (20.0 if alpha == 0 else 40.0)  # e_b a 0°, e_a a 90°
         assert arrasto.excentricidade_m == pytest.approx(excentricidade)
-        assert arrasto.torsor_kNm == pytest.approx(arrasto.forca_kN * excentricidade)
+        # A torção usa a maior das duas contas (arrasto pelo C_a ou soma das zonas).
+        maior = max(arrasto.forca_kN, arrasto.soma_das_zonas_kN)
+        assert arrasto.forca_horizontal_kN == pytest.approx(maior)
+        assert arrasto.torsor_kNm == pytest.approx(maior * excentricidade)
+        assert arrasto.forca_para_contraventamento_kN == pytest.approx(
+            maior + arrasto.atrito.total_kN
+        )
 
 
 def test_vizinhanca_aumenta_arrasto_e_excentricidade():

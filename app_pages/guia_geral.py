@@ -1237,14 +1237,18 @@ elif modulo == "Vento nas estruturas":
         3. Escolha a **permeabilidade**. Com portão grande aberto use o assistente de **abertura
            dominante**: ele calcula o c_pi da norma e o copia para os valores informados.
         4. Leia o **Resumo** (V_k e q de cada direção, q das vedações) e a aba **Pressões por zona**:
-           o desenho mostra onde fica cada zona; Δp positiva empurra a superfície para dentro,
+           a vista **em 3D** pinta cada zona no lugar dela com o C_e e o Δp do caso escolhido; a
+           **planta** dá as cotas onde o C_e muda. Δp positiva empurra a superfície para dentro,
            negativa puxa para fora.
         5. Em **Vedações e fixações** estão as pressões de projeto de telhas, painéis, terças e
-           travessas — nas arestas e cantos vale o c_pe médio, bem mais severo.
-        6. **Forças globais** traz o arrasto (gráfico da norma), a soma das zonas, a torção e o
-           atrito. Para contraventamento e fundação use o maior dos dois resultados.
+           travessas — o desenho numera as faixas de arestas e cantos, onde vale o c_pe médio,
+           bem mais severo, e dá a largura de cada uma.
+        6. **Forças globais** traz o arrasto (gráfico da norma, com a área de sombra da
+           edificação inteira), a soma das zonas, a torção e o atrito. A coluna
+           **Contraventamento** já é o maior dos dois mais o atrito.
         7. **Pórtico transversal** dá a carga por metro de cada elemento e resolve o pórtico com a
-           seção que você informar. Resolva os casos e fique com o pior.
+           seção que você informar, com os desenhos de cargas, reações, N, V, M e deformada.
+           Resolva os casos e fique com o pior.
         8. Confira a tabela de **verificações** (se as tabelas valem para a sua construção) e
            **registre** no projeto: o memorial leva as tabelas inteiras.
         """

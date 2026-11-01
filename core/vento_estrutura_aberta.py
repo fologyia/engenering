@@ -17,7 +17,7 @@ dos seguintes é multiplicado pelo fator de proteção η do reticulado imediata
 
 As forças são levadas aos níveis dos pisos por faixas de influência (meia altura do andar de baixo e
 de cima). A metade inferior do primeiro andar vai direto à fundação. ``q`` de cada faixa é o do seu
-topo (a favor da segurança). Barras de seção circular também usam a Figura 12 (C_a = 1,6 a 2,0, mais
+topo (a favor da segurança), com a classe (5.3.2) da superfície frontal de cada direção. Barras de seção circular também usam a Figura 12 (C_a = 1,6 a 2,0, mais
 do que os 1,1 da Figura 13): simplificação a favor da segurança.
 """
 
@@ -330,6 +330,8 @@ class VentoNaDirecao:
     equipamentos_por_nivel: tuple[tuple[tuple[str, float, float], ...], ...] = ()
     #: Carga por metro do guarda-corpo (barlavento, sotavento) em cada nível, kN/m.
     guarda_corpo_kN_m: tuple[tuple[float, float], ...] = ()
+    #: Classe da superfície frontal desta direção (5.3.2): largura frontal × altura total.
+    classe: str = ""
 
     @property
     def forcas_nos_niveis_kN(self) -> tuple[float, ...]:
@@ -579,6 +581,7 @@ def _calcular_direcao(
         pilares_por_portico=pilares_por_plano,
         equipamentos_por_nivel=tuple(equip_por_nivel),
         guarda_corpo_kN_m=tuple(gc_por_metro),
+        classe=classe,
     )
 
 
@@ -614,17 +617,28 @@ def _forca_equipamento(
     return forca, texto
 
 
+def classe_da_direcao(g: GeometriaAberta, direcao: str) -> str:
+    """Classe A, B ou C da superfície frontal que o vento da direção vê (5.3.2): a maior entre a
+    largura frontal (L_y para o vento em X, L_x para o vento em Y) e a altura total. Cada direção
+    tem a sua: tomar a maior dimensão da planta para as duas subestima o q na direção estreita."""
+    largura = g.largura_y_m if direcao == "X" else g.comprimento_x_m
+    return vb.classe_da_edificacao(max(largura, g.altura_total_m))
+
+
 def calcular_vento_aberto(g: GeometriaAberta, p: ParametrosVento) -> ResultadoVentoAberto:
     """Forças do vento por nível, nas direções X e Y (cada uma vale nos dois sentidos)."""
     erros = validar_geometria(g)
     if erros:
         raise VentoAbertoInvalido(" ".join(erros))
     _positivo("V₀", p.v0_m_s)
-    maior = max(g.comprimento_x_m, g.largura_y_m, g.altura_total_m)
-    classe = vb.classe_da_edificacao(maior)
+    classes = {direcao: classe_da_direcao(g, direcao) for direcao in ("X", "Y")}
     avisos: list[str] = []
+    aviso_v0 = vb.aviso_do_v0(p.v0_m_s)
+    if aviso_v0:
+        avisos.append(aviso_v0)
     resultados = {}
     for direcao in ("X", "Y"):
+        classe = classes[direcao]
         a = _calcular_direcao(g, p, direcao, classe, ordem_inversa=False)
         b = _calcular_direcao(g, p, direcao, classe, ordem_inversa=True)
         # Vento nos dois sentidos: vale o arranjo que dá mais força (os planos podem diferir).
@@ -641,7 +655,8 @@ def calcular_vento_aberto(g: GeometriaAberta, p: ParametrosVento) -> ResultadoVe
             "Estrutura esbelta (altura maior que 6 vezes a menor dimensão em planta): avalie os "
             "efeitos dinâmicos do vento (NBR 6123, capítulo 9)."
         )
-    topo = _vento(p, g.altura_total_m, classe)
+    # q no topo com a classe mais severa das duas direções (A < B < C: a de menor letra dá mais q).
+    topo = _vento(p, g.altura_total_m, min(classes.values()))
     avisos.extend(topo.avisos)
     return ResultadoVentoAberto(
         geometria=g,

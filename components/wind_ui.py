@@ -8,6 +8,7 @@ zona, as vedações, as forças globais, o pórtico e a tabela de verificações
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,15 +16,20 @@ import pandas as pd
 import streamlit as st
 
 from components.base_tecnica_ui import base_ativa, botao_recarregar_da_base, legenda_da_base
+from components.cena_3d_svg import svg_da_cena
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
 from components.verification_table import COR_BADGE, mostrar_tabela_verificacoes
-from components.wind_figures import svg_planta
+from components.wind_figures import svg_planta, svg_vedacoes
 from components.wind_help import AJUDA
 from core import base_tecnica as bt
+from core import cena_3d as c3
+from core import portico_figuras as pf
+from core import portico_plano as pp
 from core import section_catalog as catalogo_perfis
 from core import vento_coeficientes as coef
 from core import vento_edificio as ve
+from core import vento_edificio_desenho as vd
 from core import vento_nbr6123 as v6123
 from core import vento_portico as vp
 from core import vento_registro as registro_vento
@@ -680,7 +686,15 @@ def _aba_pressoes(resultado: ve.ResultadoEdificio) -> None:
     )
     caso = casos[escolha]
     st.subheader("Pressões por zona", help=AJUDA["res_zonas"])
-    st.image(svg_planta(resultado, caso.alpha), width="stretch")
+    em_3d, em_planta = st.tabs(["Em 3D", "Em planta, com as cotas"])
+    with em_3d:
+        azimute, elevacao = vd.vista_do_caso(caso.alpha)
+        desenho = c3.projetar(
+            vd.cena_das_zonas(resultado, caso), azimute=azimute, elevacao=elevacao
+        )
+        st.image(svg_da_cena(desenho), width="stretch")
+    with em_planta:
+        st.image(svg_planta(resultado, caso.alpha, caso), width="stretch")
     tabela = pd.DataFrame(ve.tabela_de_pressoes(caso))
     st.dataframe(
         tabela,
@@ -713,6 +727,7 @@ def _aba_pressoes(resultado: ve.ResultadoEdificio) -> None:
 
 def _aba_vedacoes(resultado: ve.ResultadoEdificio) -> None:
     st.subheader("Vedações, terças, travessas e fixações", help=AJUDA["res_vedacoes"])
+    st.image(svg_vedacoes(resultado), width="stretch")
     cpis = sorted({c for linha in resultado.vedacoes for c, _p in linha.liquida_por_cpi})
     linhas = []
     for linha in resultado.vedacoes:
@@ -756,30 +771,34 @@ def _aba_globais(resultado: ve.ResultadoEdificio) -> None:
                 "Classe": r.classe,
                 "q (kN/m²)": r.q_kN_m2,
                 "C_a": r.ca.valor,
-                "A_e = ℓ₁·h (m²)": r.area_frontal_m2,
+                "A_e, área de sombra (m²)": r.area_frontal_m2,
                 "F_a = q·C_a·A_e·f_v (kN)": r.forca_kN,
                 "Soma das zonas (kN)": r.soma_das_zonas_kN,
-                "Empuxo máx. no telhado (kN)": max(c.fz_telhado_kN for c in casos),
                 "Excentricidade e (m)": r.excentricidade_m,
-                "M_t = F_a·e (kN·m)": r.torsor_kNm,
+                "M_t = F·e (kN·m)": r.torsor_kNm,
                 "Atrito F_t (kN)": r.atrito.total_kN,
+                "Contraventamento (kN)": r.forca_para_contraventamento_kN,
+                "Empuxo máx. no telhado (kN)": max(c.fz_telhado_kN for c in casos),
             }
         )
+    numero = {
+        "q (kN/m²)": "%.3f",
+        "C_a": "%.2f",
+        "Excentricidade e (m)": "%.2f",
+    }
     st.dataframe(
         pd.DataFrame(linhas),
         hide_index=True,
         width="stretch",
         column_config={
-            "q (kN/m²)": st.column_config.NumberColumn(format="%.3f"),
-            "C_a": st.column_config.NumberColumn(format="%.2f"),
-            "A_e = ℓ₁·h (m²)": st.column_config.NumberColumn(format="%.1f"),
-            "F_a = q·C_a·A_e·f_v (kN)": st.column_config.NumberColumn(format="%.1f"),
-            "Soma das zonas (kN)": st.column_config.NumberColumn(format="%.1f"),
-            "Empuxo máx. no telhado (kN)": st.column_config.NumberColumn(format="%.1f"),
-            "Excentricidade e (m)": st.column_config.NumberColumn(format="%.2f"),
-            "M_t = F_a·e (kN·m)": st.column_config.NumberColumn(format="%.1f"),
-            "Atrito F_t (kN)": st.column_config.NumberColumn(format="%.1f"),
+            coluna: st.column_config.NumberColumn(format=numero.get(coluna, "%.1f"))
+            for coluna in linhas[0]
+            if coluna not in ("Vento", "Classe")
         },
+    )
+    st.caption(
+        "F (na torção e no contraventamento) é a maior das duas contas da norma: o arrasto pelo "
+        "C_a e a soma das pressões das zonas. O atrito (6.1.5) soma-se a ela. Tudo característico."
     )
     st.subheader("Torção e excentricidade", help=AJUDA["res_torcao"], divider=False)
     st.caption(
@@ -795,6 +814,20 @@ class DadosSolucao:
     descricao_bases: str
     descricao_pilar: str
     descricao_rafter: str
+    modelo: pp.Portico | None = None
+
+
+@st.cache_data(max_entries=16, show_spinner=False)
+def _figuras_do_portico(modelo_json: str, caso: str) -> list[tuple[str, str, bytes]]:
+    """As figuras do pórtico (guardadas: redesenhar a cada clique deixaria a página lenta)."""
+    resultado = pp.resolver(pp.de_dicionario(json.loads(modelo_json)))
+    return [
+        (f.titulo, f.legenda, f.png)
+        for f in pf.figuras_do_portico(resultado, caso=caso, tensao=False)
+    ]
+
+
+ABAS_DO_PORTICO = ("Cargas", "Reações", "Normal", "Cortante", "Momento", "Deformada")
 
 
 def _secao(
@@ -981,13 +1014,28 @@ def _aba_portico(resultado: ve.ResultadoEdificio) -> tuple[list[vp.CasoPortico],
                 "revise o limite do projeto.",
                 icon=":material/warning:",
             )
+    modelo = vd.modelo_do_portico(
+        geometria,
+        por_rotulo[escolhido],
+        pilar=vd.secao_do_portico(desc_pilar, pilar),
+        rafter=vd.secao_do_portico(desc_rafter, rafter),
+        bases_engastadas=bases == BASES_ENGASTADAS,
+    )
+    st.markdown("**Desenhos do pórtico**", help=AJUDA["res_p_figuras"])
+    figuras = _figuras_do_portico(
+        json.dumps(pp.para_dicionario(modelo)), vd.rotulo_do_caso_do_portico(por_rotulo[escolhido])
+    )
+    for aba, (_titulo, legenda, png) in zip(st.tabs(list(ABAS_DO_PORTICO)), figuras, strict=True):
+        with aba:
+            st.image(png, width="stretch")
+            st.caption(legenda)
     st.markdown("**Reações nas bases**", help=AJUDA["res_p_reacoes"])
     st.dataframe(pd.DataFrame(solucao.reacoes), hide_index=True, width="stretch")
     st.markdown("**Esforços nas pontas dos elementos**", help=AJUDA["res_p_esforcos"])
     st.dataframe(pd.DataFrame(solucao.esforcos), hide_index=True, width="stretch")
     for aviso in solucao.avisos:
         st.warning(aviso, icon=":material/warning:")
-    return casos, DadosSolucao(solucao, bases, desc_pilar, desc_rafter)
+    return casos, DadosSolucao(solucao, bases, desc_pilar, desc_rafter, modelo)
 
 
 def _rotulo_caso(caso: vp.CasoPortico) -> str:
@@ -1053,6 +1101,7 @@ def _aba_verificacoes(
         casos_do_portico=casos_portico,
         solucao=solucao.solucao,
         contexto=contexto,
+        modelo_do_portico=solucao.modelo,
     )
     with st.container(border=True):
         st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])

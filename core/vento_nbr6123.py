@@ -31,6 +31,10 @@ EDICAO = "ABNT NBR 6123:2023"
 #: ρ = 1,226 kg/m³ → ½·ρ = 0,613 (q em N/m², V_k em m/s).
 FATOR_PRESSAO_DINAMICA = 0.613
 
+#: Isopletas da Figura 1: de 30 m/s a 50 m/s, de 5 em 5 m/s.
+V0_MINIMO_DO_MAPA_M_S = 30.0
+V0_MAXIMO_DO_MAPA_M_S = 50.0
+
 # ---------------------------------------------------------------------------
 # Categorias de rugosidade (5.3.1, Tabela 5)
 # ---------------------------------------------------------------------------
@@ -237,6 +241,24 @@ def _classe(valor: str) -> str:
 def numero_ptbr(valor: float, casas: int = 2) -> str:
     """``1,23`` — o separador decimal que o texto da memória e da tela usa."""
     return f"{valor:.{casas}f}".replace(".", ",")
+
+
+def aviso_do_v0(v0_m_s: float) -> str | None:
+    """Texto do alerta quando ``V_0`` sai do mapa de isopletas (30 a 50 m/s, Figura 1); ``None``
+    quando está dentro.
+
+    Abaixo de 30 m/s o vento fica menor do que o de qualquer ponto do Brasil no mapa — só com estudo
+    do local; acima de 50 m/s, também só com estudo (ou é engano de digitação: km/h no lugar de m/s).
+    """
+    v0 = float(v0_m_s)
+    if V0_MINIMO_DO_MAPA_M_S - 1e-9 <= v0 <= V0_MAXIMO_DO_MAPA_M_S + 1e-9:
+        return None
+    lado = "abaixo" if v0 < V0_MINIMO_DO_MAPA_M_S else "acima"
+    return (
+        f"V₀ = {numero_ptbr(v0, 1)} m/s está {lado} do mapa de isopletas da NBR 6123:2023 (30 a "
+        "50 m/s, Figura 1): só vale com estudo do vento no local; confira também se o valor não "
+        "está em km/h."
+    )
 
 
 # ---------------------------------------------------------------------------

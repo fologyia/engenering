@@ -12,6 +12,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+from core import vento_aberto_desenho as vad
 from core import vento_aberto_registro as var
 from core import vento_por_barras as vpb
 from core import vento_por_nivel as vpn
@@ -210,6 +211,19 @@ def tabelas_para_memorial(
     return tabelas
 
 
+def direcoes_das_figuras(r: vpb.ResultadoPorBarras) -> list[int]:
+    """As direções que o memorial desenha em 3D: a mais forte em X (W0 ou W180), a mais forte em Y
+    (W90 ou W270) e a que mais carrega, se for diagonal — no máximo três."""
+    escolhidas: list[int] = []
+    for par in ((0, 180), (90, 270)):
+        candidatas = [d for d in r.direcoes if d.angulo in par]
+        if candidatas:
+            escolhidas.append(max(candidatas, key=lambda d: d.total_kN).angulo)
+    if r.governante.angulo not in escolhidas:
+        escolhidas.append(r.governante.angulo)
+    return escolhidas
+
+
 def texto_de_destaque(r: vpb.ResultadoPorBarras) -> str:
     g = r.governante
     return (
@@ -270,6 +284,14 @@ def registro_vento_por_barras(
                 max(d.momento_tombamento_kNm for d in r.direcoes)
             ),
             "q_no_topo_kN_m2": numero_json(r.vento_no_topo.q_N_m2 / 1e3, 4),
+            # Figuras que o memorial redesenha: a carga em cada barra e a força por nível.
+            "figuras_3d": [
+                vad.figura_do_vento_para_o_registro(r, angulo, eixo_vertical=eixo_vertical)
+                for angulo in direcoes_das_figuras(r)
+            ],
+            "figura_forcas_por_nivel": vad.niveis_para_o_registro(
+                vad.forcas_do_barra_a_barra(vpn.vento_por_nivel(r))
+            ),
         },
         metodo=(
             "Toda estrutura de barras retas é um reticulado (NBR 6123 8.3): a força em cada barra "

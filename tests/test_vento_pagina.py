@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from components import wind_ui
 from components.wind_help import AJUDA
 from core import vento_edificio as ve
 from core import vento_nbr6123 as v6123
@@ -250,7 +251,9 @@ def test_trocar_o_caso_de_vento_troca_a_tabela(banco_isolado):
 
 def test_desenho_da_planta_aparece(banco_isolado):
     t = abrir(banco_isolado)
-    assert len(t.get("image")) == 1  # a planta com as zonas, em SVG
+    # As zonas em 3D e em planta, o mapa das vedações e as 6 figuras do pórtico (cargas, reações,
+    # N, V, M e deformada).
+    assert len(t.get("image")) == 2 + 1 + len(wind_ui.ABAS_DO_PORTICO)
 
 
 def test_tela_avisa_quando_a_geometria_sai_do_campo_da_norma(banco_isolado):

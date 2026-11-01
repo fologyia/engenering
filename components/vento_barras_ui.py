@@ -12,6 +12,7 @@ import streamlit as st
 
 from components import contraventamento_estrutura_ui as ce
 from components.base_tecnica_ui import base_ativa, gravar_plano, plano_ativo
+from components.cena_3d_svg import svg_da_cena
 from components.figuras_vento import svg_vento_3d, svg_vento_planta, svg_vento_sombra
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -21,6 +22,7 @@ from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import plano_de_cargas as pc
+from core import vento_aberto_desenho as vad
 from core import vento_por_barras as vpb
 from core import vento_por_barras_registro as vbr
 from core import vento_por_nivel as vpn
@@ -541,6 +543,9 @@ def _forcas_por_nivel(vn: vpn.VentoPorNivel, eixo_vertical: str) -> None:
         "equipamentos vão pela viga que os apoia. A linha **base** é o que chega no pé dos "
         "pilares: vai direto à fundação. Níveis + base = a força total do resumo."
     )
+    colunas_do_desenho = vad.forcas_do_barra_a_barra(vn)
+    if colunas_do_desenho:
+        st.image(svg_da_cena(vad.desenho_das_forcas_por_nivel(colunas_do_desenho)), width="stretch")
     for aviso in vn.avisos:
         st.warning(aviso, icon=":material/warning:")
 
@@ -614,6 +619,7 @@ def _resultados(
                     "Caso": d.codigo,
                     "Sentido": vpb.SENTIDOS[d.angulo],
                     "Direção": "perpendicular" if d.perpendicular else "diagonal",
+                    "Classe": f"{d.classe} ({_pt(d.largura_frontal_m)} m)",
                     "Barras (kN)": d.estrutura_kN,
                     "Elementos (kN)": d.elementos_kN,
                     "Total (kN)": d.total_kN,

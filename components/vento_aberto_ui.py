@@ -15,11 +15,13 @@ import streamlit as st
 from components import contraventamento_estrutura_ui as ce
 from components import vento_barras_ui as vbu
 from components.base_tecnica_ui import base_ativa, gravar_acoes_no_plano, legenda_da_base
+from components.cena_3d_svg import svg_da_cena
 from components.figuras_estrutura import svg_vento_elevacao
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
 from core import base_tecnica as bt
 from core import contraventamento_plataforma as cp
+from core import vento_aberto_desenho as vad
 from core import vento_aberto_registro as var
 from core import vento_estrutura_aberta as va
 
@@ -32,10 +34,15 @@ AJUDA: dict[str, str] = {
     "res_momento": "Momento de tombamento na base: Σ força do nível × cota.",
     "res_q": "Pressão dinâmica no topo da estrutura (com o guarda-corpo).",
     "res_desenho": (
-        "Os pórticos vistos de lado: o vento entra pela esquerda, o pórtico de barlavento recebe a "
-        "força cheia e os de trás são protegidos (η). As setas são as forças por nível."
+        "A plataforma em 3D com uma seta para cada pórtico em cada nível: o pórtico de barlavento "
+        "(P1) recebe a força cheia e os de trás são protegidos pelo fator η. Ao lado de cada nível, "
+        "o total dele; em cinza, a faixa da base, que vai direto à fundação."
     ),
-    "res_niveis": "Força em cada nível: pórticos, guarda-corpos e equipamentos, com o q da faixa.",
+    "res_niveis": (
+        "Força em cada nível (pórticos, guarda-corpos e equipamentos, com o q da faixa), nas duas "
+        "direções. Em azul, a cortante de cada andar — a soma das forças dele para cima, o que o "
+        "contraventamento do andar leva — e embaixo o momento na base."
+    ),
     "res_nos": (
         "O que lançar no modelo como carga nodal: a força de cada pórtico em cada nível e a "
         "parcela de cada nó pilar–viga."
@@ -182,6 +189,10 @@ def mostrar_vento_em_estrutura_aberta() -> None:
         st.image(svg_vento_elevacao(geometria, resultado.direcao(direcao)), width="stretch")
     with abas[1]:
         st.subheader("Forças por nível", help=AJUDA["res_niveis"])
+        st.image(
+            svg_da_cena(vad.desenho_das_forcas_por_nivel(vad.forcas_da_grade(resultado))),
+            width="stretch",
+        )
         _tabela(tabelas[0])
     with abas[2]:
         st.subheader("Forças nos nós", help=AJUDA["res_nos"])

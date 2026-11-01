@@ -65,14 +65,17 @@ AJUDA: dict[str, str] = {
     "res_q": "Pressão dinâmica no topo da estrutura (a maior que aparece).",
     "res_resumo": (
         "Cada direção calculada: o caso no plano de cargas (W0 sopra para +X, W90 para +Y), as "
-        "forças nas barras e nos elementos, o tombamento e a torção da planta."
+        "forças nas barras e nos elementos, o tombamento e a torção da planta. A **classe** (A, B "
+        "ou C) é a da largura que aquele vento vê (entre parênteses) ou da altura, a maior: cada "
+        "direção tem a sua, e com ela o seu q."
     ),
     "res_niveis": (
         "A força do vento que chega a cada nível (piso, patamar), em cada direção — o número para "
         'aplicar "no geral" ou conferir o contraventamento. Cada barra manda metade do vento '
         "dela para cada ponta; o que chega no pé dos pilares vai direto à fundação (linha "
         '"base"). "Passa em" é a linha, no modelo, por onde passa a força do nível: fora do '
-        "meio da planta, ela também torce a estrutura."
+        "meio da planta, ela também torce a estrutura. O desenho mostra a mais forte em X e em "
+        "Y, com a cortante de cada andar (azul) e o momento na base."
     ),
     "res_nivel_principal": (
         "A força do vento no nível com mais vigas (a plataforma), nesta direção, em kN."

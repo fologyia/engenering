@@ -13,10 +13,13 @@ from collections.abc import Sequence
 from xml.sax.saxutils import escape
 
 from components import desenho_svg as ds
+from components.cena_3d_svg import svg_da_cena
 from core import cargas_esqueleto as ce
+from core import cena_3d as c3
 from core import contraventamento_ligacao as lig
 from core import contraventamento_plataforma as cp
 from core import contraventamento_ufm as ufm
+from core import vento_aberto_desenho as vad
 from core import vento_estrutura_aberta as va
 
 COR_TEXTO = "#1f2328"
@@ -112,214 +115,19 @@ def _legenda(x: float, y: float, itens: Sequence[tuple[str, str, str]]) -> list[
 # Vento em estrutura aberta — os pórticos em perspectiva
 # ---------------------------------------------------------------------------------------------
 def svg_vento_elevacao(g: va.GeometriaAberta, r: va.VentoNaDirecao) -> str:
-    """Os pórticos perpendiculares ao vento, em perspectiva, de barlavento (P1) para sotavento, com
-    o η de cada um, a força em cada nível no pórtico de barlavento e a faixa da base."""
-    largura, altura = 900.0, 560.0
-    camera = ds.Camera(-120.0, 24.0)
-    profundidade_total = max((p.coordenada_m for p in r.planos), default=0.0)
-    frente = r.largura_frontal_m
-    h = g.altura_m
-    h_gc = g.altura_total_m
-    pilares = max(r.pilares_por_portico, 2)
-    xs = [frente * k / (pilares - 1) for k in range(pilares)]
-    margem = 0.12 * max(profundidade_total, frente, 1.0)
-    # eixos locais: u ao longo do vento (x da câmera), v ao longo da frente, z para cima
-    chao = [
-        (-margem, -margem, 0.0),
-        (profundidade_total + margem, -margem, 0.0),
-        (profundidade_total + margem, frente + margem, 0.0),
-        (-margem, frente + margem, 0.0),
-    ]
-    seta_z = 0.55 * h
-    inicio = (-0.95 * max(profundidade_total, frente, 3.0), frente / 2, seta_z)
-    fim = (-margem * 0.9, frente / 2, seta_z)
-    pontos = [*chao, inicio, (0.0, 0.0, h_gc), (profundidade_total, frente, h_gc)]
-    enq = ds.Enquadramento([camera.tela(p) for p in pontos], (60, 90, largura - 230, altura - 60))
-
-    def t(p: tuple[float, float, float]) -> tuple[float, float]:
-        return enq(camera.tela(p))
-
-    corpo: list[str] = [
-        ds.poligono([t(p) for p in chao], preenchimento="#eef1f5", contorno="#d5dae1")
-    ]
-    # linhas de piso que ligam os pórticos (vigas na direção do vento)
-    for z in g.cotas_m:
-        for v in (0.0, frente):
-            corpo.append(
-                ds.linha(
-                    *t((0.0, v, z)),
-                    *t((profundidade_total, v, z)),
-                    cor=ds.COR_ESTRUTURA_CLARA,
-                    largura=1.6,
-                )
-            )
-    # u = distância ao pórtico de barlavento (P1), na direção do vento
-    referencia = next((p.coordenada_m for p in r.planos if p.posicao == 1), 0.0)
-    planos = sorted(r.planos, key=lambda p: -abs(p.coordenada_m - referencia))
-    for plano in planos:  # do fundo para a frente
-        u = abs(plano.coordenada_m - referencia)
-        cor = ds.COR_CONTRAVENTADO if plano.contraventado else ds.COR_ESTRUTURA
-        espessura = 3.4 if plano.contraventado else 2.4
-        opac = 1.0 if plano.posicao == 1 else 0.85
-        for v in xs:
-            corpo.append(
-                ds.linha(*t((u, v, 0.0)), *t((u, v, h)), cor=cor, largura=espessura, opacidade=opac)
-            )
-            px, py = t((u, v, 0.0))
-            corpo.append(f'<ellipse cx="{px:.1f}" cy="{py:.1f}" rx="6" ry="2.6" fill="#c9cfd8"/>')
-        for z in g.cotas_m:
-            corpo.append(
-                ds.linha(
-                    *t((u, 0.0, z)), *t((u, frente, z)), cor=cor, largura=espessura, opacidade=opac
-                )
-            )
-        if plano.contraventado:
-            v0, v1 = xs[0], xs[1]
-            base = 0.0
-            for z in g.cotas_m:
-                corpo.append(
-                    ds.linha(
-                        *t((u, v0, base)), *t((u, v1, z)), cor=cor, largura=1.6, opacidade=opac
-                    )
-                )
-                corpo.append(
-                    ds.linha(
-                        *t((u, v0, z)), *t((u, v1, base)), cor=cor, largura=1.6, opacidade=opac
-                    )
-                )
-                base = z
-        x, y = t((u, frente, h_gc))
-        corpo.append(
-            ds.etiqueta(
-                x + 6,
-                y - 14,
-                f"P{plano.posicao} · η {_n(plano.eta, 2)}",
-                tamanho=10,
-                cor=cor,
-                peso="bold",
-            )
-        )
-    # guarda-corpo no perímetro de cada piso: corrimão e montantes nos cantos
-    if g.guarda_corpo:
-        cantos = (
-            (0.0, 0.0),
-            (profundidade_total, 0.0),
-            (profundidade_total, frente),
-            (0.0, frente),
-        )
-        for z in g.cotas_m:
-            topo = z + g.altura_guarda_corpo_m
-            for k in range(4):
-                (ua, va_), (ub, vb) = cantos[k], cantos[(k + 1) % 4]
-                corpo.append(
-                    ds.linha(
-                        *t((ua, va_, topo)),
-                        *t((ub, vb, topo)),
-                        cor=ds.COR_PAINEL,
-                        largura=1.3,
-                        tracejado="5 3",
-                    )
-                )
-                corpo.append(
-                    ds.linha(*t((ua, va_, z)), *t((ua, va_, topo)), cor=ds.COR_PAINEL, largura=1.0)
-                )
-    # vento e forças por nível no pórtico de barlavento
-    (sx, sy), (ex, ey) = t(inicio), t(fim)
-    corpo.append(ds.seta_de_vento(sx, sy, ex, ey, espessura=15))
-    corpo.append(
-        ds.etiqueta(
-            sx + 10,
-            sy - 24,
-            f"Vento em {r.direcao}",
-            tamanho=11.5,
-            cor=ds.COR_VENTO_ESCURO,
-            peso="bold",
-            ancora="start",
-        )
+    """A grade de pórticos em 3D com a força de cada pórtico em cada nível — o de barlavento cheio,
+    os de trás com o seu η —, o total de cada nível, a faixa da base e o φ, o C_a e o η de cada
+    pórtico (a cena é a de :func:`core.vento_aberto_desenho.cena_dos_porticos`, a mesma do
+    memorial)."""
+    azimute, elevacao = vad.vista_dos_porticos(r)
+    desenho = c3.projetar(
+        vad.cena_dos_porticos(g, r),
+        azimute=azimute,
+        elevacao=elevacao,
+        largura=1000.0,
+        altura=640.0,
     )
-    maior = max((n.total_kN for n in r.niveis), default=1.0) or 1.0
-    escala_seta = max(profundidade_total, frente, 3.0)
-    v_seta = 0.18 * frente
-    for nivel in r.niveis:
-        comprimento = (0.18 + 0.22 * nivel.total_kN / maior) * escala_seta
-        (ax_, ay_), (bx_, by_) = (
-            t((-comprimento, v_seta, nivel.cota_m)),
-            t((-0.02 * escala_seta, v_seta, nivel.cota_m)),
-        )
-        corpo.append(ds.seta(ax_, ay_, bx_, by_, cor=ds.COR_VENTO, largura=2.6, cabeca=10))
-        corpo.append(
-            ds.etiqueta(
-                ax_,
-                ay_ - 14,
-                f"F{nivel.nivel} = {_n(nivel.total_kN)} kN",
-                tamanho=10.5,
-                cor=ds.COR_VENTO_ESCURO,
-                peso="bold",
-            )
-        )
-    if r.forca_na_base_kN > 0 and r.niveis:
-        z_base = r.niveis[0].faixa_m[0] / 2
-        (ax_, ay_), (bx_, by_) = (
-            t((-0.16 * escala_seta, v_seta, z_base)),
-            t((-0.02 * escala_seta, v_seta, z_base)),
-        )
-        corpo.append(ds.seta(ax_, ay_, bx_, by_, cor=ds.COR_VENTO, largura=1.6, cabeca=8))
-        corpo.append(
-            ds.etiqueta(
-                ax_,
-                ay_ + 14,
-                f"base {_n(r.forca_na_base_kN)} kN",
-                tamanho=9.5,
-                cor=ds.COR_VENTO_ESCURO,
-            )
-        )
-    # cotas dos níveis junto do pilar do fundo do pórtico de barlavento
-    for nivel in r.niveis:
-        x, y = t((0.0, frente, nivel.cota_m))
-        corpo.append(
-            ds.texto(
-                x - 10, y, f"{_n(nivel.cota_m, 2)} m", tamanho=10, ancora="end", cor=ds.COR_SUAVE
-            )
-        )
-    # quadro à direita
-    xq, yq = largura - 205, 96
-    corpo.append(
-        ds.texto(xq, yq, "Pórticos (de barlavento)", tamanho=11, ancora="start", peso="bold")
-    )
-    for k, plano in enumerate(sorted(r.planos, key=lambda p: p.posicao)[:14]):
-        corpo.append(
-            ds.texto(
-                xq,
-                yq + 20 + 17 * k,
-                f"P{plano.posicao}: φ {_n(plano.phi, 2)} · C_a {_n(plano.ca, 2)} · "
-                f"η {_n(plano.eta, 2)}",
-                tamanho=10,
-                ancora="start",
-                cor=ds.COR_SUAVE,
-            )
-        )
-    corpo.append(
-        ds.legenda(
-            22,
-            altura - 18,
-            (
-                (ds.COR_CONTRAVENTADO, "", "pórtico contraventado"),
-                (ds.COR_ESTRUTURA, "", "pórtico sem diagonais"),
-                (ds.COR_PAINEL, "5 3", "guarda-corpo"),
-                (ds.COR_VENTO, "", "força do vento (característica)"),
-            ),
-        )
-    )
-    return ds.documento(
-        largura,
-        altura,
-        corpo,
-        f"Vento em {r.direcao} — pórticos de barlavento a sotavento",
-        subtitulo=(
-            "O pórtico da frente (P1) recebe o vento cheio; os de trás, o seu fator de proteção η "
-            "(NBR 6123, 8.4). Setas: força de cada nível."
-        ),
-    )
+    return svg_da_cena(desenho)
 
 
 # ---------------------------------------------------------------------------------------------

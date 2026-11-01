@@ -943,13 +943,17 @@ def figuras_do_portico(
     caso: str = "",
     deformada: pp.ResultadoPortico | None = None,
     caso_deformada: str = "",
+    apenas: Sequence[str] | None = None,
 ) -> list[ImagemDiagrama]:
     """Estrutura, reações, N, V, M, tensão (se a seção tiver W) e deformada, nessa ordem.
 
     ``caso`` (por exemplo "ELU") vai no título e na legenda de cada figura; com ``deformada``, a
-    deformada sai desse outro resultado (o de serviço, ``caso_deformada``).
+    deformada sai desse outro resultado (o de serviço, ``caso_deformada``). ``apenas`` escolhe as
+    figuras pelas chaves ``estrutura``, ``reacoes``, ``N``, ``V``, ``M``, ``tensao`` e
+    ``deformada`` (na ordem de sempre); sem ele saem todas.
     """
     antes = f"{prefixo} — " if prefixo else ""
+    rotulo_def = caso_deformada if deformada is not None else caso
 
     def titulo(texto: str, rotulo: str) -> str:
         return f"{antes}{texto}" + (f", {rotulo}" if rotulo else "")
@@ -957,24 +961,27 @@ def figuras_do_portico(
     def com_caso(figura: ImagemDiagrama, rotulo: str) -> ImagemDiagrama:
         return replace(figura, legenda=f"{rotulo}. {figura.legenda}") if rotulo else figura
 
-    figuras = [
-        figura_estrutura(r, titulo=titulo("Modelo: geometria, apoios e cargas", caso)),
-        figura_reacoes(r, titulo=titulo("Reações de apoio", caso)),
-    ]
-    chaves = ["N", "V", "M"]
+    def diagrama(chave: str) -> ImagemDiagrama:
+        tipo = DIAGRAMAS[chave]
+        return figura_diagrama(r, chave, titulo=titulo(f"{tipo.titulo} ({tipo.unidade})", caso))
+
+    chaves = ["estrutura", "reacoes", "N", "V", "M"]
     if tensao and any(rb.tensao_max is not None for rb in r.barras):
         chaves.append("tensao")
+    chaves.append("deformada")
+    if apenas is not None:
+        chaves = [c for c in chaves if c in set(apenas)]
+    figuras: list[ImagemDiagrama] = []
     for chave in chaves:
-        tipo = DIAGRAMAS[chave]
-        figuras.append(
-            figura_diagrama(r, chave, titulo=titulo(f"{tipo.titulo} ({tipo.unidade})", caso))
-        )
-    rotulo_def = caso_deformada if deformada is not None else caso
-    figuras.append(
-        figura_deformada(
-            deformada or r, titulo=titulo("Deformada (deslocamentos em mm)", rotulo_def)
-        )
-    )
-    return [
-        com_caso(f, rotulo_def if k == len(figuras) - 1 else caso) for k, f in enumerate(figuras)
-    ]
+        if chave == "estrutura":
+            figura = figura_estrutura(r, titulo=titulo("Modelo: geometria, apoios e cargas", caso))
+        elif chave == "reacoes":
+            figura = figura_reacoes(r, titulo=titulo("Reações de apoio", caso))
+        elif chave == "deformada":
+            figura = figura_deformada(
+                deformada or r, titulo=titulo("Deformada (deslocamentos em mm)", rotulo_def)
+            )
+        else:
+            figura = diagrama(chave)
+        figuras.append(com_caso(figura, rotulo_def if chave == "deformada" else caso))
+    return figuras
