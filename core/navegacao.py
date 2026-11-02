@@ -113,13 +113,19 @@ MENU: tuple[GrupoMenu, ...] = (
         "Modelo SolidWorks",
         ":material/view_in_ar:",
         "Ler os esforços do modelo e verificar todas as barras, fundações e placas de base; "
-        "reações nas bases para o projeto civil; lista de material.",
+        "sensores do gerenciador; reações nas bases para o projeto civil; lista de material.",
         (
             ItemMenu(
                 "app_pages/esforcos_modelo.py",
                 "Esforços do modelo",
                 ":material/upload_file:",
                 "Importar o SolidWorks e verificar barras, fundações e placas de base",
+            ),
+            ItemMenu(
+                "app_pages/sensores_do_modelo.py",
+                "Sensores do modelo",
+                ":material/sensors:",
+                "Levar ao memorial a tensão, o deslocamento e o FS dos sensores do SolidWorks",
             ),
             ItemMenu(
                 "app_pages/reacoes_nas_bases.py",

@@ -668,6 +668,8 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     * ``figura_base_de_pilar`` — a planta e o corte da base (:mod:`core.desenho_placa_base`);
     * ``figura_forcas_por_nivel`` — a elevação com a força do vento em cada nível
       (:func:`core.vento_aberto_desenho.niveis_para_o_registro`);
+    * ``figura_sensores`` — cada sensor do SolidWorks combinação a combinação, com o limite
+      (:func:`core.desenho_dos_sensores.paineis_para_o_registro`);
     * ``esquematico_escada`` — a vista lateral da escada (:mod:`core.escada_lances`);
     * ``figuras_portico`` — lista de ``{"titulo", "caso", "modelo", "modelo_deformada",
       "caso_deformada"}``: o modelo do núcleo de pórtico plano (:mod:`core.portico_plano`) é
@@ -705,6 +707,23 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
                 desenho.titulo,
                 "Força característica do vento em cada nível, cortante de cada andar e momento na "
                 "base (NBR 6123:2023, capítulo 8).",
+                cena_3d_png.png_da_cena(desenho, escala=2.0),
+                round(desenho.largura * 2),
+                round(desenho.altura * 2),
+            )
+            figuras.append((imagem, LARGURA_DESENHO_MM))
+    sensores = resultados.get("figura_sensores")
+    if isinstance(sensores, Mapping):
+        from core import cena_3d_png
+        from core import desenho_dos_sensores as dds
+
+        paineis = dds.paineis_do_registro(sensores)
+        if paineis:
+            desenho = dds.desenho_dos_sensores(paineis)
+            imagem = ImagemDiagrama(
+                desenho.titulo,
+                "Resultado de cada sensor do SolidWorks em cada combinação; a linha tracejada é o "
+                "limite e a barra escura, a combinação que governa.",
                 cena_3d_png.png_da_cena(desenho, escala=2.0),
                 round(desenho.largura * 2),
                 round(desenho.altura * 2),

@@ -90,6 +90,11 @@ CAMPOS_CORROMPIDOS = {
         "equipamentos": "nenhum",
     },
     "geometria_do_modelo": {"corpos": [["a", None, 3], "lixo", [1] * 12], "arquivo": 7},
+    "sensores_do_modelo": {
+        "sensores": [{"nome": "S", "grandeza": 4, "limite": "L/0"}, "x"],
+        "linhas": [{"nome": "PP", "valores": ["a", None]}, {"nome": 3}],
+        "fy_MPa": -5,
+    },
     "registros_tecnicos": [
         5,
         "texto",

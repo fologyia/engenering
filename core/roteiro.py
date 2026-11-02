@@ -158,7 +158,8 @@ PASSOS: tuple[Passo, ...] = (
         SOLIDWORKS,
         None,
         "o estudo resolvido",
-        "<estudo>-<caso>-reacoes.csv (macro) e <caso>-forcas.csv (Listar, um por caso)",
+        "<estudo>-<caso>-reacoes.csv e <estudo>-gerenciador-resultados.csv (macro) e "
+        "<caso>-forcas.csv (Listar, um por caso)",
         (
             "Rode a macro exportar_casos_de_carga.bas (com a referência do Simulation marcada):"
             " saem as reações de todos os casos.",
@@ -199,6 +200,8 @@ PASSOS: tuple[Passo, ...] = (
             "caso, para quem projeta a fundação.",
             "Para detalhar uma base pela NBR 8800:2025 (6.7), leve os esforços de cálculo do pé do "
             "pilar à página Placas de base: placa, chumbadores, cortante e Tabela 18.",
+            "Na página Sensores do modelo, confira o quadro dos sensores (tensão, deslocamento, "
+            "FS), escolha o limite de cada deslocamento e registre no memorial.",
         ),
         "Nenhuma barra sem dados; o que não passa tem motivo entendido.",
     ),

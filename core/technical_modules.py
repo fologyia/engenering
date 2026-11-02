@@ -115,6 +115,21 @@ def _registrar_padrao() -> None:
             aliases=("Esforços do SolidWorks", "Verificação das barras do modelo"),
         ),
         ModuloTecnico(
+            id="sensores_do_modelo",
+            titulo="Sensores do modelo",
+            versao="1.0",
+            pagina="app_pages/sensores_do_modelo.py",
+            grupo_navegacao="Modelo SolidWorks",
+            ordem=15,
+            icone=":material/sensors:",
+            descricao=(
+                "O quadro dos sensores do gerenciador de casos de carga do SolidWorks (tensão, "
+                "deslocamento, fator de segurança) conferido contra o plano de cargas: escoamento "
+                "nas ELU, deslocamento nas ELS e o quadro completo no memorial."
+            ),
+            aliases=("Sensores do SolidWorks", "Resultados do gerenciador de casos de carga"),
+        ),
+        ModuloTecnico(
             id="modelo_3d",
             titulo="Modelo em 3D",
             versao="1.0",

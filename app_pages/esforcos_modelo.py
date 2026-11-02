@@ -38,6 +38,7 @@ from core import placa_base_pilares as pb
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import section_catalog as sc
+from core import sensores_do_modelo as sm
 from core import verificacao_barras as vb
 from core.project_store import obter_projeto_ativo
 
@@ -144,6 +145,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
     geometria_nova: ld.GeometriaDoModelo | None = None
     apoios_lidos: list[am.ApoiosDoCaso] = []
     fixacoes_lidas: am.FixacoesDoEstudo | None = None
+    sensores_lidos: sm.QuadroDeSensores | None = None
     for enviado in enviados or []:
         conteudo = enviado.getvalue()
         tipo_dos_apoios = am.tipo_do_arquivo(conteudo)
@@ -164,12 +166,12 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
                 st.error(f"{enviado.name}: {erro}", icon=":material/error:")
             continue
         if gs.e_quadro_dos_sensores(conteudo):
-            st.info(
-                f"{enviado.name} é o quadro dos sensores do gerenciador (o que a Vista de "
-                "resultados mostra): fica só para consulta. A verificação usa os arquivos "
-                "-forcas e -reacoes de cada caso.",
-                icon=":material/table_view:",
-            )
+            try:
+                sensores_lidos = sm.manter_ajustes(
+                    sm.ler_quadro(conteudo, enviado.name), sm.quadro_do_projeto(projeto)
+                )
+            except sm.QuadroInvalido as erro:
+                st.error(f"{enviado.name}: {erro}", icon=":material/error:")
             continue
         if tipo_da_macro == ld.TIPO_LISTA_DE_CORTE:
             st.info(
@@ -197,6 +199,14 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         )
         for aviso in geometria_nova.avisos:
             st.warning(f"{geometria_nova.arquivo}: {aviso}", icon=":material/warning:")
+    if sensores_lidos is not None:
+        st.success(
+            f"{sensores_lidos.arquivo}: quadro dos sensores — {len(sensores_lidos.sensores)} "
+            f"sensor(es) em {len(sensores_lidos.casos)} casos e "
+            f"{len(sensores_lidos.combinacoes)} combinações. Ao gravar, vai para a página "
+            "**Sensores do modelo** (conferência e memorial).",
+            icon=":material/sensors:",
+        )
     for apoios_do_caso in apoios_lidos:
         st.success(
             f"{apoios_do_caso.arquivo}: reações em {len(apoios_do_caso.nos)} nó(s) apoiado(s) do "
@@ -259,7 +269,11 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         )
     bloqueado = any(a.nivel == pc.NIVEL_ERRO for a in avisos_envio)
     if (
-        lidos or geometria_nova is not None or apoios_lidos or fixacoes_lidas is not None
+        lidos
+        or geometria_nova is not None
+        or apoios_lidos
+        or fixacoes_lidas is not None
+        or sensores_lidos is not None
     ) and st.button(
         "Gravar no projeto",
         type="primary",
@@ -295,6 +309,8 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
             if fixacoes_lidas is not None:
                 apoios_novos = am.com_fixacoes(apoios_novos, fixacoes_lidas)
             campos["apoios_do_modelo"] = am.para_dicionario(apoios_novos)
+        if sensores_lidos is not None:
+            campos[sm.CAMPO_DO_PROJETO] = sm.para_dicionario(sensores_lidos)
         if not problemas and gravar_campos_do_projeto(
             campos, "Esforços do modelo importados do SolidWorks"
         ):

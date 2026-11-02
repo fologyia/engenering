@@ -62,7 +62,8 @@ def macro_dos_casos_de_carga() -> bytes:
 
 def e_quadro_dos_sensores(conteudo: bytes) -> bool:
     """O ``<estudo>-gerenciador-resultados.csv`` da macro: o quadro dos sensores da Vista de
-    resultados (só para consulta — a verificação usa os ``-forcas`` e ``-reacoes``)."""
+    resultados, lido por :mod:`core.sensores_do_modelo` (a verificação das barras usa os
+    ``-forcas`` e ``-reacoes``)."""
     texto = em._normal(em._decodificar(conteudo[:600]))
     return "quadrodavistaderesultados" in texto
 

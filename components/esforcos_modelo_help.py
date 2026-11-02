@@ -15,8 +15,8 @@ AJUDA: dict[str, str] = {
         "editor de macros do SolidWorks: Ferramentas → Referências → marque “SOLIDWORKS Simulation "
         "<ano> type library”. Depois de Executar no gerenciador, com a aba Vista de resultados "
         "aberta: Ferramentas → Macro → Executar. Ela grava, na pasta da peça, as reações de cada "
-        "caso, a reação em cada apoio, as fixações e o quadro dos sensores (sensores não são "
-        "necessários). Para sair também as forças das vigas, antes de rodar selecione as vigas na "
+        "caso, a reação em cada apoio, as fixações e o quadro dos sensores (vai para a página "
+        "Sensores do modelo; sensores não são obrigatórios). Para sair também as forças das vigas, antes de rodar selecione as vigas na "
         "árvore do estudo do Simulation (a primeira, Shift + a última); se não sair, use o “Listar "
         "forças da viga” de cada caso, com o código no nome do arquivo. Envie tudo aqui, junto."
     ),

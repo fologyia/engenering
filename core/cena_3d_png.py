@@ -20,6 +20,33 @@ def _rgba(cor: str, opacidade: float = 1.0) -> tuple[int, int, int, int]:
     return (r, g, b, max(0, min(255, round(255 * opacidade))))
 
 
+def trechos_do_tracejado(
+    a: c3.Ponto2, b: c3.Ponto2, tracejado: str
+) -> list[tuple[c3.Ponto2, c3.Ponto2]]:
+    """A linha inteira ou, com ``tracejado`` (o ``stroke-dasharray`` do SVG, como "7 5"), os
+    traços — no tamanho nominal do desenho, igual ao SVG."""
+    try:
+        padrao = [float(x) for x in tracejado.replace(",", " ").split()]
+    except ValueError:
+        padrao = []
+    comprimento = math.hypot(b[0] - a[0], b[1] - a[1])
+    if not padrao or min(padrao) <= 0 or comprimento <= 0:
+        return [(a, b)]
+    if len(padrao) % 2:
+        padrao *= 2
+    ux, uy = (b[0] - a[0]) / comprimento, (b[1] - a[1]) / comprimento
+    trechos: list[tuple[c3.Ponto2, c3.Ponto2]] = []
+    s, i = 0.0, 0
+    while s < comprimento and len(trechos) < 5000:
+        passo = padrao[i % len(padrao)]
+        if i % 2 == 0:
+            fim = min(s + passo, comprimento)
+            trechos.append(((a[0] + ux * s, a[1] + uy * s), (a[0] + ux * fim, a[1] + uy * fim)))
+        s += passo
+        i += 1
+    return trechos
+
+
 def png_da_cena(desenho: c3.Desenho2D, *, escala: float = 2.0) -> bytes:
     """O desenho em PNG, ``escala`` vezes o tamanho nominal (2 = boa leitura no A4)."""
     k = max(0.5, min(4.0, escala))
@@ -68,8 +95,9 @@ def png_da_cena(desenho: c3.Desenho2D, *, escala: float = 2.0) -> bytes:
                 caneta.polygon(pontos, fill=_rgba(item.preenchimento, item.opacidade),
                                outline=_rgba(item.contorno, min(1.0, item.opacidade + 0.2)))  # fmt: skip
         elif isinstance(item, c3.Linha2D):
-            caneta.line([p(item.a), p(item.b)], fill=_rgba(item.cor, item.opacidade),
-                        width=max(1, round(item.largura * k)))  # fmt: skip
+            for a, b in trechos_do_tracejado(item.a, item.b, item.tracejado):
+                caneta.line([p(a), p(b)], fill=_rgba(item.cor, item.opacidade),
+                            width=max(1, round(item.largura * k)))  # fmt: skip
         elif isinstance(item, c3.Seta2D):
             seta(item.a, item.b, item.cor, 6.0 if item.larga else item.largura,
                  26.0 if item.larga else item.cabeca)  # fmt: skip

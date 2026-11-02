@@ -181,11 +181,13 @@ cargas que vão para o modelo.
    (`core/apoios_do_modelo.py`) na seção 8: **reação em cada apoio** (nós a menos de 10 cm formam um
    apoio; a barra que chega e a fixação pelo ponto; ação na fundação = −reação, N compressão +;
    engastado se tiver momento em algum caso), conferida com a reação total e com a soma por
-   fixação, em Excel/CSV para o engenheiro da fundação. Sensores não são usados pelo programa. A macro precisa da referência "SOLIDWORKS Simulation <ano> type library"
+   fixação, em Excel/CSV para o engenheiro da fundação. Os sensores vão para a página Sensores do modelo. A macro precisa da referência "SOLIDWORKS Simulation <ano> type library"
    marcada no editor do VBA (Ferramentas → Referências): sem ela, chamando o Simulation pelo nome,
    o `BeamBodyName` e o `LoadResultsOfPrimaryLoadCase` não responderam (erro 438) no SolidWorks do
-   usuário. O quadro dos sensores, se for enviado na página, é reconhecido e fica só para
-   consulta (`gs.e_quadro_dos_sensores`). Sem a macro: Listar forças da viga e Listar forças resultantes à mão, com o código
+   usuário. O quadro dos sensores (`<estudo>-gerenciador-resultados.csv`), enviado junto, é
+   gravado no projeto e vai para a página **Sensores do modelo** (`core/sensores_do_modelo.py`,
+   ver `docs/sensores_do_modelo.md`): conferência contra o plano, escoamento nas ELU,
+   deslocamento nas ELS e o capítulo do memorial. Sem a macro: Listar forças da viga e Listar forças resultantes à mão, com o código
    do caso no nome do arquivo (`caso_do_arquivo_sugerido`). A leitura descobre sozinha se o arquivo
    traz a força na ponta (o "Listar") ou já o esforço interno: no mesmo elemento, o axial e o torque
    das duas pontas têm de sair iguais.
