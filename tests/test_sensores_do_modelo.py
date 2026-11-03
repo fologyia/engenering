@@ -160,6 +160,11 @@ def test_arquivo_real_com_o_plano_do_projeto_acha_o_que_estava_errado():
         ("Força de reação", sm.FORCA),
         ("Momento fletor", sm.MOMENTO),
         ("Temperatura", sm.OUTRA),
+        ("Fator de segurança de flambagem1", sm.FATOR_DE_FLAMBAGEM),
+        ("Frequência1", sm.FREQUENCIA),
+        ("Propriedades de massa do Simulation1", sm.MASSA),
+        ("Deformação1", sm.DEFORMACAO),
+        ("FS mínimo", sm.FATOR_DE_SEGURANCA),
     ],
 )
 def test_grandeza_pelo_nome_do_sensor(nome, grandeza):

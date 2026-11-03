@@ -34,7 +34,9 @@ AJUDA: dict[str, str] = {
     "col_mede": (
         "Tensão = a de von Mises ou a do limite superior (axial + flexão) das vigas, verificada ao "
         "escoamento. Componente = uma parte da tensão (axial, flexão, cisalhamento), só mostrada. "
-        "Deslocamento, fator de segurança, força e momento como no sensor."
+        "Deslocamento, fator de segurança, força e momento como no sensor. Massa do estudo: "
+        "conferida com a lista de material. Deformação específica é o strain do SolidWorks, não o "
+        "deslocamento."
     ),
     "col_unidade": (
         "A unidade escolhida ao criar o sensor no SolidWorks (Tensão: quase sempre N/mm² = MPa; "
@@ -62,6 +64,12 @@ AJUDA: dict[str, str] = {
         "O quadro conferido contra o plano de cargas: casos e combinações que faltam, linhas com "
         "o mesmo resultado e combinações que não fecham com os coeficientes. Vermelho tira linhas "
         "da verificação; amarelo pede correção no SolidWorks ou no plano."
+    ),
+    "minimos": (
+        "Os sensores que o estudo estático precisa ter (a lista completa está em “Sensores mínimos "
+        "de cada estudo”, no alto da página). Tem: o quadro tem um sensor que atende. Confirmar: "
+        "pode ser, mas o nome não diz a direção do deslocamento. Falta: crie no SolidWorks — os "
+        "mínimos sem condição deixam a verificação de fora e aparecem no memorial."
     ),
     "sec_resultados": (
         "Nas combinações últimas (ELU), o escoamento pela tensão do modelo e pelo fator de "

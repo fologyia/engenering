@@ -1,8 +1,8 @@
 # Sensores do modelo
 
 Página **Sensores do modelo** (`app_pages/sensores_do_modelo.py`), núcleo
-`core/sensores_do_modelo.py`, gráfico `core/desenho_dos_sensores.py`, ajuda
-`components/sensores_do_modelo_help.py`.
+`core/sensores_do_modelo.py`, lista dos sensores mínimos `core/sensores_recomendados.py`, gráfico
+`core/desenho_dos_sensores.py`, ajuda `components/sensores_do_modelo_help.py`.
 
 ## De onde vem
 
@@ -19,7 +19,10 @@ para o projeto, campo `sensores_do_modelo`) ou direto na página Sensores do mod
 
 O nome sugere a grandeza (`sm.grandeza_sugerida`): tensão (von Mises ou limite superior das vigas,
 verificada ao escoamento), componente de tensão (axial, flexão, cisalhamento — só mostrada),
-deslocamento, fator de segurança, força, momento ou outra. A unidade padrão é a do SolidWorks em
+deslocamento, fator de segurança, força, momento, massa do estudo, frequência, fator de
+flambagem, deformação específica (o strain do SolidWorks, não o deslocamento) ou outra. O fator de
+segurança, o de flambagem e a frequência governam pelo menor valor; os outros, pelo maior em
+módulo. A unidade padrão é a do SolidWorks em
 português (N/mm², mm); o usuário confirma as duas na tabela. Uma linha `Unidade;;N/mm^2;mm;…` logo
 abaixo dos títulos, se um dia a macro gravar, é lida.
 
@@ -82,15 +85,47 @@ inteiro com o estado e a observação de cada linha, em tabelas de até 5 sensor
 sensor verificado, barra por combinação, a que governa escura e com o valor, as que ficaram fora em
 vermelho claro, o limite tracejado). Alertas do registro = achados de erro e de atenção.
 
-## Para ter mais do que o máximo do modelo
+## Sensores mínimos de cada estudo
 
-Cada sensor é o máximo (ou mínimo) de onde ele foi posto. Para o memorial ficar completo, crie
-sensores com nome claro:
+Cada sensor é o máximo (ou mínimo) de onde ele foi posto. A lista (`sr.RECOMENDADOS`, mostrada no
+alto da página, aberta enquanto não há quadro) diz, para cada estudo, o nome a dar (o programa
+reconhece), o caminho no SolidWorks (Dados do Simulation › quantidade › componente), o critério,
+onde pôr, a unidade, o valor para o Alerta do sensor e para que serve:
 
-* deslocamento **UY** num vértice no meio do vão de cada viga principal (flecha) e **UX/UZ** no topo
-  dos pilares (deslocamento horizontal), cada um com o seu limite;
-* tensão de von Mises (ou limite superior) por grupo de barras (pilares, vigas, contraventamento) e
-  nas chapas de ligação modeladas como casca/sólido;
-* fator de segurança mínimo do modelo.
+| Estudo | Nível | Sensor (nome sugerido) | No SolidWorks |
+|---|---|---|---|
+| Estático | Mínimo | Tensão barras | Tensão da viga › limite superior de axial e flexão, máximo do modelo |
+| Estático | Mínimo | Fator de segurança | Fator de segurança, mínimo do modelo |
+| Estático | Mínimo | Flecha vigas | Deslocamento › UY, **mínimo** sobre as vigas (com Y para cima a flecha é negativa) |
+| Estático | Mínimo, se há pilares | Deslocamento topo pilares | Deslocamento › URES, máximo sobre o topo dos pilares |
+| Estático | Mínimo, se há chapas | Tensão chapas | Tensão › von Mises, máximo sobre as cascas/sólidos |
+| Estático | Recomendado | Tensão vigas, Tensão pilares… | um sensor de tensão por grupo |
+| Estático | Recomendado | Massa do modelo | Propriedades de massa do Simulation › Massa |
+| Estático | Recomendado, se há conectores | Força parafusos | Força do conector |
+| Flambagem | Mínimo | Fator de flambagem modo 1 | Fator de segurança de flambagem, com a ELU que governa |
+| Flambagem | Recomendado | modos 2 e 3 | idem, estudo com ≥ 3 modos |
+| Frequência | Mínimo | Frequência modo 1 | Frequência (o primeiro modo vertical do piso) |
+| Frequência | Mínimo, se há equipamento | Frequência modo 1, 2, 3… | os modos até 1,5·Nm |
+| Frequência | Recomendado | modos 2 a 5 | estudo com ≥ 5 modos |
+
+Critérios citados: escoamento `f_y/γ_a1` (ABNT NBR 8800:2025); flecha e deslocamento lateral
+(critério Anglo, Tabelas 3 e 4); flambagem pelo α_cr do modo de deslocamento lateral, com
+`B₂ ≈ 1/(1 − 1/α_cr)`: α_cr ≥ 11 → pequena deslocabilidade (Δ₂/Δ₁ ≤ 1,10), 3,5 a 11 → média
+(≤ 1,40), abaixo de 3,5 → grande (4.10.4; os números saem dos limites de `core/structural_2d.py`);
+frequência do piso ≥ 4 Hz onde se caminha e nunca abaixo de 3 Hz (ABNT NBR 8800:2008, Anexo L,
+L.1.2 e L.3.2); equipamento: faixas de Ne/Nm do critério Anglo 5.7. A aba "As opções do
+SolidWorks" explica cada tipo e cada quantidade da lista do SolidWorks (Deformação, Forças de corpo
+livre, Térmico, Sensível ao fluxo de trabalho… não precisam).
+
+Flambagem e frequência são estudos à parte: o gerenciador de casos de carga é só do estático, e o
+quadro não traz esses valores.
+
+**Conferência** (`sm.conferir_minimo`, seção 3 da página): cada item do estudo estático fica
+*Tem*, *Confirmar* (deslocamento cujo nome não diz a direção — a direção vem do limite escolhido,
+Tabela 3 = vertical, Tabela 4 = horizontal, ou do nome: flecha/UY/viga × topo/UX/UZ/pilar) ou
+*Falta*. Faltar um mínimo sem condição (tensão das barras, FS, flecha) dá aviso na conferência e
+uma linha ALERTA nas verificações (a verificação fica de fora); os condicionais e os recomendados
+só aparecem na tabela. A massa do estudo é conferida com a dos itens da lista de material (sem o
+acréscimo): acima de 5 % de diferença é aviso.
 
 Um sensor num vértice dá um valor com sinal e linear: a superposição fecha exatamente.

@@ -58,6 +58,15 @@ def test_modulo_registrado_no_grupo_do_modelo():
 def test_sem_quadro_a_pagina_explica_de_onde_vem(banco_com_projeto):
     t = abrir()
     assert any("exportar_casos_de_carga" in c.value for c in t.caption)
+    # a lista dos sensores de cada estudo vem antes do quadro, aberta enquanto não há quadro
+    lista = next(  # com ícone, o AppTest dá o expander como status
+        e for e in (*t.expander, *t.status) if "Sensores mínimos de cada estudo" in e.label
+    )
+    assert lista.proto.expanded
+    textos = " ".join(m.value for m in t.markdown)
+    for nome in ("Tensão barras", "Fator de flambagem modo 1", "Frequência modo 1"):
+        assert nome in textos
+    assert "Sensível ao fluxo de trabalho" in textos
 
 
 def test_quadro_gravado_mostra_a_conferencia_e_registra(banco_com_projeto):
@@ -78,6 +87,8 @@ def test_quadro_gravado_mostra_a_conferencia_e_registra(banco_com_projeto):
     assert metricas["Desloc. máx. ELS (mm)"] == "1,176"
     erros = " ".join(e.value for e in t.error)
     assert "C50-ELSR, C52-ELSR a C72-ELSR" in erros
+    minimos = next(d.value for d in t.dataframe if "Sensor recomendado" in d.value.columns)
+    assert list(minimos["Situação"])[:3] == [sm.TEM, sm.TEM, sm.CONFIRMAR]
     limite_do_sensor = next(s for s in t.selectbox if str(s.key).startswith("sm_lim_"))
     assert limite_do_sensor.value == sm.L_SOBRE_X
     assert len(t.get("image")) == 1  # o gráfico

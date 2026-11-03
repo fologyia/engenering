@@ -16,8 +16,10 @@ from components.sensores_do_modelo_help import AJUDA
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_verificacoes_resumidas, texto_markdown
 from core import desenho_dos_sensores as dds
+from core import lista_de_material as lm
 from core import plano_de_cargas as pc
 from core import sensores_do_modelo as sm
+from core import sensores_recomendados as sr
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Sensores do modelo", ":material/sensors:")
@@ -40,6 +42,40 @@ ICONES = {
     sm.NIVEL_INFO: ":material/info:",
 }
 MOSTRAR = {sm.NIVEL_ERRO: st.error, sm.NIVEL_ATENCAO: st.warning, sm.NIVEL_INFO: st.info}
+CORES_DO_NIVEL = {
+    sr.MINIMO: "red",
+    sr.RECOMENDADO: "blue",
+    sr.SE_HOUVER: "orange",
+    sr.NAO_PRECISA: "gray",
+    sr.E_ESTE: "green",
+}
+
+
+def _selo(nivel: str) -> str:
+    return f":{CORES_DO_NIVEL.get(nivel, 'gray')}-badge[{texto_markdown(nivel)}]"
+
+
+def _mostrar_recomendados(estudo: str) -> None:
+    for r in sr.recomendados(estudo):
+        condicao = f" — {r.condicao}" if r.condicao else ""
+        onde = " · ".join(
+            x
+            for x in (
+                f"critério: {r.criterio}" if r.criterio != "—" else "",
+                f"onde: {r.onde}",
+                f"unidade: {r.unidade}" if r.unidade != "—" else "",
+            )
+            if x
+        )
+        partes = [
+            f"{_selo(r.nivel)} **{texto_markdown(r.titulo)}**{texto_markdown(condicao)}",
+            f"Nome no SolidWorks: **{texto_markdown(r.nome)}** · {texto_markdown(r.caminho)}",
+            texto_markdown(onde[:1].upper() + onde[1:]),
+        ]
+        if r.alerta != "—":
+            partes.append(f"Alerta do sensor: {texto_markdown(r.alerta)}")
+        partes.append(f":gray[{texto_markdown(r.para_que)}]")
+        st.markdown("  \n".join(partes))
 
 
 def _assinatura(q: sm.QuadroDeSensores) -> str:
@@ -47,6 +83,46 @@ def _assinatura(q: sm.QuadroDeSensores) -> str:
     texto = f"{q.arquivo}|{q.estudo}|{[s.nome for s in q.sensores]}|{q.linhas}"
     return hashlib.sha1(texto.encode("utf-8")).hexdigest()[:10]
 
+
+# ============================================================ os sensores de cada estudo
+with (
+    st.expander(
+        "Sensores mínimos de cada estudo (o que criar no SolidWorks)",
+        icon=":material/checklist:",
+        expanded=guardado.vazio,
+    ),
+    secao_protegida("Sensores mínimos de cada estudo"),
+):
+    abas = st.tabs(["Estático", "Flambagem", "Frequência", "As opções do SolidWorks"])
+    with abas[0]:
+        st.caption(
+            "O estudo com o gerenciador de casos de carga: é ele que vira o quadro desta página. "
+            "Use os nomes sugeridos (o programa reconhece o que cada sensor mede) e ligue o Alerta "
+            "do sensor com o valor indicado: o SolidWorks avisa na árvore quando passar."
+        )
+        _mostrar_recomendados(sr.ESTATICO)
+    with abas[1]:
+        st.caption(
+            "Um estudo de flambagem à parte, com as cargas da combinação ELU que governa. O "
+            "gerenciador de casos de carga é só do estático: este valor não vem no quadro."
+        )
+        _mostrar_recomendados(sr.FLAMBAGEM)
+    with abas[2]:
+        st.caption(
+            "Um estudo de frequência à parte. O gerenciador de casos de carga é só do estático: "
+            "estes valores não vêm no quadro."
+        )
+        _mostrar_recomendados(sr.FREQUENCIA)
+    with abas[3]:
+        for grupo in (sr.TIPO_DE_SENSOR, sr.QUANTIDADE_DE_DADOS):
+            st.markdown(f"**{grupo}**")
+            st.markdown(
+                "\n".join(
+                    f"- {_selo(o.uso)} **{texto_markdown(o.nome)}** — {texto_markdown(o.porque)}"
+                    for o in sr.OPCOES_DO_SOLIDWORKS
+                    if o.grupo == grupo
+                )
+            )
 
 # ============================================================ 1. o quadro
 quadro = guardado
@@ -227,7 +303,10 @@ with st.container(border=True), secao_protegida("2. O que cada sensor mede"):
         ):
             st.rerun()
 
-analise = sm.analisar(quadro, plano)
+massa_da_lista = (
+    lm.resumir(lm.lista_do_projeto(projeto)).massa_itens_kg if projeto is not None else None
+)
+analise = sm.analisar(quadro, plano, massa_da_lista_kg=massa_da_lista)
 
 # ============================================================ 3. conferência
 with st.container(border=True), secao_protegida("3. Conferência do quadro"):
@@ -248,6 +327,12 @@ with st.container(border=True), secao_protegida("3. Conferência do quadro"):
             f"**{texto_markdown(achado.titulo)}** — {texto_markdown(achado.texto)}",
             icon=ICONES.get(achado.nivel, ":material/info:"),
         )
+    st.markdown("**Sensores mínimos do estudo estático**", help=AJUDA["minimos"])
+    st.dataframe(
+        pd.DataFrame(sm.linhas_dos_minimos(analise), columns=list(sm.COLUNAS_MINIMOS)),
+        hide_index=True,
+        width="stretch",
+    )
 
 # ============================================================ 4. resultados
 with st.container(border=True), secao_protegida("4. Resultados"):

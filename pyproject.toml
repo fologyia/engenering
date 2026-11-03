@@ -175,6 +175,7 @@ files = [
     "core/vento_edificio_desenho.py",
     "core/vento_aberto_desenho.py",
     "core/sensores_do_modelo.py",
+    "core/sensores_recomendados.py",
     "core/desenho_dos_sensores.py",
     "core/vento_aberto_registro.py",
     "core/vento_estrutura_aberta.py",

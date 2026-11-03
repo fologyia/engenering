@@ -146,6 +146,9 @@ PASSOS: tuple[Passo, ...] = (
             " malha.",
             "Crie as cargas como diz a aba Cargas do estudo, com os nomes da convenção (PP, SC"
             " piso, W +X…).",
+            "Crie os sensores mínimos com os nomes sugeridos (lista no alto da página Sensores do"
+            " modelo): Tensão barras, Fator de segurança, Flecha vigas e Deslocamento topo"
+            " pilares.",
             "No Gerenciador de casos de carga: Carregar os dados de entrada (o CSV do passo 6);"
             " Executar.",
         ),

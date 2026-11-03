@@ -17,7 +17,10 @@ valor como a API do SOLIDWORKS devolve — na unidade do sensor, que o arquivo n
   ``1/Σ(|γ|/FS)`` (vale ponto a ponto, mesmo com dois aços);
 * nas ELU, o escoamento: ``σ ≤ f_y/γ_a1`` e ``FS ≥ γ_a1``; nas ELS, o deslocamento contra o limite
   escolhido para o sensor (critério Anglo, Tabelas 3 e 4, ou informado);
-* o registro do memorial leva as tabelas e o gráfico de cada sensor, combinação a combinação.
+* o registro do memorial leva as tabelas e o gráfico de cada sensor, combinação a combinação;
+* os sensores do quadro são conferidos contra o mínimo recomendado para o estudo estático
+  (``sensores_recomendados``): faltar um mínimo deixa uma verificação de fora, e a massa do
+  estudo é conferida com a da lista de material.
 
 Um sensor é o máximo (ou o mínimo) do modelo inteiro, ou de onde ele foi posto. A tensão elástica do
 modelo não verifica flambagem, flambagem lateral com torção nem a interação N + M da NBR 8800: isso
@@ -43,6 +46,7 @@ from core import exportacao_cargas as ex
 from core import gerenciador_solidworks as gs
 from core import load_combinations as comb
 from core import plano_de_cargas as pc
+from core import sensores_recomendados as sr
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import (
     STATUS_REGISTRO,
@@ -73,8 +77,24 @@ DESLOCAMENTO = "deslocamento"
 FATOR_DE_SEGURANCA = "fator de segurança"
 FORCA = "força"
 MOMENTO = "momento"
+MASSA = "massa"
+FREQUENCIA = "frequência"
+FATOR_DE_FLAMBAGEM = "fator de flambagem"
+DEFORMACAO = "deformação específica"
 OUTRA = "outra"
-GRANDEZAS = (TENSAO, COMPONENTE, DESLOCAMENTO, FATOR_DE_SEGURANCA, FORCA, MOMENTO, OUTRA)
+GRANDEZAS = (
+    TENSAO,
+    COMPONENTE,
+    DESLOCAMENTO,
+    FATOR_DE_SEGURANCA,
+    FORCA,
+    MOMENTO,
+    MASSA,
+    FREQUENCIA,
+    FATOR_DE_FLAMBAGEM,
+    DEFORMACAO,
+    OUTRA,
+)
 ROTULOS_GRANDEZA = {
     TENSAO: "Tensão (von Mises ou limite superior)",
     COMPONENTE: "Componente de tensão (axial, flexão, cisalhamento)",
@@ -82,6 +102,10 @@ ROTULOS_GRANDEZA = {
     FATOR_DE_SEGURANCA: "Fator de segurança",
     FORCA: "Força",
     MOMENTO: "Momento",
+    MASSA: "Massa do estudo",
+    FREQUENCIA: "Frequência (estudo de frequência)",
+    FATOR_DE_FLAMBAGEM: "Fator de flambagem (estudo de flambagem)",
+    DEFORMACAO: "Deformação específica (strain, sem unidade)",
     OUTRA: "Outra grandeza",
 }
 GRANDEZA_DO_ROTULO = {rotulo: g for g, rotulo in ROTULOS_GRANDEZA.items()}
@@ -102,6 +126,10 @@ UNIDADES: dict[str, dict[str, float]] = {
         "kgf·m": 9.80665e-3,
         "lbf·in": 1.129848290276167e-4,
     },
+    MASSA: {"kg": 1.0, "g": 1e-3, "t": 1e3, "lb": 0.45359237},
+    FREQUENCIA: {"Hz": 1.0, "rad/s": 1.0 / (2.0 * math.pi), "rpm": 1.0 / 60.0},
+    FATOR_DE_FLAMBAGEM: {"—": 1.0},
+    DEFORMACAO: {"—": 1.0},
     OUTRA: {"—": 1.0},
 }
 UNIDADE_DE_CALCULO = {
@@ -111,6 +139,10 @@ UNIDADE_DE_CALCULO = {
     FATOR_DE_SEGURANCA: "",
     FORCA: "kN",
     MOMENTO: "kN·m",
+    MASSA: "kg",
+    FREQUENCIA: "Hz",
+    FATOR_DE_FLAMBAGEM: "",
+    DEFORMACAO: "",
     OUTRA: "",
 }
 TODAS_AS_UNIDADES = tuple(dict.fromkeys(u for g in GRANDEZAS for u in UNIDADES[g]))
@@ -121,13 +153,23 @@ CASAS = {
     FATOR_DE_SEGURANCA: 2,
     FORCA: 3,
     MOMENTO: 3,
+    MASSA: 1,
+    FREQUENCIA: 2,
+    FATOR_DE_FLAMBAGEM: 2,
+    DEFORMACAO: 4,
     OUTRA: 4,
 }
+#: Os que governam pelo menor valor (o FS, o α_cr, a frequência própria).
+GOVERNA_O_MENOR = (FATOR_DE_SEGURANCA, FATOR_DE_FLAMBAGEM, FREQUENCIA)
 
 #: Pedaços do nome (sem acento, sem espaço, minúsculo) → grandeza, na ordem em que se testa.
 _PISTAS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (FATOR_DE_SEGURANCA, ("seguranca", "fatorminimo", "factorofsafety", "fos")),
+    (FATOR_DE_FLAMBAGEM, ("flamb", "buckl", "blf", "cargacritica")),
+    (FATOR_DE_SEGURANCA, ("seguranca", "fatorminimo", "factorofsafety", "fos", "fsmin")),
+    (FREQUENCIA, ("freq",)),
+    (MASSA, ("massa", "mass")),
     (DESLOCAMENTO, ("desloc", "displac", "flecha", "deflect")),
+    (DEFORMACAO, ("deforma", "strain", "estrn", "epsilon")),
     (FORCA, ("forca", "force", "reac")),
     (MOMENTO, ("moment",)),
     (
@@ -165,6 +207,13 @@ _UNIDADE_DO_TEXTO = {
     "n·mm": "N·mm",
     "kgf.m": "kgf·m",
     "lbf.in": "lbf·in",
+    "kg": "kg",
+    "g": "g",
+    "t": "t",
+    "lb": "lb",
+    "hz": "Hz",
+    "rad/s": "rad/s",
+    "rpm": "rpm",
 }
 
 
@@ -710,6 +759,100 @@ def ligar_ao_plano(plano: pc.PlanoDeCargas | None, quadro: QuadroDeSensores) -> 
 
 
 # ---------------------------------------------------------------------------------------------
+# Os sensores mínimos do estudo estático
+# ---------------------------------------------------------------------------------------------
+TEM = "Tem"
+CONFIRMAR = "Confirmar"
+FALTA = "Falta"
+VERTICAL = "vertical"
+HORIZONTAL = "horizontal"
+#: Diferença entre a massa do estudo e a da lista de material acima da qual se avisa.
+TOLERANCIA_DA_MASSA = 0.05
+
+
+@dataclass(frozen=True)
+class ItemDoMinimo:
+    """Um sensor recomendado e o que o quadro tem dele."""
+
+    recomendado: sr.SensorRecomendado
+    situacao: str  # TEM, CONFIRMAR ou FALTA
+    sensores: tuple[str, ...] = ()
+    nota: str = ""
+
+
+def _tem_pista(nome: str, pistas: Iterable[str]) -> bool:
+    n = em._normal(nome)
+    return any(p in n for p in pistas)
+
+
+def direcao_do_deslocamento(s: Sensor) -> str:
+    """VERTICAL, HORIZONTAL ou "" — pelo limite escolhido (Tabela 3 ou 4 do critério Anglo) ou,
+    sem ele, pelo nome ("Flecha vigas", "UY1", "Deslocamento topo pilares", "UX"…)."""
+    anglo = s.limite.anglo
+    if anglo is not None:
+        return HORIZONTAL if anglo in ca.DESLOCAMENTOS_HORIZONTAIS else VERTICAL
+    texto = em._sem_acento(s.nome).casefold()
+    n = em._normal(s.nome)
+    if any(p in n for p in ("horiz", "lateral")):
+        return HORIZONTAL
+    if any(p in n for p in ("vert", "flecha")):
+        return VERTICAL
+    if re.search(r"\bu[xz](\d|\b)", texto):
+        return HORIZONTAL
+    if re.search(r"\buy(\d|\b)", texto):
+        return VERTICAL
+    if any(p in n for p in sr.PISTAS_HORIZONTAL):
+        return HORIZONTAL
+    if any(p in n for p in sr.PISTAS_VERTICAL):
+        return VERTICAL
+    return ""
+
+
+def conferir_minimo(quadro: QuadroDeSensores) -> tuple[ItemDoMinimo, ...]:
+    """Cada sensor recomendado para o estudo estático e quais sensores do quadro o atendem."""
+    sensores = quadro.sensores
+
+    def de(grandeza: str) -> list[Sensor]:
+        return [s for s in sensores if s.grandeza == grandeza]
+
+    chapas = [s for s in de(TENSAO) if _tem_pista(s.nome, sr.PISTAS_CHAPA)]
+    barras = [s for s in de(TENSAO) if s not in chapas]
+    deslocamentos = de(DESLOCAMENTO)
+    verticais = [s for s in deslocamentos if direcao_do_deslocamento(s) == VERTICAL]
+    horizontais = [s for s in deslocamentos if direcao_do_deslocamento(s) == HORIZONTAL]
+    sem_direcao = [s for s in deslocamentos if not direcao_do_deslocamento(s)]
+    conectores = [s for s in de(FORCA) if _tem_pista(s.nome, sr.PISTAS_CONECTOR)]
+
+    def item(chave: str, achados: Sequence[Sensor], minimo: int = 1) -> ItemDoMinimo:
+        nomes = tuple(s.nome for s in achados)
+        return ItemDoMinimo(sr.recomendado(chave), TEM if len(nomes) >= minimo else FALTA, nomes)
+
+    flecha = item("flecha_vigas", verticais)
+    if flecha.situacao == FALTA and sem_direcao:
+        nomes = tuple(s.nome for s in sem_direcao)
+        flecha = replace(
+            flecha,
+            situacao=CONFIRMAR,
+            sensores=nomes,
+            nota=f"o nome não diz a direção de {lista_curta(nomes, 3)}: escolha o limite na seção "
+            "2 (vigas, Tabela 3; colunas, Tabela 4) para o programa saber o que ele mede",
+        )
+    grupos = item("tensao_por_grupo", barras, minimo=2)
+    if grupos.situacao == FALTA and len(barras) == 1:
+        grupos = replace(grupos, nota="um sensor só, para todas as barras")
+    return (
+        item("tensao_barras", barras),
+        item("fator_de_seguranca", de(FATOR_DE_SEGURANCA)),
+        flecha,
+        item("deslocamento_topo", horizontais),
+        item("tensao_chapas", chapas),
+        grupos,
+        item("massa", de(MASSA)),
+        item("forca_conector", conectores),
+    )
+
+
+# ---------------------------------------------------------------------------------------------
 # Análise
 # ---------------------------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -753,6 +896,7 @@ class AnaliseDosSensores:
     fy_origem: str
     fy_aparente: FyAparente | None
     verificacoes: tuple[Verificacao, ...]
+    minimos: tuple[ItemDoMinimo, ...] = ()
 
     @property
     def status(self) -> str:
@@ -790,7 +934,7 @@ def _n(valor: float, casas: int = 2) -> str:
 def formatar(valor: float | None, grandeza: str) -> str:
     if valor is None:
         return "—"
-    if grandeza == OUTRA:
+    if grandeza in (OUTRA, DEFORMACAO):
         return f"{valor:.4g}".replace(".", ",")
     return _n(valor, CASAS.get(grandeza, 3))
 
@@ -875,7 +1019,7 @@ def _extremo(
     validos = [(nome, v) for nome, v in valores if v is not None]
     if not validos:
         return None
-    if quadro.sensores[k].grandeza == FATOR_DE_SEGURANCA:
+    if quadro.sensores[k].grandeza in GOVERNA_O_MENOR:
         nome, valor = min(validos, key=lambda par: par[1])
     else:
         nome, valor = max(validos, key=lambda par: abs(par[1]))
@@ -887,7 +1031,14 @@ def _texto_do_aco(fy: float) -> str:
     return f"{_n(fy, 0)} MPa" + (f" ({nome}?)" if nome else "")
 
 
-def analisar(quadro: QuadroDeSensores, plano: pc.PlanoDeCargas | None = None) -> AnaliseDosSensores:
+def analisar(
+    quadro: QuadroDeSensores,
+    plano: pc.PlanoDeCargas | None = None,
+    *,
+    massa_da_lista_kg: float | None = None,
+) -> AnaliseDosSensores:
+    """``massa_da_lista_kg``: a massa dos itens da lista de material (sem o acréscimo), para
+    conferir a massa do estudo."""
     ligacao = ligar_ao_plano(plano, quadro)
     achados: list[Achado] = [Achado(NIVEL_ATENCAO, "Ao ler o arquivo", a) for a in quadro.avisos]
     presentes = {em._normal(linha.nome) for linha in quadro.casos}
@@ -1096,6 +1247,53 @@ def analisar(quadro: QuadroDeSensores, plano: pc.PlanoDeCargas | None = None) ->
             )
         )
 
+    # ------------------------------------------------ os sensores mínimos
+    minimos = conferir_minimo(quadro)
+    faltam_minimos = [m for m in minimos if m.situacao == FALTA and m.recomendado.obrigatorio]
+    if faltam_minimos:
+        achados.append(
+            Achado(
+                NIVEL_ATENCAO,
+                "Sensores mínimos que faltam no estudo",
+                "; ".join(
+                    f"{m.recomendado.titulo} — crie “{m.recomendado.nome}” "
+                    f"({m.recomendado.caminho})"
+                    for m in faltam_minimos
+                )
+                + ". Sem eles a verificação correspondente fica de fora: a lista completa está "
+                "em “Sensores mínimos de cada estudo”, no alto da página.",
+            )
+        )
+
+    # ------------------------------------------------ massa do estudo × lista de material
+    massa_lista = _positivo(massa_da_lista_kg)
+    k_massa = next((k for k, s in enumerate(quadro.sensores) if s.grandeza == MASSA), None)
+    if massa_lista is not None and k_massa is not None:
+        massa = next(
+            (v for linha in quadro.linhas if (v := quadro.valor(linha, k_massa)) is not None), None
+        )
+        if massa is not None and massa > 0:
+            diferenca = massa / massa_lista - 1.0
+            texto = (
+                f"O estudo tem {_n(massa, 1)} kg e a lista de material {_n(massa_lista, 1)} kg "
+                f"(sem o acréscimo): {'+' if diferenca >= 0 else '−'}{_n(abs(100 * diferenca), 1)} %."
+            )
+            if abs(diferenca) > TOLERANCIA_DA_MASSA:
+                achados.append(
+                    Achado(
+                        NIVEL_ATENCAO,
+                        "A massa do estudo não bate com a lista de material",
+                        texto
+                        + " O peso próprio do SolidWorks é essa massa: confira corpos excluídos da "
+                        "análise, material sem densidade, peças fora da lista ou a lista "
+                        "desatualizada.",
+                    )
+                )
+            else:
+                achados.append(
+                    Achado(NIVEL_INFO, "A massa do estudo bate com a lista de material", texto)
+                )
+
     # ------------------------------------------------ σ·FS → f_y
     k_tensao = next((k for k, s in enumerate(quadro.sensores) if s.grandeza == TENSAO), None)
     k_fs = next(
@@ -1248,6 +1446,21 @@ def analisar(quadro: QuadroDeSensores, plano: pc.PlanoDeCargas | None = None) ->
             )
 
     # ------------------------------------------------ o que deixa o quadro incompleto
+    for m in faltam_minimos:
+        r = m.recomendado
+        verificacoes.append(
+            Verificacao(
+                f"{r.titulo} — sem sensor no estudo",
+                None,
+                None,
+                "",
+                "Sensores mínimos do estudo estático",
+                f"não verificado: falta o sensor “{r.nome}” ({r.caminho}, {r.criterio}, em "
+                f"{r.onde})",
+                status="ALERTA",
+                tipo="limite",
+            )
+        )
     if fora or ligacao.faltam:
         partes = []
         if fora:
@@ -1307,6 +1520,7 @@ def analisar(quadro: QuadroDeSensores, plano: pc.PlanoDeCargas | None = None) ->
         fy_origem=fy_origem,
         fy_aparente=fy_aparente,
         verificacoes=tuple(verificacoes),
+        minimos=minimos,
     )
 
 
@@ -1340,6 +1554,23 @@ def _valor_do_extremo(a: AnaliseDosSensores, k: int, grupo: str) -> str:
 
 
 COLUNAS_RESUMO = ("Sensor", "Mede", "Unidade", "Pior nas ELU", "Pior nas ELS", "Pior nos casos")
+COLUNAS_MINIMOS = ("Sensor recomendado", "Situação", "No quadro", "Nível", "O que fazer")
+
+
+def linhas_dos_minimos(a: AnaliseDosSensores) -> list[list[str]]:
+    """A conferência dos sensores mínimos do estudo estático, para a tela."""
+    linhas = []
+    for m in a.minimos:
+        r = m.recomendado
+        nivel = f"{r.nivel} ({r.condicao})" if r.condicao else r.nivel
+        if m.nota:
+            fazer = m.nota[:1].upper() + m.nota[1:]
+        elif m.situacao == FALTA:
+            fazer = f"Crie “{r.nome}”: {r.caminho}"
+        else:
+            fazer = "—"
+        linhas.append([r.titulo, m.situacao, ", ".join(m.sensores) or "—", nivel, fazer])
+    return linhas
 
 
 def linhas_do_resumo(a: AnaliseDosSensores) -> list[list[str]]:
