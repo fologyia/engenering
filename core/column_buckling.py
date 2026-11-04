@@ -11,7 +11,9 @@ Uma única rodada calcula, para a mesma barra:
 * **flexão** em x e em y — FLT, FLM e FLA, com o limite ``1,5·W·f_y`` — e os momentos
   amplificados por ``B_1`` com o comprimento real da barra no plano de flexão (K = 1);
 * a **interação N + M_x + M_y numa única equação** (NBR 5.5.1.2; AISC H1-1);
-* o **critério Anglo** AA-BR-DPST-DR-0001: esbeltez limite (8.3) e espessuras mínimas (8.8).
+* o **critério Anglo** AA-BR-DPST-DR-0001: esbeltez limite (8.3) e espessuras mínimas (8.8);
+* nas **barras compostas** (:mod:`core.perfis_compostos`), a distância e a quantidade de espaçadores
+  e a redução ``N_e,m`` da flexão em y, que entra na flexo-torção das duas cantoneiras em T.
 
 As fórmulas estão em :mod:`core.column_design` (porte do módulo de referência, validado contra o
 AISC Design Guide 29 e o exemplo do programa). Este módulo as encadeia, monta a tabela de
@@ -30,6 +32,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from core import column_design as cd
+from core import perfis_compostos as pc
 from core.column_design import Secao
 from core.steel_sections import (
     PerfilAco,
@@ -319,7 +322,11 @@ NOMES_GRUPO = {
 #: O que esta verificação deliberadamente não cobre.
 FORA_DO_ESCOPO = (
     "Cantoneira simples, com regras próprias de esbeltez e excentricidade (NBR 5.3.5.4).",
-    "Barras compostas (NBR 5.3.6, N_e,m).",
+    "Barra composta de outro arranjo: perfis diferentes, mais de dois, ou com treliçado e "
+    "presilhas (NBR 5.3.6.4).",
+    "M_Rd de barra composta: com momento aplicado, informe M_Rd calculado por fora.",
+    "Dimensionamento dos espaçadores e dos seus parafusos ou soldas: o programa dá a distância e a "
+    "quantidade; a força neles a norma não fixa.",
     "Cisalhamento na barra (NBR 5.4.3): só é avisado quando há mão-francesa ou força transversal.",
     "B₂ de um andar com várias colunas (ΣN_Sd, ΣH_Sd e Δh, Anexo D): aqui o B₂ e o desaprumo são "
     "os da coluna isolada, pelo apoio escolhido; num pórtico, use os da análise da estrutura.",
@@ -353,6 +360,26 @@ REGRAS_B1 = (
     "pede análise rigorosa (4.9.7.2) e o resultado fica em ALERTA.",
     "Momentos que já vêm de uma análise de 2ª ordem com as imperfeições: marque a opção e só o "
     "B₁ é aplicado.",
+)
+
+REGRAS_COMPOSTA = (
+    "A esbeltez da barra (K·L/r) é a do conjunto, atuando como uma unidade, nos dois eixos; o limite "
+    "de 200 vale para ela (NBR 8800:2008 5.3.4.1; NBR 8800:2025 5.3.7.1).",
+    "Só a flambagem em torno de y faz um perfil escorregar em relação ao outro: é ela que carrega "
+    "as ligações e sofre a redução N_e,m. Em torno de x não há cortante entre os perfis.",
+    "Duas cantoneiras em T são uma seção monossimétrica: o N_ey já reduzido entra na flexo-torção "
+    "(NBR 5.3.5.2; AISC E4), com N_ez = G·J/r₀², porque o C_w é desprezível.",
+    "ℓ é a distância entre as ligações, r_mín o menor raio de giração de um perfil sozinho e, com n "
+    "espaçadores igualmente espaçados, ℓ = L/(n + 1).",
+    "Limite de ℓ/r_mín: 3/4 da maior esbeltez do conjunto (NBR 8800:2025 5.3.6.1; AISC E6.2) ou "
+    "1/2 (NBR 8800:2008 5.3.4.2). Pelo menos dois espaçadores nas três normas.",
+    "Parafusos com aperto normal nos espaçadores: N_e,m = N_e,o·(L/r)₀²/[(L/r)₀² + (ℓ/r_mín)²].",
+    "Solda ou parafusos protendidos: N_e,m = N_e,o até ℓ/r_mín = 40; acima, com K_i·ℓ/r_mín no lugar "
+    "de ℓ/r_mín. K_i = 0,50 (cantoneiras em T), 0,75 (U em forma de I) e 0,86 (os outros).",
+    "NBR 8800:2025 e AISC: as ligações das pontas da barra têm de ser soldadas ou com parafusos "
+    "protendidos (Classe A ou B); fora disso a norma não dá a resistência. A NBR 8800:2008 não "
+    "reduz N_e nem traz essa exigência.",
+    "Torção com cada perfil trabalhando sozinho (J e C_w somados), a favor da segurança.",
 )
 
 EXPLICACAO_FLT = {
@@ -764,6 +791,8 @@ def categoria_espessura_anglo(
 
     ``(None, None)`` para tubos, barras maciças e seções genéricas: a tabela da Anglo não os cobre.
     """
+    if secao.tipo == pc.TIPO:
+        return secao.dims["categoria_anglo"], secao.dims["t_min"]
     if secao.tipo in {"I", "U"}:
         t = min(secao.dims["tf"], secao.dims["tw"])
         if soldado or secao.dims.get("soldado"):
@@ -821,6 +850,7 @@ class EntradaColuna:
     deslocavel_x: bool = False  # flexão em torno de x com uma ponta que se desloca (B₂, desaprumo)
     deslocavel_y: bool = False
     momentos_de_segunda_ordem: bool = False  # já com P-Δ e imperfeições: só o B₁
+    ligacoes: pc.LigacoesDaComposta | None = None  # barra composta; sem isto, o mínimo da norma
 
 
 @dataclass(frozen=True)
@@ -852,6 +882,7 @@ class ResultadoColuna:
     b2_y: float = 1.0
     momento_x_imperfeicao_kNm: float = 0.0  # desaprumo, já somado ao momento de 1ª ordem
     momento_y_imperfeicao_kNm: float = 0.0
+    composta: pc.AvaliacaoDasLigacoes | None = None  # só nas barras compostas
 
     @property
     def reprovadas(self) -> tuple[Verificacao, ...]:
@@ -946,6 +977,78 @@ def _linha_bloqueio(nome: str, referencia: str, texto: str) -> Verificacao:
     return Verificacao(nome, None, None, "—", referencia, texto, status="NÃO OK", tipo="limite")
 
 
+def avaliar_ligacoes(entrada: EntradaColuna) -> pc.AvaliacaoDasLigacoes | None:
+    """A distância entre os espaçadores da barra composta; ``None`` nas outras seções."""
+    sec = entrada.secao
+    if sec.tipo != pc.TIPO:
+        return None
+    ligacoes = entrada.ligacoes or pc.LigacoesDaComposta(max(entrada.Lx_mm, entrada.Ly_mm))
+    return pc.avaliar(
+        sec,
+        ligacoes,
+        entrada.kx * entrada.Lx_mm / sec.rx,
+        entrada.ky * entrada.Ly_mm / sec.ry,
+        entrada.norma,
+    )
+
+
+def _limites_da_composta(lig: pc.AvaliacaoDasLigacoes, bloqueios: list[str]) -> list[Verificacao]:
+    """As exigências da norma para as ligações entre os perfis."""
+    norma = lig.norma
+    referencia = pc.REFERENCIA_DO_LIMITE[norma]
+    fracao = pc.TEXTO_DA_FRACAO[norma]
+    linhas = [
+        Verificacao(
+            f"Distância entre espaçadores: ℓ/r_mín ≤ {fracao}·(L/r)₀",
+            lig.esbeltez_da_peca,
+            lig.limite_da_peca,
+            "—",
+            referencia,
+            f"ℓ/r_mín = {lig.espacamento_mm:.0f}/{lig.r_min_mm:.1f} = {lig.esbeltez_da_peca:.1f}; "
+            f"limite {fracao}·{lig.esbeltez_do_conjunto:.1f} = {lig.limite_da_peca:.1f}; "
+            f"ℓ máx. = {lig.espacamento_maximo_mm:.0f} mm",
+            tipo="limite",
+        ),
+        Verificacao(
+            f"Quantidade de espaçadores: n ≥ {pc.ESPACADORES_MINIMOS}",
+            None,
+            None,
+            "—",
+            referencia,
+            f"n = {lig.quantidade}, igualmente espaçados: ℓ = {lig.comprimento_mm:.0f}/"
+            f"({lig.quantidade} + 1) = {lig.espacamento_mm:.0f} mm; mínimo para o limite de ℓ: "
+            f"{lig.quantidade_minima}",
+            status="OK" if lig.tem_quantidade_minima else "NÃO OK",
+            tipo="limite",
+        ),
+    ]
+    if lig.pede_pontas_rigidas:
+        nome = "Ligações das pontas da barra composta"
+        referencia_pontas = pc.REFERENCIA_DAS_PONTAS[norma]
+        if lig.pontas_rigidas:
+            linhas.append(
+                Verificacao(
+                    nome,
+                    None,
+                    None,
+                    "—",
+                    referencia_pontas,
+                    "Soldadas ou com parafusos protendidos (Classe A ou B)",
+                    status="OK",
+                    tipo="limite",
+                )  # fmt: skip
+            )
+        else:
+            motivo = (
+                "As pontas com parafusos de aperto normal ficam fora do que a norma cobre: solde "
+                "ou use parafusos protendidos (Classe A ou B), ou obtenha N_e por análise de "
+                "estabilidade (NBR 5.3.6.4)."
+            )
+            bloqueios.append(f"{nome}: {motivo}")
+            linhas.append(_linha_bloqueio(nome, referencia_pontas, motivo))
+    return linhas
+
+
 def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
     """Verifica a barra inteira — todos os eixos, todos os modos e os dois momentos juntos."""
     _validar(entrada)
@@ -974,9 +1077,13 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         linhas.append(_linha_bloqueio(nome, referencia, motivo))
 
     # ------------------------------------------------------------------ compressão
+    composta = avaliar_ligacoes(entrada)
+    fator_ney = 1.0 if composta is None else composta.fator_de_reducao
     comp: dict[str, Any] | None = None
     try:
-        comp = cd.resist_compressao(sec, fy, kxlx, kyly, kzlz, norma, e_mod, g_mod, gama)
+        comp = cd.resist_compressao(
+            sec, fy, kxlx, kyly, kzlz, norma, e_mod, g_mod, gama, fator_Ney=fator_ney
+        )
     except ValueError as erro:
         bloquear("Compressão — flambagem local", f"{ref_norma} (flambagem local)", str(erro))
 
@@ -1018,6 +1125,8 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         for categoria, linha in zip(entrada.espessuras_anglo or {}, anglo[1:], strict=True):
             rotulo = ROTULOS_ESPESSURA_ANGLO.get(categoria, categoria)
             linha.nome = f"Espessura mínima — {rotulo}"
+        if composta is not None:
+            anglo.extend(_limites_da_composta(composta, bloqueios))
         if norma != "NBR8800_2008" and (entrada.kx != 1.0 or entrada.ky != 1.0):
             texto_k = (
                 "Com o método da análise direta o comprimento efetivo é o real (K = 1). Mantenha "
@@ -1061,6 +1170,7 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
             avisos=avisos,
             cb_usado=entrada.Cb,
             lb_usado=entrada.Lb_mm or ly,
+            composta=composta,
         )
 
     ne_modos: dict[str, float] = comp["modos"]
@@ -1079,12 +1189,23 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         _linha_info(
             "N_ey — flambagem elástica por flexão em y",
             None,
-            comp["Ney"],
+            comp["Ney0"],
             "kN",
             ref_e,
             f"π²·E·Iy/(Ky·Ly)² = π²·{e_mod:.0f}·{sec.Iy:.4g}/{kyly:.0f}²",
         )
     )
+    if composta is not None:
+        linhas.append(
+            _linha_info(
+                "N_e,m — flexão em y com as ligações entre os perfis",
+                None,
+                comp["Ney"],
+                "kN",
+                pc.REFERENCIA_DA_REDUCAO[norma],
+                composta.formula_da_reducao,
+            )
+        )
     if math.isfinite(comp["Nez"]):
         kzlz_usado = kzlz if kzlz else max(kxlx, kyly)
         linhas.append(
@@ -1107,7 +1228,7 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
                     "kN",
                     ref_e,
                     f"x0 = {sec.x0:.1f} mm, y0 = {sec.y0:.1f} mm: a flexão no plano de simetria "
-                    "se acopla à torção",
+                    "se acopla à torção" + (" (com N_e,m)" if composta is not None else ""),
                 )
             )
     linhas.append(
@@ -1515,6 +1636,7 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
         avisos=avisos,
         cb_usado=cb,
         lb_usado=lb,
+        composta=composta,
     )
 
 
@@ -1538,6 +1660,7 @@ def _fechar(
     avisos: list[str],
     cb_usado: float,
     lb_usado: float,
+    composta: pc.AvaliacaoDasLigacoes | None = None,
 ) -> ResultadoColuna:
     resistencia = [v for v in linhas if v.tipo == "resistencia" and v.aproveitamento is not None]
     if resistencia:
@@ -1575,6 +1698,7 @@ def _fechar(
         b2_y=momentos["y"].get("b2", 1.0),
         momento_x_imperfeicao_kNm=momentos["x"].get("m_imp", 0.0),
         momento_y_imperfeicao_kNm=momentos["y"].get("m_imp", 0.0),
+        composta=composta,
     )
 
 
@@ -1622,6 +1746,54 @@ def tabela_elementos(
             }
         )
     return tabela
+
+
+def opcoes_de_espacadores(entrada: EntradaColuna, maximo: int = 6) -> list[dict[str, Any]]:
+    """O que cada quantidade de espaçadores dá, a partir do mínimo que a norma aceita.
+
+    Para na primeira linha que não muda mais N_c,Rd (as ligações deixaram de reduzir N_ey, ou outro
+    modo governa) ou depois de ``maximo`` linhas.
+    """
+    base = avaliar_ligacoes(entrada)
+    if base is None:
+        return []
+    sec = entrada.secao
+    kxlx, kyly = entrada.kx * entrada.Lx_mm, entrada.ky * entrada.Ly_mm
+    kzlz: float | None = None
+    if entrada.kz is not None or entrada.Lz_mm is not None:
+        kzlz = (entrada.kz or 1.0) * (entrada.Lz_mm or max(entrada.Lx_mm, entrada.Ly_mm))
+    ligacoes = pc.LigacoesDaComposta(base.comprimento_mm, base.ligacao, base.pontas_rigidas)
+    linhas: list[dict[str, Any]] = []
+    for n in range(base.quantidade_minima, base.quantidade_minima + maximo):
+        opcao = pc.avaliar(
+            sec, replace(ligacoes, quantidade=n), kxlx / sec.rx, kyly / sec.ry, entrada.norma
+        )
+        try:
+            comp = cd.resist_compressao(
+                sec, entrada.fy_MPa, kxlx, kyly, kzlz, entrada.norma, entrada.E_MPa, entrada.G_MPa,
+                entrada.gama_a1, fator_Ney=opcao.fator_de_reducao,
+            )  # fmt: skip
+        except ValueError:
+            return linhas
+        linhas.append(
+            {
+                "Espaçadores": n,
+                "ℓ (mm)": opcao.espacamento_mm,
+                "ℓ/r_mín": opcao.esbeltez_da_peca,
+                "N_e,m/N_e,o": opcao.fator_de_reducao,
+                "N_c,Rd (kN)": comp["Nc_Rd"],
+                "Modo que governa": comp["modo"],
+            }
+        )
+        sem_ganho = len(linhas) > 1 and comp["Nc_Rd"] <= linhas[-2]["N_c,Rd (kN)"] * (1 + 1e-6)
+        if opcao.fator_de_reducao >= 1.0 or sem_ganho:
+            break
+    return linhas
+
+
+def nomes_de_perfis_U(perfis: Mapping[str, PerfilAco]) -> list[str]:
+    """Os perfis U laminados de um catálogo, para a barra composta."""
+    return [nome for nome, perfil in perfis.items() if familia_do_perfil(perfil) in _FAMILIAS_U]
 
 
 def comparar_normas(entrada: EntradaColuna) -> list[dict[str, Any]]:
@@ -1722,6 +1894,17 @@ def registro_coluna(
         "espessuras_anglo_mm": dict(entrada.espessuras_anglo or {}),
         **dict(contexto or {}),
     }
+    composta = resultado.composta
+    if composta is not None:
+        entradas.update(
+            {
+                "arranjo_da_composta": composta.arranjo,
+                "afastamento_s_mm": sec.dims["s"],
+                "ligacao_dos_espacadores": composta.ligacao,
+                "pontas_soldadas_ou_protendidas": composta.pontas_rigidas,
+                "quantidade_de_espacadores": composta.quantidade,
+            }
+        )
     entradas = {chave: valor for chave, valor in entradas.items() if valor is not None}
 
     resultados: dict[str, Any] = {
@@ -1781,6 +1964,19 @@ def registro_coluna(
             }
             for item in tabela_elementos(sec, entrada.fy_MPa, norma, comp, entrada.E_MPa)
         ]
+    if composta is not None:
+        resultados.update(
+            {
+                "espacamento_adotado_mm": composta.espacamento_mm,
+                "espacamento_maximo_mm": composta.espacamento_maximo_mm,
+                "quantidade_minima_de_espacadores": composta.quantidade_minima,
+                "esbeltez_da_peca": composta.esbeltez_da_peca,
+                "limite_da_esbeltez_da_peca": composta.limite_da_peca,
+                "r_min_da_peca_mm": composta.r_min_mm,
+                "K_i": composta.k_i,
+                "N_e_m_sobre_N_e_o": composta.fator_de_reducao,
+            }
+        )
     if aprov_finito is not None:
         # A Central de validação lê esta chave: acima de 1,0 bloqueia a emissão.
         resultados["utilizacao_maxima"] = aprov_finito
@@ -1825,6 +2021,12 @@ def registro_coluna(
             + "; momentos amplificados por B₁ com K = 1 no plano de flexão (e, na coluna deslocável, "
             "pelo B₂ da coluna isolada, com o desaprumo somado); M_Rd pelo menor entre FLT, "
             "FLM e FLA, limitado a 1,5·W·f_y; interação 5.5.1.2 com M_x e M_y na mesma equação."
+            + (
+                ""
+                if composta is None
+                else f" Barra composta ({composta.arranjo}): espaçadores a cada "
+                f"{composta.espacamento_mm:.0f} mm, com a redução de N_ey pelas ligações."
+            )
         ),
         premissas=[
             "Barra prismática isolada, com efeitos de 2ª ordem locais (B₁); no plano em que uma "
@@ -1836,8 +2038,17 @@ def registro_coluna(
                 else "N_Sd obtido por majoração das ações características (NBR 8681 / NBR 8800 4.7)."
             ),
             texto_resistencia,
-            "Cisalhamento (5.4.3), cantoneira simples, barras compostas e perfis formados a frio "
-            "estão fora do escopo.",
+            "Cisalhamento (5.4.3), cantoneira simples e perfis formados a frio estão fora do "
+            "escopo.",
+            *(
+                ()
+                if composta is None
+                else (
+                    "Barra composta de dois perfis iguais: torção com cada perfil trabalhando "
+                    "sozinho (J e C_w somados); espaçadores não dimensionados aqui; M_Rd informado "
+                    "pelo usuário, quando há momento.",
+                )
+            ),
         ],
         equacoes=[
             *equacoes_de_carga,

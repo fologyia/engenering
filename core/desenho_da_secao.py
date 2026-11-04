@@ -6,8 +6,9 @@ r_x ao longo de y: o lado "achatado" mostra para onde a barra flamba por flexão
 cotas e uma legenda com as propriedades. ``giro_graus`` gira só o desenho (anti-horário), para a
 seção ficar como está na estrutura; o texto fica de pé e as cotas acompanham.
 
-A forma vem da própria seção (``Secao.tipo`` e ``Secao.dims``) ou, nos perfis do catálogo sem
-medidas guardadas na seção (T e C enrijecido), do catálogo pelo nome. A seção dada só pelas
+A forma vem da própria seção (``Secao.tipo`` e ``Secao.dims``; nas barras compostas, os contornos
+que :mod:`core.perfis_compostos` guardou) ou, nos perfis do catálogo sem medidas guardadas na seção
+(T e C enrijecido), do catálogo pelo nome. A seção dada só pelas
 propriedades (área e raios, ou genérica) não tem forma conhecida: o desenho mostra os eixos, G e a
 elipse de giração e diz isso.
 """
@@ -23,6 +24,7 @@ from dataclasses import dataclass
 from PIL import Image, ImageChops, ImageDraw
 
 from core import desenho_girado as dg
+from core import perfis_compostos as pc
 from core import section_catalog as sc
 from core.beam_charts import ImagemDiagrama, _fonte
 from core.column_design import Secao
@@ -257,6 +259,58 @@ def _forma_retangular(largura: float, altura: float) -> FormaDaSecao:
     )
 
 
+def _forma_composta(secao: Secao) -> FormaDaSecao:
+    """Os dois perfis da barra composta, como a seção os guardou (G na origem)."""
+    dims = secao.dims
+    arranjo, s = dims["arranjo"], dims["s"]
+    contornos: tuple[tuple[Ponto, ...], ...] = dims["contornos"]
+    xs = [p[0] for c in contornos for p in c]
+    ys = [p[1] for c in contornos for p in c]
+    xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
+    cotas: tuple[Cota, ...]
+    espessuras: list[Espessura] = []
+    if arranjo in pc.ARRANJOS_DE_CANTONEIRA:
+        a, b, t = dims["a"], dims["b"], dims["t"]
+        descricao = "Duas cantoneiras (sem os raios), com y passando entre elas"
+        if arranjo == pc.ARRANJO_2L_T:
+            cotas = (
+                Cota((xmin, ymax - a), (xmin, ymax), (-1.0, 0.0), f"a = {_n(a)}"),
+                Cota((xmin, ymax), (xmax, ymax), (0.0, 1.0), f"2b + s = {_n(2 * b + s)}"),
+            )
+            x_t = xmax - 0.3 * b
+            espessuras.append(Espessura((x_t, ymax), (x_t, ymax - t), f"t = {_n(t, 2)}"))
+            y_s: float | None = ymin + 0.25 * a
+        else:
+            direita = contornos[1]
+            canto, ponta = direita[0], direita[1]
+            normal = (ponta[1] - canto[1], canto[0] - ponta[0])
+            tamanho = math.hypot(*normal)
+            normal = (normal[0] / tamanho, normal[1] / tamanho)
+            if (direita[3][0] - canto[0]) * normal[0] + (direita[3][1] - canto[1]) * normal[1] > 0:
+                normal = (-normal[0], -normal[1])  # a cota do lado de fora da aba
+            cotas = (Cota(canto, ponta, normal, f"b = {_n(b)}"),)
+            y_s = None  # a cruz gira até os eixos principais: o s fica no título da figura
+    else:
+        d, bf, tf, tw = dims["d"], dims["bf"], dims["tf"], dims["tw"]
+        descricao = "Dois perfis U (mesas de espessura constante), com y passando entre eles"
+        cotas = (
+            Cota((xmin, ymin), (xmin, ymax), (-1.0, 0.0), f"d = {_n(d)}"),
+            Cota((xmin, ymax), (xmax, ymax), (0.0, 1.0), f"2b_f + s = {_n(2 * bf + s)}"),
+        )
+        x_tf = xmax - 0.3 * bf
+        espessuras.append(Espessura((x_tf, ymin + tf), (x_tf, ymin), f"t_f = {_n(tf, 2)}"))
+        if arranjo == pc.ARRANJO_2U_I:
+            x_tw = s / 2
+        else:
+            x_tw = xmax - tw
+        y_tw = -0.25 * (d - 2 * tf)
+        espessuras.append(Espessura((x_tw, y_tw), (x_tw + tw, y_tw), f"t_w = {_n(tw, 2)}"))
+        y_s = 0.25 * (d - 2 * tf)
+    if s > 0 and y_s is not None:
+        espessuras.append(Espessura((-s / 2, y_s), (s / 2, y_s), f"s = {_n(s)}"))
+    return FormaDaSecao(descricao, cheios=contornos, cotas=cotas, espessuras=tuple(espessuras))
+
+
 def _do_catalogo(secao: Secao) -> FormaDaSecao | None:
     """T e C enrijecido do catálogo: a seção não guarda as medidas, o catálogo sim."""
     perfil = _perfil_do_catalogo(secao)
@@ -285,6 +339,8 @@ def _do_catalogo(secao: Secao) -> FormaDaSecao | None:
 def forma_da_secao(secao: Secao) -> FormaDaSecao:
     """A forma da seção para o desenho, com G na origem."""
     dims, tipo = secao.dims, secao.tipo
+    if tipo == pc.TIPO:
+        return _forma_composta(secao)
     if tipo == "I":
         return _forma_I(dims["d"], dims["bf"], dims["tf"], dims["tw"], bool(dims.get("soldado")))
     if tipo == "U":
@@ -457,6 +513,10 @@ def figura_da_secao(secao: Secao, *, giro_graus: float = 0.0) -> ImagemDiagrama:
     ]
     if eixo_fraco:
         itens.append(("", dg.COR_TEXTO, f"   menor raio de giração: em torno de {eixo_fraco}"))
+    if secao.tipo == pc.TIPO:
+        itens.append(
+            ("", dg.COR_TEXTO, f"   r_mín de um perfil sozinho = {_n(secao.dims['r_min'], 1)} mm")
+        )
     itens += [
         ("", dg.COR_TEXTO, ""),
         ("", dg.COR_TEXTO, f"A = {_n(secao.A, 0)} mm²"),

@@ -21,8 +21,10 @@ from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import comparador_cenarios, fronteira_modelo
 from components.verification_table import COR_BADGE, estilizar, mostrar_tabela_verificacoes
+from core import cantoneiras as ct
 from core import column_buckling as cb
 from core import material_catalog as mat
+from core import perfis_compostos as pc
 from core import section_catalog as catalogo_perfis
 from core.column_design import E_ACO, ESPESSURA_MIN_ANGLO, G_ACO, Secao
 from core.coluna_word import gerar_word_coluna
@@ -33,6 +35,7 @@ from core.project_store import obter_projeto_ativo
 from core.verificacao import csv_verificacoes, formatar_percentual
 
 SEC_CATALOGO = "Perfil de aço (catálogo)"
+SEC_COMPOSTA = "Perfil composto (2 cantoneiras ou 2 perfis U)"
 SEC_CIRC = "Barra circular maciça"
 SEC_RET = "Barra retangular maciça"
 SEC_TUBO_C = "Tubo circular"
@@ -43,6 +46,7 @@ SEC_DIRETA = "Área e raio de giração"
 SEC_GENERICA = "Seção genérica (propriedades)"
 TIPOS_SECAO = (
     SEC_CATALOGO,
+    SEC_COMPOSTA,
     SEC_CIRC,
     SEC_RET,
     SEC_TUBO_C,
@@ -54,6 +58,8 @@ TIPOS_SECAO = (
 )
 
 APOIO_MANUAL = "Informar K"
+CANTONEIRA_INFORMADA = "Informar as medidas (abas desiguais)"
+CANTONEIRA_PADRAO = 'L 3" × 1/4"'
 
 #: Tipo e grupo da Tabela 4 (NBR) / F.1 das paredes que o usuário descreve na seção genérica.
 PAREDES: dict[str, tuple[str, int]] = {
@@ -392,8 +398,66 @@ def _secao_generica() -> Secao:
     )
 
 
+def _secao_composta() -> Secao:
+    """Dois perfis iguais: o arranjo, o perfil de cada um e o afastamento entre eles."""
+    linha = st.columns([3, 3, 2])
+    arranjo = linha[0].selectbox(
+        "Arranjo dos dois perfis",
+        pc.ARRANJOS,
+        key="col_cmp_arranjo",
+        persist_state="session",
+        help=AJUDA["cmp_arranjo"],
+    )
+    afastamento = _numero(
+        "Afastamento s (mm)",
+        "col_cmp_s",
+        8.0,
+        AJUDA["cmp_s"],
+        minimo=0.0,
+        passo=0.5,
+        alvo=linha[2],
+    )
+    if arranjo in pc.ARRANJOS_DE_CANTONEIRA:
+        opcoes = [*ct.CATALOGO_CANTONEIRAS, CANTONEIRA_INFORMADA]
+        nome = linha[1].selectbox(
+            "Cantoneira de cada perfil",
+            opcoes,
+            index=opcoes.index(CANTONEIRA_PADRAO),
+            key="col_cmp_cantoneira",
+            persist_state="session",
+            help=AJUDA["cmp_cantoneira"],
+        )
+        if nome == CANTONEIRA_INFORMADA:
+            medidas = st.columns(3)
+            aba_a = _numero(
+                "Aba a (mm)", "col_cmp_a", 76.2, AJUDA["cmp_a"], passo=5.0, alvo=medidas[0]
+            )
+            aba_b = _numero(
+                "Aba b (mm)", "col_cmp_b", 50.8, AJUDA["cmp_b"], passo=5.0, alvo=medidas[1]
+            )
+            espessura = _numero(
+                "Espessura t (mm)", "col_cmp_t", 6.35, AJUDA["cmp_t"], passo=0.5, alvo=medidas[2]
+            )
+            peca = pc.cantoneira(aba_a, aba_b, espessura)
+        else:
+            medida = ct.obter_cantoneira(nome)
+            peca = pc.cantoneira(medida.b_mm, medida.b_mm, medida.t_mm, nome)
+        return pc.duas_cantoneiras(peca, arranjo, afastamento)
+    perfis = catalogo_perfis.listar_perfis()
+    nome = linha[1].selectbox(
+        "Perfil U de cada peça",
+        cb.nomes_de_perfis_U(perfis),
+        key="col_cmp_u",
+        persist_state="session",
+        help=AJUDA["cmp_u"],
+    )
+    return pc.dois_U(cb.secao_de_perfil(perfis[nome]), arranjo, afastamento, nome)
+
+
 def _campos_da_secao(tipo: str) -> tuple[Secao, bool]:
     """Desenha os campos do tipo escolhido e devolve a seção (e se o perfil é soldado)."""
+    if tipo == SEC_COMPOSTA:
+        return _secao_composta(), False
     if tipo == SEC_CATALOGO:
         linha = st.columns([3, 1])
         nome = linha[0].selectbox(
@@ -571,6 +635,26 @@ def formulario_secao() -> DadosSecao:
             st.metric("rx", f"{secao.rx:.1f} mm", border=True, help=AJUDA["m_rx"])
             st.metric("ry", f"{secao.ry:.1f} mm", border=True, help=AJUDA["m_ry"])
             st.metric("J", f"{secao.J / 1e3:.1f} ×10³ mm⁴", border=True, help=AJUDA["m_J"])
+        if secao.tipo == pc.TIPO:
+            with st.container(horizontal=True):
+                st.metric(
+                    "r_mín de um perfil",
+                    f"{secao.dims['r_min']:.1f} mm",
+                    border=True,
+                    help=AJUDA["cmp_m_rmin"],
+                )
+                st.metric("K_i", f"{secao.dims['k_i']:.2f}", border=True, help=AJUDA["cmp_m_ki"])
+                if secao.y0:
+                    st.metric(
+                        "y₀ (seção monossimétrica)",
+                        f"{secao.y0:.1f} mm",
+                        border=True,
+                        help=AJUDA["cmp_m_y0"],
+                    )
+            st.caption(
+                "O eixo y passa entre os dois perfis: a flexão em torno de y é a que carrega as "
+                "ligações. O item 3.1 logo abaixo dá a distância entre os espaçadores."
+            )
         confirmada = False
         if secao.tipo == "generica":
             aviso = secao.dims.get("aviso")
@@ -753,6 +837,126 @@ def formulario_comprimentos() -> DadosComprimentos:
         comprimento, lx, ly, kx, ky, apoio_x, apoio_y, k_recomendado, lz, kz,
         deslocavel_x, deslocavel_y, segunda_ordem,
     )  # fmt: skip
+
+
+# ---------------------------------------------------------------------------
+# 3.1 Espaçadores da barra composta
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DadosLigacoes:
+    ligacoes: pc.LigacoesDaComposta
+    avaliacao: pc.AvaliacaoDasLigacoes
+
+
+def formulario_ligacoes(
+    norma: str, secao: Secao, comprimentos: DadosComprimentos
+) -> DadosLigacoes | None:
+    """As ligações entre os perfis e a distância que a norma aceita; ``None`` nas outras seções."""
+    if secao.tipo != pc.TIPO:
+        return None
+    with st.container(border=True):
+        st.subheader("3.1 Espaçadores da barra composta", help=AJUDA["sec_composta"])
+        topo = st.columns(2)
+        ligacao = topo[0].selectbox(
+            "Ligação nos espaçadores",
+            pc.LIGACOES,
+            key="col_cmp_ligacao",
+            persist_state="session",
+            help=AJUDA["cmp_ligacao"],
+        )
+        pontas = topo[1].selectbox(
+            "Ligação nas pontas da barra",
+            (pc.LIGACAO_RIGIDA, pc.LIGACAO_APERTO_NORMAL),
+            key="col_cmp_pontas",
+            persist_state="session",
+            help=AJUDA["cmp_pontas"],
+        )
+        automatico = st.toggle(
+            "Usar a menor quantidade de espaçadores que a norma aceita",
+            value=True,
+            key="col_cmp_auto",
+            persist_state="session",
+            help=AJUDA["cmp_auto"],
+        )
+        quantidade: int | None = None
+        if not automatico:
+            quantidade = int(
+                st.number_input(
+                    "Quantidade de espaçadores entre as pontas",
+                    min_value=pc.ESPACADORES_MINIMOS,
+                    max_value=100,
+                    value=3,
+                    step=1,
+                    key="col_cmp_n",
+                    persist_state="session",
+                    help=AJUDA["cmp_n"],
+                )
+            )
+        ligacoes = pc.LigacoesDaComposta(
+            comprimentos.L_total_mm, ligacao, pontas == pc.LIGACAO_RIGIDA, quantidade
+        )
+        avaliacao = pc.avaliar(
+            secao,
+            ligacoes,
+            comprimentos.kx * comprimentos.Lx_mm / secao.rx,
+            comprimentos.ky * comprimentos.Ly_mm / secao.ry,
+            norma,
+        )
+        with st.container(horizontal=True):
+            st.metric(
+                "Distância máxima ℓ_máx",
+                f"{avaliacao.espacamento_maximo_mm:.0f} mm",
+                border=True,
+                help=AJUDA["cmp_m_max"],
+            )
+            st.metric(
+                "Mínimo de espaçadores",
+                str(avaliacao.quantidade_minima),
+                border=True,
+                help=AJUDA["cmp_m_min"],
+            )
+            st.metric(
+                "Distância adotada ℓ",
+                f"{avaliacao.espacamento_mm:.0f} mm",
+                border=True,
+                help=AJUDA["cmp_m_ell"],
+            )
+            st.metric(
+                "ℓ/r_mín",
+                f"{avaliacao.esbeltez_da_peca:.1f} ≤ {avaliacao.limite_da_peca:.1f}",
+                border=True,
+                help=AJUDA["cmp_m_esbeltez"],
+            )
+            st.metric(
+                "N_e,m/N_e,o",
+                f"{avaliacao.fator_de_reducao:.3f}",
+                border=True,
+                help=AJUDA["cmp_m_fator"],
+            )
+        st.caption(avaliacao.formula_da_reducao)
+        if avaliacao.espacamento_sem_reducao_mm is not None and avaliacao.fator_de_reducao < 1.0:
+            st.caption(
+                f"Com espaçadores a cada {avaliacao.espacamento_sem_reducao_mm:.0f} mm ou menos "
+                "(ℓ/r_mín ≤ 40), as ligações deixam de reduzir a força de flambagem."
+            )
+        if not avaliacao.atende_o_limite:
+            st.error(
+                f"Faltam espaçadores: com {avaliacao.quantidade}, cada perfil fica solto em "
+                f"{avaliacao.espacamento_mm:.0f} mm, e a norma aceita até "
+                f"{avaliacao.espacamento_maximo_mm:.0f} mm. Use pelo menos "
+                f"{avaliacao.quantidade_minima}.",
+                icon=":material/error:",
+            )
+        if avaliacao.pede_pontas_rigidas and not avaliacao.pontas_rigidas:
+            st.error(
+                "Esta norma exige as pontas da barra soldadas ou com parafusos protendidos "
+                "(Classe A ou B). Com aperto normal, os perfis escorregam na ponta e a resistência "
+                "calculada não vale.",
+                icon=":material/error:",
+            )
+    return DadosLigacoes(ligacoes, avaliacao)
 
 
 # ---------------------------------------------------------------------------
@@ -1181,7 +1385,10 @@ def formulario_mao_francesa(secao: Secao, comprimentos: DadosComprimentos) -> Da
 
 
 def _coluna_em_pe(
-    secao: Secao, comprimentos: DadosComprimentos, mao_francesa: DadosMaoFrancesa
+    secao: Secao,
+    comprimentos: DadosComprimentos,
+    mao_francesa: DadosMaoFrancesa,
+    ligacoes: DadosLigacoes | None = None,
 ) -> ColunaEmPe:
     mf = None
     if mao_francesa.esforcos is not None and mao_francesa.eixo:
@@ -1200,17 +1407,21 @@ def _coluna_em_pe(
         comprimentos.apoio_x,
         comprimentos.apoio_y,
         mf,
+        () if ligacoes is None else ligacoes.avaliacao.posicoes_mm,
     )
 
 
 def mostrar_desenhos(
-    secao: Secao, comprimentos: DadosComprimentos, mao_francesa: DadosMaoFrancesa
+    secao: Secao,
+    comprimentos: DadosComprimentos,
+    mao_francesa: DadosMaoFrancesa,
+    ligacoes: DadosLigacoes | None = None,
 ) -> tuple[float, ColunaEmPe]:
     """O botão que mostra os desenhos (a seção, que gira, e a coluna em pé com a mão-francesa).
 
     Devolve o giro da seção e a coluna em pé, que o Word usa mesmo com os desenhos fechados.
     """
-    coluna = _coluna_em_pe(secao, comprimentos, mao_francesa)
+    coluna = _coluna_em_pe(secao, comprimentos, mao_francesa, ligacoes)
     with st.container(border=True), secao_protegida("Desenhos da coluna"):
         st.subheader("Desenhos da seção e da coluna em pé", help=AJUDA["sec_desenhos"])
         if st.toggle(
@@ -1310,6 +1521,7 @@ def montar_entrada(
     flexao: DadosFlexao,
     mao_francesa: DadosMaoFrancesa,
     espessuras: Mapping[str, float],
+    ligacoes: DadosLigacoes | None = None,
 ) -> cb.EntradaColuna:
     mf = mao_francesa.esforcos
     momento_mf = mf.momento_Nmm / 1e6 if mf is not None else 0.0
@@ -1352,6 +1564,7 @@ def montar_entrada(
         deslocavel_x=comprimentos.deslocavel_x,
         deslocavel_y=comprimentos.deslocavel_y,
         momentos_de_segunda_ordem=comprimentos.segunda_ordem,
+        ligacoes=None if ligacoes is None else ligacoes.ligacoes,
     )
 
 
@@ -1397,6 +1610,14 @@ def _resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
                     f"{comp['Q']:.3f}",
                     border=True,
                     help=AJUDA["res_q"],
+                )
+            if resultado.composta is not None:
+                st.metric(
+                    "Espaçadores",
+                    f"{resultado.composta.quantidade} a cada "
+                    f"{resultado.composta.espacamento_mm:.0f} mm",
+                    border=True,
+                    help=AJUDA["res_n_espacadores"],
                 )
         tem_mx = resultado.momento_x_primeira_ordem_kNm > 0
         tem_my = resultado.momento_y_primeira_ordem_kNm > 0
@@ -1504,6 +1725,31 @@ def _paredes(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
         )
 
 
+def _espacadores(entrada: cb.EntradaColuna) -> None:
+    """O ganho de cada espaçador a mais; só aparece quando há mais de uma opção a comparar."""
+    opcoes = cb.opcoes_de_espacadores(entrada)
+    if len(opcoes) < 2:
+        return
+    with st.container(border=True):
+        st.subheader("Quantos espaçadores usar", help=AJUDA["res_espacadores"])
+        st.dataframe(
+            pd.DataFrame(opcoes),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "ℓ (mm)": st.column_config.NumberColumn(format="%.0f"),
+                "ℓ/r_mín": st.column_config.NumberColumn(format="%.1f"),
+                "N_e,m/N_e,o": st.column_config.NumberColumn(format="%.3f"),
+                "N_c,Rd (kN)": st.column_config.NumberColumn(format="%.1f"),
+            },
+        )
+        st.caption(
+            "A primeira linha é o mínimo que a norma aceita. A tabela para quando mais um "
+            "espaçador já não aumenta N_c,Rd, porque as ligações deixaram de reduzir N_ey ou "
+            "outro modo passou a governar."
+        )
+
+
 def _comparar_normas(entrada: cb.EntradaColuna) -> None:
     if st.button(
         "Comparar normas",
@@ -1573,6 +1819,9 @@ def _regras(entrada: cb.EntradaColuna) -> None:
             )
         )
         st.caption("A versão em negrito é a da norma escolhida.")
+        if entrada.secao.tipo == pc.TIPO:
+            st.markdown("**Barra composta**")
+            st.markdown("\n".join(f"- {regra}" for regra in cb.REGRAS_COMPOSTA))
         st.markdown("**Espessuras mínimas da Anglo (item 8.8)**")
         st.markdown(
             "\n".join(
@@ -1697,13 +1946,14 @@ def mostrar_flambagem_colunas() -> None:
     material = formulario_material()
     secao = formulario_secao()
     comprimentos = formulario_comprimentos()
+    ligacoes = formulario_ligacoes(material.norma, secao.secao, comprimentos)
     cargas, flexao = formulario_esforcos()
     mao_francesa = formulario_mao_francesa(secao.secao, comprimentos)
-    giro, coluna_em_pe = mostrar_desenhos(secao.secao, comprimentos, mao_francesa)
+    giro, coluna_em_pe = mostrar_desenhos(secao.secao, comprimentos, mao_francesa, ligacoes)
     espessuras = formulario_anglo(secao.secao, secao.soldado)
 
     entrada = montar_entrada(
-        material, secao, comprimentos, cargas, flexao, mao_francesa, espessuras
+        material, secao, comprimentos, cargas, flexao, mao_francesa, espessuras, ligacoes
     )
     try:
         resultado = cb.verificar_coluna(entrada)
@@ -1726,6 +1976,7 @@ def mostrar_flambagem_colunas() -> None:
     _curva(entrada, resultado)
     _tabela(resultado)
     _paredes(entrada, resultado)
+    _espacadores(entrada)
     _comparar_normas(entrada)
     _regras(entrada)
     fronteira_modelo(list(cb.FORA_DO_ESCOPO))

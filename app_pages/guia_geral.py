@@ -1497,8 +1497,9 @@ elif modulo == "Flambagem de colunas":
         "desloca, o programa soma o desaprumo e amplia o momento pelo B₂ da coluna "
         "isolada; o B₂ de um andar com várias colunas e as ligações pertencem à análise "
         "da estrutura — módulo Estruturas de aço (pórtico 2D, placa de base). "
-        "Cantoneira simples, barras compostas, perfis formados a frio, fadiga e "
-        "cisalhamento também ficam de fora.",
+        "Cantoneira simples, perfis formados a frio, fadiga e cisalhamento também ficam "
+        "de fora. Barras compostas de dois perfis iguais (2 cantoneiras, 2 perfis U) entram "
+        "pelo tipo de seção Perfil composto, com a distância entre os espaçadores.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/flambagem_colunas.py", "Abrir Flambagem de colunas")

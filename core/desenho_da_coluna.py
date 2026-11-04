@@ -33,6 +33,7 @@ _EIXO = "#1d4ed8"
 _BARRA_MF = "#9ca3af"  # a mão-francesa
 _FORCA = "#b45309"
 _TRAVA = "#0f766e"  # travamentos
+_ESPACADOR = "#c2410c"  # espaçadores da barra composta
 _LARGURA_PX, _ALTURA_PX = 980, 640
 _LARGURA_MINIMA_PX = 26.0  # abaixo disto a largura do perfil é aumentada no desenho
 
@@ -72,6 +73,7 @@ class ColunaEmPe:
     apoio_x: str
     apoio_y: str
     mao_francesa: MaoFrancesaNoDesenho | None = None
+    espacadores_mm: tuple[float, ...] = ()  # altura de cada espaçador da barra composta
 
 
 @dataclass(frozen=True)
@@ -307,6 +309,14 @@ def _uma_vista(
         while z < c.comprimento_mm - 1e-6 and z > 0:
             _travamento(dr, px(0.0, z), meia_px)
             z += destravado
+    # ------------------------------------------------------------------ espaçadores da barra composta
+    for z in c.espacadores_mm:
+        dr.line([px(umin, z), px(umax, z)], fill=_ESPACADOR, width=3 * ESC)
+    if c.espacadores_mm and horizontal == "x":
+        dg.cota_alinhada(
+            dr, px(umin, 0.0), px(umin, c.espacadores_mm[0]), (-1.0, 0.0),
+            f"ℓ = {_n(c.espacadores_mm[0])}", 16 * ESC, posicao=0.5, fundo=True,
+        )  # fmt: skip
     # ------------------------------------------------------------------ a mão-francesa, no plano dela
     mf = c.mao_francesa
     plano_da_mf = mf is not None and (mf.eixo == "x") == (horizontal == "y")
@@ -381,6 +391,8 @@ def _legenda(dr: ImageDraw.ImageDraw, x: float, y: float, itens: Sequence[tuple[
             _apoio(dr, (cx, yy - 2 * ESC), 6 * ESC, "engaste", True)
         elif forma == "trava":
             _travamento(dr, (x2 + 2 * ESC, yy), 0.0)
+        elif forma == "espacador":
+            dr.line([(x1 + 3 * ESC, yy), (x2 - 3 * ESC, yy)], fill=_ESPACADOR, width=3 * ESC)
         elif forma == "mf":
             dr.line(
                 [(x1 + 4 * ESC, yy + 7 * ESC), (x2 - 4 * ESC, yy - 7 * ESC)],
@@ -443,6 +455,8 @@ def figura_da_coluna(c: ColunaEmPe) -> ImagemDiagrama:
         ("engaste", "engaste (impede também o giro)"),
         ("trava", "travamento lateral (a cada L destravado)"),
     ]
+    if c.espacadores_mm:
+        itens.append(("espacador", f"{len(c.espacadores_mm)} espaçadores entre os perfis"))
     if forma.conhecida:
         itens += [
             ("", "em cima de cada vista: a seção e, embaixo dela,"),
@@ -474,6 +488,11 @@ def figura_da_coluna(c: ColunaEmPe) -> ImagemDiagrama:
         f"{c.apoio_y if c.apoio_y in APOIOS_NAS_PONTAS else 'K informado'}) e lateral "
         f"(plano y–z, {c.apoio_x if c.apoio_x in APOIOS_NAS_PONTAS else 'K informado'})"
         + (f"; mão-francesa a {_n(mf.altura_mm)} mm da base" if mf is not None else "")
+        + (
+            f"; {len(c.espacadores_mm)} espaçadores a cada {_n(c.espacadores_mm[0])} mm"
+            if c.espacadores_mm
+            else ""
+        )
         + "."
     )
     final = imagem.resize((_LARGURA_PX, _ALTURA_PX), Image.Resampling.LANCZOS)

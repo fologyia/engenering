@@ -19,6 +19,7 @@ from streamlit.testing.v1 import AppTest
 from components import column_ui as ui
 from components.column_help import AJUDA
 from core import column_buckling as cb
+from core import perfis_compostos as pc
 
 RAIZ = Path(__file__).resolve().parent.parent
 ARQUIVOS_COM_AJUDA = [
@@ -161,6 +162,7 @@ def _abrir(banco_isolado, **estado) -> AppTest:
 
 
 DIMENSOES_I = {"col_tipo_secao": ui.SEC_I}
+COMPOSTA = {"col_tipo_secao": ui.SEC_COMPOSTA}
 MAO_FRANCESA = {"col_mf_incluir": True, "col_mf_eixo": "y"}
 GENERICA = {
     "col_tipo_secao": ui.SEC_GENERICA,
@@ -175,6 +177,15 @@ GENERICA = {
     [
         pytest.param({}, id="padrao-barra-circular"),
         pytest.param({"col_tipo_secao": ui.SEC_CATALOGO}, id="catalogo"),
+        pytest.param(COMPOSTA, id="composta-2-cantoneiras"),
+        pytest.param(
+            {**COMPOSTA, "col_cmp_cantoneira": ui.CANTONEIRA_INFORMADA, "col_cmp_auto": False},
+            id="composta-abas-desiguais-quantidade-informada",
+        ),
+        pytest.param(
+            {**COMPOSTA, "col_cmp_arranjo": pc.ARRANJO_2U_I, "col_norma": "NBR8800_2024"},
+            id="composta-2-u",
+        ),
         pytest.param({"col_tipo_secao": ui.SEC_RET}, id="retangular-macica"),
         pytest.param({"col_tipo_secao": ui.SEC_TUBO_C}, id="tubo-circular"),
         pytest.param({"col_tipo_secao": ui.SEC_TUBO_R}, id="tubo-retangular"),
@@ -260,6 +271,7 @@ def test_textos_da_flambagem_nao_falam_em_valor_normativo():
         *cb.FORA_DO_ESCOPO,
         *cb.CONFERIDOS_NBR8800_2008,
         *cb.REGRAS_B1,
+        *cb.REGRAS_COMPOSTA,
         cb.__doc__ or "",
     ]
     for texto in textos:

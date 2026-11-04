@@ -20,6 +20,7 @@ from typing import Any
 
 from core import column_buckling as cb
 from core import memorial_verificacoes as mv
+from core import perfis_compostos as pc
 from core.column_design import ESPESSURA_MIN_ANGLO
 from core.desenho_da_coluna import ColunaEmPe, figura_da_coluna
 from core.desenho_da_secao import figura_da_secao
@@ -90,6 +91,27 @@ def propriedades_da_secao(entrada: cb.EntradaColuna) -> list[list[str]]:
     ]
 
 
+def linhas_dos_espacadores(lig: pc.AvaliacaoDasLigacoes) -> list[list[str]]:
+    """O item 3.1 da página: as ligações entre os perfis da barra composta."""
+    fracao = pc.TEXTO_DA_FRACAO[lig.norma]
+    linhas = [
+        ["Arranjo", lig.arranjo],
+        ["Ligação nos espaçadores", lig.ligacao],
+        ["Pontas soldadas ou protendidas", "Sim" if lig.pontas_rigidas else "Não"],
+        ["Comprimento da barra L", _n(lig.comprimento_mm, 0, " mm")],
+        ["Menor raio de giração de um perfil r_mín", _n(lig.r_min_mm, 2, " mm")],
+        ["Fator K_i", _n(lig.k_i, 2)],
+        [f"Limite de ℓ/r_mín ({fracao} de {_n(lig.esbeltez_do_conjunto, 1)})", _n(lig.limite_da_peca, 1)],
+        ["Distância máxima ℓ_máx", _n(lig.espacamento_maximo_mm, 0, " mm")],
+        ["Mínimo de espaçadores", str(lig.quantidade_minima)],
+        ["Espaçadores adotados", str(lig.quantidade)],
+        ["Distância adotada ℓ", _n(lig.espacamento_mm, 0, " mm")],
+        ["ℓ/r_mín", _n(lig.esbeltez_da_peca, 1)],
+        ["N_e,m/N_e,o", _n(lig.fator_de_reducao, 3)],
+    ]  # fmt: skip
+    return linhas
+
+
 def linhas_do_resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> list[list[str]]:
     """O quadro "Resumo" da página, na mesma ordem."""
     comp = resultado.compressao
@@ -110,6 +132,14 @@ def linhas_do_resumo(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -
         linhas.append(["χ", _n(comp["chi"], 3)])
         rotulo_q = "Q = Q_s·Q_a" if entrada.norma == "NBR8800_2008" else "A_ef/A_g"
         linhas.append([rotulo_q, _n(comp["Q"], 3)])
+    if resultado.composta is not None:
+        linhas.append(
+            [
+                "Espaçadores",
+                f"{resultado.composta.quantidade} a cada "
+                f"{_n(resultado.composta.espacamento_mm, 0, ' mm')}",
+            ]
+        )
     for eixo, momento, b1, b2, imperfeicao, amplificado, mrd, da_norma in (
         ("x", resultado.momento_x_primeira_ordem_kNm, resultado.b1_x, resultado.b2_x, resultado.momento_x_imperfeicao_kNm, resultado.momento_x_amplificado_kNm, resultado.mrd_x_kNm, resultado.flexao_x is not None),
         ("y", resultado.momento_y_primeira_ordem_kNm, resultado.b1_y, resultado.b2_y, resultado.momento_y_imperfeicao_kNm, resultado.momento_y_amplificado_kNm, resultado.mrd_y_kNm, resultado.flexao_y is not None),
@@ -201,6 +231,26 @@ def gerar_word_coluna(
     if coluna_em_pe is not None:
         vistas = figura_da_coluna(coluna_em_pe)
         doc.figura(vistas.png, vistas.legenda, 170)
+    if resultado.composta is not None:
+        doc.paragrafo("Espaçadores da barra composta", negrito=True)
+        doc.tabela(["Item", "Valor"], linhas_dos_espacadores(resultado.composta), [150, 123])
+        doc.paragrafo(_pt(resultado.composta.formula_da_reducao), legenda=True)
+        opcoes = cb.opcoes_de_espacadores(entrada)
+        if len(opcoes) > 1:
+            doc.tabela(
+                ["Espaçadores", "ℓ (mm)", "ℓ/r_mín", "N_e,m/N_e,o", "N_c,Rd (kN)", "Modo que governa"],
+                [
+                    [
+                        str(o["Espaçadores"]),
+                        _n(o["ℓ (mm)"], 0),
+                        _n(o["ℓ/r_mín"], 1),
+                        _n(o["N_e,m/N_e,o"], 3),
+                        _n(o["N_c,Rd (kN)"], 1),
+                        o["Modo que governa"],
+                    ]
+                    for o in opcoes
+                ],
+            )  # fmt: skip
     if equacoes_de_carga:
         doc.paragrafo("Ações de cálculo", negrito=True)
         doc.itens(list(equacoes_de_carga))
@@ -314,6 +364,9 @@ def gerar_word_coluna(
             for chave, texto in cb.EXPLICACAO_FLT.items()
         ]
     )
+    if resultado.composta is not None:
+        doc.paragrafo("Barra composta", negrito=True)
+        doc.itens(list(cb.REGRAS_COMPOSTA))
     doc.paragrafo("Espessuras mínimas da Anglo (item 8.8)", negrito=True)
     doc.itens(
         [

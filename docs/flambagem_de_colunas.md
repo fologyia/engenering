@@ -16,6 +16,46 @@ cada decisão foi conferida.
 | Interface | `components/column_ui.py`, `components/column_help.py`, `components/verification_table.py`, `app_pages/flambagem_colunas.py` | Só desenha; todo cálculo vem do núcleo. Cada campo tem um “?” em `AJUDA`. |
 | Desenhos | `core/desenho_da_secao.py`, `core/desenho_da_coluna.py` (com `core/desenho_girado.py`) | Atrás do botão **Ver os desenhos** (`col_ver_desenhos`, depois da mão-francesa) e sempre no Word. **Coluna em pé** (`figura_da_coluna`): vista frontal (plano x–z: apoio, K_y, travamentos a cada L_y) e lateral (plano y–z: apoio, K_x, travamentos a cada L_x), com as arestas do perfil vistas ou escondidas (olhando de y e de x negativos, sem espelhar), a planta da seção e a seta de onde se olha em cima de cada vista, e a mão-francesa (F, θ, nó a "a" da base) na vista do plano em que age; a largura do perfil é aumentada quando ficaria fina demais. **Seção**: a forma em corte (hachurada) a partir de `Secao.tipo`/`dims` — ou do catálogo pelo nome, no T e no C enrijecido —, os eixos x e y por G, o centro de cisalhamento quando sai de G (U, C, T), a elipse de giração (r_y ao longo de x, r_x ao longo de y) e as cotas. **Girar o desenho da seção** (`col_giro`, −180° a 180°, positivo anti-horário) gira só o desenho, com o texto de pé; o Word sai com o mesmo giro. Laminados sem os raios de concordância; seção dada só pelas propriedades aparece sem a forma. |
 
+## Barras compostas
+
+Tipo de seção **Perfil composto** (`core/perfis_compostos.py`, `Secao.tipo = "composta"`): dois
+perfis iguais, em contato ou com o afastamento `s` de uma chapa espaçadora. O eixo y passa sempre
+entre os perfis, e a flexão em torno de y é a única que carrega as ligações.
+
+| Arranjo | `K_i` | Seção |
+| --- | --- | --- |
+| 2 cantoneiras em T (abas iguais ou desiguais) | 0,50 | Monossimétrica, y de simetria; `C_w = 0`, `y₀ = ȳ − t/2` |
+| 2 cantoneiras em cruz | 0,86 | Simétrica em relação a G; x é o eixo principal mais próximo da reta entre os centros das cantoneiras |
+| 2 U costas com costas (forma de I) | 0,75 | Dupla simetria |
+| 2 U com as mesas de frente (caixa, ligada a intervalos) | 0,86 | Dupla simetria |
+
+`ℓ = L/(n + 1)`, com `n` espaçadores entre as pontas e `r_mín` o menor raio de giração de um perfil
+(na cantoneira, o do eixo inclinado).
+
+| | NBR 8800:2008 | NBR 8800:2025 | AISC 360-16 |
+| --- | --- | --- | --- |
+| Limite de `ℓ/r_mín` | 1/2 de `(KL/r)` máx. (5.3.4.2) | 3/4 de `(L/r)₀` máx. (5.3.6.1) | 3/4 (E6.2) |
+| Espaçadores | pelo menos 2 | pelo menos 2 | pelo menos 2 |
+| Pontas soldadas ou protendidas | não pede | exige (5.3.6.2) | exige (E6.1) |
+| Redução de `N_ey` | não tem | `N_e,m` (5.3.6.3) | `(L_c/r)_m` (E6.1), a mesma conta |
+
+Redução (`cd.resist_compressao(..., fator_Ney=...)`): com aperto normal,
+`N_e,m = N_e,o·(L/r)₀²/[(L/r)₀² + (ℓ/r_mín)²]`; com solda ou protensão, `N_e,m = N_e,o` até
+`ℓ/r_mín = 40` e, acima, com `K_i·ℓ/r_mín`. `(L/r)₀` é a esbeltez do conjunto em y. O `N_ey` reduzido
+entra na flexo-torção das cantoneiras em T (5.3.5.2): o AISC 360-16 faz o mesmo, com `F_e` elástico
+(E4-3) levado à curva de `χ`. A esbeltez de 200 continua sendo a do conjunto (5.3.7.1).
+
+**Conferido em:** texto da NBR 8800:2008 (5.3.4.2) e Projeto de revisão de maio de 2024 (5.3.6, Tabela
+4). O texto publicado da 2025 não estava disponível para o item 5.3.6. O caso de aceite é o exemplo
+E.5 do AISC (Design Examples): 2L4×3½×3/8 LLBB, s = 3/4 pol., L = 8 pés, A36: `φP_n ≈ 127 kips`,
+2 ligações, `a = 32 pol.`; as propriedades batem com a tabela com menos de 0,5 % de diferença e o
+programa dá 126,9 kips.
+
+**Simplificações, a favor da segurança:** cantoneira sem raios; torção com cada perfil sozinho (`J`
+e `C_w` somados); abas como elementos livres (grupo 3 da Tabela 4, "providas de chapas espaçadoras").
+**De fora:** `M_Rd` (com momento, o usuário informa), o dimensionamento dos espaçadores (a norma não
+fixa a força neles), perfis diferentes, mais de dois perfis e treliçados (5.3.6.4).
+
 ## O que a verificação não faz em silêncio
 
 Nenhuma entrada é “consertada”. Os casos abaixo viram linha **NÃO OK** (bloqueio) e impedem o
@@ -26,6 +66,8 @@ resultado que dependeria deles:
   tubo não compacto na flexão — o usuário pode informar `M_Rd` calculado por fora, e a tabela
   registra que o valor veio dele;
 - `N_Sd,1 ≥ N_e` no `B₁` (a barra é instável no plano de flexão);
+- barra composta com `ℓ/r_mín` acima do limite, menos de dois espaçadores ou, na 2025 e no AISC,
+  pontas com parafusos de aperto normal;
 - seção sem módulo plástico `Z`, ou sem rotina de `M_Rd`, com momento aplicado.
 
 Ficam em **ALERTA**, nunca em OK:

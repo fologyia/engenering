@@ -90,6 +90,8 @@ AJUDA: dict[str, str] = {
         "Como você vai descrever a seção:\n\n"
         "- **Perfil de aço (catálogo)**: escolhe um perfil da tabela (W, HP, I, U, T, tubos, "
         "barras). É o caminho mais seguro.\n"
+        "- **Perfil composto**: dois perfis iguais ligados entre si, como 2 cantoneiras de um "
+        "contraventamento.\n"
         "- **Circular / retangular maciça, tubo, I ou U**: digita só as dimensões.\n"
         "- **Área e raio de giração**: só para a flambagem por flexão; a norma não pode ser "
         "aplicada por completo (veja o aviso).\n"
@@ -209,6 +211,102 @@ AJUDA: dict[str, str] = {
     "m_rx": "Raio de giração em torno de x: √(I_x/A).",
     "m_ry": "Raio de giração em torno de y: √(I_y/A).",
     "m_J": "Constante de torção de Saint-Venant.",
+    # ------------------------------------------------------------------ barra composta
+    "cmp_arranjo": (
+        "Como os dois perfis ficam juntos. O eixo y sempre passa entre eles.\n\n"
+        "- **2 cantoneiras em T**: de costas uma para a outra, normalmente com a chapa de ligação "
+        "no meio. É o caso comum de contraventamento. A seção tem um só eixo de simetria "
+        "(monossimétrica), e a flambagem em torno de y vem junto com torção.\n"
+        "- **2 cantoneiras em cruz**: opostas pelo canto, uma de cada lado da chapa. Os eixos x e "
+        "y ficam a cerca de 45° das abas.\n"
+        "- **2 U costas com costas**: as almas encostadas, formando um I.\n"
+        "- **2 U com as mesas de frente**: formando uma caixa, ligada só a intervalos. Se a solda "
+        "for contínua, é outro caso: use Seção genérica."
+    ),
+    "cmp_cantoneira": (
+        "A cantoneira de **cada** perfil (os dois são iguais), da série usual de abas iguais. Para "
+        "abas desiguais, escolha a última opção da lista.\n\n"
+        "**Simplificação:** seção de dois retângulos, sem os raios de concordância; a área e as "
+        "inércias ficam um pouco menores que as de tabela, a favor da segurança."
+    ),
+    "cmp_u": "O perfil U laminado de **cada** peça (os dois são iguais), com as propriedades da tabela.",
+    "cmp_a": (
+        "Aba **a**, em mm. No arranjo em T é a aba das costas, a que encosta na chapa de ligação."
+    ),
+    "cmp_b": "Aba **b**, em mm. No arranjo em T é a aba que fica para fora, deitada no desenho.",
+    "cmp_t": "Espessura da cantoneira, em mm. Tem de ser menor que as duas abas.",
+    "cmp_s": (
+        "Distância entre os dois perfis, em mm: normalmente a espessura da chapa de ligação e dos "
+        "espaçadores. Use 0 se eles encostam. Quanto maior, maior o r_y do conjunto."
+    ),
+    "cmp_m_rmin": (
+        "Menor raio de giração de **um** perfil sozinho (na cantoneira, o do eixo inclinado). É ele "
+        "que diz o quanto um perfil pode ficar solto entre dois espaçadores."
+    ),
+    "cmp_m_ki": (
+        "Fator K_i de 5.3.6.3: mede o quanto o trecho entre as ligações soldadas ou protendidas "
+        "pesa na redução. Vale 0,50 em cantoneiras em T, 0,75 em U em forma de I e 0,86 nos outros "
+        "arranjos. Com aperto normal, ele não entra."
+    ),
+    "cmp_m_y0": (
+        "Distância entre o centro geométrico e o centro de cisalhamento. Diferente de zero quer "
+        "dizer que a flexão em torno de y vem acoplada à torção (flexo-torção, 5.3.5.2): a coluna "
+        "flamba com força menor que a de Euler em y."
+    ),
+    "sec_composta": (
+        "Os dois perfis só trabalham juntos se forem ligados a intervalos. Aqui você diz como e "
+        "o programa dá a distância **ℓ** entre os espaçadores e quantos são necessários.\n\n"
+        "Regra: ℓ/r_mín de um perfil não pode passar de **3/4** da esbeltez do conjunto (NBR "
+        "8800:2025 5.3.6.1; AISC E6.2) ou de **1/2** (NBR 8800:2008 5.3.4.2), com pelo menos dois "
+        "espaçadores igualmente espaçados.\n\n"
+        "**Simplificação:** só a distância e a quantidade; o espaçador e os seus parafusos ou "
+        "soldas não são dimensionados aqui, porque a norma não fixa a força neles."
+    ),
+    "cmp_ligacao": (
+        "Como cada espaçador prende os perfis. Muda a resistência na 2025 e no AISC:\n\n"
+        "- **Parafusos com aperto normal**: podem escorregar, e toda distância reduz a força de "
+        "flambagem em y.\n"
+        "- **Solda ou parafusos protendidos**: até ℓ/r_mín = 40 não há redução; acima, a redução é "
+        "menor, com o fator K_i.\n\n"
+        "A NBR 8800:2008 não faz essa diferença."
+    ),
+    "cmp_pontas": (
+        "Como a barra se liga nas duas pontas. Na NBR 8800:2025 (5.3.6.2) e no AISC (E6.1), tem de "
+        "ser **solda ou parafusos protendidos** (superfície Classe A ou B): é ali que os perfis "
+        "mais tendem a escorregar. Com aperto normal, a verificação fica NÃO OK, porque a norma "
+        "não cobre esse caso."
+    ),
+    "cmp_auto": (
+        "Ligado, o programa usa a menor quantidade que atende a norma. Desligue para informar mais "
+        "espaçadores e ver quanto a resistência sobe."
+    ),
+    "cmp_n": (
+        "Espaçadores entre as duas pontas, sem contar as ligações das pontas. Eles ficam igualmente "
+        "espaçados: ℓ = L/(n + 1). A norma pede pelo menos 2."
+    ),
+    "cmp_m_max": (
+        "A maior distância entre espaçadores que a norma aceita: limite de ℓ/r_mín × r_mín. Usa a "
+        "maior esbeltez do conjunto, entre os eixos x e y."
+    ),
+    "cmp_m_min": (
+        "Menor quantidade de espaçadores entre as pontas que deixa ℓ abaixo do máximo. Nunca menos "
+        "que 2, mesmo em barra curta."
+    ),
+    "cmp_m_ell": "Distância entre espaçadores com a quantidade adotada: ℓ = L/(n + 1).",
+    "cmp_m_esbeltez": (
+        "Esbeltez de um perfil sozinho entre dois espaçadores, comparada com o limite da norma."
+    ),
+    "cmp_m_fator": (
+        "Quanto sobra da força de flambagem em y por causa das ligações. 1,000 = nada se perde. "
+        "Sempre 1,000 na NBR 8800:2008, que não faz essa redução."
+    ),
+    "res_n_espacadores": (
+        "Quantidade de espaçadores entre as pontas e a distância entre eles, no item 3.1."
+    ),
+    "res_espacadores": (
+        "O que cada espaçador a mais dá de resistência. Serve para não colocar espaçador que não "
+        "aumenta nada: quando o modo que governa é a flexão em x, por exemplo, N_c,Rd já não muda."
+    ),
     "sec_desenhos": (
         "Dois desenhos para conferir o que foi informado. A seção, em escala: o aço em corte, "
         "os eixos x e y pelo centro geométrico G, o centro de cisalhamento (CC) quando fica fora "
@@ -356,7 +454,7 @@ AJUDA: dict[str, str] = {
     "cb_MC": "Momento (em módulo) a **¾** do trecho entre travamentos, em kN·m.",
     "mrd_x_ativar": (
         "Use quando o programa não tem rotina de momento resistente para a seção (tubo "
-        "não compacto, T, seção genérica). Você calcula M_Rd fora do programa e informa; o "
+        "não compacto, T, barra composta, seção genérica). Você calcula M_Rd fora do programa e informa; o "
         "programa o usa na interação e deixa isso registrado."
     ),
     "mrd_x": "Momento resistente de cálculo M_x,Rd calculado por você, em kN·m.",

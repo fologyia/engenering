@@ -9,6 +9,7 @@ from docx import Document
 
 from core import column_buckling as cb
 from core import desenho_da_coluna as dc
+from core import perfis_compostos as pc
 from core import section_catalog as sc
 from core.coluna_word import gerar_word_coluna, linhas_do_resumo
 
@@ -127,3 +128,27 @@ def test_caso_que_a_norma_nao_cobre_aparece_sem_a_palavra_proibida():
         assert "Casos que a norma não cobre" in cheio
     for proibida in PALAVRAS_PROIBIDAS:
         assert proibida not in cheio, proibida
+
+
+def test_word_da_barra_composta_traz_os_espacadores():
+    secao = pc.duas_cantoneiras(pc.cantoneira(76.2, 76.2, 6.35), pc.ARRANJO_2L_CRUZ, 8.0)
+    entrada = cb.EntradaColuna(
+        secao=secao, fy_MPa=250.0, norma="NBR8800_2024", Lx_mm=3000.0, Ly_mm=3000.0, N_Sd_kN=50.0,
+        ligacoes=pc.LigacoesDaComposta(3000.0),
+    )  # fmt: skip
+    resultado = cb.verificar_coluna(entrada)
+    cheio = texto(gerar_word_coluna(entrada, resultado))
+    for trecho in (
+        "Espaçadores da barra composta",
+        pc.ARRANJO_2L_CRUZ,
+        pc.LIGACAO_APERTO_NORMAL,
+        "Distância máxima ℓ_máx",
+        "N_e,m/N_e,o",
+        "Modo que governa",  # a tabela de quantas ligações usar
+        "Barra composta",
+        "cada perfil trabalhando sozinho",
+    ):
+        assert trecho in cheio, trecho
+    for palavra in PALAVRAS_PROIBIDAS:
+        assert palavra not in cheio, palavra
+    assert any(item[0] == "Espaçadores" for item in linhas_do_resumo(entrada, resultado))

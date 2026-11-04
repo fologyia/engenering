@@ -6,7 +6,8 @@ guardas de entrada marcadas "Guarda:" e as lacunas marcadas "Acréscimo:" (cada 
 teste em ``tests/test_column_design.py``).
 
 Seções: I/H (laminado ou soldado), U, tubo retangular, tubo circular, barra maciça circular e
-retangular, e seção genérica de catálogo. Normas (parâmetro ``norma``):
+retangular, e seção genérica de catálogo; barras compostas vêm de :mod:`core.perfis_compostos`.
+Normas (parâmetro ``norma``):
 
     "NBR8800_2008"     ABNT NBR 8800:2008 (vigente) — flambagem local pelo fator Q = Qs·Qa (Anexo F)
     "NBR8800_2024"     ABNT NBR 8800:2025 — área efetiva A_ef (5.3.4)
@@ -337,11 +338,17 @@ def forca_flambagem_elastica(
     KzLz: float | None = None,
     E: float = E_ACO,
     G: float = G_ACO,
+    fator_Ney: float = 1.0,
 ) -> dict[str, Any]:
     """N_e (kN) e o modo que governa. Dupla simetria: min(N_ex, N_ey, N_ez). Monossimétrica: modo acoplado
-    flexo-torção (5.3.5.2). Assimétrica: menor raiz da equação cúbica. KzLz padrão = max(KxLx, KyLy)."""
+    flexo-torção (5.3.5.2). Assimétrica: menor raiz da equação cúbica. KzLz padrão = max(KxLx, KyLy).
+
+    Acréscimo: ``fator_Ney`` é N_e,m/N_e,o da barra composta (5.3.6.3), a redução que as ligações
+    entre os perfis trazem à flexão em y. Entra antes do acoplamento: a flexo-torção usa o N_ey já
+    reduzido, como o AISC faz com (L_c/r)_m. ``Ney0`` guarda o valor da barra como uma unidade."""
     Nex = PI2 * E * sec.Ix / KxLx**2
-    Ney = PI2 * E * sec.Iy / KyLy**2
+    Ney0 = PI2 * E * sec.Iy / KyLy**2
+    Ney = Ney0 * fator_Ney
     if not sec.torcao_relevante or (sec.J <= 0 and sec.Cw <= 0):
         Nez = math.inf
     else:
@@ -378,6 +385,7 @@ def forca_flambagem_elastica(
     return dict(
         Nex=Nex / 1000,
         Ney=Ney / 1000,
+        Ney0=Ney0 / 1000,
         Nez=Nez / 1000 if Nez != math.inf else math.inf,
         modos={k: v / 1000 for k, v in modos.items()},
         Ne=modos[modo] / 1000,
@@ -516,12 +524,14 @@ def resist_compressao(
     E: float = E_ACO,
     G: float = G_ACO,
     gama_a1: float = 1.10,
+    fator_Ney: float = 1.0,
 ) -> dict[str, Any]:
     """N_c,Rd (kN) com TODOS os modos (x, y, torção/flexo-torção) e flambagem local.
     2008:  λ0 = √(Q A_g f_y/N_e);  N_c,Rd = χ Q A_g f_y/γ_a1.
-    2024 / AISC-16:  λ0 = √(A_g f_y/N_e);  N_c,Rd = χ A_ef f_y × (1/γ_a1 ou 0,90)."""
+    2024 / AISC-16:  λ0 = √(A_g f_y/N_e);  N_c,Rd = χ A_ef f_y × (1/γ_a1 ou 0,90).
+    ``fator_Ney``: ver :func:`forca_flambagem_elastica`."""
     _check(norma)
-    ne = forca_flambagem_elastica(sec, KxLx, KyLy, KzLz, E, G)
+    ne = forca_flambagem_elastica(sec, KxLx, KyLy, KzLz, E, G, fator_Ney)
     Ne = ne["Ne"] * 1000
     out = dict(ne)
     if norma == "NBR8800_2008":
@@ -600,6 +610,8 @@ def momento_resistente(
     res: dict[str, float] = {}
     W = sec.Wx if eixo == "x" else sec.Wy
     Z = sec.Zx if eixo == "x" else sec.Zy
+    if sec.tipo == "composta":  # Acréscimo: a barra composta tem W, mas não tem rotina de M_Rd
+        raise NotImplementedError("Barra composta sem rotina de M_Rd neste módulo.")
     if Z is None:
         raise ValueError("Z (módulo plástico) não informado para este eixo.")
     if W is None:  # Guarda

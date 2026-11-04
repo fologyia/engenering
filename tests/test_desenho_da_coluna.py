@@ -16,6 +16,7 @@ from PIL import Image
 from core import column_buckling as cb
 from core import desenho_da_coluna as dc
 from core import desenho_da_secao as ds
+from core import perfis_compostos as pc
 from core import section_catalog as sc
 
 I_300 = cb.secao_por_dimensoes("I", soldado=True, d=300.0, bf=150.0, tf=12.5, tw=8.0)
@@ -100,3 +101,47 @@ def test_mao_francesa_entra_no_plano_em_que_age(eixo):
         != imagem_sem.crop((meio, 150, 640, 560)).tobytes()
     )
     assert (esquerda, direita) == ((False, True) if eixo == "x" else (True, False))
+
+
+# ------------------------------------------------------------------ barra composta
+def _composta(arranjo: str, s: float = 8.0):
+    if arranjo in pc.ARRANJOS_DE_CANTONEIRA:
+        return pc.duas_cantoneiras(pc.cantoneira(76.2, 76.2, 6.35), arranjo, s)
+    return pc.dois_U(cb.secao_de_perfil(sc.obter_perfil('U 6" x 12,20')), arranjo, s)
+
+
+@pytest.mark.parametrize("arranjo", pc.ARRANJOS)
+def test_secao_composta_desenha_os_dois_perfis(arranjo):
+    secao = _composta(arranjo)
+    forma = ds.forma_da_secao(secao)
+    assert forma.conhecida and len(forma.cheios) == 2 and forma.cotas
+    if arranjo != pc.ARRANJO_2L_CRUZ:  # a cruz gira: o s fica no título da figura
+        assert any(e.texto == "s = 8" for e in forma.espessuras)
+    figura = ds.figura_da_secao(secao, giro_graus=30.0)
+    assert Image.open(io.BytesIO(figura.png)).size == (940, 540)
+    assert secao.nome in figura.titulo
+
+
+@pytest.mark.parametrize("arranjo", pc.ARRANJOS)
+def test_perfis_encostados_nao_cotam_o_afastamento(arranjo):
+    forma = ds.forma_da_secao(_composta(arranjo, 0.0))
+    assert not any(e.texto.startswith("s =") for e in forma.espessuras)
+
+
+def test_y_da_secao_composta_passa_entre_os_perfis():
+    for arranjo in (pc.ARRANJO_2L_T, pc.ARRANJO_2U_I, pc.ARRANJO_2U_CAIXA):
+        forma = ds.forma_da_secao(_composta(arranjo))
+        assert max(p[0] for p in forma.cheios[0]) == pytest.approx(-4.0)
+        assert min(p[0] for p in forma.cheios[1]) == pytest.approx(4.0)
+
+
+def test_coluna_em_pe_marca_os_espacadores():
+    secao = _composta(pc.ARRANJO_2L_T)
+    sem = dc.ColunaEmPe(secao, 3000.0, 3000.0, 3000.0, 1.0, 1.0, *["Biapoiada (pino-pino)"] * 2)
+    com = dc.ColunaEmPe(
+        secao, 3000.0, 3000.0, 3000.0, 1.0, 1.0, *["Biapoiada (pino-pino)"] * 2,
+        espacadores_mm=(1000.0, 2000.0),
+    )  # fmt: skip
+    figura = dc.figura_da_coluna(com)
+    assert "2 espaçadores a cada 1000 mm" in figura.legenda
+    assert figura.png != dc.figura_da_coluna(sem).png

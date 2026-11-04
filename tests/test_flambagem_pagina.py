@@ -20,6 +20,7 @@ from streamlit.testing.v1 import AppTest
 from components import column_ui as ui
 from core import column_buckling as cb
 from core import column_design as cd
+from core import perfis_compostos as pc
 from core import section_catalog as catalogo
 from core.project_store import obter_projeto_ativo
 from core.verificacao import COLUNAS_TABELA
@@ -633,3 +634,80 @@ def test_registrar_no_projeto_grava_a_tabela_inteira(banco_com_projeto):
     assert len(registro["resultados"]["verificações"]) >= 15
     assert registro["entradas"]["condicao_apoio_x"] == "Biapoiada (pino-pino)"
     assert registro["entradas"]["norma"] == "NBR8800_2008"
+
+
+# ------------------------------------------------------------------ barra composta
+COMPOSTA = {
+    "col_tipo_secao": ui.SEC_COMPOSTA,
+    "col_norma": "NBR8800_2024",
+    "col_L": 3000.0,
+}
+
+
+def test_composta_mostra_a_distancia_entre_espacadores(banco_isolado):
+    t = abrir(banco_isolado, **COMPOSTA)
+    assert metrica(t, "Mínimo de espaçadores") == "2"
+    assert metrica(t, "Distância adotada ℓ") == "1000 mm"
+    assert metrica(t, "Espaçadores") == "2 a cada 1000 mm"
+    assert metrica(t, "K_i") == "0.50"
+    assert tem_metrica(t, "y₀ (seção monossimétrica)")
+    assert linha(t, "Distância entre espaçadores")["Status"] == "OK"
+    assert linha(t, "Ligações das pontas")["Status"] == "OK"
+    assert tem_linha(t, "N_e,m — flexão em y")
+    assert any("Barra composta" in m.value for m in t.markdown)
+
+
+def test_composta_com_pontas_de_aperto_normal_reprova(banco_isolado):
+    t = abrir(banco_isolado, **COMPOSTA, col_cmp_pontas=pc.LIGACAO_APERTO_NORMAL)
+    assert linha(t, "Ligações das pontas")["Status"] == "NÃO OK"
+    assert any("soldadas ou com parafusos protendidos" in e.value for e in t.error)
+
+
+def test_composta_com_espacadores_de_menos_avisa(banco_isolado):
+    t = abrir(
+        banco_isolado, **{**COMPOSTA, "col_L": 9000.0},
+        col_cmp_auto=False, col_cmp_n=2, col_mesmo_L=False, col_Lx=2000.0, col_Ly=2000.0,
+    )  # fmt: skip
+    assert linha(t, "Distância entre espaçadores")["Status"] == "NÃO OK"
+    assert any("Faltam espaçadores" in e.value for e in t.error)
+
+
+def test_composta_lista_quantos_espacadores_usar(banco_isolado):
+    t = abrir(banco_isolado, **COMPOSTA, col_cmp_arranjo=pc.ARRANJO_2L_CRUZ)
+    opcoes = next(d.value for d in t.dataframe if "N_e,m/N_e,o" in d.value.columns)
+    assert list(opcoes["Espaçadores"])[0] == 2 and len(opcoes) >= 2
+
+
+def test_composta_com_abas_desiguais_e_em_u(banco_isolado):
+    t = abrir(banco_isolado, **COMPOSTA, col_cmp_cantoneira=ui.CANTONEIRA_INFORMADA)
+    assert any("L 76.2×50.8×6.35" in c.value for c in t.caption)
+    t = abrir(banco_isolado, **COMPOSTA, col_cmp_arranjo=pc.ARRANJO_2U_CAIXA)
+    assert any("costas" not in c.value and "em caixa" in c.value for c in t.caption)
+    assert not tem_metrica(t, "y₀ (seção monossimétrica)")
+
+
+def test_composta_com_espessura_impossivel_mostra_o_erro(banco_isolado):
+    t = abrir(banco_isolado, **COMPOSTA, col_cmp_cantoneira=ui.CANTONEIRA_INFORMADA, col_cmp_t=60.0)
+    assert any("menor que as duas abas" in e.value for e in t.error)
+
+
+def test_composta_na_nbr_2008_usa_meia_esbeltez_sem_reduzir(banco_isolado):
+    t = abrir(banco_isolado, **{**COMPOSTA, "col_norma": "NBR8800_2008"})
+    assert metrica(t, "N_e,m/N_e,o") == "1.000"
+    assert not tem_linha(t, "Ligações das pontas")
+    assert tem_linha(t, "ℓ/r_mín ≤ 1/2")
+
+
+def test_composta_com_desenhos_e_word(banco_isolado):
+    t = abrir(banco_isolado, **COMPOSTA, col_ver_desenhos=True)
+    assert len(t.get("image")) >= 3  # a seção, a coluna em pé e a curva
+    assert t.get("download_button")
+
+
+def test_composta_registra_no_projeto(banco_com_projeto):
+    t = abrir(banco_com_projeto, **COMPOSTA)
+    t.button(key="registrar_flambagem_colunas").click().run()
+    assert not t.exception
+    registro = obter_projeto_ativo()["registros_tecnicos"][-1]
+    assert registro["entradas"]["arranjo_da_composta"] == pc.ARRANJO_2L_T
+    assert registro["resultados"]["espacamento_adotado_mm"] == 1000.0
