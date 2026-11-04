@@ -159,8 +159,9 @@ AJUDA: dict[str, str] = {
     ),
     "paineis": "Quantos painéis (vãos) contraventados em cada uma dessas linhas, por andar.",
     "familia": (
-        "Tipo da barra: cantoneira simples ligada por uma aba, tubo com chapa de nó num rasgo, ou "
-        "barra redonda rosqueada (tirante, só para X só tração)."
+        "Tipo da barra: cantoneira simples ligada por uma aba, 2 cantoneiras de costas com a "
+        "chapa de nó no meio, tubo com chapa de nó num rasgo, ou barra redonda rosqueada (tirante, "
+        "só para X só tração)."
     ),
     "perfil": "A bitola da barra. Cantoneiras em polegadas (aba × espessura).",
     "aco": "Aço da barra: dá f_y e f_u (ASTM A36: 250/400 MPa; A572 Gr 50: 345/450 MPa).",
@@ -179,12 +180,43 @@ AJUDA: dict[str, str] = {
     ),
     "comp_solda": (
         "Comprimento de cada cordão de solda ao longo da barra (mm). Na cantoneira, dois cordões; "
-        "no tubo, quatro."
+        "nas 2 cantoneiras e no tubo, quatro."
     ),
     "perna_solda": "Perna (lado) do filete de solda (mm). Eletrodo E70.",
     "t_chapa": (
-        "Espessura da chapa de nó (mm): entra no contato dos parafusos e no rasgo do tubo. A "
-        "chapa em si se verifica na página Ligação de contraventamento."
+        "Espessura da chapa de nó (mm): entra no contato dos parafusos e no rasgo do tubo; nas 2 "
+        "cantoneiras, é também o afastamento entre elas. A chapa em si se verifica na página "
+        "Ligação de contraventamento."
+    ),
+    "espacadores": (
+        "As 2 cantoneiras só trabalham juntas se forem ligadas a intervalos. A tabela de "
+        "verificações mostra a distância **ℓ** em cada trecho travado (no X ligado no cruzamento, "
+        "cada metade da diagonal tem os seus).\n\n"
+        "Na compressão: ℓ/r_mín de uma cantoneira até **3/4** da esbeltez do conjunto, com pelo "
+        "menos 2 espaçadores (5.3.6.1). Só na tração: ℓ/r_mín até 300, sem mínimo (5.2.8.2).\n\n"
+        "**Simplificação:** o programa dá a distância e a quantidade; o espaçador e os seus "
+        "parafusos ou soldas não são dimensionados aqui, porque a norma não fixa a força neles. "
+        "Para ver o ganho de cada espaçador, use a página Flambagem de colunas."
+    ),
+    "lig_espacadores": (
+        "Como cada espaçador prende as cantoneiras:\n\n"
+        "- **Parafusos com aperto normal**: podem escorregar, e toda distância reduz a força de "
+        "flambagem para fora do plano.\n"
+        "- **Solda ou parafusos protendidos**: até ℓ/r_mín = 40 não há redução; acima, ela é "
+        "menor (K_i = 0,50)."
+    ),
+    "pontas_protendidas": (
+        "Na compressão, a NBR 8800:2025 (5.3.6.2) exige as pontas das 2 cantoneiras soldadas ou "
+        "com parafusos protendidos (superfície Classe A ou B): é ali que elas mais tendem a "
+        "escorregar. Desligado, a diagonal comprimida fica NÃO OK. Parafuso A307 não se protende."
+    ),
+    "espacadores_auto": (
+        "Ligado, o programa usa a menor quantidade que atende a norma em cada andar. Desligue para "
+        "informar mais espaçadores."
+    ),
+    "espacadores_n": (
+        "Espaçadores entre as duas pontas de cada trecho travado, sem contar as pontas. Ficam "
+        "igualmente espaçados: ℓ = L/(n + 1). Na compressão, a norma pede pelo menos 2."
     ),
     "aco_chapa": "Aço da chapa de nó: dá o f_u do contato dos parafusos.",
     # ------------------------------------------------------------------ ajustes

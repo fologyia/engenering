@@ -11,7 +11,7 @@ erro claro — nada é corrigido em silêncio.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any
 
@@ -45,6 +45,7 @@ from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import load_combinations as comb
+from core import perfis_compostos as pc
 from core import section_catalog as sc
 from core import steel_sections as ss
 from core import vento_aberto_registro as var
@@ -839,6 +840,50 @@ def formulario_metodo_do_vento(
         return ve
 
 
+def _espacadores(sufixo: str, diagonal: cb.Diagonal) -> cb.Diagonal:
+    """As ligações entre as 2 cantoneiras; a distância sai na tabela de verificações."""
+    st.markdown("**Espaçadores das 2 cantoneiras**", help=AJUDA["espacadores"])
+    linha = st.columns(2)
+    ligacao = _selecao(
+        "Ligação nos espaçadores",
+        f"lig_espacadores{sufixo}",
+        list(pc.LIGACOES),
+        AJUDA["lig_espacadores"],
+        alvo=linha[0],
+    )
+    protendidas = True
+    if diagonal.ligacao == cb.LIGACAO_PARAFUSADA:
+        protendidas = _toggle(
+            "Parafusos das pontas protendidos (Classe A ou B)",
+            f"pontas_protendidas{sufixo}",
+            AJUDA["pontas_protendidas"],
+            valor=True,
+            alvo=linha[1],
+        )
+    automatico = _toggle(
+        "Usar a menor quantidade de espaçadores que a norma aceita",
+        f"espacadores_auto{sufixo}",
+        AJUDA["espacadores_auto"],
+        valor=True,
+    )
+    quantidade: int | None = None
+    if not automatico:
+        quantidade = _inteiro(
+            "Espaçadores em cada trecho travado",
+            f"espacadores{sufixo}",
+            3,
+            AJUDA["espacadores_n"],
+            minimo=0,
+            maximo=50,
+        )
+    return replace(
+        diagonal,
+        ligacao_dos_espacadores=ligacao,
+        espacadores=quantidade,
+        pontas_protendidas=protendidas,
+    )
+
+
 def _sistema(
     sufixo: str, titulo: str, alvo: Any, *, com_ligacao: bool = True
 ) -> cp.SistemaDeContraventamento:
@@ -877,7 +922,7 @@ def _sistema(
             "Barra", f"familia{sufixo}", list(cb.FAMILIAS), AJUDA["familia"], alvo=linha[0]
         )
         perfis = cb.perfis_da_familia(familia)
-        padrao = 'L 2 1/2" × 1/4"' if familia == cb.FAMILIA_CANTONEIRA else None
+        padrao = 'L 2 1/2" × 1/4"' if familia in cb.FAMILIAS_DE_CANTONEIRA else None
         perfil = _selecao(
             "Perfil", f"perfil{sufixo}", perfis, AJUDA["perfil"], padrao=padrao, alvo=linha[1]
         )
@@ -1012,6 +1057,8 @@ def _sistema(
                     t_chapa_no_mm=t_chapa,
                     aco_chapa_no=aco_chapa,
                 )
+            if familia == cb.FAMILIA_2_CANTONEIRAS:
+                diagonal = _espacadores(sufixo, diagonal)
     return cp.SistemaDeContraventamento(tipo, diagonal, linhas, paineis)
 
 

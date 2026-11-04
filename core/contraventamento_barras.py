@@ -1,6 +1,6 @@
 """Verificação das diagonais de contraventamento pela NBR 8800:2025.
 
-Três famílias, as usuais em plataformas e estruturas abertas:
+Quatro famílias, as usuais em plataformas e estruturas abertas:
 
 * **cantoneira simples** ligada por uma aba (parafusos numa linha ou solda longitudinal):
   tração (5.2: escoamento da seção bruta e ruptura da seção líquida efetiva, ``A_e = C_t·A_n`` com
@@ -8,6 +8,10 @@ Três famílias, as usuais em plataformas e estruturas abertas:
   (``N_ex = π²·E·I_x1/L_x1,eq²``, com ``Q`` das abas — grupo 3 do Anexo F) e, na ligação
   parafusada, corte e pressão de contato dos parafusos (6.3.3.2 e 6.3.3.3) e colapso por
   rasgamento da aba (6.5.6);
+* **2 cantoneiras em T**, de costas, com a chapa de nó entre elas: a tração, o contato, o colapso
+  por rasgamento e a solda somam as duas cantoneiras, os parafusos trabalham em corte duplo e a
+  compressão é a da barra composta (5.3.5.2 e 5.3.6, :mod:`core.perfis_compostos`), com os
+  espaçadores em cada trecho travado. O afastamento entre os perfis é a espessura da chapa de nó;
 * **tubo** do catálogo (circular ou retangular) com chapa de nó concêntrica soldada num rasgo:
   tração com ``C_t = [1 + (e_c/ℓ_c)^3,2]^−10`` (5.2.5-e) e área líquida descontando o rasgo,
   compressão pela NBR 8800 (5.3, ``χ``, ``Q``) e a solda de filete (6.2.5);
@@ -25,8 +29,10 @@ from dataclasses import dataclass
 
 from core import bolted_connection as bc
 from core import cantoneiras as ct
+from core import column_design as cd
 from core import criterio_anglo as ca
 from core import nbr8800
+from core import perfis_compostos as pc
 from core import section_catalog as sc
 from core import steel_sections as ss
 from core.verificacao import Verificacao
@@ -41,9 +47,11 @@ GAMMA_W2 = 1.35  # solda (metal da solda), Tabela 3
 FW_E70_MPA = 485.0  # resistência à tração do metal da solda E70XX
 
 FAMILIA_CANTONEIRA = "Cantoneira simples"
+FAMILIA_2_CANTONEIRAS = "2 cantoneiras em T"
 FAMILIA_TUBO = "Tubo (catálogo)"
 FAMILIA_BARRA_REDONDA = "Barra redonda (tirante rosqueado)"
-FAMILIAS = (FAMILIA_CANTONEIRA, FAMILIA_TUBO, FAMILIA_BARRA_REDONDA)
+FAMILIAS = (FAMILIA_CANTONEIRA, FAMILIA_2_CANTONEIRAS, FAMILIA_TUBO, FAMILIA_BARRA_REDONDA)
+FAMILIAS_DE_CANTONEIRA = (FAMILIA_CANTONEIRA, FAMILIA_2_CANTONEIRAS)
 
 LIGACAO_PARAFUSADA = "parafusada"
 LIGACAO_SOLDADA = "soldada"
@@ -77,11 +85,15 @@ class Diagonal:
     perna_solda_mm: float = 5.0
     t_chapa_no_mm: float = 9.5
     aco_chapa_no: str = "ASTM A36"
+    # só nas 2 cantoneiras
+    ligacao_dos_espacadores: str = pc.LIGACAO_APERTO_NORMAL
+    espacadores: int | None = None  # em cada trecho travado; None = o mínimo da norma
+    pontas_protendidas: bool = True  # ligação parafusada: Classe A ou B (5.3.6.2)
 
 
 def perfis_da_familia(familia: str) -> list[str]:
     """Nomes que a família aceita (cantoneiras da série; tubos e barras do catálogo)."""
-    if familia == FAMILIA_CANTONEIRA:
+    if familia in FAMILIAS_DE_CANTONEIRA:
         return list(ct.CATALOGO_CANTONEIRAS)
     catalogo = sc.listar_perfis()
     if familia == FAMILIA_TUBO:
@@ -92,17 +104,31 @@ def perfis_da_familia(familia: str) -> list[str]:
 
 
 def largura_vista_mm(d: Diagonal) -> float:
-    """Largura da barra vista pelo vento (para a área exposta da estrutura)."""
-    if d.familia == FAMILIA_CANTONEIRA:
+    """Largura da barra vista pelo vento (para a área exposta da estrutura).
+
+    Nas 2 cantoneiras é a mesma aba: as abas ligadas ficam uma atrás da outra, na chapa de nó.
+    """
+    if d.familia in FAMILIAS_DE_CANTONEIRA:
         return ct.obter_cantoneira(d.perfil).b_mm
     perfil = sc.obter_perfil(d.perfil)
     return max(perfil.altura_mm, perfil.largura_mm)
 
 
+def _pecas(d: Diagonal) -> int:
+    return 2 if d.familia == FAMILIA_2_CANTONEIRAS else 1
+
+
 def area_bruta_mm2(d: Diagonal) -> float:
-    if d.familia == FAMILIA_CANTONEIRA:
-        return ct.obter_cantoneira(d.perfil).area_mm2
+    if d.familia in FAMILIAS_DE_CANTONEIRA:
+        return _pecas(d) * ct.obter_cantoneira(d.perfil).area_mm2
     return sc.obter_perfil(d.perfil).area_mm2
+
+
+def secao_de_2_cantoneiras(d: Diagonal) -> cd.Secao:
+    """A barra composta da diagonal: duas cantoneiras em T, afastadas pela chapa de nó."""
+    medida = ct.obter_cantoneira(d.perfil)
+    peca = pc.cantoneira(medida.b_mm, medida.b_mm, medida.t_mm, d.perfil)
+    return pc.duas_cantoneiras(peca, pc.ARRANJO_2L_T, d.t_chapa_no_mm)
 
 
 def validar(d: Diagonal) -> list[str]:
@@ -115,7 +141,7 @@ def validar(d: Diagonal) -> list[str]:
         erros.append("Aço desconhecido.")
     if d.ligacao not in LIGACOES:
         erros.append(f"Ligação desconhecida: {d.ligacao!r}.")
-    if d.familia == FAMILIA_CANTONEIRA and d.ligacao == LIGACAO_PARAFUSADA:
+    if d.familia in FAMILIAS_DE_CANTONEIRA and d.ligacao == LIGACAO_PARAFUSADA:
         if d.parafuso not in bc.PARAFUSOS:
             erros.append(f"Parafuso desconhecido: {d.parafuso!r}.")
         if d.grau not in bc.GRAUS:
@@ -135,6 +161,11 @@ def validar(d: Diagonal) -> list[str]:
         erros.append("O tubo é ligado por chapa de nó soldada num rasgo: escolha ligação soldada.")
     if not d.t_chapa_no_mm > 0:
         erros.append("A espessura da chapa de nó precisa ser maior que zero.")
+    if d.familia == FAMILIA_2_CANTONEIRAS:
+        if d.ligacao_dos_espacadores not in pc.LIGACOES:
+            erros.append(f"Ligação de espaçador desconhecida: {d.ligacao_dos_espacadores!r}.")
+        if d.espacadores is not None and d.espacadores < 0:
+            erros.append("A quantidade de espaçadores não pode ser negativa.")
     return erros
 
 
@@ -197,28 +228,36 @@ def verificar_diagonal(
     ligacao_rd: float | None = None
     lb = comprimento_destravado_mm
 
-    if d.familia == FAMILIA_CANTONEIRA:
+    if d.familia in FAMILIAS_DE_CANTONEIRA:
         cant = ct.obter_cantoneira(d.perfil)
+        dupla = d.familia == FAMILIA_2_CANTONEIRAS
         nt_rd = _tracao_cantoneira(d, cant, fy, fu, prefixo, tracao_kN, linhas)
+        secao = secao_de_2_cantoneiras(d) if dupla else None
+        raio = cant.r_z_mm if secao is None else min(secao.rx, secao.ry)
         if tracao_kN > 0:
             linhas.append(
                 _limite(
                     f"{prefixo}: esbeltez da diagonal tracionada",
-                    lb / cant.r_z_mm,
+                    lb / raio,
                     nbr8800.ESBELTEZ_MAXIMA_TRACAO,
-                    f"L/r_min = {_n(lb, 0)}/{_n(cant.r_z_mm, 1)} ≤ 300 (recomendação)",
+                    f"L/r_min = {_n(lb, 0)}/{_n(raio, 1)} ≤ 300 (recomendação)",
                     "5.2.8.1",
                 )
             )
         if compressao_kN > 0:
-            nc_rd = _compressao_cantoneira(d, cant, fy, prefixo, lb, compressao_kN, linhas)
+            if secao is None:
+                nc_rd = _compressao_cantoneira(d, cant, fy, prefixo, lb, compressao_kN, linhas)
+            else:
+                nc_rd = _compressao_2_cantoneiras(d, secao, fy, prefixo, lb, compressao_kN, linhas)
+        elif secao is not None and tracao_kN > 0:
+            _espacadores_na_tracao(d, secao, prefixo, lb, linhas)
         if d.ligacao == LIGACAO_PARAFUSADA:
             ligacao_rd = _parafusos_cantoneira(
                 d, cant, fy, fu, prefixo, max(tracao_kN, compressao_kN), linhas
             )
         else:
             ligacao_rd = _solda(
-                d, prefixo, max(tracao_kN, compressao_kN), linhas, numero_de_cordoes=2
+                d, prefixo, max(tracao_kN, compressao_kN), linhas, numero_de_cordoes=2 * _pecas(d)
             )
     elif d.familia == FAMILIA_TUBO:
         perfil = sc.obter_perfil(d.perfil)
@@ -329,7 +368,7 @@ def verificacoes_anglo(
 ) -> list[Verificacao]:
     """Exigências do critério Anglo AA-BR-DPST-DR-0001 para a diagonal e a sua ligação."""
     linhas: list[Verificacao] = []
-    if d.familia == FAMILIA_CANTONEIRA:
+    if d.familia in FAMILIAS_DE_CANTONEIRA:
         cant = ct.obter_cantoneira(d.perfil)
         minimo = ca.ESPESSURAS_MINIMAS_MM["Cantoneiras"]
         linhas.append(
@@ -375,7 +414,7 @@ def verificacoes_anglo(
                 tipo="limite",
             )
         )
-    if d.familia == FAMILIA_CANTONEIRA and d.ligacao == LIGACAO_PARAFUSADA:
+    if d.familia in FAMILIAS_DE_CANTONEIRA and d.ligacao == LIGACAO_PARAFUSADA:
         db = bc.PARAFUSOS[d.parafuso][0]
         minimo = ca.DIAMETROS_MINIMOS_MM["Parafusos"]
         linhas.append(
@@ -438,24 +477,27 @@ def _tracao_cantoneira(
     tracao_kN: float,
     linhas: list[Verificacao],
 ) -> float:
-    ag = cant.area_mm2
+    pecas = _pecas(d)
+    ag = pecas * cant.area_mm2
     if d.ligacao == LIGACAO_PARAFUSADA:
         dh = bc.PARAFUSOS[d.parafuso][1]
         folga = 0.0 if d.furo_com_broca else 2.0
-        an = ag - (dh + folga) * cant.t_mm
+        an = ag - pecas * (dh + folga) * cant.t_mm
         lc = (d.n_parafusos - 1) * d.passo_mm
+        n_furos = "2·" if pecas == 2 else ""
         origem_an = (
-            f"A_n = A_g − d_h·t = {_n(ag, 0)} − {_n(dh)}·{_n(cant.t_mm, 2)} (furo de broca, "
-            "5.2.4.1 a)"
+            f"A_n = A_g − {n_furos}d_h·t = {_n(ag, 0)} − {n_furos}{_n(dh)}·{_n(cant.t_mm, 2)} "
+            "(furo de broca, 5.2.4.1 a)"
             if d.furo_com_broca
-            else f"A_n = A_g − (d_h + 2)·t = {_n(ag, 0)} − ({_n(dh)} + 2)·{_n(cant.t_mm, 2)}"
+            else f"A_n = A_g − {n_furos}(d_h + 2)·t = {_n(ag, 0)} − "
+            f"{n_furos}({_n(dh)} + 2)·{_n(cant.t_mm, 2)}"
         )
     else:
         an = ag
         lc = d.comprimento_solda_mm
         origem_an = "A_n = A_g (solda longitudinal)"
     ct_calc = 1.0 - cant.x_barra_mm / lc
-    ct_min = cant.area_aba_mm2 / ag
+    ct_min = cant.area_aba_mm2 / cant.area_mm2  # por cantoneira
     coef = min(1.0, max(ct_calc, ct_min))
     escoamento = ag * fy / GAMMA_A1 / 1e3
     ruptura = coef * an * fu / GAMMA_A2 / 1e3
@@ -533,6 +575,124 @@ def _compressao_cantoneira(
     return resistencia
 
 
+def _compressao_2_cantoneiras(
+    d: Diagonal,
+    secao: cd.Secao,
+    fy: float,
+    prefixo: str,
+    lb: float,
+    compressao_kN: float,
+    linhas: list[Verificacao],
+) -> float:
+    """Barra composta em cada trecho travado ``lb``: K = 1 nos dois eixos e espaçadores no trecho.
+
+    Usa as mesmas contas da página Flambagem de colunas: a flambagem em torno de y, para fora do
+    plano da chapa de nó, é a que carrega os espaçadores e se acopla à torção.
+    """
+    ligacao_soldada = d.ligacao == LIGACAO_SOLDADA
+    a307 = not ligacao_soldada and d.grau == "A307"
+    rigidas = ligacao_soldada or (d.pontas_protendidas and not a307)
+    ligacoes = pc.LigacoesDaComposta(lb, d.ligacao_dos_espacadores, rigidas, d.espacadores)
+    lig = pc.avaliar(secao, ligacoes, lb / secao.rx, lb / secao.ry, NORMA)
+    comp = cd.resist_compressao(
+        secao, fy, lb, lb, None, NORMA, E_MPA, G_MPA, GAMMA_A1, fator_Ney=lig.fator_de_reducao
+    )
+    resistencia = float(comp["Nc_Rd"])
+    linhas.append(
+        _linha(
+            f"{prefixo}: compressão da diagonal",
+            compressao_kN,
+            resistencia,
+            "kN",
+            f"Modo {comp['modo']}: N_e = {_n(comp['Ne'])} kN; N_ex = {_n(comp['Nex'])}, "
+            f"N_ey,o = {_n(comp['Ney0'])}, N_e,m = {_n(comp['Ney'])}, N_ez = {_n(comp['Nez'])} kN; "
+            f"λ₀ = {_n(comp['lambda0'], 3)}; χ = {_n(comp['chi'], 3)}; A_ef = "
+            f"{_n(comp['A_ef'], 0)} mm²; N_c,Rd = χ·A_ef·f_y/γ_a1",
+            "5.3.2, 5.3.5.2 e 5.3.6",
+        )
+    )
+    linhas.append(_info(f"{prefixo}: redução pelos espaçadores", lig.formula_da_reducao, "5.3.6.3"))
+    linhas.append(
+        _limite(
+            f"{prefixo}: esbeltez da diagonal comprimida",
+            max(lb / secao.rx, lb / secao.ry),
+            nbr8800.ESBELTEZ_MAXIMA_COMPRESSAO,
+            f"L/r do conjunto ≤ 200: L = {_n(lb, 0)} mm, r_x = {_n(secao.rx, 1)} e r_y = "
+            f"{_n(secao.ry, 1)} mm",
+            "5.3.7.1",
+        )
+    )
+    linhas.append(
+        _limite(
+            f"{prefixo}: distância entre espaçadores",
+            lig.esbeltez_da_peca,
+            lig.limite_da_peca,
+            f"{lig.quantidade} espaçadores no trecho de {_n(lb, 0)} mm: ℓ = "
+            f"{_n(lig.espacamento_mm, 0)} mm; ℓ/r_mín = {_n(lig.esbeltez_da_peca)} ≤ 3/4·"
+            f"{_n(lig.esbeltez_do_conjunto)}; ℓ máx. = {_n(lig.espacamento_maximo_mm, 0)} mm",
+            "5.3.6.1",
+        )
+    )
+    linhas.append(
+        Verificacao(
+            f"{prefixo}: quantidade de espaçadores",
+            None,
+            None,
+            "-",
+            f"{REF} 5.3.6.1",
+            f"n = {lig.quantidade} ≥ {pc.ESPACADORES_MINIMOS} no trecho; mínimo para o limite de "
+            f"ℓ: {lig.quantidade_minima}",
+            status="OK" if lig.tem_quantidade_minima else "NÃO OK",
+            tipo="limite",
+        )
+    )
+    if a307:
+        texto = (
+            "Parafuso A307 não se protende: com a diagonal comprimida, as pontas das 2 cantoneiras "
+            "têm de ser soldadas ou com parafusos de alta resistência protendidos (Classe A ou B)."
+        )
+    elif rigidas:
+        texto = "Soldadas ou com parafusos protendidos (Classe A ou B)."
+    else:
+        texto = (
+            "Com aperto normal, as 2 cantoneiras ficam fora do que a norma cobre na compressão: "
+            "solde, ou use parafusos protendidos (Classe A ou B)."
+        )
+    linhas.append(
+        Verificacao(
+            f"{prefixo}: ligações das pontas das 2 cantoneiras",
+            None,
+            None,
+            "-",
+            f"{REF} 5.3.6.2",
+            texto,
+            status="OK" if rigidas else "NÃO OK",
+            tipo="limite",
+        )
+    )
+    return resistencia
+
+
+def _espacadores_na_tracao(
+    d: Diagonal, secao: cd.Secao, prefixo: str, lb: float, linhas: list[Verificacao]
+) -> None:
+    """Barra só tracionada: ℓ/r_mín de um perfil ≤ 300, sem o mínimo de dois (5.2.8.2)."""
+    r_min = secao.dims["r_min"]
+    minima = pc.espacadores_na_tracao(lb, r_min)
+    quantidade = minima if d.espacadores is None else d.espacadores
+    espacamento = lb / (quantidade + 1)
+    linhas.append(
+        _limite(
+            f"{prefixo}: distância entre espaçadores",
+            espacamento / r_min,
+            pc.ESBELTEZ_DA_PECA_TRACIONADA,
+            f"{quantidade} espaçadores no trecho de {_n(lb, 0)} mm: ℓ = {_n(espacamento, 0)} mm; "
+            f"ℓ/r_mín ≤ 300 (recomendação); mínimo: {minima}",
+            "5.2.8.2",
+        )
+    )
+
+
 def compressao_de_cantoneira_simples(
     cant: ct.Cantoneira, fy: float, comprimento_mm: float, compressao_kN: float, prefixo: str
 ) -> tuple[float, list[Verificacao]]:
@@ -555,13 +715,14 @@ def _parafusos_cantoneira(
 ) -> float:
     db, dh, emin, _, _ = bc.PARAFUSOS[d.parafuso]
     fu_chapa = ACOS[d.aco_chapa_no][1]
-    fv = bc.resist_corte(db, d.grau, NORMA, rosca_no_plano=d.rosca_no_plano, n_planos=1)
+    pecas = _pecas(d)  # nas 2 cantoneiras, o parafuso passa pelas duas abas e pela chapa do meio
+    fv = bc.resist_corte(db, d.grau, NORMA, rosca_no_plano=d.rosca_no_plano, n_planos=pecas)
     contato_ext = min(
-        bc.resist_contato(db, cant.t_mm, fu, bc.lf_borda(d.borda_mm, dh), NORMA),
+        pecas * bc.resist_contato(db, cant.t_mm, fu, bc.lf_borda(d.borda_mm, dh), NORMA),
         bc.resist_contato(db, d.t_chapa_no_mm, fu_chapa, None, NORMA),
     )
     contato_int = min(
-        bc.resist_contato(db, cant.t_mm, fu, bc.lf_entre_furos(d.passo_mm, dh), NORMA),
+        pecas * bc.resist_contato(db, cant.t_mm, fu, bc.lf_entre_furos(d.passo_mm, dh), NORMA),
         bc.resist_contato(db, d.t_chapa_no_mm, fu_chapa, None, NORMA),
     )
     grupo = bc.resist_grupo_axial(1, d.n_parafusos, fv, contato_ext, contato_int)
@@ -571,9 +732,11 @@ def _parafusos_cantoneira(
             forca_kN,
             grupo,
             "kN",
-            f"{d.n_parafusos} × {d.parafuso} {d.grau}, 1 plano de corte: F_v,Rd = {_n(fv)} kN; "
+            f"{d.n_parafusos} × {d.parafuso} {d.grau}, {pecas} plano{'s' if pecas > 1 else ''} "
+            f"de corte: F_v,Rd = {_n(fv)} kN; "
             f"contato no extremo {_n(contato_ext)} kN e nos internos {_n(contato_int)} kN "
-            f"(aba t = {_n(cant.t_mm, 2)} mm e chapa t = {_n(d.t_chapa_no_mm)} mm)",
+            f"({'2 abas' if pecas > 1 else 'aba'} t = {_n(cant.t_mm, 2)} mm e chapa t = "
+            f"{_n(d.t_chapa_no_mm)} mm)",
             "6.3.3.2 e 6.3.3.3",
         )
     )
@@ -594,7 +757,7 @@ def _parafusos_cantoneira(
             )
         )
     else:
-        bloco = bc.resist_colapso_rasgamento(agv, anv, ant, fy, fu, NORMA, C_ts=1.0)
+        bloco = pecas * bc.resist_colapso_rasgamento(agv, anv, ant, fy, fu, NORMA, C_ts=1.0)
         linhas.append(
             _linha(
                 f"{prefixo}: colapso por rasgamento da aba",
@@ -602,8 +765,8 @@ def _parafusos_cantoneira(
                 bloco,
                 "kN",
                 f"A_gv = {_n(agv, 0)}, A_nv = {_n(anv, 0)}, A_nt = {_n(ant, 0)} mm² (gabarito "
-                f"{_n(g, 0)} mm); F_r,Rd = (0,6·f_u·A_nv + f_u·A_nt)/γ_a2 ≤ "
-                "(0,6·f_y·A_gv + f_u·A_nt)/γ_a2",
+                f"{_n(g, 0)} mm{', por cantoneira; as duas somam' if pecas > 1 else ''}); "
+                "F_r,Rd = (0,6·f_u·A_nv + f_u·A_nt)/γ_a2 ≤ (0,6·f_y·A_gv + f_u·A_nt)/γ_a2",
                 "6.5.6",
             )
         )

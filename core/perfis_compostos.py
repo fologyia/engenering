@@ -75,6 +75,8 @@ LIGACAO_RIGIDA = "Solda ou parafusos protendidos (Classe A ou B)"
 LIGACOES = (LIGACAO_APERTO_NORMAL, LIGACAO_RIGIDA)
 
 ESPACADORES_MINIMOS = 2
+#: Barra composta tracionada: limite de ℓ/r_mín de um perfil, recomendação de 5.2.8.2.
+ESBELTEZ_DA_PECA_TRACIONADA = 300.0
 #: Até aqui, com solda ou parafusos protendidos, as ligações não reduzem a força de flambagem.
 ESBELTEZ_SEM_REDUCAO = 40.0
 
@@ -445,6 +447,15 @@ def fator_de_reducao(
     else:
         termo = esbeltez_da_peca
     return esbeltez_em_y**2 / (esbeltez_em_y**2 + termo**2)
+
+
+def espacadores_na_tracao(comprimento_mm: float, r_min_mm: float) -> int:
+    """Menor quantidade de espaçadores da barra só tracionada: ℓ/r_mín ≤ 300 (5.2.8.2).
+
+    Diferente da compressão, a norma não pede um mínimo de dois.
+    """
+    maximo = ESBELTEZ_DA_PECA_TRACIONADA * r_min_mm
+    return max(0, math.ceil(comprimento_mm / maximo - 1e-9) - 1)
 
 
 def avaliar(

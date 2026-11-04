@@ -10,7 +10,7 @@ verificada, sem montar o modelo estrutural. O núcleo não depende do Streamlit.
 | `core/contraventamento_vento_barras.py` | vento viga a viga, pilar a pilar, pelo esqueleto do modelo, levado aos pisos (faixas, níveis e planta do esqueleto, excentricidade real) |
 | `core/load_combinations.py` | combinações (ELU normal, especial, excepcional; ELS rara, frequente, quase permanente), grupos exclusivos e envoltória rigorosa por esforço |
 | `core/contraventamento_plataforma.py` | ações, cortante de cada andar, B₂, distribuição entre as linhas, forças nas diagonais, deslocamentos |
-| `core/contraventamento_barras.py` | verificação das diagonais (cantoneira, tubo, tirante) e da ligação delas na chapa de nó |
+| `core/contraventamento_barras.py` | verificação das diagonais (cantoneira, 2 cantoneiras, tubo, tirante) e da ligação delas na chapa de nó |
 | `core/cantoneiras.py` | cantoneiras de abas iguais (seção idealizada, série em polegadas) |
 | `core/contraventamento_estrutura_registro.py` | registro no projeto e tabelas do memorial |
 | `components/contraventamento_estrutura_ui.py`, `..._help.py` | interface e textos dos "?" |
@@ -135,6 +135,15 @@ meio painel).
   0,75·L_x1` ou `32·r_x1 + 1,25·L_x1`, `N_ex = π²·E·I_x1/L_eq²`, Q do grupo 3); esbeltez
   equivalente ≤ 200; parafusos (6.3.3.2 e 6.3.3.3), colapso por rasgamento da aba (6.5.6), passo ≥
   2,7·d (6.3.9) e borda ≥ Tabela 16 (6.3.11).
+* **2 cantoneiras em T**, de costas, com a chapa de nó no meio (o afastamento é a espessura dela):
+  tração com as duas áreas e `C_t` de uma cantoneira; parafusos em corte duplo, contato = menor entre
+  as duas abas e a chapa, rasgamento das duas abas; solda de quatro cordões. Compressão de barra
+  composta em cada trecho travado, K = 1 nos dois eixos: mesmas contas da Flambagem de colunas
+  (`cd.resist_compressao` com `fator_Ney`; ver `docs/flambagem_de_colunas.md`), com `ℓ/r_mín ≤ 3/4`
+  da esbeltez do conjunto, pelo menos 2 espaçadores (5.3.6.1) e pontas soldadas ou protendidas
+  (5.3.6.2; A307 não se protende). Diagonal só tracionada: `ℓ/r_mín ≤ 300`, sem mínimo de
+  espaçadores (5.2.8.2). Vista pelo vento, a largura é a de uma aba. Só o arranjo em T: em cruz, os
+  parafusos de cada cantoneira não são os mesmos e a ligação é outra.
 * **Tubo** com chapa concêntrica soldada num rasgo: `A_n` sem o rasgo, `C_t = [1 + (e_c/ℓ_c)^3,2]^−10`
   (5.2.5-e) com `e_c = D/π − t_c/2` no circular e `(h² + 2hb)/[4(h + b)] − t_c/2` no retangular
   (Figuras 6 e 7 da 2025; o maior das duas orientações), compressão pela 5.3 e solda de

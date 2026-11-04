@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -110,6 +111,18 @@ ESTADOS = [
     pytest.param({"ce_mesmo_sistema": False}, id="sistemas-diferentes"),
     pytest.param({"ce_familia_x": cb.FAMILIA_TUBO, "ce_ligacao_x": cb.LIGACAO_SOLDADA}, id="tubo"),
     pytest.param({"ce_familia_x": cb.FAMILIA_BARRA_REDONDA}, id="tirante"),
+    pytest.param(
+        {"ce_familia_x": cb.FAMILIA_2_CANTONEIRAS, "ce_tipo_x": cp.TIPO_X_TRACAO_COMPRESSAO},
+        id="2-cantoneiras",
+    ),
+    pytest.param(
+        {
+            "ce_familia_x": cb.FAMILIA_2_CANTONEIRAS,
+            "ce_ligacao_x": cb.LIGACAO_SOLDADA,
+            "ce_espacadores_auto_x": False,
+        },
+        id="2-cantoneiras-soldadas-quantidade-informada",
+    ),
     pytest.param({"ce_tipo_x": cp.TIPO_X_TRACAO_COMPRESSAO}, id="x-tracao-compressao"),
     pytest.param({"ce_tipo_x": cp.TIPO_V_INVERTIDO}, id="v-invertido"),
     pytest.param({"ce_ligacao_x": cb.LIGACAO_SOLDADA}, id="cantoneira-soldada"),
@@ -316,3 +329,30 @@ def test_preencher_pelo_esqueleto(banco_com_projeto):
         (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
     } - ISENTOS
     assert not faltam, sorted(faltam)
+
+
+def _tabela(t: AppTest) -> pd.DataFrame:
+    return next(d.value for d in t.dataframe if "Verificação" in d.value.columns)
+
+
+def test_2_cantoneiras_mostram_os_espacadores_na_tabela(banco_isolado):
+    t = abrir(
+        banco_isolado,
+        ce_familia_x=cb.FAMILIA_2_CANTONEIRAS,
+        ce_tipo_x=cp.TIPO_X_TRACAO_COMPRESSAO,
+    )
+    nomes = list(_tabela(t)["Verificação"])
+    assert any("distância entre espaçadores" in nome for nome in nomes)
+    assert any("ligações das pontas das 2 cantoneiras" in nome for nome in nomes)
+
+
+def test_2_cantoneiras_sem_protensao_reprovam(banco_isolado):
+    t = abrir(
+        banco_isolado,
+        ce_familia_x=cb.FAMILIA_2_CANTONEIRAS,
+        ce_tipo_x=cp.TIPO_X_TRACAO_COMPRESSAO,
+        ce_pontas_protendidas_x=False,
+    )
+    tabela = _tabela(t)
+    pontas = tabela[tabela["Verificação"].str.contains("ligações das pontas")]
+    assert not pontas.empty and set(pontas["Status"]) == {"NÃO OK"}
