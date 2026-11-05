@@ -531,8 +531,100 @@ def figura_das_partes(partes: Sequence[Any], prop: Any) -> ImagemDiagrama:
     )
 
 
-def figura_de_tensoes(analise: Any, mapa: Any) -> ImagemDiagrama:
-    """Mapa de σ na seção: vermelho para tração, azul para compressão."""
+_BRANCO = np.array([255.0, 255.0, 255.0])
+_QUENTE = np.array([194.0, 65.0, 93.0])
+_FRIO = np.array([11.0, 110.0, 153.0])
+
+
+def _valores_por_celula(m: Any, x: np.ndarray, y: np.ndarray, valores: np.ndarray) -> np.ndarray:
+    """Média dos pontos de cada célula. Um nó entra em todas as células que encostam nele."""
+    nx, ny = len(m.xs) - 1, len(m.ys) - 1
+    soma, conta = np.zeros((nx, ny)), np.zeros((nx, ny))
+    folga = 1e-9 * float(m.xs[-1] - m.xs[0])
+    for sx in (-folga, folga):
+        for sy in (-folga, folga):
+            i = np.clip(np.searchsorted(m.xs, x + sx) - 1, 0, nx - 1)
+            j = np.clip(np.searchsorted(m.ys, y + sy) - 1, 0, ny - 1)
+            np.add.at(soma, (i, j), valores)
+            np.add.at(conta, (i, j), 1.0)
+    return np.divide(soma, conta, out=np.zeros_like(soma), where=conta > 0)
+
+
+def _linha_neutra(mapa: Any, p: Any) -> tuple[Ponto, Ponto] | None:
+    """Onde σ = 0 corta a caixa da seção. Sem troca de sinal, a linha não existe."""
+    if not (mapa.sigma_max > 0.0 > mapa.sigma_min) or not (mapa.b or mapa.c):
+        return None
+    achados: list[Ponto] = []
+    for x in (p.x0, p.x0 + p.largura):
+        if mapa.c:
+            y = p.yc - (mapa.a + mapa.b * (x - p.xc)) / mapa.c
+            if p.y0 <= y <= p.y0 + p.altura:
+                achados.append((x, y))
+    for y in (p.y0, p.y0 + p.altura):
+        if mapa.b:
+            x = p.xc - (mapa.a + mapa.c * (y - p.yc)) / mapa.b
+            if p.x0 <= x <= p.x0 + p.largura:
+                achados.append((x, y))
+    return (achados[0], achados[1]) if len(achados) >= 2 else None
+
+
+def _tracejado(d: ImageDraw.ImageDraw, a: Ponto, b: Ponto, cor: str) -> None:
+    comprimento = math.hypot(b[0] - a[0], b[1] - a[1])
+    passo = 9.0 * _ESC
+    for k in range(int(comprimento / passo) + 1):
+        if k % 2:
+            continue
+        i0, i1 = k * passo / comprimento, min((k + 1) * passo / comprimento, 1.0)
+        d.line(
+            [
+                (a[0] + (b[0] - a[0]) * i0, a[1] + (b[1] - a[1]) * i0),
+                (a[0] + (b[0] - a[0]) * i1, a[1] + (b[1] - a[1]) * i1),
+            ],
+            fill=cor,
+            width=2 * _ESC,
+        )
+
+
+def _setas_de_tau(d: ImageDraw.ImageDraw, escala: _Escala, mapa: Any) -> None:
+    """Uma seta por trecho do desenho, no ponto mais perto do meio dele."""
+    maior = float(mapa.tau_max)
+    if maior <= 0.0:
+        return
+    passo = 30.0 * _ESC
+    melhores: dict[tuple[int, int], tuple[float, int]] = {}
+    for k in range(len(mapa.no_x)):
+        x, y = escala.px(float(mapa.no_x[k]), float(mapa.no_y[k]))
+        chave = (int(x // passo), int(y // passo))
+        distancia = math.hypot((x % passo) - passo / 2.0, (y % passo) - passo / 2.0)
+        if chave not in melhores or distancia < melhores[chave][0]:
+            melhores[chave] = (distancia, k)
+    for _, k in melhores.values():
+        tx, ty = float(mapa.no_tau_x[k]), float(mapa.no_tau_y[k])
+        modulo = math.hypot(tx, ty)
+        if modulo < 0.05 * maior:
+            continue
+        tamanho = (7.0 + 15.0 * min(modulo / maior, 1.0)) * _ESC
+        x, y = escala.px(float(mapa.no_x[k]), float(mapa.no_y[k]))
+        ux, uy = tx / modulo, -ty / modulo
+        a = (x - ux * tamanho / 2.0, y - uy * tamanho / 2.0)
+        b = (x + ux * tamanho / 2.0, y + uy * tamanho / 2.0)
+        _seta(d, a, b, _TEXTO, largura=1, ponta=6)
+
+
+def _marca_de_maximo(d: ImageDraw.ImageDraw, escala: _Escala, ponto: tuple[float, float]) -> None:
+    x, y = escala.px(*ponto)
+    r = 9 * _ESC
+    d.ellipse([x - r, y - r, x + r, y + r], outline=_TEXTO, width=2 * _ESC)
+    d.line([(x - r * 1.5, y), (x + r * 1.5, y)], fill=_TEXTO, width=_ESC)
+    d.line([(x, y - r * 1.5), (x, y + r * 1.5)], fill=_TEXTO, width=_ESC)
+
+
+def figura_de_tensoes(analise: Any, mapa: Any, campo: str = "sigma") -> ImagemDiagrama:
+    """Mapa da seção. ``campo``: "sigma", "tau" ou "mises".
+
+    σ em vermelho e azul, porque tem sinal; τ e von Mises em um tom só, do branco ao forte. Em τ, as
+    setas mostram o caminho do cisalhamento; a marca em cruz é o ponto de maior valor.
+    """
     largura, altura = 640, 460
     imagem, d = _nova(largura, altura)
     p = analise.prop
@@ -545,27 +637,44 @@ def figura_de_tensoes(analise: Any, mapa: Any) -> ImagemDiagrama:
     ys = p.y0 + p.altura - (np.arange(ny) + 0.5) / ny * p.altura
     ix = np.clip(np.searchsorted(m.xs, xs) - 1, 0, len(m.xs) - 2)
     iy = np.clip(np.searchsorted(m.ys, ys) - 1, 0, len(m.ys) - 2)
-    grade_x, grade_y = np.meshgrid(xs, ys)
-    sigma = mapa.a + mapa.b * (grade_x - p.xc) + mapa.c * (grade_y - p.yc)
-    maior = max(abs(mapa.sigma_max), abs(mapa.sigma_min), 1e-9)
-    t = np.clip(sigma / maior, -1.0, 1.0)[..., None]
-    branco = np.array([255.0, 255.0, 255.0])
-    quente = np.array([194.0, 65.0, 93.0])
-    frio = np.array([11.0, 110.0, 153.0])
-    cor = np.where(t >= 0.0, branco + (quente - branco) * t, branco + (frio - branco) * -t)
+    if campo == "sigma":
+        grade_x, grade_y = np.meshgrid(xs, ys)
+        sigma = mapa.a + mapa.b * (grade_x - p.xc) + mapa.c * (grade_y - p.yc)
+        maior = max(abs(mapa.sigma_max), abs(mapa.sigma_min), 1e-9)
+        r = np.clip(sigma / maior, -1.0, 1.0)[..., None]
+        cor = np.where(
+            r >= 0.0, _BRANCO + (_QUENTE - _BRANCO) * r, _BRANCO + (_FRIO - _BRANCO) * -r
+        )
+    else:
+        valores = np.hypot(mapa.no_tau_x, mapa.no_tau_y) if campo == "tau" else mapa.no_mises
+        teto = max(mapa.tau_max if campo == "tau" else mapa.mises, 1e-9)
+        celulas = _valores_por_celula(m, mapa.no_x, mapa.no_y, valores)
+        r = np.clip(celulas[np.ix_(ix, iy)].T / teto, 0.0, 1.0)[..., None]
+        cor = _BRANCO + ((_FRIO if campo == "tau" else _QUENTE) - _BRANCO) * r
     tem_aco = m.ativo[np.ix_(ix, iy)].T[..., None]
     pixels = np.where(tem_aco, cor, 255.0).astype(np.uint8)
     imagem.paste(Image.fromarray(pixels, "RGB"), (int(x_a), int(y_a)))
-    _texto(
-        d,
-        (largura * _ESC / 2, (altura - 18) * _ESC),
-        f"tração máx. {_n(mapa.sigma_max, 1)} MPa · compressão máx. {_n(mapa.sigma_min, 1)} MPa",
-        cor=_TEXTO,
-        tamanho=13,
-    )
-    return _fechar(
-        imagem, "Tensões", "Tensão normal na seção: tração em vermelho, compressão em azul."
-    )
+    if campo == "sigma":
+        linha = _linha_neutra(mapa, p)
+        if linha is not None:
+            _tracejado(d, escala.px(*linha[0]), escala.px(*linha[1]), _CONTORNO)
+        rodape = (
+            f"tração máx. {_n(mapa.sigma_max, 1)} MPa · compressão máx. {_n(mapa.sigma_min, 1)} MPa"
+        )
+        legenda = "Tensão normal: tração em vermelho, compressão em azul, linha neutra tracejada."
+    elif campo == "tau":
+        _setas_de_tau(d, escala, mapa)
+        if mapa.tau_max > 0.0:
+            _marca_de_maximo(d, escala, mapa.ponto_tau)
+        rodape = f"τ máx. {_n(mapa.tau_max, 1)} MPa"
+        legenda = "Cisalhamento de V e T somados: as setas mostram o caminho, a cruz o maior valor."
+    else:
+        if mapa.mises > 0.0:
+            _marca_de_maximo(d, escala, mapa.ponto_mises)
+        rodape = f"von Mises máx. {_n(mapa.mises, 1)} MPa"
+        legenda = "Tensão combinada √(σ² + 3τ²) em cada ponto: a cruz marca o ponto crítico."
+    _texto(d, (largura * _ESC / 2, (altura - 18) * _ESC), rodape, cor=_TEXTO, tamanho=13)
+    return _fechar(imagem, "Tensões", legenda)
 
 
 # ---------------------------------------------------------------------------

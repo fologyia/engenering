@@ -110,7 +110,7 @@ function lerValorDigitado(texto, atual, unidade) {
   s = s.includes(",") ? s.replace(/\./g, "").replace(/,/g, ".") : s
   s = s.replace(/[×xX](?=\s*[\d(.])/g, "*").replace(/÷/g, "/")
   let fator = 1
-  const achada = /([a-zA-Zµ"²][a-zA-Zµ"²·.0-9]*)$/.exec(s)
+  const achada = /([a-zA-Zµ"²°][a-zA-Zµ"²°·.0-9]*)$/.exec(s)
   if (achada) {
     const digitada = achada[1]
     const f = unidade ? enFator(digitada, unidade) : null
@@ -153,7 +153,9 @@ function enVizinhos(serie, valor, n = 2) {
 // A caixinha. `d` descreve a medida: valor, unidade, nome, passo, aplicar(v, seguinte) e, se quiser,
 // semMudanca(seguinte). aplicar devolve o motivo quando não aceita, e vazio quando aceita.
 // Opcionais: `comerciais` e `serie` mostram os vizinhos que se compram; `acoes` são botões
-// ({ rotulo, titulo, ao }); `resposta` ({ texto, opcoes }) é o que o Python achou para esta medida.
+// ({ rotulo, titulo, ao }); `resposta` ({ texto, opcoes }) é o que o Python achou para esta medida;
+// `ler` troca a leitura do número por outra (o próximo ponto de um polígono); `texto` começa com outra
+// coisa no campo; `dica` troca a linha de exemplos.
 function criarEditorVivo(area, opcoes = {}) {
   const caixa = document.createElement("div")
   caixa.className = "editor"
@@ -167,6 +169,8 @@ function criarEditorVivo(area, opcoes = {}) {
   const entrada = caixa.querySelector("input")
   const unidade = caixa.querySelector(".un")
   const nome = caixa.querySelector(".nome")
+  const dica = caixa.querySelector(".dica")
+  const DICA = dica.textContent
   const serie = caixa.querySelector(".serie")
   const fichasDaSerie = serie.querySelector(".fichas")
   const acoes = caixa.querySelector(".acoes")
@@ -253,27 +257,29 @@ function criarEditorVivo(area, opcoes = {}) {
   function abrir(alvo, d) {
     atual = d
     alvoAtual = alvo
-    entrada.value = enTexto(d.valor)
+    entrada.value = d.texto ?? enTexto(d.valor)
     unidade.textContent = d.unidade
     nome.textContent = d.nome
     nome.classList.remove("ruim")
+    dica.textContent = d.dica ?? DICA
     desenharFichas()
     desenharAcoes(d)
     caixa.hidden = false
     mostrarResposta(d.resposta ?? null)
     entrada.focus()
-    entrada.select()
+    if (d.texto) entrada.setSelectionRange(d.texto.length, d.texto.length)
+    else entrada.select()
   }
   // Devolve falso se o valor não serve: a caixinha fica aberta, com o motivo.
   function confirmar(seguinte = null) {
     const d = atual
     if (!d) return true
-    const lido = lerValorDigitado(entrada.value, d.valor, d.unidade)
+    const lido = d.ler ? d.ler(entrada.value) : lerValorDigitado(entrada.value, d.valor, d.unidade)
     if (lido.erro) {
       mostrarErro(lido.erro)
       return false
     }
-    if (lido.valor === Math.round(d.valor * 1e9) / 1e9) {
+    if (!d.ler && lido.valor === Math.round(d.valor * 1e9) / 1e9) {
       fechar()
       d.semMudanca?.(seguinte)
       return true
@@ -296,10 +302,11 @@ function criarEditorVivo(area, opcoes = {}) {
     ev.stopPropagation()
     if (ev.key === "Enter") {
       ev.preventDefault()
-      confirmar()
+      if (confirmar()) opcoes.depoisDoTeclado?.()
     } else if (ev.key === "Escape") {
       ev.preventDefault()
       fechar()
+      opcoes.depoisDoTeclado?.()
     } else if (ev.key === "Tab" && opcoes.aoTab) {
       ev.preventDefault()
       opcoes.aoTab(ev.shiftKey)
@@ -320,5 +327,12 @@ function criarEditorVivo(area, opcoes = {}) {
       if (!confirmar()) fechar()
     }, 120)
   })
-  return { abrir, fechar, confirmar, mostrarResposta, aberto: () => atual !== null }
+  return {
+    abrir,
+    fechar,
+    confirmar,
+    mostrarResposta,
+    aberto: () => atual !== null,
+    texto: () => entrada.value,
+  }
 }

@@ -2,17 +2,34 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from core import nbr8800 as nbr
 from core import secao_desenhada as sd
 from core.desenho_estatica import figura_das_partes
-from core.elementos_base import Campo, Caso, Coluna, Figura, Metrica, Resultado, Tabela, Valores
+from core.elementos_base import (
+    Campo,
+    Caso,
+    Coluna,
+    Figura,
+    Metrica,
+    Resultado,
+    Tabela,
+    Valores,
+    limite,
+)
+from core.section_catalog import perfil_de_dicionario
+from core.verificacao import Verificacao
 
 FORMA_ROTULO = {sd.RET: "Retângulo", sd.CIRC: "Círculo", sd.POLI: "Polígono"}
 FORMA_DO_ROTULO = {rotulo: forma for forma, rotulo in FORMA_ROTULO.items()}
 CHEIO = "Cheio"
 FURO = "Furo"
+MODULO_E_MPA = 200_000.0
+#: Formas em que a norma sabe qual é a alma. Numa seção livre, fica só a tensão.
+FORMAS_COM_ALMA = {"I", "U", "T", "caixao"}
 
 
 def texto_dos_pontos(pontos: Sequence[Sequence[float]]) -> str:
@@ -172,3 +189,75 @@ CASO = Caso(
     ),
     calcular=_calcular,
 )
+
+
+def verificacoes_de_tensao(
+    analise: sd.Analise,
+    mapa: sd.MapaDeTensoes,
+    fy: float,
+    fs: float,
+    vx_kn: float = 0.0,
+    vy_kn: float = 0.0,
+) -> tuple[list[Verificacao], list[str]]:
+    """As tensões contra o escoamento e, em perfil conhecido, o cortante pela norma.
+
+    τ_y = f_y/√3 é o escoamento por cisalhamento pelo critério de von Mises. Isso não enxerga
+    flambagem: uma alma esbelta perde a força antes de escoar, e por isso a norma entra junto, quando
+    o programa reconhece a forma. O resultado fala de tensão no material, e não substitui as
+    verificações de flambagem da barra.
+    """
+    admissivel = fy / fs
+    linhas = [
+        limite(
+            "Tensão normal",
+            max(abs(mapa.sigma_max), abs(mapa.sigma_min)),
+            admissivel,
+            "MPa",
+            "|σ| ≤ f_y/FS",
+            "Tensão elástica",
+        ),
+        limite(
+            "Cisalhamento",
+            mapa.tau_max,
+            admissivel / math.sqrt(3.0),
+            "MPa",
+            "τ ≤ f_y/(√3·FS)",
+            "Critério de von Mises",
+        ),
+        limite(
+            "Tensão combinada",
+            mapa.mises,
+            admissivel,
+            "MPa",
+            "√(σ² + 3τ²) ≤ f_y/FS",
+            "Critério de von Mises",
+        ),
+    ]
+    avisos: list[str] = []
+    if not (vx_kn or vy_kn) or sd.reconhecer(analise.partes).tipo not in FORMAS_COM_ALMA:
+        return linhas, avisos
+    try:
+        perfil = perfil_de_dicionario(sd.perfil_da_secao("Seção desenhada", analise))
+    except (sd.ErroDeSecao, ValueError):
+        return linhas, avisos
+    for rotulo, eixo, cortante in (("na alma", "x", vy_kn), ("nas mesas", "y", vx_kn)):
+        if not cortante:
+            continue
+        norma = nbr.verificar_cisalhamento(perfil, fy, MODULO_E_MPA, abs(cortante) * 1e3, eixo=eixo)
+        linhas.append(
+            limite(
+                f"Cortante {rotulo} pela norma",
+                abs(cortante),
+                norma.resistencia_N / 1e3,
+                "kN",
+                f"V_Rd com λ = {norma.esbeltez_alma:.1f} e λ_p = {norma.lambda_p:.1f}",
+                "NBR 8800, 5.4.3",
+            )
+        )
+        if norma.esbeltez_alma > norma.lambda_p:
+            avisos.append(
+                f"Cortante {rotulo}: λ = {norma.esbeltez_alma:.1f} passa de λ_p = "
+                f"{norma.lambda_p:.1f}. A chapa flamba por cisalhamento antes de escoar, e quem "
+                "manda é a linha da norma, e não a tensão."
+            )
+    return linhas, avisos

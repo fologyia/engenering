@@ -721,7 +721,7 @@ def _celula(valor: float | None, sufixo: str = "", *, casas: int | None = None) 
     return f"{cd.numero(round(valor, casas) if casas is not None else valor)}{sufixo}"
 
 
-def _tabela_de_verificacoes(resultado: Resultado) -> None:
+def tabela_de_verificacoes(resultado: Resultado) -> None:
     if not resultado.verificacoes:
         return
     st.markdown("**Verificações**")
@@ -869,7 +869,7 @@ def _estado_do_ponto(caso: Caso, ponto: Ponto) -> cargas.EstadoPlanoCalculado:
     )
 
 
-def _enviar_para_mohr(estado: cargas.EstadoPlanoCalculado, origem_id: str | None) -> None:
+def enviar_para_mohr(estado: cargas.EstadoPlanoCalculado, origem_id: str | None) -> None:
     st.session_state["mohr_assistente_2d"] = {
         "sigma_x": estado.sigma_x,
         "sigma_y": estado.sigma_y,
@@ -928,7 +928,7 @@ def _destinos(caso: Caso, resultado: Resultado, origem_id: str | None) -> None:
             width="stretch",
             help="Leva o ponto crítico para o Círculo de Mohr.",
         ):
-            _enviar_para_mohr(estado, origem_id)
+            enviar_para_mohr(estado, origem_id)
     if resultado.fadiga is not None and colunas[2].button(
         "Análise de fadiga",
         icon=":material/cycle:",
@@ -998,7 +998,7 @@ def resposta(resultado: Resultado, *, por_linha: int = 2) -> None:
 
 def detalhes(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None:
     """O resto do resultado, na largura toda da página."""
-    _tabela_de_verificacoes(resultado)
+    tabela_de_verificacoes(resultado)
     for grafico in resultado.graficos:
         with secao_protegida(f"Gráfico: {grafico.titulo}"):
             _grafico(grafico)

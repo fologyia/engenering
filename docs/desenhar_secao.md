@@ -40,6 +40,43 @@ acompanhar a forma. Seção fechada, com furos ou com mais de uma célula entra 
 τ de torção: dentro de 5 % nos casos conferidos (círculo, quadrado, 2:1 e 10:1). O valor é lido na
 superfície, sem os cantos vivos reentrantes, onde a teoria dá infinito.
 
+## Tensões na seção
+
+**Normal.** Flexão oblíqua completa, com Ixy. O mapa mostra a linha neutra.
+
+**Cortante.** V·Q/(I·b) supõe τ uniforme na largura: serve numa alma, mas não numa mesa, numa
+cantoneira ou num polígono qualquer. A conta aqui é a flexão de Saint-Venant, para a forma desenhada:
+dois problemas de Poisson, ∇²Ψ e ∇²Φ, resolvidos com a mesma rigidez do empenamento, com ν = 0,3. Vale
+para Ixy diferente de zero e para seção fechada.
+
+**Soma.** V e T entram como vetores em cada ponto, porque se somam num lado e se subtraem no outro. A
+soma dos maiores valores daria um número que nenhum ponto tem. Von Mises usa o σ e o τ do mesmo ponto.
+
+**Onde passa a carga.** V passa pelo centro de cisalhamento, a menos que se escolha o centro de
+gravidade. Aí a excentricidade vira torção, que num U leva o τ de 47 a mais de 800 MPa no exemplo dos
+testes. A conta é de torção livre: com o empenamento impedido o valor real é outro.
+
+**Ligações.** Em chapas retas que se encostam, q = ∫τ ds é a força por metro de barra que a solda
+precisa levar. Na linha da emenda a média mistura a alma com a mesa e dá 27 % a menos num I. Por isso o
+fluxo é medido em duas linhas dentro da chapa estreita e levado até a emenda.
+
+**Norma.** τ_y = f_y/√3 não enxerga flambagem. Em I, U, T e caixão, a tabela traz também V_Rd de
+`nbr8800.verificar_cisalhamento`, e avisa quando a chapa é esbelta: nesse caso, a tensão passar não
+quer dizer que a alma aguenta. Numa seção livre ficam só as tensões.
+
+| Caso | Referência | Erro |
+|---|---|---|
+| Retângulo alto, τ máx | 1,5 V/A | 0,13 % |
+| Círculo, τ no centro | (3 + 2ν)/(2(1 + ν))·V/A | 0,02 % |
+| I, τ na alma | V·Q/(I·t) | 0,07 % |
+| I, q na solda da mesa | V·Q/I | 0,11 % |
+| Tubo fino, τ máx | 2 V/A | 2,3 % |
+| I, U e cantoneira, ∫τ dA | V aplicado | 1 em 10⁵ |
+| U e cantoneira, centro de cisalhamento | o do empenamento | menos de 1 % |
+
+A seção confere a si mesma: se ∫τ dA ficar a mais de 3 % de V, a tela avisa que a parede está fina
+demais para a malha. Seção em pedaços soltos não calcula cortante: ele não passa de um para o outro.
+
 ## O que vale para as rotinas de norma
 
 `reconhecer()` olha a figura, venha ela de um modelo ou de chapas soltas:
@@ -81,6 +118,50 @@ selecionada (num perfil pronto, o primeiro clique pega o grupo e o segundo pega 
 
 A lógica está em `components/prancheta/geometria.js`, testada no Node por
 `tests/test_editor_numerico_js.py`.
+
+## Polígono e cotas, no jeito de um CAD
+
+**Desenhar com medida.** Na ferramenta Polígono, depois do primeiro ponto, basta digitar:
+
+| Digitado | O próximo ponto fica |
+|---|---|
+| `100` | a 100 mm, na direção do mouse |
+| `100<45` | a 100 mm, a 45° (0° para a direita, 90° para cima) |
+| `@50;20` | 50 mm em x e 20 mm em y do ponto anterior |
+
+Orto (ou a tecla O) trava os lados em 0°, 45° e 90°, e Shift faz o contrário na hora. Enter fecha o
+polígono, Backspace volta um ponto, e ao lado do mouse aparece o comprimento e o ângulo do trecho.
+
+**Editar o polígono.** Com ele selecionado, cada lado mostra a medida, e clicar nela abre a caixinha. O
+ponto azul fica e o laranja anda; "Mover a outra ponta" troca os dois, e o botão de ângulo gira o lado.
+Clicar num ponto mostra x e y no painel. A alça no meio de um lado cria um ponto, e Delete apaga o
+ponto selecionado.
+
+**Cota de um ponto a outro.** Na ferramenta Cota: clique no ponto que fica, no ponto que anda e no
+lugar da cota, como no SolidWorks. O lugar escolhe o tipo: acima ou abaixo dos dois pontos mede a
+horizontal, ao lado mede a vertical, e na diagonal mede a distância direta. Os pontos aceitos ficam
+marcados em verde: cantos, meios de lado e centros, em qualquer parte.
+
+| Os dois pontos estão | Digitar um valor faz |
+|---|---|
+| no mesmo polígono | o ponto anda, levando o trecho do contorno que está além dele |
+| na mesma chapa, de lados opostos | a chapa muda de tamanho a partir do primeiro ponto |
+| no mesmo círculo | o diâmetro muda |
+| em partes diferentes | a parte do segundo ponto anda inteira, com o grupo dela |
+| em partes do mesmo perfil | não muda: use as medidas da chapa |
+
+**Por que o trecho anda junto.** Mover só o ponto entortaria o perfil. O contorno é percorrido a partir
+do ponto, nos dois sentidos, e anda junto tudo o que está ligado a ele e além dele na direção da cota.
+Num T, subir a alma leva a mesa inteira; num U, subir uma aba não leva a outra, que fica depois de um
+trecho que desce. Um corte reto, "tudo acima desta linha", erraria no U.
+
+**O que não vira polígono ruim.** O contorno é conferido antes de valer: dois pontos no mesmo lugar,
+polígono sem área e lados que se cruzam, encostam ou ficam um sobre o outro são recusados, com o
+motivo, e o desenho fica como estava. Um polígono sem área seria descartado no cálculo e sumiria.
+
+**O que estas cotas não são.** A cota mede e comanda uma vez: digitou, a peça muda. Ela acompanha a
+peça depois disso, mas não segura o valor se outra coisa mudar, como faria um CAD paramétrico. Para
+isso seria preciso um solver de restrições, que este programa não tem.
 
 ## Limites
 

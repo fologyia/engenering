@@ -4,10 +4,14 @@
       <button type="button" data-f="mover" title="Selecionar e mover (V). Clique de novo para pegar só uma parte do grupo.">Selecionar</button>
       <button type="button" data-f="ret" title="Arraste para desenhar uma chapa (R)">Chapa</button>
       <button type="button" data-f="circ" title="Arraste do centro para fora (C)">Círculo</button>
-      <button type="button" data-f="poli" title="Clique em cada ponto e clique no primeiro para fechar (P)">Polígono</button>
+      <button type="button" data-f="poli" title="Clique em cada ponto e clique no primeiro para fechar (P). Digite para dar a medida: 100, 100<45 ou @50;20.">Polígono</button>
+      <button type="button" data-f="cota" title="Cota de um ponto a outro (D): clique no ponto que fica, no ponto que anda e onde a cota vai ficar.">Cota</button>
     </div>
     <label class="chave" title="O que você desenhar agora tira aço em vez de pôr (F)">
       <input type="checkbox" data-c="furo"> Furo
+    </label>
+    <label class="chave" title="Trava os lados do polígono em 0°, 45° e 90° (O). Shift faz o contrário na hora.">
+      <input type="checkbox" data-c="orto"> Orto
     </label>
     <span class="vao"></span>
     <label class="grade" title="As medidas pulam de quanto em quanto. O ímã nas outras partes vale em qualquer grade.">

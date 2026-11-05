@@ -170,6 +170,46 @@ text {
 .cota-txt {
   fill: #1f6fb2;
   font-weight: 600;
+  /* Um contorno da cor do fundo: a medida continua legível em cima da peça e da grade. */
+  paint-order: stroke;
+  stroke: var(--st-background-color);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.cota-ponto {
+  stroke: #1f6fb2;
+  stroke-width: 1;
+}
+.alca-meio {
+  fill: #fff;
+  stroke: #d97706;
+  stroke-width: 1.5;
+  opacity: 0.75;
+}
+.alca.escolhida {
+  fill: #d97706;
+}
+.encaixe {
+  fill: none;
+  stroke: #15803d;
+  stroke-width: 2;
+}
+.ponta-fixa {
+  fill: #1f6fb2;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.ponta-movel {
+  fill: #d97706;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.medida-viva {
+  fill: #1f6fb2;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--st-background-color);
+  stroke-width: 3px;
 }
 .marca-g {
   stroke: #b4233c;

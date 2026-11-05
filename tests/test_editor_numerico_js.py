@@ -31,6 +31,22 @@ def _rodar(fonte: Path, expressao: str):
     return json.loads(saida.stdout)
 
 
+def _prancheta(expressao: str):
+    """Geometria com a leitura da caixinha, como a prancheta recebe as duas."""
+    programa = EDITOR.read_text(encoding="utf-8") + GEOMETRIA.read_text(encoding="utf-8")
+    programa += f"\nconsole.log(JSON.stringify({expressao}));\n"
+    saida = subprocess.run(
+        [NODE, "-"],
+        input=programa,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=30,
+    )
+    return json.loads(saida.stdout)
+
+
 def _ler(texto: str, atual: float = 100.0, unidade: str = "mm"):
     argumentos = json.dumps([texto, atual, unidade], ensure_ascii=False)
     return _rodar(EDITOR, f"lerValorDigitado(...{argumentos})")
@@ -274,3 +290,415 @@ def test_tubo_redondo_muda_de_escala():
     fora, furo = _chamar(partes, "esticarConjunto", "b", 150)
     assert fora["b"] == pytest.approx(150)
     assert furo["b"] == pytest.approx(120)
+
+
+# ---------------------------------------------------------------------------
+# Polígono: mudar um lado sem entortar o perfil
+# ---------------------------------------------------------------------------
+
+L = [[0, 0], [100, 0], [100, 10], [10, 10], [10, 80], [0, 80]]
+T = [[-5, 0], [5, 0], [5, 90], [50, 90], [50, 100], [-50, 100], [-50, 90], [-5, 90]]
+U = [[0, 0], [100, 0], [100, 100], [90, 100], [90, 10], [10, 10], [10, 100], [0, 100]]
+RETANGULO = [[0, 0], [100, 0], [100, 50], [0, 50]]
+
+
+def _poligono(pontos):
+    return {
+        "forma": "poli",
+        "x": 0,
+        "y": 0,
+        "b": 0,
+        "h": 0,
+        "giro": 0,
+        "pontos": pontos,
+        "grupo": 0,
+    }
+
+
+def _mudar_lado(pontos, k, novo, trocar=False):
+    partes = json.dumps([_poligono(pontos)])
+    troca = "true" if trocar else "false"
+    return _prancheta(
+        f"""(() => {{
+          const partes = {partes}
+          const erro = ajustarCota(partes, cotaDoLado(partes, 0, {k}, {troca}), {novo})
+          return {{ erro, pontos: partes[0].pontos }}
+        }})()"""
+    )
+
+
+def test_lado_do_l_leva_o_que_esta_alem_e_mantem_os_angulos():
+    saida = _mudar_lado(L, 0, 120)
+    assert saida["erro"] == ""
+    assert saida["pontos"] == [[0, 0], [120, 0], [120, 10], [10, 10], [10, 80], [0, 80]]
+
+
+def test_encurtar_usa_o_mesmo_lado_e_nao_o_sinal_do_movimento():
+    saida = _mudar_lado(L, 0, 60)
+    assert saida["pontos"] == [[0, 0], [60, 0], [60, 10], [10, 10], [10, 80], [0, 80]]
+
+
+def test_subir_a_alma_do_t_leva_a_mesa_inteira():
+    """Mover só o ponto afinaria a mesa: ela precisa continuar com 10 mm."""
+    saida = _mudar_lado(T, 1, 110)
+    assert saida["pontos"] == [
+        [-5, 0],
+        [5, 0],
+        [5, 110],
+        [50, 110],
+        [50, 120],
+        [-50, 120],
+        [-50, 110],
+        [-5, 110],
+    ]
+
+
+def test_subir_uma_aba_do_u_nao_leva_a_outra():
+    saida = _mudar_lado(U, 1, 120)
+    assert saida["pontos"] == [
+        [0, 0],
+        [100, 0],
+        [100, 120],
+        [90, 120],
+        [90, 10],
+        [10, 10],
+        [10, 100],
+        [0, 100],
+    ]
+
+
+def test_retangulo_continua_retangulo():
+    saida = _mudar_lado(RETANGULO, 1, 70)
+    assert saida["pontos"] == [[0, 0], [100, 0], [100, 70], [0, 70]]
+
+
+def test_a_outra_ponta_pode_ser_a_que_anda():
+    saida = _mudar_lado(RETANGULO, 0, 120, trocar=True)
+    assert saida["erro"] == ""
+    assert saida["pontos"] == [[-20, 0], [100, 0], [100, 50], [-20, 50]]
+
+
+def test_lado_inclinado_anda_na_propria_direcao():
+    saida = _mudar_lado([[0, 0], [30, 40], [0, 80]], 0, 100)
+    assert saida["erro"] == ""
+    assert saida["pontos"][1] == pytest.approx([60, 80])
+
+
+def test_encurtar_o_l_alem_da_alma_ainda_e_uma_forma_valida():
+    saida = _mudar_lado(L, 0, 5)
+    assert saida["erro"] == ""
+    assert saida["pontos"][2] == [5, 10]
+
+
+def test_lado_que_fica_sobre_outro_e_recusado_e_o_erro_vem_escrito():
+    """Encurtar a base do U põe a aba em cima da outra: não cruza em X, mas estraga a seção."""
+    assert _mudar_lado(U, 0, 5)["erro"] == "O contorno cruzaria a si mesmo."
+
+
+def test_medida_zero_e_recusada():
+    assert _mudar_lado(L, 0, 0)["erro"] == "A medida precisa ser maior que zero."
+
+
+@pytest.mark.parametrize(
+    ("pontos", "esperado"),
+    [
+        ([[0, 0], [10, 0]], "O polígono precisa de ao menos 3 pontos."),
+        ([[0, 0], [10, 0], [20, 0]], "O polígono ficaria sem área."),
+        ([[0, 0], [0, 0], [20, 5]], "Dois pontos ficariam no mesmo lugar."),
+        ([[0, 0], [10, 10], [10, 0], [0, 20]], "O contorno cruzaria a si mesmo."),
+        ([[0, 0], [10, 0], [10, 10], [5, 0], [0, 10]], "O contorno cruzaria a si mesmo."),
+        (L, ""),
+    ],
+)
+def test_problema_do_poligono(pontos, esperado):
+    assert _prancheta(f"problemaDoPoligono({json.dumps(pontos)})") == esperado
+
+
+def test_area_com_sinal_segue_o_sentido():
+    assert _prancheta(f"areaComSinal({json.dumps(RETANGULO)})") == 5000
+    assert _prancheta(f"areaComSinal({json.dumps(RETANGULO[::-1])})") == -5000
+
+
+# ---------------------------------------------------------------------------
+# Cotas de um ponto a outro
+# ---------------------------------------------------------------------------
+
+CHAPA = {"forma": "ret", "x": 50, "y": 25, "b": 100, "h": 50, "giro": 0, "pontos": [], "grupo": 0}
+FURO = {"forma": "circ", "x": 30, "y": 25, "b": 20, "h": 20, "giro": 0, "pontos": [], "grupo": 0}
+
+
+def _cota(partes, cota, novo):
+    return _prancheta(
+        f"""(() => {{
+          const partes = {json.dumps(partes)}
+          const erro = ajustarCota(partes, {json.dumps(cota)}, {novo})
+          return {{ erro, partes }}
+        }})()"""
+    )
+
+
+@pytest.mark.parametrize(
+    ("mouse", "modo"),
+    [([50, 120], "h"), ([50, -30], "h"), ([160, 40], "v"), ([-20, 40], "v"), ([160, 120], "a")],
+)
+def test_lugar_da_cota_escolhe_o_tipo(mouse, modo):
+    assert _prancheta(f"modoDaCota([0, 0], [100, 80], {json.dumps(mouse)})") == modo
+
+
+def test_pontos_alinhados_so_tem_uma_medida():
+    assert _prancheta("modoDaCota([0, 0], [100, 0], [50, -40])") == "h"
+    assert _prancheta("modoDaCota([0, 0], [0, 80], [50, 40])") == "v"
+
+
+@pytest.mark.parametrize(("modo", "medida"), [("h", 30), ("v", 40), ("a", 50)])
+def test_medida_de_cada_tipo(modo, medida):
+    assert _prancheta(f'medidaEntre([0, 0], [30, 40], "{modo}")') == medida
+
+
+@pytest.mark.parametrize(
+    ("modo", "mouse", "linha"),
+    [
+        ("h", [15, 70], [[0, 70], [30, 70]]),
+        ("v", [90, 20], [[90, 0], [90, 40]]),
+    ],
+)
+def test_linha_passa_pelo_lugar_escolhido(modo, mouse, linha):
+    expressao = f"""(() => {{
+      const f = folgaDaCota([0, 0], [30, 40], "{modo}", {json.dumps(mouse)})
+      return linhaDaCota([0, 0], [30, 40], "{modo}", f)
+    }})()"""
+    assert _prancheta(expressao) == linha
+
+
+def test_cota_direta_fica_paralela_e_na_distancia_do_mouse():
+    expressao = """(() => {
+      const f = folgaDaCota([0, 0], [100, 0], "a", [50, 30])
+      return linhaDaCota([0, 0], [100, 0], "a", f)
+    })()"""
+    assert _prancheta(expressao) == [[0, 30], [100, 30]]
+
+
+def test_ancoras_do_poligono_sao_pontos_e_meios():
+    ancoras = _prancheta(f"ancorasDaParte({json.dumps(_poligono(RETANGULO))}, 3)")
+    assert len(ancoras) == 8
+    assert {"i": 3, "t": "m", "k": 0, "x": 50, "y": 0} in ancoras
+
+
+def test_ancoras_da_chapa_trazem_o_centro_e_as_do_circulo_tambem():
+    assert {"i": 0, "t": "c", "k": 0, "x": 50, "y": 25} in _prancheta(
+        f"ancorasDaParte({json.dumps(CHAPA)}, 0)"
+    )
+    circulo = _prancheta(f"ancorasDaParte({json.dumps(FURO)}, 1)")
+    assert len(circulo) == 5
+    assert {"i": 1, "t": "v", "k": 0, "x": 40, "y": 25} in circulo
+
+
+def test_furo_anda_pela_cota_a_partir_da_chapa():
+    """Distância do furo à borda: o primeiro ponto fica e a peça do segundo anda."""
+    cota = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 1, "t": "c", "k": 0}, "modo": "h"}
+    saida = _cota([CHAPA, FURO], cota, 45)
+    assert saida["erro"] == ""
+    assert saida["partes"][1]["x"] == 45
+    assert saida["partes"][1]["y"] == 25
+    assert saida["partes"][0]["x"] == 50
+
+
+def test_cota_leva_o_grupo_inteiro_da_peca_que_anda():
+    outra = {**FURO, "grupo": 2}
+    irma = {**CHAPA, "x": 300, "grupo": 2}
+    cota = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 1, "t": "c", "k": 0}, "modo": "h"}
+    saida = _cota([CHAPA, outra, irma], cota, 40)
+    assert saida["partes"][1]["x"] == 40
+    assert saida["partes"][2]["x"] == 310
+
+
+def test_pontos_do_mesmo_perfil_mandam_mudar_pela_chapa():
+    a = {**CHAPA, "grupo": 1}
+    b = {**CHAPA, "y": 80, "grupo": 1}
+    cota = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 1, "t": "v", "k": 0}, "modo": "v"}
+    assert "mesmo perfil" in _cota([a, b], cota, 90)["erro"]
+
+
+def test_chapa_cresce_a_partir_do_primeiro_ponto():
+    cota = {"a": {"i": 0, "t": "v", "k": 1}, "b": {"i": 0, "t": "v", "k": 0}, "modo": "h"}
+    saida = _cota([CHAPA], cota, 150)
+    assert saida["erro"] == ""
+    chapa = saida["partes"][0]
+    assert (chapa["b"], chapa["x"]) == (150, 25)
+
+
+def test_chapa_recusa_diagonal():
+    cota = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 0, "t": "v", "k": 2}, "modo": "a"}
+    assert "lados opostos" in _cota([CHAPA], cota, 150)["erro"]
+
+
+def test_raio_do_circulo():
+    cota = {"a": {"i": 0, "t": "c", "k": 0}, "b": {"i": 0, "t": "v", "k": 0}, "modo": "a"}
+    saida = _cota([FURO], cota, 25)
+    assert saida["partes"][0]["b"] == 50
+    assert saida["partes"][0]["h"] == 50
+
+
+def test_cota_horizontal_no_poligono_leva_o_lado_todo():
+    """Da ponta da aba até a ponta da mesa: anda em x, e o resto do L fica."""
+    cota = {"a": {"i": 0, "t": "v", "k": 5}, "b": {"i": 0, "t": "v", "k": 2}, "modo": "h"}
+    saida = _cota([_poligono(L)], cota, 130)
+    assert saida["erro"] == ""
+    assert saida["partes"][0]["pontos"] == [
+        [0, 0],
+        [130, 0],
+        [130, 10],
+        [10, 10],
+        [10, 80],
+        [0, 80],
+    ]
+
+
+def test_cota_que_perdeu_o_ponto_avisa():
+    cota = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 7, "t": "v", "k": 0}, "modo": "h"}
+    assert "perdeu" in _cota([CHAPA], cota, 10)["erro"]
+
+
+def test_cotas_validas_tira_quem_perdeu_o_ponto():
+    boa = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 0, "t": "v", "k": 1}, "modo": "h"}
+    ruim = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 0, "t": "v", "k": 9}, "modo": "h"}
+    expressao = f"cotasValidas({json.dumps([CHAPA])}, {json.dumps([boa, ruim])})"
+    assert _prancheta(expressao) == [boa]
+
+
+# ---------------------------------------------------------------------------
+# Pontos novos e pontos apagados
+# ---------------------------------------------------------------------------
+
+
+def _cotas_em(*ks):
+    return [
+        {"a": {"i": 0, "t": "v", "k": k}, "b": {"i": 0, "t": "v", "k": 0}, "modo": "a"} for k in ks
+    ]
+
+
+def test_inserir_ponto_mantem_a_cota_no_mesmo_lugar():
+    partes = json.dumps([_poligono(RETANGULO)])
+    cotas = json.dumps(_cotas_em(1, 2))
+    saida = _prancheta(
+        f"""(() => {{
+          const partes = {partes}
+          const cotas = inserirVertice(partes, {cotas}, 0, 1, [100, 25])
+          return {{ cotas, pontos: partes[0].pontos, antes: pontoDaAncora(partes, cotas[1].a) }}
+        }})()"""
+    )
+    assert saida["pontos"] == [[0, 0], [100, 0], [100, 25], [100, 50], [0, 50]]
+    assert [c["a"]["k"] for c in saida["cotas"]] == [1, 3]
+    assert saida["antes"] == [100, 50]
+
+
+def test_apagar_ponto_leva_a_cota_presa_a_ele_e_corrige_as_outras():
+    partes = json.dumps([_poligono([[0, 0], [100, 0], [100, 25], [100, 50], [0, 50]])])
+    cotas = json.dumps(_cotas_em(2, 3))
+    saida = _prancheta(
+        f"""(() => {{
+          const partes = {partes}
+          const cotas = apagarVertice(partes, {cotas}, 0, 2)
+          return {{ cotas, pontos: partes[0].pontos, ponto: pontoDaAncora(partes, cotas[0].a) }}
+        }})()"""
+    )
+    assert saida["pontos"] == RETANGULO
+    assert [c["a"]["k"] for c in saida["cotas"]] == [2]
+    assert saida["ponto"] == [100, 50]
+
+
+def test_apagar_parte_renumera_as_cotas_das_outras():
+    cotas = [
+        {"a": {"i": 0, "t": "c", "k": 0}, "b": {"i": 1, "t": "c", "k": 0}, "modo": "h"},
+        {"a": {"i": 1, "t": "c", "k": 0}, "b": {"i": 2, "t": "c", "k": 0}, "modo": "h"},
+    ]
+    saida = _prancheta(f"cotasSemPartes({json.dumps(cotas)}, new Set([0]))")
+    assert len(saida) == 1
+    assert (saida[0]["a"]["i"], saida[0]["b"]["i"]) == (0, 1)
+
+
+# ---------------------------------------------------------------------------
+# O próximo ponto digitado
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("100", [110, 20]),
+        ("10 cm", [110, 20]),
+        ("100<0", [110, 20]),
+        ("100<90", [10, 120]),
+        ("100<180", [-90, 20]),
+        ("100<90°", [10, 120]),
+        ("@50;20", [60, 40]),
+        ("@50,20", [60, 40]),
+        ("@-5,5;2,5", [4.5, 22.5]),
+        ("@ 50 ; -20", [60, 0]),
+    ],
+)
+def test_proximo_ponto(texto, esperado):
+    argumentos = json.dumps([texto, [10, 20], [500, 20]], ensure_ascii=False)
+    saida = _prancheta(f"lerProximoPonto(...{argumentos})")
+    assert saida["valor"] == pytest.approx(esperado, abs=1e-9)
+
+
+@pytest.mark.parametrize("texto", ["@50", "@a;b", "abc<45", "100<xx", "", "abc"])
+def test_proximo_ponto_recusa_o_que_nao_entende(texto):
+    argumentos = json.dumps([texto, [10, 20], [500, 20]], ensure_ascii=False)
+    assert _prancheta(f"lerProximoPonto(...{argumentos})")["erro"]
+
+
+def test_proximo_ponto_precisa_de_direcao():
+    assert "Mova o mouse" in _prancheta("lerProximoPonto('100', [10, 20], [10, 20])")["erro"]
+
+
+@pytest.mark.parametrize(
+    ("alvo", "esperado"),
+    [
+        ([100, 3], [100, 0]),
+        ([3, 100], [0, 100]),
+        ([70, 72], [70.711, 70.711]),
+        ([-100, 4], [-100, 0]),
+    ],
+)
+def test_travar_angulo(alvo, esperado):
+    saida = _prancheta(f"travarAngulo([0, 0], {json.dumps(alvo)})")
+    assert saida == pytest.approx(esperado, abs=0.3)
+
+
+def test_angulo_do_lado():
+    assert _prancheta("anguloEntre([0, 0], [10, 0])") == 0
+    assert _prancheta("anguloEntre([0, 0], [0, 10])") == 90
+    assert _prancheta("anguloEntre([0, 0], [-10, 0])") == 180
+    assert _prancheta("anguloEntre([0, 0], [0, -10])") == 270
+
+
+def test_girar_lado_mantem_o_comprimento():
+    partes = json.dumps([_poligono(RETANGULO)])
+    saida = _prancheta(
+        f"""(() => {{
+          const partes = {partes}
+          const cota = cotaDoLado(partes, 0, 0)
+          const erro = girarLado(partes, cota, 20)
+          return {{ erro, ponto: partes[0].pontos[1] }}
+        }})()"""
+    )
+    assert saida["erro"] == ""
+    assert saida["ponto"] == pytest.approx([93.9693, 34.202], abs=1e-3)
+
+
+def test_girar_lado_ate_encostar_em_outro_e_recusado():
+    """A 30°, a ponta de 100 mm cai em cima do lado de 50 mm de altura."""
+    partes = json.dumps([_poligono(RETANGULO)])
+    saida = _prancheta(
+        f"""(() => {{
+          const partes = {partes}
+          return girarLado(partes, cotaDoLado(partes, 0, 0), 30)
+        }})()"""
+    )
+    assert saida == "O contorno cruzaria a si mesmo."
+
+
+def test_grau_e_unidade_que_a_caixinha_aceita():
+    assert _ler("45°", 0.0, "°") == {"valor": 45}

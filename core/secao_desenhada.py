@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
@@ -546,19 +546,20 @@ def _largura_na_linha(a: np.ndarray, b: np.ndarray, largura: np.ndarray, c: floa
     )
 
 
-def _gradiente_nos_nos(
-    malha: Malha, omega: np.ndarray, xc: float, yc: float
-) -> tuple[np.ndarray, np.ndarray]:
-    """|∇ω + (−y, x)| nos nós das células cheias: (valores, índices dos nós).
+def _derivadas_nos_nos(
+    malha: Malha, valores: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """∂/∂x e ∂/∂y nos nós das células cheias: (d_x, d_y, índices dos nós).
 
     A tensão de torção é máxima na superfície, e os pontos de integração ficam para dentro dela: lá
     uma chapa com 3 células na espessura mostra 9 % a menos. No nó, a média das células vizinhas
-    chega à superfície. Sem células cheias (parede curva muito fina), ficam os pontos de integração.
+    chega à superfície. Sem células cheias (parede curva muito fina), a resposta sai vazia, e quem
+    chama fica com os pontos de integração.
     """
     i, j = np.nonzero(malha.ativo)
     indices = np.nonzero(malha.cheia)[0]
     if len(indices) < 20:
-        return np.zeros(0), np.zeros(0, dtype=int)
+        return np.zeros(0), np.zeros(0), np.zeros(0, dtype=int)
     dx, dy = np.diff(malha.xs)[i[indices]], np.diff(malha.ys)[j[indices]]
     conexao = malha.conexao[indices]
     nos = len(malha.no_x)
@@ -568,14 +569,12 @@ def _gradiente_nos_nos(
         _, d_x, d_y = _pontos_da_celula(
             np.full(len(indices), xi), np.full(len(indices), eta), dx, dy
         )
-        locais = omega[conexao]
+        locais = valores[conexao]
         no = conexao[:, canto]
         soma_x += np.bincount(no, (d_x * locais).sum(axis=1), minlength=nos)
         soma_y += np.bincount(no, (d_y * locais).sum(axis=1), minlength=nos)
     usados = np.nonzero(contagem)[0]
-    gx = soma_x[usados] / contagem[usados] - (malha.no_y[usados] - yc)
-    gy = soma_y[usados] / contagem[usados] + (malha.no_x[usados] - xc)
-    return np.hypot(gx, gy), usados
+    return soma_x[usados] / contagem[usados], soma_y[usados] / contagem[usados], usados
 
 
 @dataclass(slots=True)
@@ -589,6 +588,8 @@ class Analise:
     gradiente_x: np.ndarray
     gradiente_y: np.ndarray
     gradiente_max: float  # sem os cantos vivos reentrantes, onde a teoria dá infinito
+    torcao_x: np.ndarray  # o vetor ∇ω + (−y, x): torção e cortante se somam ponto a ponto
+    torcao_y: np.ndarray
 
 
 def analisar(partes: Sequence[Parte]) -> Analise:
@@ -633,12 +634,14 @@ def analisar(partes: Sequence[Parte]) -> Analise:
     empenamento = float((w * omega_s**2).sum())
 
     # Tensão de torção por unidade de T/J.
-    gradiente, nos_usados = _gradiente_nos_nos(malha, omega, xc, yc)
+    d_x, d_y, nos_usados = _derivadas_nos_nos(malha, omega)
     gradiente_x, gradiente_y = malha.no_x[nos_usados], malha.no_y[nos_usados]
-    if not len(gradiente):
-        gx = (malha.ponto_dx * no_valor).sum(axis=1) - v
-        gy = (malha.ponto_dy * no_valor).sum(axis=1) + u
-        gradiente, gradiente_x, gradiente_y = np.hypot(gx, gy), x, y
+    torcao_x, torcao_y = d_x - (gradiente_y - yc), d_y + (gradiente_x - xc)
+    if not len(nos_usados):
+        torcao_x = (malha.ponto_dx * no_valor).sum(axis=1) - v
+        torcao_y = (malha.ponto_dy * no_valor).sum(axis=1) + u
+        gradiente_x, gradiente_y = x, y
+    gradiente = np.hypot(torcao_x, torcao_y)
     gradiente_max = float(np.percentile(gradiente, 98.5))
     w_torcao = constante / gradiente_max
 
@@ -676,7 +679,17 @@ def analisar(partes: Sequence[Parte]) -> Analise:
         espessura_media=espessura,
         pedacos=_pedacos(malha.ativo) if cortadas else 0,
     )
-    return Analise(tuple(partes), prop, malha, gradiente, gradiente_x, gradiente_y, gradiente_max)
+    return Analise(
+        tuple(partes),
+        prop,
+        malha,
+        gradiente,
+        gradiente_x,
+        gradiente_y,
+        gradiente_max,
+        torcao_x,
+        torcao_y,
+    )
 
 
 def _perimetro(malha: Malha) -> float:
@@ -916,6 +929,104 @@ def perfil_da_secao(
 # ---------------------------------------------------------------------------
 
 
+#: Fração dos pontos que define o maior τ: o resto são os cantos vivos reentrantes, onde a teoria dá
+#: infinito. É a mesma fração do módulo de torção, e assim τ de T continua igual a T/Wt.
+PERCENTIL_DO_TAU = 98.5
+POISSON_ACO = 0.3
+
+
+@dataclass(frozen=True, slots=True)
+class CamposDeCortante:
+    """τ por unidade de cortante (1/mm²), nos mesmos pontos de ``Analise.gradiente_x``.
+
+    Pelo cálculo, V passa pelo centro de cisalhamento e não torce a seção.
+    """
+
+    vx_x: np.ndarray  # τ_zx de Vx = 1
+    vx_y: np.ndarray  # τ_zy de Vx = 1
+    vy_x: np.ndarray
+    vy_y: np.ndarray
+    resultante: tuple[float, float, float, float]  # ∫τ dA: as duas de Vx e as duas de Vy
+    momento_vx: float  # ∫(u·τ_zy − v·τ_zx) dA em volta do centro de gravidade, por V unitário
+    momento_vy: float
+
+    @property
+    def erro(self) -> float:
+        """Quanto a integral das tensões se afasta do cortante aplicado."""
+        rxx, ryx, rxy, ryy = self.resultante
+        return max(abs(rxx - 1.0), abs(ryy - 1.0), abs(rxy), abs(ryx))
+
+
+def campos_de_cortante(analise: Analise, nu: float = POISSON_ACO) -> CamposDeCortante:
+    """Flexão de Saint-Venant: dois problemas de Poisson na mesma malha da torção.
+
+    V·Q/(I·b) só vale quando o τ é uniforme na largura: serve numa alma, mas não numa mesa, numa
+    cantoneira ou num polígono qualquer. Aqui ∇²Ψ e ∇²Φ são resolvidos com a mesma rigidez do
+    empenamento, e vale para qualquer forma, inclusive com Ixy diferente de zero. A integral das
+    tensões precisa devolver o cortante aplicado, e isso fica guardado em ``resultante``.
+    """
+    p = analise.prop
+    if p.pedacos > 1:
+        raise ErroDeSecao(
+            "A seção tem pedaços soltos: o cortante não passa de um para o outro. "
+            "Ligue as partes para calcular o cisalhamento."
+        )
+    m = analise.malha
+    u, v, w = m.ponto_x - p.xc, m.ponto_y - p.yc, m.ponto_peso
+    d1, d2, h1, h2 = _termos_do_cortante(u, v, p)
+    celulas = m.conexao[m.ponto_celula]
+    nos = len(m.no_x)
+
+    def carga(a: np.ndarray, b: np.ndarray, fonte: np.ndarray) -> np.ndarray:
+        termo = (nu / 2.0) * (m.ponto_dx * a[:, None] + m.ponto_dy * b[:, None])
+        termo = (termo + 2.0 * (1.0 + nu) * m.ponto_n * fonte[:, None]) * w[:, None]
+        return np.bincount(celulas.ravel(), termo.ravel(), minlength=nos)
+
+    psi = _resolver_empenamento(m, carga(d1, d2, p.ix * u - p.ixy * v))
+    phi = _resolver_empenamento(m, carga(h1, h2, p.iy * v - p.ixy * u))
+    delta = 2.0 * (1.0 + nu) * (p.ix * p.iy - p.ixy**2)
+
+    def no_ponto(campo: np.ndarray, a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        locais = campo[celulas]
+        return (
+            ((m.ponto_dx * locais).sum(axis=1) - nu / 2.0 * a) / delta,
+            ((m.ponto_dy * locais).sum(axis=1) - nu / 2.0 * b) / delta,
+        )
+
+    vx_x, vx_y = no_ponto(psi, d1, d2)
+    vy_x, vy_y = no_ponto(phi, h1, h2)
+    resultante = (
+        float((w * vx_x).sum()),
+        float((w * vx_y).sum()),
+        float((w * vy_x).sum()),
+        float((w * vy_y).sum()),
+    )
+    momento_vx = float((w * (u * vx_y - v * vx_x)).sum())
+    momento_vy = float((w * (u * vy_y - v * vy_x)).sum())
+
+    def nos_nos(campo: np.ndarray, a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        d_x, d_y, usados = _derivadas_nos_nos(m, campo)
+        return (d_x - nu / 2.0 * a[usados]) / delta, (d_y - nu / 2.0 * b[usados]) / delta
+
+    if len(_derivadas_nos_nos(m, psi)[2]):
+        no_d1, no_d2, no_h1, no_h2 = _termos_do_cortante(m.no_x - p.xc, m.no_y - p.yc, p)
+        vx_x, vx_y = nos_nos(psi, no_d1, no_d2)
+        vy_x, vy_y = nos_nos(phi, no_h1, no_h2)
+    return CamposDeCortante(vx_x, vx_y, vy_x, vy_y, resultante, momento_vx, momento_vy)
+
+
+def _termos_do_cortante(
+    u: np.ndarray, v: np.ndarray, p: Propriedades
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    r, q = u * u - v * v, 2.0 * u * v
+    return (
+        p.ix * r - p.ixy * q,
+        p.ixy * r + p.ix * q,
+        -p.ixy * r + p.iy * q,
+        -p.iy * r - p.ixy * q,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class MapaDeTensoes:
     sigma_max: float
@@ -925,14 +1036,38 @@ class MapaDeTensoes:
     a: float  # σ = a + b·(x − xc) + c·(y − yc), em MPa
     b: float
     c: float
+    tau_cortante: float = 0.0  # só o de V
+    tau_max: float = 0.0  # V e T somados como vetores, ponto a ponto
+    torcao_extra: float = 0.0  # kN·m: o que V soma por não passar pelo centro de cisalhamento
+    ponto_tau: tuple[float, float] = (0.0, 0.0)
+    ponto_mises: tuple[float, float] = (0.0, 0.0)
+    sigma_no_ponto: float = 0.0  # no ponto de von Mises
+    tau_no_ponto: float = 0.0
+    erro_cortante: float = 0.0
+    no_x: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    no_y: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    no_tau_x: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    no_tau_y: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    no_mises: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
 
 def tensoes(
-    analise: Analise, n_kn: float, mx_knm: float, my_knm: float, t_knm: float = 0.0
+    analise: Analise,
+    n_kn: float,
+    mx_knm: float,
+    my_knm: float,
+    t_knm: float = 0.0,
+    vx_kn: float = 0.0,
+    vy_kn: float = 0.0,
+    *,
+    campos: CamposDeCortante | None = None,
+    pelo_centro_de_gravidade: bool = False,
 ) -> MapaDeTensoes:
     """Tração positiva. Mx positivo traciona a base; My positivo traciona a direita.
 
-    Com eixos girados vale a flexão oblíqua completa, pelo sistema das inércias (Ixy entra).
+    Com eixos girados vale a flexão oblíqua completa, pelo sistema das inércias (Ixy entra). Vx para
+    a direita e Vy para cima. V passa pelo centro de cisalhamento; com ``pelo_centro_de_gravidade``,
+    a excentricidade vira torção, que é o que um U sofre com a carga fora da alma.
     """
     p = analise.prop
     m = analise.malha
@@ -948,15 +1083,166 @@ def tensoes(
         :, None
     ] * np.array([0.0, 0.0, 1.0, 1.0])
     sigma = a + b * (cantos_x - p.xc) + c * (cantos_y - p.yc)
-    tau = abs(t_knm) * 1e6 / p.w_torcao if p.w_torcao > 0 else 0.0
-    no_sigma = a + b * (analise.gradiente_x - p.xc) + c * (analise.gradiente_y - p.yc)
-    no_tau = (
-        abs(t_knm) * 1e6 * np.minimum(analise.gradiente, analise.gradiente_max) / p.j
-        if p.j > 0
-        else 0.0
+
+    vx, vy = vx_kn * 1e3, vy_kn * 1e3
+    corta = bool(vx or vy)
+    if corta and campos is None:
+        campos = campos_de_cortante(analise)
+    extra = 0.0
+    if campos is not None and corta and pelo_centro_de_gravidade:
+        extra = -(vx * campos.momento_vx + vy * campos.momento_vy)
+    torque = t_knm * 1e6 + extra
+    tau = abs(torque) / p.w_torcao if p.w_torcao > 0 else 0.0
+    por_j = torque / p.j if p.j > 0 else 0.0
+    tau_x = por_j * analise.torcao_x
+    tau_y = por_j * analise.torcao_y
+    tau_cortante = 0.0
+    if campos is not None and corta:
+        v_x = vx * campos.vx_x + vy * campos.vy_x
+        v_y = vx * campos.vx_y + vy * campos.vy_y
+        tau_cortante = float(np.percentile(np.hypot(v_x, v_y), PERCENTIL_DO_TAU))
+        tau_x, tau_y = tau_x + v_x, tau_y + v_y
+    modulo = np.hypot(tau_x, tau_y)
+    tau_max = float(np.percentile(modulo, PERCENTIL_DO_TAU))
+    x_no, y_no = analise.gradiente_x, analise.gradiente_y
+    no_sigma = a + b * (x_no - p.xc) + c * (y_no - p.yc)
+    no_mises = np.sqrt(no_sigma**2 + 3.0 * np.minimum(modulo, tau_max) ** 2)
+
+    k_mises = int(np.argmax(no_mises))
+    mises = float(no_mises[k_mises])
+    ponto_mises = (float(x_no[k_mises]), float(y_no[k_mises]))
+    sigma_no_ponto, tau_no_ponto = float(no_sigma[k_mises]), min(float(modulo[k_mises]), tau_max)
+    maior_sigma = float(np.abs(sigma).max())
+    if maior_sigma > mises:
+        # O canto extremo pode não ser nó de célula cheia: ali só há σ.
+        linha, canto = np.unravel_index(int(np.argmax(np.abs(sigma))), sigma.shape)
+        mises, sigma_no_ponto, tau_no_ponto = maior_sigma, float(sigma[linha, canto]), 0.0
+        ponto_mises = (float(cantos_x[linha, canto]), float(cantos_y[linha, canto]))
+    # O maior τ fica no ponto que atinge o teto: acima dele sobram só os cantos reentrantes.
+    k_tau = int(np.argmin(np.abs(modulo - tau_max)))
+    return MapaDeTensoes(
+        float(sigma.max()),
+        float(sigma.min()),
+        tau,
+        mises,
+        a,
+        b,
+        c,
+        tau_cortante,
+        tau_max,
+        extra / 1e6,
+        (float(x_no[k_tau]), float(y_no[k_tau])),
+        ponto_mises,
+        sigma_no_ponto,
+        tau_no_ponto,
+        campos.erro if campos is not None and corta else 0.0,
+        x_no,
+        y_no,
+        tau_x,
+        tau_y,
+        no_mises,
     )
-    mises = max(float(np.sqrt(no_sigma**2 + 3.0 * no_tau**2).max()), float(np.abs(sigma).max()))
-    return MapaDeTensoes(float(sigma.max()), float(sigma.min()), tau, mises, a, b, c)
+
+
+@dataclass(frozen=True, slots=True)
+class FluxoNaLigacao:
+    """Cisalhamento longitudinal na emenda de duas chapas: é o que a solda precisa levar."""
+
+    parte_a: int  # posição em ``Analise.partes``
+    parte_b: int
+    comprimento: float  # mm de contato na seção
+    q: float  # N/mm de barra
+
+
+def _fluxo_na_linha(
+    mapa: MapaDeTensoes, normal: str, posicao: float, trecho: tuple[float, float], folga: float
+) -> float | None:
+    """∫τ ds numa linha da malha. Sem nós bastantes na linha, não há resposta."""
+    coordenada = mapa.no_y if normal == "y" else mapa.no_x
+    caminho = mapa.no_x if normal == "y" else mapa.no_y
+    tau = mapa.no_tau_y if normal == "y" else mapa.no_tau_x
+    nos = np.nonzero(
+        (np.abs(coordenada - posicao) < folga)
+        & (caminho >= trecho[0] - folga)
+        & (caminho <= trecho[1] + folga)
+    )[0]
+    if len(nos) < 2:
+        return None
+    ordem = nos[np.argsort(caminho[nos])]
+    return float(((tau[ordem][1:] + tau[ordem][:-1]) / 2.0 * np.diff(caminho[ordem])).sum())
+
+
+def _fluxo_na_emenda(
+    analise: Analise,
+    mapa: MapaDeTensoes,
+    emenda: tuple[float, tuple[float, float], str],
+    dentro: tuple[float, float],
+    folga: float,
+) -> float | None:
+    """O fluxo medido dentro da chapa estreita e levado até a emenda.
+
+    Na própria emenda a média dos nós mistura a alma com a mesa, onde o τ despenca, e dá 27 % a menos
+    num I. Duas linhas da malha dentro da chapa dão o valor e a variação até lá. ``dentro`` é a faixa
+    da chapa estreita na direção da normal.
+    """
+    posicao, trecho, normal = emenda
+    grade = analise.malha.ys if normal == "y" else analise.malha.xs
+    linhas = [float(v) for v in grade if dentro[0] + folga < v < dentro[1] - folga]
+    linhas.sort(key=lambda v: abs(v - posicao))
+    lidas = [
+        (abs(v - posicao), _fluxo_na_linha(mapa, normal, v, trecho, folga)) for v in linhas[:2]
+    ]
+    validas = [(d, q) for d, q in lidas if q is not None]
+    if len(validas) == 2:
+        (d1, q1), (d2, q2) = validas
+        return q1 + (q1 - q2) * d1 / (d2 - d1)
+    if validas:
+        return validas[0][1]
+    return _fluxo_na_linha(mapa, normal, posicao, trecho, folga)
+
+
+def fluxos_nas_ligacoes(analise: Analise, mapa: MapaDeTensoes) -> list[FluxoNaLigacao]:
+    """q em cada emenda entre chapas retas que se encostam, em N por mm de barra."""
+    tamanho = max(analise.prop.largura, analise.prop.altura)
+    folga = 1e-6 * tamanho
+    chapas = [(i, p.caixa()) for i, p in enumerate(analise.partes) if p.reta and not p.furo]
+    fluxos: list[FluxoNaLigacao] = []
+    for posicao, (i, a) in enumerate(chapas):
+        for j, b in chapas[posicao + 1 :]:
+            emenda = _emenda(a, b, folga)
+            if emenda is None:
+                continue
+            _, trecho, normal = emenda
+            comprimento = trecho[1] - trecho[0]
+            # Mede na chapa que a emenda atravessa de lado a lado: é a alma, e não a mesa.
+            lados = (0, 2) if normal == "y" else (1, 3)
+            normais = (1, 3) if normal == "y" else (0, 2)
+            estreita = min((a, b), key=lambda c: abs((c[lados[1]] - c[lados[0]]) - comprimento))
+            q = _fluxo_na_emenda(
+                analise, mapa, emenda, (estreita[normais[0]], estreita[normais[1]]), folga
+            )
+            if q is not None:
+                fluxos.append(FluxoNaLigacao(i, j, comprimento, abs(q)))
+    return fluxos
+
+
+def _emenda(
+    a: tuple[float, float, float, float], b: tuple[float, float, float, float], folga: float
+) -> tuple[float, tuple[float, float], str] | None:
+    """A linha onde duas caixas se encostam: (posição, trecho, direção da normal)."""
+    ax0, ay0, ax1, ay1 = a
+    bx0, by0, bx1, by1 = b
+    for y in (ay1, ay0):
+        if abs(y - (by0 if y == ay1 else by1)) < folga:
+            trecho = (max(ax0, bx0), min(ax1, bx1))
+            if trecho[1] - trecho[0] > folga:
+                return y, trecho, "y"
+    for x in (ax1, ax0):
+        if abs(x - (bx0 if x == ax1 else bx1)) < folga:
+            trecho = (max(ay0, by0), min(ay1, by1))
+            if trecho[1] - trecho[0] > folga:
+                return x, trecho, "x"
+    return None
 
 
 # ---------------------------------------------------------------------------

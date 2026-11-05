@@ -181,3 +181,296 @@ function esticarConjunto(partes, eixo, novo) {
     else if (centro < meio - TOLERANCIA) mover(p, ...e.passo(-delta / 2))
   })
 }
+
+// ---------------------------------------------------------------------------
+// Pontos de encaixe e cotas de um ponto a outro
+// ---------------------------------------------------------------------------
+
+// Uma âncora aponta para um ponto de uma parte, e não para coordenadas: a cota acompanha a peça.
+// t: "v" canto ou vértice, "m" meio de lado, "c" centro.
+function ancorasDaParte(p, i) {
+  const lista = []
+  if (p.forma === "circ") {
+    lista.push({ i, t: "c", k: 0, x: p.x, y: p.y })
+    ;[[1, 0], [0, 1], [-1, 0], [0, -1]].forEach(([sx, sy], k) => {
+      lista.push({ i, t: "v", k, x: p.x + (sx * p.b) / 2, y: p.y + (sy * p.b) / 2 })
+    })
+    return lista
+  }
+  const anel = cantos(p)
+  anel.forEach(([x, y], k) => {
+    const [u, w] = anel[(k + 1) % anel.length]
+    lista.push({ i, t: "v", k, x, y })
+    lista.push({ i, t: "m", k, x: (x + u) / 2, y: (y + w) / 2 })
+  })
+  if (p.forma === "ret") lista.push({ i, t: "c", k: 0, x: p.x, y: p.y })
+  return lista
+}
+
+function pontoDaAncora(partes, a) {
+  const p = partes[a.i]
+  if (!p) return null
+  const achada = ancorasDaParte(p, a.i).find((q) => q.t === a.t && q.k === a.k)
+  return achada ? [achada.x, achada.y] : null
+}
+
+const mesmaAncora = (a, b) => a.i === b.i && a.t === b.t && a.k === b.k
+
+const cotasValidas = (partes, cotas) =>
+  cotas.filter((c) => pontoDaAncora(partes, c.a) && pontoDaAncora(partes, c.b))
+
+function direcaoDaCota(A, B, modo) {
+  const [dx, dy] = [B[0] - A[0], B[1] - A[1]]
+  if (modo === "h") return [dx < 0 ? -1 : 1, 0]
+  if (modo === "v") return [0, dy < 0 ? -1 : 1]
+  const d = Math.hypot(dx, dy)
+  return d ? [dx / d, dy / d] : [1, 0]
+}
+
+function medidaEntre(A, B, modo) {
+  if (modo === "h") return Math.abs(B[0] - A[0])
+  if (modo === "v") return Math.abs(B[1] - A[1])
+  return Math.hypot(B[0] - A[0], B[1] - A[1])
+}
+
+// O lugar do mouse escolhe o tipo, como num CAD: em cima ou embaixo dos dois pontos mede a distância
+// horizontal; ao lado deles, a vertical; na diagonal, a distância direta.
+function modoDaCota(A, B, M) {
+  const [dx, dy] = [Math.abs(B[0] - A[0]), Math.abs(B[1] - A[1])]
+  if (dx < TOLERANCIA) return "v"
+  if (dy < TOLERANCIA) return "h"
+  const dentroX = M[0] >= Math.min(A[0], B[0]) && M[0] <= Math.max(A[0], B[0])
+  const dentroY = M[1] >= Math.min(A[1], B[1]) && M[1] <= Math.max(A[1], B[1])
+  if (dentroX && !dentroY) return "h"
+  if (dentroY && !dentroX) return "v"
+  return "a"
+}
+
+function folgaDaCota(A, B, modo, M) {
+  if (modo === "h") return M[1] - (A[1] + B[1]) / 2
+  if (modo === "v") return M[0] - (A[0] + B[0]) / 2
+  const [ux, uy] = direcaoDaCota(A, B, "a")
+  return (M[0] - A[0]) * -uy + (M[1] - A[1]) * ux
+}
+
+function linhaDaCota(A, B, modo, folga) {
+  if (modo === "h") {
+    const y = (A[1] + B[1]) / 2 + folga
+    return [[A[0], y], [B[0], y]]
+  }
+  if (modo === "v") {
+    const x = (A[0] + B[0]) / 2 + folga
+    return [[x, A[1]], [x, B[1]]]
+  }
+  const [ux, uy] = direcaoDaCota(A, B, "a")
+  const [nx, ny] = [-uy * folga, ux * folga]
+  return [[A[0] + nx, A[1] + ny], [B[0] + nx, B[1] + ny]]
+}
+
+// ---------------------------------------------------------------------------
+// Polígono
+// ---------------------------------------------------------------------------
+
+function areaComSinal(pontos) {
+  let soma = 0
+  pontos.forEach(([x, y], k) => {
+    const [u, w] = pontos[(k + 1) % pontos.length]
+    soma += x * w - u * y
+  })
+  return soma / 2
+}
+
+// Vale também encostar e sobrepor: dois lados que dividem a mesma linha estragam a seção tanto quanto
+// um cruzamento em X, e só um teste de sinal não veria isso.
+function ladosSeTocam(a, b, c, d) {
+  const lado = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+  const sobre = (p, q, r) =>
+    Math.abs(lado(p, q, r)) <= TOLERANCIA &&
+    r[0] >= Math.min(p[0], q[0]) - TOLERANCIA &&
+    r[0] <= Math.max(p[0], q[0]) + TOLERANCIA &&
+    r[1] >= Math.min(p[1], q[1]) - TOLERANCIA &&
+    r[1] <= Math.max(p[1], q[1]) + TOLERANCIA
+  const opostos = (u, v) => (u > TOLERANCIA && v < -TOLERANCIA) || (u < -TOLERANCIA && v > TOLERANCIA)
+  if (opostos(lado(c, d, a), lado(c, d, b)) && opostos(lado(a, b, c), lado(a, b, d))) return true
+  return sobre(c, d, a) || sobre(c, d, b) || sobre(a, b, c) || sobre(a, b, d)
+}
+
+// Devolve o motivo, ou vazio. O Python descarta o polígono sem área, e ele sumiria do desenho.
+function problemaDoPoligono(pontos) {
+  const n = pontos.length
+  if (n < 3) return "O polígono precisa de ao menos 3 pontos."
+  for (let k = 0; k < n; k += 1) {
+    const [a, b] = [pontos[k], pontos[(k + 1) % n]]
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < TOLERANCIA) return "Dois pontos ficariam no mesmo lugar."
+  }
+  if (Math.abs(areaComSinal(pontos)) < TOLERANCIA) return "O polígono ficaria sem área."
+  for (let k = 0; k < n; k += 1) {
+    for (let j = k + 2; j < n; j += 1) {
+      if (k === 0 && j === n - 1) continue
+      if (ladosSeTocam(pontos[k], pontos[k + 1], pontos[j], pontos[(j + 1) % n])) {
+        return "O contorno cruzaria a si mesmo."
+      }
+    }
+  }
+  return ""
+}
+
+// Anda pelo contorno a partir do ponto e leva junto o trecho ligado que está além dele. Mover só o
+// ponto entortaria o perfil: num T, subir a alma tem de levar a mesa inteira, e num U, subir uma aba
+// não pode levar a outra, que fica depois de um trecho que desce.
+function esticarContorno(pontos, sementes, d, u, fixos) {
+  const n = pontos.length
+  const alcance = (k) => pontos[k][0] * u[0] + pontos[k][1] * u[1]
+  const limite = Math.min(...sementes.map(alcance)) - TOLERANCIA
+  const andam = new Set(sementes)
+  for (const inicio of sementes) {
+    for (const passo of [1, -1]) {
+      let k = inicio
+      for (let c = 0; c < n; c += 1) {
+        k = (k + passo + n) % n
+        if (fixos.has(k) || alcance(k) < limite) break
+        andam.add(k)
+      }
+    }
+  }
+  andam.forEach((k) => {
+    pontos[k] = [pontos[k][0] + d[0], pontos[k][1] + d[1]]
+  })
+}
+
+const verticesDaAncora = (a, n) => (a.t === "m" ? [a.k, (a.k + 1) % n] : [a.k])
+
+function ajustarNaChapa(p, c, A, B, novo) {
+  if (p.giro) return "Chapa girada: mude pelo painel de medidas."
+  const dx = Math.abs(B[0] - A[0])
+  const dy = Math.abs(B[1] - A[1])
+  const eixo = c.modo === "h" || (c.modo === "a" && dy < TOLERANCIA) ? "b" : "h"
+  const reta = c.modo !== "a" || dx < TOLERANCIA || dy < TOLERANCIA
+  if (!reta || Math.abs((eixo === "b" ? dx : dy) - p[eixo]) > TOLERANCIA) {
+    return "Na chapa, escolha dois pontos de lados opostos, na mesma direção."
+  }
+  const [ini, sinal] = eixo === "b" ? [A[0], Math.sign(B[0] - A[0])] : [A[1], Math.sign(B[1] - A[1])]
+  p[eixo] = novo
+  if (eixo === "b") p.x = ini + (sinal * novo) / 2
+  else p.y = ini + (sinal * novo) / 2
+  return ""
+}
+
+// Muda a medida deixando o primeiro ponto no lugar. Devolve o motivo se não der. Quem chama passa uma
+// cópia: um polígono que falhou no meio não pode ficar pela metade.
+function ajustarCota(partes, c, novo) {
+  if (!(novo > 0)) return "A medida precisa ser maior que zero."
+  const A = pontoDaAncora(partes, c.a)
+  const B = pontoDaAncora(partes, c.b)
+  if (!A || !B) return "Esta cota perdeu um dos pontos."
+  const u = direcaoDaCota(A, B, c.modo)
+  const delta = novo - medidaEntre(A, B, c.modo)
+  const d = [u[0] * delta, u[1] * delta]
+  if (c.a.i !== c.b.i) {
+    const [ga, gb] = [partes[c.a.i].grupo, partes[c.b.i].grupo]
+    if (gb && ga === gb) return "Os dois pontos são do mesmo perfil: mude pelas medidas da chapa."
+    partes.forEach((p, j) => {
+      if (j === c.b.i || (gb && p.grupo === gb)) mover(p, d[0], d[1])
+    })
+    return ""
+  }
+  const p = partes[c.b.i]
+  if (p.forma === "circ") {
+    const k = novo / medidaEntre(A, B, c.modo)
+    p.b *= k
+    p.h = p.b
+    return ""
+  }
+  if (p.forma === "ret") return ajustarNaChapa(p, c, A, B, novo)
+  const n = p.pontos.length
+  esticarContorno(p.pontos, verticesDaAncora(c.b, n), d, u, new Set(verticesDaAncora(c.a, n)))
+  return problemaDoPoligono(p.pontos)
+}
+
+// A ponta da esquerda fica, ou a de baixo: o lado cresce para a direita e para cima, como a chapa.
+function cotaDoLado(partes, i, k, trocar = false) {
+  const pontos = partes[i].pontos
+  const j = (k + 1) % pontos.length
+  const [a, b] = [pontos[k], pontos[j]]
+  const antes = a[0] < b[0] - TOLERANCIA || (Math.abs(a[0] - b[0]) <= TOLERANCIA && a[1] <= b[1])
+  const [fica, anda] = antes !== trocar ? [k, j] : [j, k]
+  return { a: { i, t: "v", k: fica }, b: { i, t: "v", k: anda }, modo: "a", folga: 0 }
+}
+
+function anguloEntre(A, B) {
+  const graus = (Math.atan2(B[1] - A[1], B[0] - A[0]) * 180) / Math.PI
+  return Math.round(((graus + 360) % 360) * 1e6) / 1e6
+}
+
+function girarLado(partes, c, graus) {
+  const A = pontoDaAncora(partes, c.a)
+  const B = pontoDaAncora(partes, c.b)
+  const p = partes[c.b.i]
+  const r = Math.hypot(B[0] - A[0], B[1] - A[1])
+  const a = (graus * Math.PI) / 180
+  p.pontos[c.b.k] = [A[0] + r * Math.cos(a), A[1] + r * Math.sin(a)]
+  return problemaDoPoligono(p.pontos)
+}
+
+function inserirVertice(partes, cotas, i, k, ponto) {
+  partes[i].pontos.splice(k + 1, 0, ponto)
+  const subir = (a) => (a.i === i && a.t !== "c" && a.k > k ? { ...a, k: a.k + 1 } : a)
+  return cotas.map((c) => ({ ...c, a: subir(c.a), b: subir(c.b) }))
+}
+
+// Cota presa ao ponto que saiu vai junto com ele.
+function apagarVertice(partes, cotas, i, k) {
+  const pontos = partes[i].pontos
+  const anterior = (k - 1 + pontos.length) % pontos.length
+  pontos.splice(k, 1)
+  const perdida = (a) =>
+    a.i === i && ((a.t === "v" && a.k === k) || (a.t === "m" && (a.k === k || a.k === anterior)))
+  const descer = (a) => (a.i === i && a.t !== "c" && a.k > k ? { ...a, k: a.k - 1 } : a)
+  return cotas
+    .filter((c) => !perdida(c.a) && !perdida(c.b))
+    .map((c) => ({ ...c, a: descer(c.a), b: descer(c.b) }))
+}
+
+function cotasSemPartes(cotas, apagadas) {
+  const novo = (a) => ({ ...a, i: a.i - [...apagadas].filter((j) => j < a.i).length })
+  return cotas
+    .filter((c) => !apagadas.has(c.a.i) && !apagadas.has(c.b.i))
+    .map((c) => ({ ...c, a: novo(c.a), b: novo(c.b) }))
+}
+
+function travarAngulo([x0, y0], [x, y], passo = 45) {
+  const r = Math.hypot(x - x0, y - y0)
+  if (!r) return [x, y]
+  const a = ((Math.round(((Math.atan2(y - y0, x - x0) * 180) / Math.PI) / passo) * passo) * Math.PI) / 180
+  return [
+    Math.round((x0 + r * Math.cos(a)) * 1e6) / 1e6,
+    Math.round((y0 + r * Math.sin(a)) * 1e6) / 1e6,
+  ]
+}
+
+// O próximo ponto por digitação: 100 na direção do mouse, 100<45 em ângulo, @50;20 em x e y.
+function lerProximoPonto(texto, ultimo, mouse) {
+  const s = String(texto ?? "").trim()
+  if (s.startsWith("@")) {
+    const resto = s.slice(1)
+    const partes = (resto.includes(";") ? resto.split(";") : resto.split(",")).map((v) => v.trim())
+    if (partes.length !== 2) return { erro: "Escreva @x;y, por exemplo @50;20." }
+    const [dx, dy] = partes.map((v) => lerValorDigitado(v, 0, "mm"))
+    if (dx.erro || dy.erro) return { erro: dx.erro || dy.erro }
+    return { valor: [ultimo[0] + dx.valor, ultimo[1] + dy.valor] }
+  }
+  if (s.includes("<")) {
+    const [comprimento, angulo] = s.split("<")
+    const r = lerValorDigitado(comprimento, 0, "mm")
+    const g = lerValorDigitado(angulo, 0, "°")
+    if (r.erro || g.erro) return { erro: "Escreva comprimento<ângulo, por exemplo 100<45." }
+    const a = (g.valor * Math.PI) / 180
+    return { valor: [ultimo[0] + r.valor * Math.cos(a), ultimo[1] + r.valor * Math.sin(a)] }
+  }
+  const r = lerValorDigitado(s, 0, "mm")
+  if (r.erro) return r
+  const [dx, dy] = [mouse[0] - ultimo[0], mouse[1] - ultimo[1]]
+  const d = Math.hypot(dx, dy)
+  if (!d) return { erro: "Mova o mouse para a direção do próximo ponto." }
+  return { valor: [ultimo[0] + (dx / d) * r.valor, ultimo[1] + (dy / d) * r.valor] }
+}

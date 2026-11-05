@@ -6,6 +6,12 @@
 const ESTADOS = new WeakMap()
 const IMA_PX = 9
 const ALCA_PX = 6
+const ENCAIXE_PX = 13
+const DICAS = {
+  poli: "Clique os pontos, ou digite: 100 (na direção do mouse), 100<45 (ângulo), @50;20 (x;y). Shift trava o ângulo. Enter fecha, Backspace volta um ponto.",
+  cota: "Clique no ponto que fica, no ponto que anda e no lugar da cota. O lugar escolhe: em cima, horizontal; ao lado, vertical; na diagonal, direta.",
+}
+const NOME_DO_ENCAIXE = { v: "Ponto", m: "Meio do lado", c: "Centro" }
 
 const copiar = (v) => JSON.parse(JSON.stringify(v))
 const arred = (v) => Math.round(v * 1000) / 1000
@@ -35,6 +41,7 @@ function criar(raiz) {
   const infoDica = raiz.querySelector('[data-i="dica"]')
   const caixaFuro = raiz.querySelector('[data-c="furo"]')
   const seletorGrade = raiz.querySelector('[data-c="grade"]')
+  const caixaOrto = raiz.querySelector('[data-c="orto"]')
 
   const e = {
     enviar: null,
@@ -52,6 +59,14 @@ function criar(raiz) {
     ponteiro: null,
     passado: [],
     futuro: [],
+    cotas: [],
+    novaCota: null,
+    mouse: null,
+    encaixe: null,
+    orto: false,
+    vertice: null,
+    realce: null,
+    pontaTrocada: false,
   }
 
   const tela = () => {
@@ -96,7 +111,29 @@ function criar(raiz) {
     }
     return melhor
   }
+  function encaixeEm(x, y, fora = new Set()) {
+    const [mx, my] = px(x, y)
+    let melhor = null
+    let distancia = ENCAIXE_PX
+    e.partes.forEach((p, i) => {
+      if (fora.has(i)) return
+      for (const a of ancorasDaParte(p, i)) {
+        const [u, v] = px(a.x, a.y)
+        const d = Math.hypot(u - mx, v - my)
+        if (d < distancia) {
+          distancia = d
+          melhor = a
+        }
+      }
+    })
+    return melhor
+  }
   function ponto(x, y, fora = new Set()) {
+    e.encaixe = encaixeEm(x, y, fora)
+    if (e.encaixe) {
+      e.guias = { x: null, y: null }
+      return [e.encaixe.x, e.encaixe.y]
+    }
     const r = referencias(fora)
     const ix = maisPerto(r.xs, x)
     const iy = maisPerto(r.ys, y)
@@ -129,16 +166,29 @@ function criar(raiz) {
   }
 
   // ---- histórico e envio
+  const foto = () => ({ partes: copiar(e.partes), cotas: copiar(e.cotas) })
   function guardar() {
-    e.passado.push(copiar(e.partes))
+    e.passado.push(foto())
     if (e.passado.length > 60) e.passado.shift()
     e.futuro = []
   }
+  function voltarA(guardada) {
+    e.partes = guardada.partes
+    e.cotas = guardada.cotas
+    e.sel.clear()
+    e.vertice = null
+    enviar()
+  }
   function enviar() {
     e.versao += 1
-    e.enviar?.("edicao", { partes: copiar(e.partes), versao: e.versao })
+    e.enviar?.("edicao", { partes: copiar(e.partes), cotas: copiar(e.cotas), versao: e.versao })
     montarPainel()
     desenhar()
+  }
+  function verticeAtual() {
+    if (e.vertice === null || e.sel.size !== 1) return null
+    const p = selecionadas()[0]
+    return p?.forma === "poli" && e.vertice < p.pontos.length ? e.vertice : null
   }
   function grupoDe(i) {
     const g = e.partes[i].grupo
@@ -156,17 +206,13 @@ function criar(raiz) {
   const acoes = {
     desfazer() {
       if (!e.passado.length) return
-      e.futuro.push(copiar(e.partes))
-      e.partes = e.passado.pop()
-      e.sel.clear()
-      enviar()
+      e.futuro.push(foto())
+      voltarA(e.passado.pop())
     },
     refazer() {
       if (!e.futuro.length) return
-      e.passado.push(copiar(e.partes))
-      e.partes = e.futuro.pop()
-      e.sel.clear()
-      enviar()
+      e.passado.push(foto())
+      voltarA(e.futuro.pop())
     },
     ajustar() {
       ajustarVista()
@@ -175,8 +221,30 @@ function criar(raiz) {
     apagar() {
       if (!e.sel.size) return
       guardar()
+      e.cotas = cotasSemPartes(e.cotas, e.sel)
       e.partes = e.partes.filter((_, i) => !e.sel.has(i))
       e.sel.clear()
+      enviar()
+    },
+    apagarPonto() {
+      const k = verticeAtual()
+      if (k === null) return
+      const i = [...e.sel][0]
+      if (e.partes[i].pontos.length <= 3) {
+        infoDica.textContent = "O polígono precisa de ao menos 3 pontos."
+        return
+      }
+      const copia = copiar(e.partes)
+      const cotas = apagarVertice(copia, e.cotas, i, k)
+      const erro = problemaDoPoligono(copia[i].pontos)
+      if (erro) {
+        infoDica.textContent = erro
+        return
+      }
+      guardar()
+      e.partes = copia
+      e.cotas = cotas
+      e.vertice = null
       enviar()
     },
     duplicar() {
@@ -318,6 +386,19 @@ function criar(raiz) {
       titulo.textContent =
         p.forma === "circ" ? "Círculo" : p.forma === "poli" ? "Polígono" : "Chapa"
       painel.append(titulo)
+      const k = verticeAtual()
+      if (k !== null) {
+        const [vx, vy] = p.pontos[k]
+        titulo.textContent = `Ponto ${k + 1}`
+        // Só o que é do ponto. Com os botões da parte o painel cresceria, e a prancheta desceria
+        // embaixo do mouse logo depois do clique.
+        painel.append(
+          campo("x", vx, (v) => { p.pontos[k] = [v, p.pontos[k][1]] }, "Posição do ponto em x (mm)"),
+          campo("y", vy, (v) => { p.pontos[k] = [p.pontos[k][0], v] }, "Posição do ponto em y (mm)"),
+          botao("Apagar ponto", "apagarPonto", "Tira este ponto do polígono (Delete)", "perigo"),
+        )
+        return
+      }
       if (p.forma === "poli") {
         const c = caixa(p)
         painel.append(
@@ -410,6 +491,99 @@ function criar(raiz) {
       <line class="cota" x1="${xx - 5}" y1="${b[1]}" x2="${xx + 5}" y2="${b[1]}"/>
       <text class="cota-txt editavel" data-editar="${editar}" x="${xx - 8}" y="${my + 4}" text-anchor="end">${rotulo}</text>`
   }
+  // ---- cotas de um ponto a outro e medidas do polígono
+  function desenhoDaCota(A, B, modo, folga, rotulo, editar = "") {
+    const [P, Q] = linhaDaCota(A, B, modo, folga).map(([x, y]) => px(x, y))
+    const [a, b] = [px(...A), px(...B)]
+    const tamanho = Math.hypot(Q[0] - P[0], Q[1] - P[1]) || 1
+    const [ux, uy] = [(Q[0] - P[0]) / tamanho, (Q[1] - P[1]) / tamanho]
+    const traco = ([x, y]) =>
+      `<line class="cota-ponto" x1="${x - (ux + uy) * 5}" y1="${y - (uy - ux) * 5}" x2="${x + (ux + uy) * 5}" y2="${y + (uy - ux) * 5}"/>`
+    const [mx, my] = [(P[0] + Q[0]) / 2, (P[1] + Q[1]) / 2]
+    const atributos = editar ? `class="cota-txt editavel" data-editar="${editar}"` : 'class="cota-txt"'
+    const legenda =
+      Math.abs(ux) < 0.01
+        ? `<text ${atributos} x="${mx - 7}" y="${my + 4}" text-anchor="end">${rotulo}</text>`
+        : `<text ${atributos} x="${mx}" y="${my - 6}" text-anchor="middle">${rotulo}</text>`
+    return `<line class="cota" x1="${a[0]}" y1="${a[1]}" x2="${P[0]}" y2="${P[1]}"/>
+      <line class="cota" x1="${b[0]}" y1="${b[1]}" x2="${Q[0]}" y2="${Q[1]}"/>
+      <line class="cota-ponto" x1="${P[0]}" y1="${P[1]}" x2="${Q[0]}" y2="${Q[1]}"/>
+      ${traco(P)}${traco(Q)}${legenda}`
+  }
+  function cotasDoUsuario() {
+    return e.cotas
+      .map((c, n) => {
+        const A = pontoDaAncora(e.partes, c.a)
+        const B = pontoDaAncora(e.partes, c.b)
+        if (!A || !B) return ""
+        return desenhoDaCota(A, B, c.modo, c.folga, texto(medidaEntre(A, B, c.modo)), `cota:${n}`)
+      })
+      .join("")
+  }
+  function ladosDoPoligono() {
+    if (e.ferramenta !== "mover" || e.sel.size !== 1) return ""
+    const p = selecionadas()[0]
+    if (p?.forma !== "poli") return ""
+    const sinal = areaComSinal(p.pontos) >= 0 ? 1 : -1
+    const afasta = 15 / e.vista.esc
+    return p.pontos
+      .map((a, k) => {
+        const b = p.pontos[(k + 1) % p.pontos.length]
+        const [dx, dy] = [b[0] - a[0], b[1] - a[1]]
+        const L = Math.hypot(dx, dy)
+        // Lado curto não recebe rótulo: a medida taparia a peça. Ele se edita pelo ponto.
+        if (L * e.vista.esc < 34) return ""
+        const [nx, ny] = [(sinal * dy) / L, (-sinal * dx) / L]
+        const [x, y] = px((a[0] + b[0]) / 2 + nx * afasta, (a[1] + b[1]) / 2 + ny * afasta)
+        return `<text class="cota-txt editavel" data-editar="lado:${k}" x="${x}" y="${y + 4}" text-anchor="middle">${texto(L)}</text>`
+      })
+      .join("")
+  }
+  function desenhoDoEncaixe() {
+    if (!e.encaixe) return ""
+    const [x, y] = px(e.encaixe.x, e.encaixe.y)
+    if (e.encaixe.t === "m") {
+      return `<polygon class="encaixe" points="${x},${y - 7} ${x + 7},${y + 5} ${x - 7},${y + 5}"/>`
+    }
+    if (e.encaixe.t === "c") return `<circle class="encaixe" cx="${x}" cy="${y}" r="7"/>`
+    return `<rect class="encaixe" x="${x - 6}" y="${y - 6}" width="12" height="12"/>`
+  }
+  function desenhoDaNovaCota() {
+    const nova = e.novaCota
+    if (!nova) return ""
+    const A = pontoDaAncora(e.partes, nova.a)
+    if (!A) return ""
+    const [ax, ay] = px(...A)
+    let s = `<circle class="ponta-fixa" cx="${ax}" cy="${ay}" r="5"/>`
+    if (!nova.b) {
+      if (e.mouse) {
+        const [mx, my] = px(...e.mouse)
+        s += `<line class="guia" x1="${ax}" y1="${ay}" x2="${mx}" y2="${my}"/>`
+      }
+      return s
+    }
+    const B = pontoDaAncora(e.partes, nova.b)
+    if (!B) return s
+    const M = e.mouse ?? B
+    const modo = modoDaCota(A, B, M)
+    const [bx, by] = px(...B)
+    s += `<circle class="ponta-movel" cx="${bx}" cy="${by}" r="5"/>`
+    return s + desenhoDaCota(A, B, modo, folgaDaCota(A, B, modo, M), texto(medidaEntre(A, B, modo)))
+  }
+  function desenhoDoRealce() {
+    if (!e.realce) return ""
+    const [[ax, ay], [bx, by]] = [px(...e.realce.fica), px(...e.realce.anda)]
+    return `<circle class="ponta-fixa" cx="${ax}" cy="${ay}" r="6"/><circle class="ponta-movel" cx="${bx}" cy="${by}" r="6"/>`
+  }
+  function medidaDoTrecho() {
+    const ultimo = e.polilinha?.at(-1)
+    if (!ultimo || !e.ponteiro) return ""
+    const L = medidaEntre(ultimo, e.ponteiro, "a")
+    if (!L) return ""
+    const [x, y] = px(...e.ponteiro)
+    return `<text class="medida-viva" x="${x + 14}" y="${y - 12}">${texto(L)} mm · ${texto(anguloEntre(ultimo, e.ponteiro))}°</text>`
+  }
+
   function desenhar() {
     const { w, h } = tela()
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`)
@@ -458,6 +632,9 @@ function criar(raiz) {
       }
     }
 
+    s += cotasDoUsuario()
+    s += ladosDoPoligono()
+
     if (e.marcas && !e.gesto) {
       const [gx, gy] = px(e.marcas.xc, e.marcas.yc)
       s += `<circle class="marca-g" cx="${gx}" cy="${gy}" r="6"/>
@@ -484,6 +661,7 @@ function criar(raiz) {
         const [a, b] = px(x, y)
         s += `<circle class="alca" cx="${a}" cy="${b}" r="4"/>`
       })
+      s += medidaDoTrecho()
     }
     if (e.guias.x !== null) {
       const [x] = px(e.guias.x, 0)
@@ -493,9 +671,18 @@ function criar(raiz) {
       const [, y] = px(0, e.guias.y)
       s += `<line class="guia" x1="0" y1="${y}" x2="${w}" y2="${y}"/>`
     }
+    const escolhida = verticeAtual()
     for (const a of alcas()) {
-      s += `<circle class="alca" cx="${a.px[0]}" cy="${a.px[1]}" r="${ALCA_PX}"/>`
+      if (a.tipo === "meio") {
+        s += `<circle class="alca-meio" cx="${a.px[0]}" cy="${a.px[1]}" r="4"/>`
+      } else {
+        const classe = a.tipo === "vertice" && a.k === escolhida ? "alca escolhida" : "alca"
+        s += `<circle class="${classe}" cx="${a.px[0]}" cy="${a.px[1]}" r="${ALCA_PX}"/>`
+      }
     }
+    s += desenhoDoRealce()
+    s += desenhoDaNovaCota()
+    s += desenhoDoEncaixe()
     if (!e.partes.length && !e.polilinha && !e.gesto) {
       s += `<text class="vazia-txt" x="${w / 2}" y="${h / 2}" text-anchor="middle">Arraste aqui para desenhar a primeira chapa</text>`
     }
@@ -511,7 +698,12 @@ function criar(raiz) {
     if (!p) return []
     if (p.forma === "circ") return [{ tipo: "raio", px: px(p.x + p.b / 2, p.y) }]
     if (p.forma === "poli") {
-      return p.pontos.map((v, k) => ({ tipo: "vertice", k, px: px(v[0], v[1]) }))
+      // Os pontos vêm antes: num lado curto, o meio cai perto deles e não pode roubar o clique.
+      const meios = p.pontos.map((v, k) => {
+        const u = p.pontos[(k + 1) % p.pontos.length]
+        return { tipo: "meio", k, px: px((v[0] + u[0]) / 2, (v[1] + u[1]) / 2) }
+      })
+      return [...p.pontos.map((v, k) => ({ tipo: "vertice", k, px: px(v[0], v[1]) })), ...meios]
     }
     if (p.giro) return []
     const x0 = p.x - p.b / 2
@@ -545,6 +737,14 @@ function criar(raiz) {
   // ---- ponteiro
   function fecharPoligono() {
     const lista = e.polilinha
+    if (lista?.length >= 3) {
+      const erro = problemaDoPoligono(lista)
+      if (erro) {
+        // Continua desenhando: Backspace volta um ponto, e o trabalho não se perde.
+        infoDica.textContent = `${erro} Backspace volta um ponto.`
+        return
+      }
+    }
     e.polilinha = null
     e.ponteiro = null
     if (!lista || lista.length < 3) {
@@ -565,13 +765,186 @@ function criar(raiz) {
     })
     e.sel = new Set([e.partes.length - 1])
     trocarFerramenta("mover")
+    // Primeira peça: os lados só mostram a medida se a peça tiver tamanho na tela.
+    if (e.partes.length === 1) ajustarVista()
     enviar()
   }
 
+  function pontoDoPoligono(x, y, shift) {
+    const alvo = ponto(x, y)
+    const ultimo = e.polilinha?.at(-1)
+    if (!ultimo || e.encaixe || shift === e.orto) return alvo
+    e.guias = { x: null, y: null }
+    return travarAngulo(ultimo, alvo)
+  }
+  function acrescentarPonto(novo) {
+    e.polilinha = [...(e.polilinha || []), novo]
+    e.ponteiro = null
+    desenhar()
+    mostrarDica()
+  }
+  function mostrarDica() {
+    infoDica.textContent = DICAS[e.ferramenta] ?? ""
+  }
+  function dentroDaVista() {
+    const { w, h } = tela()
+    // A folga é o lugar das medidas, que ficam do lado de fora da peça.
+    return e.partes.flatMap((p) => cantos(p)).every(([x, y]) => {
+      const [a, b] = px(x, y)
+      return a >= 40 && a <= w - 40 && b >= 40 && b <= h - 40
+    })
+  }
+
   // ---- medidas editadas no próprio desenho
-  const editor = criarEditorVivo(raiz.querySelector(".area"))
-  function abrirEdicao(el) {
-    const [tipo, eixo] = el.dataset.editar.split(":")
+  const editor = criarEditorVivo(raiz.querySelector(".area"), {
+    aoFechar() {
+      if (!e.realce) return
+      e.realce = null
+      desenhar()
+    },
+    depoisDoTeclado() {
+      svg.focus({ preventScroll: true })
+    },
+  })
+  const noDesenho = (chave) => svg.querySelector(`[data-editar="${chave}"]`)
+
+  // Muda numa cópia: se o polígono não servir, o desenho fica como estava.
+  function aplicarCota(cota, valor) {
+    const copia = copiar(e.partes)
+    const erro = ajustarCota(copia, cota, valor)
+    if (erro) return erro
+    guardar()
+    e.partes = copia
+    if (!dentroDaVista()) ajustarVista()
+    enviar()
+    return ""
+  }
+  function realcar(cota) {
+    e.realce = { fica: pontoDaAncora(e.partes, cota.a), anda: pontoDaAncora(e.partes, cota.b) }
+    desenhar()
+  }
+  function abrirLado(k) {
+    const i = [...e.sel][0]
+    const cota = cotaDoLado(e.partes, i, k, e.pontaTrocada)
+    const [A, B] = [pontoDaAncora(e.partes, cota.a), pontoDaAncora(e.partes, cota.b)]
+    realcar(cota)
+    const digitado = editor.aberto() ? editor.texto() : undefined
+    editor.abrir(noDesenho(`lado:${k}`), {
+      valor: medidaEntre(A, B, "a"),
+      texto: digitado,
+      unidade: "mm",
+      passo: e.grade,
+      nome: `Lado do polígono. O ponto azul fica e o laranja anda, levando o que está além dele.`,
+      acoes: [
+        {
+          rotulo: "Mover a outra ponta",
+          titulo: "Troca o ponto que fica pelo que anda",
+          ao() {
+            e.pontaTrocada = !e.pontaTrocada
+            abrirLado(k)
+          },
+        },
+        {
+          rotulo: `Ângulo ${texto(anguloEntre(A, B))}°`,
+          titulo: "Gira o lado em volta do ponto que fica",
+          ao: () => abrirAngulo(k),
+        },
+      ],
+      aplicar: (v) => aplicarCota(cota, v),
+    })
+  }
+  function abrirAngulo(k) {
+    const cota = cotaDoLado(e.partes, [...e.sel][0], k, e.pontaTrocada)
+    realcar(cota)
+    editor.abrir(noDesenho(`lado:${k}`), {
+      valor: anguloEntre(pontoDaAncora(e.partes, cota.a), pontoDaAncora(e.partes, cota.b)),
+      unidade: "°",
+      passo: 5,
+      nome: "Ângulo do lado: 0° para a direita, 90° para cima.",
+      dica: "Gira o lado em volta do ponto azul.",
+      aplicar(v) {
+        const copia = copiar(e.partes)
+        const erro = girarLado(copia, cota, v)
+        if (erro) return erro
+        guardar()
+        e.partes = copia
+        enviar()
+        return ""
+      },
+    })
+  }
+  function abrirCota(n) {
+    const cota = e.cotas[n]
+    if (!cota) return
+    const [A, B] = [pontoDaAncora(e.partes, cota.a), pontoDaAncora(e.partes, cota.b)]
+    realcar(cota)
+    const nomes = { h: "Distância horizontal", v: "Distância vertical", a: "Distância direta" }
+    const digitado = editor.aberto() ? editor.texto() : undefined
+    editor.abrir(noDesenho(`cota:${n}`), {
+      valor: medidaEntre(A, B, cota.modo),
+      texto: digitado,
+      unidade: "mm",
+      passo: e.grade,
+      nome: `${nomes[cota.modo]}. O ponto azul fica e o laranja anda.`,
+      acoes: [
+        {
+          rotulo: "Mover a outra ponta",
+          titulo: "Troca o ponto que fica pelo que anda",
+          ao() {
+            e.cotas[n] = { ...cota, a: cota.b, b: cota.a }
+            abrirCota(n)
+          },
+        },
+        {
+          rotulo: "Apagar cota",
+          titulo: "Tira a cota. A peça fica como está.",
+          ao() {
+            editor.fechar()
+            guardar()
+            e.cotas.splice(n, 1)
+            enviar()
+          },
+        },
+      ],
+      aplicar: (v) => aplicarCota(cota, v),
+    })
+  }
+  function abrirProximoPonto(inicial) {
+    const ultimo = e.polilinha.at(-1)
+    const [a, b] = px(...ultimo)
+    const alvo = {
+      getBoundingClientRect() {
+        const r = svg.getBoundingClientRect()
+        const [x, y] = [r.left + a, r.top + b]
+        return { left: x, right: x, top: y, bottom: y }
+      },
+    }
+    editor.abrir(alvo, {
+      valor: 0,
+      texto: inicial,
+      unidade: "mm",
+      nome: "Próximo ponto",
+      dica: "100 na direção do mouse · 100<45 · @50;20",
+      ler: (s) => lerProximoPonto(s, ultimo, e.mouse ?? ultimo),
+      aplicar(novo) {
+        acrescentarPonto(novo)
+        return ""
+      },
+    })
+  }
+
+  function abrirEdicao(chave) {
+    const [tipo, eixo] = chave.split(":")
+    if (tipo === "lado") {
+      e.pontaTrocada = false
+      abrirLado(Number(eixo))
+      return
+    }
+    if (tipo === "cota") {
+      abrirCota(Number(eixo))
+      return
+    }
+    const el = noDesenho(chave)
     if (tipo === "parte") {
       const i = [...e.sel][0]
       const p = e.partes[i]
@@ -614,20 +987,51 @@ function criar(raiz) {
   }
 
   svg.addEventListener("pointerdown", (ev) => {
+    // Com a caixinha aberta, o clique só confirma: senão o valor e o clique virariam dois pontos.
+    if (editor.aberto()) {
+      if (!editor.confirmar()) editor.fechar()
+      return
+    }
     svg.focus({ preventScroll: true })
     svg.setPointerCapture(ev.pointerId)
     const [x, y] = mundo(ev)
     const medida = ev.target.closest?.("[data-editar]")
-    if (medida && ev.button === 0 && e.ferramenta === "mover") {
-      e.gesto = { tipo: "texto", el: medida }
+    const cotaLivre = e.ferramenta === "cota" && !e.novaCota && medida?.dataset.editar.startsWith("cota:")
+    if (medida && ev.button === 0 && (e.ferramenta === "mover" || cotaLivre)) {
+      e.gesto = { tipo: "texto", chave: medida.dataset.editar }
       return
     }
     if (ev.button === 1) {
       e.gesto = { tipo: "pan", inicio: [ev.clientX, ev.clientY], vista: { ...e.vista } }
       return
     }
+    if (e.ferramenta === "cota") {
+      const nova = e.novaCota
+      if (nova?.b) {
+        const A = pontoDaAncora(e.partes, nova.a)
+        const B = pontoDaAncora(e.partes, nova.b)
+        const modo = modoDaCota(A, B, [x, y])
+        guardar()
+        e.cotas.push({ a: nova.a, b: nova.b, modo, folga: folgaDaCota(A, B, modo, [x, y]) })
+        e.novaCota = null
+        e.encaixe = null
+        e.gesto = { tipo: "texto", chave: `cota:${e.cotas.length - 1}` }
+        enviar()
+        return
+      }
+      const achada = encaixeEm(x, y)
+      if (!achada) {
+        infoDica.textContent = "Chegue perto de um ponto da peça: ele fica marcado em verde."
+        return
+      }
+      const { i, t, k } = achada
+      if (!nova) e.novaCota = { a: { i, t, k }, b: null }
+      else if (!mesmaAncora(nova.a, achada)) nova.b = { i, t, k }
+      desenhar()
+      return
+    }
     if (e.ferramenta === "poli") {
-      const [a, b] = ponto(x, y)
+      const [a, b] = pontoDoPoligono(x, y, ev.shiftKey)
       if (e.polilinha?.length > 2) {
         const [p0, q0] = px(...e.polilinha[0])
         const [p1, q1] = px(a, b)
@@ -636,8 +1040,7 @@ function criar(raiz) {
           return
         }
       }
-      e.polilinha = [...(e.polilinha || []), [a, b]]
-      desenhar()
+      acrescentarPonto([a, b])
       return
     }
     if (e.ferramenta !== "mover") {
@@ -651,6 +1054,7 @@ function criar(raiz) {
       return
     }
     const i = parteEm(x, y)
+    e.vertice = null
     if (i === null) {
       e.sel.clear()
       e.gesto = { tipo: "pan", inicio: [ev.clientX, ev.clientY], vista: { ...e.vista } }
@@ -682,8 +1086,20 @@ function criar(raiz) {
     const [x, y] = mundo(ev)
     infoXY.textContent = `x ${texto(x)} · y ${texto(y)} mm`
     const g = e.gesto
+    e.mouse = [x, y]
+    if (e.ferramenta === "cota") {
+      e.encaixe = encaixeEm(x, y)
+      desenhar()
+      return
+    }
     if (e.polilinha) {
-      e.ponteiro = ponto(x, y)
+      e.ponteiro = pontoDoPoligono(x, y, ev.shiftKey)
+      desenhar()
+      return
+    }
+    if (e.ferramenta === "poli") {
+      e.encaixe = encaixeEm(x, y)
+      infoDica.textContent = e.encaixe ? NOME_DO_ENCAIXE[e.encaixe.t] : DICAS.poli
       desenhar()
       return
     }
@@ -735,7 +1151,11 @@ function criar(raiz) {
       const fora = new Set([g.i])
       const [a, b] = ponto(x, y, fora)
       const antes = g.antes
-      if (g.alca.tipo === "raio") {
+      if (g.alca.tipo === "meio") {
+        e.cotas = inserirVertice(e.partes, e.cotas, g.i, g.alca.k, [a, b])
+        g.alca = { tipo: "vertice", k: g.alca.k + 1 }
+        e.vertice = g.alca.k
+      } else if (g.alca.tipo === "raio") {
         p.b = p.h = Math.max(2 * Math.hypot(a - p.x, b - p.y), 0.1)
       } else if (g.alca.tipo === "vertice") {
         p.pontos[g.alca.k] = [a, b]
@@ -761,13 +1181,14 @@ function criar(raiz) {
     const g = e.gesto
     e.gesto = null
     e.guias = { x: null, y: null }
-    infoDica.textContent = ""
+    if (e.ferramenta === "mover") e.encaixe = null
+    mostrarDica()
     if (!g) {
       desenhar()
       return
     }
     if (g.tipo === "texto") {
-      abrirEdicao(g.el) // aqui e não no pointerdown: o clique daria o foco de volta à prancheta
+      abrirEdicao(g.chave) // aqui e não no pointerdown: o clique daria o foco de volta à prancheta
       return
     }
     if (g.tipo === "novo" && g.fim) {
@@ -806,9 +1227,36 @@ function criar(raiz) {
       e.sel = new Set([g.sozinha])
       montarPainel()
     }
-    if ((g.tipo === "mover" || g.tipo === "alca") && g.moveu) {
+    if (g.tipo === "alca" && g.moveu) {
+      const erro = e.partes[g.i].forma === "poli" ? problemaDoPoligono(e.partes[g.i].pontos) : ""
+      if (erro) {
+        const guardada = e.passado.pop()
+        e.partes = guardada.partes
+        e.cotas = guardada.cotas
+        e.vertice = null
+        infoDica.textContent = `${erro} O ponto voltou.`
+      }
+      // Um ponto solto fora da prancheta não teria mais como ser alcançado.
+      if (!dentroDaVista()) ajustarVista()
       enviar()
       return
+    }
+    if (g.tipo === "mover" && g.moveu) {
+      enviar()
+      return
+    }
+    if (g.tipo === "alca" && g.alca.tipo === "meio") {
+      const p = e.partes[g.i]
+      const [a, b] = [p.pontos[g.alca.k], p.pontos[(g.alca.k + 1) % p.pontos.length]]
+      guardar()
+      e.cotas = inserirVertice(e.partes, e.cotas, g.i, g.alca.k, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])
+      e.vertice = g.alca.k + 1
+      enviar()
+      return
+    }
+    if (g.tipo === "alca" && g.alca.tipo === "vertice") {
+      e.vertice = g.alca.k
+      montarPainel()
     }
     desenhar()
   })
@@ -834,9 +1282,21 @@ function criar(raiz) {
     if (ctrl && tecla === "z") acoes.desfazer()
     else if (ctrl && tecla === "y") acoes.refazer()
     else if (ctrl && tecla === "d") acoes.duplicar()
-    else if (tecla === "delete" || tecla === "backspace") acoes.apagar()
-    else if (tecla === "escape") {
+    else if (e.ferramenta === "poli" && e.polilinha?.length && /^[0-9@.,+-]$/.test(ev.key)) {
+      abrirProximoPonto(ev.key)
+    } else if (tecla === "backspace" && e.polilinha?.length) {
+      e.polilinha = e.polilinha.slice(0, -1)
+      if (!e.polilinha.length) e.polilinha = null
+      desenhar()
+    } else if (tecla === "delete" || tecla === "backspace") {
+      if (verticeAtual() !== null) acoes.apagarPonto()
+      else acoes.apagar()
+    } else if (tecla === "escape" && e.novaCota) {
+      e.novaCota = null
+      desenhar()
+    } else if (tecla === "escape") {
       e.polilinha = null
+      e.vertice = null
       e.sel.clear()
       trocarFerramenta("mover")
       montarPainel()
@@ -845,10 +1305,13 @@ function criar(raiz) {
       guardar()
       selecionadas().forEach((p) => mover(p, seta[0] * e.grade, seta[1] * e.grade))
       enviar()
-    } else if (!ctrl && "vrcp".includes(tecla)) {
-      trocarFerramenta({ v: "mover", r: "ret", c: "circ", p: "poli" }[tecla])
+    } else if (!ctrl && "vrcpd".includes(tecla)) {
+      trocarFerramenta({ v: "mover", r: "ret", c: "circ", p: "poli", d: "cota" }[tecla])
     } else if (!ctrl && tecla === "f") {
       caixaFuro.checked = !caixaFuro.checked
+    } else if (!ctrl && tecla === "o") {
+      caixaOrto.checked = !caixaOrto.checked
+      e.orto = caixaOrto.checked
     } else return
     ev.preventDefault()
   })
@@ -856,6 +1319,10 @@ function criar(raiz) {
   function trocarFerramenta(nome) {
     e.ferramenta = nome
     e.polilinha = null
+    e.ponteiro = null
+    e.novaCota = null
+    e.encaixe = null
+    mostrarDica()
     raiz.querySelectorAll("[data-f]").forEach((b) => {
       b.classList.toggle("ativo", b.dataset.f === nome)
     })
@@ -870,6 +1337,9 @@ function criar(raiz) {
   seletorGrade.addEventListener("change", () => {
     e.grade = Number(seletorGrade.value)
   })
+  caixaOrto.addEventListener("change", () => {
+    e.orto = caixaOrto.checked
+  })
 
   e.receber = (dados) => {
     const novas = dados.partes ?? []
@@ -879,6 +1349,8 @@ function criar(raiz) {
         e.partes = copiar(novas)
         e.sel = new Set([...e.sel].filter((i) => i < e.partes.length))
       }
+      // O dono das partes é o Python: tabela, modelo e arquivo trocam a seção por fora daqui.
+      e.cotas = cotasValidas(e.partes, dados.cotas ?? [])
       e.versao = dados.versao
     }
     e.marcas = dados.marcas ?? null

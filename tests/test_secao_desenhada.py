@@ -593,3 +593,331 @@ def test_csv_do_catalogo_nao_perde_os_dados_da_secao_desenhada(tmp_path):
     assert perfil.x0_mm == pytest.approx(dados["x0_mm"])
     assert perfil.y0_mm == pytest.approx(dados["y0_mm"])
     assert perfil.i_min_mm4 == pytest.approx(dados["i_min_mm4"])
+
+
+# ---------------------------------------------------------------------------
+# Cotas de um ponto a outro
+# ---------------------------------------------------------------------------
+
+_COTA = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 0, "t": "v", "k": 1}, "modo": "h", "folga": 20}
+
+
+def _estado_com_cotas() -> dict:
+    from components import desenhar_secao_ui as ui
+
+    return {
+        ui.PARTES: [],
+        ui.COTAS: [_COTA],
+        ui.VERSAO: 0,
+        ui.AJUSTE: 0,
+        ui.REVISAO_TABELA: 0,
+        ui.BASE_TABELA: [],
+    }
+
+
+def test_cotas_vem_junto_com_o_gesto_na_prancheta():
+    from components import desenhar_secao_ui as ui
+
+    estado = _estado_com_cotas()
+    parte = {"forma": "ret", "x": 0, "y": 0, "b": 100, "h": 10, "giro": 0, "pontos": [], "grupo": 0}
+    estado[ui.CHAVE_PRANCHETA] = mock.Mock(
+        edicao={"partes": [parte], "cotas": [_COTA], "versao": 3}
+    )
+    with mock.patch.object(ui.st, "session_state", estado):
+        ui._ao_editar_na_prancheta()
+    assert estado[ui.COTAS] == [_COTA]
+
+
+def test_gesto_antigo_sem_cotas_nao_quebra():
+    from components import desenhar_secao_ui as ui
+
+    estado = _estado_com_cotas()
+    estado[ui.CHAVE_PRANCHETA] = mock.Mock(edicao={"partes": [], "versao": 3})
+    with mock.patch.object(ui.st, "session_state", estado):
+        ui._ao_editar_na_prancheta()
+    assert estado[ui.COTAS] == []
+
+
+def test_secao_nova_tira_as_cotas_da_antiga():
+    from components import desenhar_secao_ui as ui
+
+    estado = _estado_com_cotas()
+    with mock.patch.object(ui.st, "session_state", estado):
+        ui._limpar()
+    assert estado[ui.COTAS] == []
+
+
+def test_editar_a_tabela_nao_apaga_as_cotas():
+    from components import desenhar_secao_ui as ui
+
+    estado = _estado_com_cotas()
+    estado[ui.ERRO_TABELA] = ""
+    with mock.patch.object(ui.st, "session_state", estado):
+        ui._ao_editar_tabela()
+    assert estado[ui.COTAS] == [_COTA]
+
+
+# ---------------------------------------------------------------------------
+# Cortante na seção
+# ---------------------------------------------------------------------------
+
+V_KN = 100.0
+
+
+def _r(x, y, b, h, **extras):
+    return sd.Parte(R, x=x, y=y, b=b, h=h, **extras)
+
+
+def _i_soldado():
+    return [
+        _r(0, 145, 200, 10, grupo=1),
+        _r(0, 0, 8, 280, grupo=1),
+        _r(0, -145, 200, 10, grupo=1),
+    ]
+
+
+def _u_soldado():
+    return [
+        _r(100, 145, 200, 10, grupo=1),
+        _r(4, 0, 8, 280, grupo=1),
+        _r(100, -145, 200, 10, grupo=1),
+    ]
+
+
+def _cantoneira():
+    return [_r(50, 5, 100, 10, grupo=1), _r(5, 45, 10, 70, grupo=1)]
+
+
+def _cortante(partes, **extras):
+    analise = sd.analisar(partes)
+    return analise, sd.tensoes(analise, 0, 0, 0, 0, 0, V_KN, **extras)
+
+
+def test_retangulo_alto_da_a_parabola_classica():
+    analise, mapa = _cortante([_r(0, 0, 10, 100)])
+    assert mapa.tau_max == pytest.approx(1.5 * V_KN * 1e3 / analise.prop.area, rel=0.005)
+
+
+def test_circulo_macico_bate_com_a_solucao_exata_com_poisson():
+    """Timoshenko: no centro, τ = (3 + 2ν)/(2(1 + ν))·V/A. Sem o termo de ν, daria 1,5."""
+    analise, mapa = _cortante([sd.Parte(C, x=0, y=0, b=100, h=100)])
+    centro = int((mapa.no_x**2 + mapa.no_y**2).argmin())
+    exato = (3 + 2 * 0.3) / (2 * 1.3) * V_KN * 1e3 / analise.prop.area
+    assert mapa.no_tau_y[centro] == pytest.approx(exato, rel=0.002)
+
+
+def test_alma_do_i_bate_com_vq_sobre_it():
+    analise, mapa = _cortante(_i_soldado())
+    q = 200 * 10 * 145 + 8 * 140 * 70
+    assert mapa.tau_max == pytest.approx(V_KN * 1e3 * q / (analise.prop.ix * 8), rel=0.005)
+
+
+def test_tubo_fino_da_o_dobro_da_media():
+    partes = [sd.Parte(C, x=0, y=0, b=200, h=200), sd.Parte(C, x=0, y=0, b=180, h=180, furo=True)]
+    analise, mapa = _cortante(partes)
+    assert mapa.tau_max == pytest.approx(2 * V_KN * 1e3 / analise.prop.area, rel=0.03)
+
+
+@pytest.mark.parametrize("montar", [_i_soldado, _u_soldado, _cantoneira])
+def test_integral_das_tensoes_devolve_o_cortante(montar):
+    """Inclui a cantoneira, com Ixy diferente de zero, onde V·Q/(I·b) nem se aplica."""
+    campos = sd.campos_de_cortante(sd.analisar(montar()))
+    assert campos.resultante == pytest.approx((1.0, 0.0, 0.0, 1.0), abs=2e-5)
+    assert campos.erro < 2e-5
+
+
+@pytest.mark.parametrize("montar", [_u_soldado, _cantoneira])
+def test_centro_de_cisalhamento_sai_igual_pelos_dois_caminhos(montar):
+    """Um vem do empenamento e o outro do momento das tensões de cortante."""
+    analise = sd.analisar(montar())
+    campos = sd.campos_de_cortante(analise)
+    # Em milímetros, e não relativo: o y_s do U é zero, e erro relativo em torno de zero não existe.
+    assert campos.momento_vy == pytest.approx(analise.prop.x_s, abs=0.05)
+    assert -campos.momento_vx == pytest.approx(analise.prop.y_s, abs=0.05)
+
+
+def test_carga_pelo_centro_de_gravidade_soma_a_torcao_da_excentricidade():
+    analise = sd.analisar(_u_soldado())
+    campos = sd.campos_de_cortante(analise)
+    no_cc = sd.tensoes(analise, 0, 0, 0, 0, 0, V_KN, campos=campos)
+    no_cg = sd.tensoes(analise, 0, 0, 0, 0, 0, V_KN, campos=campos, pelo_centro_de_gravidade=True)
+    assert no_cc.torcao_extra == 0.0
+    assert no_cg.torcao_extra == pytest.approx(-V_KN * analise.prop.x_s / 1e3, rel=0.001)
+    assert no_cg.tau_max > 5 * no_cc.tau_max
+
+
+def test_v_e_t_somam_como_vetores_e_nao_como_modulos():
+    """Num tubo, V e T se somam num lado e se subtraem no outro: a soma dos maiores valores é o teto."""
+    partes = [sd.Parte(C, x=0, y=0, b=200, h=200), sd.Parte(C, x=0, y=0, b=180, h=180, furo=True)]
+    analise = sd.analisar(partes)
+    so_v = sd.tensoes(analise, 0, 0, 0, 0, 0, V_KN)
+    so_t = sd.tensoes(analise, 0, 0, 0, 5.0)
+    junto = sd.tensoes(analise, 0, 0, 0, 5.0, 0, V_KN)
+    assert junto.tau_max > max(so_v.tau_max, so_t.tau_max)
+    assert junto.tau_max == pytest.approx(so_v.tau_max + so_t.tau_max, rel=0.03)
+    direita = int(((junto.no_x - 95) ** 2 + junto.no_y**2).argmin())
+    esquerda = int(((junto.no_x + 95) ** 2 + junto.no_y**2).argmin())
+    assert so_t.no_tau_y[direita] > 0 > so_t.no_tau_y[esquerda]
+    assert junto.no_tau_y[direita] == pytest.approx(so_v.no_tau_y[direita] + so_t.no_tau_y[direita])
+    assert junto.no_tau_y[esquerda] == pytest.approx(
+        so_v.no_tau_y[esquerda] + so_t.no_tau_y[esquerda]
+    )
+    assert junto.no_tau_y[esquerda] < so_v.no_tau_y[esquerda]
+
+
+def test_torcao_sozinha_continua_dando_t_sobre_wt():
+    analise = sd.analisar(_i_soldado())
+    mapa = sd.tensoes(analise, 0, 0, 0, 2.0)
+    assert mapa.tau_max == pytest.approx(2e6 / analise.prop.w_torcao)
+    assert mapa.tau_max == pytest.approx(mapa.tau_torcao)
+    assert mapa.tau_cortante == 0.0
+
+
+def test_von_mises_junta_sigma_e_tau_no_mesmo_ponto():
+    """Na emenda da mesa com a alma, σ e τ são altos juntos: é lá que o I costuma governar."""
+    analise = sd.analisar(_i_soldado())
+    mapa = sd.tensoes(analise, 0, 300.0, 0, 0, 0, 800.0)
+    sigma_mesa = max(abs(mapa.sigma_max), abs(mapa.sigma_min))
+    assert mapa.mises >= sigma_mesa
+    assert mapa.mises > mapa.tau_max * math.sqrt(3)
+    assert mapa.sigma_no_ponto**2 + 3 * mapa.tau_no_ponto**2 == pytest.approx(mapa.mises**2)
+
+
+def test_secao_em_pedacos_nao_finge_cortante():
+    analise = sd.analisar([_r(0, 0, 50, 50), _r(200, 0, 50, 50)])
+    with pytest.raises(sd.ErroDeSecao, match="pedaços soltos"):
+        sd.campos_de_cortante(analise)
+
+
+# ---------------------------------------------------------------------------
+# Ligações entre as chapas
+# ---------------------------------------------------------------------------
+
+
+def test_fluxo_na_solda_da_mesa_bate_com_vq_sobre_i():
+    analise, mapa = _cortante(_i_soldado())
+    fluxos = sd.fluxos_nas_ligacoes(analise, mapa)
+    assert len(fluxos) == 2
+    esperado = V_KN * 1e3 * (200 * 10 * 145) / analise.prop.ix
+    for fluxo in fluxos:
+        assert fluxo.comprimento == pytest.approx(8.0)
+        assert fluxo.q == pytest.approx(esperado, rel=0.01)
+
+
+def test_fluxo_no_u_tambem_vem_pela_mesa():
+    analise, mapa = _cortante(_u_soldado())
+    fluxos = sd.fluxos_nas_ligacoes(analise, mapa)
+    q_mesa = (200 * 10) * 145
+    assert len(fluxos) == 2
+    for fluxo in fluxos:
+        assert fluxo.q == pytest.approx(V_KN * 1e3 * q_mesa / analise.prop.ix, rel=0.02)
+
+
+def test_sem_emenda_nao_ha_linha_na_tabela():
+    analise, mapa = _cortante([_r(0, 0, 10, 100)])
+    assert sd.fluxos_nas_ligacoes(analise, mapa) == []
+
+
+# ---------------------------------------------------------------------------
+# Verificações
+# ---------------------------------------------------------------------------
+
+
+def _linhas(partes, vy=V_KN, vx=0.0, fy=250.0, fs=1.5):
+    analise = sd.analisar(partes)
+    mapa = sd.tensoes(analise, 0, 0, 0, 0, vx, vy)
+    return sr.verificacoes_de_tensao(analise, mapa, fy, fs, vx, vy), mapa
+
+
+def test_escoamento_por_cisalhamento_e_fy_sobre_raiz_de_3():
+    (linhas, _), mapa = _linhas(_i_soldado())
+    tau = next(v for v in linhas if v.nome == "Cisalhamento")
+    assert tau.solicitante == pytest.approx(mapa.tau_max)
+    assert tau.resistente == pytest.approx(250.0 / 1.5 / math.sqrt(3))
+
+
+def test_alma_robusta_passa_pela_norma_sem_aviso():
+    (linhas, avisos), _ = _linhas(_i_soldado())
+    norma = next(v for v in linhas if "pela norma" in v.nome)
+    assert norma.nome == "Cortante na alma pela norma"
+    assert norma.referencia == "NBR 8800, 5.4.3"
+    assert norma.solicitante == V_KN
+    assert avisos == []
+
+
+def test_alma_esbelta_avisa_que_quem_manda_e_a_norma():
+    """A tensão passa folgada, e mesmo assim a alma flambaria: a tensão sozinha daria falsa segurança."""
+    partes = [
+        _r(0, 505, 200, 10, grupo=1),
+        _r(0, 0, 5, 1000, grupo=1),
+        _r(0, -505, 200, 10, grupo=1),
+    ]
+    (linhas, avisos), _ = _linhas(partes, vy=50.0)
+    assert next(v for v in linhas if v.nome == "Cisalhamento").status == "OK"
+    assert len(avisos) == 1
+    assert "flamba por cisalhamento" in avisos[0]
+
+
+def test_seccao_livre_fica_so_nas_tensoes():
+    poligono = sd.Parte(P, pontos=((0, 0), (120, 0), (0, 90)))
+    (linhas, avisos), _ = _linhas([poligono])
+    assert [v.nome for v in linhas] == ["Tensão normal", "Cisalhamento", "Tensão combinada"]
+    assert avisos == []
+
+
+def test_sem_cortante_nao_entra_a_linha_da_norma():
+    analise = sd.analisar(_i_soldado())
+    mapa = sd.tensoes(analise, 0, 10.0, 0)
+    linhas, _ = sr.verificacoes_de_tensao(analise, mapa, 250.0, 1.5)
+    assert len(linhas) == 3
+
+
+# ---------------------------------------------------------------------------
+# Desenho e tela
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("campo", ["sigma", "tau", "mises"])
+def test_todos_os_mapas_saem(campo):
+    analise = sd.analisar(_u_soldado())
+    mapa = sd.tensoes(analise, 10.0, 20.0, 0, 1.0, 0, V_KN)
+    desenho = figura_de_tensoes(analise, mapa, campo)
+    assert desenho.png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert desenho.legenda
+
+
+def test_mapa_sem_tensao_nenhuma_tambem_sai():
+    analise = sd.analisar(_i_soldado())
+    mapa = sd.tensoes(analise, 0, 0, 0)
+    for campo in ("sigma", "tau", "mises"):
+        assert figura_de_tensoes(analise, mapa, campo).png
+
+
+def test_tela_de_tensoes_mostra_o_cortante_e_a_norma():
+    pagina = _abrir_pagina()
+    pagina.number_input(key="secao_vy").set_value(100.0).run()
+    assert not pagina.exception
+    quadro = next(d.value for d in pagina.dataframe if "Aproveitamento" in d.value.columns)
+    assert "Cortante na alma pela norma" in set(quadro["Verificação"])
+    assert any("q (kN/m)" in d.value.columns for d in pagina.dataframe)
+
+
+def test_tela_avisa_a_torcao_da_carga_fora_do_centro_de_cisalhamento():
+    pagina = _abrir_pagina()
+    pagina.session_state["secao_modelo"] = "U"
+    pagina.number_input(key="secao_vy").set_value(100.0)
+    pagina.selectbox(key="secao_pelo").set_value("Centro de gravidade").run()
+    assert not pagina.exception
+
+
+def test_tela_com_pedacos_soltos_avisa_e_nao_quebra():
+    from components import desenhar_secao_ui as ui
+
+    pagina = _abrir_pagina()
+    pagina.session_state[ui.PARTES] = [
+        _r(0, 0, 50, 50).como_dicionario(),
+        _r(200, 0, 50, 50).como_dicionario(),
+    ]
+    pagina.number_input(key="secao_vy").set_value(50.0).run()
+    assert not pagina.exception
+    assert any("pedaços soltos" in w.value for w in pagina.warning)

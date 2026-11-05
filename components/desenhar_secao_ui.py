@@ -12,7 +12,11 @@ from typing import Any
 
 import streamlit as st
 
-from components.assistente_cargas_ui import abrir_caso_preenchido
+from components.assistente_cargas_ui import (
+    abrir_caso_preenchido,
+    enviar_para_mohr,
+    tabela_de_verificacoes,
+)
 from components.prancheta_ui import prancheta
 from components.project_tools import (
     botao_registrar_calculo,
@@ -23,13 +27,15 @@ from core import secao_desenhada as sd
 from core import secao_relatorio as sr
 from core import section_catalog as catalogo
 from core.desenho_estatica import figura_de_tensoes
-from core.elementos_base import dados_do_registro
+from core.elementos_base import Resultado, dados_do_registro
 from core.elementos_vigas import CATALOGO
 from core.elementos_word import gerar_word_do_caso
+from core.load_to_stress import EstadoPlanoCalculado
 from core.medidas_comerciais import CHAPAS
 from core.project_store import obter_projeto_ativo
 
 PARTES = "secao_partes"
+COTAS = "secao_cotas"
 VERSAO = "secao_versao"
 AJUSTE = "secao_ajuste"
 MODELO = "secao_modelo"
@@ -67,10 +73,17 @@ def _partes() -> list[dict[str, Any]]:
 
 
 def _trocar_partes(
-    novas: list[sd.Parte], *, ajustar: bool = False, tabela: bool = True, versao: int | None = None
+    novas: list[sd.Parte],
+    *,
+    ajustar: bool = False,
+    tabela: bool = True,
+    versao: int | None = None,
+    cotas: list[dict[str, Any]] | None = None,
 ) -> None:
+    """``cotas`` só fica de fora quando a seção é outra: uma cota aponta para pontos de uma parte."""
     estado = st.session_state
     estado[PARTES] = [parte.como_dicionario() for parte in novas]
+    estado[COTAS] = [] if cotas is None else cotas
     estado[VERSAO] = estado[VERSAO] + 1 if versao is None else versao
     if ajustar:
         estado[AJUSTE] += 1
@@ -124,7 +137,7 @@ def _ao_editar_na_prancheta() -> None:
             continue  # um gesto que não formou parte (polígono sem área) não derruba o desenho
     # O modelo deixa de mandar: mudar uma medida agora apagaria o que foi feito à mão.
     st.session_state[MODELO] = None
-    _trocar_partes(validas, versao=int(evento.get("versao", 0)))
+    _trocar_partes(validas, versao=int(evento.get("versao", 0)), cotas=evento.get("cotas") or [])
 
 
 def _ao_editar_tabela() -> None:
@@ -145,7 +158,7 @@ def _ao_editar_tabela() -> None:
         estado[ERRO_TABELA] = str(erro)
         return
     estado[MODELO] = None
-    _trocar_partes(partes, tabela=False)
+    _trocar_partes(partes, tabela=False, cotas=estado.get(COTAS, []))
 
 
 def _limpar() -> None:
@@ -167,7 +180,7 @@ def _por_perfil() -> None:
         st.session_state[AVISO] = str(erro)
         return
     st.session_state[MODELO] = None
-    _trocar_partes([*atuais, *novas], ajustar=True)
+    _trocar_partes([*atuais, *novas], ajustar=True, cotas=st.session_state.get(COTAS, []))
     area = sd.analisar(novas).prop.area
     diferenca = (1.0 - area / perfil.area_mm2) * 100.0
     if abs(diferenca) >= 0.5:
@@ -218,7 +231,14 @@ def _impressao(partes: list[dict[str, Any]]) -> str:
 
 @st.cache_data(max_entries=64, show_spinner=False)
 def _analisar(impressao: str) -> sd.Analise:
-    return sd.analisar(sd.partes_de_lista(json.loads(impressao)))
+    """Corpo mudado de propósito quando ``Analise`` muda: o cache antigo fica para trás."""
+    partes = sd.partes_de_lista(json.loads(impressao))
+    return sd.analisar(partes)
+
+
+@st.cache_data(max_entries=32, show_spinner=False)
+def _campos_de_cortante(impressao: str) -> sd.CamposDeCortante:
+    return sd.campos_de_cortante(_analisar(impressao))
 
 
 def _numero(valor: float, casas: int = 1) -> str:
@@ -479,45 +499,191 @@ def _propriedades(analise: sd.Analise) -> None:
     )
 
 
-def _tensoes(analise: sd.Analise) -> None:
-    st.caption(
-        "Tração positiva. Mx positivo traciona a base e My positivo traciona a direita. "
-        "Com eixos principais girados, a conta já é a da flexão oblíqua."
-    )
-    colunas = st.columns(5)
-    n = colunas[0].number_input(
+_MAPAS = {"σ normal": "sigma", "τ cisalhamento": "tau", "von Mises": "mises"}
+_PELO_CC = "Centro de cisalhamento"
+_PELO_CG = "Centro de gravidade"
+
+
+def _esforcos_da_secao() -> dict[str, Any]:
+    linha_1 = st.columns(4)
+    n = linha_1[0].number_input(
         "N (kN)", value=0.0, step=10.0, key="secao_n", help="Força normal. Tração positiva."
     )
-    mx = colunas[1].number_input(
+    mx = linha_1[1].number_input(
         "Mx (kN·m)", value=10.0, step=1.0, key="secao_mx", help="Momento em torno do eixo x."
     )
-    my = colunas[2].number_input(
+    my = linha_1[2].number_input(
         "My (kN·m)", value=0.0, step=1.0, key="secao_my", help="Momento em torno do eixo y."
     )
-    t = colunas[3].number_input(
+    t = linha_1[3].number_input(
         "T (kN·m)", value=0.0, step=0.1, key="secao_t", help="Momento de torção."
     )
-    fy = colunas[4].number_input(
+    linha_2 = st.columns([2, 2, 3, 2, 2])
+    vx = linha_2[0].number_input(
+        "Vx (kN)",
+        value=0.0,
+        step=10.0,
+        key="secao_vx",
+        help="Cortante na horizontal, positivo para a direita.",
+    )
+    vy = linha_2[1].number_input(
+        "Vy (kN)",
+        value=0.0,
+        step=10.0,
+        key="secao_vy",
+        help="Cortante na vertical, positivo para cima.",
+    )
+    pelo = linha_2[2].selectbox(
+        "O cortante passa pelo",
+        (_PELO_CC, _PELO_CG),
+        key="secao_pelo",
+        help=(
+            "Carga que não passa pelo centro de cisalhamento torce a seção. Numa viga em U com a "
+            "carga no meio, isso pode pesar mais que o próprio cortante."
+        ),
+    )
+    fy = linha_2[3].number_input(
         "f_y (MPa)",
         value=250.0,
         min_value=1.0,
         step=10.0,
         key="secao_fy",
-        help="Escoamento do aço, para o fator de segurança da tensão de von Mises.",
+        help="Escoamento do aço.",
     )
-    mapa = sd.tensoes(analise, n, mx, my, t)
+    fs = linha_2[4].number_input(
+        "FS",
+        value=1.5,
+        min_value=1.0,
+        step=0.1,
+        key="secao_fs",
+        help="Fator de segurança sobre o escoamento, nas linhas de tensão.",
+    )
+    return {
+        "n": n,
+        "mx": mx,
+        "my": my,
+        "t": t,
+        "vx": vx,
+        "vy": vy,
+        "pelo": pelo,
+        "fy": fy,
+        "fs": fs,
+    }
+
+
+def _ligacoes(analise: sd.Analise, mapa: sd.MapaDeTensoes) -> None:
+    fluxos = sd.fluxos_nas_ligacoes(analise, mapa)
+    if not fluxos:
+        return
+    st.markdown("**Cisalhamento nas ligações entre as chapas**")
+    st.dataframe(
+        [
+            {
+                "Ligação": f"Parte {f.parte_a + 1} com parte {f.parte_b + 1}",
+                "Contato (mm)": _numero(f.comprimento),
+                "q (kN/m)": _numero(f.q),
+            }
+            for f in fluxos
+        ],
+        hide_index=True,
+        width="stretch",
+    )
+    st.caption(
+        "q é a força que a ligação precisa levar por metro de barra, e é com ela que se dimensiona a "
+        "solda: num par de filetes, cada um leva a metade. A perna sai em Ligações soldadas."
+    )
+
+
+def _tensoes(analise: sd.Analise, impressao: str) -> None:
+    st.caption(
+        "Tração positiva. Mx positivo traciona a base e My positivo traciona a direita. "
+        "Com eixos principais girados, a conta já é a da flexão oblíqua."
+    )
+    e = _esforcos_da_secao()
+    vx, vy = e["vx"], e["vy"]
+    campos = None
+    if vx or vy:
+        try:
+            campos = _campos_de_cortante(impressao)
+        except sd.ErroDeSecao as erro:
+            st.warning(str(erro), icon=":material/warning:")
+            vx = vy = 0.0
+    mapa = sd.tensoes(
+        analise,
+        e["n"],
+        e["mx"],
+        e["my"],
+        e["t"],
+        vx,
+        vy,
+        campos=campos,
+        pelo_centro_de_gravidade=e["pelo"] == _PELO_CG,
+    )
+    escolha = st.segmented_control(
+        "Mapa",
+        tuple(_MAPAS),
+        default="σ normal",
+        key="secao_mapa",
+        help="Qual tensão pintar na seção.",
+    )
     figura, resumo = st.columns([3, 2])
-    desenho = figura_de_tensoes(analise, mapa)
+    desenho = figura_de_tensoes(analise, mapa, _MAPAS.get(escolha or "", "sigma"))
     figura.image(desenho.png, caption=desenho.legenda, width="stretch")
-    fs = fy / mapa.mises if mapa.mises > 0 else float("inf")
+    fs_real = e["fy"] / mapa.mises if mapa.mises > 0 else float("inf")
     _cartao(resumo, "Maior tração", _numero(mapa.sigma_max), "MPa", "Maior σ da seção.")
     _cartao(resumo, "Maior compressão", _numero(mapa.sigma_min), "MPa", "Menor σ da seção.")
+    _cartao(
+        resumo,
+        "τ máximo",
+        _numero(mapa.tau_max),
+        "MPa",
+        "Cortante e torção somados como vetores, ponto a ponto.",
+    )
+    _cartao(resumo, "τ só do cortante", _numero(mapa.tau_cortante), "MPa", "Sem a torção.")
     _cartao(resumo, "τ de torção", _numero(mapa.tau_torcao), "MPa", "T dividido por Wt.")
     _cartao(resumo, "von Mises", _numero(mapa.mises), "MPa", "Maior valor de √(σ² + 3τ²) na seção.")
-    _cartao(resumo, "f_y ÷ von Mises", _numero(fs, 2), "", "Só a tensão, sem flambagem.")
+    _cartao(resumo, "f_y ÷ von Mises", _numero(fs_real, 2), "", "Só a tensão, sem flambagem.")
+
+    if mapa.torcao_extra:
+        st.warning(
+            f"Pelo centro de gravidade, o cortante soma {_numero(mapa.torcao_extra, 2)} kN·m de "
+            "torção. A conta é de torção livre: com o empenamento impedido o valor real é outro. "
+            "Se puder, leve a carga ao centro de cisalhamento.",
+            icon=":material/warning:",
+        )
+    if mapa.erro_cortante > 0.03:
+        st.warning(
+            f"A integral das tensões ficou {mapa.erro_cortante * 100:.1f} % longe do cortante: a "
+            "parede está fina demais para a malha, e o τ desta seção é uma estimativa.",
+            icon=":material/warning:",
+        )
+    linhas, avisos = sr.verificacoes_de_tensao(analise, mapa, e["fy"], e["fs"], vx, vy)
+    tabela_de_verificacoes(Resultado("", verificacoes=tuple(linhas)))
+    for aviso in avisos:
+        st.warning(aviso, icon=":material/warning:")
+    if vx or vy or e["t"]:
+        _ligacoes(analise, mapa)
+    if mapa.mises > 0 and st.button(
+        "Ver o ponto crítico no Círculo de Mohr",
+        key="secao_mohr",
+        icon=":material/donut_large:",
+        help="Abre o Círculo de Mohr com σ e τ do ponto onde von Mises é maior.",
+    ):
+        x, y = mapa.ponto_mises
+        enviar_para_mohr(
+            EstadoPlanoCalculado(
+                mapa.sigma_no_ponto,
+                0.0,
+                mapa.tau_no_ponto,
+                f"Ponto crítico da seção desenhada (x = {_numero(x)} mm, y = {_numero(y)} mm)",
+                (),
+            ),
+            None,
+        )
     st.caption(
-        "Tensão elástica. Compressão pode flambar antes: verifique em Flambagem de colunas. "
-        "Os cantos vivos reentrantes concentram tensão de torção, e o valor aqui não inclui isso."
+        "Tensão elástica, com o cortante pela flexão de Saint-Venant, calculado para a forma "
+        "desenhada. Compressão pode flambar antes: verifique em Flambagem de colunas. Os cantos "
+        "vivos reentrantes concentram tensão, e o valor aqui não inclui isso."
     )
 
 
@@ -592,6 +758,7 @@ def tela() -> None:
                 "ajustar": st.session_state[AJUSTE],
                 "marcas": _marcas(analise),
                 "chapas": list(CHAPAS.valores),
+                "cotas": st.session_state.get(COTAS, []),
             },
             key=CHAVE_PRANCHETA,
             ao_editar=_ao_editar_na_prancheta,
@@ -620,6 +787,6 @@ def tela() -> None:
     with abas[1], secao_protegida("Propriedades da seção"):
         _propriedades(analise)
     with abas[2], secao_protegida("Tensões"):
-        _tensoes(analise)
+        _tensoes(analise, _impressao(_partes()))
     with abas[3], secao_protegida("Memorial"):
         _registro(analise)
