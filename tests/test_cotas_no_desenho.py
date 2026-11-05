@@ -13,7 +13,7 @@ from streamlit.testing.v1 import AppTest
 from components import assistente_cargas_ui as ui
 from core import cotas_dos_desenhos as cd
 from core import elementos_catalogo as cat
-from core.elementos_base import calcular_caso
+from core.elementos_base import Metrica, calcular_caso
 
 APP = str(Path(__file__).resolve().parent.parent / "app.py")
 COM_COTAS = sorted(cd.COTAS)
@@ -200,6 +200,53 @@ def test_editar_celula_troca_a_linha_e_reinicia_a_tabela():
     assert f"{chave}::base" not in estado
 
 
+def test_editar_guarda_para_desfazer_e_desfazer_volta_o_valor():
+    caso = cat.CASOS["chapa_furo"]
+    estado: dict = {}
+    _editar(caso, estado, _cota(caso, estado, "b_mm"), 150.0)
+    _editar(caso, estado, _cota(caso, estado, "b_mm"), 180.0)
+    assert estado[ui.chave_do_campo(caso.id, "b_mm")] == 180.0
+    with mock.patch.object(ui.st, "session_state", estado):
+        ui._desfazer_cota(caso)
+    assert estado[ui.chave_do_campo(caso.id, "b_mm")] == 150.0
+    with mock.patch.object(ui.st, "session_state", estado):
+        ui._desfazer_cota(caso)
+    assert estado[ui.chave_do_campo(caso.id, "b_mm")] == 100.0
+    assert not estado[f"assistente_pilha::{caso.id}"]
+    assert "Desfeito" in estado[f"assistente_mudou::{caso.id}"][0]
+
+
+def test_desfazer_vale_para_celula_de_tabela():
+    caso = cat.CASOS["barra_axial"]
+    estado: dict = {}
+    alvo = cd.Celula("trechos", 1, "l_mm")
+    _editar(caso, estado, _cota(caso, estado, alvo), 450.0)
+    with mock.patch.object(ui.st, "session_state", estado):
+        ui._desfazer_cota(caso)
+    chave = ui.chave_do_campo(caso.id, "trechos")
+    assert estado[f"{chave}::ultimas"][1]["l_mm"] == 300.0
+
+
+def test_mudancas_mostram_o_que_mais_andou():
+    antes = {"Força": (100.0, "kN"), "Tensão": (80.0, "MPa"), "Igual": (5.0, "mm"), "FS": (2.0, "")}
+    agora = [
+        Metrica("Situação", "Isostática"),
+        Metrica("Força", 150.0, "kN"),
+        Metrica("Tensão", 76.0, "MPa"),
+        Metrica("Igual", 5.0000001, "mm"),
+        Metrica("Nova", 1.0, "mm"),
+    ]
+    achadas = cd.mudancas(antes, agora)
+    assert [m.rotulo for m in achadas] == ["Força", "Tensão"]
+    assert achadas[0].texto() == "Força: 100 → 150 kN (+50 %)"
+    assert achadas[1].texto() == "Tensão: 80 → 76 MPa (−5 %)"
+
+
+def test_mudanca_de_zero_nao_divide_por_zero():
+    achada = cd.mudancas({"V": (0.0, "kN")}, [Metrica("V", 3.0, "kN")])[0]
+    assert achada.texto() == "V: 0 → 3 kN"
+
+
 def test_voltar_ao_exemplo_limpa_o_caso():
     caso = cat.CASOS["barra_axial"]
     chave = ui.chave_do_campo(caso.id, "trechos")
@@ -281,6 +328,20 @@ def test_celula_da_tabela():
     assert ui._celula(float("inf"), " %") == "∞"
     assert ui._celula(87.4, " %", casas=0) == "87 %"
     assert ui._celula(1.5) == "1,5"
+
+
+def test_tela_mostra_o_antes_e_o_depois_e_o_botao_de_desfazer():
+    at = _abrir("chapa_furo")
+    at.session_state["assistente_pilha::chapa_furo"] = [("b_mm", "b", 100.0, "mm")]
+    antes = at.session_state["assistente_metricas::chapa_furo"]
+    at.session_state["assistente_mudou::chapa_furo"] = ("b: 100 → 150 mm", antes)
+    at.session_state[ui.chave_do_campo("chapa_furo", "b_mm")] = 150.0
+    at.run()
+    assert not at.exception
+    assert any("100 → 150 mm" in i.value and "(+50 %)" in i.value for i in at.info)
+    at.button(key="assistente_desfazer::chapa_furo").click().run()
+    assert not at.exception
+    assert at.session_state[ui.chave_do_campo("chapa_furo", "b_mm")] == 100.0
 
 
 @pytest.mark.parametrize("caso_id", ["viga_reacoes", "barra_axial", "Barra sob carga axial"])

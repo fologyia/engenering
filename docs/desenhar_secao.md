@@ -65,6 +65,23 @@ Na forma livre, `PerfilAco` leva três dados que a família não sabe calcular:
 
 Wx e Wy da forma livre usam a fibra mais afastada, não d/2.
 
+## Medidas digitadas no desenho
+
+Clique na cota: a altura e a largura totais estão sempre à vista, e as da chapa aparecem com ela
+selecionada (num perfil pronto, o primeiro clique pega o grupo e o segundo pega a chapa).
+
+- Mudar a altura de uma chapa deixa a base no lugar e sobe o topo, levando quem está encostado em
+  cima. Assim a alma cresce sem soltar a mesa, e a mesa engrossa sem invadir a alma.
+- Mudar a largura cresce do centro, para não tirar a seção de simetria, e empurra quem está dos lados.
+- A outra alma de um caixão acompanha: sem isso ela ficaria solta da mesa que subiu.
+- Na medida total, cresce quem vai de ponta a ponta (as mesas de um I, na largura); sem ninguém assim,
+  cresce quem cruza o meio (a alma, na altura). Os outros andam para fora e continuam encostados.
+  Sem chapa para crescer, como num tubo redondo, a seção inteira muda de escala.
+- Chapa girada e polígono mudam só a própria medida, sem empurrar ninguém.
+
+A lógica está em `components/prancheta/geometria.js`, testada no Node por
+`tests/test_editor_numerico_js.py`.
+
 ## Limites
 
 - Partes encostadas contam como uma peça só: a ligação entre elas precisa passar o cortante.

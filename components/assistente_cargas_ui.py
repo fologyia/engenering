@@ -354,10 +354,36 @@ def _ao_editar_cota(caso: Caso, chave_do_desenho: str) -> None:
     st.session_state[f"{chave_do_desenho}::aviso"] = motivo
     if valor is None:
         return
-    if isinstance(cota.alvo, cd.Celula):
-        _gravar_na_tabela(caso, cota.alvo, valor)
+    pilha = st.session_state.setdefault(f"assistente_pilha::{caso.id}", [])
+    pilha.append((cota.alvo, cota.letra, cota.valor, cota.unidade))
+    del pilha[:-30]
+    texto = f"{cota.letra}: {cd.numero(cota.valor)} → {cd.numero(valor)} {cota.unidade}".rstrip()
+    _anotar_mudanca(caso, texto)
+    _gravar_cota(caso, cota.alvo, valor)
+
+
+def _gravar_cota(caso: Caso, alvo: cd.Alvo, valor: float) -> None:
+    if isinstance(alvo, cd.Celula):
+        _gravar_na_tabela(caso, alvo, valor)
     else:
-        st.session_state[chave_do_campo(caso.id, cota.alvo)] = valor
+        st.session_state[chave_do_campo(caso.id, alvo)] = valor
+
+
+def _anotar_mudanca(caso: Caso, texto: str) -> None:
+    """Guarda as métricas de agora: a próxima rodada mostra o antes e o depois."""
+    st.session_state[f"assistente_mudou::{caso.id}"] = (
+        texto,
+        st.session_state.get(f"assistente_metricas::{caso.id}", {}),
+    )
+
+
+def _desfazer_cota(caso: Caso) -> None:
+    pilha = st.session_state.get(f"assistente_pilha::{caso.id}")
+    if not pilha:
+        return
+    alvo, letra, valor, unidade = pilha.pop()
+    _anotar_mudanca(caso, f"Desfeito: {letra} volta a {cd.numero(valor)} {unidade}".rstrip())
+    _gravar_cota(caso, alvo, valor)
 
 
 def _voltar_ao_exemplo(caso: Caso) -> None:
@@ -365,7 +391,19 @@ def _voltar_ao_exemplo(caso: Caso) -> None:
         chave = chave_do_campo(caso.id, campo.chave)
         for nome in (chave, f"{chave}::base", f"{chave}::ultimas"):
             st.session_state.pop(nome, None)
-    st.session_state.pop(f"assistente_material::{caso.id}", None)
+    for nome in ("material", "pilha", "mudou"):
+        st.session_state.pop(f"assistente_{nome}::{caso.id}", None)
+
+
+def _o_que_mudou(caso: Caso, resultado: Resultado) -> None:
+    """Depois de mexer numa medida: quanto o resultado andou, sem precisar comparar de cabeça."""
+    anotado = st.session_state.get(f"assistente_mudou::{caso.id}")
+    if not anotado:
+        return
+    texto, antes = anotado
+    partes = [mudanca.texto() for mudanca in cd.mudancas(antes, resultado.metricas)]
+    corpo = " · ".join(partes) if partes else "O resultado não mudou."
+    st.info(f"**{texto}**  \n{corpo}", icon=":material/compare_arrows:")
 
 
 def _desenho_com_medidas(caso: Caso) -> frozenset[str]:
@@ -390,6 +428,15 @@ def _desenho_com_medidas(caso: Caso) -> frozenset[str]:
     with st.container(horizontal=True, vertical_alignment="center"):
         if cotas:
             st.caption("Clique numa medida para mudar. Enter confirma e Tab vai para a próxima.")
+        if st.session_state.get(f"assistente_pilha::{caso.id}"):
+            st.button(
+                "Desfazer",
+                key=f"assistente_desfazer::{caso.id}",
+                icon=":material/undo:",
+                on_click=_desfazer_cota,
+                args=(caso,),
+                help="Desfaz a última medida mudada no desenho.",
+            )
         st.button(
             "Voltar ao exemplo",
             key=f"assistente_exemplo::{caso.id}",
@@ -973,6 +1020,10 @@ def tela_do_caso(caso: Caso) -> None:
         with st.container(border=True):
             _desenho_do_caso(caso, resultado)
         if resultado is not None:
+            _o_que_mudou(caso, resultado)
             resposta(resultado)
     if resultado is not None:
         detalhes(caso, valores, resultado)
+        st.session_state[f"assistente_metricas::{caso.id}"] = cd.metricas_numericas(
+            resultado.metricas
+        )

@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 _PASTA = Path(__file__).parent / "croqui_editavel"
+_COMUM = Path(__file__).parent / "editor_numerico"
 _NOME = "mecanica_toolkit_croqui_editavel"
 
 
@@ -16,8 +17,10 @@ def _registrar() -> Any:
     return st.components.v2.component(
         _NOME,
         html=(_PASTA / "croqui.html").read_text(encoding="utf-8"),
-        css=(_PASTA / "croqui.css").read_text(encoding="utf-8"),
-        js=(_PASTA / "croqui.js").read_text(encoding="utf-8"),
+        css=_COMUM.with_suffix(".css").read_text(encoding="utf-8")
+        + (_PASTA / "croqui.css").read_text(encoding="utf-8"),
+        js=_COMUM.with_suffix(".js").read_text(encoding="utf-8")
+        + (_PASTA / "croqui.js").read_text(encoding="utf-8"),
     )
 
 

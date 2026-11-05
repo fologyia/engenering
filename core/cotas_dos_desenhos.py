@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from core.elementos_base import Campo, Caso, Coluna
+from core.elementos_base import Campo, Caso, Coluna, Metrica
 
 MARGEM_X = 34
 MARGEM_Y = 8
@@ -234,6 +234,7 @@ class CotaViva:
     minimo: float | None
     maximo: float | None
     inteiro: bool
+    passo: float | None = None
 
     def como_dicionario(self) -> dict[str, Any]:
         return {
@@ -245,6 +246,7 @@ class CotaViva:
             "minimo": self.minimo,
             "maximo": self.maximo,
             "inteiro": self.inteiro,
+            "passo": self.passo,
         }
 
 
@@ -316,6 +318,7 @@ def _cota(
         origem.minimo,
         origem.maximo,
         isinstance(origem.padrao, int) and not isinstance(origem.padrao, bool),
+        getattr(origem, "passo", None),
     )
 
 
@@ -386,3 +389,55 @@ def valor_aceito(cota: CotaViva, digitado: Any) -> tuple[float | int | None, str
     if cota.maximo is not None and valor > cota.maximo:
         return None, f"{cota.nome}: máximo {numero(cota.maximo)} {cota.unidade}".rstrip() + "."
     return (int(valor) if cota.inteiro else valor), ""
+
+
+# ---------------------------------------------------------------------------
+# O que mudou no resultado
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Mudanca:
+    rotulo: str
+    antes: float
+    depois: float
+    unidade: str
+
+    @property
+    def relativa(self) -> float:
+        return (self.depois - self.antes) / abs(self.antes) if self.antes else math.inf
+
+    def texto(self) -> str:
+        unidade = f" {self.unidade}" if self.unidade else ""
+        faixa = f"{_curto(self.antes)} → {_curto(self.depois)}{unidade}"
+        if not math.isfinite(self.relativa):
+            return f"{self.rotulo}: {faixa}"
+        return f"{self.rotulo}: {faixa} ({self.relativa * 100:+.0f} %)".replace("-", "−")
+
+
+def _curto(valor: float) -> str:
+    return f"{valor:.4g}".replace(".", ",")
+
+
+def metricas_numericas(metricas: Sequence[Metrica]) -> dict[str, tuple[float, str]]:
+    """Só o que é número: o texto de situação não tem antes e depois."""
+    return {
+        m.rotulo: (float(m.valor), m.unidade)
+        for m in metricas
+        if isinstance(m.valor, (int, float)) and math.isfinite(m.valor)
+    }
+
+
+def mudancas(
+    antes: Mapping[str, tuple[float, str]], agora: Sequence[Metrica], limite: int = 3
+) -> list[Mudanca]:
+    """As métricas que mais mudaram. Abaixo de 0,1 % é ruído de conta, e fica de fora."""
+    achadas = []
+    for rotulo, (depois, unidade) in metricas_numericas(agora).items():
+        if rotulo not in antes:
+            continue
+        mudou = Mudanca(rotulo, antes[rotulo][0], depois, unidade)
+        if abs(mudou.relativa) >= 0.001:
+            achadas.append(mudou)
+    achadas.sort(key=lambda m: min(abs(m.relativa), 1e9), reverse=True)
+    return achadas[:limite]

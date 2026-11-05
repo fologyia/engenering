@@ -49,7 +49,6 @@ const DICA = {
 const copiar = (v) => JSON.parse(JSON.stringify(v))
 const arred = (v) => Math.round(v * 10000) / 10000
 const texto = (v) => String(arred(v)).replace(".", ",")
-const lerNumero = (s) => Number(String(s).trim().replace(",", "."))
 const rad = (g) => (g * Math.PI) / 180
 const grau = (r) => (r * 180) / Math.PI
 const direcao = (g) => [Math.cos(rad(g)), Math.sin(rad(g))]
@@ -79,11 +78,7 @@ function criar(raiz) {
   const infoXY = raiz.querySelector('[data-i="xy"]')
   const infoDica = raiz.querySelector('[data-i="dica"]')
   const seletorGrade = raiz.querySelector('[data-c="grade"]')
-  const area = raiz.querySelector(".area")
-  const editor = raiz.querySelector(".editor")
-  const entradaViva = raiz.querySelector(".editor input")
-  const unidadeViva = raiz.querySelector(".editor .un")
-  const nomeVivo = raiz.querySelector(".editor .nome")
+  const editor = criarEditorVivo(raiz.querySelector(".area"))
 
   const e = {
     enviar: null,
@@ -106,7 +101,6 @@ function criar(raiz) {
     ultimo: {},
     focar: false,
     cotasVivas: [],
-    edicao: null,
   }
 
   const tela = () => {
@@ -340,13 +334,14 @@ function criar(raiz) {
     entrada.value = valor === null || valor === undefined ? "" : texto(valor)
     if (foco) entrada.dataset.foco = "1"
     entrada.addEventListener("change", () => {
-      const n = lerNumero(entrada.value)
-      if (!Number.isFinite(n) || entrada.value.trim() === "") {
+      const unidade = /\(([^)]+)\)\s*$/.exec(dica)?.[1] ?? ""
+      const lido = lerValorDigitado(entrada.value, valor ?? 0, unidade)
+      if (lido.erro) {
         entrada.value = valor === null || valor === undefined ? "" : texto(valor)
         return
       }
       guardar()
-      aplicar(n)
+      aplicar(lido.valor)
       enviar()
     })
     entrada.addEventListener("keydown", (ev) => {
@@ -674,63 +669,18 @@ function criar(raiz) {
   function abrirEdicao(el) {
     const [tipo, indice] = el.dataset.editar.split(":")
     const d = descreverEdicao(tipo, Number(indice))
-    e.edicao = d
-    entradaViva.value = texto(d.valor)
-    unidadeViva.textContent = d.unidade
-    nomeVivo.textContent = d.nome
-    nomeVivo.classList.remove("ruim")
-    editor.hidden = false
-    const m = area.getBoundingClientRect()
-    const r = el.getBoundingClientRect()
-    const x = Math.min(Math.max(r.left - m.left - 8, 4), m.width - editor.offsetWidth - 4)
-    const abaixo = r.bottom - m.top + 5
-    const y = abaixo + editor.offsetHeight > m.height ? r.top - m.top - editor.offsetHeight - 5 : abaixo
-    editor.style.left = `${x}px`
-    editor.style.top = `${Math.max(y, 4)}px`
-    entradaViva.focus()
-    entradaViva.select()
+    editor.abrir(el, {
+      ...d,
+      passo: d.reenquadrar ? e.grade : null,
+      aplicar(v) {
+        const erro = d.aplicar(v)
+        if (erro) return erro
+        if (d.reenquadrar) ajustarVista() // a peça mudou de tamanho e pode ter saído da tela
+        enviar()
+        return ""
+      },
+    })
   }
-  function fecharEdicao() {
-    editor.hidden = true
-    e.edicao = null
-  }
-  function confirmarEdicao() {
-    const d = e.edicao
-    if (!d) return
-    const v = lerNumero(entradaViva.value)
-    if (!Number.isFinite(v) || entradaViva.value.trim() === "") {
-      nomeVivo.textContent = "Digite um número."
-      nomeVivo.classList.add("ruim")
-      return
-    }
-    if (arred(v) === arred(d.valor)) {
-      fecharEdicao()
-      return
-    }
-    const erro = d.aplicar(v)
-    if (erro) {
-      nomeVivo.textContent = erro
-      nomeVivo.classList.add("ruim")
-      return
-    }
-    fecharEdicao()
-    if (d.reenquadrar) ajustarVista() // a peça mudou de tamanho e pode ter saído da tela
-    enviar()
-  }
-  entradaViva.addEventListener("keydown", (ev) => {
-    ev.stopPropagation()
-    if (ev.key === "Enter") {
-      ev.preventDefault()
-      confirmarEdicao()
-    } else if (ev.key === "Escape") {
-      ev.preventDefault()
-      fecharEdicao()
-    }
-  })
-  entradaViva.addEventListener("blur", () => {
-    if (e.edicao) confirmarEdicao()
-    if (e.edicao) fecharEdicao()
-  })
 
   // ---- vista
   function aproximar(fator, x, y) {

@@ -272,52 +272,10 @@ text {
   stroke: #d97706;
   stroke-width: 2;
 }
-.editavel {
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-}
-.editavel:hover {
-  fill: #d97706;
-}
 .cota-t.editavel {
   opacity: 1;
   fill: #1f6fb2;
   font-weight: 600;
-}
-.editor {
-  position: absolute;
-  z-index: 2;
-  background: var(--st-background-color);
-  border: 1px solid #d97706;
-  border-radius: 8px;
-  padding: 5px 7px;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.22);
-  max-width: 220px;
-}
-.editor[hidden] {
-  display: none;
-}
-.linha {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.editor input[type="text"] {
-  width: 84px;
-}
-.un {
-  white-space: nowrap;
-}
-.nome {
-  margin-top: 3px;
-  font-size: 12px;
-  line-height: 1.25;
-  opacity: 0.75;
-}
-.nome.ruim {
-  color: var(--st-red-color, #b4233c);
-  opacity: 1;
 }
 .vazia-t {
   font-size: 15px;

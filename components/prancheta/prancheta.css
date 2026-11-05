@@ -85,6 +85,7 @@ input[type="text"] {
   opacity: 0.65;
 }
 .area {
+  position: relative;
   border: 1px solid var(--st-border-color);
   border-radius: 10px;
   overflow: hidden;
@@ -167,7 +168,8 @@ text {
   fill: var(--st-text-color);
 }
 .cota-txt {
-  opacity: 0.8;
+  fill: #1f6fb2;
+  font-weight: 600;
 }
 .marca-g {
   stroke: #b4233c;

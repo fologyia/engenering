@@ -10,38 +10,6 @@ const ALCA_PX = 6
 const copiar = (v) => JSON.parse(JSON.stringify(v))
 const arred = (v) => Math.round(v * 1000) / 1000
 const texto = (v) => String(arred(v)).replace(".", ",")
-const lerNumero = (s) => Number(String(s).trim().replace(",", "."))
-
-function cantos(p) {
-  if (p.forma === "poli") return p.pontos
-  const a = ((p.giro || 0) * Math.PI) / 180
-  const c = Math.cos(a)
-  const s = Math.sin(a)
-  return [
-    [-p.b / 2, -p.h / 2],
-    [p.b / 2, -p.h / 2],
-    [p.b / 2, p.h / 2],
-    [-p.b / 2, p.h / 2],
-  ].map(([dx, dy]) => [p.x + dx * c - dy * s, p.y + dx * s + dy * c])
-}
-
-function caixa(p) {
-  if (p.forma === "circ") return [p.x - p.b / 2, p.y - p.b / 2, p.x + p.b / 2, p.y + p.b / 2]
-  const lista = cantos(p)
-  const xs = lista.map((v) => v[0])
-  const ys = lista.map((v) => v[1])
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
-}
-
-function caixaDe(partes) {
-  const c = partes.map(caixa)
-  return [
-    Math.min(...c.map((v) => v[0])),
-    Math.min(...c.map((v) => v[1])),
-    Math.max(...c.map((v) => v[2])),
-    Math.max(...c.map((v) => v[3])),
-  ]
-}
 
 function contem(p, x, y) {
   if (p.forma === "circ") return (x - p.x) ** 2 + (y - p.y) ** 2 <= (p.b / 2) ** 2
@@ -53,12 +21,6 @@ function contem(p, x, y) {
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) dentro = !dentro
   }
   return dentro
-}
-
-function mover(p, dx, dy) {
-  p.x += dx
-  p.y += dy
-  if (p.forma === "poli") p.pontos = p.pontos.map(([x, y]) => [x + dx, y + dy])
 }
 
 function novaGrade(espacoMinimo, escala) {
@@ -312,13 +274,13 @@ function criar(raiz) {
     entrada.inputMode = "decimal"
     entrada.value = texto(valor)
     entrada.addEventListener("change", () => {
-      const n = lerNumero(entrada.value)
-      if (!Number.isFinite(n)) {
+      const lido = lerValorDigitado(entrada.value, valor, "mm")
+      if (lido.erro) {
         entrada.value = texto(valor)
         return
       }
       guardar()
-      aplicar(n)
+      aplicar(lido.valor)
       enviar()
     })
     entrada.addEventListener("keydown", (ev) => {
@@ -367,14 +329,14 @@ function criar(raiz) {
           campo("x", p.x, (v) => { p.x = v }, "Centro em x (mm)"),
           campo("y", p.y, (v) => { p.y = v }, "Centro em y (mm)"),
           campo(p.forma === "circ" ? "Ø" : "b", p.b, (v) => {
-            if (v <= 0) return
-            p.b = v
-            if (p.forma === "circ") p.h = v
-          }, "Largura ou diâmetro (mm)"),
+            dimensionarParte(e.partes, [...e.sel][0], "b", v)
+          }, "Largura ou diâmetro (mm). O que está encostado continua encostado."),
         )
         if (p.forma === "ret") {
           painel.append(
-            campo("h", p.h, (v) => { if (v > 0) p.h = v }, "Altura (mm)"),
+            campo("h", p.h, (v) => {
+              dimensionarParte(e.partes, [...e.sel][0], "h", v)
+            }, "Altura (mm). O que está encostado continua encostado."),
             campo("giro", p.giro || 0, (v) => { p.giro = v }, "Giro em graus, anti-horário"),
           )
         }
@@ -431,22 +393,22 @@ function criar(raiz) {
     const pts = cantos(p).map(([x, y]) => px(x, y).join(",")).join(" ")
     return `<polygon class="${classe}" points="${pts}"/>`
   }
-  function cotaH(x0, x1, y, rotulo) {
+  function cotaH(x0, x1, y, rotulo, editar) {
     const [a, b] = [px(x0, y), px(x1, y)]
     const yy = a[1]
     return `<line class="cota" x1="${a[0]}" y1="${yy}" x2="${b[0]}" y2="${yy}"/>
       <line class="cota" x1="${a[0]}" y1="${yy - 5}" x2="${a[0]}" y2="${yy + 5}"/>
       <line class="cota" x1="${b[0]}" y1="${yy - 5}" x2="${b[0]}" y2="${yy + 5}"/>
-      <text class="cota-txt" x="${(a[0] + b[0]) / 2}" y="${yy + 16}" text-anchor="middle">${rotulo}</text>`
+      <text class="cota-txt editavel" data-editar="${editar}" x="${(a[0] + b[0]) / 2}" y="${yy + 16}" text-anchor="middle">${rotulo}</text>`
   }
-  function cotaV(x, y0, y1, rotulo) {
+  function cotaV(x, y0, y1, rotulo, editar) {
     const [a, b] = [px(x, y0), px(x, y1)]
     const xx = a[0]
     const my = (a[1] + b[1]) / 2
     return `<line class="cota" x1="${xx}" y1="${a[1]}" x2="${xx}" y2="${b[1]}"/>
       <line class="cota" x1="${xx - 5}" y1="${a[1]}" x2="${xx + 5}" y2="${a[1]}"/>
       <line class="cota" x1="${xx - 5}" y1="${b[1]}" x2="${xx + 5}" y2="${b[1]}"/>
-      <text class="cota-txt" x="${xx - 8}" y="${my + 4}" text-anchor="end">${rotulo}</text>`
+      <text class="cota-txt editavel" data-editar="${editar}" x="${xx - 8}" y="${my + 4}" text-anchor="end">${rotulo}</text>`
   }
   function desenhar() {
     const { w, h } = tela()
@@ -481,14 +443,17 @@ function criar(raiz) {
     const cheias = e.partes.filter((p) => !p.furo)
     if (cheias.length) {
       const c = caixaDe(cheias)
-      s += cotaH(c[0], c[2], c[1] - 26 / esc, `${texto(c[2] - c[0])} mm`)
-      s += cotaV(c[0] - 26 / esc, c[1], c[3], `${texto(c[3] - c[1])} mm`)
+      s += cotaH(c[0], c[2], c[1] - 26 / esc, `${texto(c[2] - c[0])} mm`, "total:b")
+      s += cotaV(c[0] - 26 / esc, c[1], c[3], `${texto(c[3] - c[1])} mm`, "total:h")
       if (e.sel.size === 1) {
         const p = selecionadas()[0]
         if (p?.forma === "ret" && !p.giro) {
           const k = caixa(p)
-          s += cotaH(k[0], k[2], k[3] + 26 / esc, `b ${texto(p.b)}`)
-          s += cotaV(k[2] + 8 / esc + 34 / esc, k[1], k[3], `h ${texto(p.h)}`)
+          s += cotaH(k[0], k[2], k[3] + 26 / esc, `b ${texto(p.b)}`, "parte:b")
+          s += cotaV(k[2] + 8 / esc + 34 / esc, k[1], k[3], `h ${texto(p.h)}`, "parte:h")
+        } else if (p?.forma === "circ") {
+          const k = caixa(p)
+          s += cotaH(k[0], k[2], k[3] + 26 / esc, `Ø ${texto(p.b)}`, "parte:b")
         }
       }
     }
@@ -603,10 +568,56 @@ function criar(raiz) {
     enviar()
   }
 
+  // ---- medidas editadas no próprio desenho
+  const editor = criarEditorVivo(raiz.querySelector(".area"))
+  function abrirEdicao(el) {
+    const [tipo, eixo] = el.dataset.editar.split(":")
+    if (tipo === "parte") {
+      const i = [...e.sel][0]
+      const p = e.partes[i]
+      const circulo = p.forma === "circ"
+      editor.abrir(el, {
+        valor: p[eixo],
+        unidade: "mm",
+        passo: e.grade,
+        nome: circulo ? "Diâmetro" : eixo === "b" ? "Largura da chapa" : "Altura da chapa",
+        aplicar(v) {
+          if (v <= 0) return "A medida precisa ser maior que zero."
+          guardar()
+          dimensionarParte(e.partes, i, eixo, v)
+          ajustarVista()
+          enviar()
+          return ""
+        },
+      })
+      return
+    }
+    const c = caixaDe(e.partes.filter((p) => !p.furo))
+    editor.abrir(el, {
+      valor: eixo === "b" ? c[2] - c[0] : c[3] - c[1],
+      unidade: "mm",
+      passo: e.grade,
+      nome: eixo === "b" ? "Largura total da seção" : "Altura total da seção",
+      aplicar(v) {
+        if (v <= 0) return "A medida precisa ser maior que zero."
+        guardar()
+        esticarConjunto(e.partes, eixo, v)
+        ajustarVista()
+        enviar()
+        return ""
+      },
+    })
+  }
+
   svg.addEventListener("pointerdown", (ev) => {
     svg.focus({ preventScroll: true })
     svg.setPointerCapture(ev.pointerId)
     const [x, y] = mundo(ev)
+    const medida = ev.target.closest?.("[data-editar]")
+    if (medida && ev.button === 0 && e.ferramenta === "mover") {
+      e.gesto = { tipo: "texto", el: medida }
+      return
+    }
     if (ev.button === 1) {
       e.gesto = { tipo: "pan", inicio: [ev.clientX, ev.clientY], vista: { ...e.vista } }
       return
@@ -749,6 +760,10 @@ function criar(raiz) {
     infoDica.textContent = ""
     if (!g) {
       desenhar()
+      return
+    }
+    if (g.tipo === "texto") {
+      abrirEdicao(g.el) // aqui e não no pointerdown: o clique daria o foco de volta à prancheta
       return
     }
     if (g.tipo === "novo" && g.fim) {

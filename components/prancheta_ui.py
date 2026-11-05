@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 _PASTA = Path(__file__).parent / "prancheta"
+_COMUM = Path(__file__).parent / "editor_numerico"
 _NOME = "mecanica_toolkit_prancheta_secao"
 
 
@@ -16,8 +17,11 @@ def _registrar() -> Any:
     return st.components.v2.component(
         _NOME,
         html=(_PASTA / "prancheta.html").read_text(encoding="utf-8"),
-        css=(_PASTA / "prancheta.css").read_text(encoding="utf-8"),
-        js=(_PASTA / "prancheta.js").read_text(encoding="utf-8"),
+        css=_COMUM.with_suffix(".css").read_text(encoding="utf-8")
+        + (_PASTA / "prancheta.css").read_text(encoding="utf-8"),
+        js=_COMUM.with_suffix(".js").read_text(encoding="utf-8")
+        + (_PASTA / "geometria.js").read_text(encoding="utf-8")
+        + (_PASTA / "prancheta.js").read_text(encoding="utf-8"),
     )
 
 

@@ -14,6 +14,13 @@ mapa exista no desenho e que todo campo exista no caso. O campo que está no des
 em "Medidas do desenho em lista", recolhida. Campo escondido por uma escolha continua só como letra.
 As caixinhas se afastam sozinhas quando se encostam, porque o tamanho depende do número digitado.
 
+A caixinha é a mesma nas três pranchetas (`components/editor_numerico.js`). Além do número, aceita
+conta (`300/2`, `2*150+10`), unidade (`1,5 m`, `2 pol`, `5 kN`, `10 bar`), valor relativo ao atual
+(`+10`, `*1,2`, `/2`) e as setas ↑ e ↓, com Shift para dez passos. A conta não usa `eval`.
+
+Depois de mudar uma medida, a resposta mostra o que mais andou, com o antes e o depois (`mudancas`).
+O botão Desfazer volta uma medida de cada vez, e abaixo de 0,1 % a variação é tratada como ruído.
+
 No Equilíbrio de uma peça, as cotas da prancheta funcionam do mesmo jeito: mudar uma distância empurra
 tudo o que está depois dela, e a peça estica sem soltar nada.
 
