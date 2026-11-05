@@ -261,7 +261,7 @@ def _conferir_celula(campo: Campo, coluna: Coluna, valor: Any, posicao: int) -> 
     return int(numero) if isinstance(coluna.padrao, int) else numero
 
 
-def _conferir_tabela(campo: Campo, linhas: Sequence[Mapping[str, Any]]) -> tuple[Linha, ...]:
+def conferir_tabela(campo: Campo, linhas: Sequence[Mapping[str, Any]]) -> tuple[Linha, ...]:
     """Tira as linhas em branco e confere cada célula. A linha conta a partir de 1, como na tela."""
     conferidas: list[Linha] = []
     for posicao, linha in enumerate(linhas, start=1):
@@ -283,7 +283,7 @@ def _conferir_valores(caso: Caso, valores: Valores) -> dict[str, Any]:
             continue
         valor = valores[campo.chave]
         if campo.e_tabela:
-            completos[campo.chave] = _conferir_tabela(campo, valor)
+            completos[campo.chave] = conferir_tabela(campo, valor)
         elif isinstance(campo.padrao, bool):
             completos[campo.chave] = bool(valor)
         elif isinstance(campo.padrao, str):

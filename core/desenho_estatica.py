@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from core import beam_model as bm
+from core import equilibrio_corpo as eq
 from core.beam_charts import ImagemDiagrama, _fonte
 
 _ESC = 2
@@ -570,64 +571,236 @@ def figura_de_tensoes(analise: Any, mapa: Any) -> ImagemDiagrama:
 # ---------------------------------------------------------------------------
 
 
-def figura_do_equilibrio(
-    forcas: Sequence[tuple[float, float, float, float]],
-    momentos: Sequence[tuple[float, float, float]],
-    reacoes: Sequence[tuple[str, float, float, float, float]],
-) -> ImagemDiagrama:
-    """Forças (x, y, Fx, Fy) e momentos (x, y, M) na peça, com as reações (nome, x, y, Rx, Ry)."""
-    largura, altura = 720, 460
+def _hachura(d: ImageDraw.ImageDraw, a: Ponto, b: Ponto, atras: Ponto) -> None:
+    """Risquinhos atrás da linha de a até b: a marca de que ali é fixo."""
+    for k in range(5):
+        s = k / 4.0
+        x, y = a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s
+        d.line(
+            [(x, y), (x + atras[0] + (b[0] - a[0]) * 0.12, y + atras[1] + (b[1] - a[1]) * 0.12)],
+            fill=_CONTORNO,
+            width=_ESC,
+        )
+
+
+def _simbolo_do_apoio(
+    d: ImageDraw.ImageDraw, p: Ponto, tipo: str, direcao: tuple[float, float]
+) -> None:
+    """O símbolo fica atrás da reação: num apoio que empurra para cima, ele fica embaixo do ponto."""
+    ux, uy = direcao[0], -direcao[1]
+    vx, vy = -uy, ux
+    e = float(_ESC)
+
+    def pt(lado: float, atras: float) -> Ponto:
+        return (p[0] + (vx * lado - ux * atras) * e, p[1] + (vy * lado - uy * atras) * e)
+
+    atras_h = (-ux * 8 * e, -uy * 8 * e)
+    if tipo == eq.ENGASTE:
+        a, b = pt(-24, 0), pt(24, 0)
+        d.line([a, b], fill=_CONTORNO, width=3 * _ESC)
+        _hachura(d, a, b, atras_h)
+        return
+    if tipo == eq.GUIA:
+        # O trilho corre de lado, perpendicular à reação.
+        for atras in (-9, 9):
+            d.line([pt(-22, atras), pt(22, atras)], fill=_CONTORNO, width=2 * _ESC)
+        d.rectangle([p[0] - 6 * e, p[1] - 6 * e, p[0] + 6 * e, p[1] + 6 * e], outline=_CONTORNO)
+        return
+    if tipo in (eq.SIMPLES, eq.ATRITO):
+        a, b = pt(-24, 7), pt(24, 7)
+        d.line([a, b], fill=_CONTORNO, width=2 * _ESC)
+        _hachura(d, a, b, atras_h)
+        if tipo == eq.ATRITO:
+            _texto(d, pt(32, 12), "μ", cor=_CONTORNO, tamanho=12)
+        return
+    d.polygon([p, pt(-13, 22), pt(13, 22)], outline=_CONTORNO, fill="#ffffff", width=2 * _ESC)
+    if tipo == eq.ROLETE:
+        for lado in (-8, 8):
+            x, y = pt(lado, 27)
+            r = 4 * e
+            d.ellipse([x - r, y - r, x + r, y + r], outline=_CONTORNO, width=_ESC)
+        a, b = pt(-20, 32), pt(20, 32)
+    else:
+        a, b = pt(-20, 22), pt(20, 22)
+    d.line([a, b], fill=_CONTORNO, width=2 * _ESC)
+    _hachura(d, a, b, atras_h)
+    r = 4 * e
+    d.ellipse([p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill="#ffffff", outline=_CONTORNO)
+
+
+def _arco_de_momento(
+    d: ImageDraw.ImageDraw, p: Ponto, momento: float, cor: str, rotulo: str, raio: float = 24
+) -> None:
+    r = raio * _ESC
+    d.arc([p[0] - r, p[1] - r, p[0] + r, p[1] + r], 30, 300, fill=cor, width=2 * _ESC)
+    # O arco vai de 30° a 300° no sentido da tela; a ponta mostra o sentido do momento.
+    grau = 300 if momento < 0 else 30
+    x = p[0] + r * math.cos(math.radians(grau))
+    y = p[1] + r * math.sin(math.radians(grau))
+    tangente = grau + (90 if momento < 0 else -90)
+    k = 9 * _ESC
+    dx, dy = math.cos(math.radians(tangente)), math.sin(math.radians(tangente))
+    _seta(d, (x - dx * k, y - dy * k), (x, y), cor, ponta=8)
+    _texto(d, (p[0], p[1] - r - 12 * _ESC), rotulo, cor=cor, tamanho=12)
+
+
+def _carga_distribuida(
+    d: ImageDraw.ImageDraw, escala: _Escala, carga: eq.Carga, u: eq.Unidades
+) -> None:
+    ux, uy = eq.eixo(carga.angulo)
+    maior = max(abs(carga.valor), abs(carga.valor2), 1e-12)
+    alto = 46 * _ESC
+    pontos = []
+    for k in range(9):
+        s = k / 8.0
+        x = carga.x + (carga.x2 - carga.x) * s
+        y = carga.y + (carga.y2 - carga.y) * s
+        w = carga.valor + (carga.valor2 - carga.valor) * s
+        ponta = escala.px(x, y)
+        comprimento = abs(w) / maior * alto
+        sinal = 1.0 if w >= 0.0 else -1.0
+        cauda = (ponta[0] - sinal * ux * comprimento, ponta[1] + sinal * uy * comprimento)
+        pontos.append(cauda)
+        if comprimento > 6 * _ESC:
+            _seta(d, cauda, ponta, _CARGA, ponta=8)
+    d.line(pontos, fill=_CARGA, width=2 * _ESC)
+    meio = pontos[len(pontos) // 2]
+    fator = u.newton / u.metro
+    texto = f"{_n(carga.valor / fator)} {u.distribuida}"
+    if abs(carga.valor - carga.valor2) > 1e-12 * maior:
+        texto = f"{_n(carga.valor / fator)} a {_n(carga.valor2 / fator)} {u.distribuida}"
+    _texto(d, (meio[0] - ux * 14 * _ESC, meio[1] + uy * 14 * _ESC), texto, cor=_CARGA, tamanho=12)
+
+
+def _ponta_da_barra(d: ImageDraw.ImageDraw, escala: _Escala, apoio: eq.Apoio) -> None:
+    """Cabo e biela: a linha até a outra ponta, onde fica o pino fixo."""
+    p = escala.px(apoio.x, apoio.y)
+    cx, cy = apoio.direcao
+    if apoio.x2 is not None and apoio.y2 is not None:
+        fim = escala.px(apoio.x2, apoio.y2)
+    else:
+        fim = (p[0] + cx * 90 * _ESC, p[1] - cy * 90 * _ESC)
+    d.line([p, fim], fill=_CONTORNO, width=(1 if apoio.tipo == eq.CABO else 4) * _ESC)
+    _simbolo_do_apoio(d, fim, eq.PINO, (-cx, -cy))
+    r = 4 * _ESC
+    d.ellipse([p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill="#ffffff", outline=_CONTORNO)
+
+
+def _seta_de_carga(
+    d: ImageDraw.ImageDraw, escala: _Escala, carga: eq.Carga, u: eq.Unidades
+) -> None:
+    p = escala.px(carga.x, carga.y)
+    acao = eq.acao_da_carga(carga)
+    modulo = math.hypot(acao.fx, acao.fy)
+    if modulo <= 0.0:
+        return
+    ux, uy = acao.fx / modulo, acao.fy / modulo
+    cauda = (p[0] - ux * 66 * _ESC, p[1] + uy * 66 * _ESC)
+    _seta(d, cauda, p, _CARGA)
+    rotulo = f"{carga.nome} = {_n(modulo / u.newton)} {u.forca}"
+    folga = (16 + 40 * abs(ux)) * _ESC  # texto largo na seta deitada
+    posicao = (cauda[0] - ux * folga, cauda[1] + uy * 16 * _ESC)
+    _texto(d, posicao, rotulo, cor=_CARGA, tamanho=12)
+
+
+def _seta_de_reacao(
+    d: ImageDraw.ImageDraw, escala: _Escala, r: eq.Reacao, solucao: eq.Solucao, u: eq.Unidades
+) -> None:
+    p = escala.px(r.apoio.x, r.apoio.y)
+    if r.modulo > 1e-9 * solucao.referencia:
+        ux, uy = r.fx / r.modulo, r.fy / r.modulo
+        longe = (p[0] + ux * 62 * _ESC, p[1] - uy * 62 * _ESC)
+        perto = (p[0] - ux * 62 * _ESC, p[1] + uy * 62 * _ESC)
+        puxa = r.apoio.tipo == eq.CABO
+        cauda, ponta = (p, longe) if puxa else (perto, p)
+        _seta(d, cauda, ponta, _REACAO, largura=3)
+        fora = longe if puxa else perto
+        _texto(
+            d,
+            (fora[0] + (fora[0] - p[0]) * 0.28, fora[1] + (fora[1] - p[1]) * 0.28),
+            f"{r.apoio.nome} = {_n(r.modulo / u.newton)} {u.forca}",
+            cor=_REACAO,
+            tamanho=12,
+        )
+    if abs(r.m) > 1e-9 * solucao.referencia:
+        rotulo = f"M{r.apoio.nome} = {_n(abs(r.m) / u.newton)} {u.momento}"
+        _arco_de_momento(d, p, r.m, _REACAO, rotulo, raio=34)
+
+
+def _marca_do_corte(d: ImageDraw.ImageDraw, escala: _Escala, corte: eq.Corte) -> None:
+    p = escala.px(corte.x, corte.y)
+    tx, ty = eq.eixo_do_corte(corte.angulo)
+    nx, ny = -ty, tx
+    a = (p[0] + nx * 26 * _ESC, p[1] - ny * 26 * _ESC)
+    b = (p[0] - nx * 26 * _ESC, p[1] + ny * 26 * _ESC)
+    for k in range(0, 8, 2):
+        s0, s1 = k / 7.0, (k + 1) / 7.0
+        d.line(
+            [
+                (a[0] + (b[0] - a[0]) * s0, a[1] + (b[1] - a[1]) * s0),
+                (a[0] + (b[0] - a[0]) * s1, a[1] + (b[1] - a[1]) * s1),
+            ],
+            fill=_TRACAO,
+            width=2 * _ESC,
+        )
+    _texto(d, (a[0], a[1] - 9 * _ESC), corte.nome, cor=_TRACAO, tamanho=12)
+
+
+def figura_do_equilibrio(solucao: eq.Solucao, u: eq.Unidades) -> ImagemDiagrama:
+    """A peça, os apoios, as cargas em laranja e as reações em verde, na proporção real."""
+    problema = solucao.problema
+    pontos: list[Ponto] = [(a.x, a.y) for a in problema.apoios]
+    pontos += [(a.x2, a.y2) for a in problema.apoios if a.x2 is not None and a.y2 is not None]
+    pontos += [(c.x, c.y) for c in problema.cargas]
+    pontos += [(c.x2, c.y2) for c in problema.cargas if c.tipo == eq.DISTRIBUIDA]
+    for t in problema.trechos:
+        pontos += [(t.x1, t.y1), (t.x2, t.y2)]
+    largura, altura = 760, 500
     imagem, d = _nova(largura, altura)
-    pontos = [(f[0], f[1]) for f in forcas] + [(m[0], m[1]) for m in momentos]
-    pontos += [(r[1], r[2]) for r in reacoes]
-    escala = _escala(pontos, largura, altura, 100)
-    tela = [escala.px(*p) for p in pontos]
-    xs = [p[0] for p in tela]
-    ys = [p[1] for p in tela]
-    folga = 24 * _ESC
-    d.rounded_rectangle(
-        [min(xs) - folga, min(ys) - folga, max(xs) + folga, max(ys) + folga],
-        radius=14 * _ESC,
-        fill="#eef2f7",
-        outline=_CORPO,
-        width=2 * _ESC,
-    )
+    escala = _escala(pontos, largura, altura, 110)
 
-    def desenhar(x: float, y: float, fx: float, fy: float, cor: str) -> None:
-        modulo = math.hypot(fx, fy)
-        if modulo < 1e-9:
-            return
-        px, py = escala.px(x, y)
-        tamanho = 62 * _ESC
-        cauda = (px - fx / modulo * tamanho, py + fy / modulo * tamanho)
-        _seta(d, cauda, (px, py), cor)
-        _texto(
-            d,
-            (cauda[0] - fx / modulo * 18 * _ESC, cauda[1] + fy / modulo * 18 * _ESC),
-            f"{_n(modulo, 2)} kN",
-            cor=cor,
-            tamanho=12,
-        )
+    for t in problema.trechos:
+        a, b = escala.px(t.x1, t.y1), escala.px(t.x2, t.y2)
+        d.line([a, b], fill=_CORPO, width=11 * _ESC)
+        for x, y in (a, b):
+            raio = 5.5 * _ESC
+            d.ellipse([x - raio, y - raio, x + raio, y + raio], fill=_CORPO)
 
-    for x, y, fx, fy in forcas:
-        desenhar(x, y, fx, fy, _CARGA)
-    for x, y, momento in momentos:
-        px, py = escala.px(x, y)
-        r = 26 * _ESC
-        d.arc([px - r, py - r, px + r, py + r], 30, 330, fill=_CARGA, width=2 * _ESC)
+    for apoio in problema.apoios:
+        if apoio.tipo in eq.COM_PONTA:
+            _ponta_da_barra(d, escala, apoio)
+        else:
+            _simbolo_do_apoio(d, escala.px(apoio.x, apoio.y), apoio.tipo, apoio.direcao)
+
+    for carga in problema.cargas:
+        if carga.tipo == eq.DISTRIBUIDA:
+            _carga_distribuida(d, escala, carga, u)
+        elif carga.tipo == eq.MOMENTO:
+            rotulo = f"{carga.nome} = {_n(abs(carga.valor) / u.newton)} {u.momento}"
+            _arco_de_momento(d, escala.px(carga.x, carga.y), carga.valor, _CARGA, rotulo)
+        else:
+            _seta_de_carga(d, escala, carga, u)
+
+    for r in solucao.reacoes:
+        if solucao.para:
+            _seta_de_reacao(d, escala, r, solucao, u)
+        x, y = escala.px(r.apoio.x, r.apoio.y)
+        lado = 14 * _ESC
+        _texto(d, (x + lado, y - lado), r.apoio.nome, tamanho=14)
+
+    for corte in problema.cortes:
+        _marca_do_corte(d, escala, corte)
+
+    if solucao.movimento is not None and not solucao.para:
         _texto(
-            d,
-            (px, py - r - 12 * _ESC),
-            f"{_n(momento, 2)} kN·m",
-            cor=_CARGA,
-            tamanho=12,
+            d, (largura * _ESC / 2, 20 * _ESC), "A peça não fica parada", cor=_TRACAO, tamanho=14
         )
-    for nome, x, y, rx, ry in reacoes:
-        desenhar(x, y, rx, ry, _REACAO)
-        px, py = escala.px(x, y)
-        r = 6 * _ESC
-        d.ellipse([px - r, py - r, px + r, py + r], fill=_REACAO)
-        _texto(d, (px + 16 * _ESC, py - 14 * _ESC), nome, tamanho=14)
+        if solucao.movimento.giro:
+            x, y = escala.px(solucao.movimento.x, solucao.movimento.y)
+            r_px = 9 * _ESC
+            if 0 <= x <= largura * _ESC and 0 <= y <= altura * _ESC:
+                d.ellipse([x - r_px, y - r_px, x + r_px, y + r_px], outline=_TRACAO, width=3 * _ESC)
+                _texto(d, (x, y + 22 * _ESC), "centro do giro", cor=_TRACAO, tamanho=12)
     return _fechar(imagem, "Peça", "Em laranja as cargas e em verde as reações dos apoios.")
 
 

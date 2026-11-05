@@ -272,7 +272,7 @@ def painel() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _barra_de_navegacao(caso: Caso) -> None:
+def barra_de_navegacao(caso: Caso) -> None:
     area = cat.area_do_caso(caso.id)
     with st.container(horizontal=True, vertical_alignment="center"):
         st.button(
@@ -384,7 +384,7 @@ def _widget(caso: Caso, campo: Any) -> Any:
     )
 
 
-def _coluna_da_tabela(coluna: Coluna) -> Any:
+def coluna_da_tabela(coluna: Coluna) -> Any:
     rotulo = coluna.rotulo_completo
     if coluna.opcoes:
         return st.column_config.SelectboxColumn(
@@ -411,7 +411,7 @@ def _coluna_da_tabela(coluna: Coluna) -> Any:
     )
 
 
-def _quadro_da_tabela(campo: Campo, linhas: Any) -> pd.DataFrame:
+def quadro_da_tabela(campo: Campo, linhas: Any) -> pd.DataFrame:
     """As linhas com todas as colunas e o tipo certo: coluna toda vazia não pode virar texto."""
     quadro = pd.DataFrame(list(linhas), columns=[coluna.chave for coluna in campo.colunas])
     for coluna in campo.colunas:
@@ -433,7 +433,7 @@ def _tabela(caso: Caso, campo: Campo) -> list[dict[str, Any]]:
     ultimas = f"{chave}::ultimas"
     if chave not in st.session_state or base not in st.session_state:
         linhas = st.session_state.get(ultimas, campo.padrao)
-        st.session_state[base] = _quadro_da_tabela(campo, linhas)
+        st.session_state[base] = quadro_da_tabela(campo, linhas)
     if campo.rotulo != campo.secao:
         st.markdown(f"**{campo.rotulo_completo}**")
     st.caption(campo.ajuda)
@@ -444,7 +444,7 @@ def _tabela(caso: Caso, campo: Campo) -> list[dict[str, Any]]:
         hide_index=True,
         width="stretch",
         placeholder="—",
-        column_config={coluna.chave: _coluna_da_tabela(coluna) for coluna in campo.colunas},
+        column_config={coluna.chave: coluna_da_tabela(coluna) for coluna in campo.colunas},
     )
     registros: list[dict[str, Any]] = editado.to_dict("records")
     st.session_state[ultimas] = registros
@@ -519,15 +519,18 @@ def _tabela_de_verificacoes(resultado: Resultado) -> None:
     linhas = tabela_verificacoes(ordenar_por_severidade(resultado.verificacoes))
     for linha in linhas:
         linha["Fórmula"] = mv.decimal_ptbr(linha["Fórmula"])
+    # O formato fica no Styler: é ele que troca a célula vazia por um traço, em vez de "None".
+    quadro = pd.DataFrame(linhas).astype(
+        {"Solicitante": "float64", "Resistente": "float64", "Aproveitamento": "float64"}
+    )
     st.dataframe(
-        pd.DataFrame(linhas),
+        quadro.style.format(
+            {"Solicitante": "{:.4g}", "Resistente": "{:.4g}", "Aproveitamento": "{:.0f} %"},
+            na_rep="—",
+        ),
         hide_index=True,
         width="stretch",
-        column_config={
-            "Solicitante": st.column_config.NumberColumn(format="%.4g"),
-            "Resistente": st.column_config.NumberColumn("Limite", format="%.4g"),
-            "Aproveitamento": st.column_config.NumberColumn(format="%.0f %%"),
-        },
+        column_config={"Resistente": "Limite"},
     )
 
 
@@ -770,19 +773,20 @@ def _tabela_de_resultado(tabela: Any) -> None:
         st.caption(tabela.legenda)
 
 
-def _resposta(resultado: Resultado) -> None:
+def resposta(resultado: Resultado, *, por_linha: int = 2) -> None:
     """A resposta curta, ao lado dos dados: passou ou não, e os números que importam."""
     _faixa_de_status(resultado)
-    for inicio in range(0, len(resultado.metricas), 2):
-        colunas = st.columns(2)
-        for coluna, metrica in zip(colunas, resultado.metricas[inicio : inicio + 2], strict=False):
+    for inicio in range(0, len(resultado.metricas), por_linha):
+        colunas = st.columns(por_linha)
+        fim = inicio + por_linha
+        for coluna, metrica in zip(colunas, resultado.metricas[inicio:fim], strict=False):
             with coluna:
                 _metrica(metrica)
     for texto in resultado.alertas:
         st.warning(mv.decimal_ptbr(texto), icon=":material/warning:")
 
 
-def _detalhes(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None:
+def detalhes(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None:
     """O resto do resultado, na largura toda da página."""
     _tabela_de_verificacoes(resultado)
     for grafico in resultado.graficos:
@@ -824,7 +828,13 @@ def _detalhes(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None
 
 def tela_do_caso(caso: Caso) -> None:
     """Dados à esquerda e resposta à direita. Dado inválido vira mensagem no lugar da resposta."""
-    _barra_de_navegacao(caso)
+    if caso.id == "equilibrio_peca":
+        # Este caso se preenche desenhando. A tela dele reaproveita as peças desta aqui.
+        from components.equilibrio_ui import tela_do_equilibrio
+
+        tela_do_equilibrio(caso)
+        return
+    barra_de_navegacao(caso)
     esquerda, direita = st.columns(2, gap="large")
     with esquerda:
         st.markdown("##### Dados")
@@ -842,6 +852,6 @@ def tela_do_caso(caso: Caso) -> None:
         with st.container(border=True):
             _desenho_do_caso(caso, resultado)
         if resultado is not None:
-            _resposta(resultado)
+            resposta(resultado)
     if resultado is not None:
-        _detalhes(caso, valores, resultado)
+        detalhes(caso, valores, resultado)

@@ -765,53 +765,6 @@ def test_portico_confere_o_topo_e_a_flecha_no_meio_da_viga():
 # ---------------------------------------------------------------------------
 
 
-def test_equilibrio_sobre_dois_apoios():
-    resultado = calcular_caso(
-        CASOS["equilibrio_peca"],
-        {
-            "xb_m": 4.0,
-            "cargas": ({"x_m": 1.0, "y_m": 0.0, "fx_kN": 3.0, "fy_kN": -8.0, "m_kNm": 0.0},),
-        },
-    )
-    linhas = {linha["Apoio"]: linha for linha in _tabela(resultado, "Reações")}
-    assert linhas["B"]["Ry (kN)"] == pytest.approx(2.0)
-    assert linhas["A"]["Ry (kN)"] == pytest.approx(6.0)
-    assert linhas["A"]["Rx (kN)"] == pytest.approx(-3.0)
-
-
-def test_equilibrio_com_rolete_horizontal_e_braco_vertical():
-    resultado = calcular_caso(
-        CASOS["equilibrio_peca"],
-        {
-            "xb_m": 0.0,
-            "yb_m": 2.0,
-            "rolete": ee.ROLETE_X,
-            "cargas": ({"x_m": 3.0, "y_m": 0.0, "fx_kN": 0.0, "fy_kN": -10.0, "m_kNm": 0.0},),
-        },
-    )
-    linhas = {linha["Apoio"]: linha for linha in _tabela(resultado, "Reações")}
-    assert linhas["B"]["Rx (kN)"] == pytest.approx(-15.0)
-    assert linhas["A"]["Rx (kN)"] == pytest.approx(15.0)
-    assert linhas["A"]["Ry (kN)"] == pytest.approx(10.0)
-
-
-def test_engaste_devolve_o_momento_e_fecha_o_equilibrio():
-    resultado = calcular_caso(
-        CASOS["equilibrio_peca"],
-        {
-            "apoios": ee.ENGASTE,
-            "cargas": ({"x_m": 2.0, "y_m": 1.0, "fx_kN": 5.0, "fy_kN": -10.0, "m_kNm": 1.0},),
-        },
-    )
-    assert _metrica(resultado, "Momento no engaste") == pytest.approx(-(2 * -10 - 1 * 5 + 1))
-    assert all(abs(v.solicitante) < 1e-9 for v in resultado.verificacoes)
-
-
-def test_apoios_na_mesma_linha_do_rolete_nao_seguram_o_giro():
-    with pytest.raises(ValueError, match="giraria"):
-        calcular_caso(CASOS["equilibrio_peca"], {"xb_m": 0.0, "yb_m": 3.0})
-
-
 def test_secao_t_montada_bate_com_a_conta_de_mao():
     partes = (
         {

@@ -1,4 +1,4 @@
-"""Peças, seções e chapas: equilíbrio de corpo rígido, seção montada e chapa tracionada com furo."""
+"""Peças, seções e chapas: seção montada e chapa com furo. O equilíbrio tem módulo próprio."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from core.desenho_estatica import figura_da_secao, figura_do_equilibrio
+from core.desenho_estatica import figura_da_secao
 from core.elementos_base import (
     Campo,
     Caso,
@@ -21,216 +21,12 @@ from core.elementos_base import (
     informativo,
     limite,
 )
+from core.elementos_equilibrio import CASO_EQUILIBRIO, GRUPO
 from core.elementos_vigas import INFORMAR
 
-GRUPO = "Peças, seções e chapas"
-
-HIBBELER = "Hibbeler, Estática"
 HIBBELER_RM = "Hibbeler, Resistência dos Materiais"
 PILKEY = "Pilkey, Peterson's Stress Concentration Factors, Chart 4.1"
 SHIGLEY_3 = "Shigley, Elementos de Máquinas, cap. 3"
-
-
-# ---------------------------------------------------------------------------
-# Equilíbrio de uma peça
-# ---------------------------------------------------------------------------
-
-PINO_E_ROLETE = "Pino em A e rolete em B"
-ENGASTE = "Engaste em A"
-ROLETE_Y = "Rolete segura na vertical"
-ROLETE_X = "Rolete segura na horizontal"
-
-
-def calcular_equilibrio(v: Valores) -> Resultado:
-    cargas: Sequence[Mapping[str, Any]] = v["cargas"]
-    exigir(len(cargas) >= 1, "Informe ao menos uma carga na tabela.")
-    xa, ya = float(v["xa_m"]), float(v["ya_m"])
-    forcas = [
-        (
-            float(c["x_m"]),
-            float(c["y_m"]),
-            float(c["fx_kN"]),
-            float(c["fy_kN"]),
-            float(c["m_kNm"]),
-        )
-        for c in cargas
-    ]
-    soma_fx = sum(f[2] for f in forcas)
-    soma_fy = sum(f[3] for f in forcas)
-    # Momento em torno de A, anti-horário positivo.
-    momento_a = sum((x - xa) * fy - (y - ya) * fx + m for x, y, fx, fy, m in forcas)
-
-    reacoes: list[tuple[str, float, float, float, float]] = []
-    linhas: list[dict[str, object]] = []
-    momento_engaste = 0.0
-    if v["apoios"] == ENGASTE:
-        ax, ay = -soma_fx, -soma_fy
-        momento_engaste = -momento_a
-        reacoes.append(("A", xa, ya, ax, ay))
-        linhas.append(
-            {"Apoio": "A", "Rx (kN)": ax, "Ry (kN)": ay, "Momento (kN·m)": momento_engaste}
-        )
-        metricas = [
-            Metrica("Reação Ax", ax, "kN"),
-            Metrica("Reação Ay", ay, "kN"),
-            Metrica("Momento no engaste", momento_engaste, "kN·m"),
-        ]
-    else:
-        xb, yb = float(v["xb_m"]), float(v["yb_m"])
-        if v["rolete"] == ROLETE_Y:
-            exigir(
-                abs(xb - xa) > 1e-9,
-                "Com o rolete que segura na vertical, A e B não podem estar na mesma vertical: a "
-                "peça giraria em torno de A.",
-            )
-            bx, by = 0.0, -momento_a / (xb - xa)
-        else:
-            exigir(
-                abs(yb - ya) > 1e-9,
-                "Com o rolete que segura na horizontal, A e B não podem estar na mesma horizontal: "
-                "a peça giraria em torno de A.",
-            )
-            bx, by = momento_a / (yb - ya), 0.0
-        ax, ay = -soma_fx - bx, -soma_fy - by
-        reacoes.extend([("A", xa, ya, ax, ay), ("B", xb, yb, bx, by)])
-        linhas.append({"Apoio": "A", "Rx (kN)": ax, "Ry (kN)": ay, "Momento (kN·m)": 0.0})
-        linhas.append({"Apoio": "B", "Rx (kN)": bx, "Ry (kN)": by, "Momento (kN·m)": 0.0})
-        metricas = [
-            Metrica("Reação Ax", ax, "kN"),
-            Metrica("Reação Ay", ay, "kN"),
-            Metrica("Reação em B", math.hypot(bx, by), "kN"),
-        ]
-    resultante = math.hypot(soma_fx, soma_fy)
-    metricas.append(Metrica("Resultante das cargas", resultante, "kN"))
-
-    residuo_f = math.hypot(
-        soma_fx + sum(r[3] for r in reacoes), soma_fy + sum(r[4] for r in reacoes)
-    )
-    residuo_m = abs(
-        momento_a + momento_engaste + sum((r[1] - xa) * r[4] - (r[2] - ya) * r[3] for r in reacoes)
-    )
-    figura = figura_do_equilibrio(
-        [(x, y, fx, fy) for x, y, fx, fy, _ in forcas],
-        [(x, y, m) for x, y, _, _, m in forcas if abs(m) > 1e-12],
-        reacoes,
-    )
-    maior = max(reacoes, key=lambda r: math.hypot(r[3], r[4]))
-    return Resultado(
-        resumo=(
-            f"Maior reação de {math.hypot(maior[3], maior[4]):.2f} kN no apoio {maior[0]}. "
-            f"Resultante das cargas: {resultante:.2f} kN."
-        ),
-        metricas=tuple(metricas),
-        verificacoes=(
-            informativo(
-                "Soma das forças com as reações",
-                round(residuo_f, 6),
-                "kN",
-                "ΣF = 0: deve dar zero",
-                HIBBELER,
-            ),
-            informativo(
-                "Soma dos momentos com as reações",
-                round(residuo_m, 6),
-                "kN·m",
-                "ΣM = 0: deve dar zero",
-                HIBBELER,
-            ),
-        ),
-        tabelas=(
-            Tabela(
-                "Reações nos apoios",
-                tuple(linhas),
-                "Rx para a direita, Ry para cima e momento anti-horário.",
-            ),
-        ),
-        figuras=(Figura("Peça", figura.png, "Cargas em laranja e reações em verde."),),
-        hipoteses=(
-            "Corpo rígido no plano: a deformação da peça não muda a posição das cargas.",
-            "Pino segura as duas direções e deixa girar. Rolete segura uma direção. Engaste segura "
-            "tudo.",
-            "Atrito nos apoios desprezado.",
-        ),
-        referencias=(HIBBELER,),
-    )
-
-
-CAMPOS_EQUILIBRIO: tuple[Campo, ...] = (
-    Campo(
-        "apoios",
-        "Como a peça está apoiada",
-        "Pino e rolete é o caso geral com duas reações. Engaste é a peça presa em um só ponto, "
-        "como um suporte soldado.",
-        PINO_E_ROLETE,
-        opcoes=(PINO_E_ROLETE, ENGASTE),
-        secao="Apoios",
-    ),
-    Campo(
-        "xa_m",
-        "Posição x do apoio A",
-        "Coordenada horizontal do apoio A.",
-        0.0,
-        "m",
-        passo=0.1,
-        secao="Apoios",
-    ),
-    Campo(
-        "ya_m",
-        "Posição y do apoio A",
-        "Coordenada vertical do apoio A.",
-        0.0,
-        "m",
-        passo=0.1,
-        secao="Apoios",
-    ),
-    Campo(
-        "xb_m",
-        "Posição x do apoio B",
-        "Coordenada horizontal do apoio B.",
-        3.0,
-        "m",
-        passo=0.1,
-        secao="Apoios",
-        quando=("apoios", (PINO_E_ROLETE,)),
-    ),
-    Campo(
-        "yb_m",
-        "Posição y do apoio B",
-        "Coordenada vertical do apoio B.",
-        0.0,
-        "m",
-        passo=0.1,
-        secao="Apoios",
-        quando=("apoios", (PINO_E_ROLETE,)),
-    ),
-    Campo(
-        "rolete",
-        "Direção do rolete",
-        "O rolete só faz força nesta direção.",
-        ROLETE_Y,
-        opcoes=(ROLETE_Y, ROLETE_X),
-        secao="Apoios",
-        quando=("apoios", (PINO_E_ROLETE,)),
-    ),
-    Campo(
-        "cargas",
-        "Cargas",
-        "Uma linha por carga, com o ponto de aplicação. Fx positiva para a direita, Fy para cima e "
-        "momento anti-horário.",
-        (
-            {"x_m": 1.0, "y_m": 0.5, "fx_kN": 0.0, "fy_kN": -10.0, "m_kNm": 0.0},
-            {"x_m": 2.0, "y_m": 0.5, "fx_kN": 4.0, "fy_kN": -6.0, "m_kNm": 0.0},
-        ),
-        secao="Cargas",
-        colunas=(
-            Coluna("x_m", "x", "Coordenada horizontal do ponto da carga.", 0.0, "m"),
-            Coluna("y_m", "y", "Coordenada vertical do ponto da carga.", 0.0, "m"),
-            Coluna("fx_kN", "Fx", "Componente horizontal da força.", 0.0, "kN"),
-            Coluna("fy_kN", "Fy", "Componente vertical da força.", 0.0, "kN"),
-            Coluna("m_kNm", "Momento", "Momento aplicado neste ponto.", 0.0, "kN·m"),
-        ),
-    ),
-)
 
 
 # ---------------------------------------------------------------------------
@@ -615,17 +411,7 @@ CAMPOS_CHAPA: tuple[Campo, ...] = (
 )
 
 CASOS: tuple[Caso, ...] = (
-    Caso(
-        "equilibrio_peca",
-        "Equilíbrio de uma peça",
-        GRUPO,
-        "Reações de uma peça qualquer, com forças em qualquer direção.",
-        "Peça, suporte ou alavanca sobre dois apoios ou presa em um engaste. Sai a força em cada "
-        "apoio.",
-        CAMPOS_EQUILIBRIO,
-        calcular_equilibrio,
-        r"\sum F_x=0,\quad \sum F_y=0,\quad \sum M_A=0",
-    ),
+    CASO_EQUILIBRIO,
     Caso(
         "secao_montada",
         "Seção montada",

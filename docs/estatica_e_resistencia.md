@@ -73,7 +73,29 @@ barras, não só nos nós: na viga de um pórtico, o maior fica no meio do vão.
 
 ## Peças, seções e chapas
 
-**Equilíbrio de uma peça.** Três equações, com pino e rolete ou engaste.
+**Equilíbrio de uma peça.** `core/equilibrio_corpo.py`. Preenche desenhando: a prancheta recebe a
+peça, os apoios e as cargas, e as reações voltam na hora. Cada apoio entra com as forças que consegue
+fazer, e as três equações viram uma matriz 3 × n, lida por valores singulares:
+
+- o posto diz quantas reações a estática define; quem tem componente zero no espaço nulo tem valor
+  único mesmo em peça hiperestática (a força horizontal nas duas dobradiças de uma tampa);
+- o espaço nulo da transposta diz para onde a peça foge quando falta apoio, giro em torno de um ponto
+  ou translação, e a carga projetada nele diz se ela empurra para esse lado;
+- três reações concorrentes ou paralelas contam três incógnitas e ainda assim não seguram: o posto
+  pega isso sem caso especial;
+- apoio simples, atrito e cabo são de um lado só. Na peça isostática a linha reprova quando o apoio
+  precisaria puxar ou o cabo empurrar. Com um grau hiperestático, procura a divisão que respeita as
+  restrições; com dois ou mais a divisão mostrada é a de menor esforço e a linha só pede atenção.
+
+Os esforços N, V e M saem do equilíbrio do pedaço à frente do corte. A linha do corte é infinita: se
+atravessa mais de um trecho, o programa avisa que o valor é a soma dos pedaços.
+
+Conferido contra contas de mão e, em peças sorteadas, contra as propriedades que valem sempre: ΣF e
+ΣM somados de novo, fora da matriz; o mesmo N e M pelos dois lados do corte; reações iguais com a peça
+girada e transladada; resposta igual em qualquer unidade.
+
+Limites: peça rígida no plano; sem mecanismo de várias peças (cada corpo é um caso); sem folga nem
+sequência de carga; a distribuída vale por comprimento da peça, sem opção por projeção.
 
 **Seção montada.** Teorema dos eixos paralelos, com retângulos, círculos e furos, além dos eixos
 principais. O resultado segue para uma viga ou uma coluna.

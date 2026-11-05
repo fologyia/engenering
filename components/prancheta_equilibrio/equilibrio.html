@@ -1,0 +1,43 @@
+<div class="pe">
+  <div class="barra">
+    <div class="bloco">
+      <button type="button" data-f="mover" title="Selecionar e mover (V)">Selecionar</button>
+      <button type="button" data-f="trecho" title="Clique em cada ponto da peça. Duplo clique ou Enter termina.">Desenhar peça</button>
+    </div>
+    <div class="grupo"><span class="rot">Apoios</span>
+    <div class="bloco">
+      <button type="button" data-f="Pino" title="Segura as duas direções e deixa girar">Pino</button>
+      <button type="button" data-f="Rolete" title="Segura uma direção, para os dois lados">Rolete</button>
+      <button type="button" data-f="Apoio simples" title="Só empurra: a peça pode descolar">Apoio simples</button>
+      <button type="button" data-f="Apoio com atrito" title="Empurra e segura de lado até μ·N">Atrito</button>
+      <button type="button" data-f="Engaste" title="Segura tudo, inclusive o giro">Engaste</button>
+      <button type="button" data-f="Guia" title="Deixa correr e segura o lado e o giro">Guia</button>
+      <button type="button" data-f="Cabo" title="Só puxa, na direção do cabo">Cabo</button>
+      <button type="button" data-f="Biela" title="Haste articulada: puxa e empurra ao longo dela">Biela</button>
+    </div></div>
+    <div class="grupo"><span class="rot">Cargas</span>
+    <div class="bloco">
+      <button type="button" data-f="Força" title="Clique na peça, ou arraste no sentido da força">Força</button>
+      <button type="button" data-f="Momento" title="Clique no ponto do momento">Momento</button>
+      <button type="button" data-f="Distribuída" title="Clique num trecho para carregar ele inteiro">Distribuída</button>
+      <button type="button" data-f="Peso" title="Massa no centro de gravidade">Peso</button>
+    </div></div>
+    <div class="bloco">
+      <button type="button" data-f="corte" title="Corta a peça neste ponto e mostra N, V e M">Seção</button>
+    </div>
+    <span class="vao"></span>
+    <label class="grade" title="As medidas pulam de quanto em quanto. O ímã na peça vale em qualquer grade.">
+      Grade <select data-c="grade"></select>
+    </label>
+    <div class="bloco">
+      <button type="button" data-a="desfazer" title="Desfazer (Ctrl+Z)">↶</button>
+      <button type="button" data-a="refazer" title="Refazer (Ctrl+Y)">↷</button>
+      <button type="button" data-a="maisLonge" title="Afastar (Ctrl + rodinha)">−</button>
+      <button type="button" data-a="maisPerto" title="Aproximar (Ctrl + rodinha)">+</button>
+      <button type="button" data-a="ajustar" title="Mostrar a peça inteira">Ver tudo</button>
+    </div>
+  </div>
+  <div class="painel" data-painel></div>
+  <div class="area"><svg tabindex="0" aria-label="Prancheta da peça"></svg></div>
+  <div class="rodape"><span data-i="xy"></span><span data-i="dica"></span></div>
+</div>
