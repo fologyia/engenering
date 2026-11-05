@@ -357,6 +357,7 @@ def recomendacao(
         formula,
         status="OK" if aproveitamento <= 1.0 + 1e-9 else "ALERTA",
         aproveitamento=aproveitamento,
+        obrigatoria=False,
     )
 
 
@@ -391,6 +392,7 @@ def faixa_recomendada(
         formula or f"faixa usual {inferior:g} a {superior:g}",
         status="OK" if dentro else "ALERTA",
         tipo="limite",
+        obrigatoria=False,
     )
 
 

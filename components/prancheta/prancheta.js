@@ -576,10 +576,14 @@ function criar(raiz) {
       const i = [...e.sel][0]
       const p = e.partes[i]
       const circulo = p.forma === "circ"
+      // A espessura é o lado menor: ninguém compra chapa pela largura.
+      const espessura = p.forma === "ret" && p[eixo] <= Math.min(p.b, p.h)
       editor.abrir(el, {
         valor: p[eixo],
         unidade: "mm",
         passo: e.grade,
+        comerciais: espessura ? e.chapas : [],
+        serie: "Chapas de aço",
         nome: circulo ? "Diâmetro" : eixo === "b" ? "Largura da chapa" : "Altura da chapa",
         aplicar(v) {
           if (v <= 0) return "A medida precisa ser maior que zero."
@@ -878,6 +882,7 @@ function criar(raiz) {
       e.versao = dados.versao
     }
     e.marcas = dados.marcas ?? null
+    e.chapas = dados.chapas ?? []
     if (e.verAjuste !== dados.ajustar) {
       e.verAjuste = dados.ajustar
       ajustarVista()

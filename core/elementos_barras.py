@@ -19,7 +19,7 @@ import numpy as np
 from core import column_design as cd
 from core import portico_figuras as pf
 from core import portico_plano as pp
-from core.beam_charts import COR_FLECHA, COR_NORMAL, COR_TORQUE
+from core.beam_charts import COR_FLECHA, COR_NORMAL, COR_TORQUE, desenho_dispensado
 from core.desenho_estatica import figura_da_barra, figura_da_trelica
 from core.elementos_base import (
     Campo,
@@ -1185,21 +1185,25 @@ def calcular_portico(v: Valores) -> Resultado:
         for r in resposta.reacoes
     )
     figuras = (
-        Figura(
-            "Modelo",
-            pf.figura_estrutura(resposta, largura_px=760, altura_max_px=520).png,
-            "Geometria, apoios e cargas.",
-        ),
-        Figura(
-            "Momento fletor",
-            pf.figura_diagrama(resposta, "M", largura_px=760, altura_max_px=520).png,
-            "Momento do lado tracionado.",
-        ),
-        Figura(
-            "Deformada",
-            pf.figura_deformada(resposta, largura_px=760, altura_max_px=520).png,
-            "Deformada ampliada, com o maior deslocamento.",
-        ),
+        ()
+        if desenho_dispensado()
+        else (
+            Figura(
+                "Modelo",
+                pf.figura_estrutura(resposta, largura_px=760, altura_max_px=520).png,
+                "Geometria, apoios e cargas.",
+            ),
+            Figura(
+                "Momento fletor",
+                pf.figura_diagrama(resposta, "M", largura_px=760, altura_max_px=520).png,
+                "Momento do lado tracionado.",
+            ),
+            Figura(
+                "Deformada",
+                pf.figura_deformada(resposta, largura_px=760, altura_max_px=520).png,
+                "Deformada ampliada, com o maior deslocamento.",
+            ),
+        )
     )
     alertas = [
         "Conta de tensão, sem flambagem. Pilar comprimido e viga sem travamento lateral pedem a "

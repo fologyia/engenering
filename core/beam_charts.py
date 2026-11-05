@@ -16,7 +16,9 @@ from __future__ import annotations
 import functools
 import io
 import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont
@@ -65,6 +67,27 @@ class ImagemDiagrama:
     png: bytes
     largura_px: int
     altura_px: int
+
+
+_SO_A_CONTA: ContextVar[bool] = ContextVar("so_a_conta", default=False)
+
+
+@contextmanager
+def so_a_conta() -> Iterator[None]:
+    """Dentro do bloco, os desenhos saem vazios.
+
+    Quem varre uma medida roda o caso dezenas de vezes e só quer os números. O tempo de um caso com
+    figura está quase todo em reduzir e comprimir o PNG, de 20 a 150 ms por rodada.
+    """
+    marca = _SO_A_CONTA.set(True)
+    try:
+        yield
+    finally:
+        _SO_A_CONTA.reset(marca)
+
+
+def desenho_dispensado() -> bool:
+    return _SO_A_CONTA.get()
 
 
 _FONTES_SISTEMA = (

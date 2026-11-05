@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw
 
 from core import beam_model as bm
 from core import equilibrio_corpo as eq
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, desenho_dispensado
 
 _ESC = 2
 _FUNDO = "#ffffff"
@@ -52,6 +52,8 @@ def _nova(largura: int, altura: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
 
 
 def _fechar(imagem: Image.Image, titulo: str, legenda: str) -> ImagemDiagrama:
+    if desenho_dispensado():
+        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
     final = imagem.resize((imagem.width // _ESC, imagem.height // _ESC), Image.Resampling.LANCZOS)
     saida = io.BytesIO()
     final.save(saida, format="PNG", optimize=True)

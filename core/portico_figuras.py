@@ -33,6 +33,7 @@ from core.beam_charts import (
     ImagemDiagrama,
     _fonte,
     _rgba,
+    desenho_dispensado,
 )
 
 _ESC = 2  # desenho no dobro do tamanho, reduzido no fim
@@ -185,6 +186,8 @@ def _nova_tela(
 
 
 def _finalizar(imagem: Image.Image, tela: _Tela, titulo: str, legenda: str) -> ImagemDiagrama:
+    if desenho_dispensado():
+        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
     final = imagem.convert("RGB").resize(
         (tela.largura_px, tela.altura_px), Image.Resampling.LANCZOS
     )

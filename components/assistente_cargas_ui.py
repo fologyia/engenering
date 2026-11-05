@@ -18,6 +18,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components import estudo_da_medida_ui as estudo_ui
 from components import load_models as modelos_de_secao
 from components.croqui_editavel_ui import croqui_editavel
 from components.elementos_croquis import CROQUIS, svg_do_croqui
@@ -350,16 +351,48 @@ def _ao_editar_cota(caso: Caso, chave_do_desenho: str) -> None:
     if not 0 <= indice < len(cotas):
         return
     cota = cotas[indice]
-    valor, motivo = cd.valor_aceito(cota, evento.get("valor"))
-    st.session_state[f"{chave_do_desenho}::aviso"] = motivo
+    acao = evento.get("acao")
+    if acao == "limite":
+        _achar_limite(caso, chave_do_desenho, cota)
+    elif acao == "grafico":
+        estudo_ui.escolher_medida(caso, cota, abrir=True)
+    else:
+        st.session_state[f"{chave_do_desenho}::aviso"] = _mudar_medida(
+            caso, cota, evento.get("valor")
+        )
+
+
+def _mudar_medida(caso: Caso, cota: cd.CotaViva, digitado: Any, origem: str = "") -> str:
+    """Grava a medida com o antes e o depois, e devolve o motivo se o valor não servir."""
+    valor, motivo = cd.valor_aceito(cota, digitado)
     if valor is None:
-        return
+        return motivo
     pilha = st.session_state.setdefault(f"assistente_pilha::{caso.id}", [])
     pilha.append((cota.alvo, cota.letra, cota.valor, cota.unidade))
     del pilha[:-30]
     texto = f"{cota.letra}: {cd.numero(cota.valor)} → {cd.numero(valor)} {cota.unidade}".rstrip()
-    _anotar_mudanca(caso, texto)
+    _anotar_mudanca(caso, f"{texto} ({origem.lower()})" if origem else texto)
     _gravar_cota(caso, cota.alvo, valor)
+    return ""
+
+
+def _usar_valor(caso: Caso, cota: cd.CotaViva, valor: float, origem: str) -> None:
+    """Um valor pronto do estudo vale como uma medida digitada: entra no Desfazer."""
+    aviso = _mudar_medida(caso, cota, valor, origem)
+    st.session_state[f"assistente_croqui::{caso.id}::aviso"] = aviso
+
+
+def _achar_limite(caso: Caso, chave_do_desenho: str, cota: cd.CotaViva) -> None:
+    """Guarda a resposta com os dados que a geraram: mudou um número, ela deixa de valer."""
+    valores = _valores_da_sessao(caso)
+    estudo = estudo_ui.estudo_de(caso, valores, cota)
+    if estudo is None:
+        return
+    st.session_state[f"{chave_do_desenho}::limite"] = (
+        estudo_ui.assinatura(valores),
+        {**estudo.para_a_caixinha(), "indice": cota.indice},
+    )
+    estudo_ui.escolher_medida(caso, cota)
 
 
 def _gravar_cota(caso: Caso, alvo: cd.Alvo, valor: float) -> None:
@@ -393,6 +426,7 @@ def _voltar_ao_exemplo(caso: Caso) -> None:
             st.session_state.pop(nome, None)
     for nome in ("material", "pilha", "mudou"):
         st.session_state.pop(f"assistente_{nome}::{caso.id}", None)
+    st.session_state.pop(f"assistente_croqui::{caso.id}::limite", None)
 
 
 def _o_que_mudou(caso: Caso, resultado: Resultado) -> None:
@@ -410,12 +444,19 @@ def _desenho_com_medidas(caso: Caso) -> frozenset[str]:
     """Desenha o caso e diz quais campos já estão nele, para a lista ficar mais curta."""
     svg = _croqui(caso)
     chave = f"assistente_croqui::{caso.id}"
-    cotas = cd.cotas_do_caso(caso, _valores_da_sessao(caso))
+    valores = _valores_da_sessao(caso)
+    cotas = cd.cotas_do_caso(caso, valores)
+    diagnostico = estudo_ui.diagnostico_de(caso, valores)
     if svg and cotas:
+        limite = st.session_state.get(f"{chave}::limite")
+        vale = limite is not None and limite[0] == estudo_ui.assinatura(valores)
         croqui_editavel(
             {
                 "svg": cd.desenho_com_cotas(svg, cotas),
                 "cotas": [cota.como_dicionario() for cota in cotas],
+                "estudavel": bool(diagnostico.avaliacao.criterios),
+                "manda": diagnostico.manda.medida.indice if diagnostico.manda else None,
+                "estudo": limite[1] if vale else None,
             },
             key=chave,
             ao_editar=partial(_ao_editar_cota, caso, chave),
@@ -425,6 +466,8 @@ def _desenho_com_medidas(caso: Caso) -> frozenset[str]:
     aviso = st.session_state.get(f"{chave}::aviso")
     if aviso:
         st.warning(aviso, icon=":material/warning:")
+    if svg and diagnostico.texto():
+        st.caption(diagnostico.texto())
     with st.container(horizontal=True, vertical_alignment="center"):
         if cotas:
             st.caption("Clique numa medida para mudar. Enter confirma e Tab vai para a próxima.")
@@ -1022,6 +1065,9 @@ def tela_do_caso(caso: Caso) -> None:
         if resultado is not None:
             _o_que_mudou(caso, resultado)
             resposta(resultado)
+    # Fora do resultado: com dado inválido, é justamente o estudo que mostra um valor que serve.
+    with secao_protegida("Estudo da medida"):
+        estudo_ui.painel_de_estudo(caso, valores, _usar_valor)
     if resultado is not None:
         detalhes(caso, valores, resultado)
         st.session_state[f"assistente_metricas::{caso.id}"] = cd.metricas_numericas(

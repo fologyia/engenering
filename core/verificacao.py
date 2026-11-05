@@ -43,7 +43,8 @@ class Verificacao:
 
     ``tipo`` diz como a linha entra no resumo: ``"resistencia"`` (a razão
     solicitante/resistente conta para o aproveitamento máximo), ``"limite"`` (só
-    OK/NÃO OK) ou ``"informativo"`` (valor mostrado, sem critério).
+    OK/NÃO OK) ou ``"informativo"`` (valor mostrado, sem critério). ``obrigatoria`` é falso na boa
+    prática: passar do limite dela pede atenção, mas não reprova.
     """
 
     nome: str
@@ -55,6 +56,7 @@ class Verificacao:
     status: str = ""  # "OK", "NÃO OK", "ALERTA", "N/A", "INFO"
     aproveitamento: float | None = None
     tipo: str = "resistencia"
+    obrigatoria: bool = True
 
     def __post_init__(self) -> None:
         if not self.status:

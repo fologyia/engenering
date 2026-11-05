@@ -21,8 +21,48 @@ conta (`300/2`, `2*150+10`), unidade (`1,5 m`, `2 pol`, `5 kN`, `10 bar`), valor
 Depois de mudar uma medida, a resposta mostra o que mais andou, com o antes e o depois (`mudancas`).
 O botão Desfazer volta uma medida de cada vez, e abaixo de 0,1 % a variação é tratada como ruído.
 
+Quando a medida tem série comercial, a caixinha mostra os vizinhos do valor digitado, que acompanham
+a digitação: quem escreve 7 numa chapa vê 5, 6,3, 8 e 9,5. "Achar o limite" responde ali mesmo, com os
+valores prontos para usar, e "Ver gráfico" abre o estudo da medida logo abaixo. A resposta só vale
+para os números que a geraram: mudou um dado, ela sai. A Desenhar seção sugere chapas comerciais no
+lado menor da chapa selecionada, porque ninguém compra chapa pela largura.
+
 No Equilíbrio de uma peça, as cotas da prancheta funcionam do mesmo jeito: mudar uma distância empurra
 tudo o que está depois dela, e a peça estica sem soltar nada.
+
+## Estudar uma medida
+
+`core/estudo_da_medida.py` não inverte fórmula: roda o próprio cálculo do caso em vários valores. Por
+isso vale para qualquer caso, e o número que ele acha é o que a tela mostraria com aquele valor.
+
+**A faixa que passa.** A resposta é uma faixa, e não só um mínimo: para uma espessura o limite é o
+menor valor, para uma carga é o maior, e há medidas com os dois lados. O estudo olha 41 valores de um
+oitavo a oito vezes o valor de agora, dentro dos limites do campo. Cada troca entre passa e não passa
+é fechada por bisseção, com tolerância de 0,01 %. A curva não precisa ser crescente, e dado que o caso
+recusa conta como não passa, com o motivo. Um trecho que passa e cabe inteiro entre dois valores da
+grade pode não aparecer.
+
+**Valores prontos.** O número limpo mais perto do limite, com 3 algarismos, conferido no cálculo antes
+de aparecer. Se o arredondamento mais próximo reprovar, ele vai para o lado que passa: 166,67 kN vira
+166 kN, e 4,80 mm continua 4,8 mm. O comercial é o primeiro valor da série que passa de verdade.
+
+**Recomendação não é critério.** Passar de uma recomendação não reprova, e por isso ela fica fora da
+curva dos 100 %. Ela vira a opção "Sem ressalvas". Num caso só de recomendações, são elas que separam.
+
+**A medida que manda.** O peso é a variação do aproveitamento governante para cada 1 % na medida,
+medida com ±10 %: peso −2 quer dizer que a medida entra ao quadrado no denominador, como a espessura
+na flexão de uma placa. O destaque em laranja no desenho sai só das cotas de geometria, porque carga e
+material costumam vir dados. O peso vale em volta dos números de agora: uma medida com peso zero é a
+que não governa hoje, e pode passar a governar se outra mudar.
+
+**Valores comerciais.** `core/medidas_comerciais.py` liga cada campo a uma série: chapas, parafusos
+ISO 261, assentos de rolamento ISO 15, arame EN 10270-1, módulos ISO 54, polias ISO 4183, correntes
+ISO 606, roscas ISO 2904, cilindros ISO 3320, chavetas ISO 773, cabos, cantoneiras e pernas de solda.
+Só tem série o que tem tabela de verdade por trás: um comprimento qualquer fica sem sugestão. As séries
+de mercado (chapas, barras, cabos, cantoneiras) variam por fornecedor, e quem confirma é a compra.
+
+As varreduras rodam em `so_a_conta()`, que dispensa o PNG das figuras. O número não muda, e um teste
+confere isso em todos os casos.
 
 ## Convenção de unidades
 

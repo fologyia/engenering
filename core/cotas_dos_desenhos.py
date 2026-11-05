@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.elementos_base import Campo, Caso, Coluna, Metrica
+from core.medidas_comerciais import Serie, serie_do_campo
 
 MARGEM_X = 34
 MARGEM_Y = 8
@@ -235,6 +236,18 @@ class CotaViva:
     maximo: float | None
     inteiro: bool
     passo: float | None = None
+    serie: Serie | None = None
+
+    @property
+    def identidade(self) -> str:
+        """Identifica a medida entre rodadas: o índice muda quando um campo aparece ou some."""
+        if isinstance(self.alvo, Celula):
+            return f"{self.alvo.campo}|{self.alvo.linha}|{self.alvo.coluna}"
+        return self.alvo
+
+    @property
+    def no_desenho(self) -> bool:
+        return bool(self.rotulo)
 
     def como_dicionario(self) -> dict[str, Any]:
         return {
@@ -247,6 +260,8 @@ class CotaViva:
             "maximo": self.maximo,
             "inteiro": self.inteiro,
             "passo": self.passo,
+            "serie": self.serie.nome if self.serie else "",
+            "comerciais": list(self.serie.valores) if self.serie else [],
         }
 
 
@@ -319,6 +334,7 @@ def _cota(
         origem.maximo,
         isinstance(origem.padrao, int) and not isinstance(origem.padrao, bool),
         getattr(origem, "passo", None),
+        serie_do_campo(caso.id, alvo),
     )
 
 
@@ -332,6 +348,32 @@ def cotas_do_caso(caso: Caso, valores: Mapping[str, Any]) -> list[CotaViva]:
             if cota is not None:
                 cotas.append(cota)
     return cotas
+
+
+def medidas_do_caso(caso: Caso, valores: Mapping[str, Any]) -> list[CotaViva]:
+    """As cotas do desenho e, depois delas, os outros números do caso que estão à vista."""
+    medidas = cotas_do_caso(caso, valores)
+    no_desenho = {cota.alvo for cota in medidas}
+    for campo in caso.campos:
+        numerico = isinstance(campo.padrao, (int, float)) and not isinstance(campo.padrao, bool)
+        if not numerico or campo.chave in no_desenho:
+            continue
+        medida = _cota(caso, len(medidas), "", campo.rotulo, campo.chave, valores)
+        if medida is not None:
+            medidas.append(medida)
+    return medidas
+
+
+def com_valor(valores: Mapping[str, Any], alvo: Alvo, valor: float) -> dict[str, Any]:
+    """Os mesmos dados com uma medida trocada. Os originais ficam como estavam."""
+    novos = dict(valores)
+    if isinstance(alvo, Celula):
+        linhas = [dict(linha) for linha in valores[alvo.campo]]
+        linhas[alvo.linha][alvo.coluna] = valor
+        novos[alvo.campo] = linhas
+    else:
+        novos[alvo] = valor
+    return novos
 
 
 def _texto_da_cota(cota: CotaViva) -> str:

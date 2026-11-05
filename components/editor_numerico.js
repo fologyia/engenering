@@ -142,19 +142,37 @@ function passoDoValor(valor, passo) {
   return 10 ** (Math.floor(Math.log10(Math.abs(valor) || 1)) - 1)
 }
 
+// Os valores da série em volta do número: `n` abaixo, ele mesmo se existir e `n` acima.
+function enVizinhos(serie, valor, n = 2) {
+  const abaixo = serie.filter((v) => v < valor - 1e-9).slice(-n)
+  const iguais = serie.filter((v) => Math.abs(v - valor) <= 1e-9)
+  const acima = serie.filter((v) => v > valor + 1e-9).slice(0, n)
+  return [...abaixo, ...iguais, ...acima]
+}
+
 // A caixinha. `d` descreve a medida: valor, unidade, nome, passo, aplicar(v, seguinte) e, se quiser,
 // semMudanca(seguinte). aplicar devolve o motivo quando não aceita, e vazio quando aceita.
+// Opcionais: `comerciais` e `serie` mostram os vizinhos que se compram; `acoes` são botões
+// ({ rotulo, titulo, ao }); `resposta` ({ texto, opcoes }) é o que o Python achou para esta medida.
 function criarEditorVivo(area, opcoes = {}) {
   const caixa = document.createElement("div")
   caixa.className = "editor"
   caixa.hidden = true
   caixa.innerHTML = `<div class="linha"><input type="text" aria-label="Novo valor"><span class="un"></span></div>
-    <div class="nome"></div><div class="dica">Vale conta e unidade: 300/2, 1,5 m, +10</div>`
+    <div class="nome"></div><div class="dica">Vale conta e unidade: 300/2, 1,5 m, +10</div>
+    <div class="serie" hidden><div class="titulo"></div><div class="fichas"></div></div>
+    <div class="acoes" hidden></div>
+    <div class="resposta" hidden><div class="texto" role="status"></div><div class="fichas"></div></div>`
   area.append(caixa)
   const entrada = caixa.querySelector("input")
   const unidade = caixa.querySelector(".un")
   const nome = caixa.querySelector(".nome")
+  const serie = caixa.querySelector(".serie")
+  const fichasDaSerie = serie.querySelector(".fichas")
+  const acoes = caixa.querySelector(".acoes")
+  const resposta = caixa.querySelector(".resposta")
   let atual = null
+  let alvoAtual = null
 
   function mostrarErro(texto) {
     nome.textContent = texto
@@ -163,22 +181,86 @@ function criarEditorVivo(area, opcoes = {}) {
   function fechar() {
     caixa.hidden = true
     atual = null
+    alvoAtual = null
     opcoes.aoFechar?.()
+  }
+  function ficha(valor, texto, titulo, marcada = false) {
+    const b = document.createElement("button")
+    b.type = "button"
+    b.className = marcada ? "ficha igual" : "ficha"
+    b.textContent = texto
+    b.title = titulo
+    b.addEventListener("click", () => {
+      entrada.value = enTexto(valor)
+      confirmar()
+    })
+    return b
+  }
+  // Acompanha o que se digita: quem escreve 7 numa chapa já vê o 6,3 e o 8.
+  function desenharFichas() {
+    const lista = atual?.comerciais ?? []
+    serie.hidden = !lista.length
+    if (!lista.length) return
+    const lido = lerValorDigitado(entrada.value, atual.valor, atual.unidade)
+    const base = lido.erro ? atual.valor : lido.valor
+    serie.querySelector(".titulo").textContent = atual.serie
+    fichasDaSerie.replaceChildren(
+      ...enVizinhos(lista, base).map((v) =>
+        ficha(v, enTexto(v), `Usar ${enTexto(v)} ${atual.unidade}`.trim(), Math.abs(v - base) <= 1e-9),
+      ),
+    )
+  }
+  function desenharAcoes(d) {
+    const lista = d.acoes ?? []
+    acoes.hidden = !lista.length
+    acoes.replaceChildren(
+      ...lista.map((a) => {
+        const b = document.createElement("button")
+        b.type = "button"
+        b.className = "acao"
+        b.textContent = a.rotulo
+        b.title = a.titulo ?? ""
+        b.addEventListener("click", () => a.ao(b))
+        return b
+      }),
+    )
+  }
+  function mostrarResposta(r) {
+    resposta.hidden = !r
+    if (r) {
+      resposta.querySelector(".texto").textContent = r.texto
+      resposta.querySelector(".fichas").replaceChildren(
+        ...(r.opcoes ?? []).map((o) => ficha(o.valor, o.texto, `${o.rotulo}: usar este valor`)),
+      )
+      acoes.querySelectorAll("button").forEach((b) => {
+        b.disabled = false
+      })
+    }
+    posicionar()
+  }
+  function posicionar() {
+    if (!alvoAtual) return
+    const m = area.getBoundingClientRect()
+    const r = alvoAtual.getBoundingClientRect()
+    const x = Math.min(Math.max(r.left - m.left - 8, 4), m.width - caixa.offsetWidth - 4)
+    const abaixo = r.bottom - m.top + 5
+    // No desenho de um caso a caixinha pode passar da moldura: subir cobriria a própria medida.
+    const cabeAbaixo = opcoes.saiDaArea || abaixo + caixa.offsetHeight <= m.height
+    const y = cabeAbaixo ? abaixo : r.top - m.top - caixa.offsetHeight - 5
+    caixa.style.left = `${x}px`
+    caixa.style.top = `${Math.max(y, 4)}px`
   }
   function abrir(alvo, d) {
     atual = d
+    alvoAtual = alvo
     entrada.value = enTexto(d.valor)
     unidade.textContent = d.unidade
     nome.textContent = d.nome
     nome.classList.remove("ruim")
+    desenharFichas()
+    desenharAcoes(d)
     caixa.hidden = false
-    const m = area.getBoundingClientRect()
-    const r = alvo.getBoundingClientRect()
-    const x = Math.min(Math.max(r.left - m.left - 8, 4), m.width - caixa.offsetWidth - 4)
-    const abaixo = r.bottom - m.top + 5
-    const y = abaixo + caixa.offsetHeight > m.height ? r.top - m.top - caixa.offsetHeight - 5 : abaixo
-    caixa.style.left = `${x}px`
-    caixa.style.top = `${Math.max(y, 4)}px`
+    mostrarResposta(d.resposta ?? null)
     entrada.focus()
     entrada.select()
   }
@@ -204,6 +286,12 @@ function criarEditorVivo(area, opcoes = {}) {
     fechar()
     return true
   }
+  entrada.addEventListener("input", desenharFichas)
+  // Sem isto, clicar numa ficha tira o foco do campo, e a saída do campo já confirmaria o texto.
+  caixa.addEventListener("mousedown", (ev) => {
+    if (ev.target.closest("button")) ev.preventDefault()
+  })
+  caixa.addEventListener("pointerdown", (ev) => ev.stopPropagation())
   entrada.addEventListener("keydown", (ev) => {
     ev.stopPropagation()
     if (ev.key === "Enter") {
@@ -222,6 +310,7 @@ function criarEditorVivo(area, opcoes = {}) {
       const sinal = ev.key === "ArrowUp" ? 1 : -1
       const passo = passoDoValor(lido.valor, atual.passo) * (ev.shiftKey ? 10 : 1)
       entrada.value = enTexto(lido.valor + sinal * passo)
+      desenharFichas()
     }
   })
   entrada.addEventListener("blur", () => {
@@ -231,5 +320,5 @@ function criarEditorVivo(area, opcoes = {}) {
       if (!confirmar()) fechar()
     }, 120)
   })
-  return { abrir, fechar, confirmar, aberto: () => atual !== null }
+  return { abrir, fechar, confirmar, mostrarResposta, aberto: () => atual !== null }
 }

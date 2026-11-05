@@ -6,6 +6,10 @@
   background: #fff;
   border: 1px solid var(--st-border-color);
   border-radius: 10px;
+}
+/* O recorte é só do desenho: a caixinha pode passar da moldura. */
+.desenho {
+  border-radius: 10px;
   overflow: hidden;
 }
 .desenho svg {
@@ -24,6 +28,16 @@
 .pilula:focus {
   fill: #cfe3f7;
   outline: none;
+}
+/* A medida que mais pesa: traço mais grosso além da cor, para não depender só dela. */
+.pilula.manda {
+  fill: #ffedd5;
+  stroke: #c2410c;
+  stroke-width: 1.3;
+}
+.pilula.manda:hover,
+.pilula.manda:focus {
+  fill: #fed7aa;
 }
 .pilula.aberta {
   fill: #fff3d6;

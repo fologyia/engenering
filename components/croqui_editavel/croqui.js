@@ -1,6 +1,7 @@
 // Desenho do caso com as medidas vivas: clica na medida, digita e confirma, ali mesmo.
 // O Python monta o desenho e guarda os valores. A caixinha é a de editor_numerico.js, e o número
 // digitado vai para lá. Enter confirma, Esc desiste e Tab vai para a medida seguinte.
+// Achar o limite é conta do Python: o pedido vai, e a resposta volta para a caixinha aberta.
 
 const ESTADOS = new WeakMap()
 const SVG_NS = "http://www.w3.org/2000/svg"
@@ -43,12 +44,36 @@ function desencontrar(caixas, q) {
   return caixas
 }
 
+// O estudo fica depois das duas colunas, e pode estar longe da tela. Espera o painel abrir aqui, e não
+// na volta do Python: os dados do desenho não mudam com este clique, e o componente nem seria chamado.
+function rolarAteOEstudo(tentativas = 30) {
+  const alvo = document.querySelector(".st-key-assistente_estudo_aberto")
+  if (!alvo?.querySelector("details[open]")) {
+    if (tentativas > 0) setTimeout(() => rolarAteOEstudo(tentativas - 1), 100)
+    return
+  }
+  const pagina = alvo.closest('[data-testid="stMain"]')
+  // A folga é o cabeçalho fixo da página, que cobriria o título do painel.
+  pagina?.scrollTo({ top: pagina.scrollTop + alvo.getBoundingClientRect().top - 70, behavior: "smooth" })
+}
+
 function criar(raiz) {
   const moldura = raiz.querySelector(".moldura")
   const desenho = raiz.querySelector(".desenho")
 
-  const e = { enviar: null, svg: null, cotas: [], aberta: null, proxima: null, n: 0 }
+  const e = {
+    enviar: null,
+    svg: null,
+    cotas: [],
+    aberta: null,
+    proxima: null,
+    n: 0,
+    estudavel: false,
+    estudo: null,
+    manda: null,
+  }
   const editor = criarEditorVivo(moldura, {
+    saiDaArea: true,
     aoFechar() {
       desenho.querySelector(".aberta")?.classList.remove("aberta")
       e.aberta = null
@@ -109,6 +134,41 @@ function criar(raiz) {
     return desenho.querySelector(`rect[data-cota="${indice}"]`)
   }
 
+  function destacar() {
+    desenho.querySelector("rect.manda")?.classList.remove("manda")
+    if (e.manda !== null) pilula(e.manda)?.classList.add("manda")
+  }
+
+  function pedir(acao, indice) {
+    e.n += 1
+    e.enviar?.("edicao", { acao, indice, n: e.n })
+  }
+
+  function acoesDe(indice) {
+    if (!e.estudavel) return []
+    return [
+      {
+        rotulo: "Achar o limite",
+        titulo: "Procura o menor e o maior valor que passam",
+        ao(botao) {
+          // A resposta destes mesmos números já está à vista: um novo pedido não mudaria nada.
+          if (e.estudo?.indice === indice) return
+          botao.disabled = true
+          pedir("limite", indice)
+        },
+      },
+      {
+        rotulo: "Ver gráfico",
+        titulo: "Abre o estudo desta medida, com o gráfico, logo abaixo da página",
+        ao() {
+          editor.fechar()
+          pedir("grafico", indice)
+          rolarAteOEstudo()
+        },
+      },
+    ]
+  }
+
   function motivo(c, v) {
     if (c.minimo !== null && v < c.minimo) return `O mínimo é ${enTexto(c.minimo)} ${c.unidade}`
     if (c.maximo !== null && v > c.maximo) return `O máximo é ${enTexto(c.maximo)} ${c.unidade}`
@@ -128,6 +188,10 @@ function criar(raiz) {
       unidade: c.unidade,
       nome: c.nome,
       passo: c.passo,
+      comerciais: c.comerciais,
+      serie: c.serie,
+      acoes: acoesDe(indice),
+      resposta: e.estudo?.indice === indice ? e.estudo : null,
       semMudanca(seguinte) {
         if (seguinte !== null) abrir(seguinte)
       },
@@ -166,12 +230,17 @@ function criar(raiz) {
 
   e.receber = (dados) => {
     e.cotas = dados.cotas ?? []
+    e.estudavel = Boolean(dados.estudavel)
+    e.manda = dados.manda ?? null
+    e.estudo = dados.estudo ?? null
     if (dados.svg !== e.svg) {
       editor.fechar()
       e.svg = dados.svg
       desenho.innerHTML = dados.svg ?? ""
       marcar()
     }
+    destacar()
+    if (e.estudo && e.estudo.indice === e.aberta) editor.mostrarResposta(e.estudo)
     if (e.proxima !== null) {
       const indice = e.proxima
       e.proxima = null

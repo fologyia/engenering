@@ -26,6 +26,7 @@ from core.desenho_estatica import figura_de_tensoes
 from core.elementos_base import dados_do_registro
 from core.elementos_vigas import CATALOGO
 from core.elementos_word import gerar_word_do_caso
+from core.medidas_comerciais import CHAPAS
 from core.project_store import obter_projeto_ativo
 
 PARTES = "secao_partes"
@@ -590,6 +591,7 @@ def tela() -> None:
                 "versao": st.session_state[VERSAO],
                 "ajustar": st.session_state[AJUSTE],
                 "marcas": _marcas(analise),
+                "chapas": list(CHAPAS.valores),
             },
             key=CHAVE_PRANCHETA,
             ao_editar=_ao_editar_na_prancheta,
