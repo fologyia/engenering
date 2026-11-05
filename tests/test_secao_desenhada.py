@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -19,7 +20,7 @@ from core.desenho_estatica import figura_das_partes, figura_de_tensoes
 from core.elementos_word import gerar_word_do_caso
 
 R, C, P = sd.RET, sd.CIRC, sd.POLI
-APP = "app.py"
+APP = str(Path(__file__).resolve().parent.parent / "app.py")
 PAGINA = "app_pages/desenhar_secao.py"
 
 
