@@ -79,6 +79,7 @@ files = [
     "core/column_design.py",
     "core/criterio_anglo.py",
     "core/desenho_estatica.py",
+    "core/cotas_dos_desenhos.py",
     "core/elementos_barras.py",
     "core/elementos_base.py",
     "core/elementos_catalogo.py",

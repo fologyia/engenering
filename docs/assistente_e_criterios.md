@@ -5,6 +5,18 @@ para converter carregamentos em tensões e avaliar materiais. Os casos de
 transmissão, eixos, mancais, içamento, molas, freios e hidráulica estão em
 [`elementos_de_maquinas.md`](elementos_de_maquinas.md).
 
+## Medidas no desenho
+
+O desenho de cada caso mostra os valores no lugar das letras, e a medida se edita ali mesmo: clique,
+digite, Enter confirma e Tab vai para a próxima. `core/cotas_dos_desenhos.py` diz qual letra de cada
+desenho é qual campo; letra que é resultado do cálculo fica de fora. Um teste exige que toda letra do
+mapa exista no desenho e que todo campo exista no caso. O campo que está no desenho sai da lista e fica
+em "Medidas do desenho em lista", recolhida. Campo escondido por uma escolha continua só como letra.
+As caixinhas se afastam sozinhas quando se encostam, porque o tamanho depende do número digitado.
+
+No Equilíbrio de uma peça, as cotas da prancheta funcionam do mesmo jeito: mudar uma distância empurra
+tudo o que está depois dela, e a peça estica sem soltar nada.
+
 ## Convenção de unidades
 
 O núcleo trabalha com forças em N e dimensões em mm. Assim, as tensões

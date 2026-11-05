@@ -34,6 +34,7 @@ MODELO = "eq_modelo"
 COMPRIMENTO = "eq_comprimento"
 FORCA = "eq_forca"
 UNIDADES_ATUAIS = "eq_unidades_atuais"
+MODELO_ATUAL = "eq_modelo_atual"
 REVISAO = "eq_tabela_rev"
 BASES = "eq_tabela_base"
 ERRO_TABELA = "eq_erro_tabela"
@@ -73,19 +74,17 @@ def _iniciar() -> None:
     estado[AJUSTE] = 0
     estado[REVISAO] = 0
     estado[ERRO_TABELA] = ""
-    estado[MODELO] = MODELO_INICIAL.nome
-    estado[COMPRIMENTO] = MODELO_INICIAL.comprimento
-    estado[FORCA] = MODELO_INICIAL.forca
+    estado[MODELO_ATUAL] = MODELO_INICIAL.nome
     estado[UNIDADES_ATUAIS] = (MODELO_INICIAL.comprimento, MODELO_INICIAL.forca)
     _trocar_dados(MODELO_INICIAL.dados(), ajustar=True)
 
 
 def _aplicar_modelo() -> None:
-    modelo = POR_NOME.get(st.session_state.get(MODELO) or "")
+    nome = st.session_state.get(MODELO)
+    st.session_state[MODELO_ATUAL] = nome
+    modelo = POR_NOME.get(nome or "")
     if modelo is None:
         return
-    st.session_state[COMPRIMENTO] = modelo.comprimento
-    st.session_state[FORCA] = modelo.forca
     st.session_state[UNIDADES_ATUAIS] = (modelo.comprimento, modelo.forca)
     st.session_state[ERRO_TABELA] = ""
     _trocar_dados(modelo.dados(), ajustar=True)
@@ -107,7 +106,7 @@ def _ao_editar_na_prancheta() -> None:
     if any(not isinstance(dados.get(nome), list) for nome, _ in TABELAS):
         return
     # O modelo deixa de mandar: a escolha na lista já não descreve o desenho.
-    st.session_state[MODELO] = None
+    st.session_state[MODELO_ATUAL] = None
     st.session_state[ERRO_TABELA] = ""
     _trocar_dados(dados, versao=int(evento.get("versao", 0)))
 
@@ -130,17 +129,22 @@ def _ao_editar_tabela(caso: Caso, nome: str) -> None:
         return
     dados = dict(estado[DADOS])
     dados[nome] = eq.nomear(nome, conferidas)
-    estado[MODELO] = None
+    estado[MODELO_ATUAL] = None
     _trocar_dados(dados, tabela=False)
 
 
 def _limpar() -> None:
-    st.session_state[MODELO] = None
+    st.session_state[MODELO_ATUAL] = None
     st.session_state[ERRO_TABELA] = ""
     _trocar_dados({nome: [] for nome, _ in TABELAS}, ajustar=True)
 
 
 def _cabecalho() -> None:
+    # O Streamlit apaga o estado do seletor que não foi desenhado: ao voltar de outro caso, a
+    # unidade cairia em mm e N sem converter a peça. Quem manda são as chaves atuais.
+    estado = st.session_state
+    estado[COMPRIMENTO], estado[FORCA] = estado[UNIDADES_ATUAIS]
+    estado[MODELO] = estado[MODELO_ATUAL]
     colunas = st.columns([4, 1, 1, 1], vertical_alignment="bottom")
     colunas[0].selectbox(
         "Começar de um modelo",
@@ -186,9 +190,13 @@ def _tabelas(caso: Caso) -> None:
             campo = next(c for c in caso.campos if c.chave == nome)
             st.markdown(f"**{titulo}**")
             st.caption(campo.ajuda)
+            chave = f"eq_tabela_{nome}_{st.session_state[REVISAO]}"
+            if chave not in st.session_state:
+                # Voltando de outro caso: a edição guardada no editor se perdeu, os dados não.
+                st.session_state[BASES][nome] = [dict(x) for x in st.session_state[DADOS][nome]]
             st.data_editor(
                 quadro_da_tabela(campo, st.session_state[BASES][nome]),
-                key=f"eq_tabela_{nome}_{st.session_state[REVISAO]}",
+                key=chave,
                 num_rows="dynamic",
                 hide_index=True,
                 width="stretch",

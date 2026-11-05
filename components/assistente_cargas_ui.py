@@ -11,6 +11,7 @@ mudou um número, o desenho e o resultado mudam do lado.
 from __future__ import annotations
 
 import math
+from functools import partial
 from typing import Any
 
 import altair as alt
@@ -18,6 +19,7 @@ import pandas as pd
 import streamlit as st
 
 from components import load_models as modelos_de_secao
+from components.croqui_editavel_ui import croqui_editavel
 from components.elementos_croquis import CROQUIS, svg_do_croqui
 from components.project_tools import (
     botao_registrar_calculo,
@@ -26,6 +28,7 @@ from components.project_tools import (
 )
 from components.robustez import secao_protegida
 from components.ui import fronteira_modelo
+from core import cotas_dos_desenhos as cd
 from core import elementos_catalogo as cat
 from core import load_to_stress as cargas
 from core import material_catalog as mat
@@ -302,16 +305,100 @@ def barra_de_navegacao(caso: Caso) -> None:
 
 
 def _desenho_do_caso(caso: Caso, resultado: Resultado | None) -> None:
-    """O desenho feito com os números do cálculo, ou o croqui fixo quando o caso não tem um."""
+    """O desenho feito com os números do cálculo. O croqui fica nos dados, com as medidas."""
     if resultado is not None and resultado.figuras:
         figura = resultado.figuras[0]
         st.image(figura.png, caption=figura.legenda, width="stretch")
-    else:
-        svg = _croqui(caso)
-        if svg:
-            st.image(svg, width="stretch")
     if caso.formula:
         st.latex(caso.formula)
+
+
+# ---------------------------------------------------------------------------
+# Medidas no desenho
+# ---------------------------------------------------------------------------
+
+
+def _valores_da_sessao(caso: Caso) -> dict[str, Any]:
+    """O que vale agora, antes de os campos serem desenhados. Tabela: as últimas linhas."""
+    valores: dict[str, Any] = caso.padroes()
+    for campo in caso.campos:
+        chave = chave_do_campo(caso.id, campo.chave)
+        if campo.e_tabela:
+            valores[campo.chave] = st.session_state.get(f"{chave}::ultimas", campo.padrao)
+        elif chave in st.session_state:
+            valores[campo.chave] = st.session_state[chave]
+    return valores
+
+
+def _gravar_na_tabela(caso: Caso, alvo: cd.Celula, valor: float) -> None:
+    """A tabela renasce das linhas novas: a edição dela vale sobre uma base que ficou parada."""
+    campo = next(c for c in caso.campos if c.chave == alvo.campo)
+    chave = chave_do_campo(caso.id, alvo.campo)
+    linhas = [dict(linha) for linha in st.session_state.get(f"{chave}::ultimas", campo.padrao)]
+    linhas[alvo.linha][alvo.coluna] = valor
+    st.session_state[f"{chave}::ultimas"] = linhas
+    st.session_state.pop(chave, None)
+    st.session_state.pop(f"{chave}::base", None)
+
+
+def _ao_editar_cota(caso: Caso, chave_do_desenho: str) -> None:
+    evento = getattr(st.session_state.get(chave_do_desenho), "edicao", None)
+    if not evento:
+        return
+    cotas = cd.cotas_do_caso(caso, _valores_da_sessao(caso))
+    indice = int(evento.get("indice", -1))
+    if not 0 <= indice < len(cotas):
+        return
+    cota = cotas[indice]
+    valor, motivo = cd.valor_aceito(cota, evento.get("valor"))
+    st.session_state[f"{chave_do_desenho}::aviso"] = motivo
+    if valor is None:
+        return
+    if isinstance(cota.alvo, cd.Celula):
+        _gravar_na_tabela(caso, cota.alvo, valor)
+    else:
+        st.session_state[chave_do_campo(caso.id, cota.alvo)] = valor
+
+
+def _voltar_ao_exemplo(caso: Caso) -> None:
+    for campo in caso.campos:
+        chave = chave_do_campo(caso.id, campo.chave)
+        for nome in (chave, f"{chave}::base", f"{chave}::ultimas"):
+            st.session_state.pop(nome, None)
+    st.session_state.pop(f"assistente_material::{caso.id}", None)
+
+
+def _desenho_com_medidas(caso: Caso) -> frozenset[str]:
+    """Desenha o caso e diz quais campos já estão nele, para a lista ficar mais curta."""
+    svg = _croqui(caso)
+    chave = f"assistente_croqui::{caso.id}"
+    cotas = cd.cotas_do_caso(caso, _valores_da_sessao(caso))
+    if svg and cotas:
+        croqui_editavel(
+            {
+                "svg": cd.desenho_com_cotas(svg, cotas),
+                "cotas": [cota.como_dicionario() for cota in cotas],
+            },
+            key=chave,
+            ao_editar=partial(_ao_editar_cota, caso, chave),
+        )
+    elif svg:
+        st.image(svg, width="stretch")
+    aviso = st.session_state.get(f"{chave}::aviso")
+    if aviso:
+        st.warning(aviso, icon=":material/warning:")
+    with st.container(horizontal=True, vertical_alignment="center"):
+        if cotas:
+            st.caption("Clique numa medida para mudar. Enter confirma e Tab vai para a próxima.")
+        st.button(
+            "Voltar ao exemplo",
+            key=f"assistente_exemplo::{caso.id}",
+            icon=":material/restart_alt:",
+            on_click=_voltar_ao_exemplo,
+            args=(caso,),
+            help="Volta todos os dados deste caso aos números do exemplo.",
+        )
+    return frozenset(c.alvo for c in cotas if isinstance(c.alvo, str))
 
 
 # ---------------------------------------------------------------------------
@@ -451,14 +538,36 @@ def _tabela(caso: Caso, campo: Campo) -> list[dict[str, Any]]:
     return registros
 
 
-def formulario(caso: Caso) -> dict[str, Any]:
-    """Os campos por seção, em duas colunas. Tabela ocupa a largura toda. Escondido fica no padrão."""
+def _lista_de_medidas(caso: Caso, no_desenho: frozenset[str], valores: dict[str, Any]) -> None:
+    """As medidas do desenho também em campos, para quem prefere uma lista."""
+    with st.expander("Medidas do desenho em lista", icon=":material/format_list_numbered:"):
+        colunas: Any = None
+        posicao = 0
+        for campo in caso.campos:
+            if campo.chave not in no_desenho:
+                continue
+            if colunas is None or posicao % 2 == 0:
+                colunas = st.columns(2)
+            with colunas[posicao % 2]:
+                valores[campo.chave] = _widget(caso, campo)
+            posicao += 1
+
+
+def formulario(caso: Caso, no_desenho: frozenset[str] = frozenset()) -> dict[str, Any]:
+    """Os campos por seção, em duas colunas. Tabela ocupa a largura toda. Escondido fica no padrão.
+
+    O que já está no desenho sai das seções e vai para uma lista recolhida, depois delas.
+    """
     _seletor_de_material(caso)
-    valores: dict[str, Any] = caso.padroes()
+    # Da sessão: um campo pode depender de outro que agora é desenhado mais adiante.
+    valores: dict[str, Any] = _valores_da_sessao(caso)
     secoes: dict[str, list[Campo]] = {}
     for campo in caso.campos:
-        secoes.setdefault(campo.secao, []).append(campo)
+        if campo.chave not in no_desenho:
+            secoes.setdefault(campo.secao, []).append(campo)
     for secao, campos in secoes.items():
+        if not any(campo.visivel(valores) for campo in campos):
+            continue
         with st.container(border=True):
             if secao and not (len(campos) == 1 and campos[0].rotulo == secao):
                 st.markdown(f"**{secao}**")
@@ -476,6 +585,8 @@ def formulario(caso: Caso) -> dict[str, Any]:
                 with colunas[posicao % 2]:
                     valores[campo.chave] = _widget(caso, campo)
                 posicao += 1
+    if no_desenho:
+        _lista_de_medidas(caso, no_desenho, valores)
     return valores
 
 
@@ -512,6 +623,14 @@ def _faixa_de_status(resultado: Resultado) -> None:
         st.info(texto, icon=":material/info:")
 
 
+def _celula(valor: float | None, sufixo: str = "", *, casas: int | None = None) -> str:
+    if valor is None or math.isnan(valor):
+        return "—"
+    if math.isinf(valor):
+        return "∞"
+    return f"{cd.numero(round(valor, casas) if casas is not None else valor)}{sufixo}"
+
+
 def _tabela_de_verificacoes(resultado: Resultado) -> None:
     if not resultado.verificacoes:
         return
@@ -519,15 +638,13 @@ def _tabela_de_verificacoes(resultado: Resultado) -> None:
     linhas = tabela_verificacoes(ordenar_por_severidade(resultado.verificacoes))
     for linha in linhas:
         linha["Fórmula"] = mv.decimal_ptbr(linha["Fórmula"])
-    # O formato fica no Styler: é ele que troca a célula vazia por um traço, em vez de "None".
-    quadro = pd.DataFrame(linhas).astype(
-        {"Solicitante": "float64", "Resistente": "float64", "Aproveitamento": "float64"}
-    )
+    # Texto, e não número: célula numérica vazia aparece como "None", e nem o Styler muda isso.
+    for linha in linhas:
+        linha["Solicitante"] = _celula(linha["Solicitante"])
+        linha["Resistente"] = _celula(linha["Resistente"])
+        linha["Aproveitamento"] = _celula(linha["Aproveitamento"], " %", casas=0)
     st.dataframe(
-        quadro.style.format(
-            {"Solicitante": "{:.4g}", "Resistente": "{:.4g}", "Aproveitamento": "{:.0f} %"},
-            na_rep="—",
-        ),
+        pd.DataFrame(linhas),
         hide_index=True,
         width="stretch",
         column_config={"Resistente": "Limite"},
@@ -760,6 +877,9 @@ def _word(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None:
 def _tabela_de_resultado(tabela: Any) -> None:
     st.markdown(f"**{tabela.titulo}**")
     quadro = pd.DataFrame(list(tabela.linhas))
+    for coluna in quadro.select_dtypes("number").columns:
+        if quadro[coluna].isna().any():  # vazia em coluna numérica apareceria como "None"
+            quadro[coluna] = quadro[coluna].map(_celula)
     st.dataframe(
         quadro,
         hide_index=True,
@@ -838,7 +958,8 @@ def tela_do_caso(caso: Caso) -> None:
     esquerda, direita = st.columns(2, gap="large")
     with esquerda:
         st.markdown("##### Dados")
-        valores = formulario(caso)
+        no_desenho = _desenho_com_medidas(caso)
+        valores = formulario(caso, no_desenho)
     resultado: Resultado | None = None
     erro = ""
     try:

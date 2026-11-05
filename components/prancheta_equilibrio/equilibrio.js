@@ -29,7 +29,7 @@ const GRADES = {
   m: [0.01, 0.05, 0.1, 0.25, 0.5, 1],
 }
 const DICA = {
-  mover: "Arraste apoios e cargas. Alça laranja muda a ponta ou a direção. Ctrl + rodinha aproxima.",
+  mover: "Clique numa medida ou num valor para mudar. Arraste apoios e cargas. Ctrl + rodinha aproxima.",
   trecho: "Clique em cada ponto da peça. Duplo clique ou Enter termina.",
   [PINO]: "Clique na peça: o pino segura as duas direções e deixa girar.",
   [ROLETE]: "Clique na peça: o rolete segura uma direção, para os dois lados.",
@@ -79,6 +79,11 @@ function criar(raiz) {
   const infoXY = raiz.querySelector('[data-i="xy"]')
   const infoDica = raiz.querySelector('[data-i="dica"]')
   const seletorGrade = raiz.querySelector('[data-c="grade"]')
+  const area = raiz.querySelector(".area")
+  const editor = raiz.querySelector(".editor")
+  const entradaViva = raiz.querySelector(".editor input")
+  const unidadeViva = raiz.querySelector(".editor .un")
+  const nomeVivo = raiz.querySelector(".editor .nome")
 
   const e = {
     enviar: null,
@@ -100,6 +105,8 @@ function criar(raiz) {
     futuro: [],
     ultimo: {},
     focar: false,
+    cotasVivas: [],
+    edicao: null,
   }
 
   const tela = () => {
@@ -591,6 +598,140 @@ function criar(raiz) {
     }
   }
 
+  // ---- medidas e valores editados no próprio desenho
+  // Mudar uma distância empurra tudo o que está depois dela: a peça estica, nada se solta.
+  function esticar(eixo, limite, delta) {
+    const [a, b, p, q] = eixo === "x" ? ["x1", "x2", "x", "x2"] : ["y1", "y2", "y", "y2"]
+    const mexe = (o, k) => {
+      if (o[k] !== null && o[k] !== undefined && o[k] >= limite - 1e-9) o[k] = arred(o[k] + delta)
+    }
+    for (const t of e.dados.trechos) {
+      mexe(t, a)
+      mexe(t, b)
+    }
+    for (const nome of ["apoios", "cargas", "cortes"]) {
+      for (const v of e.dados[nome]) {
+        mexe(v, p)
+        if (q in v) mexe(v, q)
+      }
+    }
+    for (const c of e.dados.cortes) {
+      const t = trechoEm(c.x, c.y)
+      if (t) c.angulo = arred(anguloDoTrecho(t))
+    }
+  }
+  function descreverEdicao(tipo, k) {
+    if (tipo === "cota") {
+      const c = e.cotasVivas[k]
+      const atual = c.b - c.a
+      return {
+        valor: atual,
+        unidade: e.u.c,
+        reenquadrar: true,
+        nome: c.eixo === "x" ? "Distância na horizontal" : "Distância na vertical",
+        aplicar(v) {
+          if (v <= 0) return "A distância precisa ser maior que zero."
+          guardar()
+          esticar(c.eixo, c.b, v - atual)
+          return ""
+        },
+      }
+    }
+    if (tipo === "trecho") {
+      const t = e.dados.trechos[k]
+      const l = Math.hypot(t.x2 - t.x1, t.y2 - t.y1)
+      return {
+        valor: l,
+        unidade: e.u.c,
+        reenquadrar: true,
+        nome: "Comprimento do trecho",
+        aplicar(v) {
+          if (v <= 0) return "O comprimento precisa ser maior que zero."
+          guardar()
+          const [cx, cy] = [(t.x2 - t.x1) / l, (t.y2 - t.y1) / l]
+          arrastarPonta(t.x2, t.y2, arred(t.x1 + v * cx), arred(t.y1 + v * cy))
+          return ""
+        },
+      }
+    }
+    const c = e.dados.cargas[k]
+    const unidade = { [FORCA]: e.u.f, [MOMENTO]: e.u.m, [DISTRIBUIDA]: e.u.q, [PESO]: "kg" }[c.tipo]
+    const momento = c.tipo === MOMENTO
+    return {
+      valor: momento ? Math.abs(c.valor) : c.valor,
+      unidade,
+      nome: `${c.nome}: ${c.tipo === PESO ? "massa" : c.tipo.toLowerCase()}`,
+      aplicar(v) {
+        if (c.tipo === PESO && v < 0) return "A massa não pode ser negativa."
+        guardar()
+        if (c.tipo === DISTRIBUIDA && c.valor2 === c.valor) c.valor2 = v
+        c.valor = momento && v >= 0 && c.valor < 0 ? -v : v
+        e.ultimo[c.tipo] = v
+        return ""
+      },
+    }
+  }
+  function abrirEdicao(el) {
+    const [tipo, indice] = el.dataset.editar.split(":")
+    const d = descreverEdicao(tipo, Number(indice))
+    e.edicao = d
+    entradaViva.value = texto(d.valor)
+    unidadeViva.textContent = d.unidade
+    nomeVivo.textContent = d.nome
+    nomeVivo.classList.remove("ruim")
+    editor.hidden = false
+    const m = area.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    const x = Math.min(Math.max(r.left - m.left - 8, 4), m.width - editor.offsetWidth - 4)
+    const abaixo = r.bottom - m.top + 5
+    const y = abaixo + editor.offsetHeight > m.height ? r.top - m.top - editor.offsetHeight - 5 : abaixo
+    editor.style.left = `${x}px`
+    editor.style.top = `${Math.max(y, 4)}px`
+    entradaViva.focus()
+    entradaViva.select()
+  }
+  function fecharEdicao() {
+    editor.hidden = true
+    e.edicao = null
+  }
+  function confirmarEdicao() {
+    const d = e.edicao
+    if (!d) return
+    const v = lerNumero(entradaViva.value)
+    if (!Number.isFinite(v) || entradaViva.value.trim() === "") {
+      nomeVivo.textContent = "Digite um número."
+      nomeVivo.classList.add("ruim")
+      return
+    }
+    if (arred(v) === arred(d.valor)) {
+      fecharEdicao()
+      return
+    }
+    const erro = d.aplicar(v)
+    if (erro) {
+      nomeVivo.textContent = erro
+      nomeVivo.classList.add("ruim")
+      return
+    }
+    fecharEdicao()
+    if (d.reenquadrar) ajustarVista() // a peça mudou de tamanho e pode ter saído da tela
+    enviar()
+  }
+  entradaViva.addEventListener("keydown", (ev) => {
+    ev.stopPropagation()
+    if (ev.key === "Enter") {
+      ev.preventDefault()
+      confirmarEdicao()
+    } else if (ev.key === "Escape") {
+      ev.preventDefault()
+      fecharEdicao()
+    }
+  })
+  entradaViva.addEventListener("blur", () => {
+    if (e.edicao) confirmarEdicao()
+    if (e.edicao) fecharEdicao()
+  })
+
   // ---- vista
   function aproximar(fator, x, y) {
     const esc = Math.min(Math.max(e.vista.esc * fator, 0.001), 20000)
@@ -686,7 +827,7 @@ function criar(raiz) {
       <g transform="translate(${fim[0]} ${fim[1]}) rotate(${giro})"><polygon class="ap-c" points="0,0 -10,16 10,16"/></g>
       <circle class="ap-c" cx="${p[0]}" cy="${p[1]}" r="4"/>`
   }
-  function desenhoDaDistribuida(c, marcado) {
+  function desenhoDaDistribuida(c, marcado, i) {
     const [ux, uy] = direcao(c.angulo)
     const maior = Math.max(Math.abs(c.valor), Math.abs(c.valor2 ?? c.valor), 1e-12)
     const topo = []
@@ -706,15 +847,15 @@ function criar(raiz) {
     const meio = topo[Math.floor(topo.length / 2)]
     const fim = c.valor2 ?? c.valor
     const rotulo = fim === c.valor ? `${c.nome} = ${texto(c.valor)} ${e.u.q}` : `${c.nome} = ${texto(c.valor)} a ${texto(fim)} ${e.u.q}`
-    s += `<text class="carga-t" x="${meio[0] - ux * 14}" y="${meio[1] + uy * 14 + 4}" text-anchor="middle">${rotulo}</text>`
+    s += `<text class="carga-t editavel" data-editar="carga:${i}" x="${meio[0] - ux * 14}" y="${meio[1] + uy * 14 + 4}" text-anchor="middle">${rotulo}</text>`
     return s
   }
-  function desenhoDaCarga(c, marcado) {
+  function desenhoDaCarga(c, marcado, i) {
     const p = px(c.x, c.y)
     const cls = marcado ? "carga sel" : "carga"
-    if (c.tipo === DISTRIBUIDA) return desenhoDaDistribuida(c, marcado)
+    if (c.tipo === DISTRIBUIDA) return desenhoDaDistribuida(c, marcado, i)
     if (c.tipo === MOMENTO) {
-      return `${arco(p, c.valor, cls)}<text class="carga-t" x="${p[0]}" y="${p[1] - 30}" text-anchor="middle">${c.nome} = ${texto(Math.abs(c.valor))} ${e.u.m}</text>`
+      return `${arco(p, c.valor, cls)}<text class="carga-t editavel" data-editar="carga:${i}" x="${p[0]}" y="${p[1] - 30}" text-anchor="middle">${c.nome} = ${texto(Math.abs(c.valor))} ${e.u.m}</text>`
     }
     const [ux, uy] = c.tipo === PESO ? [0, -1] : direcao(c.angulo)
     const sinal = c.tipo === FORCA && c.valor < 0 ? -1 : 1
@@ -723,7 +864,7 @@ function criar(raiz) {
     const extra = c.tipo === PESO ? `<circle class="carga-g" cx="${p[0]}" cy="${p[1]}" r="5"/>` : ""
     const folga = 8 + 38 * Math.abs(ux) // texto largo na seta deitada
     const [tx, ty] = [cauda[0] - sinal * ux * folga, cauda[1] + sinal * uy * 8 + (uy < 0 ? -4 : 12)]
-    return `${seta(cauda, p, cls)}${extra}<text class="carga-t" x="${tx}" y="${ty}" text-anchor="middle">${c.nome} = ${texto(c.valor)} ${un}</text>`
+    return `${seta(cauda, p, cls)}${extra}<text class="carga-t editavel" data-editar="carga:${i}" x="${tx}" y="${ty}" text-anchor="middle">${c.nome} = ${texto(c.valor)} ${un}</text>`
   }
   function desenhoDaReacao(r) {
     const p = px(r.x, r.y)
@@ -744,28 +885,66 @@ function criar(raiz) {
     }
     return s
   }
+  function distintos(lista) {
+    return [...new Set(lista.map(arred))].sort((a, b) => a - b)
+  }
+  function valoresDoEixo(p, q, a, b) {
+    const lista = []
+    for (const v of e.dados.apoios) {
+      lista.push(v[p])
+      if (temPonta(v) && v[q] !== null && v[q] !== undefined) lista.push(v[q])
+    }
+    for (const c of e.dados.cargas) {
+      lista.push(c[p])
+      if (c.tipo === DISTRIBUIDA) lista.push(c[q])
+    }
+    for (const t of e.dados.trechos) lista.push(t[a], t[b])
+    return distintos(lista)
+  }
   function cotas() {
-    const xs = new Set()
+    e.cotasVivas = []
     const pts = pontosDoDesenho()
     if (pts.length < 2) return ""
-    for (const a of e.dados.apoios) xs.add(arred(a.x))
-    for (const c of e.dados.cargas) {
-      xs.add(arred(c.x))
-      if (c.tipo === DISTRIBUIDA) xs.add(arred(c.x2))
-    }
-    for (const t of e.dados.trechos) xs.add(arred(t.x1)).add(arred(t.x2))
-    const lista = [...xs].sort((a, b) => a - b)
-    const base = Math.min(...pts.map((p) => p[1]))
-    const yy = px(0, base)[1] + 72
     let s = ""
-    for (let i = 1; i < lista.length; i += 1) {
-      const a = px(lista[i - 1], 0)[0]
-      const b = px(lista[i], 0)[0]
+    const nova = (eixo, a, b) => {
+      e.cotasVivas.push({ eixo, a, b })
+      return e.cotasVivas.length - 1
+    }
+    const xs = valoresDoEixo("x", "x2", "x1", "x2")
+    const yy = px(0, Math.min(...pts.map((p) => p[1])))[1] + 72
+    for (let i = 1; i < xs.length; i += 1) {
+      const a = px(xs[i - 1], 0)[0]
+      const b = px(xs[i], 0)[0]
       if (b - a < 2) continue
       s += `<line class="cota" x1="${a}" y1="${yy}" x2="${b}" y2="${yy}"/><line class="cota" x1="${a}" y1="${yy - 4}" x2="${a}" y2="${yy + 4}"/><line class="cota" x1="${b}" y1="${yy - 4}" x2="${b}" y2="${yy + 4}"/>`
-      if (b - a > 34) s += `<text class="cota-t" x="${(a + b) / 2}" y="${yy + 15}" text-anchor="middle">${texto(lista[i] - lista[i - 1])}</text>`
+      if (b - a > 30) {
+        const k = nova("x", xs[i - 1], xs[i])
+        s += `<text class="cota-t editavel" data-editar="cota:${k}" x="${(a + b) / 2}" y="${yy + 15}" text-anchor="middle">${texto(xs[i] - xs[i - 1])}</text>`
+      }
+    }
+    const ys = valoresDoEixo("y", "y2", "y1", "y2")
+    const xx = px(Math.min(...pts.map((p) => p[0])), 0)[0] - 72
+    for (let i = 1; i < ys.length; i += 1) {
+      const a = px(0, ys[i - 1])[1]
+      const b = px(0, ys[i])[1]
+      if (a - b < 2) continue
+      s += `<line class="cota" x1="${xx}" y1="${a}" x2="${xx}" y2="${b}"/><line class="cota" x1="${xx - 4}" y1="${a}" x2="${xx + 4}" y2="${a}"/><line class="cota" x1="${xx - 4}" y1="${b}" x2="${xx + 4}" y2="${b}"/>`
+      if (a - b > 16) {
+        const k = nova("y", ys[i - 1], ys[i])
+        s += `<text class="cota-t editavel" data-editar="cota:${k}" x="${xx - 7}" y="${(a + b) / 2 + 4}" text-anchor="end">${texto(ys[i] - ys[i - 1])}</text>`
+      }
     }
     return s
+  }
+  function comprimentoDoTrecho(t, i) {
+    const [dx, dy] = [t.x2 - t.x1, t.y2 - t.y1]
+    if (Math.abs(dx) < 1e-9 || Math.abs(dy) < 1e-9) return "" // as cotas já dão esta medida
+    const [a, b] = [px(t.x1, t.y1), px(t.x2, t.y2)]
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
+    const [nx, ny] = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l]
+    const lado = ny > 0 ? -1 : 1
+    const [mx, my] = [(a[0] + b[0]) / 2 + lado * nx * 18, (a[1] + b[1]) / 2 + lado * ny * 18 + 4]
+    return `<text class="cota-t editavel" data-editar="trecho:${i}" x="${mx}" y="${my}" text-anchor="middle">L = ${texto(Math.hypot(dx, dy))}</text>`
   }
   function desenhar() {
     const { w, h } = tela()
@@ -795,6 +974,7 @@ function criar(raiz) {
     e.dados.trechos.forEach((t, i) => {
       const [a, b] = [px(t.x1, t.y1), px(t.x2, t.y2)]
       s += `<line class="peca${marcado("trechos", i) ? " sel" : ""}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`
+      s += comprimentoDoTrecho(t, i)
     })
     s += cotas()
     e.dados.apoios.forEach((a, i) => {
@@ -803,7 +983,7 @@ function criar(raiz) {
       s += `<text class="nome${marcado("apoios", i) ? " sel-t" : ""}" x="${p[0] + 13}" y="${p[1] - 11}">${a.nome}</text>`
     })
     e.dados.cargas.forEach((c, i) => {
-      s += desenhoDaCarga(c, marcado("cargas", i))
+      s += desenhoDaCarga(c, marcado("cargas", i), i)
     })
     e.dados.cortes.forEach((c, i) => {
       const p = px(c.x, c.y)
@@ -1028,6 +1208,11 @@ function criar(raiz) {
     svg.focus({ preventScroll: true })
     svg.setPointerCapture(ev.pointerId)
     const [x, y] = mundo(ev)
+    const valor = ev.target.closest?.("[data-editar]")
+    if (valor && ev.button === 0 && e.ferramenta === "mover") {
+      e.gesto = { tipo: "texto", el: valor }
+      return
+    }
     if (ev.button === 1) {
       e.gesto = { tipo: "pan", inicio: [ev.clientX, ev.clientY], vista: { ...e.vista } }
       return
@@ -1157,6 +1342,10 @@ function criar(raiz) {
     if (e.ferramenta === "mover") e.ima = null
     if (!g) {
       desenhar()
+      return
+    }
+    if (g.tipo === "texto") {
+      abrirEdicao(g.el) // aqui e não no pointerdown: o clique daria o foco de volta à prancheta
       return
     }
     if (g.tipo === "novo") {

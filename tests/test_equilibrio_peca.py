@@ -700,6 +700,34 @@ def test_trocar_a_unidade_na_tela_converte_o_desenho():
     assert at.session_state["eq_dados"]["apoios"][1]["x"] == pytest.approx(4000.0)
 
 
+def test_sair_para_outro_caso_e_voltar_nao_troca_a_unidade():
+    """O seletor não desenhado perde o estado: 1,5 m não pode virar 1,5 mm na volta."""
+    at = _abrir_tela()
+    assert at.session_state["eq_comprimento"] == "m"
+    reacoes = [m.value for m in at.markdown if "Maior reação" in m.value]
+    at.session_state["assistente_geometria"] = "chapa_furo"
+    at.run()
+    at.session_state["assistente_geometria"] = "equilibrio_peca"
+    at.run()
+    assert not at.exception
+    assert at.selectbox(key="eq_comprimento").value == "m"
+    assert at.selectbox(key="eq_forca").value == "kN"
+    assert at.selectbox(key="eq_modelo").value == MODELOS[0].nome
+    assert at.session_state["eq_dados"]["apoios"][1]["x"] == pytest.approx(4.0)
+    assert reacoes == [m.value for m in at.markdown if "Maior reação" in m.value]
+
+
+def test_unidade_trocada_continua_valendo_na_volta():
+    at = _abrir_tela()
+    at.selectbox(key="eq_comprimento").set_value("mm").run()
+    at.session_state["assistente_geometria"] = "chapa_furo"
+    at.run()
+    at.session_state["assistente_geometria"] = "equilibrio_peca"
+    at.run()
+    assert at.selectbox(key="eq_comprimento").value == "mm"
+    assert at.session_state["eq_dados"]["apoios"][1]["x"] == pytest.approx(4000.0)
+
+
 def test_limpar_avisa_o_que_falta_sem_quebrar():
     at = _abrir_tela()
     at.button(key="eq_limpar").click().run()
@@ -722,7 +750,7 @@ def _estado(dados):
         ui.AJUSTE: 0,
         ui.REVISAO: 2,
         ui.BASES: {nome: [dict(x) for x in dados[nome]] for nome, _ in ui.TABELAS},
-        ui.MODELO: MODELOS[0].nome,
+        ui.MODELO_ATUAL: MODELOS[0].nome,
         ui.ERRO_TABELA: "",
     }
 
@@ -741,7 +769,7 @@ def test_edicao_na_tabela_vale_sobre_a_base_e_da_nome():
     assert apoios[1]["x"] == 5.0
     assert apoios[2]["nome"] == "C"
     assert estado[ui.REVISAO] == 2  # a chave fica: o editor guarda as mudanças sobre ela
-    assert estado[ui.MODELO] is None
+    assert estado[ui.MODELO_ATUAL] is None
 
 
 def test_edicao_ruim_na_tabela_avisa_e_nao_mexe_no_desenho():

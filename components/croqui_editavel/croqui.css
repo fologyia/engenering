@@ -1,0 +1,85 @@
+.moldura {
+  position: relative;
+  font-family: var(--st-font);
+  font-size: 14px;
+  /* O desenho tem cores fixas: fica claro também no tema escuro. */
+  background: #fff;
+  border: 1px solid var(--st-border-color);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.desenho svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 340px;
+}
+.pilula {
+  fill: #e8f1fb;
+  stroke: #1f6fb2;
+  stroke-width: 0.6;
+  cursor: pointer;
+}
+.pilula:hover,
+.pilula:focus {
+  fill: #cfe3f7;
+  outline: none;
+}
+.pilula.aberta {
+  fill: #fff3d6;
+  stroke: #d97706;
+}
+text.cota {
+  pointer-events: none;
+}
+text.cota tspan {
+  fill: #12507f;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 10px;
+}
+.editor {
+  position: absolute;
+  z-index: 2;
+  background: #fff;
+  border: 1px solid #d97706;
+  border-radius: 8px;
+  padding: 5px 7px;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.22);
+  color: #172033;
+  max-width: 230px;
+}
+.editor[hidden] {
+  display: none;
+}
+.linha {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+input {
+  font: inherit;
+  width: 92px;
+  padding: 3px 5px;
+  text-align: right;
+  color: #172033;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  outline: none;
+}
+input:focus {
+  border-color: #1f6fb2;
+}
+.un {
+  white-space: nowrap;
+}
+.nome {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.25;
+  color: #475569;
+}
+.nome.ruim {
+  color: #b4233c;
+}
