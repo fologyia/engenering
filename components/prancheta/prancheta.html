@@ -1,0 +1,34 @@
+<div class="pr">
+  <div class="barra">
+    <div class="bloco">
+      <button type="button" data-f="mover" title="Selecionar e mover (V). Clique de novo para pegar só uma parte do grupo.">Selecionar</button>
+      <button type="button" data-f="ret" title="Arraste para desenhar uma chapa (R)">Chapa</button>
+      <button type="button" data-f="circ" title="Arraste do centro para fora (C)">Círculo</button>
+      <button type="button" data-f="poli" title="Clique em cada ponto e clique no primeiro para fechar (P)">Polígono</button>
+    </div>
+    <label class="chave" title="O que você desenhar agora tira aço em vez de pôr (F)">
+      <input type="checkbox" data-c="furo"> Furo
+    </label>
+    <span class="vao"></span>
+    <label class="grade" title="As medidas pulam de quanto em quanto. O ímã nas outras partes vale em qualquer grade.">
+      Grade
+      <select data-c="grade">
+        <option value="0.5">0,5 mm</option>
+        <option value="1">1 mm</option>
+        <option value="2">2 mm</option>
+        <option value="5" selected>5 mm</option>
+        <option value="10">10 mm</option>
+        <option value="25">25 mm</option>
+        <option value="50">50 mm</option>
+      </select>
+    </label>
+    <div class="bloco">
+      <button type="button" data-a="desfazer" title="Desfazer (Ctrl+Z)">↶</button>
+      <button type="button" data-a="refazer" title="Refazer (Ctrl+Y)">↷</button>
+      <button type="button" data-a="ajustar" title="Mostrar a seção inteira">Ver tudo</button>
+    </div>
+  </div>
+  <div class="painel" data-painel></div>
+  <div class="area"><svg tabindex="0" aria-label="Prancheta da seção"></svg></div>
+  <div class="rodape"><span data-i="xy"></span><span data-i="dica"></span></div>
+</div>

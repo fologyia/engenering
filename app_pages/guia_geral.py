@@ -89,6 +89,7 @@ opcoes = [
     "Flambagem de colunas",
     "Análise de fadiga",
     "Assistente de cargas",
+    "Desenhar seção",
     "Círculo de Mohr",
     "Análise de sensibilidade",
     "Projeto de parafusos",
@@ -1593,23 +1594,83 @@ elif modulo == "Análise de fadiga":
     link_modulo("app_pages/analise_fadiga.py", "Abrir a análise de fadiga")
 
 
-elif modulo == "Assistente de cargas":
-    st.header("Assistente de cargas e geometrias")
+elif modulo == "Desenhar seção":
+    st.header("Desenhar seção")
     st.markdown(
-        "Use quando você conhece **cargas e dimensões**, mas ainda não possui as "
-        "componentes de tensão."
+        "Use quando a seção **não está no catálogo**: um I com chapa, um caixão, dois perfis "
+        "soldados, um eixo com rasgo de chaveta ou qualquer outra forma."
+    )
+    st.markdown(
+        "1. **Comece** de um modelo, de um perfil do catálogo ou da ferramenta Chapa.\n"
+        "2. **Desenhe** arrastando na prancheta. As bordas têm ímã: chapa encosta em chapa sozinha. "
+        "Clique numa parte para digitar a medida exata; a roda do mouse aproxima e Ctrl+Z desfaz.\n"
+        "3. **Confira** à direita: área, massa, inércias, módulos, J e raio de giração mudam a cada "
+        "gesto, e G e o centro de cisalhamento aparecem no desenho.\n"
+        "4. **Use**: um clique salva no catálogo e abre a viga, a flexão, a coluna ou o perfil pela "
+        "norma. Salva, a seção aparece em todas as listas de perfis do programa."
+    )
+    st.info(
+        "O programa reconhece a forma pelo desenho. I, U, T, caixão e tubos entram nas rotinas da "
+        "norma; a forma livre usa as propriedades calculadas, e a norma fica em alerta porque não "
+        "há classe de flambagem local para ela.",
+        icon=":material/verified:",
+    )
+elif modulo == "Assistente de cargas":
+    st.header("Assistente de cargas")
+    st.markdown(
+        "Use quando você tem **forças, momentos, torque, potência ou pressão** e quer saber o que "
+        "chega em cada peça e se ela aguenta. A página abre num painel com três áreas: **Estática "
+        "e resistência**, para parafusos, roscas, vigas, barras e perfis; **Elementos de "
+        "máquinas**, que verifica a peça inteira; e **Seção e tensão no ponto**, que transforma "
+        "esforços em tensões."
     )
     st.subheader("Passo a passo")
     st.markdown(
         """
-        1. Escolha a geometria que melhor representa a peça.
-        2. Informe dimensões e carregamentos nas unidades mostradas.
-        3. Escolha o ponto ou o lado da flexão.
-        4. Confira σx, σy e τxy.
-        5. Leia as hipóteses do modelo.
-        6. Use **Enviar para o Círculo de Mohr** para continuar.
+        1. No painel, escolha uma das perguntas, procure pelo nome ou abra a área e o grupo.
+        2. Informe os dados à esquerda. Cada campo tem o seu **?**, e o material pode vir do
+           catálogo. Cargas e trechos são tabelas: acrescente as linhas que precisar.
+        3. A resposta aparece à direita, na hora: o desenho, o que passou e os números.
+        4. Mais abaixo ficam as verificações, os diagramas e as tabelas. Use os botões de **Próximo
+           passo** para levar o resultado ao caso seguinte, já preenchido.
+        5. Registre no projeto para o cálculo entrar no memorial, ou gere o Word do caso.
+        6. **Voltar ao painel** não apaga nada: os valores continuam lá quando você voltar.
         """
     )
+    with st.container(border=True):
+        st.subheader("O que dá para analisar")
+        st.markdown(
+            """
+            - **Parafusos e roscas:** parafuso sob força axial, arrancamento da rosca, torque de
+              aperto e grupo de parafusos.
+            - **Vigas e flexão:** reações, momentos e flecha com oito esquemas de apoio, flexão de
+              uma seção e perfil de aço pela norma.
+            - **Barras e estruturas:** força axial, torção, coluna, treliça plana, pórtico e console.
+            - **Peças, seções e chapas:** equilíbrio de uma peça, seção montada e chapa com furo.
+            - **Transmissão:** motor e redutor, engrenagens cilíndrica e cônica, sem-fim, correia,
+              corrente e flange de acoplamento.
+            - **Eixos e cubos:** eixo sobre dois mancais, seção de eixo à fadiga, chaveta e ajuste
+              prensado.
+            - **Mancais e contato:** rolamento, bucha, pino de articulação e contato de Hertz.
+            - **Molas, freios e fusos:** mola de compressão, freio ou embreagem de disco, freio de
+              cinta e parafuso de potência.
+            - **Içamento (NBR 8400):** ações, cabo, tambor e polias, roda, peça de mecanismo, gancho
+              e olhal.
+            - **Máquinas e vibração:** desbalanceamento, base de máquina e disco girante.
+            - **Hidráulica e tampas:** cilindro hidráulico, tampa circular e chapa retangular.
+            """
+        )
+    with st.container(border=True):
+        st.subheader("Um exemplo de ponta a ponta")
+        st.markdown(
+            """
+            1. Em **Motor e redutor**, saia da placa do motor para o torque no eixo.
+            2. Em **Engrenagem cilíndrica**, tire as forças no pinhão.
+            3. Em **Eixo sobre dois mancais**, veja as reações e a seção crítica.
+            4. Em **Seção de eixo**, confira a fadiga no ressalto ou no rasgo.
+            5. Em **Rolamento** e **Chaveta**, feche os mancais e a ligação do cubo.
+            """
+        )
     mostrar_exemplo(
         [
             ["Modelo", "Eixo circular maciço"],
@@ -1617,15 +1678,16 @@ elif modulo == "Assistente de cargas":
             ["Força axial F", "10 kN de tração"],
             ["Momento fletor |M|", "500 N·m"],
             ["Torque T", "300 N·m"],
-            ["Ponto na flexão", "Lado tracionado"],
         ],
-        "Saída aproximada: σx = 202,78 MPa, σy = 0 MPa e τxy = 56,59 MPa.",
+        "Saída aproximada no lado tracionado, que é o ponto crítico: σx = 202,78 MPa, σy = 0 MPa e "
+        "τxy = 56,59 MPa.",
     )
     with st.container(border=True):
         st.subheader("Como escolher o ponto")
         st.markdown(
             """
-            - Na flexão, confira os lados tracionado e comprimido.
+            - O programa avalia vários pontos da seção e aponta o crítico. Para um ponto
+              exato, ligue **Avaliar outro ponto**.
             - Em uma viga retangular, a tensão normal é maior nas fibras externas
               e o cisalhamento é maior próximo do centroide.
             - Em eixos, a torção é avaliada na superfície externa.
@@ -1634,8 +1696,8 @@ elif modulo == "Assistente de cargas":
             """
         )
     st.warning(
-        "Os modelos simples não incluem automaticamente furos, chavetas, soldas, "
-        "contato ou outros concentradores de tensão.",
+        "Nos casos de seção, furos, chavetas, soldas e outros concentradores de tensão só "
+        "entram se você informar o K_t. Em eixos, use o caso Seção de eixo: fadiga e entalhe.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/assistente_cargas.py", "Abrir o assistente de cargas")

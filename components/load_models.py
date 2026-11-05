@@ -12,8 +12,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-import streamlit as st
-
 # Paleta alinhada ao tema em .streamlit/config.toml.
 _CONTORNO = "#0B6E99"
 _CORPO = "#DDF2FA"
@@ -851,51 +849,6 @@ def montar_svg(modelo: ModeloCarga) -> str:
         f"<title>Croqui: {modelo.chave}</title>"
         f"{modelo.croqui}</svg>"
     )
-
-
-def desenhar_croqui(modelo: ModeloCarga) -> None:
-    """Mostra o croqui do modelo, dimensionado à largura do contêiner.
-
-    ``st.html`` não serve aqui: ele sanitiza a marcação pelo perfil HTML e
-    descarta os elementos SVG inteiros. ``st.image`` reconhece uma string
-    SVG e a embute como data URI.
-    """
-    st.image(montar_svg(modelo), width="stretch")
-
-
-def cartao_modelo(modelo: ModeloCarga) -> None:
-    """Cartão do modelo escolhido: croqui, o que entra, o que sai e a fórmula.
-
-    Responde, antes de o usuário digitar qualquer número, à pergunta que
-    antes só era respondida no resultado: este modelo devolve cisalhamento?
-    Devolve tensão nas duas direções? É isso que decide se o estado serve
-    para o Círculo de Mohr ou se vai chegar lá degenerado.
-    """
-    with st.container(border=True):
-        croqui, texto = st.columns([2, 3], vertical_alignment="center")
-        with croqui:
-            desenhar_croqui(modelo)
-        with texto:
-            st.markdown(f"**{modelo.chave}**")
-            st.caption(modelo.descricao)
-            with st.container(horizontal=True):
-                st.badge(
-                    "Você informa: " + " · ".join(modelo.entradas),
-                    icon=":material/input:",
-                    color="gray",
-                )
-                st.badge(
-                    "Devolve: " + " · ".join(modelo.saidas),
-                    icon=":material/output:",
-                    color="blue",
-                )
-            if len(modelo.saidas) == 1:
-                st.caption(
-                    ":material/info: Este modelo devolve uma única componente "
-                    "— no Círculo de Mohr o estado aparecerá como uniaxial "
-                    "ou de cisalhamento puro."
-                )
-        st.latex(modelo.formula)
 
 
 def tabela_comparativa() -> list[dict[str, str]]:

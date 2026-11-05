@@ -35,6 +35,12 @@ with st.container(border=True):
             icon=":material/description:",
         )
         st.page_link(
+            "app_pages/assistente_cargas.py",
+            label="Assistente de cargas",
+            icon=":material/calculate:",
+        )
+        st.page_link("app_pages/desenhar_secao.py", label="Desenhar seção", icon=":material/draw:")
+        st.page_link(
             "app_pages/guia_geral.py",
             label="Guia",
             icon=":material/help:",

@@ -369,7 +369,9 @@ def test_carteira_exportada_restaura_identidade_revisoes_e_linha_do_tempo(tmp_pa
 
     # Restaurar de novo não duplica nem sobrescreve.
     repetido = importar_carteira(pacote, caminho_banco=destino)
-    assert repetido == {"importados": [], "ignorados": ["PRJ-ALFA", "PRJ-BETA"]}
+    assert repetido["importados"] == []
+    # A carteira sai por updated_at, em segundos: a ordem depende de virar ou não o segundo.
+    assert sorted(repetido["ignorados"]) == ["PRJ-ALFA", "PRJ-BETA"]
     assert len(listar_projetos(incluir_arquivados=True, caminho_banco=destino)) == 2
 
     # Um projeto individual não é carteira, e vice-versa.

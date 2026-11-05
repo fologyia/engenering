@@ -49,6 +49,7 @@ class SerieDiagrama:
     cor: str = COR_CORTANTE
     pontos_inferiores: tuple[tuple[float, float], ...] = ()
     descricao: str = ""
+    rotulo_x: str = "x (m)"
 
     @property
     def e_faixa(self) -> bool:
@@ -270,7 +271,7 @@ def renderizar_diagrama(
 
     # -- títulos -------------------------------------------------------------
     desenho.text((margem_esq, 8 * escala), serie.titulo, fill=_TEXTO, font=fonte_titulo)
-    rotulo_x = "x (m)"
+    rotulo_x = serie.rotulo_x
     desenho.text(
         (
             margem_esq + area_l - desenho.textlength(rotulo_x, font=fonte_eixo),

@@ -1,10 +1,10 @@
 """O menu do programa num lugar só: grupos na ordem do trabalho, páginas na ordem de uso.
 
-A barra lateral (``app.py``), a Visão geral (``app_pages/inicio.py``) e o selo de grupo no topo de
-cada página (:func:`components.ui.cabecalho_pagina`) leem daqui, então os três dizem sempre a mesma
-coisa. A ordem dos grupos segue o roteiro do projeto (:mod:`core.roteiro`): preparar o projeto,
-levantar as cargas, ler o modelo do SolidWorks, verificar barras, ligações e escadas e entregar o
-memorial; as ferramentas de mecânica de máquinas e as referências ficam por último.
+A barra lateral (:mod:`components.menu_lateral`), a Visão geral (``app_pages/inicio.py``) e o selo
+de grupo no topo de cada página (:func:`components.ui.cabecalho_pagina`) leem daqui, então os três
+dizem sempre a mesma coisa. A ordem dos grupos segue o roteiro do projeto (:mod:`core.roteiro`):
+preparar o projeto, levantar as cargas, ler o modelo do SolidWorks, verificar barras, escadas e
+ligações e entregar o memorial; os cálculos de máquinas, as seções e as referências ficam por último.
 
 Sem Streamlit.
 """
@@ -101,12 +101,6 @@ MENU: tuple[GrupoMenu, ...] = (
                 ":material/stacks:",
                 "Combinar ou envelopar cenários de carga",
             ),
-            ItemMenu(
-                "app_pages/assistente_cargas.py",
-                "Assistente de cargas",
-                ":material/calculate:",
-                "Transformar dados de operação em cargas de projeto",
-            ),
         ),
     ),
     GrupoMenu(
@@ -150,7 +144,7 @@ MENU: tuple[GrupoMenu, ...] = (
     GrupoMenu(
         "Barras e vigas",
         ":material/view_week:",
-        "Dimensionar uma barra isolada: viga de piso, coluna, contraventamento ou outra peça.",
+        "Dimensionar uma barra isolada: viga de piso, coluna, contraventamento, degrau e longarina.",
         (
             ItemMenu(
                 "app_pages/viga_de_piso.py",
@@ -175,6 +169,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Estruturas de aço",
                 ":material/domain:",
                 "Verificar barra, treliça ou pórtico de aço com várias normas",
+            ),
+            ItemMenu(
+                "app_pages/degrau_escada.py",
+                "Degrau de escada em grade",
+                ":material/stairs:",
+                "Calcular o degrau de escada, os lances, os patamares e a longarina",
             ),
         ),
     ),
@@ -211,19 +211,6 @@ MENU: tuple[GrupoMenu, ...] = (
         ),
     ),
     GrupoMenu(
-        "Escadas",
-        ":material/stairs:",
-        "Degraus em grade, lances, patamares, esquemático e longarinas com diagramas.",
-        (
-            ItemMenu(
-                "app_pages/degrau_escada.py",
-                "Degrau de escada em grade",
-                ":material/stairs:",
-                "Calcular o degrau de escada, os lances, os patamares e a longarina",
-            ),
-        ),
-    ),
-    GrupoMenu(
         "Entrega",
         ":material/description:",
         "Conferir as pendências do projeto e gerar o memorial em Word ou PDF.",
@@ -245,8 +232,14 @@ MENU: tuple[GrupoMenu, ...] = (
     GrupoMenu(
         "Mecânica geral",
         ":material/precision_manufacturing:",
-        "Ferramentas de mecânica de máquinas: tensões, eixos, fadiga, Mohr e sensibilidade.",
+        "Parafusos, roscas, vigas, eixos, engrenagens, fadiga e outros cálculos de peças.",
         (
+            ItemMenu(
+                "app_pages/assistente_cargas.py",
+                "Assistente de cargas",
+                ":material/calculate:",
+                "Parafusos, roscas, vigas, barras, perfis e elementos de máquinas",
+            ),
             ItemMenu(
                 "app_pages/analise_estatica.py",
                 "Análise estática",
@@ -280,21 +273,15 @@ MENU: tuple[GrupoMenu, ...] = (
         ),
     ),
     GrupoMenu(
-        "Referências e ajuda",
-        ":material/menu_book:",
-        "Guia, normas, catálogos de perfis e materiais, conversor e assistente.",
+        "Seções e materiais",
+        ":material/category:",
+        "Desenhar uma seção, consultar ou cadastrar perfis e materiais.",
         (
             ItemMenu(
-                "app_pages/guia_geral.py",
-                "Guia geral",
-                ":material/help:",
-                "Aprender a usar cada página, com exemplos",
-            ),
-            ItemMenu(
-                "app_pages/normas_tecnicas.py",
-                "Normas técnicas",
-                ":material/library_books:",
-                "Localizar a norma aplicável ou pesquisar os PDFs",
+                "app_pages/desenhar_secao.py",
+                "Desenhar seção",
+                ":material/draw:",
+                "Desenhar uma seção qualquer e usá-la nos outros cálculos",
             ),
             ItemMenu(
                 "app_pages/catalogo_perfis.py",
@@ -313,6 +300,25 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Materiais técnicos",
                 ":material/science:",
                 "Cadastrar propriedades de material com origem confiável",
+            ),
+        ),
+    ),
+    GrupoMenu(
+        "Referências e ajuda",
+        ":material/menu_book:",
+        "Guia, normas técnicas, conversor de unidades e assistente de projeto.",
+        (
+            ItemMenu(
+                "app_pages/guia_geral.py",
+                "Guia geral",
+                ":material/help:",
+                "Aprender a usar cada página, com exemplos",
+            ),
+            ItemMenu(
+                "app_pages/normas_tecnicas.py",
+                "Normas técnicas",
+                ":material/library_books:",
+                "Localizar a norma aplicável ou pesquisar os PDFs",
             ),
             ItemMenu(
                 "app_pages/conversor_unidades.py",
@@ -333,6 +339,11 @@ MENU: tuple[GrupoMenu, ...] = (
 
 def todos_os_itens() -> list[ItemMenu]:
     return [VISAO_GERAL, *(item for grupo in MENU for item in grupo.itens)]
+
+
+def item_da_pagina(pagina: str) -> ItemMenu | None:
+    """O item de menu de uma página, pelo caminho ``app_pages/...``."""
+    return next((item for item in todos_os_itens() if item.pagina == pagina), None)
 
 
 def grupo_da_pagina(pagina: str) -> GrupoMenu | None:

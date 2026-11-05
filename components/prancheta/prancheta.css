@@ -1,0 +1,193 @@
+.pr {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--st-font);
+  font-size: 13px;
+  color: var(--st-text-color);
+}
+.barra,
+.painel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.painel {
+  min-height: 72px;
+  align-content: center;
+  padding: 4px 8px;
+  background: var(--st-secondary-background-color);
+  border-radius: 8px;
+}
+.bloco {
+  display: inline-flex;
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--st-background-color);
+  border: 0;
+  padding: 5px 11px;
+  cursor: pointer;
+  border-right: 1px solid var(--st-border-color);
+}
+.bloco button:last-child {
+  border-right: 0;
+}
+button:hover {
+  background: var(--st-secondary-background-color);
+}
+button.ativo {
+  background: var(--st-primary-color);
+  color: #fff;
+}
+.solto {
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+}
+button.perigo {
+  color: var(--st-red-color, #b4233c);
+}
+.chave,
+.grade,
+.campo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.vao {
+  flex: 1;
+}
+select,
+input[type="text"] {
+  font: inherit;
+  color: inherit;
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: 6px;
+  padding: 3px 5px;
+}
+input[type="text"] {
+  width: 62px;
+  text-align: right;
+}
+.titulo {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.apagado {
+  color: var(--st-text-color);
+  opacity: 0.65;
+}
+.area {
+  border: 1px solid var(--st-border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--st-background-color);
+}
+svg {
+  display: block;
+  width: 100%;
+  height: 560px;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+  cursor: default;
+}
+svg.desenho {
+  cursor: crosshair;
+}
+.rodape {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.g-menor {
+  stroke: var(--st-border-color);
+  stroke-width: 0.5;
+  opacity: 0.55;
+}
+.g-maior {
+  stroke: var(--st-border-color);
+  stroke-width: 1;
+}
+.g-eixo {
+  stroke: var(--st-text-color);
+  stroke-width: 1;
+  opacity: 0.25;
+}
+.cheia {
+  fill: var(--st-primary-color);
+  fill-opacity: 0.32;
+  stroke: var(--st-primary-color);
+  stroke-width: 1.5;
+}
+.vazio {
+  fill: var(--st-background-color);
+  stroke: var(--st-red-color, #b4233c);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+.selecao {
+  stroke: #d97706;
+  stroke-width: 2.5;
+}
+.rascunho {
+  fill: var(--st-primary-color);
+  fill-opacity: 0.18;
+  stroke: var(--st-primary-color);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.alca {
+  fill: #fff;
+  stroke: #d97706;
+  stroke-width: 2;
+}
+.guia {
+  stroke: #d97706;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.cota {
+  stroke: var(--st-text-color);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+text {
+  font-family: var(--st-font);
+  font-size: 12px;
+  fill: var(--st-text-color);
+}
+.cota-txt {
+  opacity: 0.8;
+}
+.marca-g {
+  stroke: #b4233c;
+  stroke-width: 1.5;
+  fill: none;
+}
+.marca-cc {
+  stroke: #6750a4;
+  stroke-width: 1.5;
+  fill: none;
+}
+.txt-g {
+  fill: #b4233c;
+  font-weight: 600;
+}
+.txt-cc {
+  fill: #6750a4;
+  font-weight: 600;
+}
+.vazia-txt {
+  font-size: 15px;
+  opacity: 0.6;
+}

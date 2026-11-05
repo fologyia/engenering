@@ -86,6 +86,7 @@ class PerfilCadastrado:
     editavel: bool
     observacoes: str = ""
     atualizado_em: str = ""
+    desenho: tuple[Mapping[str, Any], ...] = ()  # as partes, na seção desenhada no programa
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +123,12 @@ def perfil_de_dicionario(dados: Mapping[str, Any]) -> PerfilAco:
             positivo=campo in _OBRIGATORIOS_POSITIVOS,
         )
     valores["descricao"] = str(dados.get("descricao", "")).strip()
+    # Medidos do centroide, com sinal: ficam fora de CAMPOS_NUMERICOS, que só aceita positivos.
+    for campo, rotulo in (("x0_mm", "x0"), ("y0_mm", "y0"), ("i_min_mm4", "I mínima")):
+        convertido = float(dados.get(campo) or 0.0)
+        if not math.isfinite(convertido):
+            raise ErroDeCatalogo(f"{rotulo} deve ser um número finito.")
+        valores[campo] = convertido
 
     if valores["espessura_mesa_mm"] * 2 >= valores["altura_mm"]:
         raise ErroDeCatalogo(
@@ -254,6 +261,7 @@ def _ler_perfis(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]
             editavel=editavel,
             observacoes=str(item.get("observacoes", "")),
             atualizado_em=str(item.get("atualizado_em", "")),
+            desenho=tuple(item.get("desenho") or ()),
         )
     return resultado
 
@@ -307,8 +315,9 @@ def salvar_perfil(
     origem: str = ORIGEM_USUARIO,
     observacoes: str = "",
     substituir: bool = True,
+    desenho: tuple[Mapping[str, Any], ...] = (),
 ) -> PerfilCadastrado:
-    """Cadastra ou atualiza um perfil do usuário."""
+    """Cadastra ou atualiza um perfil do usuário. ``desenho`` guarda as partes da seção desenhada."""
     perfil = perfil_de_dicionario(dados)
     documento = _ler_arquivo(ARQUIVO_USUARIO)
     perfis = [
@@ -324,6 +333,8 @@ def salvar_perfil(
         "observacoes": observacoes,
         "atualizado_em": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
+    if desenho:
+        registro["desenho"] = [dict(parte) for parte in desenho]
     perfis.append(registro)
     perfis.sort(key=lambda item: str(item.get("nome", "")).casefold())
     _gravar_arquivo(
@@ -336,6 +347,7 @@ def salvar_perfil(
         editavel=True,
         observacoes=observacoes,
         atualizado_em=registro["atualizado_em"],
+        desenho=tuple(desenho),
     )
 
 
@@ -441,6 +453,11 @@ def catalogo_dataframe():
                 "zy_mm3": perfil.zy_mm3,
                 "j_mm4": perfil.j_mm4,
                 "cw_mm6": perfil.cw_mm6,
+                # Da seção desenhada: sem estas colunas, baixar o catálogo em CSV e importar de
+                # volta perderia o centro de cisalhamento e a menor inércia principal.
+                "x0_mm": perfil.x0_mm,
+                "y0_mm": perfil.y0_mm,
+                "i_min_mm4": perfil.i_min_mm4,
                 # Colunas derivadas da versão embutida: manter o mesmo conjunto
                 # permite este catálogo substituir aquele sem que as páginas
                 # que já leem a tabela precisem ser reescritas.

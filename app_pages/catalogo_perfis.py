@@ -4,9 +4,11 @@ import streamlit as st
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import column_buckling as cb
+from core import secao_desenhada as sd
 from core import section_catalog as catalogo
 from core import steel_sections as secoes
 from core.desenho_da_secao import figura_da_secao
+from core.desenho_estatica import figura_das_partes
 
 configurar_pagina("Catálogo de perfis", ":material/view_in_ar:")
 
@@ -95,8 +97,19 @@ with st.container(border=True), secao_protegida("Desenho do perfil"):
         help="Escolha o perfil (a lista segue o filtro e a busca acima).",
     )
     perfil_desenho = catalogo.obter_perfil(escolhido_desenho)
-    desenho = figura_da_secao(cb.secao_de_perfil(perfil_desenho))
+    partes_salvas = catalogo.obter(escolhido_desenho).desenho
+    if partes_salvas:
+        analise = sd.analisar(sd.partes_de_lista(partes_salvas))
+        desenho = figura_das_partes(analise.partes, analise.prop)
+    else:
+        desenho = figura_da_secao(cb.secao_de_perfil(perfil_desenho))
     st.image(desenho.png, caption=desenho.legenda, width="stretch")
+    if partes_salvas:
+        st.page_link(
+            "app_pages/desenhar_secao.py",
+            label="Editar em Desenhar seção (botão Abrir salva)",
+            icon=":material/draw:",
+        )
 
 
 # ---------------------------------------------------------------------------

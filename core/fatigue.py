@@ -77,7 +77,7 @@ def limites_temperatura_entrada(
 
     if unidade_normalizada == "c":
         return limites_c
-    return tuple(celsius_para_fahrenheit(valor) for valor in limites_c)
+    return celsius_para_fahrenheit(limites_c[0]), celsius_para_fahrenheit(limites_c[1])
 
 
 def fator_temperatura_na_unidade(

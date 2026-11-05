@@ -19,8 +19,8 @@ ROTAS: dict[str, RotaProjeto] = {
         "Assistente de cargas",
         "app_pages/assistente_cargas.py",
         ":material/manufacturing:",
-        "forças, momentos, torque, pressão e geometria",
-        "componentes de tensão em MPa",
+        "potência, forças, momentos, torque, pressão e geometria",
+        "forças nas peças, tensões e verificações de parafusos, vigas, barras e máquinas",
     ),
     "estatica": RotaProjeto(
         "estatica",

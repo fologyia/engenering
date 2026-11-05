@@ -33,12 +33,13 @@ def test_grupos_na_ordem_do_trabalho_e_com_descricao():
         "Modelo SolidWorks",
         "Barras e vigas",
         "Ligações e bases",
-        "Escadas",
         "Entrega",
+        "Mecânica geral",
     ]
     assert all(g.descricao and g.itens for g in nv.MENU)
     assert all(len(i.tarefa) <= 90 for i in nv.todos_os_itens())
     icones = [i.icone for i in nv.todos_os_itens()]
     assert len(set(icones)) >= len(icones) - 4  # quase todos distintos
-    assert nv.grupo_da_pagina("degrau_escada").nome == "Escadas"
+    assert nv.grupo_da_pagina("degrau_escada").nome == "Barras e vigas"
+    assert nv.grupo_da_pagina("desenhar_secao").nome == "Seções e materiais"
     assert nv.grupo_da_pagina("app_pages/inicio.py") is None

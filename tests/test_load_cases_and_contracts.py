@@ -104,6 +104,7 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "analise_fadiga",
         "circulo_mohr",
         "analise_sensibilidade",
+        "assistente_cargas",
     ]
     cargas = [item.id for item in listar_modulos(grupo="Cargas e vento")]
     assert cargas == [
@@ -111,7 +112,6 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "vento_estrutura_aberta",
         "vento_nbr6123",
         "casos_carga",
-        "assistente_cargas",
     ]
     assert resolver_modulo("Casos de carga").id == "casos_carga"
     assert resolver_modulo("Linha elástica").id == "vigas_eixos"

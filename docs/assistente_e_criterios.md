@@ -1,7 +1,9 @@
 # Assistente de cargas e critérios de falha
 
 Este documento registra as equações, unidades, hipóteses e critérios usados
-para converter carregamentos em tensões e avaliar materiais.
+para converter carregamentos em tensões e avaliar materiais. Os casos de
+transmissão, eixos, mancais, içamento, molas, freios e hidráulica estão em
+[`elementos_de_maquinas.md`](elementos_de_maquinas.md).
 
 ## Convenção de unidades
 
@@ -122,7 +124,8 @@ von Mises ou Tresca usando a base local.
 
 ## Limitações
 
-Os modelos não incluem automaticamente concentração de tensões, efeitos
-locais de aplicação de carga, contato, soldas, tensões residuais, plasticidade,
+Nos modelos de seção, a concentração de tensões só entra pelo K_t informado.
+Eles não incluem efeitos locais de aplicação de carga, contato, soldas,
+tensões residuais, plasticidade,
 instabilidade, fluência ou carregamentos cíclicos. O fator aceitável depende da
 norma e da consequência da falha.

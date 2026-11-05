@@ -39,6 +39,12 @@ class PerfilAco:
     # e a fábrica idealizada, que já calcula o centroide, passa a guardá-lo.
     centroide_x_mm: float = 0.0
     centroide_y_mm: float = 0.0
+    # Só nas seções desenhadas, onde a malha dá o valor certo para qualquer forma: centro de
+    # cisalhamento medido do centroide (zero = pelas fórmulas da família) e a menor inércia
+    # principal quando os eixos principais não são x e y (zero = eles são).
+    x0_mm: float = 0.0
+    y0_mm: float = 0.0
+    i_min_mm4: float = 0.0
 
     @property
     def rx_mm(self) -> float:
@@ -648,6 +654,9 @@ def centro_de_cisalhamento_do_perfil(perfil: PerfilAco) -> tuple[float, float]:
     fina com dimensões nas linhas médias (Galambos/Roark). No T o centro de
     cisalhamento está no encontro mesa-alma.
     """
+    x0, y0 = float(perfil.x0_mm), float(perfil.y0_mm)
+    if x0 or y0:
+        return (x0, y0)
     h = float(perfil.altura_mm)
     b = float(perfil.largura_mm)
     tw = float(perfil.espessura_alma_mm)

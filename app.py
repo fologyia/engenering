@@ -8,6 +8,7 @@ renovar_modulos_desatualizados()
 
 from components.acesso_ui import acesso_na_lateral, exigir_acesso
 from components.armazenamento_ui import preparar_armazenamento, situacao_na_lateral
+from components.menu_lateral import menu_lateral
 from components.project_tools import sincronizar_projeto_ativo
 from components.robustez import executar_pagina, iniciar_execucao, secao_protegida
 from core import navegacao as nv
@@ -50,11 +51,14 @@ def _pagina(item: nv.ItemMenu, *, inicial: bool = False) -> st.Page:
 menu: dict[str, list[st.Page]] = {"": [_pagina(nv.VISAO_GERAL, inicial=True)]}
 for grupo in nv.MENU:
     menu[grupo.nome] = [_pagina(item) for item in grupo.itens]
-pagina = st.navigation(menu, position="sidebar", expanded=True)
+# As rotas ficam com o st.navigation; o menu que aparece é o de components/menu_lateral.py.
+pagina = st.navigation(menu, position="hidden")
 st.session_state["_pagina_atual"] = next(
     (caminho for caminho, p in paginas_por_caminho.items() if p is pagina), ""
 )
 
+with secao_protegida("menu"):
+    menu_lateral(paginas_por_caminho, st.session_state["_pagina_atual"])
 with secao_protegida("lateral"):
     situacao_na_lateral()
     acesso_na_lateral()

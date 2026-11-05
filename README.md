@@ -301,14 +301,33 @@ na página inicial e nas páginas de cada etapa com o que o projeto ativo já te
   combinações;
 - registro rastreável do modelo e dos resultados no projeto industrial ativo.
 
-### Assistente de cargas e geometrias
+### Desenhar seção
 
-- barras, eixos maciços e vazados, vigas e seção I;
-- flexão biaxial, pinos em cisalhamento e vasos de parede fina;
-- conversão de forças, momentos, torque, pressão e dimensões em σx, σy e τxy;
-- transferência direta para o Círculo de Mohr;
-- avisos sobre as hipóteses de cada modelo.
-- gravação do estado de tensões e das hipóteses no projeto ativo.
+Prancheta para desenhar qualquer seção: chapas, círculos, polígonos e furos, com ímã nas bordas, 17 modelos prontos e perfis do catálogo. Mostra área, inércias, módulos, J, C_w e centro de cisalhamento a cada gesto, reconhece a forma pelo desenho e leva a seção ao catálogo, de onde ela aparece em todos os cálculos. Detalhes e conferências em `docs/desenhar_secao.md`.
+
+### Assistente de cargas e elementos de máquinas
+
+62 casos, cada um com formulário próprio, verificações, avisos, hipóteses, referências, Word e
+registro no memorial. A página abre num painel por pergunta, área e grupo, e cada caso mostra a
+resposta ao lado dos dados (`docs/estatica_e_resistencia.md` e `docs/elementos_de_maquinas.md`):
+
+- parafusos e roscas: parafuso sob força axial, com e sem pré-carga, arrancamento da rosca, torque de
+  aperto e grupo de parafusos;
+- vigas e flexão: reações, momentos e flecha com oito esquemas de apoio e cargas por tabela, flexão
+  de uma seção e perfil de aço pela norma;
+- barras e estruturas: força axial, torção, coluna, treliça plana, pórtico e console;
+- peças, seções e chapas: equilíbrio de uma peça, seção montada e chapa tracionada com furo;
+- transmissão: motor e redutor, engrenagens cilíndrica e cônica, sem-fim, correia, corrente e flange;
+- eixos e cubos: eixo sobre dois mancais em dois planos (reações, diagramas, flecha, torção e rotação
+  crítica), seção de eixo à fadiga com K_t e K_f, chaveta DIN 6885 e ajuste prensado pela NBR 6158;
+- mancais e contato: rolamento (ISO 281 e regimes da NBR 8400), bucha, pino de articulação e Hertz;
+- molas, freios e fusos: mola de compressão, freio ou embreagem de disco, freio de cinta e fuso;
+- içamento pela NBR 8400: ações, cabo, tambor e polias, roda, peça de mecanismo, gancho e olhal;
+- máquinas e vibração: desbalanceamento (ISO 21940), base de máquina e disco girante;
+- hidráulica e tampas: cilindro hidráulico, tampa circular e chapa retangular;
+- seção e tensão no ponto: barras, eixos, vigas, perfis, pinos e vasos, com varredura do ponto
+  crítico e comparação com o material;
+- encadeamento: o resultado de um caso abre o próximo já preenchido, do motor ao mancal.
 
 ### Casos e combinações de carga
 

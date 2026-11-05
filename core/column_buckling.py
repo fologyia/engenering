@@ -593,6 +593,11 @@ def secao_de_perfil(perfil: PerfilAco, *, soldado: bool = False) -> Secao:
             "de dupla simetria, sem flambagem local e sem rotina de M_Rd"
         )
     x0, y0 = centro_de_cisalhamento_do_perfil(perfil)
+    # Eixos principais girados (cantoneira, Z): a barra flamba em torno da menor inércia principal,
+    # que é menor que Ix e Iy. Ela entra no lugar da menor das duas, a favor da segurança.
+    i_min = float(perfil.i_min_mm4)
+    if 0.0 < i_min < min(ix, iy):
+        ix, iy = (i_min, iy) if ix <= iy else (ix, i_min)
     return Secao(
         perfil.nome,
         area,
@@ -602,8 +607,8 @@ def secao_de_perfil(perfil: PerfilAco, *, soldado: bool = False) -> Secao:
         Cw=constante_de_empenamento_estimada(perfil),
         x0=abs(x0),
         y0=abs(y0),
-        Wx=ix / (d / 2),
-        Wy=iy / (bf / 2),
+        Wx=perfil.sx_mm3,
+        Wy=perfil.sy_mm3,
         Zx=zx,
         Zy=zy,
         tipo="generica",
