@@ -1,7 +1,7 @@
 # Elementos de máquinas no Assistente de cargas
 
-O Assistente de cargas cobre 65 casos: 15 de estática e resistência, 34 de elementos de máquinas e
-16 de seção e tensão no ponto. Este documento registra as equações, as fontes, as hipóteses e o que
+O Assistente de cargas cobre 67 casos: 15 de estática e resistência, 34 de elementos de máquinas e
+18 de seção e tensão no ponto. Este documento registra as equações, as fontes, as hipóteses e o que
 **não** é feito nos elementos de máquinas. A estática está em `docs/estatica_e_resistencia.md`.
 
 ## Como funciona
@@ -126,6 +126,27 @@ abertas confirmam a estrutura (divisor `1,20·N_d`, `N_d` = 2 e 3), mas não os 
 içamento, coeficiente não vem de memória: entra quando houver o texto da norma. Por isso a AISC D5,
 com um fator mínimo próprio para içamento, é o método aplicado. A **NBR 15516-2** (correntes de elos)
 está digitalizada como imagem e também não foi usada.
+
+## Pinos e parafusos ao corte
+
+Os casos saem do equilíbrio do pino (`core/esforcos_no_pino.py`): ele é uma viga carregada pelas
+chapas ou pelo furo, e o desenho (`core/desenho_pinos.py`) mostra os mesmos números.
+
+- **Vários planos de corte:** cada plano leva `F/(n_p·n_c)`, e a chapa de dentro recebe o dobro da de
+  ponta, porque tem um plano de cada lado. Cada chapa empurra o pino por igual na espessura. Com dois
+  planos isso dá `F/8·(b + 4c + 2a)`, a fórmula da EN 1993-1-8. Com número ímpar, sobra um binário, que
+  fica metade em cada ponta, na cabeça e na porca; em corte simples dá `F·(t₁ + t₂)/4`.
+- **O que verifica:** corte, flexão, flexão com cortante, esmagamento, rasgamento até a borda e seção
+  líquida. A tabela de capacidade dá a força de cada critério, e a dos planos compara de 1 a 6.
+- **Pino vazado:** `τ_máx` usa o fator da seção anelar, que chega a 2 na parede fina. **Parafuso com
+  rosca no corte:** área de tração, e o momento no diâmetro equivalente a ela.
+- **Pino em balanço:** pressão linear no furo, com resultante `F` e momento fechando no fundo. Dá
+  `p_máx = F/(d·L)·(4 + 6a/L)`. O maior momento fica dentro do furo, onde o cortante zera.
+- **Pino transversal:** `F = T/D` em cada plano. Pressão triangular no eixo, `6T/(d·D²)`, e uniforme no
+  cubo, `4T/(d·(D_c² − D²))`. Módulo líquido do eixo `π·D³/16 − d·D²/6`, que vale para furo pequeno.
+
+Todos usam `S_y` e o fator de segurança, com o corte a 0,577·`S_y`. Em ligação de estrutura, com
+coeficientes de norma e aperto, o lugar é o Projeto de parafusos.
 
 ## Molas, freios e fusos
 

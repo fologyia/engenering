@@ -11,6 +11,7 @@ mudou um número, o desenho e o resultado mudam do lado.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from functools import partial
 from typing import Any
 
@@ -21,7 +22,7 @@ import streamlit as st
 from components import estudo_da_medida_ui as estudo_ui
 from components import load_models as modelos_de_secao
 from components.croqui_editavel_ui import croqui_editavel
-from components.elementos_croquis import CROQUIS, svg_do_croqui
+from components.elementos_croquis import CROQUIS, CROQUIS_VIVOS, svg_do_croqui
 from components.figuras import mostrar_figura
 from components.project_tools import (
     botao_registrar_calculo,
@@ -84,7 +85,10 @@ def chave_do_campo(caso_id: str, campo: str) -> str:
     return f"assistente::{caso_id}::{campo}"
 
 
-def _croqui(caso: Caso) -> str | None:
+def _croqui(caso: Caso, valores: Mapping[str, Any] | None = None) -> str | None:
+    vivo = CROQUIS_VIVOS.get(caso.id)
+    if vivo is not None and valores is not None:
+        return svg_do_croqui(caso.titulo, vivo(valores))
     if caso.id in CROQUIS:
         return svg_do_croqui(caso.titulo, CROQUIS[caso.id])
     modelo = modelos_de_secao.CATALOGO.get(caso.id)
@@ -443,9 +447,9 @@ def _o_que_mudou(caso: Caso, resultado: Resultado) -> None:
 
 def _desenho_com_medidas(caso: Caso) -> frozenset[str]:
     """Desenha o caso e diz quais campos já estão nele, para a lista ficar mais curta."""
-    svg = _croqui(caso)
     chave = f"assistente_croqui::{caso.id}"
     valores = _valores_da_sessao(caso)
+    svg = _croqui(caso, valores)
     cotas = cd.cotas_do_caso(caso, valores)
     diagnostico = estudo_ui.diagnostico_de(caso, valores)
     if svg and cotas:

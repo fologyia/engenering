@@ -5,7 +5,7 @@
   (passos s e g, bordas e e e_v), a força de cálculo em cada parafuso (método elástico, ELU) — o
   mais carregado em destaque — e N, V e M no centro do grupo, com as convenções do cálculo
   (N positivo para a direita, V para cima, M anti-horário).
-* **Corte**: as chapas, o parafuso com a arruela e a porca, e os planos de corte (um ou dois).
+* **Corte**: as chapas, o parafuso com a arruela e a porca, e todos os planos de corte.
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ def _corte(
     """O corte: chapas empilhadas, o parafuso com arruela e porca e os planos de corte."""
     e = r.entrada
     d_b = float(bc.dados_parafuso(e.designacao)["d_b"])
-    planos = max(1, min(int(e.n_planos), 2))
+    planos = max(1, int(e.n_planos))
     n_chapas = planos + 1
     t = e.t
     pega = e.pega if e.pega else n_chapas * t

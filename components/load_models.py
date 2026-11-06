@@ -748,7 +748,7 @@ _MODELOS = (
     ModeloCarga(
         chave="Pinos ou parafusos sob cisalhamento",
         grupo=GRUPO_LIGACOES,
-        resumo="Pino cortado transversalmente pela força, em um ou dois planos.",
+        resumo="Pino cortado transversalmente pela força, em um ou mais planos.",
         descricao=(
             "Um pino ou parafuso sendo cortado transversalmente pela força, "
             "como uma tesoura corta um papel. O modelo divide a carga "

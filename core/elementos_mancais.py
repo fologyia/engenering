@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import math
 
+from core import desenho_pinos as dp
+from core import esforcos_no_pino as ep
 from core.elementos_base import (
     Campo,
     Caso,
+    Figura,
     Metrica,
     Ponto,
     Resultado,
@@ -624,6 +627,14 @@ def calcular_pino(v: Valores) -> Resultado:
         alertas.append(
             "Folga grande perto do diâmetro: o pino trabalha mais à flexão que ao corte."
         )
+    chapas = ep.chapas_alternadas(2, forca, t_garfo, t_olhal, folga)
+    desenho = dp.figura_das_chapas(
+        chapas,
+        ep.diagrama_das_chapas(chapas),
+        d,
+        titulo="Pino no garfo",
+        legenda="Garfo e olhal, com os dois planos de corte e os diagramas ao longo do pino.",
+    )
     return Resultado(
         resumo=(
             f"Com F = {forca / 1000:.1f} kN de projeto, o pino flete a {sigma:.0f} MPa e corta a "
@@ -641,6 +652,7 @@ def calcular_pino(v: Valores) -> Resultado:
             Ponto("Fibra extrema, meio do pino", sigma, 0.0, 0.0),
             Ponto("Centro da seção, plano de corte", 0.0, 0.0, tau_max),
         ),
+        figuras=(Figura("Pino no garfo", desenho.png, desenho.legenda),),
         alertas=tuple(alertas),
         hipoteses=(
             "Pino biapoiado no garfo, com carga distribuída no olhal e no garfo.",

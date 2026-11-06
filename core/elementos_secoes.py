@@ -1127,23 +1127,8 @@ CAMPOS_TORCAO = (
 
 
 # ---------------------------------------------------------------------------
-# Pino, vasos
+# Vasos
 # ---------------------------------------------------------------------------
-
-
-def calcular_pinos(v: Valores) -> Resultado:
-    forca = float(v["forca_kN"]) * 1000.0
-    planos = 1 if str(v["corte"]) == "Simples" else 2
-    estado = modelos.pino_cisalhamento(forca, float(v["d_mm"]), int(v["pinos"]), planos)
-    return _fechar(
-        v,
-        (_ponto("Plano de corte, tensão média", estado),),
-        estado,
-        alertas=(
-            "Este modelo traz só o corte médio. Para flexão do pino e esmagamento das chapas, "
-            "use Pino de articulação.",
-        ),
-    )
 
 
 def _membrana(diametro: float, espessura: float) -> tuple[list[str], list]:
@@ -1241,48 +1226,6 @@ def calcular_parede_espessa(v: Valores) -> Resultado:
         metricas=(Metrica("Relação D_e/t", relacao, "", 1),),
         extra=lambda r, _z: em("Raio informado", r),
     )
-
-
-CAMPOS_PINOS = (
-    Campo(
-        "forca_kN",
-        "Força total F",
-        "A força que atravessa o conjunto de pinos.",
-        20.0,
-        "kN",
-        passo=1.0,
-        secao="Ligação",
-    ),
-    Campo(
-        "d_mm",
-        "Diâmetro resistente d",
-        "Diâmetro no plano de corte. Se o corte cruzar a rosca, use o da raiz.",
-        10.0,
-        "mm",
-        minimo=0.001,
-        passo=1.0,
-        secao="Ligação",
-    ),
-    Campo(
-        "pinos",
-        "Número de pinos",
-        "Quantos pinos dividem a força.",
-        1,
-        minimo=1,
-        maximo=500,
-        passo=1,
-        secao="Ligação",
-    ),
-    Campo(
-        "corte",
-        "Planos de corte",
-        "Simples: duas chapas. Duplo: chapa central entre duas outras.",
-        "Simples",
-        opcoes=("Simples", "Duplo"),
-        secao="Ligação",
-    ),
-    *_campos_da_verificacao(900.0),
-)
 
 
 def _campos_de_vaso() -> tuple[Campo, ...]:
@@ -1537,16 +1480,6 @@ CASOS: tuple[Caso, ...] = (
         CAMPOS_CAIXAO,
         calcular_caixao,
         r"\sigma_x=\frac{F}{A}-\frac{My}{I},\qquad \tau=\frac{T}{2A_m t}",
-    ),
-    Caso(
-        "Pinos ou parafusos sob cisalhamento",
-        "Pinos ou parafusos sob cisalhamento",
-        GRUPO_LIGACOES,
-        "Pino cortado transversalmente pela força, em um ou dois planos.",
-        "Divide a carga entre os pinos e os planos de corte e devolve a tensão média.",
-        CAMPOS_PINOS,
-        calcular_pinos,
-        r"\tau_{media}=\frac{F}{n_p\,n_c\,(\pi d^2/4)}",
     ),
     Caso(
         "Vaso cilíndrico de parede fina",

@@ -203,7 +203,13 @@ SERIE_DO_CAMPO: dict[str, dict[str, Serie]] = {
     "Perfil U sob força axial, flexão e cortante": {"tf_mm": CHAPAS, "tw_mm": CHAPAS},
     "Cantoneira de abas iguais": {"aba_mm": CANTONEIRAS_ABA, "t_mm": CANTONEIRAS_T},
     "Perfil tubular retangular (caixão)": {"t_mm": CHAPAS},
-    "Pinos ou parafusos sob cisalhamento": {"d_mm": PARAFUSOS},
+    "Pinos ou parafusos sob cisalhamento": {
+        "d_mm": BARRAS_REDONDAS,
+        "a_mm": CHAPAS,
+        "b_mm": CHAPAS,
+    },
+    "pino_balanco": {"d_mm": BARRAS_REDONDAS, "t_chapa_mm": CHAPAS},
+    "pino_transversal": {"d_mm": BARRAS_REDONDAS, "d_eixo_mm": EIXOS},
     "Vaso cilíndrico de parede fina": {"t_mm": CHAPAS},
     "Vaso esférico de parede fina": {"t_mm": CHAPAS},
 }

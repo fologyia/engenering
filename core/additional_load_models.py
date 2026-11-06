@@ -174,8 +174,8 @@ def pino_cisalhamento(
     diametro = _positivo("diametro_mm", diametro_mm)
     if int(numero_pinos) != numero_pinos or numero_pinos < 1:
         raise ValueError("O número de pinos deve ser um inteiro positivo.")
-    if numero_planos_corte not in {1, 2}:
-        raise ValueError("O número de planos de corte deve ser 1 ou 2.")
+    if int(numero_planos_corte) != numero_planos_corte or numero_planos_corte < 1:
+        raise ValueError("O número de planos de corte deve ser um inteiro positivo.")
 
     area = math.pi * diametro**2 / 4.0
     tau = forca / (int(numero_pinos) * numero_planos_corte * area)
@@ -183,10 +183,7 @@ def pino_cisalhamento(
         sigma_x=0.0,
         sigma_y=0.0,
         tau_xy=tau,
-        descricao=(
-            f"{int(numero_pinos)} pino(s) em cisalhamento "
-            f"{'duplo' if numero_planos_corte == 2 else 'simples'}"
-        ),
+        descricao=(f"{int(numero_pinos)} pino(s) com {int(numero_planos_corte)} plano(s) de corte"),
         hipoteses=(
             "Carga dividida igualmente entre os pinos.",
             "Tensão de cisalhamento média na seção resistente.",

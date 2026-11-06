@@ -51,6 +51,17 @@ def test_ligacao_parafusada_tem_planta_e_corte(entrada):
     assert f"nº {mais_carregado + 1}" in desenho.legenda
 
 
+def test_corte_da_ligacao_desenha_todos_os_planos():
+    """O campo de planos não tem teto: o desenho não pode parar em dois."""
+    desenhos = {
+        dp.figura_parafusos(
+            chk.verificar_ligacao(chk.EntradaLigacao(V=50, n_lin=3, n_col=2, n_planos=n))
+        ).png
+        for n in (2, 3, 4)
+    }
+    assert len(desenhos) == 3
+
+
 # ------------------------------------------------------------------ reações nas bases
 def _reacoes(com_posicao: bool = True) -> rb.ReacoesNasBases:
     pes, acoes = [], []

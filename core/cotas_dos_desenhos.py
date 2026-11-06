@@ -220,7 +220,27 @@ COTAS: dict[str, dict[str, Alvo | tuple[Alvo, ...]]] = {
         "h": "h_mm",
         "t": "t_mm",
     },
-    "Pinos ou parafusos sob cisalhamento": {"F": "forca_kN", "d": "d_mm"},
+    "Pinos ou parafusos sob cisalhamento": {
+        "F": "forca_kN",
+        "d": "d_mm",
+        "a": "a_mm",
+        "b": "b_mm",
+        "c": "c_mm",
+        "n_c": "planos",
+    },
+    "pino_balanco": {
+        "F": "forca_kN",
+        "d": "d_mm",
+        "a": "braco_mm",
+        "L": "engaste_mm",
+        "t": "t_chapa_mm",
+    },
+    "pino_transversal": {
+        "T": "torque_Nm",
+        "D": "d_eixo_mm",
+        "D_c": "d_cubo_mm",
+        "d": "d_mm",
+    },
     "Vaso cilíndrico de parede fina": {"D": "d_mm", "p": "pressao_MPa", "t": "t_mm"},
     "Vaso esférico de parede fina": {"p": "pressao_MPa", "t": "t_mm"},
     "Cilindro de parede espessa": {

@@ -307,7 +307,7 @@ Prancheta para desenhar qualquer seção: chapas, círculos, polígonos e furos,
 
 ### Assistente de cargas e elementos de máquinas
 
-65 casos, cada um com formulário próprio, verificações, avisos, hipóteses, referências, Word e
+67 casos, cada um com formulário próprio, verificações, avisos, hipóteses, referências, Word e
 registro no memorial. A página abre num painel por pergunta, área e grupo, e cada caso mostra a
 resposta ao lado dos dados (`docs/estatica_e_resistencia.md` e `docs/elementos_de_maquinas.md`):
 

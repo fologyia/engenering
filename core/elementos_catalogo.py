@@ -13,6 +13,7 @@ from core import (
     elementos_molas,
     elementos_molas_atrito,
     elementos_parafusos,
+    elementos_pinos,
     elementos_rotativos,
     elementos_secoes,
     elementos_transmissao,
@@ -40,7 +41,7 @@ _DE_MAQUINAS: tuple[Caso, ...] = (
     *elementos_icamento.CASOS,
     *elementos_rotativos.CASOS,
 )
-_DE_SECOES: tuple[Caso, ...] = elementos_secoes.CASOS
+_DE_SECOES: tuple[Caso, ...] = (*elementos_secoes.CASOS, *elementos_pinos.CASOS)
 
 CASOS: dict[str, Caso] = {caso.id: caso for caso in (*_DE_ESTATICA, *_DE_MAQUINAS, *_DE_SECOES)}
 
@@ -143,7 +144,7 @@ GRUPOS_INFO = {
         ":material/view_column:", "Perfis I, U, L e tubos, ponto a ponto da seção."
     ),
     elementos_secoes.GRUPO_LIGACOES: InfoDoGrupo(
-        ":material/push_pin:", "Cisalhamento em pinos e parafusos."
+        ":material/push_pin:", "Vários planos de corte, pino em balanço e pino transversal."
     ),
     elementos_secoes.GRUPO_PRESSAO: InfoDoGrupo(
         ":material/propane_tank:", "Paredes finas, paredes grossas e esferas."

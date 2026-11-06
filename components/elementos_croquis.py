@@ -7,6 +7,8 @@ para mostrar o que cada letra do formulário significa, e o resultado do cálcul
 from __future__ import annotations
 
 import math
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from components.load_models import (
     _ALTURA_VIEWBOX,
@@ -367,6 +369,92 @@ def _mola_prato() -> str:
         _cota_horizontal(52, 104, 176, "D_i", acima=True),
         _cota_vertical(250, 62, 92, "h₀"),
         _texto(36, 100, "t", cor=_COTA, italico=True),
+    )
+
+
+def croqui_do_pino(valores: Mapping[str, Any]) -> str:
+    """As chapas mudam com o número de planos, e o parafuso ganha cabeça e porca."""
+    planos = int(valores.get("planos", 2))
+    parafuso = str(valores.get("elemento", "")).startswith("Parafuso")
+    n_chapas = planos + 1
+    inicio, fim = 56.0, 224.0
+    passo = (fim - inicio) / n_chapas
+    espessura = passo * 0.78
+    pecas: list[str] = []
+    centros: list[float] = []
+    for k in range(n_chapas):
+        x = inicio + k * passo + (passo - espessura) / 2.0
+        centros.append(x + espessura / 2.0)
+        sobe = k % 2 == 0
+        y, altura = (34.0, 62.0) if sobe else (60.0, 62.0)
+        cor = _CORPO if sobe else "#BFDBFE"
+        pecas.append(
+            f'<rect x="{x:.1f}" y="{y}" width="{espessura:.1f}" height="{altura}" fill="{cor}" '
+            f'stroke="{_CONTORNO}" stroke-width="1.5"/>'
+        )
+        if sobe:
+            pecas.append(_seta(centros[-1], 34, centros[-1], 16, largura=1.5, cabeca=5))
+        else:
+            pecas.append(_seta(centros[-1], 122, centros[-1], 140, largura=1.5, cabeca=5))
+    pecas.append(
+        f'<rect x="40" y="70" width="200" height="16" rx="3" fill="#FDE7CF" stroke="{_CARGA}" '
+        'stroke-width="2"/>'
+    )
+    if parafuso:
+        pecas.append(_retangulo(32, 62, 8, 32))
+        pecas.append(_retangulo(240, 62, 8, 32))
+    for k in range(1, n_chapas):
+        x = inicio + k * passo
+        pecas.append(
+            f'<line x1="{x:.1f}" y1="60" x2="{x:.1f}" y2="96" stroke="{_CARGA}" '
+            'stroke-width="1.5" stroke-dasharray="4 3"/>'
+        )
+    pecas += [
+        _forca(centros[0] + 8, 14, "F", ancora="start"),
+        _linha(26, 40, centros[0] - espessura / 2.0, 40, largura=1.0),
+        _texto(18, 44, "a", cor=_COTA, italico=True, ancora="end"),
+        _linha(40, 132, inicio + passo, 96, largura=1.0),
+        _texto(36, 140, "c", cor=_COTA, italico=True, ancora="end"),
+        _linha(256, 70, 256, 86, largura=1.0),
+        _texto(262, 82, "d", cor=_COTA, italico=True, ancora="start"),
+        _texto(196, 12, "n_c", cor=_COTA, italico=True),
+    ]
+    if planos >= 2:
+        pecas += [
+            _linha(centros[1], 128, 240, 128, largura=1.0),
+            _texto(244, 132, "b", cor=_COTA, italico=True, ancora="start"),
+        ]
+    return _pecas(*pecas)
+
+
+def _pino_balanco() -> str:
+    return _pecas(
+        _retangulo(170, 18, 92, 114),
+        f'<rect x="56" y="64" width="176" height="22" rx="3" fill="#FDE7CF" stroke="{_CARGA}" '
+        'stroke-width="2"/>',
+        f'<rect x="70" y="24" width="20" height="88" fill="#BFDBFE" stroke="{_CONTORNO}" '
+        'stroke-width="1.5"/>',
+        _seta(80, 24, 80, 6, largura=1.5, cabeca=5),
+        _forca(90, 14, "F", ancora="start"),
+        _cota_horizontal(124, 80, 170, "a"),
+        _cota_horizontal(140, 170, 232, "L"),
+        _texto(62, 104, "t", cor=_COTA, italico=True, ancora="end"),
+        _linha(40, 64, 40, 86, largura=1.0),
+        _texto(32, 79, "d", cor=_COTA, italico=True, ancora="end"),
+    )
+
+
+def _pino_transversal() -> str:
+    return _pecas(
+        _circulo(112, 76, 62),
+        f'<circle cx="112" cy="76" r="36" fill="#BFDBFE" stroke="{_CONTORNO}" stroke-width="2"/>',
+        f'<rect x="50" y="69" width="124" height="14" rx="3" fill="#FDE7CF" stroke="{_CARGA}" '
+        'stroke-width="2"/>',
+        _arco_torque(112, 76, 22, "T"),
+        _cota_vertical(196, 14, 138, "D_c"),
+        _cota_vertical(186, 40, 112, "D"),
+        _linha(150, 69, 150, 83, largura=1.0),
+        _texto(158, 66, "d", cor=_COTA, italico=True, ancora="start"),
     )
 
 
@@ -869,6 +957,9 @@ CROQUIS: dict[str, str] = {
     "pino_articulacao": _pino(),
     "hertz": _hertz(),
     "mola_compressao": _mola(),
+    "Pinos ou parafusos sob cisalhamento": croqui_do_pino({}),
+    "pino_balanco": _pino_balanco(),
+    "pino_transversal": _pino_transversal(),
     "mola_tracao": _mola_tracao(),
     "mola_torcao": _mola_torcao(),
     "mola_prato": _mola_prato(),
@@ -888,6 +979,12 @@ CROQUIS: dict[str, str] = {
     "placa_circular": _placa_circular(),
     "placa_retangular": _placa_retangular(),
     "Torção de seção retangular": _torcao_retangular(),
+}
+
+
+#: Casos em que o desenho muda com os dados, e não só o número das medidas.
+CROQUIS_VIVOS: dict[str, Callable[[Mapping[str, Any]], str]] = {
+    "Pinos ou parafusos sob cisalhamento": croqui_do_pino,
 }
 
 
