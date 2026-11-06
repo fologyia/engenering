@@ -305,6 +305,10 @@ na página inicial e nas páginas de cada etapa com o que o projeto ativo já te
 
 Prancheta para desenhar qualquer seção: chapas, círculos, polígonos e furos, com ímã nas bordas, 17 modelos prontos e perfis do catálogo. Mostra área, inércias, módulos, J, C_w e centro de cisalhamento a cada gesto, reconhece a forma pelo desenho e leva a seção ao catálogo, de onde ela aparece em todos os cálculos. Detalhes e conferências em `docs/desenhar_secao.md`.
 
+### Montador de fórmulas
+
+Prancheta de blocos: seção, esforços, critério e "Em função de". Devolve a equação isolada na medida, na carga ou no material, ponto a ponto da seção, e diz qual condição manda. Letra sem valor fica na fórmula. O momento entra em XX e em YY, pelo valor ou por força vezes distância, para achar a força ou a distância máxima. Blocos de viga e de potência trocam M, V e T pelas fórmulas deles, e von Mises, Tresca, DE-Goodman, flecha, Euler e giro podem ser ligados juntos. Detalhes e como acrescentar um bloco em `docs/montador_formulas.md`.
+
 ### Assistente de cargas e elementos de máquinas
 
 67 casos, cada um com formulário próprio, verificações, avisos, hipóteses, referências, Word e

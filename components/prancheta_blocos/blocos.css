@@ -1,0 +1,211 @@
+.mf {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--st-font);
+  font-size: 13px;
+  color: var(--st-text-color);
+}
+.paleta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.grupo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.rot {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-right: 2px;
+}
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dica {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.bloco {
+  display: inline-flex;
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--st-background-color);
+  border: 0;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.bloco button {
+  border-right: 1px solid var(--st-border-color);
+}
+.bloco button:last-child {
+  border-right: 0;
+}
+.grupo button {
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  padding: 3px 8px;
+  border-left-width: 3px;
+}
+.grupo.g-secao button {
+  border-left-color: #2563a8;
+}
+.grupo.g-origem button {
+  border-left-color: #b45309;
+}
+.grupo.g-esforco button {
+  border-left-color: #7c3aed;
+}
+.grupo.g-material button {
+  border-left-color: #64748b;
+}
+.grupo.g-criterio button {
+  border-left-color: #16836f;
+}
+.grupo.g-resultado button {
+  border-left-color: #c2415d;
+}
+button:hover {
+  background: var(--st-secondary-background-color);
+}
+svg {
+  display: block;
+  width: 100%;
+  height: 430px;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+  cursor: default;
+  background: var(--st-secondary-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  font-family: var(--st-font);
+}
+svg.puxando {
+  cursor: grabbing;
+}
+.corpo {
+  fill: var(--st-background-color);
+  stroke: var(--st-border-color);
+  stroke-width: 1.2;
+}
+.no.sel .corpo {
+  stroke: var(--st-primary-color);
+  stroke-width: 2.4;
+}
+.no.errado .corpo {
+  stroke: #c2415d;
+  stroke-width: 1.8;
+}
+.cab {
+  stroke: none;
+}
+.cab.g-secao {
+  fill: #2563a8;
+}
+.cab.g-origem {
+  fill: #b45309;
+}
+.cab.g-esforco {
+  fill: #7c3aed;
+}
+.cab.g-material {
+  fill: #64748b;
+}
+.cab.g-criterio {
+  fill: #16836f;
+}
+.cab.g-resultado {
+  fill: #c2415d;
+}
+.nome {
+  fill: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.fecha {
+  fill: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.formula {
+  fill: var(--st-text-color);
+  font-size: 11px;
+  opacity: 0.8;
+  pointer-events: none;
+}
+.resposta {
+  fill: #c2415d;
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.rotulo {
+  fill: var(--st-text-color);
+  font-size: 11px;
+  pointer-events: none;
+}
+.erro {
+  fill: #c2415d;
+  font-size: 11px;
+  pointer-events: none;
+}
+.porta {
+  stroke: var(--st-background-color);
+  stroke-width: 1.5;
+  cursor: crosshair;
+}
+.porta.t-secao {
+  fill: #2563a8;
+}
+.porta.t-valor {
+  fill: #b45309;
+}
+.porta.t-condicao {
+  fill: #16836f;
+}
+.porta.apagada {
+  opacity: 0.2;
+}
+.porta.pode {
+  stroke: var(--st-primary-color);
+  stroke-width: 3;
+}
+.fio {
+  fill: none;
+  stroke-width: 2.2;
+}
+.fio.t-secao {
+  stroke: #2563a8;
+}
+.fio.t-valor {
+  stroke: #b45309;
+}
+.fio.t-condicao {
+  stroke: #16836f;
+}
+.fio.sel {
+  stroke-width: 4;
+}
+.fio.solto {
+  stroke-dasharray: 5 4;
+}
+.toque {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  cursor: pointer;
+}

@@ -241,6 +241,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Parafusos, roscas, vigas, barras, perfis e elementos de máquinas",
             ),
             ItemMenu(
+                "app_pages/montador_formulas.py",
+                "Montador de fórmulas",
+                ":material/function:",
+                "Ligar seção, esforços e critério e isolar a medida, a carga ou o material",
+            ),
+            ItemMenu(
                 "app_pages/analise_estatica.py",
                 "Análise estática",
                 ":material/functions:",

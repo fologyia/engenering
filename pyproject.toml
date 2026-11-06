@@ -57,6 +57,11 @@ no_implicit_optional = true
 files = [
     "core/additional_load_models.py",
     "core/estudo_da_medida.py",
+    "core/montador.py",
+    "core/montador_blocos.py",
+    "core/montador_grandezas.py",
+    "core/montador_modelos.py",
+    "core/montador_secoes.py",
     "core/medidas_comerciais.py",
     "core/armazenamento.py",
     "core/acesso.py",

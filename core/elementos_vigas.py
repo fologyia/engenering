@@ -227,14 +227,19 @@ def _viga_do_desenho(nome: str, d: _Desenho, eixo: str) -> bs.SecaoViga:
     )
 
 
-def _secao_desenhada(nome: str, eixo: str) -> SecaoDoCaso:
+def desenho_salvo(nome: str) -> _Desenho:
+    """A seção salva em Desenhar seção, já analisada."""
     exigir(
         nome != SEM_DESENHO,
         "Escolha uma seção salva. Se ela ainda não existe, desenhe em Desenhar seção e salve.",
     )
     item = sc.obter(nome)
     exigir(bool(item.desenho), f"{nome} não tem desenho guardado.")
-    d = _desenho_guardado(item.desenho)
+    return _desenho_guardado(item.desenho)
+
+
+def _secao_desenhada(nome: str, eixo: str) -> SecaoDoCaso:
+    d = desenho_salvo(nome)
     return SecaoDoCaso(
         _viga_do_desenho(nome, d, eixo),
         nome,
