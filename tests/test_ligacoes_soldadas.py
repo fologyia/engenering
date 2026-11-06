@@ -271,7 +271,7 @@ def test_figura_e_registro_redesenham_a_solda_adotada(entrada):
     r = lg.calcular(entrada)
     figura = lg.figura(r)
     imagem = Image.open(io.BytesIO(figura.png))
-    assert imagem.format == "PNG" and imagem.size == (figura.largura_px, figura.altura_px)
+    assert imagem.format == "PNG" and imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
     registro = json.loads(json.dumps(lg.registro_ligacao(r, contexto={"tag": "LG-02"})))
     assert registro["entradas"]["norma"] == sd.NORMAS_ROTULOS[entrada.norma]
     assert len(registro["resultados"]["verificações"]) == len(r.verificacoes)

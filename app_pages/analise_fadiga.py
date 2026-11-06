@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components.figuras import SO_NA_LARGURA, mostrar_figura
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
@@ -395,7 +396,7 @@ with st.container(border=True), secao_protegida("3. Fator de tamanho"):
                     st.error(str(erro), icon=":material/error:")
                     st.stop()
             with desenho_geometria:
-                st.image(size.desenho_svg(rotulo_svg), width="stretch")
+                mostrar_figura(size.desenho_svg(rotulo_svg))
                 st.caption("Esquema para orientar as dimensoes da formula selecionada.")
             st.metric("A0,95sigma", f"{area_95:.2f} mm2", border=True)
             st.metric("Diametro equivalente calculado", f"{diametro_mm:.2f} mm", border=True)
@@ -1238,7 +1239,7 @@ with st.container(border=True), secao_protegida("9. Segurança por Goodman e Sod
                 "Tensão alternada admissível (MPa):Q",
                 title="Tensão alternada, σa (MPa)",
             ),
-            color=alt.Color("Critério:N", title=None),
+            color=alt.Color("Critério:N", title=None, legend=alt.Legend(orient="top")),
             tooltip=[
                 "Critério:N",
                 alt.Tooltip("Tensão média (MPa):Q", format=".1f"),
@@ -1258,8 +1259,10 @@ with st.container(border=True), secao_protegida("9. Segurança por Goodman e Sod
         )
         .mark_point(size=180, filled=True, color="#111")
         .encode(
-            x="Tensão média (MPa):Q",
-            y="Tensão alternada (MPa):Q",
+            # O mesmo título das curvas: com outro, o Altair emenda os dois num só, e um título mais
+            # comprido que o eixo encolhe o gráfico e corta os números.
+            x=alt.X("Tensão média (MPa):Q", title="Tensão média de tração, σm (MPa)"),
+            y=alt.Y("Tensão alternada (MPa):Q", title="Tensão alternada, σa (MPa)"),
             tooltip=[
                 "Ponto:N",
                 alt.Tooltip("Tensão média (MPa):Q", format=".1f"),
@@ -1268,7 +1271,7 @@ with st.container(border=True), secao_protegida("9. Segurança por Goodman e Sod
         )
     )
     st.altair_chart(
-        (curvas_criterios + ponto_operacao).properties(height=390),
+        (curvas_criterios + ponto_operacao).properties(height=330, autosize=SO_NA_LARGURA),
         width="stretch",
     )
     st.caption(
@@ -1376,9 +1379,9 @@ with st.container(border=True), secao_protegida("10. Curva S–N e estimativa de
                 y=alt.Y(
                     "Resistência (MPa):Q",
                     scale=alt.Scale(zero=False),
-                    title="Amplitude totalmente reversa equivalente (MPa)",
+                    title="Amplitude equivalente (MPa)",
                 ),
-                color=alt.Color("Trecho:N", title=None),
+                color=alt.Color("Trecho:N", title=None, legend=alt.Legend(orient="top")),
                 tooltip=[
                     alt.Tooltip("Ciclos:Q", format=".3e"),
                     alt.Tooltip("Resistência (MPa):Q", format=".1f"),
@@ -1395,7 +1398,10 @@ with st.container(border=True), secao_protegida("10. Curva S–N e estimativa de
                 .mark_rule(color="#d62728", strokeDash=[6, 4])
                 .encode(y="Amplitude equivalente de Goodman:Q")
             )
-        st.altair_chart(alt.layer(*camadas_sn).properties(height=390), width="stretch")
+        st.altair_chart(
+            alt.layer(*camadas_sn).properties(height=330, autosize=SO_NA_LARGURA),
+            width="stretch",
+        )
         st.caption(
             "A vida é estimada com a amplitude totalmente reversa equivalente "
             "de Goodman, incorporando o efeito da tensão média de tração. "

@@ -17,6 +17,7 @@ import streamlit as st
 
 from components.base_tecnica_ui import base_ativa, botao_recarregar_da_base, legenda_da_base
 from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
 from components.verification_table import COR_BADGE, mostrar_tabela_verificacoes
@@ -692,9 +693,9 @@ def _aba_pressoes(resultado: ve.ResultadoEdificio) -> None:
         desenho = c3.projetar(
             vd.cena_das_zonas(resultado, caso), azimute=azimute, elevacao=elevacao
         )
-        st.image(svg_da_cena(desenho), width="stretch")
+        mostrar_figura(svg_da_cena(desenho))
     with em_planta:
-        st.image(svg_planta(resultado, caso.alpha, caso), width="stretch")
+        mostrar_figura(svg_planta(resultado, caso.alpha, caso))
     tabela = pd.DataFrame(ve.tabela_de_pressoes(caso))
     st.dataframe(
         tabela,
@@ -727,7 +728,7 @@ def _aba_pressoes(resultado: ve.ResultadoEdificio) -> None:
 
 def _aba_vedacoes(resultado: ve.ResultadoEdificio) -> None:
     st.subheader("Vedações, terças, travessas e fixações", help=AJUDA["res_vedacoes"])
-    st.image(svg_vedacoes(resultado), width="stretch")
+    mostrar_figura(svg_vedacoes(resultado))
     cpis = sorted({c for linha in resultado.vedacoes for c, _p in linha.liquida_por_cpi})
     linhas = []
     for linha in resultado.vedacoes:
@@ -1027,7 +1028,7 @@ def _aba_portico(resultado: ve.ResultadoEdificio) -> tuple[list[vp.CasoPortico],
     )
     for aba, (_titulo, legenda, png) in zip(st.tabs(list(ABAS_DO_PORTICO)), figuras, strict=True):
         with aba:
-            st.image(png, width="stretch")
+            mostrar_figura(png)
             st.caption(legenda)
     st.markdown("**Reações nas bases**", help=AJUDA["res_p_reacoes"])
     st.dataframe(pd.DataFrame(solucao.reacoes), hide_index=True, width="stretch")

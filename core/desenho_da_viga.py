@@ -9,7 +9,6 @@ cima, momento positivo anti-horário, axial positiva para a direita.
 
 from __future__ import annotations
 
-import io
 import math
 from collections.abc import Sequence
 
@@ -17,7 +16,7 @@ from PIL import Image, ImageDraw
 
 from core import beam_model as bm
 from core import desenho_girado as dg
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 
 ESC = dg.ESC
 _BARRA = "#cbd5e1"
@@ -334,7 +333,4 @@ def figura_da_viga(v: bm.Viga) -> ImagemDiagrama:
         f"{len(v.cargas_pontuais)} carga(s) concentrada(s), {len(v.cargas_distribuidas)} "
         "distribuída(s)."
     )
-    final = imagem.resize((_LARGURA_PX, _ALTURA_PX), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), _LARGURA_PX, _ALTURA_PX)
+    return figura_final(imagem, titulo, legenda)

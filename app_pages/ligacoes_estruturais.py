@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.ligacoes_help import AJUDA
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -1339,7 +1340,7 @@ with secao_protegida("Figura da ligação"):
             help=AJUDA["giro_desenho"],
         )
     desenho = lg.figura(resultado, giro_graus=giro)
-    st.image(desenho.png, caption=desenho.legenda, width="stretch")
+    mostrar_figura(desenho)
 st.subheader("Verificações", help=AJUDA["res_verificacoes"])
 mostrar_verificacoes_resumidas(lg.verificacoes_por_grupo(resultado), nome=lg.nome_no_grupo)
 st.download_button(

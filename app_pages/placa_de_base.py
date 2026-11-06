@@ -7,6 +7,7 @@ import math
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.placa_de_base_help import AJUDA
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -524,7 +525,7 @@ if reprovadas:
 with secao_protegida("Desenho da base"):
     st.subheader("A base", help=AJUDA["res_figura"])
     desenho = figura_da_base(resultado)
-    st.image(desenho.png, caption=desenho.legenda, width="stretch")
+    mostrar_figura(desenho)
 st.subheader("Detalhamento adotado", help=AJUDA["res_adotado"])
 st.table(pd.DataFrame(resultado.detalhamento, columns=["Item", "Valor"]).set_index("Item"))
 st.caption(f":material/info: {bp.NOTA_TABELA_18}")

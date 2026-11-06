@@ -4,6 +4,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
@@ -53,7 +54,9 @@ TIPOS_CARGA = (
 def numero(valor: float, casas: int = 2) -> str:
     if valor is None or (isinstance(valor, float) and not math.isfinite(valor)):
         return "∞"
-    return f"{valor:,.{casas}f}".replace(",", " ")
+    texto = f"{valor:,.{casas}f}".replace(",", " ")
+    # -0.00 acontece com resíduo numérico de uma barra sem aquele esforço.
+    return texto.removeprefix("-") if not texto.strip("-0.") else texto
 
 
 def fator_seguranca_minimo_do_projeto() -> float:
@@ -716,7 +719,7 @@ for aviso in resultado.avisos:
 with st.container(border=True), secao_protegida("2. Esquema do modelo"):
     st.subheader("2. Esquema do modelo")
     esquema = figura_da_viga(modelo)
-    st.image(esquema.png, caption=esquema.legenda, width="stretch")
+    mostrar_figura(esquema)
     detalhes = st.columns(4)
     detalhes[0].metric("Comprimento", f"{comprimento_m:g} m", border=True)
     detalhes[1].metric("Seção", secao.nome, border=True, help=secao.descricao)
@@ -788,13 +791,13 @@ with st.container(border=True), secao_protegida("4. Valores extremos"):
     primeira = st.columns(4)
     primeira[0].metric(
         "Cortante máximo |V|",
-        f"{numero(extremos['cortante'].valor / 1_000.0)} kN",
+        f"{numero(abs(extremos['cortante'].valor) / 1_000.0)} kN",
         border=True,
         help=f"Em x = {extremos['cortante'].x_mm / 1_000.0:.3f} m.",
     )
     primeira[1].metric(
         "Momento máximo |M|",
-        f"{numero(extremos['momento'].valor / 1e6)} kN·m",
+        f"{numero(abs(extremos['momento'].valor) / 1e6)} kN·m",
         border=True,
         help=f"Em x = {extremos['momento'].x_mm / 1_000.0:.3f} m.",
     )
@@ -814,13 +817,18 @@ with st.container(border=True), secao_protegida("4. Valores extremos"):
     segunda = st.columns(4)
     segunda[0].metric(
         "Normal máximo |N|",
-        f"{numero(extremos['normal'].valor / 1_000.0)} kN",
+        f"{numero(abs(extremos['normal'].valor) / 1_000.0)} kN",
         border=True,
-        help="Positivo traciona a seção.",
+        help=(
+            "Maior esforço normal, sem o sinal; "
+            + ("tração." if extremos["normal"].valor > 0 else "compressão.")
+            if extremos["normal"].valor
+            else "Esta barra não tem esforço normal."
+        ),
     )
     segunda[1].metric(
         "Torque máximo |T|",
-        f"{numero(extremos['torque'].valor / 1e6, 3)} kN·m",
+        f"{numero(abs(extremos['torque'].valor) / 1e6, 3)} kN·m",
         border=True,
         help=f"Giro máximo: {math.degrees(extremos['giro_torcao'].valor):.4f}°.",
     )
@@ -920,14 +928,17 @@ tabela["ordem"] = range(len(tabela))
 def diagrama(coluna: str, titulo: str, cor: str, *, inverter: bool = False, altura: int = 210):
     # Só as colunas que o gráfico usa: cada Chart embute a tabela inteira
     # no JSON da página, e são dez gráficos sobre milhares de linhas.
+    # A ordem das linhas fica só na linha: numa área, ``order`` faz de cada ponto uma marca separada,
+    # sem preenchimento. A área ordena por x, e o salto mantém a ordem em que os pontos vieram.
     base = alt.Chart(tabela[["x (m)", coluna, "ordem"]]).encode(
         x=alt.X("x (m):Q", title="x (m)", scale=alt.Scale(nice=False, domainMin=0)),
-        order=alt.Order("ordem:Q"),
     )
     escala = alt.Scale(zero=True, reverse=inverter)
-    eixo_y = alt.Y(f"{coluna}:Q", title=titulo, scale=escala)
+    # stack=None: um salto do diagrama tem dois pontos no mesmo x, e empilhados eles somam,
+    # o que desenhava um pico no momento e listras no cortante.
+    eixo_y = alt.Y(f"{coluna}:Q", title=titulo, scale=escala, stack=None)
     area = base.mark_area(opacity=0.22, color=cor).encode(y=eixo_y)
-    linha = base.mark_line(color=cor, strokeWidth=2).encode(y=eixo_y)
+    linha = base.mark_line(color=cor, strokeWidth=2).encode(y=eixo_y, order="ordem:Q")
     zero = (
         alt.Chart(pd.DataFrame({"zero": [0.0]}))
         .mark_rule(color="#94a3b8", strokeDash=[4, 4])
@@ -1000,17 +1011,16 @@ with st.container(border=True), secao_protegida("5. Diagramas"):
             def faixa(coluna_max: str, coluna_min: str, titulo: str, cor: str):
                 base = alt.Chart(tabela_env[["x (m)", coluna_max, coluna_min, "ordem"]]).encode(
                     x=alt.X("x (m):Q", title="x (m)", scale=alt.Scale(nice=False, domainMin=0)),
-                    order=alt.Order("ordem:Q"),
                 )
                 area = base.mark_area(opacity=0.25, color=cor).encode(
                     y=alt.Y(f"{coluna_max}:Q", title=titulo),
                     y2=alt.Y2(f"{coluna_min}:Q"),
                 )
                 linha_max = base.mark_line(color=cor, strokeWidth=2).encode(
-                    y=alt.Y(f"{coluna_max}:Q")
+                    y=alt.Y(f"{coluna_max}:Q"), order="ordem:Q"
                 )
                 linha_min = base.mark_line(color=cor, strokeWidth=2, strokeDash=[4, 3]).encode(
-                    y=alt.Y(f"{coluna_min}:Q")
+                    y=alt.Y(f"{coluna_min}:Q"), order="ordem:Q"
                 )
                 zero = (
                     alt.Chart(pd.DataFrame({"zero": [0.0]}))

@@ -379,7 +379,8 @@ def test_memorial_word_desta_base():
 # ------------------------------------------------------------------ desenho
 def _contar(png: bytes, cor: tuple[int, int, int], tolerancia: int = 18) -> int:
     pixels = np.asarray(Image.open(io.BytesIO(png)).convert("RGB")).astype(int)
-    return int((np.abs(pixels - np.array(cor)).max(axis=2) <= tolerancia).sum())
+    # em pixels de tela: o arquivo tem o dobro em cada direção
+    return int((np.abs(pixels - np.array(cor)).max(axis=2) <= tolerancia).sum()) // 4
 
 
 VERMELHO = (0xB9, 0x1C, 0x1C)
@@ -401,7 +402,8 @@ AZUL = (0x1D, 0x4E, 0xD8)
 def test_desenho_mostra_tracao_e_pressao_so_quando_existem(entrada, tracao, pressao):
     figura = figura_da_base(bp.calcular(entrada))
     imagem = Image.open(io.BytesIO(figura.png))
-    assert imagem.size == (figura.largura_px, figura.altura_px) == (1100, 660)
+    assert imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
+    assert figura.largura_px <= 1100 and figura.altura_px <= 660
     # a legenda tem sempre uma seta de cada cor (uns 90 px); o desenho soma mais quando existe
     assert (_contar(figura.png, VERMELHO) > 200) is tracao
     assert (_contar(figura.png, AZUL) > 115) is pressao

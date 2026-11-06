@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
 from core import material_catalog as mat
@@ -267,7 +268,7 @@ if resultado_estatica:
     with st.container(border=True):
         st.subheader("Elementos de tensão")
         elementos = figura_dos_elementos(sigma_x, sigma_y, tau_xy)
-        st.image(elementos.png, caption=elementos.legenda, width="stretch")
+        mostrar_figura(elementos)
 
     grafico_esforcos, grafico_mohr = st.columns(2)
     with grafico_esforcos:
@@ -305,6 +306,9 @@ if resultado_estatica:
             centro = (sigma_x + sigma_y) / 2
             raio = math.sqrt(((sigma_x - sigma_y) / 2) ** 2 + tau_xy**2)
             angulos = np.linspace(0, 2 * np.pi, 241)
+            # Mesma escala nos dois eixos e área quadrada, senão o círculo sai achatado.
+            alcance = 1.2 * (raio or 1.0)
+            dominio_sigma = [centro - alcance, centro + alcance]
             circulo = pd.DataFrame(
                 {
                     "σ (MPa)": centro + raio * np.cos(angulos),
@@ -323,8 +327,8 @@ if resultado_estatica:
                 alt.Chart(circulo)
                 .mark_line()
                 .encode(
-                    x=alt.X("σ (MPa):Q", scale=alt.Scale(zero=False)),
-                    y=alt.Y("τ (MPa):Q", scale=alt.Scale(zero=False)),
+                    x=alt.X("σ (MPa):Q", scale=alt.Scale(domain=dominio_sigma, nice=False)),
+                    y=alt.Y("τ (MPa):Q", scale=alt.Scale(domain=[-alcance, alcance], nice=False)),
                     order="ordem:Q",
                 )
             )
@@ -342,7 +346,7 @@ if resultado_estatica:
                     ],
                 )
             )
-            st.altair_chart((linha + marcadores).properties(height=330), width="stretch")
+            st.altair_chart((linha + marcadores).properties(width=280, height=280), width="content")
 
     with st.container(border=True):
         st.subheader("Utilização das resistências")

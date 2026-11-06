@@ -22,6 +22,7 @@ from components import estudo_da_medida_ui as estudo_ui
 from components import load_models as modelos_de_secao
 from components.croqui_editavel_ui import croqui_editavel
 from components.elementos_croquis import CROQUIS, svg_do_croqui
+from components.figuras import mostrar_figura
 from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
@@ -309,7 +310,7 @@ def _desenho_do_caso(caso: Caso, resultado: Resultado | None) -> None:
     """O desenho feito com os números do cálculo. O croqui fica nos dados, com as medidas."""
     if resultado is not None and resultado.figuras:
         figura = resultado.figuras[0]
-        st.image(figura.png, caption=figura.legenda, width="stretch")
+        mostrar_figura(figura)
     if caso.formula:
         st.latex(caso.formula)
 
@@ -462,7 +463,7 @@ def _desenho_com_medidas(caso: Caso) -> frozenset[str]:
             ao_editar=partial(_ao_editar_cota, caso, chave),
         )
     elif svg:
-        st.image(svg, width="stretch")
+        mostrar_figura(svg, largura=520)
     aviso = st.session_state.get(f"{chave}::aviso")
     if aviso:
         st.warning(aviso, icon=":material/warning:")
@@ -742,7 +743,10 @@ def tabela_de_verificacoes(resultado: Resultado) -> None:
 
 
 def _grafico(grafico: Grafico) -> None:
-    """Diagrama com o valor ao passar o mouse. A ordem dos pontos é a da peça, por causa dos saltos."""
+    """Diagrama com o valor ao passar o mouse. A ordem dos pontos é a da peça, por causa dos saltos.
+
+    ``order`` fica só na linha: numa área, ele faz de cada ponto uma marca separada, sem preenchimento.
+    """
     tabela = pd.DataFrame(grafico.pontos, columns=["x", "y", "Curva"])
     tabela["ordem"] = range(len(tabela))
     varias = tabela["Curva"].nunique() > 1
@@ -754,15 +758,16 @@ def _grafico(grafico: Grafico) -> None:
             scale=alt.Scale(nice=False),
             axis=alt.Axis(tickCount=8, labelFlush=False),
         ),
-        order=alt.Order("ordem:Q"),
     )
     cor = grafico.cor or "#0B6E99"
     if varias:
         linha = base.mark_line(strokeWidth=2).encode(
-            y=eixo_y, color=alt.Color("Curva:N", legend=alt.Legend(title=None, orient="top"))
+            y=eixo_y,
+            color=alt.Color("Curva:N", legend=alt.Legend(title=None, orient="top")),
+            order="ordem:Q",
         )
     else:
-        linha = base.mark_line(strokeWidth=2, color=cor).encode(y=eixo_y)
+        linha = base.mark_line(strokeWidth=2, color=cor).encode(y=eixo_y, order="ordem:Q")
     camadas = [linha]
     if grafico.area and not varias:
         camadas.insert(0, base.mark_area(opacity=0.18, color=cor).encode(y=eixo_y))
@@ -827,7 +832,7 @@ def _pontos(resultado: Resultado) -> None:
     )
     if critico:
         figura = figura_dos_elementos(critico.sigma_x, critico.sigma_y, critico.tau_xy)
-        st.image(figura.png, caption=f"{critico.nome}. {figura.legenda}", width="stretch")
+        mostrar_figura(figura, f"{critico.nome}. {figura.legenda}")
 
 
 def abrir_caso_preenchido(destino: str, novos: dict[str, Any]) -> None:
@@ -1007,7 +1012,7 @@ def detalhes(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None:
     if len(resultado.figuras) > 1:
         colunas = st.columns(2)
         for coluna, figura in zip(colunas, resultado.figuras[1:], strict=False):
-            coluna.image(figura.png, caption=figura.legenda, width="stretch")
+            mostrar_figura(figura, alvo=coluna)
     with secao_protegida("Pontos de tensão"):
         _pontos(resultado)
 

@@ -16,6 +16,7 @@ import streamlit as st
 
 from components.base_tecnica_ui import base_ativa, gravar_campos_do_projeto
 from components.figura_guarda_corpo import svg_bordas_do_piso
+from components.figuras import mostrar_figura
 from components.guarda_corpo_help import AJUDA
 from components.robustez import secao_protegida
 from core import guarda_corpo_do_modelo as gm
@@ -215,9 +216,7 @@ def mostrar_guarda_corpo_do_modelo(
         for aviso in bordas.avisos:
             st.warning(aviso, icon=":material/warning:")
         st.caption("Planta das bordas", help=AJUDA["res_desenho"])
-        st.image(
-            svg_bordas_do_piso(bordas, geometria, eixo_vertical, escolha_tela), width="stretch"
-        )
+        mostrar_figura(svg_bordas_do_piso(bordas, geometria, eixo_vertical, escolha_tela))
         linha = st.columns(3)
         peso = linha[0].number_input(
             "Peso do guarda-corpo (kN/m)",

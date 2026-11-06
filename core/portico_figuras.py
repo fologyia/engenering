@@ -16,7 +16,6 @@ o formato de imagem (:class:`ImagemDiagrama`) de :mod:`core.beam_charts`. Sem St
 
 from __future__ import annotations
 
-import io
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -33,7 +32,7 @@ from core.beam_charts import (
     ImagemDiagrama,
     _fonte,
     _rgba,
-    desenho_dispensado,
+    figura_final,
 )
 
 _ESC = 2  # desenho no dobro do tamanho, reduzido no fim
@@ -186,14 +185,7 @@ def _nova_tela(
 
 
 def _finalizar(imagem: Image.Image, tela: _Tela, titulo: str, legenda: str) -> ImagemDiagrama:
-    if desenho_dispensado():
-        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
-    final = imagem.convert("RGB").resize(
-        (tela.largura_px, tela.altura_px), Image.Resampling.LANCZOS
-    )
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), tela.largura_px, tela.altura_px)
+    return figura_final(imagem, titulo, legenda)
 
 
 def _cabecalho(d: ImageDraw.ImageDraw, tela: _Tela, titulo: str, nota: str = "") -> None:

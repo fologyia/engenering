@@ -34,7 +34,7 @@ from core import criterio_anglo as ca
 from core import nbr8800 as nb
 from core import section_catalog as sc
 from core import soldas as sd
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 from core.desenho_girado import Tela as _Tela
 from core.desenho_girado import angulo_do_giro, texto_do_giro
 from core.desenho_girado import arco_entre as _arco_entre
@@ -62,7 +62,6 @@ from core.ligacoes import (
     LigacaoInvalida,
     ResultadoLigacao,
     _chamada,
-    _png,
 )
 from core.verificacao import Verificacao
 
@@ -1616,7 +1615,7 @@ def figura_chapa_no_apoio(e: EntradaChapaNoApoio, giro_graus: float = 0.0) -> Im
         )
         + f"{_n(comprimento, 0)} mm de junta."
     )
-    return ImagemDiagrama(titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px)  # fmt: skip
+    return figura_final(imagem, titulo, legenda)
 
 
 @dataclass(frozen=True)
@@ -1878,7 +1877,7 @@ def figura_barra_soldada(e: EntradaBarraSoldada, giro_graus: float = 0.0) -> Ima
         + (f"; chapa de nó soldada no apoio em {_n(l_apoio, 0)} mm" if e.com_apoio else "")
         + "."
     )
-    return ImagemDiagrama(titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px)  # fmt: skip
+    return figura_final(imagem, titulo, legenda)
 
 
 #: Códigos que o memorial mostra pelo texto.

@@ -12,6 +12,7 @@ from components.base_tecnica_ui import (
     gravar_plano,
     mapa_do_projeto,
 )
+from components.figuras import mostrar_figura
 from components.figuras_estrutura import svg_convencao_de_eixos
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
@@ -512,7 +513,7 @@ with st.container(border=True), secao_protegida("Exportar para o modelo"):
     )
     sistema = ex.SISTEMAS[nome_sistema]
     st.subheader("Convenção de eixos e sinais", help=AJUDA["res_convencao"])
-    st.image(svg_convencao_de_eixos(eixos), width="stretch")
+    mostrar_figura(svg_convencao_de_eixos(eixos))
     linhas_carga = ex.linhas_de_carga(plano, sistema, eixos)
     st.subheader(f"Cargas por caso ({len(linhas_carga)})", help=AJUDA["res_previa"])
     if linhas_carga:

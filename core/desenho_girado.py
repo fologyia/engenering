@@ -3,8 +3,8 @@
 Usado pelos desenhos das ligações soldadas (:mod:`core.ligacoes`, :mod:`core.ligacoes_soldadas`)
 e pelo desenho da seção da coluna (:mod:`core.desenho_da_secao`). O giro é só do desenho:
 anti-horário para valores positivos. O texto fica sempre de pé, com a âncora escolhida pelo lado
-para onde ele sai, e as cotas acompanham a peça. As medidas em px já estão na escala ``ESC`` (o
-desenho é feito no dobro do tamanho e reduzido no fim, para sair liso).
+para onde ele sai, e as cotas acompanham a peça. As medidas em px já estão na escala ``ESC``: o
+desenho é feito no dobro do tamanho, que é o que o PNG guarda (:func:`core.beam_charts.figura_final`).
 """
 
 from __future__ import annotations

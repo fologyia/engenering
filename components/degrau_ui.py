@@ -18,6 +18,7 @@ import pandas as pd
 import streamlit as st
 
 from components.degrau_help import AJUDA
+from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import fronteira_modelo
@@ -920,7 +921,7 @@ def _aba_escada_3d(
     dados["azimute"] = azimute + float(giro)
     dados["elevacao"] = elevacao
     desenho = c3.projetar(cesc.cena_do_registro(dados), azimute=dados["azimute"], elevacao=elevacao)
-    st.image(svg_da_cena(desenho), width="stretch")
+    mostrar_figura(svg_da_cena(desenho))
     st.caption(
         f"{str(modo)} — é assim que a escada sai no relatório em PDF e no memorial. Longarina "
         f"{perfil}, guarda-corpo de {_pt(r.entrada.gc_superior_mm, 0)} mm."
@@ -931,7 +932,7 @@ def _aba_escada_3d(
 def _aba_escada(escada: el.EscadaComPatamares) -> None:
     st.subheader("Esquemático da escada", help=AJUDA["res_escada"])
     legenda, png = _figura_da_escada(json.dumps(el.para_dicionario(escada), sort_keys=True))
-    st.image(png, caption=legenda, width="stretch")
+    mostrar_figura(png, legenda)
     st.dataframe(
         pd.DataFrame(el.linhas_dos_lances(escada), columns=el.CABECALHO_LANCES),
         hide_index=True,
@@ -1008,7 +1009,7 @@ def _aba_longarina(resultado: le.ResultadoLongarina) -> None:
     nomes = ["Modelo", "Reações", "Normal", "Cortante", "Momento", *tensao, "Deformada"]
     for aba, (_titulo, legenda, png) in zip(st.tabs(nomes), figuras, strict=True):
         with aba:
-            st.image(png, caption=legenda, width="stretch")
+            mostrar_figura(png, legenda)
 
     st.subheader("Cargas por longarina", help=AJUDA["res_lg_cargas"])
     st.dataframe(

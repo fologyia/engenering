@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.material_verification import mostrar_verificacao_material
 from components.project_tools import (
     botao_registrar_calculo,
@@ -620,7 +621,7 @@ if modo == "Estado plano (2D)":
             ),
         )
         elementos = figura_dos_elementos(sigma_x, sigma_y, tau_xy, theta_graus)
-        st.image(elementos.png, caption=elementos.legenda, width="stretch")
+        mostrar_figura(elementos)
 
     with st.container(border=True):
         st.subheader("Mapa das transformações")

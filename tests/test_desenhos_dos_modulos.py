@@ -26,7 +26,7 @@ from core import reacoes_nas_bases as rb
 
 def _png(desenho) -> Image.Image:
     imagem = Image.open(io.BytesIO(desenho.png))
-    assert imagem.format == "PNG" and imagem.size == (desenho.largura_px, desenho.altura_px)
+    assert imagem.format == "PNG" and imagem.size == (2 * desenho.largura_px, 2 * desenho.altura_px)
     return imagem
 
 

@@ -6,6 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components.figuras import SO_NA_LARGURA
 from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
@@ -232,9 +233,12 @@ if resultado and resultado.get("modelo_id") == modelo_id:
         .mark_bar(cornerRadiusEnd=4)
         .encode(
             x=alt.X("impacto_percentual:Q", title="Variação total da saída (% do nominal)"),
-            y=alt.Y("variavel:N", sort="-x", title=None),
+            y=alt.Y("variavel:N", sort="-x", title=None, axis=alt.Axis(labelLimit=260)),
             color=alt.Color(
-                "direcao_critica:N", title="Piora ao", scale=alt.Scale(range=["#7C3AED", "#D97706"])
+                "direcao_critica:N",
+                title="Piora ao",
+                scale=alt.Scale(range=["#7C3AED", "#D97706"]),
+                legend=alt.Legend(orient="top"),
             ),
             tooltip=[
                 alt.Tooltip("variavel:N", title="Entrada"),
@@ -243,7 +247,7 @@ if resultado and resultado.get("modelo_id") == modelo_id:
                 alt.Tooltip("direcao_critica:N", title="Direção crítica"),
             ],
         )
-        .properties(height=max(220, 42 * len(ranking_df)))
+        .properties(height=max(160, 42 * len(ranking_df)), autosize=SO_NA_LARGURA)
     )
     st.altair_chart(grafico_ranking, width="stretch")
     st.caption(

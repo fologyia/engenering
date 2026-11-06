@@ -9,7 +9,6 @@ sentido anti-horário. Convenção: τxy positivo puxa a face +x para +y.
 
 from __future__ import annotations
 
-import io
 import math
 from dataclasses import dataclass
 
@@ -17,14 +16,14 @@ from PIL import Image, ImageDraw
 
 from core import desenho_girado as dg
 from core import mohr_analysis as mohr
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 
 ESC = dg.ESC
 _TRACAO = "#1d4ed8"
 _COMPRESSAO = "#b91c1c"
 _CISALHAMENTO = "#7c3aed"
 _ELEMENTO = "#e2e8f0"
-_ALTURA_PX = 400
+_ALTURA_PX = 340
 
 Ponto = tuple[float, float]
 
@@ -51,7 +50,7 @@ def _direcao(angulo_graus: float) -> Ponto:
 
 
 def _elemento(dr: ImageDraw.ImageDraw, e: Elemento, centro: Ponto, maior: float) -> None:
-    lado = 46 * ESC
+    lado = 42 * ESC
     cx, cy = centro
     ux, vy = _direcao(e.angulo_graus), _direcao(e.angulo_graus + 90.0)
     cantos = [
@@ -84,7 +83,7 @@ def _elemento(dr: ImageDraw.ImageDraw, e: Elemento, centro: Ponto, maior: float)
         )
 
     def comprimento(valor: float) -> float:
-        return 12 * ESC + 34 * ESC * abs(valor) / maior if maior > 0 else 12 * ESC
+        return 12 * ESC + 26 * ESC * abs(valor) / maior if maior > 0 else 12 * ESC
 
     def normal(direcao: Ponto, valor: float, nome: str, rotular: bool) -> None:
         if abs(valor) < 1e-9:
@@ -120,10 +119,11 @@ def _elemento(dr: ImageDraw.ImageDraw, e: Elemento, centro: Ponto, maior: float)
         a, b = dg.mais(meio, sentido, -tamanho / 2), dg.mais(meio, sentido, tamanho / 2)
         dg.seta(dr, a, b, _CISALHAMENTO, largura=2 * ESC, ponta_px=9 * ESC)
         if rotular:
+            # para fora da face: ao longo dela, o fundo branco do rótulo cobria o canto do elemento
             dg.rotulo(
                 dr,
                 b,
-                sentido,
+                direcao,
                 4 * ESC,
                 f"{e.nomes[2]} = {_n(abs(valor))}",
                 _CISALHAMENTO,
@@ -210,20 +210,20 @@ def figura_dos_elementos(
 ) -> ImagemDiagrama:
     """Os elementos de tensão lado a lado, em MPa."""
     lista = elementos(sigma_x, sigma_y, tau_xy, theta_graus)
-    largura_painel = 270
+    largura_painel = 232
     largura_px = largura_painel * len(lista) + 40
     imagem = Image.new("RGB", (largura_px * ESC, _ALTURA_PX * ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
     maior = max(abs(v) for e in lista for v in (e.sigma_x, e.sigma_y, e.tau)) or 1.0
     for k, e in enumerate(lista):
         x0 = (20 + k * largura_painel) * ESC
-        centro = (x0 + largura_painel / 2 * ESC, 205 * ESC)
+        centro = (x0 + largura_painel / 2 * ESC, 188 * ESC)
         dr.text(
             (centro[0], 74 * ESC), e.titulo, fill=dg.COR_TEXTO, font=_fonte(13 * ESC), anchor="mm"
         )
         _elemento(dr, e, centro, maior)
         if k:
-            dr.line([(x0, 70 * ESC), (x0, 340 * ESC)], fill="#e2e8f0", width=ESC)
+            dr.line([(x0, 70 * ESC), (x0, 296 * ESC)], fill="#e2e8f0", width=ESC)
     itens: list[tuple[str, str, str]] = [
         ("seta", _TRACAO, "tração (para fora da face)"),
         ("seta", _COMPRESSAO, "compressão (para dentro)"),
@@ -246,7 +246,4 @@ def figura_dos_elementos(
         + ("girado, " if abs(theta_graus) > 0.05 else "")
         + "nas direções principais e no cisalhamento máximo."
     )
-    final = imagem.resize((largura_px, _ALTURA_PX), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), largura_px, _ALTURA_PX)
+    return figura_final(imagem, titulo, legenda)

@@ -16,7 +16,6 @@ além da linha neutra inclinada (LN) e o corte, a força do chumbador mais traci
 
 from __future__ import annotations
 
-import io
 import math
 from typing import Any
 
@@ -24,7 +23,7 @@ from PIL import Image, ImageDraw
 
 from core import base_de_pilar as bp
 from core import desenho_girado as dg
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 
 ESC = dg.ESC
 _PLACA = "#bfdbfe"
@@ -587,7 +586,4 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
         f"{_n(g.ly)} × {_n(e.t_placa_mm, 1)} mm, {e.n_chumbadores} chumbadores Ø {tab.polegada}; caso "
         f"{r.caso}" + (" com flexão oblíqua." if e.m_sd_y_kNm else ".")
     )
-    final = imagem.resize((_LARGURA_PX, _ALTURA_PX), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), _LARGURA_PX, _ALTURA_PX)
+    return figura_final(imagem, titulo, legenda)

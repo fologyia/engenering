@@ -12,7 +12,10 @@
   border-radius: 10px;
   overflow: hidden;
 }
+/* O croqui acompanha a coluna só até aqui: numa tela grande, as letras ficavam enormes. */
 .desenho svg {
+  max-width: 520px;
+  margin: 0 auto;
   display: block;
   width: 100%;
   height: auto;

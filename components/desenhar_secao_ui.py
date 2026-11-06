@@ -17,6 +17,7 @@ from components.assistente_cargas_ui import (
     enviar_para_mohr,
     tabela_de_verificacoes,
 )
+from components.figuras import mostrar_figura
 from components.prancheta_ui import prancheta
 from components.project_tools import (
     botao_registrar_calculo,
@@ -628,7 +629,7 @@ def _tensoes(analise: sd.Analise, impressao: str) -> None:
     )
     figura, resumo = st.columns([3, 2])
     desenho = figura_de_tensoes(analise, mapa, _MAPAS.get(escolha or "", "sigma"))
-    figura.image(desenho.png, caption=desenho.legenda, width="stretch")
+    mostrar_figura(desenho, alvo=figura)
     fs_real = e["fy"] / mapa.mises if mapa.mises > 0 else float("inf")
     _cartao(resumo, "Maior tração", _numero(mapa.sigma_max), "MPa", "Maior σ da seção.")
     _cartao(resumo, "Maior compressão", _numero(mapa.sigma_min), "MPa", "Menor σ da seção.")

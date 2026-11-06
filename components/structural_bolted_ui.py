@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from components.bolted_help import AJUDA
+from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo
 from components.ui import comparador_cenarios, fronteira_modelo
 from components.verification_table import (
@@ -1062,7 +1063,7 @@ def _distribuicao(resultado: chk.ResultadoLigacao) -> None:
         tabela = pd.DataFrame(linhas)
         desenho = figura_parafusos(resultado)
         if desenho is not None:
-            st.image(desenho.png, caption=desenho.legenda, width="stretch")
+            mostrar_figura(desenho)
         st.dataframe(
             tabela,
             hide_index=True,

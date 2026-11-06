@@ -7,7 +7,6 @@ primeiro; passando de :data:`MAXIMO_DE_LINHAS`, o resto vira "Outros".
 
 from __future__ import annotations
 
-import io
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from PIL import Image, ImageDraw
 
 from core import desenho_girado as dg
 from core import lista_de_material as lm
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 
 ESC = dg.ESC
 _BARRA = "#3b82f6"
@@ -151,7 +150,4 @@ def figura_da_massa(resumo: lm.ResumoDaLista) -> ImagemDiagrama | None:
         f"Massa por perfil ({len(perfis)}) e por espessura de chapa ({len(chapas)}); "
         f"massa dos itens {_kg(total)}."
     )
-    final = imagem.resize((_LARGURA_PX, altura_px), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), _LARGURA_PX, altura_px)
+    return figura_final(imagem, titulo, legenda)

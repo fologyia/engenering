@@ -302,7 +302,8 @@ RESINA = (0xFB, 0xBF, 0x24)
 
 def _contar(png: bytes, cor: tuple[int, int, int], tolerancia: int = 18) -> int:
     pixels = np.asarray(Image.open(io.BytesIO(png)).convert("RGB")).astype(int)
-    return int((np.abs(pixels - np.array(cor)).max(axis=2) <= tolerancia).sum())
+    # em pixels de tela: o arquivo tem o dobro em cada direção
+    return int((np.abs(pixels - np.array(cor)).max(axis=2) <= tolerancia).sum()) // 4
 
 
 @pytest.mark.parametrize(
@@ -318,7 +319,7 @@ def _contar(png: bytes, cor: tuple[int, int, int], tolerancia: int = 18) -> int:
 )
 def test_desenho_das_disposicoes_e_tipos(entrada):
     figura = figura_da_base(bp.calcular(entrada))
-    assert Image.open(io.BytesIO(figura.png)).size == (1100, 660)
+    assert figura.largura_px <= 1100 and figura.altura_px <= 660
     assert _contar(figura.png, VERMELHO) > 200  # chumbadores tracionados
     assert bp.NOMES_CURTOS[entrada.tipo] in figura.titulo
 

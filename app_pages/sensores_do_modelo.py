@@ -10,6 +10,7 @@ import streamlit as st
 
 from components.base_tecnica_ui import gravar_campo_do_projeto
 from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.sensores_do_modelo_help import AJUDA
@@ -375,7 +376,7 @@ with st.container(border=True), secao_protegida("4. Resultados"):
     )
     paineis = dds.paineis_da_analise(analise)
     if paineis:
-        st.image(svg_da_cena(dds.desenho_dos_sensores(paineis)), width="stretch")
+        mostrar_figura(svg_da_cena(dds.desenho_dos_sensores(paineis)))
     with st.expander("O quadro inteiro e as combinações que governam", icon=":material/table:"):
         st.dataframe(
             pd.DataFrame(sm.linhas_do_quadro(analise), columns=sm.colunas_do_quadro(analise)),

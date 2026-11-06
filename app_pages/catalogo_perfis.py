@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import column_buckling as cb
@@ -103,7 +104,7 @@ with st.container(border=True), secao_protegida("Desenho do perfil"):
         desenho = figura_das_partes(analise.partes, analise.prop)
     else:
         desenho = figura_da_secao(cb.secao_de_perfil(perfil_desenho))
-    st.image(desenho.png, caption=desenho.legenda, width="stretch")
+    mostrar_figura(desenho)
     if partes_salvas:
         st.page_link(
             "app_pages/desenhar_secao.py",

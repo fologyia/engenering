@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from components.base_tecnica_ui import base_ativa, legenda_da_base
+from components.figuras import mostrar_figura
 from components.figuras_estrutura import svg_viga_de_piso
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -214,7 +215,7 @@ colunas[3].metric(
     help=AJUDA["res_flecha"],
 )
 st.subheader("A viga", help=AJUDA["res_desenho"])
-st.image(
+mostrar_figura(
     svg_viga_de_piso(
         vao,
         sum(resultado.cargas_kN_m.values()),
@@ -222,7 +223,6 @@ st.image(
         resultado.flecha_mm,
         resultado.reacao_caracteristica_kN,
     ),
-    width="stretch",
 )
 st.caption(
     f"Peso próprio {resultado.peso_proprio_kN_m:.3f} kN/m · momento: {resultado.combinacao_momento}"

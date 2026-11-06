@@ -10,6 +10,7 @@ import streamlit as st
 
 from components.base_tecnica_ui import base_ativa
 from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.guarda_corpo_ui import escolha_inicial
 from components.modelo_3d_help import AJUDA
 from components.project_tools import botao_registrar_calculo
@@ -231,7 +232,7 @@ def mostrar_modelo_3d(projeto: Any) -> None:
             perfil_real=desenho == PERFIL_REAL,
         )
         colunas = st.columns([3, 1])
-        colunas[0].image(svg_da_cena(resultado), width="stretch")
+        mostrar_figura(svg_da_cena(resultado), alvo=colunas[0])
         with colunas[1]:
             _painel_lateral(barra, corpos, nomes, tipos, valores, eixo)
             if caso_das_cargas != NENHUM:

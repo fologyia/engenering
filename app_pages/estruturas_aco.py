@@ -5,6 +5,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import base_plate as placa_base
@@ -281,7 +282,7 @@ if modulo == "1. Perfis":
             st.metric("Iy", f"{perfil.iy_mm4 / 1e4:.1f} cm⁴", border=True)
             st.metric("Zx", f"{perfil.zx_mm3 / 1e3:.1f} cm³", border=True)
         desenho_perfil = figura_da_secao(secao_da_coluna.secao_de_perfil(perfil))
-        st.image(desenho_perfil.png, caption=desenho_perfil.legenda, width="stretch")
+        mostrar_figura(desenho_perfil)
         propriedades = pd.DataFrame(
             {
                 "Propriedade": [

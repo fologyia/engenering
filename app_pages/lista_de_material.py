@@ -7,6 +7,7 @@ import streamlit as st
 
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import gravar_campo_do_projeto, mapa_do_projeto
+from components.figuras import mostrar_figura
 from components.lista_de_material_help import AJUDA
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
@@ -271,7 +272,7 @@ with st.container(border=True), secao_protegida("3. Resumo"):
     quadro = figura_da_massa(resumo)
     if quadro is not None:
         st.subheader("Quadro de massa", help=AJUDA["sec_quadro"])
-        st.image(quadro.png, caption=quadro.legenda, width="stretch")
+        mostrar_figura(quadro)
     if resumo.perfis:
         st.subheader("Por perfil", help=AJUDA["sec_perfis"])
         st.dataframe(

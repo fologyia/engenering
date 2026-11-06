@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.ui import cabecalho_pagina, configurar_pagina
 
 
@@ -2177,7 +2178,7 @@ elif modulo == "Plano de cargas":
     from core import exportacao_cargas as _ex
 
     st.subheader("Convenção de eixos e sinais")
-    st.image(_figura_eixos(_ex.EIXO_Y_PARA_CIMA), width="stretch")
+    mostrar_figura(_figura_eixos(_ex.EIXO_Y_PARA_CIMA))
     st.subheader("Passo a passo")
     st.markdown(
         """

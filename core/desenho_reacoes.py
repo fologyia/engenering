@@ -8,14 +8,13 @@ momento, quando há. São as ações da estrutura na fundação, característica
 
 from __future__ import annotations
 
-import io
 import math
 
 from PIL import Image, ImageDraw
 
 from core import desenho_girado as dg
 from core import reacoes_nas_bases as rb
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 
 ESC = dg.ESC
 _COMPRESSAO = "#93c5fd"
@@ -160,7 +159,4 @@ def figura_das_reacoes(r: rb.ReacoesNasBases, caso: str) -> ImagemDiagrama | Non
         font=_fonte(11 * ESC),
     )
     legenda = f"Planta dos pés com as reações do caso {caso} (características, sem combinar)."
-    final = imagem.resize((_LARGURA_PX, _ALTURA_PX), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), _LARGURA_PX, _ALTURA_PX)
+    return figura_final(imagem, titulo, legenda)

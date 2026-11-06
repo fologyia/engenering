@@ -28,6 +28,7 @@ from components.base_tecnica_ui import (
     plano_ativo,
 )
 from components.contraventamento_estrutura_help import AJUDA
+from components.figuras import mostrar_figura
 from components.figuras_estrutura import svg_elevacao_linha, svg_planta, svg_vento_elevacao
 from components.figuras_vento import svg_vento_3d
 from components.project_tools import botao_registrar_calculo
@@ -1229,7 +1230,7 @@ def grafico_do_cortante(andares: list[cp.AndarNaDirecao]) -> alt.Chart:
 def _aba_desenhos(r: cp.ResultadoContraventamento) -> None:
     e = r.entrada
     st.subheader("Planta", help=AJUDA["res_desenhos"])
-    st.image(svg_planta(e), width="stretch")
+    mostrar_figura(svg_planta(e))
     direcao = st.radio(
         "Direção",
         list(cp.DIRECOES),
@@ -1238,19 +1239,16 @@ def _aba_desenhos(r: cp.ResultadoContraventamento) -> None:
         help=AJUDA["desenho_direcao"],
     )
     st.subheader(f"Elevação da linha contraventada — {direcao}", help=AJUDA["res_desenhos"])
-    st.image(svg_elevacao_linha(e, r.andares_da_direcao(direcao), direcao), width="stretch")
+    mostrar_figura(svg_elevacao_linha(e, r.andares_da_direcao(direcao), direcao))
     ve = e.vento_do_esqueleto
     if ve is not None:
         angulo = 0 if direcao == "X" else 90
         st.subheader(f"Vento W{angulo} viga a viga", help=AJUDA["res_vento_3d"])
-        st.image(
-            svg_vento_3d(ve.resultado, angulo, eixo_vertical=ve.eixo_vertical), width="stretch"
-        )
+        mostrar_figura(svg_vento_3d(ve.resultado, angulo, eixo_vertical=ve.eixo_vertical))
     else:
         st.subheader(f"Vento em {direcao} nos pórticos", help=AJUDA["res_vento_niveis"])
-        st.image(
+        mostrar_figura(
             svg_vento_elevacao(cp.geometria_do_vento(e), r.vento.direcao(direcao)),
-            width="stretch",
         )
     st.subheader("Cortante de cálculo por andar", help=AJUDA["res_cortante"])
     st.altair_chart(grafico_do_cortante(list(r.andares)), width="stretch")
@@ -1352,9 +1350,8 @@ def _aba_vento_por_barras(r: cp.ResultadoContraventamento) -> None:
         help=AJUDA["vb_ver"],
     )
     with secao_protegida("Desenho 3D do vento no contraventamento"):
-        st.image(
+        mostrar_figura(
             svg_vento_3d(ve.resultado, int(angulo), eixo_vertical=ve.eixo_vertical),
-            width="stretch",
         )
     st.subheader("Reticulados (planos perpendiculares ao vento)", help=AJUDA["res_planos"])
     _tabela(tabelas[1])

@@ -8,6 +8,7 @@ import streamlit as st
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import base_ativa, gravar_campos_do_projeto, mapa_do_projeto
 from components.cargas_esqueleto_help import AJUDA
+from components.figuras import mostrar_figura
 from components.figuras_estrutura import svg_planta_do_esqueleto
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -484,7 +485,7 @@ with st.container(border=True), secao_protegida("3. Cargas nas barras"):
         "Caso", list(casos) or ["PE"], key="ce_caso", help=AJUDA["caso_desenho"]
     )
     st.subheader("Planta do nível", help=AJUDA["res_desenho"])
-    st.image(svg_planta_do_esqueleto(resultado, int(nivel), caso_escolhido), width="stretch")
+    mostrar_figura(svg_planta_do_esqueleto(resultado, int(nivel), caso_escolhido))
     st.subheader(f"Cargas distribuídas — {caso_escolhido}", help=AJUDA["res_barras"])
     st.dataframe(
         pd.DataFrame(

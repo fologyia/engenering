@@ -18,6 +18,14 @@ _RECENTES = 4
 
 _ESTILO = """
 <style>
+/* Valor longo quebra a linha em vez de sair cortado com reticências. */
+[data-testid="stMetricValue"] div,
+[data-testid="stMetricValue"] p {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
 [data-testid="stSidebar"] [data-testid="stExpander"] details {
   border: 0;
   background: transparent;

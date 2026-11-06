@@ -18,6 +18,7 @@ import streamlit as st
 
 from components.base_tecnica_ui import base_ativa
 from components.contraventamento_help import AJUDA
+from components.figuras import mostrar_figura
 from components.figuras_estrutura import svg_ligacao
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
@@ -1081,7 +1082,7 @@ def _dimensoes_adotadas(dim: dm.Dimensionamento) -> None:
 
 def _aba_desenho(r: lig.ResultadoLigacao) -> None:
     st.subheader("Chapa de nó em escala", help=AJUDA["res_desenho"])
-    st.image(svg_ligacao(r), width="stretch")
+    mostrar_figura(svg_ligacao(r))
     st.caption(
         "Perfis, chapa, grupo de parafusos, seção de Whitmore e as forças de cálculo em cada "
         "interface. A posição do grupo ao longo da diagonal é ilustrativa: confira as folgas no "

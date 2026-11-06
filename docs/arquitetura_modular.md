@@ -126,3 +126,26 @@ específicos. A exportação JSON leva os eventos junto com o histórico.
 - a transferência para outro módulo deve usar o vetor completo do cenário
   governante selecionado.
 
+## Figuras e gráficos
+
+Toda figura em PNG fecha em `core.beam_charts.figura_final`, e toda figura vai à tela por
+`components.figuras.mostrar_figura`. As regras:
+
+- o desenho é feito no dobro do tamanho de tela e o PNG guarda esse dobro, com o DPI gravado: sai
+  nítido com a escala do Windows acima de 100 % e no papel;
+- o branco em volta é aparado. Um desenho nunca fica pequeno num quadro vazio;
+- `largura_px` e `altura_px` são o tamanho de tela, não o do arquivo;
+- a figura aparece no tamanho dela e só encolhe se a coluna for menor. Com `width="stretch"`, o
+  texto encolhia na coluna estreita e inchava na tela grande;
+- abaixo de 1,2 de proporção, o branco fica dos lados: no Word a figura tem a largura da página, e
+  uma seção alta aparada passaria da folha;
+- uma figura que vai à coluna de resposta do Assistente tem até 640 px de largura, para o texto de
+  13 px não cair abaixo de 9 px numa janela comum.
+
+Nos gráficos do Altair:
+
+- `order` só em linha. Numa área, ele faz de cada ponto uma marca separada, sem preenchimento;
+- área com pontos repetidos no mesmo x leva `stack=None`, senão os valores do salto se somam;
+- camadas do mesmo eixo levam o mesmo título, senão o Altair emenda os dois num título só;
+- gráfico com legenda leva `autosize=SO_NA_LARGURA`: no ajuste padrão, a legenda deixa o eixo vertical
+  sem lugar, os números saem cortados e a área do desenho fica esmagada.

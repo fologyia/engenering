@@ -106,7 +106,7 @@ def test_esquematico_e_gravacao(alta):
     )
     figura = el.figura_da_escada(esc)
     imagem = Image.open(io.BytesIO(figura.png))
-    assert imagem.format == "PNG" and imagem.size == (figura.largura_px, figura.altura_px)
+    assert imagem.format == "PNG" and imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
     assert "α = 33,7°" in figura.legenda and "o lance seguinte volta" in figura.legenda
     H, lances, patamares = el.geometria_do_dicionario(el.para_dicionario(esc))
     assert H == esc.H_mm and lances == esc.lances and patamares == esc.patamares

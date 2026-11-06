@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from components.reacoes_nas_bases_help import AJUDA
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
@@ -174,7 +175,7 @@ with secao_protegida("Reações nas bases"):
             )
             desenho = figura_das_reacoes(reacoes, caso_desenho)
             if desenho is not None:
-                st.image(desenho.png, caption=desenho.legenda, width="stretch")
+                mostrar_figura(desenho)
         with st.expander("Locação dos pés e natureza de cada caso"):
             st.dataframe(
                 pd.DataFrame(rb.linhas_da_locacao(reacoes, eixos), columns=rb.COLUNAS_LOCACAO),

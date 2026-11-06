@@ -1,7 +1,7 @@
 """Desenhos dos casos de estática do Assistente de cargas, na escala dos dados, sem Streamlit.
 
 Cada função devolve um PNG (:class:`core.beam_charts.ImagemDiagrama`), que serve para a tela e para
-o Word. O desenho é feito no dobro do tamanho e reduzido no fim, para o traço sair suavizado.
+o Word. O desenho é feito no dobro do tamanho, e o PNG guarda esse dobro para sair nítido.
 
 Cores: vermelho para tração e azul para compressão em todos os desenhos, as mesmas que as tabelas
 descrevem. Cada barra e cada parafuso também levam o valor escrito, para a cor nunca ser a única
@@ -10,7 +10,6 @@ informação.
 
 from __future__ import annotations
 
-import io
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -21,7 +20,8 @@ from PIL import Image, ImageDraw
 
 from core import beam_model as bm
 from core import equilibrio_corpo as eq
-from core.beam_charts import ImagemDiagrama, _fonte, desenho_dispensado
+from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import figura_final as _fechar
 
 _ESC = 2
 _FUNDO = "#ffffff"
@@ -49,15 +49,6 @@ def _n(valor: float, casas: int = 2) -> str:
 def _nova(largura: int, altura: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     imagem = Image.new("RGB", (largura * _ESC, altura * _ESC), _FUNDO)
     return imagem, ImageDraw.Draw(imagem)
-
-
-def _fechar(imagem: Image.Image, titulo: str, legenda: str) -> ImagemDiagrama:
-    if desenho_dispensado():
-        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
-    final = imagem.resize((imagem.width // _ESC, imagem.height // _ESC), Image.Resampling.LANCZOS)
-    saida = io.BytesIO()
-    final.save(saida, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, saida.getvalue(), final.width, final.height)
 
 
 def _texto(
@@ -152,7 +143,7 @@ def figura_do_grupo_de_parafusos(
     pontos: Sequence[Ponto], tracoes_kN: Sequence[float], designacao: str
 ) -> ImagemDiagrama:
     """Planta do grupo: cada parafuso com o número e a força, na posição real."""
-    largura, altura = 720, 520
+    largura, altura = 560, 440
     imagem, d = _nova(largura, altura)
     escala = _escala(pontos, largura, altura, 74, topo=20)
     maior = max([abs(t) for t in tracoes_kN] + [1e-9])
@@ -233,7 +224,7 @@ def figura_da_barra(
 
     ``cargas`` são as forças (ou torques) no fim de cada trecho.
     """
-    largura, altura = 720, 330
+    largura, altura = 560, 330
     imagem, d = _nova(largura, altura)
     x0, x1 = 60 * _ESC, (largura - 76) * _ESC
     y = 180 * _ESC
@@ -359,7 +350,7 @@ def figura_da_trelica(
     cargas: dict[str, tuple[float, float]],
 ) -> ImagemDiagrama:
     """Treliça com a força de cada barra. ``apoios`` guarda "pino" ou "rolete" por nó."""
-    largura, altura = 760, 480
+    largura, altura = 580, 420
     imagem, d = _nova(largura, altura)
     posicoes = {nome: (x, y) for nome, x, y in nos}
     escala = _escala([(x, y) for _, x, y in nos], largura, altura, 84, topo=24)
@@ -866,7 +857,7 @@ def figura_do_equilibrio(solucao: eq.Solucao, u: eq.Unidades) -> ImagemDiagrama:
     pontos += [(c.x2, c.y2) for c in problema.cargas if c.tipo == eq.DISTRIBUIDA]
     for t in problema.trechos:
         pontos += [(t.x1, t.y1), (t.x2, t.y2)]
-    largura, altura = 760, 500
+    largura, altura = 600, 460
     imagem, d = _nova(largura, altura)
     escala = _escala(pontos, largura, altura, 110)
 
@@ -932,7 +923,7 @@ def figura_da_viga_compacta(
     ``reacoes`` traz, para cada apoio, (x em mm, força para cima em kN, momento em kN·m). Escala só
     no comprimento: as alturas das cargas dizem o tamanho relativo, não o valor.
     """
-    largura, altura = 680, 390
+    largura, altura = 560, 390
     imagem, d = _nova(largura, altura)
     comprimento = viga.comprimento_mm
     x0, x1 = 60 * _ESC, (largura - 60) * _ESC

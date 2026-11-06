@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import io
 import math
 
 from PIL import Image, ImageDraw
@@ -18,7 +17,7 @@ from PIL import Image, ImageDraw
 from core import bolted_connection as bc
 from core import bolted_joint_check as chk
 from core import desenho_girado as dg
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 
 ESC = dg.ESC
 _CHAPA = "#bfdbfe"
@@ -284,7 +283,4 @@ def figura_parafusos(r: chk.ResultadoLigacao) -> ImagemDiagrama | None:
         f"{n} parafusos {e.designacao} {e.grau} em chapa de {_n(e.t, 2)} mm; o mais carregado é o "
         f"nº {critico + 1}, com {_n(forca_critica, 2)} kN (ELU)."
     )
-    final = imagem.resize((_LARGURA_PX, _ALTURA_PX), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), _LARGURA_PX, _ALTURA_PX)
+    return figura_final(imagem, titulo, legenda)

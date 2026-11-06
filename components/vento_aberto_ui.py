@@ -16,6 +16,7 @@ from components import contraventamento_estrutura_ui as ce
 from components import vento_barras_ui as vbu
 from components.base_tecnica_ui import base_ativa, gravar_acoes_no_plano, legenda_da_base
 from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.figuras_estrutura import svg_vento_elevacao
 from components.project_tools import botao_registrar_calculo
 from components.ui import fronteira_modelo
@@ -186,12 +187,11 @@ def mostrar_vento_em_estrutura_aberta() -> None:
             "Direção do vento", ["X", "Y"], horizontal=True, key="va_direcao", help=AJUDA["direcao"]
         )
         st.subheader(f"Vento em {direcao}", help=AJUDA["res_desenho"])
-        st.image(svg_vento_elevacao(geometria, resultado.direcao(direcao)), width="stretch")
+        mostrar_figura(svg_vento_elevacao(geometria, resultado.direcao(direcao)))
     with abas[1]:
         st.subheader("Forças por nível", help=AJUDA["res_niveis"])
-        st.image(
+        mostrar_figura(
             svg_da_cena(vad.desenho_das_forcas_por_nivel(vad.forcas_da_grade(resultado))),
-            width="stretch",
         )
         _tabela(tabelas[0])
     with abas[2]:

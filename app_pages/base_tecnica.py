@@ -8,6 +8,7 @@ import streamlit as st
 
 from components.base_tecnica_help import AJUDA
 from components.base_tecnica_ui import gravar_base, mapa_do_projeto
+from components.figuras import mostrar_figura
 from components.figuras_estrutura import svg_limite_de_deslocamento
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
@@ -227,9 +228,8 @@ else:
             figura, grafico = st.columns(2)
             with figura:
                 st.subheader("Limite do deslocamento", help=AJUDA["res_figura_limite"])
-                st.image(
+                mostrar_figura(
                     svg_limite_de_deslocamento(limite_1.divisor, limite_1.maximo_mm, 6.0),
-                    width="stretch",
                 )
                 st.caption(
                     "Exemplo com H = 6 m: o Contraventamento usa a altura da estrutura."

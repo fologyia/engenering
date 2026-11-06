@@ -1190,17 +1190,17 @@ def calcular_portico(v: Valores) -> Resultado:
         else (
             Figura(
                 "Modelo",
-                pf.figura_estrutura(resposta, largura_px=760, altura_max_px=520).png,
+                pf.figura_estrutura(resposta, largura_px=580, altura_max_px=460).png,
                 "Geometria, apoios e cargas.",
             ),
             Figura(
                 "Momento fletor",
-                pf.figura_diagrama(resposta, "M", largura_px=760, altura_max_px=520).png,
+                pf.figura_diagrama(resposta, "M", largura_px=580, altura_max_px=460).png,
                 "Momento do lado tracionado.",
             ),
             Figura(
                 "Deformada",
-                pf.figura_deformada(resposta, largura_px=760, altura_max_px=520).png,
+                pf.figura_deformada(resposta, largura_px=580, altura_max_px=460).png,
                 "Deformada ampliada, com o maior deslocamento.",
             ),
         )

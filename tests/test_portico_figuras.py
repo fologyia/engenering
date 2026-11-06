@@ -64,7 +64,7 @@ def portico_completo():
 def _png(figura):
     imagem = Image.open(io.BytesIO(figura.png))
     assert imagem.format == "PNG"
-    assert imagem.size == (figura.largura_px, figura.altura_px)
+    assert imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
     return imagem
 
 
@@ -90,7 +90,8 @@ def test_todas_as_figuras_saem_como_png(fabrica):
     ]
     for figura in figuras:
         imagem = _png(figura)
-        assert imagem.size[0] == 1000 and 280 <= imagem.size[1] <= 620
+        assert imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
+        assert figura.largura_px <= 1000 and figura.altura_px <= 620
         assert figura.legenda
 
 

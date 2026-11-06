@@ -236,7 +236,7 @@ def test_figura_e_registro_com_a_figura_no_memorial(entrada):
     r = lg.calcular(entrada)
     figura = lg.figura(r)
     imagem = Image.open(io.BytesIO(figura.png))
-    assert imagem.format == "PNG" and imagem.size == (figura.largura_px, figura.altura_px)
+    assert imagem.format == "PNG" and imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
     registro = lg.registro_ligacao(r, contexto={"tag": "LG-01"})
     gravado = json.loads(json.dumps(registro))
     assert gravado["modulo_id"] == lg.MODULO_ID

@@ -157,7 +157,7 @@ def test_desenho_hachura_a_zona_inclinada_e_marca_a_linha_neutra():
     desenho = figura_da_base(r)
     assert "flexão oblíqua" in desenho.legenda
     imagem = np.asarray(Image.open(io.BytesIO(desenho.png)).convert("RGB")).astype(int)
-    planta = imagem[110:520, 40:470]
+    planta = imagem[220:1040, 72:932]  # no dobro de pixels e sem os 4 px aparados à esquerda
     hachura = np.all(np.abs(planta - [0x60, 0xA5, 0xFA]) < 40, axis=-1)  # #60a5fa
     pressao = np.all(np.abs(planta - [0x1D, 0x4E, 0xD8]) < 40, axis=-1)  # #1d4ed8 (LN)
     assert hachura.sum() > 300 and pressao.sum() > 60

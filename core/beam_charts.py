@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 # Mesma paleta usada nos gráficos da página, para o memorial não parecer
 # outro programa.
@@ -60,7 +60,11 @@ class SerieDiagrama:
 
 @dataclass(frozen=True, slots=True)
 class ImagemDiagrama:
-    """PNG pronto para ser embutido, com a legenda que o acompanha."""
+    """PNG pronto para ser embutido, com a legenda que o acompanha.
+
+    ``largura_px`` e ``altura_px`` são o tamanho em que o desenho foi pensado, o de tela. O arquivo
+    pode ter mais pixels: ver :func:`figura_final`.
+    """
 
     titulo: str
     legenda: str
@@ -77,7 +81,7 @@ def so_a_conta() -> Iterator[None]:
     """Dentro do bloco, os desenhos saem vazios.
 
     Quem varre uma medida roda o caso dezenas de vezes e só quer os números. O tempo de um caso com
-    figura está quase todo em reduzir e comprimir o PNG, de 20 a 150 ms por rodada.
+    figura está quase todo em comprimir o PNG, de 20 a 150 ms por rodada.
     """
     marca = _SO_A_CONTA.set(True)
     try:
@@ -88,6 +92,48 @@ def so_a_conta() -> Iterator[None]:
 
 def desenho_dispensado() -> bool:
     return _SO_A_CONTA.get()
+
+
+#: Pixels do arquivo por pixel de tela. Os desenhos são feitos neste dobro e o PNG o guarda inteiro:
+#: reduzir no fim deixava a figura mole na tela com escala do Windows acima de 100 % e no papel, onde
+#: 1000 px em 17 cm dão menos de 150 dpi.
+DENSIDADE = 2
+DPI_DE_TELA = 96
+#: Branco deixado em volta do desenho, em pixels de tela.
+MARGEM_DA_FIGURA = 14
+#: Largura mínima sobre altura. Uma seção alta aparada pode ficar estreita, e no Word, onde a figura
+#: tem a largura da página, ela passaria da altura da folha: abaixo disso o branco fica dos lados.
+PROPORCAO_MINIMA = 1.2
+
+
+def figura_final(imagem: Image.Image, titulo: str, legenda: str) -> ImagemDiagrama:
+    """Fecha o desenho feito na escala :data:`DENSIDADE`: apara o branco e grava o PNG.
+
+    O quadro de cada desenho tem tamanho fixo e o desenho raramente o preenche. Aparar evita a figura
+    pequena no meio de um quadro branco, que foi o que deixava o texto miúdo depois de a figura
+    caber na coluna. O DPI gravado no PNG diz o tamanho de tela a quem só recebe os bytes.
+    """
+    if desenho_dispensado():
+        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
+    desenho = imagem.convert("RGB")
+    fundo = desenho.getpixel((0, 0))
+    caixa = ImageChops.difference(desenho, Image.new("RGB", desenho.size, fundo)).getbbox()
+    if caixa is not None:
+        folga = MARGEM_DA_FIGURA * DENSIDADE
+        miolo = desenho.crop(caixa)
+        altura = miolo.height + 2 * folga
+        largura = max(miolo.width + 2 * folga, math.ceil(altura * PROPORCAO_MINIMA))
+        # Medida múltipla da densidade: o tamanho de tela sai exato.
+        largura += -largura % DENSIDADE
+        altura += -altura % DENSIDADE
+        desenho = Image.new("RGB", (largura, altura), fundo)
+        desenho.paste(miolo, ((largura - miolo.width) // 2, folga))
+    saida = io.BytesIO()
+    dpi = DPI_DE_TELA * DENSIDADE
+    desenho.save(saida, format="PNG", compress_level=6, dpi=(dpi, dpi))
+    return ImagemDiagrama(
+        titulo, legenda, saida.getvalue(), desenho.width // DENSIDADE, desenho.height // DENSIDADE
+    )
 
 
 _FONTES_SISTEMA = (

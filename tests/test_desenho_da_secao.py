@@ -54,7 +54,7 @@ def test_toda_secao_tem_desenho(nome):
     secao = SECOES[nome]()
     desenho = ds.figura_da_secao(secao)
     imagem = Image.open(io.BytesIO(desenho.png))
-    assert imagem.format == "PNG" and imagem.size == (desenho.largura_px, desenho.altura_px)
+    assert imagem.format == "PNG" and imagem.size == (2 * desenho.largura_px, 2 * desenho.altura_px)
     assert secao.nome in desenho.titulo
     forma = ds.forma_da_secao(secao)
     assert forma.conhecida == (nome != "área e raios")
@@ -116,7 +116,6 @@ def test_girar_muda_so_o_desenho(nome):
     parado = ds.figura_da_secao(secao)
     girado = ds.figura_da_secao(secao, giro_graus=45)
     assert girado.png != parado.png
-    assert (girado.largura_px, girado.altura_px) == (parado.largura_px, parado.altura_px)
     assert ds.figura_da_secao(secao, giro_graus=360).png == parado.png
     assert "girado 45° no sentido anti-horário" in girado.legenda
     assert "girado" not in parado.legenda

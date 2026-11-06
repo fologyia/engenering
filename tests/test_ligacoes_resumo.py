@@ -235,7 +235,7 @@ def test_frase_e_referencias_pendentes():
 )
 def test_figuras_com_legenda_saem_em_png(entrada):
     desenho = lg.figura(lg.calcular(entrada))
-    assert desenho.png.startswith(b"\x89PNG") and desenho.largura_px >= 900
+    assert desenho.png.startswith(b"\x89PNG") and desenho.largura_px >= 600
 
 
 # ------------------------------------------------------------------ parte 2 do texto da 2025

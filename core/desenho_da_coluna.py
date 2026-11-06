@@ -15,7 +15,6 @@ demais para ler — aí ela é aumentada e a legenda diz isso.
 
 from __future__ import annotations
 
-import io
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -23,7 +22,7 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw
 
 from core import desenho_girado as dg
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 from core.column_design import Secao
 from core.desenho_da_secao import FormaDaSecao, forma_da_secao
 
@@ -495,7 +494,4 @@ def figura_da_coluna(c: ColunaEmPe) -> ImagemDiagrama:
         )
         + "."
     )
-    final = imagem.resize((_LARGURA_PX, _ALTURA_PX), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), _LARGURA_PX, _ALTURA_PX)
+    return figura_final(imagem, titulo, legenda)

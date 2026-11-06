@@ -13,6 +13,7 @@ import streamlit as st
 from components import contraventamento_estrutura_ui as ce
 from components.base_tecnica_ui import base_ativa, gravar_plano, plano_ativo
 from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.figuras_vento import svg_vento_3d, svg_vento_planta, svg_vento_sombra
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -545,7 +546,7 @@ def _forcas_por_nivel(vn: vpn.VentoPorNivel, eixo_vertical: str) -> None:
     )
     colunas_do_desenho = vad.forcas_do_barra_a_barra(vn)
     if colunas_do_desenho:
-        st.image(svg_da_cena(vad.desenho_das_forcas_por_nivel(colunas_do_desenho)), width="stretch")
+        mostrar_figura(svg_da_cena(vad.desenho_das_forcas_por_nivel(colunas_do_desenho)))
     for aviso in vn.avisos:
         st.warning(aviso, icon=":material/warning:")
 
@@ -672,13 +673,13 @@ def _resultados(
     )
     with abas[0], secao_protegida("Desenho 3D do vento"):
         st.subheader("Carga em cada barra", help=AJUDA["res_3d"])
-        st.image(svg_vento_3d(r, direcao.angulo, eixo_vertical=eixo_vertical), width="stretch")
+        mostrar_figura(svg_vento_3d(r, direcao.angulo, eixo_vertical=eixo_vertical))
     with abas[1], secao_protegida("Planta do vento"):
         st.subheader("Planta", help=AJUDA["res_planta"])
-        st.image(svg_vento_planta(r, direcao.angulo), width="stretch")
+        mostrar_figura(svg_vento_planta(r, direcao.angulo))
     with abas[2], secao_protegida("Sombra do vento"):
         st.subheader("O que o vento vê", help=AJUDA["res_sombra"])
-        st.image(svg_vento_sombra(r, direcao.angulo), width="stretch")
+        mostrar_figura(svg_vento_sombra(r, direcao.angulo))
     with abas[3]:
         st.subheader("Barra a barra", help=AJUDA["res_barras"])
         st.dataframe(

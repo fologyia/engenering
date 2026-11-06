@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from components.column_help import AJUDA
+from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import comparador_cenarios, fronteira_modelo
@@ -1443,9 +1444,9 @@ def mostrar_desenhos(
                 help=AJUDA["giro_secao"],
             )
             desenho = figura_da_secao(secao, giro_graus=giro)
-            st.image(desenho.png, caption=desenho.legenda, width="stretch")
+            mostrar_figura(desenho)
             vistas = figura_da_coluna(coluna)
-            st.image(vistas.png, caption=vistas.legenda, width="stretch")
+            mostrar_figura(vistas)
     return float(st.session_state.get("col_giro") or 0), coluna
 
 
@@ -1672,7 +1673,7 @@ def _curva(entrada: cb.EntradaColuna, resultado: cb.ResultadoColuna) -> None:
     with st.container(border=True):
         st.subheader("Curva de flambagem", help=AJUDA["res_curva"])
         for figura in figuras:
-            st.image(figura.png, caption=figura.legenda, width="stretch")
+            mostrar_figura(figura)
 
 
 def _tabela(resultado: cb.ResultadoColuna) -> None:

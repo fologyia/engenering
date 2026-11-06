@@ -31,7 +31,6 @@ Unidades: mm, MPa, kN e kN·m. Sem Streamlit.
 
 from __future__ import annotations
 
-import io
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields, replace
@@ -42,7 +41,7 @@ from PIL import Image, ImageDraw
 from core import bolted_connection as bc
 from core import section_catalog as sc
 from core import soldas as sd
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 from core.desenho_girado import Tela as _Tela
 from core.desenho_girado import angulo_do_giro, texto_do_giro
 from core.desenho_girado import cota_alinhada as _cota_alinhada
@@ -1483,13 +1482,6 @@ _APOIO = "#e2e8f0"
 _WHITMORE = "#1d4ed8"  # seção de Whitmore (tracejado)
 
 
-def _png(imagem: Image.Image, largura: int, altura: int) -> bytes:
-    final = imagem.resize((largura, altura), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return buffer.getvalue()
-
-
 def _cota_vertical(d: ImageDraw.ImageDraw, x: float, y1: float, y2: float, texto: str) -> None:
     fonte = _fonte(11 * _ESC)
     d.line([(x, y1), (x, y2)], fill=_COTA, width=_ESC)
@@ -1672,9 +1664,7 @@ def figura_chapa_simples(e: EntradaChapaSimples) -> ImagemDiagrama:
         + (f"; mesa superior recortada {_n(rec_c, 0)} × {_n(rec_h, 0)} mm" if e.recorte else "")
         + "."
     )
-    return ImagemDiagrama(
-        titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px
-    )
+    return figura_final(imagem, titulo, legenda)
 
 
 def figura_cantoneira_dupla(e: EntradaCantoneiraDupla) -> ImagemDiagrama:
@@ -1800,9 +1790,7 @@ def figura_perfil_frio(e: EntradaPerfilFrio) -> ImagemDiagrama:
         f"Grade de {e.n_linhas} linha(s) × {e.n_por_linha} parafuso(s) {e.parafuso} na alma do "
         f"perfil, borda e = {_n(e.borda_mm, 0)} mm, lateral e₁ = {_n(e.borda_lateral_mm, 0)} mm."
     )
-    return ImagemDiagrama(
-        titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px
-    )
+    return figura_final(imagem, titulo, legenda)
 
 
 def _momento_px(
@@ -1944,9 +1932,7 @@ def figura_solda(e: EntradaSolda, giro_graus: float = 0.0) -> ImagemDiagrama:
         + (f", b = {_n(b, 0)} mm" if e.arranjo != ARRANJO_UM else "")
         + f"; perna {_n(e.perna_mm, 0)} mm; forças aplicadas no centro geométrico do grupo."
     )
-    return ImagemDiagrama(
-        titulo, legenda, _png(imagem, largura_px, altura_px), largura_px, altura_px
-    )
+    return figura_final(imagem, titulo, legenda)
 
 
 #: Os tipos da barra soldada e da chapa no apoio moram em :mod:`core.ligacoes_soldadas`.

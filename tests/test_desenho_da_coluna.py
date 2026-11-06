@@ -70,7 +70,7 @@ def test_toda_combinacao_de_apoio_e_secao_sai_desenhada(apoio, secao):
     coluna = dc.ColunaEmPe(secao, 3000.0, 1500.0, 3000.0, 1.0, 1.0, apoio, apoio)
     desenho = dc.figura_da_coluna(coluna)
     imagem = Image.open(io.BytesIO(desenho.png))
-    assert imagem.format == "PNG" and imagem.size == (desenho.largura_px, desenho.altura_px)
+    assert imagem.format == "PNG" and imagem.size == (2 * desenho.largura_px, 2 * desenho.altura_px)
     assert secao.nome in desenho.titulo
 
 
@@ -91,14 +91,14 @@ def test_mao_francesa_entra_no_plano_em_que_age(eixo):
     # a mão-francesa só aparece numa das vistas: a do plano dela
     imagem_com = Image.open(io.BytesIO(com.png)).convert("RGB")
     imagem_sem = Image.open(io.BytesIO(sem.png)).convert("RGB")
-    meio = imagem_com.width * 345 // 980  # a divisa entre as duas vistas
+    meio = 2 * (345 - 4)  # a divisa entre as duas vistas; o aparo tira 4 px de cada lado do título
     esquerda = (
-        imagem_com.crop((0, 150, meio, 560)).tobytes()
-        != imagem_sem.crop((0, 150, meio, 560)).tobytes()
+        imagem_com.crop((0, 300, meio, 1120)).tobytes()
+        != imagem_sem.crop((0, 300, meio, 1120)).tobytes()
     )
     direita = (
-        imagem_com.crop((meio, 150, 640, 560)).tobytes()
-        != imagem_sem.crop((meio, 150, 640, 560)).tobytes()
+        imagem_com.crop((meio, 300, 1280, 1120)).tobytes()
+        != imagem_sem.crop((meio, 300, 1280, 1120)).tobytes()
     )
     assert (esquerda, direita) == ((False, True) if eixo == "x" else (True, False))
 
@@ -118,7 +118,7 @@ def test_secao_composta_desenha_os_dois_perfis(arranjo):
     if arranjo != pc.ARRANJO_2L_CRUZ:  # a cruz gira: o s fica no título da figura
         assert any(e.texto == "s = 8" for e in forma.espessuras)
     figura = ds.figura_da_secao(secao, giro_graus=30.0)
-    assert Image.open(io.BytesIO(figura.png)).size == (940, 540)
+    assert figura.largura_px <= 940 and figura.altura_px <= 540
     assert secao.nome in figura.titulo
 
 

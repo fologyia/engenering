@@ -15,7 +15,6 @@ elipse de giração e diz isso.
 
 from __future__ import annotations
 
-import io
 import math
 import re
 from collections.abc import Sequence
@@ -26,7 +25,7 @@ from PIL import Image, ImageChops, ImageDraw
 from core import desenho_girado as dg
 from core import perfis_compostos as pc
 from core import section_catalog as sc
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 from core.column_design import Secao
 from core.steel_sections import PerfilAco
 
@@ -544,7 +543,4 @@ def figura_da_secao(secao: Secao, *, giro_graus: float = 0.0) -> ImagemDiagrama:
         + (f"; desenho girado {dg.texto_do_giro(giro)}" if giro else "")
         + "."
     )
-    final = imagem.resize((_LARGURA_PX, _ALTURA_PX), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
-    return ImagemDiagrama(titulo, legenda, buffer.getvalue(), _LARGURA_PX, _ALTURA_PX)
+    return figura_final(imagem, titulo, legenda)

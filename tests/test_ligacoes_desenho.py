@@ -79,7 +79,6 @@ def test_giro_positivo_e_anti_horario():
 def test_girar_muda_so_o_desenho(entrada):
     r = lg.calcular(entrada)
     parado, girado = lg.figura(r), lg.figura(r, giro_graus=90)
-    assert (girado.largura_px, girado.altura_px) == (parado.largura_px, parado.altura_px)
     assert girado.png != parado.png
     assert lg.figura(r, giro_graus=360).png == parado.png  # uma volta inteira
     assert lg.figura(r, giro_graus=-270).png == girado.png

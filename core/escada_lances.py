@@ -22,7 +22,6 @@ Sem Streamlit.
 
 from __future__ import annotations
 
-import io
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -31,7 +30,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 from core import degrau_escada as de
-from core.beam_charts import ImagemDiagrama, _fonte
+from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 
 _ESC = 2
 
@@ -725,9 +724,6 @@ def figura_esquematico(
         fill=_TEXTO_FRACO,
         font=fonte,
     )
-    final = imagem.resize((largura_px, altura_px), Image.Resampling.LANCZOS)
-    buffer = io.BytesIO()
-    final.save(buffer, format="PNG", optimize=True)
     legenda = "Lances — " + "; ".join(
         f"{ln.numero}: {ln.n_espelhos} espelhos de {_n(ln.h_mm, 1)} mm, piso {_n(ln.b_mm)} mm, "
         f"α = {_n(ln.alfa_graus, 1)}°, de +{_n(ln.nivel_inicial_mm)} a +{_n(ln.nivel_final_mm)} mm"
@@ -739,7 +735,7 @@ def figura_esquematico(
             + (" (o lance seguinte volta)" if pt.volta else "")
             for pt in patamares
         )
-    return ImagemDiagrama(titulo, legenda + ".", buffer.getvalue(), largura_px, altura_px)
+    return figura_final(imagem, titulo, legenda + ".")
 
 
 def figura_da_escada(esc: EscadaComPatamares, **opcoes: Any) -> ImagemDiagrama:
