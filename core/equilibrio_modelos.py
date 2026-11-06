@@ -26,6 +26,7 @@ def apoio(
     *,
     ponta: tuple[float, float] | None = None,
     mu: float | None = None,
+    fixacao: str | None = None,
 ) -> Linha:
     return {
         "nome": nome,
@@ -36,6 +37,7 @@ def apoio(
         "x2": ponta[0] if ponta else None,
         "y2": ponta[1] if ponta else None,
         "mu": mu,
+        "fixacao": fixacao,
     }
 
 
@@ -99,6 +101,16 @@ MODELOS: tuple[ModeloDePeca, ...] = (
             carga("F1", eq.FORCA, 1.5, 0, 10, -60),
             carga("q1", eq.DISTRIBUIDA, 2.5, 0, 4, ate=(4, 0), valor2=4),
         ),
+        (corte("S1", 2, 0),),
+    ),
+    ModeloDePeca(
+        "Peça apoiada ao longo",
+        "Encostada num trecho, como uma viga sobre um muro ou uma máquina na base.",
+        "m",
+        "kN",
+        (trecho(0, 0, 4, 0),),
+        (apoio("A", eq.DISTRIBUIDO, 0.5, 0, ponta=(3.5, 0), mu=0.3, fixacao=eq.SO_ENCOSTA),),
+        (carga("F1", eq.FORCA, 2.4, 0, 20),),
         (corte("S1", 2, 0),),
     ),
     ModeloDePeca(

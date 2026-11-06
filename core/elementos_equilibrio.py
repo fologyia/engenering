@@ -39,6 +39,8 @@ HIPOTESES = (
     "Apoio simples só empurra. Cabo só puxa. Biela puxa e empurra ao longo da haste. Guia segura "
     "o giro e o lado, e deixa correr. Engaste segura tudo.",
     "Fora do apoio com atrito, os apoios não têm atrito.",
+    "No apoio distribuído a peça é rígida e a pressão varia em linha reta ao longo do trecho. Com "
+    "base ou peça flexível, a pressão se concentra perto da carga e passa da mostrada aqui.",
     "A carga distribuída vale por unidade de comprimento da peça, ao longo do trecho desenhado.",
     "Peso usa g = 9,80665 m/s².",
 )
@@ -57,7 +59,15 @@ def _posicao(valor: float) -> str:
 def _como_trabalha(r: eq.Reacao) -> str:
     tipo = r.apoio.tipo
     texto = "Segura a peça"
-    if tipo == eq.CABO:
+    if tipo == eq.DISTRIBUIDO and not r.apoio.preso:
+        p = eq.pressao_do_apoio(r)
+        if p.tomba:
+            texto = "Não segura: a peça tomba ou descola"
+        elif p.fracao < 1.0:
+            texto = f"Encostado em {p.fracao * 100:.0f} % do trecho"
+        else:
+            texto = "Encostado no trecho inteiro"
+    elif tipo == eq.CABO:
         texto = "Tracionado" if r.n > 0.0 else "Precisaria empurrar: afrouxa"
         texto = texto if r.n != 0.0 else "Sem força"
     elif tipo == eq.BIELA:
@@ -105,7 +115,7 @@ def _conta(solucao: eq.Solucao, u: eq.Unidades) -> list[dict[str, Any]]:
     for a in solucao.acoes:
         somar(f"Carga {a.nome}", a.x, a.y, a.fx, a.fy, a.m)
     for r in solucao.reacoes:
-        somar(f"Reação {r.apoio.nome}", r.apoio.x, r.apoio.y, r.fx, r.fy, r.m)
+        somar(f"Reação {r.apoio.nome}", *r.apoio.ponto, r.fx, r.fy, r.m)
     soma: dict[str, Any] = {
         "Item": "Soma (precisa dar zero)",
         f"x ({u.comprimento})": "—",
@@ -133,11 +143,14 @@ def _checagens(solucao: eq.Solucao, u: eq.Unidades) -> list[Verificacao]:
     linhas: list[Verificacao] = []
     for r in solucao.reacoes:
         apoio = r.apoio
-        if apoio.tipo not in eq.SO_UM_LADO:
+        encostado = apoio.tipo == eq.DISTRIBUIDO and not apoio.preso
+        if apoio.tipo not in eq.SO_UM_LADO and not encostado:
             continue
         ruim = "NÃO OK" if certeza or not r.soltas else "ALERTA"
         n = r.n / u.newton
-        if apoio.tipo == eq.CABO:
+        if encostado:
+            nome, formula = f"Apoio {apoio.nome} encostado", "R ≥ 0: a peça só encosta, não puxa"
+        elif apoio.tipo == eq.CABO:
             nome, formula = f"Cabo {apoio.nome} tracionado", "T ≥ 0: cabo não empurra"
         else:
             nome, formula = f"Apoio {apoio.nome} encostado", "N ≥ 0: apoio simples não puxa"
@@ -153,7 +166,23 @@ def _checagens(solucao: eq.Solucao, u: eq.Unidades) -> list[Verificacao]:
                 tipo="limite",
             )
         )
-        if apoio.tipo == eq.ATRITO:
+        if encostado:
+            p = eq.pressao_do_apoio(r)
+            meia = apoio.comprimento / 2.0 / u.metro
+            desvio = abs(p.excentricidade) / u.metro
+            linhas.append(
+                Verificacao(
+                    f"Resultante dentro do apoio {apoio.nome}",
+                    desvio if r.n > 0.0 else 2.0 * meia,
+                    meia,
+                    u.comprimento,
+                    HIBBELER,
+                    "|e| ≤ L/2: com a resultante fora do trecho, a peça tomba",
+                    status=ruim if p.tomba else "OK",
+                    tipo="limite",
+                )
+            )
+        if apoio.tipo == eq.ATRITO or (encostado and apoio.mu > 0.0):
             usado = abs(r.t) / u.newton
             maximo = max(apoio.mu * n, 0.0)
             if usado <= maximo + folga / u.newton:
@@ -169,6 +198,39 @@ def _checagens(solucao: eq.Solucao, u: eq.Unidades) -> list[Verificacao]:
                 )
             )
     return linhas
+
+
+def _tabela_das_pressoes(solucao: eq.Solucao, u: eq.Unidades) -> Tabela | None:
+    """A pressão que a peça faz em cada apoio distribuído, para dimensionar a base."""
+    linhas: list[dict[str, Any]] = []
+    k = u.metro / u.newton  # de N/m para a unidade da tela
+    for r in solucao.reacoes:
+        if r.apoio.tipo != eq.DISTRIBUIDO:
+            continue
+        p = eq.pressao_do_apoio(r)
+        inicio, fim = p.nas_pontas()
+        linhas.append(
+            {
+                "Apoio": r.apoio.nome,
+                f"Trecho ({u.comprimento})": _posicao(r.apoio.comprimento / u.metro),
+                f"Resultante ({u.forca})": r.n / u.newton,
+                f"Posição da resultante ({u.comprimento})": _posicao(
+                    (r.apoio.comprimento / 2.0 + p.excentricidade) / u.metro
+                ),
+                f"No início ({u.distribuida})": inicio * k,
+                f"No fim ({u.distribuida})": fim * k,
+                f"Maior ({u.distribuida})": p.maior * k,
+                "Em contato (%)": round(p.fracao * 100.0, 1),
+            }
+        )
+    if not linhas:
+        return None
+    return Tabela(
+        "Pressão nos apoios distribuídos",
+        tuple(linhas),
+        "A posição é medida do início do trecho. Divida a pressão pela largura de contato para "
+        "comparar com o limite da base.",
+    )
 
 
 def _resultado_sem_equilibrio(solucao: eq.Solucao, u: eq.Unidades) -> Resultado:
@@ -234,6 +296,22 @@ def _alertas(solucao: eq.Solucao, esforcos: Sequence[eq.Esforco], u: eq.Unidades
             "Nenhuma divisão das reações respeita cabo, contato e atrito ao mesmo tempo: a peça "
             "não fica parada assim."
         )
+    for r in solucao.reacoes:
+        if r.apoio.tipo != eq.DISTRIBUIDO or r.apoio.preso:
+            continue
+        if solucao.grau_hiperestatico > 1 and r.soltas:
+            continue  # a divisão é só uma das possíveis: outra pode não tombar
+        p = eq.pressao_do_apoio(r)
+        if p.tomba:
+            alertas.append(
+                f"O apoio {r.apoio.nome} não segura a peça: a resultante cai fora do trecho, e ela "
+                "tomba. Aumente o trecho, aproxime a carga, ou prenda a peça ao longo do apoio."
+            )
+        elif p.fracao < 1.0:
+            alertas.append(
+                f"No apoio {r.apoio.nome} a resultante saiu do terço central: só "
+                f"{p.fracao * 100:.0f} % do trecho fica encostado, e o resto descola."
+            )
     maior = max(r.modulo for r in solucao.reacoes)
     if maior > _RAZAO_SUSPEITA * solucao.referencia:
         alertas.append(
@@ -381,6 +459,9 @@ def calcular_equilibrio(v: Valores) -> Resultado:
             "positivo. A carga distribuída entra pela resultante, no centro dela.",
         ),
     ]
+    pressoes = _tabela_das_pressoes(solucao, u)
+    if pressoes:
+        tabelas.insert(1, pressoes)
     if esforcos:
         tabelas.append(
             Tabela(
@@ -412,18 +493,40 @@ def marcas_para_a_tela(v: Valores) -> dict[str, Any]:
     problema, u = _problema(v)
     solucao = eq.resolver(problema)
 
+    def pressao(r: eq.Reacao) -> dict[str, Any]:
+        """A prancheta desenha a pressão ao longo do trecho, no lugar de uma seta só."""
+        p = eq.pressao_do_apoio(r)
+        k = u.metro / u.newton
+        cx, cy = r.apoio.direcao
+        return {
+            "x1": p.x1 / u.metro,
+            "y1": p.y1 / u.metro,
+            "x2": p.x2 / u.metro,
+            "y2": p.y2 / u.metro,
+            "w1": p.w1 * k,
+            "w2": p.w2 * k,
+            "cx": cx,
+            "cy": cy,
+            "tomba": p.tomba,
+            "texto": (f"{r.apoio.nome}: {_numero(p.w1 * k)} a {_numero(p.w2 * k)} {u.distribuida}"),
+        }
+
     def reacao(r: eq.Reacao) -> dict[str, Any]:
+        x, y = r.apoio.ponto
+        certa = solucao.grau_hiperestatico <= 1 or not r.soltas
+        tomba = certa and r.apoio.tipo == eq.DISTRIBUIDO and eq.pressao_do_apoio(r).tomba
         return {
             "nome": r.apoio.nome,
-            "x": r.apoio.x / u.metro,
-            "y": r.apoio.y / u.metro,
+            "x": x / u.metro,
+            "y": y / u.metro,
             "fx": r.fx / u.newton,
             "fy": r.fy / u.newton,
             "m": r.m / u.newton,
             "texto": f"{r.apoio.nome} = {_numero(r.modulo / u.newton)} {u.forca}",
             "texto_m": f"M{r.apoio.nome} = {_numero(abs(r.m) / u.newton)} {u.momento}",
             "puxa": r.apoio.tipo == eq.CABO,
-            "ruim": (r.apoio.tipo in eq.SO_UM_LADO) and r.n < -1e-9 * solucao.referencia,
+            "ruim": tomba or (r.apoio.tipo in eq.SO_UM_LADO and r.n < -1e-9 * solucao.referencia),
+            "pressao": pressao(r) if r.apoio.tipo == eq.DISTRIBUIDO else None,
         }
 
     movimento = solucao.movimento
@@ -496,7 +599,8 @@ CAMPOS_EQUILIBRIO: tuple[Campo, ...] = (
         "apoios",
         "Apoios",
         "O que segura a peça. Ângulo é para onde o apoio empurra: 90° empurra para cima, 180° "
-        "empurra para a esquerda. Cabo e biela usam a outra ponta (x₂, y₂).",
+        "empurra para a esquerda. Cabo e biela usam a outra ponta (x₂, y₂). O apoio distribuído vai "
+        "de (x, y) até (x₂, y₂).",
         _linhas("apoios"),
         secao="Apoios",
         colunas=(
@@ -511,7 +615,8 @@ CAMPOS_EQUILIBRIO: tuple[Campo, ...] = (
                 "tipo",
                 "Tipo",
                 "Pino segura as duas direções. Rolete uma direção. Apoio simples só empurra. "
-                "Engaste segura tudo. Guia deixa correr. Cabo só puxa. Biela puxa e empurra.",
+                "Apoio distribuído segura ao longo de um trecho. Engaste segura tudo. Guia deixa "
+                "correr. Cabo só puxa. Biela puxa e empurra.",
                 eq.PINO,
                 opcoes=eq.TIPOS_DE_APOIO,
             ),
@@ -524,14 +629,36 @@ CAMPOS_EQUILIBRIO: tuple[Campo, ...] = (
                 90.0,
                 "°",
             ),
-            Coluna("x2", "x₂", "Outra ponta do cabo ou da biela.", None, opcional=True),
-            Coluna("y2", "y₂", "Outra ponta do cabo ou da biela.", None, opcional=True),
+            Coluna(
+                "x2",
+                "x₂",
+                "Outra ponta do cabo, da biela ou do apoio distribuído.",
+                None,
+                opcional=True,
+            ),
+            Coluna(
+                "y2",
+                "y₂",
+                "Outra ponta do cabo, da biela ou do apoio distribuído.",
+                None,
+                opcional=True,
+            ),
             Coluna(
                 "mu",
                 "μ",
-                "Coeficiente de atrito do apoio com atrito. Aço com aço seco: 0,15 a 0,5.",
+                "Coeficiente de atrito. Aço com aço seco: 0,15 a 0,5. No apoio distribuído que só "
+                "encosta, sem μ ele não segura nada ao longo do trecho.",
                 None,
                 minimo=0.0,
+                opcional=True,
+            ),
+            Coluna(
+                "fixacao",
+                "Fixação",
+                "No apoio distribuído. Só encosta: empurra, e a peça pode descolar e tombar. Preso "
+                "ao longo: soldado ou parafusado, empurra, puxa e segura ao longo do trecho.",
+                None,
+                opcoes=eq.FIXACOES,
                 opcional=True,
             ),
         ),

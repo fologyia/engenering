@@ -83,6 +83,15 @@ barras, não só nos nós: na viga de um pórtico, o maior fica no meio do vão.
 
 ## Peças, seções e chapas
 
+**Apoio distribuído.** Vale para peça rígida, encostada ou presa ao longo de um trecho de
+comprimento L. A reação fica no meio do trecho, com três partes: R perpendicular ao trecho, T ao
+longo dele e o momento M, que diz o quanto a resultante saiu do meio (e = M/R). Dentro do terço
+central, |e| ≤ L/6, a pressão é um trapézio: w = R/L ∓ 6·R·e/L². Fora dele, a peça que só encosta
+descola, e a pressão vira um triângulo de comprimento c = 3·(L/2 − |e|) e pico 2·R/c. Com |e| ≥ L/2,
+ou R negativo, ela tomba. Presa ao longo, a reta segue inteira e pode trocar de sinal. Uma seção que
+corta o trecho soma só a parte da pressão que fica de um lado. Base ou peça flexível concentra a
+pressão de outro jeito, e isso pede a rigidez do apoio: o resultado aqui é o da peça rígida.
+
 **Equilíbrio de uma peça.** `core/equilibrio_corpo.py`. Preenche desenhando: a prancheta recebe a
 peça, os apoios e as cargas, e as reações voltam na hora. Cada apoio entra com as forças que consegue
 fazer, e as três equações viram uma matriz 3 × n, lida por valores singulares:

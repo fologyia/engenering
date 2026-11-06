@@ -805,9 +805,72 @@ def _seta_de_carga(
     _texto(d, posicao, rotulo, cor=_CARGA, tamanho=12)
 
 
+def _apoio_distribuido(d: ImageDraw.ImageDraw, escala: _Escala, apoio: eq.Apoio) -> None:
+    """A faixa de apoio, atrás da reação e no comprimento real do trecho."""
+    a = escala.px(apoio.x, apoio.y)
+    b = escala.px(apoio.x2 or 0.0, apoio.y2 or 0.0)
+    cx, cy = apoio.direcao
+    atras = (-cx * 9 * _ESC, cy * 9 * _ESC)
+    inicio = (a[0] + atras[0], a[1] + atras[1])
+    fim = (b[0] + atras[0], b[1] + atras[1])
+    d.line([inicio, fim], fill=_CONTORNO, width=3 * _ESC)
+    comprimento = math.hypot(b[0] - a[0], b[1] - a[1]) or 1.0
+    tx, ty = (b[0] - a[0]) / comprimento, (b[1] - a[1]) / comprimento
+    riscos = max(3, round(comprimento / (14 * _ESC)))
+    for k in range(riscos + 1):
+        x = inicio[0] + (fim[0] - inicio[0]) * k / riscos
+        y = inicio[1] + (fim[1] - inicio[1]) * k / riscos
+        risco = (x + atras[0] * 0.8 - tx * 6 * _ESC, y + atras[1] * 0.8 - ty * 6 * _ESC)
+        d.line([(x, y), risco], fill=_CONTORNO, width=_ESC)
+    if apoio.preso:
+        for k in range(8):  # entre as setas da pressão
+            x = a[0] + (b[0] - a[0]) * (k + 0.5) / 8.0
+            y = a[1] + (b[1] - a[1]) * (k + 0.5) / 8.0
+            d.line([(x, y), (x + atras[0], y + atras[1])], fill=_CONTORNO, width=2 * _ESC)
+
+
+def _pressao_no_apoio(
+    d: ImageDraw.ImageDraw, escala: _Escala, r: eq.Reacao, u: eq.Unidades
+) -> None:
+    """As setas da pressão, do tamanho de cada ponto, com os valores nas pontas."""
+    p = eq.pressao_do_apoio(r)
+    cx, cy = r.apoio.direcao
+    a = escala.px(p.x1, p.y1)
+    b = escala.px(p.x2, p.y2)
+    maior = p.maior or 1.0
+    cor = _TRACAO if p.tomba else _REACAO
+    caudas: list[Ponto] = []
+    passos = 8
+    for k in range(passos + 1):
+        q = k / passos
+        w = p.w1 + (p.w2 - p.w1) * q
+        ponta = (a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q)
+        tamanho = 20 * _ESC + abs(w) / maior * 40 * _ESC
+        # A seta nasce atrás do apoio: empurrando, chega na peça; puxando, sai dela.
+        atras = (ponta[0] - cx * tamanho, ponta[1] + cy * tamanho)
+        caudas.append(atras)
+        if abs(w) > 0.04 * maior:
+            _seta(d, atras if w >= 0.0 else ponta, ponta if w >= 0.0 else atras, cor, ponta=7)
+    d.line(caudas, fill=cor, width=2 * _ESC)
+    por_metro = u.metro / u.newton
+    meio = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+    fora = 74 * _ESC  # depois da seta mais longa, para o texto não cruzar nenhuma delas
+    _texto(
+        d,
+        (meio[0] - cx * fora, meio[1] + cy * fora),
+        f"{r.apoio.nome}: {_n(p.w1 * por_metro)} a {_n(p.w2 * por_metro)} {u.distribuida}",
+        cor=cor,
+        tamanho=12,
+        ancora="rm" if cx > 0.3 else "lm" if cx < -0.3 else "mm",
+    )
+
+
 def _seta_de_reacao(
     d: ImageDraw.ImageDraw, escala: _Escala, r: eq.Reacao, solucao: eq.Solucao, u: eq.Unidades
 ) -> None:
+    if r.apoio.distribuido:
+        _pressao_no_apoio(d, escala, r, u)
+        return
     p = escala.px(r.apoio.x, r.apoio.y)
     if r.modulo > 1e-9 * solucao.referencia:
         ux, uy = r.fx / r.modulo, r.fy / r.modulo
@@ -869,7 +932,9 @@ def figura_do_equilibrio(solucao: eq.Solucao, u: eq.Unidades) -> ImagemDiagrama:
             d.ellipse([x - raio, y - raio, x + raio, y + raio], fill=_CORPO)
 
     for apoio in problema.apoios:
-        if apoio.tipo in eq.COM_PONTA:
+        if apoio.distribuido:
+            _apoio_distribuido(d, escala, apoio)
+        elif apoio.tipo in eq.COM_PONTA:
             _ponta_da_barra(d, escala, apoio)
         else:
             _simbolo_do_apoio(d, escala.px(apoio.x, apoio.y), apoio.tipo, apoio.direcao)
@@ -886,7 +951,7 @@ def figura_do_equilibrio(solucao: eq.Solucao, u: eq.Unidades) -> ImagemDiagrama:
     for r in solucao.reacoes:
         if solucao.para:
             _seta_de_reacao(d, escala, r, solucao, u)
-        x, y = escala.px(r.apoio.x, r.apoio.y)
+        x, y = escala.px(*r.apoio.ponto)
         lado = 14 * _ESC
         _texto(d, (x + lado, y - lado), r.apoio.nome, tamanho=14)
 

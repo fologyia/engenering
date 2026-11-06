@@ -17,11 +17,14 @@ const ENGASTE = "Engaste"
 const GUIA = "Guia"
 const CABO = "Cabo"
 const BIELA = "Biela"
+const DISTRIBUIDO = "Apoio distribuído"
+const SO_ENCOSTA = "Só encosta"
+const PRESO = "Preso ao longo"
 const FORCA = "Força"
 const MOMENTO = "Momento"
 const DISTRIBUIDA = "Distribuída"
 const PESO = "Peso"
-const APOIOS = [PINO, ROLETE, SIMPLES, ATRITO, ENGASTE, GUIA, CABO, BIELA]
+const APOIOS = [PINO, ROLETE, SIMPLES, ATRITO, DISTRIBUIDO, ENGASTE, GUIA, CABO, BIELA]
 const CARGAS = [FORCA, MOMENTO, DISTRIBUIDA, PESO]
 const GRADES = {
   mm: [1, 5, 10, 25, 50, 100],
@@ -35,6 +38,7 @@ const DICA = {
   [ROLETE]: "Clique na peça: o rolete segura uma direção, para os dois lados.",
   [SIMPLES]: "Clique na peça: o apoio simples só empurra.",
   [ATRITO]: "Clique na peça: empurra e segura de lado até o limite do atrito.",
+  [DISTRIBUIDO]: "Clique num trecho para apoiar ele inteiro, ou arraste do início ao fim do apoio.",
   [ENGASTE]: "Clique na peça: o engaste segura tudo, inclusive o giro.",
   [GUIA]: "Clique na peça: a guia deixa correr e segura o lado e o giro.",
   [CABO]: "Arraste da peça até o ponto onde o cabo prende.",
@@ -53,8 +57,17 @@ const rad = (g) => (g * Math.PI) / 180
 const grau = (r) => (r * 180) / Math.PI
 const direcao = (g) => [Math.cos(rad(g)), Math.sin(rad(g))]
 const temPonta = (a) => a.tipo === CABO || a.tipo === BIELA
+const temTrecho = (a) => a.tipo === DISTRIBUIDO
+const temFim = (a) => temPonta(a) || temTrecho(a)
 
 function dirApoio(a) {
+  if (temTrecho(a) && a.x2 !== null && a.x2 !== undefined) {
+    // Sempre perpendicular ao trecho: o ângulo só escolhe de que lado o apoio empurra.
+    const d = Math.hypot(a.x2 - a.x, a.y2 - a.y) || 1
+    const [tx, ty] = [(a.x2 - a.x) / d, (a.y2 - a.y) / d]
+    const [ax, ay] = direcao(a.angulo)
+    return -ty * ax + tx * ay >= 0 ? [-ty, tx] : [ty, -tx]
+  }
   if (temPonta(a) && a.x2 !== null && a.x2 !== undefined) {
     const d = Math.hypot(a.x2 - a.x, a.y2 - a.y) || 1
     return [(a.x2 - a.x) / d, (a.y2 - a.y) / d]
@@ -137,7 +150,7 @@ function criar(raiz) {
       e.dados[nome].forEach((a, i) => {
         if (fora?.lista === nome && fora.i === i) return
         lista.push([a.x, a.y])
-        if (a.tipo === DISTRIBUIDA) lista.push([a.x2, a.y2])
+        if (a.tipo === DISTRIBUIDA || temTrecho(a)) lista.push([a.x2, a.y2])
       })
     }
     return lista
@@ -272,10 +285,14 @@ function criar(raiz) {
       tipo,
       x,
       y,
-      angulo: ponta ? arred(grau(Math.atan2(ponta[1] - y, ponta[0] - x))) : anguloNovoDoApoio(tipo, x, y),
+      angulo:
+        ponta && tipo !== DISTRIBUIDO
+          ? arred(grau(Math.atan2(ponta[1] - y, ponta[0] - x)))
+          : anguloNovoDoApoio(tipo, x, y),
       x2: ponta ? ponta[0] : null,
       y2: ponta ? ponta[1] : null,
       mu: tipo === ATRITO ? 0.3 : null,
+      fixacao: tipo === DISTRIBUIDO ? SO_ENCOSTA : null,
     })
     selecionar("apoios", e.dados.apoios.length - 1)
   }
@@ -424,24 +441,73 @@ function criar(raiz) {
     a.x2 = arred(a.x + cx * l)
     a.y2 = arred(a.y + cy * l)
   }
+  function trechoPadrao(a) {
+    // O trecho da peça que está embaixo do apoio; fora da peça, um pedaço deitado.
+    const t = trechoEm(a.x, a.y)
+    if (t) {
+      ;[a.x, a.y, a.x2, a.y2] = [t.x1, t.y1, t.x2, t.y2]
+      return
+    }
+    a.x2 = arred(a.x + 120 / e.vista.esc)
+    a.y2 = a.y
+  }
+  function escolhaDaFixacao(a) {
+    const s = document.createElement("select")
+    s.title = "Só encosta: empurra, e a peça pode descolar e tombar. Preso ao longo: soldado ou parafusado, empurra, puxa e segura ao longo do trecho."
+    for (const t of [SO_ENCOSTA, PRESO]) {
+      const o = document.createElement("option")
+      o.textContent = t
+      o.selected = t === (a.fixacao ?? SO_ENCOSTA)
+      s.append(o)
+    }
+    s.addEventListener("change", () => {
+      guardar()
+      a.fixacao = s.value
+      enviar()
+    })
+    return s
+  }
+  function botaoDoLado(a) {
+    const b = document.createElement("button")
+    b.type = "button"
+    b.textContent = "Trocar o lado"
+    b.title = "Põe o apoio do outro lado da peça"
+    b.className = "solto"
+    b.addEventListener("click", () => {
+      const [cx, cy] = dirApoio(a)
+      guardar()
+      a.angulo = arred(grau(Math.atan2(-cy, -cx)))
+      enviar()
+    })
+    return b
+  }
   function painelDoApoio(a) {
     const un = e.u.c
     painel.append(
       escolhaDeTipo(a, APOIOS, () => {
-        if (temPonta(a)) pontaPadrao(a)
+        if (temTrecho(a)) trechoPadrao(a)
+        else if (temPonta(a)) pontaPadrao(a)
         else a.x2 = a.y2 = null
         if (a.tipo === ATRITO) a.mu = a.mu ?? 0.3
+        a.fixacao = temTrecho(a) ? (a.fixacao ?? SO_ENCOSTA) : null
       }),
       nomeDoItem(a),
       campo("x", a.x, (v) => { a.x = v }, `Posição em x (${un})`),
       campo("y", a.y, (v) => { a.y = v }, `Posição em y (${un})`),
     )
-    if (temPonta(a)) {
+    if (temFim(a)) {
       painel.append(
         campo("x₂", a.x2, (v) => { a.x2 = v }, `Outra ponta em x (${un})`),
         campo("y₂", a.y2, (v) => { a.y2 = v }, `Outra ponta em y (${un})`),
       )
-    } else if (a.tipo !== PINO) {
+    }
+    if (temTrecho(a)) {
+      painel.append(
+        escolhaDaFixacao(a),
+        campo("μ", a.mu, (v) => { if (v >= 0) a.mu = v }, "Coeficiente de atrito: sem ele, quem só encosta não segura ao longo do trecho"),
+        botaoDoLado(a),
+      )
+    } else if (!temPonta(a) && a.tipo !== PINO) {
       painel.append(
         campo("Empurra para (°)", a.angulo, (v) => { a.angulo = v }, "Direção da reação: 90° para cima"),
         setas("Empurra para", (g) => { a.angulo = g }, "Para onde o apoio empurra a peça"),
@@ -694,7 +760,7 @@ function criar(raiz) {
     for (const t of e.dados.trechos) lista.push([t.x1, t.y1], [t.x2, t.y2])
     for (const a of e.dados.apoios) {
       lista.push([a.x, a.y])
-      if (temPonta(a) && a.x2 !== null) lista.push([a.x2, a.y2])
+      if (temFim(a) && a.x2 !== null) lista.push([a.x2, a.y2])
     }
     for (const c of e.dados.cargas) {
       lista.push([c.x, c.y])
@@ -768,6 +834,24 @@ function criar(raiz) {
     }
     return `<g transform="translate(${x} ${y}) rotate(${giro})">${s}</g>`
   }
+  function faixaDoApoio(a) {
+    // Fica atrás da peça, no comprimento real do trecho, para o apoio não cobrir a barra.
+    const [p, q] = [px(a.x, a.y), px(a.x2, a.y2)]
+    const [cx, cy] = dirApoio(a)
+    const [ax, ay] = [-cx * 9, cy * 9]
+    const comp = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1
+    const [tx, ty] = [(q[0] - p[0]) / comp, (q[1] - p[1]) / comp]
+    const n = Math.max(2, Math.round(comp / 12))
+    let s = `<line class="ap" x1="${p[0] + ax}" y1="${p[1] + ay}" x2="${q[0] + ax}" y2="${q[1] + ay}"/>`
+    for (let k = 0; k <= n; k += 1) {
+      const [x, y] = [p[0] + ax + ((q[0] - p[0]) * k) / n, p[1] + ay + ((q[1] - p[1]) * k) / n]
+      s += `<line class="ap-f" x1="${x}" y1="${y}" x2="${x + ax * 0.8 - tx * 6}" y2="${y + ay * 0.8 - ty * 6}"/>`
+      if (a.fixacao === PRESO && k % 2 === 1) {
+        s += `<line class="ap" x1="${x}" y1="${y}" x2="${x - ax}" y2="${y - ay}"/>`
+      }
+    }
+    return s
+  }
   function barraDePonta(a) {
     const p = px(a.x, a.y)
     const [cx, cy] = dirApoio(a)
@@ -816,7 +900,31 @@ function criar(raiz) {
     const [tx, ty] = [cauda[0] - sinal * ux * folga, cauda[1] + sinal * uy * 8 + (uy < 0 ? -4 : 12)]
     return `${seta(cauda, p, cls)}${extra}<text class="carga-t editavel" data-editar="carga:${i}" x="${tx}" y="${ty}" text-anchor="middle">${c.nome} = ${texto(c.valor)} ${un}</text>`
   }
+  function desenhoDaPressao(r) {
+    // Peça rígida: a pressão é uma reta, com as setas saindo de trás do apoio.
+    const q = r.pressao
+    const cls = r.ruim ? "ruim" : "reacao"
+    const maior = Math.max(Math.abs(q.w1), Math.abs(q.w2), 1e-12)
+    const caudas = []
+    let s = ""
+    const n = 8
+    for (let k = 0; k <= n; k += 1) {
+      const f = k / n
+      const w = q.w1 + (q.w2 - q.w1) * f
+      const pp = px(q.x1 + (q.x2 - q.x1) * f, q.y1 + (q.y2 - q.y1) * f)
+      const l = 18 + (Math.abs(w) / maior) * 30
+      const atras = [pp[0] - q.cx * l, pp[1] + q.cy * l]
+      caudas.push(atras)
+      if (Math.abs(w) > 0.04 * maior) s += w >= 0 ? seta(atras, pp, cls, 7) : seta(pp, atras, cls, 7)
+    }
+    s += `<polyline class="${cls}" points="${caudas.map((v) => v.join(",")).join(" ")}"/>`
+    // Depois da seta mais longa, para o texto não cruzar nenhuma delas.
+    const meio = px((q.x1 + q.x2) / 2, (q.y1 + q.y2) / 2)
+    const ancora = q.cx > 0.3 ? "end" : q.cx < -0.3 ? "start" : "middle"
+    return `${s}<text class="${cls}-t" x="${meio[0] - q.cx * 60}" y="${meio[1] + q.cy * 60 + 4}" text-anchor="${ancora}">${q.texto}</text>`
+  }
   function desenhoDaReacao(r) {
+    if (r.pressao) return desenhoDaPressao(r)
     const p = px(r.x, r.y)
     const m = Math.hypot(r.fx, r.fy)
     const cls = r.ruim ? "ruim" : "reacao"
@@ -842,7 +950,7 @@ function criar(raiz) {
     const lista = []
     for (const v of e.dados.apoios) {
       lista.push(v[p])
-      if (temPonta(v) && v[q] !== null && v[q] !== undefined) lista.push(v[q])
+      if (temFim(v) && v[q] !== null && v[q] !== undefined) lista.push(v[q])
     }
     for (const c of e.dados.cargas) {
       lista.push(c[p])
@@ -928,8 +1036,9 @@ function criar(raiz) {
     })
     s += cotas()
     e.dados.apoios.forEach((a, i) => {
-      s += temPonta(a) ? barraDePonta(a) : simbolo(a)
-      const p = px(a.x, a.y)
+      if (temTrecho(a)) s += faixaDoApoio(a)
+      else s += temPonta(a) ? barraDePonta(a) : simbolo(a)
+      const p = temTrecho(a) ? px((a.x + a.x2) / 2, (a.y + a.y2) / 2) : px(a.x, a.y)
       s += `<text class="nome${marcado("apoios", i) ? " sel-t" : ""}" x="${p[0] + 13}" y="${p[1] - 11}">${a.nome}</text>`
     })
     e.dados.cargas.forEach((c, i) => {
@@ -993,6 +1102,12 @@ function criar(raiz) {
       ]
     }
     if (e.sel.lista === "apoios") {
+      if (temTrecho(it)) {
+        return [
+          { tipo: "ini", px: px(it.x, it.y) },
+          { tipo: "fim", px: px(it.x2, it.y2) },
+        ]
+      }
       if (temPonta(it)) return it.x2 === null ? [] : [{ tipo: "ponta", px: px(it.x2, it.y2) }]
       if (it.tipo === PINO) return []
       const [cx, cy] = direcao(it.angulo)
@@ -1044,6 +1159,16 @@ function criar(raiz) {
     for (let i = e.dados.apoios.length - 1; i >= 0; i -= 1) {
       const a = e.dados.apoios[i]
       const p = px(a.x, a.y)
+      if (temTrecho(a)) {
+        // Toca-se a faixa, atrás da peça: a barra em cima dela continua selecionável.
+        const [cx, cy] = dirApoio(a)
+        const q = px(a.x2, a.y2)
+        const atras = [-cx * 17, cy * 17]
+        if (noSegmento([p[0] + atras[0], p[1] + atras[1]], [q[0] + atras[0], q[1] + atras[1]]) < TOQUE_PX) {
+          return { lista: "apoios", i }
+        }
+        continue
+      }
       if (pertoPx(p) < 18) return { lista: "apoios", i }
       if (temPonta(a) && a.x2 !== null && noSegmento(p, px(a.x2, a.y2)) < TOQUE_PX) {
         return { lista: "apoios", i }
@@ -1080,14 +1205,14 @@ function criar(raiz) {
     for (const nome of ["apoios", "cargas", "cortes"]) {
       for (const v of e.dados[nome]) {
         if (igual(v.x, v.y)) [v.x, v.y] = [x1, y1]
-        if (v.tipo === DISTRIBUIDA && igual(v.x2, v.y2)) [v.x2, v.y2] = [x1, y1]
+        if ((v.tipo === DISTRIBUIDA || temTrecho(v)) && igual(v.x2, v.y2)) [v.x2, v.y2] = [x1, y1]
       }
     }
   }
   function moverItem(it, base, dx, dy) {
     it.x = arred(base.x + dx)
     it.y = arred(base.y + dy)
-    if (it.tipo === DISTRIBUIDA) {
+    if (it.tipo === DISTRIBUIDA || temTrecho(it)) {
       it.x2 = arred(base.x2 + dx)
       it.y2 = arred(base.y2 + dy)
     }
@@ -1112,6 +1237,14 @@ function criar(raiz) {
         e.pendente = ini.p
         desenhar()
       }
+    } else if (tipo === DISTRIBUIDO) {
+      if (moveu && (fim.p[0] !== ini.p[0] || fim.p[1] !== ini.p[1])) {
+        criarApoio(tipo, ini.p[0], ini.p[1], fim.p)
+        return
+      }
+      const t = trechoEm(...ini.bruto)
+      if (t) criarApoio(tipo, t.x1, t.y1, [t.x2, t.y2])
+      else desenhar()
     } else if (APOIOS.includes(tipo)) {
       criarApoio(tipo, ini.p[0], ini.p[1])
     } else if (tipo === FORCA) {
@@ -1148,7 +1281,7 @@ function criar(raiz) {
     const tipo = e.ferramenta
     const [a, b] = [px(...g.ini.p), px(...g.fim.p)]
     if (tipo === FORCA) return seta(a, b, "carga", 10)
-    if (tipo === DISTRIBUIDA || tipo === CABO || tipo === BIELA) {
+    if (tipo === DISTRIBUIDA || tipo === DISTRIBUIDO || tipo === CABO || tipo === BIELA) {
       return `<line class="rascunho" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`
     }
     return ""

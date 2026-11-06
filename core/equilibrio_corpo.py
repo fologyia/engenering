@@ -31,7 +31,12 @@ ENGASTE = "Engaste"
 GUIA = "Guia"
 CABO = "Cabo"
 BIELA = "Biela"
-TIPOS_DE_APOIO = (PINO, ROLETE, SIMPLES, ATRITO, ENGASTE, GUIA, CABO, BIELA)
+DISTRIBUIDO = "Apoio distribuído"
+TIPOS_DE_APOIO = (PINO, ROLETE, SIMPLES, ATRITO, DISTRIBUIDO, ENGASTE, GUIA, CABO, BIELA)
+#: Como a peça fica no apoio distribuído: encostada, ela descola e tomba; presa, ela não sai.
+SO_ENCOSTA = "Só encosta"
+PRESO = "Preso ao longo"
+FIXACOES = (SO_ENCOSTA, PRESO)
 #: Apoios que só trabalham para um lado: o cabo puxa e o apoio simples empurra.
 SO_UM_LADO = (SIMPLES, ATRITO, CABO)
 #: A ponta de lá é o que define a direção destes.
@@ -100,10 +105,40 @@ class Apoio:
     x2: float | None = None
     y2: float | None = None
     mu: float = 0.0
+    preso: bool = False
+
+    @property
+    def distribuido(self) -> bool:
+        return self.tipo == DISTRIBUIDO
+
+    @property
+    def comprimento(self) -> float:
+        """O trecho do apoio distribuído. Nos outros apoios, zero."""
+        if not self.distribuido or self.x2 is None or self.y2 is None:
+            return 0.0
+        return math.hypot(self.x2 - self.x, self.y2 - self.y)
+
+    @property
+    def tangente(self) -> tuple[float, float]:
+        """Do início para o fim do trecho."""
+        l = self.comprimento or 1.0
+        return ((self.x2 or 0.0) - self.x) / l, ((self.y2 or 0.0) - self.y) / l
+
+    @property
+    def ponto(self) -> tuple[float, float]:
+        """Onde a reação é aplicada: no apoio distribuído, o meio do trecho."""
+        if self.comprimento == 0.0:
+            return self.x, self.y
+        return (self.x + (self.x2 or 0.0)) / 2.0, (self.y + (self.y2 or 0.0)) / 2.0
 
     @property
     def direcao(self) -> tuple[float, float]:
         """Para onde a reação principal aponta quando é positiva."""
+        if self.distribuido:
+            # Sempre perpendicular ao trecho; o ângulo só escolhe o lado.
+            tx, ty = self.tangente
+            ax, ay = eixo(self.angulo)
+            return (-ty, tx) if -ty * ax + tx * ay >= 0.0 else (ty, -tx)
         if self.x2 is not None and self.y2 is not None:
             dx, dy = self.x2 - self.x, self.y2 - self.y
             comprimento = math.hypot(dx, dy)
@@ -226,6 +261,12 @@ class Incognita:
 
 def _incognitas(indice: int, apoio: Apoio) -> list[Incognita]:
     cx, cy = apoio.direcao
+    if apoio.distribuido:
+        # Peça rígida: a pressão varia em linha reta, e uma reta tem dois números, R e M.
+        lista = [Incognita(indice, "n", cx, cy), Incognita(indice, "m", um=1.0)]
+        if apoio.preso or apoio.mu > 0.0:
+            lista.append(Incognita(indice, "t", -cy, cx))
+        return lista
     if apoio.tipo == PINO:
         return [Incognita(indice, "x", 1.0, 0.0), Incognita(indice, "y", 0.0, 1.0)]
     if apoio.tipo == ENGASTE:
@@ -311,6 +352,7 @@ class Solucao:
 
 def _pontos(problema: Problema, acoes: Iterable[Acao]) -> list[tuple[float, float]]:
     pontos = [(a.x, a.y) for a in problema.apoios]
+    pontos += [(a.x2 or 0.0, a.y2 or 0.0) for a in problema.apoios if a.distribuido]
     pontos += [(a.x, a.y) for a in acoes]
     pontos += [(c.x2, c.y2) for c in problema.cargas if c.tipo == DISTRIBUIDA]
     return pontos
@@ -322,22 +364,37 @@ def _matriz(
     """Linhas ΣFx, ΣFy e ΣM/L: as três na mesma ordem de grandeza. O momento entra como M/L."""
     colunas = []
     for inc in incognitas:
-        apoio = apoios[inc.apoio]
-        braco = ((apoio.x - xo) * inc.uy - (apoio.y - yo) * inc.ux) / l
+        ax, ay = apoios[inc.apoio].ponto
+        braco = ((ax - xo) * inc.uy - (ay - yo) * inc.ux) / l
         colunas.append((inc.ux, inc.uy, braco + inc.um))
     return np.array(colunas, dtype=float).T
 
 
-def _restricoes(incognitas: Sequence[Incognita], apoios: Sequence[Apoio]) -> list[np.ndarray]:
-    """Cada vetor c diz c·x ≥ 0: cabo não empurra, contato não puxa, atrito tem limite."""
+def _restricoes(
+    incognitas: Sequence[Incognita], apoios: Sequence[Apoio], l: float, margem: float = 2.0
+) -> list[np.ndarray]:
+    """Cada vetor c diz c·x ≥ 0: cabo não empurra, contato não puxa, atrito tem limite.
+
+    No apoio distribuído encostado, a resultante fica a até L/``margem`` do meio do trecho: |M| ≤
+    R·L/margem. Com 2, ela não sai do trecho; com 6, o trecho inteiro fica encostado. O momento entra
+    dividido por ``l``, como na matriz.
+    """
     n = len(incognitas)
     saida: list[np.ndarray] = []
     normais = {inc.apoio: i for i, inc in enumerate(incognitas) if inc.papel == "n"}
     for i, inc in enumerate(incognitas):
         apoio = apoios[inc.apoio]
-        if apoio.tipo not in SO_UM_LADO:
+        encostado = apoio.distribuido and not apoio.preso
+        if apoio.tipo not in SO_UM_LADO and not encostado:
             continue
-        if inc.papel == "n":
+        if inc.papel == "m":
+            normal = normais[inc.apoio]
+            for sinal in (1.0, -1.0):
+                vetor = np.zeros(n)
+                vetor[normal] = apoio.comprimento / (margem * l)
+                vetor[i] = sinal
+                saida.append(vetor)
+        elif inc.papel == "n":
             vetor = np.zeros(n)
             vetor[i] = 1.0
             saida.append(vetor)
@@ -427,10 +484,16 @@ def resolver(problema: Problema) -> Solucao:
     )
     movimento = _movimento(livre, b, empurrada, l, xo, yo) if livre.shape[1] else None
 
-    restricoes = _restricoes(incognitas, problema.apoios)
     viavel = True
-    if nulo.shape[1] == 1 and restricoes:
-        x, viavel = _procurar_divisao(x, nulo, restricoes, _TOL_ZERO * referencia)
+    if nulo.shape[1] == 1:
+        # Entre as divisões possíveis, primeiro a que mantém os trechos inteiros encostados.
+        for margem in (6.0, 2.0):
+            restricoes = _restricoes(incognitas, problema.apoios, l, margem)
+            if restricoes:
+                achado, viavel = _procurar_divisao(x, nulo, restricoes, _TOL_ZERO * referencia)
+                if viavel:
+                    x = achado
+                    break
 
     valores: dict[int, dict[str, float]] = {}
     soltas: dict[int, list[str]] = {}
@@ -471,13 +534,91 @@ def resolver(problema: Problema) -> Solucao:
     )
 
 
+@dataclass(frozen=True)
+class Pressao:
+    """A reação do apoio distribuído, por comprimento, na faixa que está em contato."""
+
+    apoio: Apoio
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    w1: float
+    w2: float
+    excentricidade: float  # da resultante, a partir do meio do trecho, no sentido início → fim
+    fracao: float  # do trecho que está em contato
+    tomba: bool
+
+    @property
+    def maior(self) -> float:
+        return max(abs(self.w1), abs(self.w2))
+
+    def nas_pontas(self) -> tuple[float, float]:
+        """A pressão no começo e no fim do trecho inteiro: zero onde a peça descolou."""
+        a = self.apoio
+        inicio = self.w1 if math.hypot(self.x1 - a.x, self.y1 - a.y) < 1e-9 else 0.0
+        fim = (
+            self.w2 if math.hypot(self.x2 - (a.x2 or 0.0), self.y2 - (a.y2 or 0.0)) < 1e-9 else 0.0
+        )
+        return inicio, fim
+
+
+def pressao_do_apoio(r: Reacao) -> Pressao:
+    """Da resultante e do momento para a pressão ao longo do trecho.
+
+    Dentro do terço central, é um trapézio. Fora dele, a peça que só encosta descola do lado leve:
+    a pressão vira um triângulo com o centro na resultante. Com a resultante fora do trecho, ou
+    pedindo para puxar, a peça tomba, e a função devolve a reta só para o desenho.
+    """
+    a = r.apoio
+    l = a.comprimento
+    tx, ty = a.tangente
+    cx, cy = a.direcao
+    # R·e, com e medido ao longo do trecho: o sinal do giro depende do lado para onde o apoio empurra.
+    momento = r.m * (tx * cy - ty * cx)
+    linha = r.n / l, 6.0 * momento / l**2
+    w1, w2 = linha[0] - linha[1], linha[0] + linha[1]
+    fim = (a.x2 or 0.0, a.y2 or 0.0)
+    cheia = Pressao(a, a.x, a.y, fim[0], fim[1], w1, w2, momento / r.n if r.n else 0.0, 1.0, False)
+    if a.preso or (r.n == 0.0 and momento == 0.0):
+        return cheia
+    if r.n <= 0.0 or abs(momento) >= r.n * l / 2.0:
+        return Pressao(a, a.x, a.y, fim[0], fim[1], w1, w2, cheia.excentricidade, 0.0, True)
+    e = momento / r.n
+    if abs(e) <= l / 6.0:
+        return cheia
+    contato = 3.0 * (l / 2.0 - abs(e))
+    pico = 2.0 * r.n / contato
+    if e > 0.0:
+        inicio = (fim[0] - tx * contato, fim[1] - ty * contato)
+        return Pressao(a, inicio[0], inicio[1], fim[0], fim[1], 0.0, pico, e, contato / l, False)
+    final = (a.x + tx * contato, a.y + ty * contato)
+    return Pressao(a, a.x, a.y, final[0], final[1], pico, 0.0, e, contato / l, False)
+
+
+def cargas_da_reacao(r: Reacao) -> list[Carga]:
+    """A reação do apoio distribuído como cargas: assim uma seção corta o apoio ao meio."""
+    p = pressao_do_apoio(r)
+    a = r.apoio
+    cx, cy = a.direcao
+    cargas = [
+        Carga(a.nome, DISTRIBUIDA, p.x1, p.y1, p.w1, angulo_de(cx, cy), p.x2, p.y2, p.w2),
+    ]
+    if r.t != 0.0:
+        w = r.t / a.comprimento
+        fim = (a.x2 or 0.0, a.y2 or 0.0)
+        cargas.append(Carga(a.nome, DISTRIBUIDA, a.x, a.y, w, angulo_de(-cy, cx), *fim, w))
+    return cargas
+
+
 def residuos(solucao: Solucao) -> tuple[float, float]:
     """ΣF e ΣM em torno do primeiro apoio, somados de novo, sem passar pela matriz."""
-    xo, yo = solucao.reacoes[0].apoio.x, solucao.reacoes[0].apoio.y
+    xo, yo = solucao.reacoes[0].apoio.ponto
     fx = sum(a.fx for a in solucao.acoes) + sum(r.fx for r in solucao.reacoes)
     fy = sum(a.fy for a in solucao.acoes) + sum(r.fy for r in solucao.reacoes)
     momento = sum(_momento(a, xo, yo) for a in solucao.acoes) + sum(
-        (r.apoio.x - xo) * r.fy - (r.apoio.y - yo) * r.fx + r.m for r in solucao.reacoes
+        (r.apoio.ponto[0] - xo) * r.fy - (r.apoio.ponto[1] - yo) * r.fx + r.m
+        for r in solucao.reacoes
     )
     return math.hypot(fx, fy), abs(momento)
 
@@ -556,7 +697,10 @@ def esforco_no_corte(solucao: Solucao, corte: Corte) -> Esforco:
     acoes = [a for carga in solucao.problema.cargas for a in _acoes_do_lado(carga, xc, yc, tx, ty)]
     for reacao in solucao.reacoes:
         apoio = reacao.apoio
-        if (apoio.x - xc) * tx + (apoio.y - yc) * ty > 0.0:
+        if apoio.distribuido:
+            for carga in cargas_da_reacao(reacao):
+                acoes += _acoes_do_lado(carga, xc, yc, tx, ty)
+        elif (apoio.x - xc) * tx + (apoio.y - yc) * ty > 0.0:
             acoes.append(Acao(apoio.nome, apoio.x, apoio.y, reacao.fx, reacao.fy, reacao.m))
     fx = sum(a.fx for a in acoes)
     fy = sum(a.fy for a in acoes)
@@ -564,7 +708,7 @@ def esforco_no_corte(solucao: Solucao, corte: Corte) -> Esforco:
     na_linha = any(
         abs((p[0] - xc) * tx + (p[1] - yc) * ty) < 1e-9
         for p in [(a.x, a.y) for a in solucao.acoes]
-        + [(r.apoio.x, r.apoio.y) for r in solucao.reacoes]
+        + [(r.apoio.x, r.apoio.y) for r in solucao.reacoes if not r.apoio.distribuido]
     )
     return Esforco(
         corte,
@@ -590,7 +734,9 @@ def _apoio_da_linha(linha: Mapping[str, Any], nome: str, u: Unidades) -> Apoio:
     tipo = str(linha["tipo"])
     x2 = _numero(linha, "x2")
     y2 = _numero(linha, "y2")
-    com_ponta = tipo in COM_PONTA and x2 is not None and y2 is not None
+    if tipo == DISTRIBUIDO and (x2 is None or y2 is None):
+        raise ErroDeEquilibrio(f"Apoio {nome}: informe onde o trecho termina (x₂, y₂).")
+    com_ponta = (tipo in COM_PONTA or tipo == DISTRIBUIDO) and x2 is not None and y2 is not None
     mu = _numero(linha, "mu")
     if tipo == ATRITO and mu is None:
         raise ErroDeEquilibrio(f"Apoio {nome}: informe o coeficiente de atrito μ.")
@@ -598,6 +744,8 @@ def _apoio_da_linha(linha: Mapping[str, Any], nome: str, u: Unidades) -> Apoio:
     y = float(linha["y"]) * u.metro
     if com_ponta and x2 * u.metro == x and y2 * u.metro == y:  # type: ignore[operator]
         raise ErroDeEquilibrio(f"{tipo} {nome}: as duas pontas estão no mesmo lugar.")
+    if tipo == DISTRIBUIDO and linha.get("fixacao") not in (None, *FIXACOES):
+        raise ErroDeEquilibrio(f"Apoio {nome}: fixação desconhecida.")
     return Apoio(
         nome,
         tipo,
@@ -607,6 +755,7 @@ def _apoio_da_linha(linha: Mapping[str, Any], nome: str, u: Unidades) -> Apoio:
         x2 * u.metro if com_ponta else None,  # type: ignore[operator]
         y2 * u.metro if com_ponta else None,  # type: ignore[operator]
         mu or 0.0,
+        tipo == DISTRIBUIDO and linha.get("fixacao") == PRESO,
     )
 
 
