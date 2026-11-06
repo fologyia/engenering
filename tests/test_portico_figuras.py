@@ -9,6 +9,7 @@ from PIL import Image
 
 from core import portico_figuras as pf
 from core import portico_plano as pp
+from core.beam_charts import MARGEM_DA_FIGURA
 
 SECAO = pp.Secao("teste", area_m2=1e-2, inercia_m4=1e-5, modulo_w_m3=1e-4)
 
@@ -91,7 +92,10 @@ def test_todas_as_figuras_saem_como_png(fabrica):
     for figura in figuras:
         imagem = _png(figura)
         assert imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
-        assert figura.largura_px <= 1000 and figura.altura_px <= 620
+        assert (
+            figura.largura_px <= 1000 + 2 * MARGEM_DA_FIGURA
+            and figura.altura_px <= 620 + 2 * MARGEM_DA_FIGURA
+        )
         assert figura.legenda
 
 

@@ -12,6 +12,7 @@ from PIL import Image
 
 from core import base_de_pilar as bp
 from core import record_charts
+from core.beam_charts import MARGEM_DA_FIGURA
 from core.desenho_placa_base import figura_da_base
 
 PADRAO = bp.EntradaBase()  # W 250 x 32,7, tipo 1, 4 × Ø 1", t_p 25 mm, f_ck 25, N 300 kN, V 20 kN
@@ -403,7 +404,10 @@ def test_desenho_mostra_tracao_e_pressao_so_quando_existem(entrada, tracao, pres
     figura = figura_da_base(bp.calcular(entrada))
     imagem = Image.open(io.BytesIO(figura.png))
     assert imagem.size == (2 * figura.largura_px, 2 * figura.altura_px)
-    assert figura.largura_px <= 1100 and figura.altura_px <= 660
+    assert (
+        figura.largura_px <= 1100 + 2 * MARGEM_DA_FIGURA
+        and figura.altura_px <= 660 + 2 * MARGEM_DA_FIGURA
+    )
     # a legenda tem sempre uma seta de cada cor (uns 90 px); o desenho soma mais quando existe
     assert (_contar(figura.png, VERMELHO) > 200) is tracao
     assert (_contar(figura.png, AZUL) > 115) is pressao

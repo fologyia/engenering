@@ -11,6 +11,7 @@ import pytest
 from PIL import Image
 
 from core import base_de_pilar as bp
+from core.beam_charts import MARGEM_DA_FIGURA
 from core.desenho_placa_base import figura_da_base
 
 PADRAO = bp.EntradaBase()  # W 250 x 32,7, tipo 1, 4 × Ø 1", t_p 25 mm, f_ck 25, N 300 kN, V 20 kN
@@ -319,7 +320,10 @@ def _contar(png: bytes, cor: tuple[int, int, int], tolerancia: int = 18) -> int:
 )
 def test_desenho_das_disposicoes_e_tipos(entrada):
     figura = figura_da_base(bp.calcular(entrada))
-    assert figura.largura_px <= 1100 and figura.altura_px <= 660
+    assert (
+        figura.largura_px <= 1100 + 2 * MARGEM_DA_FIGURA
+        and figura.altura_px <= 660 + 2 * MARGEM_DA_FIGURA
+    )
     assert _contar(figura.png, VERMELHO) > 200  # chumbadores tracionados
     assert bp.NOMES_CURTOS[entrada.tipo] in figura.titulo
 

@@ -18,6 +18,7 @@ from core import desenho_da_coluna as dc
 from core import desenho_da_secao as ds
 from core import perfis_compostos as pc
 from core import section_catalog as sc
+from core.beam_charts import MARGEM_DA_FIGURA
 
 I_300 = cb.secao_por_dimensoes("I", soldado=True, d=300.0, bf=150.0, tf=12.5, tw=8.0)
 U_152 = cb.secao_por_dimensoes("U", d=152.4, bf=48.8, tf=8.71, tw=5.08)
@@ -118,7 +119,10 @@ def test_secao_composta_desenha_os_dois_perfis(arranjo):
     if arranjo != pc.ARRANJO_2L_CRUZ:  # a cruz gira: o s fica no título da figura
         assert any(e.texto == "s = 8" for e in forma.espessuras)
     figura = ds.figura_da_secao(secao, giro_graus=30.0)
-    assert figura.largura_px <= 940 and figura.altura_px <= 540
+    assert (
+        figura.largura_px <= 940 + 2 * MARGEM_DA_FIGURA
+        and figura.altura_px <= 540 + 2 * MARGEM_DA_FIGURA
+    )
     assert secao.nome in figura.titulo
 
 
