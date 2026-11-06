@@ -54,7 +54,17 @@ trecho, e no balanço o L é o dobro do comprimento (NBR 8800, Tabela C.1, nota 
 leves da família saem por reescala: com EI constante, M e V não mudam com o perfil e a flecha cai com
 a inércia, então não é preciso resolver a viga de novo.
 
-**Flexão de uma seção.** `σ = N/A ± M/W` e o W necessário.
+**Flexão de uma seção.** `σ = N/A ± M/W` e o W necessário. A seção é cortada em faixas
+(`core/geometria_da_secao.py`): com b(y) saem Q(y), `τ = V·Q/(I·b)` ao longo da altura e von Mises em
+cada ponto, com σ e τ do mesmo ponto. Isso vale para I, U, T, tubos e círculo, e a integral de τ·b
+devolve V. Num perfil I, o ponto mais solicitado pode ser a junção da alma com a mesa, onde σ ainda é
+alto e τ já cresceu: com a W 250 x 28,4, M = 50 kN·m e V = 100 kN, a tensão normal e o cortante passam
+e von Mises não. Saem também a linha neutra, o momento e o cortante admissíveis, `M_y`, `M_p` e o
+fator de forma, e a comparação entre os dois eixos do perfil. O contorno não tem os raios de
+concordância, e na mesa `V·Q/(I·b)` é a média vertical, não o caminho real do cisalhamento. Sem a
+forma (propriedades informadas), a conta volta a `V/A_v` e não há von Mises ao longo da altura.
+A mesma figura (`core/desenho_flexao.py`) aparece em Viga de seção retangular, Seção I, Perfil U e
+Perfil tubular; neste último, a torção entra como τ uniforme.
 
 **Perfil de aço pela norma.** O mesmo motor das barras do modelo, com a norma escolhida.
 

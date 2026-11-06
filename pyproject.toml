@@ -94,6 +94,8 @@ files = [
     "core/elementos_molas_atrito.py",
     "core/elementos_parafusos.py",
     "core/elementos_pinos.py",
+    "core/geometria_da_secao.py",
+    "core/desenho_flexao.py",
     "core/esforcos_no_pino.py",
     "core/desenho_pinos.py",
     "core/elementos_rotativos.py",

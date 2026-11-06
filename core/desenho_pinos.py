@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from PIL import Image, ImageDraw
 
 from core import desenho_girado as dg
-from core.beam_charts import ImagemDiagrama, _fonte, figura_final
+from core.beam_charts import ImagemDiagrama, _fonte, desenho_dispensado, figura_final
 from core.esforcos_no_pino import Chapa, Diagrama, PinoEmBalanco, planos_de_corte
 
 ESC = dg.ESC
@@ -133,6 +133,8 @@ def figura_das_chapas(
     legenda: str = "",
 ) -> ImagemDiagrama:
     """As chapas, o pino, os planos de corte e os diagramas de cortante e momento."""
+    if desenho_dispensado():
+        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
     imagem, d = _quadro(430)
     comprimento = chapas[-1].fim - chapas[0].inicio
     escala = (_DIREITA - _ESQUERDA) * ESC / comprimento
@@ -230,6 +232,8 @@ def figura_do_balanco(
     pino: PinoEmBalanco, t_chapa: float, *, titulo: str, legenda: str
 ) -> ImagemDiagrama:
     """O pino preso no bloco, a chapa que carrega, a pressão no furo e os diagramas."""
+    if desenho_dispensado():
+        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
     imagem, d = _quadro(430)
     diagrama = pino.diagrama()
     meia_chapa = t_chapa / 2.0
@@ -358,6 +362,8 @@ def figura_do_transversal(
     legenda: str,
 ) -> ImagemDiagrama:
     """Corte do eixo e do cubo, com o pino atravessando e a pressão de cada lado."""
+    if desenho_dispensado():
+        return ImagemDiagrama(titulo, legenda, b"", 0, 0)
     imagem, d = _quadro(330)
     cx, cy = 300 * ESC, 165 * ESC
     escala = 135 * ESC / (d_cubo / 2.0)

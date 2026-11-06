@@ -57,7 +57,7 @@ COTAS: dict[str, dict[str, Alvo | tuple[Alvo, ...]]] = {
         "L": "l_m",
         "q": Celula("cargas", 0, "valor", ("tipo", "Distribuída")),
     },
-    "flexao_secao": {"M": "m_kNm"},
+    "flexao_secao": {"M": "m_kNm", "V": "v_kN", "N": "n_kN", "b": "b_mm", "h": "h_mm"},
     "perfil_nbr8800": {"M": "mx_kNm"},
     # Barras e estruturas
     "barra_axial": {

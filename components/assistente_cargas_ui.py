@@ -33,9 +33,12 @@ from components.robustez import secao_protegida
 from components.ui import fronteira_modelo
 from core import cotas_dos_desenhos as cd
 from core import elementos_catalogo as cat
+from core import elementos_vigas as ev
 from core import load_to_stress as cargas
 from core import material_catalog as mat
 from core import memorial_verificacoes as mv
+from core import secao_desenhada as sd
+from core import section_catalog as catalogo
 from core.desenho_tensoes import figura_dos_elementos
 from core.elementos_base import (
     Campo,
@@ -79,6 +82,9 @@ OUTRAS_PAGINAS = (
     ("app_pages/estruturas_aco.py", "Estruturas de aço", ":material/domain:"),
 )
 RECENTES = 6
+#: Onde a página Desenhar seção guarda a seção aberta.
+PARTES_DA_SECAO_ABERTA = "secao_partes"
+NOME_DA_SECAO_ABERTA = "secao_nome"
 
 
 def chave_do_campo(caso_id: str, campo: str) -> str:
@@ -648,6 +654,53 @@ def _lista_de_medidas(caso: Caso, no_desenho: frozenset[str], valores: dict[str,
             posicao += 1
 
 
+def _trazer_secao(caso: Caso) -> None:
+    """Salva a seção aberta na Desenhar seção e a escolhe neste caso, sem sair da página."""
+    aviso = f"assistente_trazer::{caso.id}::aviso"
+    st.session_state.pop(aviso, None)
+    nome = str(st.session_state.get(NOME_DA_SECAO_ABERTA) or "").strip() or "Seção desenhada"
+    existente = catalogo.listar_cadastrados().get(nome)
+    if existente is not None and not existente.editavel:
+        st.session_state[aviso] = (
+            f"{nome} já é um perfil de referência do catálogo. Dê outro nome à seção em Desenhar "
+            "seção."
+        )
+        return
+    try:
+        analise = sd.analisar(sd.partes_de_lista(st.session_state[PARTES_DA_SECAO_ABERTA]))
+        catalogo.salvar_perfil(
+            sd.perfil_da_secao(nome, analise),
+            desenho=tuple(parte.como_dicionario() for parte in analise.partes),
+        )
+    except (sd.ErroDeSecao, catalogo.ErroDeCatalogo) as erro:
+        st.session_state[aviso] = str(erro)
+        return
+    st.session_state[chave_do_campo(caso.id, "desenho")] = nome
+
+
+def _importar_secao(caso: Caso) -> None:
+    """A ponte com a prancheta: só aparece quando a seção do caso é uma seção desenhada."""
+    with st.container(horizontal=True):
+        if st.session_state.get(PARTES_DA_SECAO_ABERTA):
+            st.button(
+                "Trazer a seção aberta",
+                key=f"assistente_trazer::{caso.id}",
+                icon=":material/download:",
+                on_click=_trazer_secao,
+                args=(caso,),
+                help="Salva a seção aberta na página Desenhar seção e a escolhe aqui.",
+            )
+        st.page_link(
+            "app_pages/desenhar_secao.py",
+            label="Abrir Desenhar seção",
+            icon=":material/draw:",
+            help="Desenhe ou altere a seção. Ela volta para cá pela lista de seções salvas.",
+        )
+    aviso = st.session_state.get(f"assistente_trazer::{caso.id}::aviso")
+    if aviso:
+        st.warning(aviso, icon=":material/warning:")
+
+
 def formulario(caso: Caso, no_desenho: frozenset[str] = frozenset()) -> dict[str, Any]:
     """Os campos por seção, em duas colunas. Tabela ocupa a largura toda. Escondido fica no padrão.
 
@@ -680,6 +733,8 @@ def formulario(caso: Caso, no_desenho: frozenset[str] = frozenset()) -> dict[str
                 with colunas[posicao % 2]:
                     valores[campo.chave] = _widget(caso, campo)
                 posicao += 1
+            if valores.get("tipo_secao") == ev.DESENHADA and secao == "Seção":
+                _importar_secao(caso)
     if no_desenho:
         _lista_de_medidas(caso, no_desenho, valores)
     return valores

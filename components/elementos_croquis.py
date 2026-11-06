@@ -27,6 +27,8 @@ from components.load_models import (
     _seta,
     _texto,
 )
+from core import elementos_vigas as ev
+from core import geometria_da_secao as gs
 
 
 def _forca(x: float, y: float, rotulo: str, **kw: object) -> str:
@@ -799,17 +801,90 @@ def _perfil_flexao() -> str:
     )
 
 
+#: Proporção do I usado no desenho sem dados, antes de o caso abrir.
+_I_DO_ESQUEMA = gs.perfil_i(250.0, 150.0, 12.0, 8.0)
+
+
+def _flexao(geometria: gs.Geometria | None, sigma_sup: float, sigma_inf: float) -> str:
+    """A seção na forma real e a reta de σ com o sinal real, com as letras dos campos."""
+    alto, largo = 104.0, 84.0
+    centro_x, centro_y = 104.0, 72.0
+    pecas: list[str] = []
+    if geometria is None:
+        pecas.append(_retangulo(centro_x - 34, centro_y - 50, 68, 100))
+        topo, base = centro_y - 50, centro_y + 50
+        esquerda, direita = centro_x - 34, centro_x + 34
+    else:
+        ya, yb = geometria.extremos_y()
+        xa, xb = geometria.extremos_x()
+        escala = min(alto / (yb - ya), largo / (xb - xa))
+        meio_x, meio_y = (xa + xb) / 2.0, (ya + yb) / 2.0
+
+        def px(x: float, y: float) -> tuple[float, float]:
+            return centro_x + (x - meio_x) * escala, centro_y - (y - meio_y) * escala
+
+        trechos = "".join(
+            "M " + " L ".join("{:.1f},{:.1f}".format(*px(x, y)) for x, y in contorno) + " Z "
+            for contorno in (*geometria.cheios, *geometria.vazados)
+        )
+        for externo, interno in geometria.aneis:
+            for raio in (externo, interno):
+                if raio > 0:
+                    cx, cy = px(0.0, 0.0)
+                    r = raio * escala
+                    trechos += (
+                        f"M {cx - r:.1f},{cy:.1f} A {r:.1f},{r:.1f} 0 1 0 {cx + r:.1f},{cy:.1f} "
+                        f"A {r:.1f},{r:.1f} 0 1 0 {cx - r:.1f},{cy:.1f} Z "
+                    )
+        pecas.append(
+            f'<path d="{trechos}" fill="{_CORPO}" fill-rule="evenodd" stroke="{_CONTORNO}" '
+            'stroke-width="2" stroke-linejoin="round"/>'
+        )
+        topo, base = px(0.0, yb)[1], px(0.0, ya)[1]
+        esquerda, direita = px(xa, 0.0)[0], px(xb, 0.0)[0]
+    maior = max(abs(sigma_sup), abs(sigma_inf), 1e-9)
+    x_zero = 214.0
+    x_sup = x_zero + sigma_sup / maior * 34.0
+    x_inf = x_zero + sigma_inf / maior * 34.0
+    pecas += [
+        _linha_eixo(esquerda - 10, centro_y, direita + 8, centro_y),
+        _caminho(
+            f"M {x_zero},{topo} L {x_sup:.1f},{topo} L {x_inf:.1f},{base} L {x_zero},{base} Z"
+        ),
+        _linha(x_zero, topo - 6, x_zero, base + 6),
+        _forca(
+            x_sup + (6 if sigma_sup >= 0 else -6),
+            topo + 2,
+            "σ",
+            ancora="start" if sigma_sup >= 0 else "end",
+        ),
+        _arco_torque(30, centro_y, 16, "M"),
+        _cota_vertical(direita + 14, topo, base, "h"),
+        _cota_horizontal(base + 8, esquerda, direita, "b"),
+        _seta(262, 24, 262, 62),
+        _forca(268, 44, "V", ancora="start"),
+        _seta(14, 128, 46, 128),
+        _forca(14, 120, "N", ancora="start"),
+    ]
+    return _pecas(*pecas)
+
+
+def croqui_da_flexao(valores: Mapping[str, Any]) -> str:
+    """A seção escolhida, em proporção. Dado que ainda não fecha fica com a seção sem forma."""
+    try:
+        secao = ev.secao_do_caso(valores)
+        geometria = ev.geometria_do_caso(valores, secao)
+        media = float(valores["n_kN"]) * 1000.0 / secao.viga.area_mm2
+        momento = float(valores["m_kNm"]) * 1e6
+        sup = media - momento / secao.viga.modulo_resistencia_superior_mm3
+        inf = media + momento / secao.viga.modulo_resistencia_inferior_mm3
+    except (ValueError, ArithmeticError, KeyError, TypeError):
+        return _flexao(None, -1.0, 1.0)
+    return _flexao(geometria, sup, inf)
+
+
 def _flexao_de_secao() -> str:
-    return _pecas(
-        _retangulo(66, 24, 66, 102),
-        _linha_eixo(50, 75, 150, 75),
-        _caminho("M 176,24 L 226,24 L 176,75 Z"),
-        _caminho("M 176,75 L 126,126 L 176,126 Z"),
-        _linha(176, 18, 176, 132),
-        _forca(236, 30, "σ", ancora="start"),
-        _forca(112, 140, "σ", ancora="start"),
-        _arco_torque(38, 75, 18, "M"),
-    )
+    return _flexao(_I_DO_ESQUEMA, -1.0, 1.0)
 
 
 def _barra_em_trechos() -> str:
@@ -985,6 +1060,7 @@ CROQUIS: dict[str, str] = {
 #: Casos em que o desenho muda com os dados, e não só o número das medidas.
 CROQUIS_VIVOS: dict[str, Callable[[Mapping[str, Any]], str]] = {
     "Pinos ou parafusos sob cisalhamento": croqui_do_pino,
+    "flexao_secao": croqui_da_flexao,
 }
 
 

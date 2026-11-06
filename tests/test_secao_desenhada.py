@@ -558,7 +558,7 @@ def test_botao_usar_salva_e_abre_o_caso_preenchido(tmp_path):
         assert not at.exception
         assert "I soldado 300×150" in catalogo.listar_perfis()
         assert at.session_state["assistente_geometria"] == "viga_reacoes"
-        assert at.session_state[chave_do_campo("viga_reacoes", "perfil")] == "I soldado 300×150"
+        assert at.session_state[chave_do_campo("viga_reacoes", "desenho")] == "I soldado 300×150"
 
 
 def test_word_da_secao_traz_o_desenho_e_as_propriedades():

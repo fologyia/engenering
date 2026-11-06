@@ -10,12 +10,22 @@ para cima. O motor usa positivo para cima nas cargas: a conversão fica em :func
 
 from __future__ import annotations
 
+import functools
+import json
 import math
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import Any
+
+import numpy as np
 
 from core import beam_model as bm
 from core import beam_sections as bs
+from core import column_buckling as cb
+from core import desenho_da_secao as ds
+from core import desenho_flexao as df
+from core import geometria_da_secao as gs
+from core import secao_desenhada as sd
 from core import section_catalog as sc
 from core import verificacao_barras as vb
 from core.beam_charts import COR_CORTANTE, COR_FLECHA, COR_MOMENTO
@@ -53,7 +63,17 @@ CIRCULAR = "Circular maciça"
 TUBO_CIRCULAR = "Tubo circular"
 TUBO_RETANGULAR = "Tubo retangular"
 INFORMAR = "Informar as propriedades"
-TIPOS_DE_SECAO = (CATALOGO, RETANGULAR, CIRCULAR, TUBO_CIRCULAR, TUBO_RETANGULAR, INFORMAR)
+DESENHADA = "Seção desenhada"
+TIPOS_DE_SECAO = (
+    CATALOGO,
+    DESENHADA,
+    RETANGULAR,
+    CIRCULAR,
+    TUBO_CIRCULAR,
+    TUBO_RETANGULAR,
+    INFORMAR,
+)
+SEM_DESENHO = "— escolha uma seção salva —"
 EIXO_FORTE = "Eixo forte (x)"
 EIXO_FRACO = "Eixo fraco (y)"
 
@@ -90,6 +110,12 @@ def nomes_dos_perfis() -> tuple[str, ...]:
     return tuple(sc.listar_perfis())
 
 
+def nomes_dos_desenhos() -> tuple[str, ...]:
+    """As seções salvas em Desenhar seção, com a forma guardada junto."""
+    salvas = sorted(nome for nome, item in sc.listar_cadastrados().items() if item.desenho)
+    return (SEM_DESENHO, *salvas)
+
+
 # ---------------------------------------------------------------------------
 # Seção escolhida
 # ---------------------------------------------------------------------------
@@ -104,6 +130,10 @@ class SecaoDoCaso:
     i_min_mm4: float
     perfil: PerfilAco | None = None
     eixo: str = "x"
+    # Só nas seções desenhadas: a forma real, que o resumo do catálogo não guarda.
+    geometria: gs.Geometria | None = None
+    faixas: gs.Faixas | None = None
+    eixos_girados: bool = False
 
     @property
     def area_mm2(self) -> float:
@@ -120,17 +150,127 @@ class SecaoDoCaso:
         )
 
 
+@dataclass(frozen=True)
+class _Desenho:
+    """A seção desenhada já analisada: a forma para mostrar e as faixas exatas para calcular."""
+
+    analise: sd.Analise
+    contorno: gs.Geometria
+    faixas_x: gs.Faixas
+    faixas_y: gs.Faixas
+
+
+def _contorno_das_partes(partes: Sequence[sd.Parte], xc: float, yc: float) -> gs.Geometria:
+    cheios: list[tuple[gs.Ponto, ...]] = []
+    vazados: list[tuple[gs.Ponto, ...]] = []
+    for parte in partes:
+        if parte.forma == sd.CIRC:
+            raio = parte.b / 2.0
+            voltas = [2.0 * math.pi * k / 72 for k in range(72)]
+            pontos = [(parte.x + raio * math.cos(a), parte.y + raio * math.sin(a)) for a in voltas]
+        else:
+            pontos = parte.cantos
+        (vazados if parte.furo else cheios).append(tuple((x - xc, y - yc) for x, y in pontos))
+    return gs.Geometria(tuple(cheios), tuple(vazados))
+
+
+@functools.lru_cache(maxsize=32)
+def _analisar_desenho(texto: str) -> _Desenho:
+    """Guardado pelas partes: a varredura de uma medida chamaria a análise dezenas de vezes."""
+    partes = sd.partes_de_lista(json.loads(texto))
+    analise = sd.analisar(partes)
+    p = analise.prop
+    # A malha já separou o que é aço: furos fora e partes sobrepostas contadas uma vez.
+    recortes = gs.Geometria(
+        tuple(
+            (
+                (x0 - p.xc, y0 - p.yc),
+                (x1 - p.xc, y0 - p.yc),
+                (x1 - p.xc, y1 - p.yc),
+                (x0 - p.xc, y1 - p.yc),
+            )
+            for x0, x1, y0, y1 in analise.malha.faixas.tolist()
+        )
+    )
+    return _Desenho(
+        analise,
+        _contorno_das_partes(partes, p.xc, p.yc),
+        gs.faixas_da_secao(recortes),
+        gs.faixas_da_secao(recortes.deitada()),
+    )
+
+
+def _desenho_guardado(desenho: Sequence[Mapping[str, Any]]) -> _Desenho:
+    return _analisar_desenho(json.dumps([dict(parte) for parte in desenho], sort_keys=True))
+
+
+def _viga_do_desenho(nome: str, d: _Desenho, eixo: str) -> bs.SecaoViga:
+    p = d.analise.prop
+    topo, base = p.y0 + p.altura - p.yc, p.yc - p.y0
+    direita, esquerda = p.x0 + p.largura - p.xc, p.xc - p.x0
+    inercia, c_sup, c_inf, q, b, outra = (
+        (p.iy, direita, esquerda, p.qy, p.by, p.ix)
+        if eixo == "y"
+        else (p.ix, topo, base, p.qx, p.bx, p.iy)
+    )
+    return bs.SecaoViga(
+        nome=nome,
+        area_mm2=p.area,
+        inercia_mm4=inercia,
+        c_superior_mm=c_sup,
+        c_inferior_mm=c_inf,
+        momento_estatico_mm3=q,
+        espessura_cisalhamento_mm=b,
+        constante_torcao_mm4=p.j,
+        modulo_torcao_mm3=p.w_torcao,
+        inercia_transversal_mm4=outra,
+    )
+
+
+def _secao_desenhada(nome: str, eixo: str) -> SecaoDoCaso:
+    exigir(
+        nome != SEM_DESENHO,
+        "Escolha uma seção salva. Se ela ainda não existe, desenhe em Desenhar seção e salve.",
+    )
+    item = sc.obter(nome)
+    exigir(bool(item.desenho), f"{nome} não tem desenho guardado.")
+    d = _desenho_guardado(item.desenho)
+    return SecaoDoCaso(
+        _viga_do_desenho(nome, d, eixo),
+        nome,
+        d.analise.prop.i2,
+        None,
+        eixo,
+        d.contorno.deitada() if eixo == "y" else d.contorno,
+        d.faixas_y if eixo == "y" else d.faixas_x,
+        d.analise.prop.eixos_girados,
+    )
+
+
 def secao_do_caso(v: Valores) -> SecaoDoCaso:
     tipo = v["tipo_secao"]
+    if tipo == DESENHADA:
+        return _secao_desenhada(str(v["desenho"]), "y" if v.get("eixo") == EIXO_FRACO else "x")
     if tipo == CATALOGO:
         perfil = sc.obter_perfil(str(v["perfil"]))
         eixo = "y" if v.get("eixo") == EIXO_FRACO else "x"
-        return SecaoDoCaso(
+        do_catalogo = SecaoDoCaso(
             bs.secao_de_perfil_catalogo(perfil, eixo=eixo),
             perfil.nome,
             min(perfil.ix_mm4, perfil.iy_mm4),
             perfil,
             eixo,
+        )
+        desenho = sc.obter(perfil.nome).desenho
+        if not desenho:
+            return do_catalogo
+        # Perfil que veio da prancheta: os números são os do catálogo, e a forma é a desenhada.
+        salvo = _desenho_guardado(desenho)
+        return replace(
+            do_catalogo,
+            geometria=salvo.contorno.deitada() if eixo == "y" else salvo.contorno,
+            faixas=salvo.faixas_y if eixo == "y" else salvo.faixas_x,
+            eixos_girados=salvo.analise.prop.eixos_girados,
         )
     if tipo == INFORMAR:
         area, inercia, modulo = float(v["a_mm2"]), float(v["i_mm4"]), float(v["w_mm3"])
@@ -176,8 +316,9 @@ def campos_de_secao(
         Campo(
             "tipo_secao",
             "Tipo de seção",
-            "Escolha um perfil do catálogo ou informe as medidas. Em Informar as propriedades, "
-            "use os valores de uma seção montada, por exemplo.",
+            "Escolha um perfil do catálogo, uma seção feita em Desenhar seção ou informe as "
+            "medidas. Em Informar as propriedades, use os valores de uma seção montada, por "
+            "exemplo.",
             CATALOGO,
             opcoes=TIPOS_DE_SECAO,
             secao=secao,
@@ -191,6 +332,16 @@ def campos_de_secao(
             quando=("tipo_secao", (CATALOGO,)),
             opcoes_de=nomes_dos_perfis,
         ),
+        Campo(
+            "desenho",
+            "Seção salva",
+            "As seções salvas em Desenhar seção, com a forma real: furos, recortes e chapas "
+            "fora de padrão entram na conta.",
+            SEM_DESENHO,
+            secao=secao,
+            quando=("tipo_secao", (DESENHADA,)),
+            opcoes_de=nomes_dos_desenhos,
+        ),
     ]
     if com_eixo:
         campos.append(
@@ -201,7 +352,7 @@ def campos_de_secao(
                 EIXO_FORTE,
                 opcoes=(EIXO_FORTE, EIXO_FRACO),
                 secao=secao,
-                quando=("tipo_secao", (CATALOGO,)),
+                quando=("tipo_secao", (CATALOGO, DESENHADA)),
             )
         )
     campos += [
@@ -856,6 +1007,63 @@ CAMPOS_VIGA: tuple[Campo, ...] = (
 # ---------------------------------------------------------------------------
 
 
+def geometria_do_caso(v: Valores, secao: SecaoDoCaso) -> gs.Geometria | None:
+    """O contorno da seção, com y na direção da flexão. Sem forma conhecida, ``None``."""
+    if secao.geometria is not None:
+        return secao.geometria
+    tipo = v["tipo_secao"]
+    if tipo == CATALOGO and secao.perfil is not None:
+        forma = ds.forma_da_secao(cb.secao_de_perfil(secao.perfil))
+        if not forma.conhecida:
+            return None
+        geometria = gs.Geometria(forma.cheios, forma.vazados, forma.aneis)
+        return geometria.deitada() if secao.eixo == "y" else geometria
+    if tipo == RETANGULAR:
+        return gs.retangulo(float(v["b_mm"]), float(v["h_mm"]))
+    if tipo == CIRCULAR:
+        return gs.circulo(float(v["d_mm"]))
+    if tipo == TUBO_CIRCULAR:
+        d, t = float(v["d_mm"]), float(v["t_mm"])
+        return gs.circulo(d, d - 2.0 * t)
+    if tipo == TUBO_RETANGULAR:
+        return gs.tubo_retangular(float(v["b_mm"]), float(v["h_mm"]), float(v["t_mm"]))
+    return None
+
+
+def _no_outro_eixo(secao: SecaoDoCaso, momento: float, media: float) -> Tabela | None:
+    """O mesmo perfil girado 90°: quanto se perde deitando a seção."""
+    if secao.perfil is None:
+        return None
+    linhas = []
+    for eixo, rotulo in (("x", EIXO_FORTE), ("y", EIXO_FRACO)):
+        viga = bs.secao_de_perfil_catalogo(secao.perfil, eixo=eixo)
+        linhas.append(
+            {
+                "Eixo": rotulo,
+                "Situação": "atual" if eixo == secao.eixo else "",
+                "I (cm⁴)": round(viga.inercia_mm4 / 1e4, 1),
+                "W (cm³)": round(
+                    min(viga.modulo_resistencia_superior_mm3, viga.modulo_resistencia_inferior_mm3)
+                    / 1000.0,
+                    1,
+                ),
+                "σ máx (MPa)": round(
+                    abs(media)
+                    + abs(momento)
+                    / min(
+                        viga.modulo_resistencia_superior_mm3, viga.modulo_resistencia_inferior_mm3
+                    ),
+                    1,
+                ),
+            }
+        )
+    return Tabela(
+        "O mesmo perfil no outro eixo",
+        tuple(linhas),
+        "Mesmos esforços. Mostra quanto a posição do perfil pesa na tensão.",
+    )
+
+
 def calcular_flexao(v: Valores) -> Resultado:
     secao = secao_do_caso(v)
     momento = float(v["m_kNm"]) * 1e6
@@ -870,16 +1078,21 @@ def calcular_flexao(v: Valores) -> Resultado:
     # Momento positivo traciona a fibra de baixo, como na viga biapoiada.
     sigma_sup = media - momento / viga.modulo_resistencia_superior_mm3
     sigma_inf = media + momento / viga.modulo_resistencia_inferior_mm3
-    if viga.momento_estatico_mm3 > 0 and viga.espessura_cisalhamento_mm > 0:
-        tau = (
-            cortante
-            * viga.momento_estatico_mm3
-            / (viga.inercia_mm4 * viga.espessura_cisalhamento_mm)
-        )
-        formula_tau = "τ = V·Q/(I·t)"
+    geometria = geometria_do_caso(v, secao)
+    faixas = secao.faixas
+    if faixas is None and geometria is not None:
+        faixas = gs.faixas_da_secao(geometria)
+    if faixas is not None:
+        ao_longo = gs.tensoes_ao_longo(faixas, sigma_sup, sigma_inf, cortante)
+        tau = ao_longo.tau_max
+        formula_tau = "τ = V·Q/(I·b) ao longo da altura"
     else:
         tau = cortante / viga.area_cisalhamento_mm2
         formula_tau = "τ = V/A_v"
+        y_sup, y_inf = viga.c_superior_mm, -viga.c_inferior_mm
+        y = np.array([y_sup, y_inf])
+        sem_forma = np.array([sigma_sup, sigma_inf])
+        ao_longo = gs.Tensoes(y, sem_forma, np.zeros(2), np.abs(sem_forma), False)
     maior = max(abs(sigma_sup), abs(sigma_inf))
     exigir(abs(media) < admissivel, "Só a força axial já passa da tensão admissível.")
     w_necessario = abs(momento) / (admissivel - abs(media))
@@ -899,6 +1112,74 @@ def calcular_flexao(v: Valores) -> Resultado:
             "Perfil aberto: esta é a conta de tensão, que não vê a flambagem lateral nem a local. "
             "Sem travamento, use o caso Perfil de aço."
         )
+    if secao.eixos_girados:
+        alertas.append(
+            "Esta seção não tem os eixos principais em x e y: o momento faz a seção fletir também "
+            "no outro eixo, e M/W não mostra isso. A aba Tensões da Desenhar seção faz essa conta."
+        )
+    limite_tau = 0.577 * admissivel
+    y_topo = float(ao_longo.y[0])
+    y_base = float(ao_longo.y[-1])
+    ln = gs.linha_neutra(sigma_sup, sigma_inf, y_topo, y_base)
+    momento_adm = (admissivel - abs(media)) * secao.w_mm3
+    cortante_adm = cortante * limite_tau / tau if tau > 0 else math.inf
+    critico = ao_longo.indice_critico
+    y_critico = float(ao_longo.y[critico])
+    pontos = [
+        Ponto("Fibra de cima", sigma_sup),
+        Ponto("Fibra de baixo", sigma_inf),
+        Ponto("Centro da seção", media, tau_xy=tau),
+    ]
+    nas_fibras = max(abs(sigma_sup), abs(sigma_inf))
+    if faixas is not None and ao_longo.mises_max > nas_fibras * 1.001:
+        pontos.append(
+            Ponto(
+                f"Mais solicitado, a {y_critico:.1f} mm de G",
+                float(ao_longo.sigma[critico]),
+                tau_xy=float(ao_longo.tau[critico]),
+            )
+        )
+        if abs(y_critico) > 0.05 * (y_topo - y_base):
+            alertas.append(
+                f"O ponto mais solicitado não está na fibra externa: a {abs(y_critico):.1f} mm de G, "
+                "onde a tensão normal ainda é alta e o cisalhamento já cresceu. Num perfil I, é a "
+                "junção da alma com a mesa."
+            )
+    if ln is not None and abs(ln) > 1e-6 * (y_topo - y_base):
+        alertas.append(
+            f"A força axial tirou a linha neutra do centro: ela está a {abs(ln):.1f} mm de G, "
+            f"{'acima' if ln > 0 else 'abaixo'} dele."
+        )
+    tabelas_extra = [t for t in (_no_outro_eixo(secao, momento, media),) if t is not None]
+    tabelas = (*tabelas, *tabelas_extra)
+    figura = df.figura_da_flexao(
+        df.DadosDaFlexao(
+            geometria,
+            ao_longo,
+            sigma_sup,
+            sigma_inf,
+            admissivel,
+            momento / 1e6,
+            cortante / 1000.0,
+            normal / 1000.0,
+            f"{secao.nome}: o que está na mesma altura é o mesmo ponto da seção. Vermelho é tração e "
+            "azul é compressão; o tracejado é o limite.",
+            limite_tau=limite_tau,
+        )
+    )
+    linhas_extras = []
+    if faixas is not None:
+        linhas_extras.append(
+            limite(
+                "von Mises na seção",
+                ao_longo.mises_max,
+                admissivel,
+                "MPa",
+                f"√(σ² + 3τ²) ao longo da altura; o pior ponto está a {y_critico:.1f} mm de G",
+                SHIGLEY_3,
+            )
+        )
+    plastico = faixas.modulo_plastico if faixas is not None else None
     envios: tuple[Envio, ...] = ()
     if secao.perfil is not None:
         envios = (
@@ -925,6 +1206,22 @@ def calcular_flexao(v: Valores) -> Resultado:
             Metrica("Cortante máximo", tau, "MPa", 1),
             Metrica("W da seção", secao.w_mm3 / 1000.0, "cm³", 1),
             Metrica("W necessário", w_necessario / 1000.0, "cm³", 1),
+            Metrica("Momento admissível", momento_adm / 1e6, "kN·m", 1),
+            Metrica("Cortante admissível", cortante_adm / 1000.0, "kN", 1),
+            *(
+                (Metrica("von Mises máximo", ao_longo.mises_max, "MPa", 1),)
+                if faixas is not None
+                else ()
+            ),
+            *(
+                (
+                    Metrica("Início do escoamento M_y", sy * secao.w_mm3 / 1e6, "kN·m", 1),
+                    Metrica("Seção toda escoada M_p", sy * plastico / 1e6, "kN·m", 1),
+                    Metrica("Fator de forma Z/W", plastico / secao.w_mm3, "", 2),
+                )
+                if plastico is not None
+                else ()
+            ),
         ),
         verificacoes=(
             limite(
@@ -943,18 +1240,19 @@ def calcular_flexao(v: Valores) -> Resultado:
                 f"{formula_tau}; limite 0.577·S_y/FS",
                 SHIGLEY_3,
             ),
+            *linhas_extras,
         ),
-        pontos=(
-            Ponto("Fibra de cima", sigma_sup),
-            Ponto("Fibra de baixo", sigma_inf),
-            Ponto("Centro da seção", media, tau_xy=tau),
-        ),
+        pontos=tuple(pontos),
         tabelas=tabelas,
+        figuras=(Figura("Tensões na seção", figura.png, figura.legenda),),
         alertas=tuple(alertas),
         hipoteses=(
             "Flexão no plano do eixo escolhido, com seção constante e material elástico.",
             "Momento positivo traciona a fibra de baixo.",
             "A tensão normal cresce em linha reta a partir do centro da seção.",
+            "O cisalhamento é V·Q/(I·b), que assume τ uniforme na largura b. Na mesa de um perfil I "
+            "o valor é só a média vertical: o caminho real do cisalhamento ali é horizontal.",
+            "Contorno sem os raios de concordância: Q e o I do cisalhamento saem da forma desenhada.",
             "Forças de serviço, sem majorar: a segurança vem do fator FS.",
         ),
         referencias=(SHIGLEY_3, HIBBELER),
@@ -1257,9 +1555,9 @@ CASOS: tuple[Caso, ...] = (
         "flexao_secao",
         "Flexão de uma seção",
         GRUPO,
-        "Com o momento na mão: tensões, W necessário e os perfis que atendem.",
-        "Quando o momento já é conhecido. Mostra a tensão nas fibras e o módulo W necessário, e "
-        "segue para o Círculo de Mohr.",
+        "Com o momento na mão: σ, τ e von Mises na seção real, e os perfis que atendem.",
+        "Quando o momento já é conhecido. Desenha a seção real com σ, τ e von Mises ao longo da "
+        "altura, acha o ponto mais solicitado e mostra até onde a seção vai.",
         CAMPOS_FLEXAO,
         calcular_flexao,
         r"\sigma=\frac{N}{A}\pm\frac{M}{W},\quad W_{nec}=\frac{M}{S_y/FS-|N|/A}",

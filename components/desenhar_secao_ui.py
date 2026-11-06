@@ -29,7 +29,7 @@ from core import secao_relatorio as sr
 from core import section_catalog as catalogo
 from core.desenho_estatica import figura_de_tensoes
 from core.elementos_base import Resultado, dados_do_registro
-from core.elementos_vigas import CATALOGO
+from core.elementos_vigas import DESENHADA
 from core.elementos_word import gerar_word_do_caso
 from core.load_to_stress import EstadoPlanoCalculado
 from core.medidas_comerciais import CHAPAS
@@ -221,7 +221,8 @@ def _usar(destino: str, so_perfil: bool, nome: str, analise: sd.Analise) -> None
     if erro:
         st.session_state[AVISO] = erro
         return
-    valores = {"perfil": nome} if so_perfil else {"tipo_secao": CATALOGO, "perfil": nome}
+    # A norma precisa do perfil; os outros casos aproveitam a forma real da seção.
+    valores = {"perfil": nome} if so_perfil else {"tipo_secao": DESENHADA, "desenho": nome}
     abrir_caso_preenchido(destino, valores)
     st.session_state[IR_PARA] = True
 

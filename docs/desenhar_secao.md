@@ -40,6 +40,16 @@ acompanhar a forma. Seção fechada, com furos ou com mais de uma célula entra 
 τ de torção: dentro de 5 % nos casos conferidos (círculo, quadrado, 2:1 e 10:1). O valor é lido na
 superfície, sem os cantos vivos reentrantes, onde a teoria dá infinito.
 
+## Usar a seção nos outros casos
+
+A Flexão de uma seção, a Viga e a Coluna do Assistente têm o tipo **Seção desenhada**, que lista as
+seções salvas aqui. Nesse tipo, o cálculo usa a forma real: furos, recortes e partes sobrepostas entram
+como foram desenhados, e o τ ao longo da altura sai das faixas da malha. O botão **Trazer a seção
+aberta**, no próprio caso, salva a seção que está na prancheta e a escolhe, sem voltar a esta página. Os
+botões daqui fazem o mesmo caminho. O Perfil pela norma continua pelo catálogo, porque precisa das
+medidas de alma e mesa. Seção sem eixos principais em x e y dá aviso: M/W não mostra a flexão no outro
+eixo, e a conta certa está em Tensões na seção.
+
 ## Tensões na seção
 
 **Normal.** Flexão oblíqua completa, com Ixy. O mapa mostra a linha neutra.

@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 
 from core import additional_load_models as modelos
+from core import desenho_flexao as df
+from core import geometria_da_secao as gs
 from core import load_to_stress as cargas
 from core.elementos_base import (
     Campo,
     Caso,
+    Figura,
     Metrica,
     Ponto,
     Resultado,
@@ -215,6 +219,40 @@ def _fechar(
         hipoteses=base.hipoteses,
         referencias=(REFERENCIA_RM,),
     )
+
+
+def _com_o_desenho(
+    resultado: Resultado,
+    v: Valores,
+    geometria: gs.Geometria,
+    pontos: tuple[Ponto, ...],
+    *,
+    forca: float,
+    momento: float,
+    cortante: float,
+    tau_extra: float = 0.0,
+) -> Resultado:
+    """A seção real, com σ, τ e von Mises alinhados. Os extremos vêm do primeiro e do último ponto."""
+    sup, inf = pontos[0].sigma_x, pontos[-1].sigma_x
+    faixas = gs.faixas_da_secao(geometria)
+    ao_longo = gs.tensoes_ao_longo(faixas, sup, inf, abs(cortante), tau_extra)
+    admissivel = float(v["sy_MPa"]) / float(v["fs"])
+    figura = df.figura_da_flexao(
+        df.DadosDaFlexao(
+            geometria,
+            ao_longo,
+            sup,
+            inf,
+            admissivel,
+            momento / 1e6,
+            cortante / 1000.0,
+            forca / 1000.0,
+            "O que está na mesma altura é o mesmo ponto da seção. Vermelho é tração e azul é "
+            "compressão; o tracejado é o limite.",
+            limite_tau=0.577 * admissivel,
+        )
+    )
+    return replace(resultado, figuras=(Figura("Tensões na seção", figura.png, figura.legenda),))
 
 
 def _flambagem(forca: float) -> tuple[str, ...]:
@@ -559,11 +597,14 @@ def calcular_viga_retangular(v: Valores) -> Resultado:
         em("Um quarto abaixo do centroide", -h / 4.0),
         em("Fibra inferior", -h / 2.0),
     )
-    return _fechar(
+    resultado = _fechar(
         v,
         pontos,
         cargas.viga_retangular(b, h, 0.0, forca, momento, cortante),
         extra=lambda y, _z: em("Ponto informado", y),
+    )
+    return _com_o_desenho(
+        resultado, v, gs.retangulo(b, h), pontos, forca=forca, momento=momento, cortante=cortante
     )
 
 
@@ -727,11 +768,15 @@ def calcular_perfil_i(v: Valores) -> Resultado:
         em("Junção mesa-alma inferior, na alma", -meia_alma * (1.0 - 1e-9)),
         em("Fibra inferior", -h / 2.0),
     )
-    return _fechar(
+    resultado = _fechar(
         v,
         pontos,
         modelos.secao_i_flexao(h, b, tf, tw, 0.0, forca, momento, cortante),
         extra=lambda y, _z: em("Ponto informado", y),
+    )
+    geometria = gs.perfil_i(h, b, tf, tw)
+    return _com_o_desenho(
+        resultado, v, geometria, pontos, forca=forca, momento=momento, cortante=cortante
     )
 
 
@@ -762,7 +807,7 @@ def calcular_perfil_u(v: Valores) -> Resultado:
             "O centro de cisalhamento do perfil U fica fora da alma, do lado oposto ao das mesas. "
             "Um cortante que não passe por ele acrescenta torção que este modelo não calcula."
         )
-    return _fechar(
+    resultado = _fechar(
         v,
         pontos,
         modelos.secao_u_flexao(h, b, tf, tw, 0.0, forca, momento, cortante),
@@ -773,6 +818,10 @@ def calcular_perfil_u(v: Valores) -> Resultado:
             Metrica("Centroide (da face da alma)", props["z_centroide"], "mm", 2),
             Metrica("Centro de cisalhamento", props["excentricidade_centro_cisalhamento"], "mm", 2),
         ),
+    )
+    geometria = gs.perfil_u(h, b, tf, tw)
+    return _com_o_desenho(
+        resultado, v, geometria, pontos, forca=forca, momento=momento, cortante=cortante
     )
 
 
@@ -832,7 +881,7 @@ def calcular_caixao(v: Valores) -> Resultado:
 
     pontos = (em("Fibra superior", h / 2.0), em("Centroide", 0.0), em("Fibra inferior", -h / 2.0))
     relacao = min(b, h) / t
-    return _fechar(
+    resultado = _fechar(
         v,
         pontos,
         modelos.secao_tubular_retangular(b, h, t, 0.0, forca, momento, torque),
@@ -847,6 +896,16 @@ def calcular_caixao(v: Valores) -> Resultado:
                 REFERENCIA_RM,
             ),
         ),
+    )
+    return _com_o_desenho(
+        resultado,
+        v,
+        gs.tubo_retangular(b, h, t),
+        pontos,
+        forca=forca,
+        momento=momento,
+        cortante=0.0,
+        tau_extra=pontos[1].tau_xy,
     )
 
 
