@@ -185,6 +185,8 @@ SERIE_DO_CAMPO: dict[str, dict[str, Serie]] = {
     "bucha": {"d_mm": EIXOS},
     "pino_articulacao": {"d_mm": BARRAS_REDONDAS, "t_olhal_mm": CHAPAS, "t_garfo_mm": CHAPAS},
     "mola_compressao": {"d_mm": ARAME_DE_MOLA},
+    "mola_tracao": {"d_mm": ARAME_DE_MOLA},
+    "mola_torcao": {"d_mm": ARAME_DE_MOLA},
     "freio_cinta": {"t_mm": CHAPAS},
     "parafuso_potencia": {"d_mm": FUSOS, "passo_mm": PASSOS_DE_FUSO},
     "cabo_tambor": {"d_cabo_mm": CABOS},

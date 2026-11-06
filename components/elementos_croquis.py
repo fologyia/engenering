@@ -319,6 +319,57 @@ def _mola() -> str:
     )
 
 
+def _mola_tracao() -> str:
+    espiras = "".join(
+        _linha(80 + 12 * i, 104 if i % 2 == 0 else 56, 92 + 12 * i, 56 if i % 2 == 0 else 104)
+        for i in range(10)
+    )
+    return _pecas(
+        espiras,
+        _caminho("M 80,104 C 40,110 36,80 62,80", fechado=False),
+        _caminho("M 200,56 C 240,50 244,80 218,80", fechado=False),
+        _seta(238, 80, 270, 80),
+        _seta(40, 80, 8, 80),
+        _forca(24, 70, "F"),
+        _cota_vertical(214, 56, 104, "D"),
+        _texto(140, 40, "N_b, d", cor=_COTA, italico=True),
+        _texto(46, 124, "r₂", cor=_COTA, italico=True),
+    )
+
+
+def _mola_torcao() -> str:
+    return _pecas(
+        _circulo(96, 84, 42, cheio=False),
+        _circulo(96, 84, 34, cheio=False),
+        _circulo(96, 84, 15),
+        _linha(96, 42, 236, 42, largura=3.0),
+        _linha(62, 110, 16, 136, largura=3.0),
+        _seta(236, 14, 236, 40),
+        _forca(246, 28, "F", ancora="start"),
+        _linha(96, 74, 96, 94, largura=1.0),
+        _linha(86, 84, 106, 84, largura=1.0),
+        _cota_horizontal(124, 96, 236, "a"),
+        _cota_vertical(150, 42, 126, "D"),
+        _texto(96, 106, "D_p", cor=_COTA, italico=True),
+        _texto(190, 34, "N_b, d", cor=_COTA, italico=True),
+    )
+
+
+def _mola_prato() -> str:
+    return _pecas(
+        _caminho("M 50,92 L 104,62 L 104,74 L 50,104 Z"),
+        _caminho("M 230,92 L 176,62 L 176,74 L 230,104 Z"),
+        _linha_eixo(140, 28, 140, 118),
+        _seta(104, 22, 104, 58),
+        _seta(176, 22, 176, 58),
+        _forca(140, 20, "F"),
+        _cota_horizontal(120, 50, 230, "D_e"),
+        _cota_horizontal(52, 104, 176, "D_i", acima=True),
+        _cota_vertical(250, 62, 92, "h₀"),
+        _texto(36, 100, "t", cor=_COTA, italico=True),
+    )
+
+
 def _disco_freio() -> str:
     return _pecas(
         _circulo(150, 80, 56),
@@ -818,6 +869,9 @@ CROQUIS: dict[str, str] = {
     "pino_articulacao": _pino(),
     "hertz": _hertz(),
     "mola_compressao": _mola(),
+    "mola_tracao": _mola_tracao(),
+    "mola_torcao": _mola_torcao(),
+    "mola_prato": _mola_prato(),
     "embreagem_disco": _disco_freio(),
     "freio_cinta": _cinta(),
     "parafuso_potencia": _fuso(),

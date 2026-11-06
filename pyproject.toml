@@ -90,6 +90,7 @@ files = [
     "core/elementos_estatica.py",
     "core/elementos_icamento.py",
     "core/elementos_mancais.py",
+    "core/elementos_molas.py",
     "core/elementos_molas_atrito.py",
     "core/elementos_parafusos.py",
     "core/elementos_rotativos.py",

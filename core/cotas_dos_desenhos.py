@@ -112,6 +112,26 @@ COTAS: dict[str, dict[str, Alvo | tuple[Alvo, ...]]] = {
         "L₀": "L0_mm",
         "N_a, d": ("ativas", "d_mm"),
     },
+    "mola_tracao": {
+        "D": "D_mm",
+        "F": "f_max_N",
+        "N_b, d": ("espiras", "d_mm"),
+        "r₂": "r2_mm",
+    },
+    "mola_torcao": {
+        "D": "D_mm",
+        "F": "f_max_N",
+        "a": "braco_mm",
+        "D_p": "d_pino_mm",
+        "N_b, d": ("espiras", "d_mm"),
+    },
+    "mola_prato": {
+        "D_e": "de_mm",
+        "D_i": "di_mm",
+        "F": "f_max_N",
+        "h₀": "h0_mm",
+        "t": "t_mm",
+    },
     # Freios, embreagens e fusos
     "embreagem_disco": {"D": "D_ext_mm", "d": "D_int_mm", "T": "torque_Nm", "F": "forca_kN"},
     "freio_cinta": {"D": "D_mm"},

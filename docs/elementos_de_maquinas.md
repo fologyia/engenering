@@ -1,6 +1,6 @@
 # Elementos de máquinas no Assistente de cargas
 
-O Assistente de cargas cobre 62 casos: 15 de estática e resistência, 31 de elementos de máquinas e
+O Assistente de cargas cobre 65 casos: 15 de estática e resistência, 34 de elementos de máquinas e
 16 de seção e tensão no ponto. Este documento registra as equações, as fontes, as hipóteses e o que
 **não** é feito nos elementos de máquinas. A estática está em `docs/estatica_e_resistencia.md`.
 
@@ -131,6 +131,19 @@ está digitalizada como imagem e também não foi usada.
 
 - **Mola de compressão:** Tabelas 10-1, 10-4, 10-5 e 10-6 de Shigley. `S_ut = A/d^m`. Bloco, reserva
   de 15 %, `L₀ ≤ 2,63·D/α`, fadiga de Zimmerli com Goodman torsional e frequência própria.
+- **Mola de tração:** eq. 10-34 a 10-41 de Shigley. Corpo com `K_B`, gancho nos pontos A (flexão) e
+  B (torção), `N_a = N_b + G/E` e `L₀ = (2C − 1 + N_b)d`. Limites da Tabela 10-7: 45 %, 40 % e 75 % de
+  `S_ut`; com tensão inicial acima da faixa, o corpo usa 40 %, como manda a nota da tabela. Fadiga de
+  Zimmerli, com `S_e = S_se/0,577` na flexão.
+- **Mola de torção:** `σ = K_i·32M/(π·d³)`, `k' = d⁴E/(10,8·D·N_a)` e `N_a = N_b + (ℓ₁+ℓ₂)/(3πD)`.
+  `S_y` é a Tabela 10-6 dividida por 0,577. O diâmetro sob carga usa só o giro do corpo, eq. 10-53.
+  Fadiga de Gerber a partir da Tabela 10-10, que só traz A228, A230 e A232: os outros fios ficam na
+  coluna do A228.
+- **Mola prato:** Almen e László, com `K₁`, `K₂` e `K₃`, sem apoios planos. Pilha em série e paralelo
+  sem atrito. Conferido com o disco A 40 (40 × 20,4 × 2,25, h₀ = 0,9): 6,5 kN a 0,75·h₀. A DIN EN 16984
+  não está na pasta de normas. Por isso o limite de `σ_OM` é um dado, as faixas de `D_e/D_i`, `D_e/t` e
+  `h₀/t`, o curso de 0,75·h₀ e a pré-carga de 15 % vêm de catálogos de fabricantes, e a fadiga não é
+  calculada: saem `σ_o` e `σ_u` para levar ao diagrama da norma.
 - **Freio ou embreagem de disco:** desgaste uniforme (projeto) e pressão uniforme. Energia
   `½·J·ω²·T/T_líq` e aquecimento `E/(m·c)`.
 - **Freio de cinta:** Euler, com o aviso de que a capacidade cai no giro contrário.

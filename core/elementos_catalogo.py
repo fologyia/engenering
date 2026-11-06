@@ -10,6 +10,7 @@ from core import (
     elementos_estatica,
     elementos_icamento,
     elementos_mancais,
+    elementos_molas,
     elementos_molas_atrito,
     elementos_parafusos,
     elementos_rotativos,
@@ -35,6 +36,7 @@ _DE_MAQUINAS: tuple[Caso, ...] = (
     *elementos_eixos.CASOS,
     *elementos_mancais.CASOS,
     *elementos_molas_atrito.CASOS,
+    *elementos_molas.CASOS,
     *elementos_icamento.CASOS,
     *elementos_rotativos.CASOS,
 )
@@ -114,7 +116,7 @@ GRUPOS_INFO = {
         ":material/motion_blur:", "Rolamento, bucha, pino e contato de Hertz."
     ),
     elementos_molas_atrito.GRUPO_MOLAS: InfoDoGrupo(
-        ":material/compress:", "Rigidez, tensão, flambagem e fadiga da mola."
+        ":material/compress:", "Compressão, tração, torção e prato: rigidez, tensão e fadiga."
     ),
     elementos_molas_atrito.GRUPO_ATRITO: InfoDoGrupo(
         ":material/album:", "Freio, embreagem e parafuso de potência."

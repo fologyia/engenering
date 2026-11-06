@@ -59,6 +59,12 @@ def _sut_do_fio(fio: str, d_mm: float) -> float:
     return a / d_mm**m
 
 
+def limite_de_zimmerli(superficie: str, ssu: float) -> float:
+    """S_se de Zimmerli pela reta de Goodman: não depende do material, só do jateamento."""
+    ssa, ssm = (241.0, 379.0) if superficie == SEM_JATEAMENTO else (398.0, 534.0)
+    return ssa / (1.0 - ssm / ssu)
+
+
 def calcular_mola(v: Valores) -> Resultado:
     fio = str(v["fio"])
     d = float(v["d_mm"])
@@ -145,8 +151,7 @@ def calcular_mola(v: Valores) -> Resultado:
         f_media = (f_max + f_min) / 2.0
         tau_a = kb * 8.0 * f_alternada * diametro / (math.pi * d**3)
         tau_m = kb * 8.0 * f_media * diametro / (math.pi * d**3)
-        ssa, ssm = (241.0, 379.0) if str(v["superficie"]) == SEM_JATEAMENTO else (398.0, 534.0)
-        sse = ssa / (1.0 - ssm / ssu)
+        sse = limite_de_zimmerli(str(v["superficie"]), ssu)
         n_fadiga = 1.0 / (tau_a / sse + tau_m / ssu) if tau_a + tau_m > 0 else math.inf
         verificacoes.append(
             minimo(

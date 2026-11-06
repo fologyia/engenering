@@ -296,8 +296,13 @@ def test_toda_serie_ligada_aponta_para_campo_de_verdade():
 
 def test_toda_espessura_em_mm_do_catalogo_tem_serie():
     """Campo novo de espessura sem série passaria sem ninguém notar."""
-    # A parede sai de tubo, e o aperto é a soma de várias peças: nenhum dos dois é chapa de catálogo.
-    de_fora = {"cilindro_hidraulico": {"parede_mm"}, "parafuso_axial": {"aperto_mm"}}
+    # A parede sai de tubo, o aperto é a soma de várias peças e o disco de mola prato sai da tabela do
+    # fabricante de discos: nenhum dos três é chapa de catálogo.
+    de_fora = {
+        "cilindro_hidraulico": {"parede_mm"},
+        "parafuso_axial": {"aperto_mm"},
+        "mola_prato": {"t_mm"},
+    }
     for caso_id, caso in cat.CASOS.items():
         for campo in caso.campos:
             if campo.unidade != "mm" or "spessura" not in campo.rotulo:
