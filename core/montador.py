@@ -27,7 +27,7 @@ from core import montador_blocos as mb
 from core import montador_fluidos as mfl
 from core import montador_grandezas as g
 from core.montador_blocos import Condicao, Contexto, ErroDeBloco
-from core.montador_funcoes import FUNCOES, AtritoDarcy
+from core.montador_funcoes import FUNCOES, NUMERICAS
 from core.montador_grandezas import Grandeza
 from core.montador_secoes import Estado, Validade
 
@@ -145,8 +145,9 @@ def grafo_de_dados(dados: Mapping[str, Any]) -> Grafo:
         fio = Fio(de, saida, para, entrada)
         if not _fio_valido(fio, por_id):
             continue
+        para_no = por_id[fio.para]
         destino = next(
-            p for p in mb.POR_CHAVE[por_id[fio.para].tipo].entradas if p.chave == fio.entrada
+            p for p in mb.portas_de(para_no.tipo, dict(para_no.opcoes))[0] if p.chave == fio.entrada
         )
         chave = (fio.para, fio.entrada)
         if destino.varias or chave not in ocupadas:
@@ -183,9 +184,14 @@ def _fio_valido(fio: Fio, por_id: Mapping[str, No]) -> bool:
     if fio.de not in por_id or fio.para not in por_id or fio.de == fio.para:
         return False
     origem = por_id[fio.de]
-    saida = next((p for p in mb.POR_CHAVE[origem.tipo].saidas if p.chave == fio.saida), None)
+    destino = por_id[fio.para]
+    saida = next(
+        (p for p in mb.portas_de(origem.tipo, dict(origem.opcoes))[1] if p.chave == fio.saida),
+        None,
+    )
     entrada = next(
-        (p for p in mb.POR_CHAVE[por_id[fio.para].tipo].entradas if p.chave == fio.entrada), None
+        (p for p in mb.portas_de(destino.tipo, dict(destino.opcoes))[0] if p.chave == fio.entrada),
+        None,
     )
     if saida is None or entrada is None or saida.tipo != entrada.tipo:
         return False
@@ -252,6 +258,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
     area: sp.Expr | None = None
     for no in ordem:
         bloco = mb.POR_CHAVE[no.tipo]
+        entradas, _ = mb.portas_de(no.tipo, dict(no.opcoes))
         contagem[no.tipo] = contagem.get(no.tipo, 0) + 1
         ligados: dict[str, Any] = {}
         for fio in grafo.fios:
@@ -260,7 +267,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
             valor = saidas.get(fio.de, {}).get(fio.saida)
             if valor is None:
                 continue
-            porta = next(p for p in bloco.entradas if p.chave == fio.entrada)
+            porta = next(p for p in entradas if p.chave == fio.entrada)
             if porta.varias:
                 ligados.setdefault(fio.entrada, []).extend(valor)
             else:
@@ -335,7 +342,7 @@ def limpar(expressao: sp.Expr, positiva: bool = True) -> sp.Expr:
     ``positiva``: a sympy não sabe que h − t_f é positivo e deixa √(x²) como |x|, o que trava o
     isolamento. Dentro da faixa válida da seção, o sinal de cada módulo é sempre o mesmo.
     """
-    if sp.count_ops(expressao) > _LIMITE_DE_OPERACOES or expressao.has(AtritoDarcy):
+    if sp.count_ops(expressao) > _LIMITE_DE_OPERACOES or expressao.has(*NUMERICAS):
         return expressao
     simples = sp.simplify(expressao)
     return _sem_modulo(simples) if positiva else simples
@@ -855,6 +862,29 @@ def curvas(
     return linhas
 
 
+def curvas_da_bomba(
+    resposta: Resposta, valores: Mapping[str, float], pontos: int = 61
+) -> list[tuple[float, float, float]]:
+    """Vazão, altura do sistema e altura da bomba em volta do ponto de operação."""
+    x = resposta.alvo.simbolo
+    if resposta.valor is None or x.name != g.VAZAO_Q.chave:
+        return []
+    numeros = _numeros(resposta.valores_usados or valores, x)
+    item = next(
+        (i for i in resposta.isoladas if i.condicao.criterio == mfl.PONTO_DE_OPERACAO), None
+    )
+    if item is None:
+        return []
+    sistema = _funcao(item.condicao.esquerda.subs(numeros), x)
+    bomba = _funcao(item.condicao.direita.subs(numeros), x)
+    linhas = []
+    for valor in np.linspace(resposta.valor * 0.02, resposta.valor * 1.5, pontos).tolist():
+        alto, baixo = sistema(valor), bomba(valor)
+        if math.isfinite(alto) and math.isfinite(baixo) and baixo > 0.0:
+            linhas.append((valor, alto, baixo))
+    return linhas
+
+
 # ---------------------------------------------------------------------------
 # O que passa num fio
 # ---------------------------------------------------------------------------
@@ -870,7 +900,7 @@ class Transportado:
     esforcos: tuple[tuple[str, float | None, str], ...] = ()  # o que já foi somado na fila
 
 
-def _numero_de(expressao: Any, numeros: Mapping[sp.Symbol, sp.Float]) -> float | None:
+def numero_de(expressao: Any, numeros: Mapping[sp.Symbol, sp.Float]) -> float | None:
     valor = sp.sympify(expressao).subs(numeros)
     return None if valor.free_symbols else _real(valor)
 
@@ -884,11 +914,11 @@ def transportado(
             "EstadoTensao",
             (("σ", g.TENSAO), ("τ", g.TENSAO)),
             tuple(
-                (t.ponto, (_numero_de(t.sx, numeros), _numero_de(t.tau, numeros)))
+                (t.ponto, (numero_de(t.sx, numeros), numero_de(t.tau, numeros)))
                 for t in valor.tensoes
             ),
             tuple(
-                (rotulo, _numero_de(esforco, numeros), dimensao)
+                (rotulo, numero_de(esforco, numeros), dimensao)
                 for rotulo, esforco, dimensao in (
                     ("M_x", valor.mx, g.MOMENTO),
                     ("M_y", valor.my, g.MOMENTO),
@@ -913,10 +943,10 @@ def transportado(
                 (
                     t.rotulo,
                     (
-                        _numero_de(t.velocidade, numeros),
-                        _numero_de(t.reynolds, numeros),
-                        _numero_de(t.atrito, numeros),
-                        _numero_de(t.perda, numeros),
+                        numero_de(t.velocidade, numeros),
+                        numero_de(t.reynolds, numeros),
+                        numero_de(t.atrito, numeros),
+                        numero_de(t.perda, numeros),
                     ),
                 )
                 for t in valor.trechos
@@ -927,10 +957,10 @@ def transportado(
             "Material",
             (("Valor", g.TENSAO),),
             (
-                ("S_y", (_numero_de(valor.sy, numeros),)),
-                ("S_ut", (_numero_de(valor.sut, numeros),)),
-                ("E", (_numero_de(valor.e, numeros),)),
-                ("G", (_numero_de(valor.g, numeros),)),
+                ("S_y", (numero_de(valor.sy, numeros),)),
+                ("S_ut", (numero_de(valor.sut, numeros),)),
+                ("E", (numero_de(valor.e, numeros),)),
+                ("G", (numero_de(valor.g, numeros),)),
             ),
         )
     if isinstance(valor, list):
@@ -938,7 +968,7 @@ def transportado(
     return Transportado(
         "Valor",
         (("Valor", dimensao or g.PURO),),
-        (("", (_numero_de(valor, numeros),)),),
+        (("", (numero_de(valor, numeros),)),),
     )
 
 
@@ -972,6 +1002,7 @@ __all__ = [
     "Transportado",
     "conferir_valores",
     "curvas",
+    "curvas_da_bomba",
     "forma_fechada",
     "grafo_de_dados",
     "ids_ate_o_inicio",
@@ -979,6 +1010,7 @@ __all__ = [
     "letras_zeradas",
     "limpar",
     "montar",
+    "numero_de",
     "resolver_saida",
     "transportado",
     "valor_final",

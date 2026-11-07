@@ -15,14 +15,27 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 import sympy as sp
 
+from core import elementos_eixos as ee
 from core import elementos_vigas as ev
+from core import fatigue as ft
 from core import material_catalog as mc
+from core import montador_formula as mf
 from core import montador_grandezas as g
 from core import montador_secoes as ms
+from core.montador_funcoes import (
+    MATERIAIS_DE_FADIGA,
+    FatorSuperficie,
+    FatorTamanho,
+    KtRessalto,
+    LimiteBase,
+    ResistenciaEmVida,
+    SensibilidadeNeuber,
+)
 from core.montador_grandezas import Grandeza
 from core.montador_secoes import Estado, Secao, Validade
 
@@ -105,6 +118,7 @@ CLASSE_DO_GRUPO = {
 
 RESULTADO = "resultado"
 REFERENCIA = "referencia"
+FORMULA = "formula"
 SEM_MATERIAL = "Escolha o material"
 FLECHA_RELATIVA = "Relação L/δ"
 FLECHA_ABSOLUTA = "Valor de δ"
@@ -112,6 +126,27 @@ FLECHAS = (FLECHA_RELATIVA, FLECHA_ABSOLUTA)
 INFORMAR_FADIGA = "Informar alternado e médio"
 EIXO_GIRANDO = "Eixo girando: flexão alternada e torque constante"
 ESFORCOS_DA_FADIGA = (INFORMAR_FADIGA, EIXO_GIRANDO)
+GOODMAN = "DE-Goodman"
+GERBER = "DE-Gerber"
+SODERBERG = "DE-Soderberg"
+ELIPTICO = "DE-ASME elíptico"
+CRITERIOS_DE_FADIGA = (GOODMAN, GERBER, SODERBERG, ELIPTICO)
+_FORMULA_DA_FADIGA = {
+    GOODMAN: "σ_a'/S_e + σ_m'/S_ut ≤ 1/n",
+    GERBER: "n·σ_a'/S_e + (n·σ_m'/S_ut)² ≤ 1",
+    SODERBERG: "σ_a'/S_e + σ_m'/S_y ≤ 1/n",
+    ELIPTICO: "(n·σ_a'/S_e)² + (n·σ_m'/S_y)² ≤ 1",
+}
+VIDA_INFINITA = "Vida infinita"
+VIDA_FINITA = "Vida finita: N_c ciclos"
+VIDAS = (VIDA_INFINITA, VIDA_FINITA)
+TAMANHO_PELO_D = "Pelo diâmetro d da seção"
+TAMANHO_INFORMADO = "Informar k_b"
+TAMANHOS = (TAMANHO_PELO_D, TAMANHO_INFORMADO)
+#: k_c de Shigley. Com von Mises das parcelas, que é o que o bloco de fadiga usa, k_c é 1.
+CARREGAMENTOS = {"Flexão ou combinado": 1.0, "Axial": 0.85, "Torção pura": 0.59}
+ACABAMENTO_PADRAO = "Usinado ou estirado a frio"
+CONFIABILIDADE_PADRAO = "50 %"
 
 #: E e G típicos por categoria do cadastro, em MPa. O cadastro só guarda S_y e S_ut.
 MODULOS_POR_CATEGORIA = {
@@ -419,6 +454,7 @@ def _material(c: Contexto) -> dict[str, Any]:
     if nome != SEM_MATERIAL:
         material = mc.obter(nome)
         fonte = f"Cadastro: {nome}"
+        c.marcas.add(f"categoria:{material.categoria}")
         if material.sy_MPa > 0:
             c.padrao(g.SY, material.sy_MPa, fonte)
         else:
@@ -516,10 +552,44 @@ def _rankine(c: Contexto) -> dict[str, Any]:
     return _nos_pontos(c, "Maior principal", "\\sigma_{1}", limite, lambda t: (_principal(t),))
 
 
+def _criterio_de_fadiga(
+    criterio: str, sa: sp.Expr, sm: sp.Expr, se: sp.Expr, c: Contexto
+) -> tuple[sp.Expr, sp.Expr, str]:
+    """Os dois lados do critério, e o lado esquerdo em LaTeX. S_e pode ser S_f, na vida finita."""
+    material = c.material()
+    n = c.letra(g.FS)
+    if criterio in (SODERBERG, ELIPTICO):
+        escoamento = material.sy if material else c.letra(g.SY)
+        if criterio == SODERBERG:
+            return (
+                sa / se + sm / escoamento,
+                1 / n,
+                "\\frac{\\sigma_{a}'}{S_{e}} + \\frac{\\sigma_{m}'}{S_{y}}",
+            )
+        return (
+            (n * sa / se) ** 2 + (n * sm / escoamento) ** 2,
+            sp.S.One,
+            "\\left(\\frac{n \\sigma_{a}'}{S_{e}}\\right)^{2} + "
+            "\\left(\\frac{n \\sigma_{m}'}{S_{y}}\\right)^{2}",
+        )
+    ruptura = material.sut if material else c.letra(g.SUT)
+    if criterio == GERBER:
+        return (
+            n * sa / se + (n * sm / ruptura) ** 2,
+            sp.S.One,
+            "\\frac{n \\sigma_{a}'}{S_{e}} + \\left(\\frac{n \\sigma_{m}'}{S_{ut}}\\right)^{2}",
+        )
+    return (
+        sa / se + sm / ruptura,
+        1 / n,
+        "\\frac{\\sigma_{a}'}{S_{e}} + \\frac{\\sigma_{m}'}{S_{ut}}",
+    )
+
+
 def _goodman(c: Contexto) -> dict[str, Any]:
     estado = c.estado()
     fibra = estado.secao.pontos[0]
-    kf, kfs = c.letra(g.KF), c.letra(g.KFS)
+    kf, kfs = c.letra(g.KF, "kf"), c.letra(g.KFS, "kfs")
     if c.opcoes.get("esforcos", INFORMAR_FADIGA) == EIXO_GIRANDO:
         if not estado.secao.redonda:
             raise ErroDeBloco("Eixo girando vale para seção redonda.")
@@ -541,24 +611,62 @@ def _goodman(c: Contexto) -> dict[str, Any]:
 
     alternada, media = equivalente(ma, ta), equivalente(mm, tm)
     material = c.material()
-    ruptura = material.sut if material else c.letra(g.SUT)
-    esquerda = alternada / c.letra(g.SE) + media / ruptura
+    criterio = c.opcoes.get("criterio", GOODMAN)
+    resistencia = c.letra(g.SE, "se")
+    validade = estado.validade
+    if c.opcoes.get("vida", VIDA_INFINITA) == VIDA_FINITA:
+        ruptura = material.sut if material else c.letra(g.SUT)
+        ciclos = c.letra(g.N_CICLOS)
+        resistencia = ResistenciaEmVida(sp.Rational(9, 10) * ruptura, resistencia, ciclos)
+        validade = (
+            *validade,
+            Validade(
+                1e6 - ciclos,
+                "Acima de 10⁶ ciclos o aço entra na vida infinita: vale S_e, e a reta usada aqui "
+                "fica a favor da segurança.",
+                restringe=False,
+            ),
+        )
+        c.hipoteses.append(
+            "Vida finita: S_f na reta log-log entre 0,9·S_ut em 10³ ciclos e S_e em 10⁶ ciclos."
+        )
+    esquerda, direita, letra = _criterio_de_fadiga(criterio, alternada, media, resistencia, c)
     c.hipoteses.append(
-        "Fadiga simplificada, para pré-dimensionamento: DE-Goodman com von Mises nas parcelas "
-        "alternada e média. Confira em Análise de fadiga, e ligue também um critério de escoamento: "
-        "Goodman não vê o escoamento no primeiro ciclo."
+        f"Fadiga para pré-dimensionamento: {criterio} com von Mises nas parcelas alternada e média."
     )
-    condicao = Condicao(
-        "Fadiga (Goodman) na fibra externa",
-        "Goodman",
-        esquerda,
-        1 / c.letra(g.FS),
-        "\\frac{\\sigma_{a}'}{S_{e}} + \\frac{\\sigma_{m}'}{S_{ut}}",
-        "fibra externa",
-        (("\\sigma_{a}'", alternada), ("\\sigma_{m}'", media)),
-        estado.validade,
-    )
-    return {"condicao": [condicao]}
+    curto = criterio.removeprefix("DE-").removeprefix("ASME ")
+    condicoes = [
+        Condicao(
+            f"Fadiga ({curto}) na fibra externa",
+            curto.capitalize(),
+            esquerda,
+            direita,
+            letra,
+            "fibra externa",
+            (("\\sigma_{a}'", alternada), ("\\sigma_{m}'", media)),
+            validade,
+        )
+    ]
+    if material is not None and "fragil" not in c.marcas:
+        maxima = equivalente(ma + mm, ta + tm)
+        condicoes.append(
+            Condicao(
+                "Escoamento no primeiro ciclo",
+                "Escoamento",
+                maxima,
+                material.sy / c.letra(g.FS),
+                "\\sigma_{max}'",
+                "fibra externa",
+                (("\\sigma_{max}'", maxima),),
+                estado.validade,
+            )
+        )
+    else:
+        c.hipoteses.append(
+            "Sem o material ligado, o escoamento no primeiro ciclo não é conferido: ligue o bloco "
+            "Material, ou um critério de escoamento."
+        )
+    return {"condicao": condicoes}
 
 
 def _flecha(c: Contexto) -> dict[str, Any]:
@@ -633,6 +741,127 @@ def _giro(c: Contexto) -> dict[str, Any]:
     return {"condicao": [condicao]}
 
 
+def _limite_fadiga(c: Contexto) -> dict[str, Any]:
+    material = c.material()
+    sut = material.sut if material else c.letra(g.SUT)
+    categoria = next(
+        (m.split(":", 1)[1] for m in c.marcas if m.startswith("categoria:")),
+        MATERIAIS_DE_FADIGA[0],
+    )
+    if categoria not in MATERIAIS_DE_FADIGA:
+        categoria = MATERIAIS_DE_FADIGA[0]
+    if categoria in ("aluminio", "cobre"):
+        c.alertas.append(
+            "Alumínio e cobre não têm limite de fadiga de verdade: S_e' vale para 5·10⁸ ciclos."
+        )
+    a, b = ft.COEFICIENTES_SUPERFICIE[ee.ACABAMENTOS[c.opcoes.get("acabamento", ACABAMENTO_PADRAO)]]
+    ka = sp.S.One if categoria == "ferro_fundido" else FatorSuperficie(sut, a, b)
+    if c.opcoes.get("tamanho", TAMANHO_PELO_D) == TAMANHO_PELO_D:
+        kb = FatorTamanho(c.letra(g.D))
+    else:
+        kb = c.letra(g.K_TAMANHO)
+    kc = sp.Float(CARREGAMENTOS[c.opcoes.get("carregamento", next(iter(CARREGAMENTOS)))])
+    confianca = c.opcoes.get("confiabilidade", CONFIABILIDADE_PADRAO)
+    c.padrao(
+        g.K_CONFIANCA,
+        ft.fator_confiabilidade(ee.CONFIABILIDADES[confianca]),
+        f"Tabela: confiabilidade de {confianca}",
+    )
+    c.hipoteses.append(
+        "S_e pelos fatores de Marin de Shigley, os mesmos do Assistente de cargas. O k_b pelo "
+        "diâmetro vale para eixo girando, de 2,79 a 254 mm."
+    )
+    base = LimiteBase(sut, MATERIAIS_DE_FADIGA.index(categoria))
+    se = (
+        base
+        * ka
+        * kb
+        * kc
+        * c.letra(g.K_TEMPERATURA)
+        * c.letra(g.K_CONFIANCA)
+        * c.letra(g.K_DIVERSOS)
+    )
+    return {"se": se}
+
+
+def _entalhe(c: Contexto) -> dict[str, Any]:
+    tipo = c.opcoes.get("entalhe", ee.ENTALHE_LISO)
+    if tipo == ee.ENTALHE_LISO:
+        return {"kf": sp.S.One, "kfs": sp.S.One}
+    material = c.material()
+    sut = material.sut if material else c.letra(g.SUT)
+    kt: sp.Expr
+    kts: sp.Expr
+    if tipo == ee.ENTALHE_RESSALTO:
+        d, maior, raio = c.letra(g.D), c.letra(g.D_MAIOR), c.letra(g.R_ENTALHE)
+        kt, kts = KtRessalto(maior, d, raio, 0), KtRessalto(maior, d, raio, 1)
+        q, qs = SensibilidadeNeuber(sut, raio, 0), SensibilidadeNeuber(sut, raio, 1)
+        c.hipoteses.append(
+            "K_t pelas curvas de Peterson (Norton, apêndice E) e q de Neuber (Shigley, eq. 6-35)."
+        )
+    elif tipo == ee.ENTALHE_MANUAL:
+        kt, kts = c.letra(g.KT), c.letra(g.KTS)
+        q, qs = c.letra(g.Q_NORMAL), c.letra(g.Q_CORTE)
+    else:
+        na_flexao, na_torcao, _ = ee.KT_FIXOS[tipo]
+        kt, kts = sp.Float(na_flexao), sp.Float(na_torcao)
+        if tipo == ee.ENTALHE_CHAVETA:
+            raio = sp.Rational(1, 50) * c.letra(g.D)
+            q, qs = SensibilidadeNeuber(sut, raio, 0), SensibilidadeNeuber(sut, raio, 1)
+        else:
+            q, qs = sp.S.One, sp.S.One  # lado seguro: sem raio definido, não há sensibilidade
+    return {"kf": 1 + q * (kt - 1), "kfs": 1 + qs * (kts - 1)}
+
+
+def _formula(c: Contexto) -> dict[str, Any]:
+    texto = c.opcoes.get("texto", "").strip()
+    if not texto:
+        raise ErroDeBloco("Digite a fórmula no inspetor.")
+    try:
+        formula = mf.ler(texto)
+    except mf.ErroDeFormula as erro:
+        raise ErroDeBloco(str(erro)) from erro
+    sistema = c.opcoes.get("sistema", g.SISTEMA_SOLIDOS.chave)
+    dimensoes = mf.dimensoes_das_letras(c.opcoes.get("dimensoes"))
+    trocas = {
+        sp.Symbol(letra, positive=True): c.letra(
+            mf.grandeza_da_letra(letra, sistema, dimensoes), letra
+        )
+        for letra in formula.letras
+    }
+    c.alertas.extend(mf.problemas_de_unidade(formula, sistema, dimensoes))
+    direita = formula.direita.subs(trocas)
+    saida: dict[str, Any] = {}
+    if formula.tem_valor:
+        saida["saida"] = direita
+    if formula.esquerda is None:
+        return saida
+    if formula.nome:
+        dimensao = mf.dimensao_da_saida(formula, sistema, dimensoes, c.opcoes.get("saida"))
+        grandeza = mf.grandeza_da_letra(
+            formula.nome, sistema, {**dimensoes, formula.nome: dimensao}
+        )
+        esquerda = direita
+        limite = c.letra(grandeza)
+    else:
+        esquerda = formula.esquerda.subs(trocas)
+        limite = direita
+        if formula.sinal == mf.MAIOR_IGUAL:
+            esquerda, limite = limite, esquerda
+    nome = f"Fórmula {texto}" if len(texto) <= 40 else f"Fórmula {texto[:37]}..."
+    saida["condicao"] = [
+        Condicao(
+            nome,
+            "Fórmula própria",
+            esquerda,
+            limite,
+            sp.latex(esquerda),
+            igualdade=formula.sinal == mf.IGUAL,
+        )
+    ]
+    return saida
+
+
 def _resultado(c: Contexto) -> dict[str, Any]:
     return {}
 
@@ -644,7 +873,20 @@ def _referencia(c: Contexto) -> dict[str, Any]:
     return {"saida": sp.Float(float(valor))}
 
 
+_BLOCO_DA_FORMULA = Bloco(
+    FORMULA,
+    "Fórmula própria",
+    GRUPO_OUTROS,
+    "Digite a sua fórmula no inspetor: as letras viram bolinhas, e as unidades são conferidas.",
+    "M = q*L^2/8",
+    (),
+    (),
+    _formula,
+    dominio=COMUM,
+)
+
 BLOCOS: tuple[Bloco, ...] = (
+    _BLOCO_DA_FORMULA,
     _secao(
         "circular",
         "Circular maciça",
@@ -841,12 +1083,33 @@ BLOCOS: tuple[Bloco, ...] = (
         "goodman",
         "Fadiga de eixo",
         GRUPO_CRITERIO,
-        "DE-Goodman simplificado. Usa os esforços da fila no eixo girando, ou os que você informar.",
+        "Goodman, Gerber, Soderberg ou ASME elíptico. Usa os esforços da fila, ou os informados.",
         "σ_a'/S_e + σ_m'/S_ut ≤ 1/n",
-        (_ENTRADA, _ENTRADA_MATERIAL),
+        (
+            _ENTRADA,
+            _ENTRADA_MATERIAL,
+            Porta("se", "S_e", VALOR, g.TENSAO),
+            Porta("kf", "K_f", VALOR, g.PURO),
+            Porta("kfs", "K_fs", VALOR, g.PURO),
+        ),
         (_CONDICAO,),
         _goodman,
         (
+            Opcao(
+                "criterio",
+                "Critério de fadiga",
+                "Goodman é o usual e fica a favor da segurança. Gerber segue melhor os ensaios. "
+                "Soderberg e ASME elíptico usam S_y no lugar de S_ut.",
+                CRITERIOS_DE_FADIGA,
+                GOODMAN,
+            ),
+            Opcao(
+                "vida",
+                "Vida",
+                "Vida infinita usa S_e. Vida finita troca S_e por S_f em N_c ciclos.",
+                VIDAS,
+                VIDA_INFINITA,
+            ),
             Opcao(
                 "esforcos",
                 "De onde vêm os esforços",
@@ -854,6 +1117,66 @@ BLOCOS: tuple[Bloco, ...] = (
                 "repetir valores. Para outros ciclos, informe as quatro parcelas.",
                 ESFORCOS_DA_FADIGA,
                 INFORMAR_FADIGA,
+            ),
+        ),
+        face=lambda opcoes: _FORMULA_DA_FADIGA[opcoes.get("criterio", GOODMAN)],
+    ),
+    Bloco(
+        "limite_fadiga",
+        "Limite de fadiga",
+        GRUPO_MATERIAL,
+        "S_e pelos fatores de Marin. Com d em aberto, k_b acompanha a resposta sozinho.",
+        "S_e = k_a·k_b·k_c·k_d·k_e·S_e'",
+        (_ENTRADA_MATERIAL,),
+        (Porta("se", "S_e", VALOR, g.TENSAO),),
+        _limite_fadiga,
+        (
+            Opcao(
+                "acabamento",
+                "Acabamento",
+                "Superfície mais grossa rende menos em fadiga. Dá o k_a.",
+                tuple(ee.ACABAMENTOS),
+                ACABAMENTO_PADRAO,
+            ),
+            Opcao(
+                "tamanho",
+                "Fator de tamanho",
+                "Pelo diâmetro vale para eixo girando. Em outra forma, informe k_b.",
+                TAMANHOS,
+                TAMANHO_PELO_D,
+            ),
+            Opcao(
+                "carregamento",
+                "Carregamento",
+                "Com o bloco de fadiga vale Flexão ou combinado, que já traz von Mises.",
+                tuple(CARREGAMENTOS),
+                next(iter(CARREGAMENTOS)),
+            ),
+            Opcao(
+                "confiabilidade",
+                "Confiabilidade",
+                "Dá o k_e. 50 % é o valor médio do ensaio; projeto costuma pedir de 90 a 99 %.",
+                tuple(ee.CONFIABILIDADES),
+                CONFIABILIDADE_PADRAO,
+            ),
+        ),
+    ),
+    Bloco(
+        "entalhe",
+        "Entalhe",
+        GRUPO_MATERIAL,
+        "K_f e K_fs do ressalto, da chaveta, do canal de anel, do furo ou do cubo prensado.",
+        "K_f = 1 + q·(K_t − 1)",
+        (_ENTRADA_MATERIAL,),
+        (Porta("kf", "K_f", VALOR, g.PURO), Porta("kfs", "K_fs", VALOR, g.PURO)),
+        _entalhe,
+        (
+            Opcao(
+                "entalhe",
+                "Tipo de entalhe",
+                "Os mesmos do Assistente de cargas. Sem raio definido, q fica em 1, a favor.",
+                ee.ENTALHES,
+                ee.ENTALHE_LISO,
             ),
         ),
     ),
@@ -929,6 +1252,52 @@ BLOCOS: tuple[Bloco, ...] = (
 )
 
 POR_CHAVE: dict[str, Bloco] = {b.chave: b for b in BLOCOS}
+
+
+@lru_cache(maxsize=256)
+def _portas_da_formula(
+    texto: str, dimensoes: str, escolhida: str, sistema: str
+) -> tuple[tuple[Porta, ...], tuple[Porta, ...]]:
+    """As bolinhas nascem das letras do texto. Com erro na fórmula, o bloco fica sem nenhuma."""
+    try:
+        formula = mf.ler(texto)
+    except mf.ErroDeFormula:
+        return (), ()
+    medidas = mf.dimensoes_das_letras(dimensoes)
+    entradas = tuple(
+        Porta(letra, item.texto, VALOR, item.dimensao)
+        for letra, item in (
+            (letra, mf.grandeza_da_letra(letra, sistema, medidas)) for letra in formula.letras
+        )
+    )
+    saidas: list[Porta] = []
+    if formula.tem_valor:
+        dimensao = mf.dimensao_da_saida(formula, sistema, medidas, escolhida)
+        saidas.append(Porta("saida", formula.nome or "Valor", VALOR, dimensao))
+    if formula.tem_condicao:
+        saidas.append(_CONDICAO)
+    return entradas, tuple(saidas)
+
+
+def portas_de(tipo: str, opcoes: Mapping[str, Any]) -> tuple[tuple[Porta, ...], tuple[Porta, ...]]:
+    """Entradas e saídas de um bloco. Só a fórmula própria depende do que foi escolhido nele."""
+    if tipo == FORMULA:
+        return _portas_da_formula(
+            str(opcoes.get("texto", "")),
+            str(opcoes.get("dimensoes", "")),
+            str(opcoes.get("saida", "")),
+            str(opcoes.get("sistema", g.SISTEMA_SOLIDOS.chave)),
+        )
+    bloco = POR_CHAVE[tipo]
+    return bloco.entradas, bloco.saidas
+
+
+def portas_para_a_tela(tipo: str, opcoes: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    entradas, saidas = portas_de(tipo, opcoes)
+    return {
+        "entradas": [porta_para_tela(p) for p in entradas],
+        "saidas": [porta_para_tela(p) for p in saidas],
+    }
 
 
 def registrar(blocos: Sequence[Bloco]) -> None:

@@ -117,7 +117,8 @@ function criar(raiz) {
   const noPorId = (id) => nivel().nos.find((n) => n.id === id)
   const tipoDe = (no) => e.catalogo[no.tipo]
   function portas(no) {
-    if (no.tipo === CONJUNTO) {
+    // Conjunto e fórmula própria têm as bolinhas no próprio bloco, e não no catálogo.
+    if (no.portas || no.tipo === CONJUNTO) {
       return { entradas: no.portas?.entradas ?? [], saidas: no.portas?.saidas ?? [] }
     }
     const b = tipoDe(no)

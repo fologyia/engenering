@@ -8,10 +8,12 @@ pedida é a que fecha a conta. A linha é em série, com a mesma vazão em todos
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
+import numpy as np
 import sympy as sp
 
 from core import montador_blocos as mb
@@ -36,20 +38,24 @@ RUGOSIDADE_INFORMADA = "Informar a rugosidade"
 ACIMA_DO_NIVEL = "Bomba acima do nível do líquido"
 ABAIXO_DO_NIVEL = "Bomba abaixo do nível do líquido"
 SUCCOES = (ACIMA_DO_NIVEL, ABAIXO_DO_NIVEL)
+DIAMETRO_INFORMADO = "Informar o diâmetro"
+PONTO_DE_OPERACAO = "Ponto de operação"
 
-#: ρ em kg/m³, μ em Pa·s e pressão de vapor absoluta em Pa. Valores típicos de tabela.
+#: ρ em kg/m³, μ em Pa·s e pressão de vapor absoluta em Pa. A água foi conferida em duas tabelas
+#: (roymech.org e engineeringtoolbox.com): saturação pela IAPWS. O resto são valores típicos.
 FLUIDOS_TIPICOS: dict[str, tuple[float, float, float | None]] = {
-    "Água a 20 °C": (998.0, 1.002e-3, 2339.0),
-    "Água a 40 °C": (992.1, 6.53e-4, 7384.0),
-    "Água a 60 °C": (983.3, 4.67e-4, 19940.0),
-    "Água a 80 °C": (971.8, 3.55e-4, 47390.0),
+    "Água a 20 °C": (998.2, 1.0016e-3, 2339.0),
+    "Água a 40 °C": (992.2, 6.527e-4, 7385.0),
+    "Água a 60 °C": (983.2, 4.660e-4, 19946.0),
+    "Água a 80 °C": (971.8, 3.540e-4, 47414.0),
     "Ar a 20 °C": (1.204, 1.825e-5, None),
     "Etanol a 20 °C": (789.0, 1.2e-3, 5800.0),
     "Glicerina a 20 °C": (1261.0, 1.519, None),
     "Óleo de motor a 40 °C": (876.0, 0.2177, None),
     "Óleo hidráulico ISO VG 46 a 40 °C": (870.0, 0.040, None),
 }
-#: Rugosidade absoluta em metros. Tubo novo: com o tempo, ela cresce.
+#: Rugosidade absoluta em metros, de tubo novo: com o tempo, ela cresce. Concreto varia de 0,3 a
+#: 3 mm conforme o acabamento: 1,5 mm é o meio dessa faixa.
 RUGOSIDADES: dict[str, float] = {
     "Aço comercial": 0.045e-3,
     "Aço galvanizado": 0.15e-3,
@@ -58,6 +64,129 @@ RUGOSIDADES: dict[str, float] = {
     "Cobre": 1.5e-6,
     "Concreto": 1.5e-3,
 }
+#: K de peça aberta por inteiro, em excesso de carga, com a velocidade do tubo. Variam com o diâmetro
+#: e o fabricante: são o valor típico de cada peça, para pré-dimensionar.
+PECAS: dict[str, float] = {
+    "Curva 90° padrão (R/D = 1)": 0.75,
+    "Curva 90° raio longo (R/D = 1,5)": 0.45,
+    "Curva 45° padrão": 0.35,
+    "Curva 45° raio longo": 0.20,
+    "Tê, passagem direta": 0.40,
+    "Tê, saída lateral": 1.00,
+    "Registro de gaveta aberto": 0.17,
+    "Válvula de globo aberta": 6.0,
+    "Válvula de esfera aberta": 0.05,
+    "Válvula de retenção de portinhola": 2.0,
+    "Entrada de canto vivo": 0.5,
+    "Saída para reservatório": 1.0,
+}
+
+
+@dataclass(frozen=True)
+class TuboComercial:
+    rotulo: str
+    familia: str  # o material da tabela de rugosidade
+    externo_mm: float
+    parede_mm: float
+
+    @property
+    def interno_m(self) -> float:
+        return (self.externo_mm - 2.0 * self.parede_mm) / 1000.0
+
+
+def _sch40(dn: int, polegadas: str, externo: float, parede: float) -> TuboComercial:
+    return TuboComercial(f"Aço Sch 40, DN {dn} ({polegadas} pol)", "Aço comercial", externo, parede)
+
+
+def _pvc(dn: int, parede: float) -> TuboComercial:
+    return TuboComercial(f"PVC soldável, DN {dn}", "PVC ou plástico", float(dn), parede)
+
+
+#: Aço pela ASME B36.10M. PVC pela ficha técnica da linha soldável (NBR 5648, 750 kPa a 20 °C).
+TUBOS_COMERCIAIS: dict[str, TuboComercial] = {
+    t.rotulo: t
+    for t in (
+        _sch40(15, "1/2", 21.3, 2.77),
+        _sch40(20, "3/4", 26.7, 2.87),
+        _sch40(25, "1", 33.4, 3.38),
+        _sch40(32, "1 1/4", 42.2, 3.56),
+        _sch40(40, "1 1/2", 48.3, 3.68),
+        _sch40(50, "2", 60.3, 3.91),
+        _sch40(65, "2 1/2", 73.0, 5.16),
+        _sch40(80, "3", 88.9, 5.49),
+        _sch40(90, "3 1/2", 101.6, 5.74),
+        _sch40(100, "4", 114.3, 6.02),
+        _sch40(125, "5", 141.3, 6.55),
+        _sch40(150, "6", 168.3, 7.11),
+        _sch40(200, "8", 219.1, 8.18),
+        _sch40(250, "10", 273.0, 9.27),
+        _sch40(300, "12", 323.8, 10.31),
+        _sch40(350, "14", 355.6, 11.13),
+        _sch40(400, "16", 406.4, 12.70),
+        _sch40(450, "18", 457.0, 14.27),
+        _sch40(500, "20", 508.0, 15.09),
+        _sch40(600, "24", 610.0, 17.48),
+        _pvc(20, 1.5),
+        _pvc(25, 1.7),
+        _pvc(32, 2.1),
+        _pvc(40, 2.4),
+        _pvc(50, 3.0),
+        _pvc(60, 3.3),
+        _pvc(75, 4.2),
+        _pvc(85, 4.7),
+        _pvc(110, 6.1),
+    )
+}
+
+
+def ler_pecas(texto: str | None) -> dict[str, int]:
+    """As peças de um bloco: guardadas como texto, porque as opções do bloco são texto."""
+    try:
+        dados = json.loads(texto or "{}")
+    except ValueError:
+        return {}
+    if not isinstance(dados, Mapping):
+        return {}
+    pecas: dict[str, int] = {}
+    for nome, quantos in dados.items():
+        if nome in PECAS and isinstance(quantos, (int, float)) and quantos > 0:
+            pecas[str(nome)] = int(quantos)
+    return pecas
+
+
+def somar_pecas(pecas: Mapping[str, int]) -> float:
+    return sum(PECAS[nome] * quantos for nome, quantos in pecas.items())
+
+
+def ler_pontos(texto: str | None) -> list[tuple[float, float]]:
+    """Os pontos da curva da bomba, na base do sistema: vazão em m³/s e altura em m."""
+    try:
+        dados = json.loads(texto or "[]")
+    except ValueError:
+        return []
+    pontos: list[tuple[float, float]] = []
+    if isinstance(dados, list):
+        for item in dados:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                try:
+                    q, h = float(item[0]), float(item[1])
+                except (TypeError, ValueError):
+                    continue
+                if q >= 0.0 and h > 0.0 and np.isfinite(q) and np.isfinite(h):
+                    pontos.append((q, h))
+    return pontos
+
+
+def ajustar_curva(pontos: Sequence[tuple[float, float]]) -> tuple[float, float]:
+    """H_0 e a de H = H_0 − a·Q², pelos mínimos quadrados em Q²."""
+    if len({q for q, _ in pontos}) < 2:
+        raise ErroDeBloco("Dê ao menos dois pontos da curva, com vazões diferentes.")
+    quadrados = np.array([q**2 for q, _ in pontos])
+    alturas = np.array([h for _, h in pontos])
+    inclinacao, h_0 = np.polyfit(quadrados, alturas, 1)
+    if inclinacao >= 0.0 or h_0 <= 0.0:
+        raise ErroDeBloco("Esses pontos não dão uma curva de bomba: a altura precisa cair com Q.")
+    return float(h_0), float(-inclinacao)
 
 
 @dataclass(frozen=True)
@@ -105,8 +234,16 @@ def _fluido(c: Contexto) -> dict[str, Any]:
 
 def _trecho(c: Contexto) -> dict[str, Any]:
     linha = _linha(c)
-    d, comprimento = c.letra(g.D_TUBO), c.letra(g.L_TUBO)
+    comercial = TUBOS_COMERCIAIS.get(c.opcoes.get("comercial", DIAMETRO_INFORMADO))
     material = c.opcoes.get("tubo", "Aço comercial")
+    if comercial is not None:
+        c.padrao(g.D_TUBO, comercial.interno_m, f"Tabela: {comercial.rotulo}")
+        plastico = comercial.familia == "PVC ou plástico"
+        if plastico != (material == "PVC ou plástico"):
+            c.alertas.append(
+                f"O tubo é {comercial.rotulo}, e a rugosidade está como {material}: confira."
+            )
+    d, comprimento = c.letra(g.D_TUBO), c.letra(g.L_TUBO)
     if material in RUGOSIDADES:
         c.padrao(g.EPSILON, RUGOSIDADES[material], f"Tabela: {material}")
     rugosidade = c.letra(g.EPSILON)
@@ -145,6 +282,10 @@ def _perda_local(c: Contexto) -> dict[str, Any]:
     if not linha.trechos:
         raise ErroDeBloco("Ponha um trecho de tubo antes: a perda usa a velocidade dele.")
     velocidade = linha.trechos[-1].velocidade
+    if "pecas" in c.opcoes:
+        pecas = ler_pecas(c.opcoes.get("pecas"))
+        lista = ", ".join(f"{quantos} × {nome}" for nome, quantos in pecas.items()) or "nenhuma"
+        c.padrao(g.K_LOCAL, somar_pecas(pecas), f"Soma das peças: {lista}")
     perda = c.letra(g.K_LOCAL) * velocidade**2 / (2 * linha.gravidade)
     return {"saida": replace(linha, perda=linha.perda + perda)}
 
@@ -194,6 +335,35 @@ def _altura_bomba(c: Contexto) -> dict[str, Any]:
         "",
         _dados_da_linha(linha),
         linha.validade,
+    )
+    return {"condicao": [condicao]}
+
+
+def _curva_bomba(c: Contexto) -> dict[str, Any]:
+    linha = _com_perda(c)
+    pontos = ler_pontos(c.opcoes.get("pontos"))
+    if pontos:
+        h_0, a = ajustar_curva(pontos)
+        fonte = f"Curva da bomba: {len(pontos)} pontos"
+        c.padrao(g.H_ZERO, h_0, fonte)
+        c.padrao(g.A_BOMBA, a, fonte)
+    sistema = _altura_do_sistema(c, linha)
+    vazao = linha.vazao if linha.vazao is not None else c.letra(g.VAZAO_Q, fixa=True)
+    bomba = c.letra(g.H_ZERO) - c.letra(g.A_BOMBA) * vazao**2
+    c.hipoteses.append(
+        "Curva da bomba em parábola, H = H_0 − a·Q², ajustada nos pontos dados. Ela vale entre o "
+        "primeiro e o último ponto do catálogo."
+    )
+    condicao = Condicao(
+        PONTO_DE_OPERACAO,
+        PONTO_DE_OPERACAO,
+        sistema,
+        bomba,
+        "H_{sist}",
+        "",
+        _dados_da_linha(linha),
+        linha.validade,
+        igualdade=True,
     )
     return {"condicao": [condicao]}
 
@@ -407,6 +577,13 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
                 (*RUGOSIDADES, RUGOSIDADE_INFORMADA),
                 "Aço comercial",
             ),
+            Opcao(
+                "comercial",
+                "Tubo comercial",
+                "Preenche D com o diâmetro interno da tabela: aço Sch 40 ou PVC soldável.",
+                (DIAMETRO_INFORMADO, *TUBOS_COMERCIAIS),
+                DIAMETRO_INFORMADO,
+            ),
         ),
         numerar=True,
         dominio=FLUIDOS,
@@ -436,6 +613,13 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
         "O que a bomba precisa entregar: altura estática, pressão e perdas.",
         "H_est + Δp/(ρ·g) + h_L ≤ H_b",
         _altura_bomba,
+    ),
+    _verificacao(
+        "curva_bomba",
+        "Curva da bomba",
+        "Acha o ponto de operação: onde a curva da bomba cruza a do sistema. Peça a vazão Q.",
+        "H_0 − a·Q² = H_est + Δp/(ρ·g) + h_L",
+        _curva_bomba,
     ),
     _verificacao(
         "potencia_bomba",

@@ -101,7 +101,7 @@ ENTALHES = (
 )
 
 #: K_t em flexão, K_ts em torção e K_t axial dos entalhes que não dependem de D/d.
-_KT_FIXOS = {
+KT_FIXOS = {
     ENTALHE_CHAVETA: (2.14, 3.0, 2.14),
     ENTALHE_ANEL: (5.0, 3.0, 5.0),
     ENTALHE_FURO: (3.0, 4.0, 3.0),
@@ -270,7 +270,7 @@ def calcular_eixo_secao(v: Valores) -> Resultado:
         kts = float(v["kts"])
         kta = kt
     else:
-        kt, kts, kta = _KT_FIXOS[tipo]
+        kt, kts, kta = KT_FIXOS[tipo]
 
     if tipo == ENTALHE_FURO:
         alertas.append(

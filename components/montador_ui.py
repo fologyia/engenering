@@ -31,9 +31,14 @@ from core import armazenamento
 from core import montador as mt
 from core import montador_blocos as mb
 from core import montador_busca as bs
+from core import montador_catalogo as cat
 from core import montador_conjuntos as mc
+from core import montador_fluidos as fl
+from core import montador_formula as mf
 from core import montador_grandezas as g
+from core import montador_planilha as mp
 from core import montador_registro as rg
+from core import montador_word as mw
 from core.montador_grandezas import Grandeza, Unidades
 from core.montador_modelos import Modelo, Parte
 from core.montador_secoes import Estado
@@ -60,6 +65,19 @@ _CENTRO_DA_FAIXA = {
 }
 _RUIM_NA_SITUACAO = (rg.AUSENTE, rg.INCOMPATIVEL, rg.DESATUALIZADA)
 _PIOR_PRIMEIRO = ("erro", "alerta", "falta", "ok")
+_MIME_WORD = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_MIME_EXCEL = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_LINHAS_DO_CATALOGO = 12
+#: O que o cartão mostra em destaque nos blocos que só entregam um número para o próximo.
+_SAIDA_NO_CARTAO = {
+    "limite_fadiga": ("se", "S_e", g.TENSAO),
+    "entalhe": ("kf", "K_f", g.PURO),
+}
+_AJUDA_DA_FORMULA = (
+    "Três formas: q*L^2/8 dá um valor; M = q*L^2/8 dá um valor com nome e também uma equação; "
+    "M*c/I <= S_y/n dá uma condição. Use * para vezes e ^ para potência. Funções: sqrt, sin, cos, "
+    "tan, exp, ln, log10 e abs. Letra igual à do programa usa o mesmo valor e a mesma unidade."
+)
 _ALTURA_DA_PRANCHETA = 574
 _PORQUE_DO_FIO = {
     mb.SECAO: (
@@ -194,6 +212,7 @@ def _aplicar(p: Parte, modelo: Modelo) -> None:
     estado[p.k("adotado")] = None
     estado[p.k("revisao")] = estado.get(p.k("revisao"), 0) + 1
     estado[p.k("modelo_atual")] = modelo.nome
+    estado[p.k("titulo")] = modelo.nome
     estado[p.k("selecao")] = None
     estado[p.k("mudanca")] = ""
     estado.pop(p.k("ultima"), None)
@@ -270,6 +289,7 @@ def _limpar(p: Parte) -> None:
     _trocar_grafo(p, {"nos": [], "fios": []})
     estado[p.k("ajuste")] += 1
     estado[p.k("modelo_atual")] = None
+    estado[p.k("titulo")] = p.titulo
     estado[p.k("valores")] = {}
     estado[p.k("origens")] = {}
     estado[p.k("padroes")] = {}
@@ -507,6 +527,7 @@ def _faces(
     valores: Mapping[str, float | None],
     alvo: str | None,
     u: Unidades,
+    numeros: Mapping[sp.Symbol, sp.Float] | None = None,
 ) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
     """O miolo de cada cartão: as letras com valor, o uso do critério e a resposta."""
     faces: dict[str, dict[str, str]] = {}
@@ -521,10 +542,18 @@ def _faces(
         if bloco.grupo in (mb.GRUPO_MATERIAL, mb.GRUPO_FLUIDO) and bloco.opcoes:
             escolha = dict(no.opcoes).get(bloco.opcoes[0].chave, bloco.opcoes[0].padrao)
             texto = " · ".join(x for x in (str(escolha), texto) if x)
+        if no.tipo == mb.FORMULA:
+            texto = dict(no.opcoes).get("texto", "") or texto
         if texto:
             faces[no.id] = {"a": texto}
         faltam = any(valores.get(c) is None and c != alvo for c in letras)
         luzes[no.id] = "falta" if faltam else "ok"
+        destaque = _SAIDA_NO_CARTAO.get(no.tipo)
+        if destaque is not None and numeros is not None:
+            porta, nome, dimensao = destaque
+            numero = _saida_em_numero(base, no.id, porta, dimensao, numeros, u)
+            if numero:
+                faces.setdefault(no.id, {})["b"] = f"{nome} = {numero}"
     if resposta is not None:
         _marcar_criterios(faces, luzes, resposta, u)
         for no in grafo.nos:
@@ -607,10 +636,31 @@ def _rastro(grafo: mt.Grafo, resposta: mt.Resposta | None) -> list[str]:
 def _ao_mudar_opcao(p: Parte, no_id: str, opcao: str, chave: str) -> None:
     estado = st.session_state
     no = rg.por_id(estado[p.k("grafo")]["nos"], no_id)
-    if no is not None:
-        no.setdefault("opcoes", {})[opcao] = estado[chave]
+    bloco = mb.POR_CHAVE.get(str(no.get("tipo"))) if no is not None else None
+    escolhas = next((o.lista() for o in bloco.opcoes if o.chave == opcao), ()) if bloco else ()
+    if no is None or estado.get(chave) not in escolhas:
+        return  # o bloco mudou desde que a lista foi desenhada
+    no.setdefault("opcoes", {})[opcao] = estado[chave]
     estado[p.k("versao")] += 1
     estado[p.k("modelo_atual")] = None
+
+
+def _saida_em_numero(
+    base: mt.Montagem,
+    id_: str,
+    porta: str,
+    dimensao: str,
+    numeros: Mapping[sp.Symbol, sp.Float],
+    u: Unidades,
+) -> str:
+    """O número que sai de uma bolinha, se já não sobrou letra nenhuma."""
+    valor = base.saidas.get(id_, {}).get(porta)
+    if valor is None:
+        return ""
+    numero = mt.numero_de(valor, numeros)
+    if numero is None:
+        return ""
+    return f"{_numero(numero / u.fator(dimensao))} {u.rotulo(dimensao)}".strip()
 
 
 def _opcoes_dos_blocos(p: Parte, nos: Sequence[mt.No]) -> None:
@@ -633,8 +683,29 @@ def _opcoes_dos_blocos(p: Parte, nos: Sequence[mt.No]) -> None:
             )
 
 
+def _da_rodada_atual(p: Parte, campo: str) -> bool:
+    """Campo de antes de trocar o modelo não grava mais nada.
+
+    Se a prancheta pede uma rodada enquanto a anterior ainda desenha, o navegador manda junto os
+    campos velhos, com os números do modelo anterior. A revisão no nome do campo separa os dois.
+    """
+    return campo.startswith(
+        f"{p.prefixo}_v_{st.session_state[p.k('revisao')]}_"
+    ) or campo.startswith(f"{p.prefixo}_adotado_{st.session_state[p.k('revisao')]}")
+
+
+def _no_do_tipo(p: Parte, no_id: str, tipo: str) -> Any:
+    """O bloco, se ainda for do tipo esperado: depois de trocar o modelo, o id pode ser outro bloco."""
+    no = rg.por_id(st.session_state[p.k("grafo")]["nos"], no_id)
+    if no is None or no.get("tipo") != tipo:
+        return None
+    return no
+
+
 def _ao_digitar(p: Parte, chave: str, fator: float, campo: str) -> None:
     estado = st.session_state
+    if not _da_rodada_atual(p, campo):
+        return
     valor = estado.get(campo)
     estado[p.k("valores")][chave] = None if valor is None else float(valor) * fator
     estado[p.k("origens")][chave] = _DIGITADO
@@ -757,7 +828,7 @@ def _inspetor_geral(
 def _formulas_do_bloco(base: mt.Montagem, no: mt.No, resposta: mt.Resposta | None) -> None:
     bloco = mb.POR_CHAVE[no.tipo]
     saidas = base.saidas.get(no.id, {})
-    for porta in bloco.saidas:
+    for porta in mb.portas_de(no.tipo, dict(no.opcoes))[1]:
         valor = saidas.get(porta.chave)
         if isinstance(valor, sp.Expr):
             st.latex(f"{porta.rotulo.replace('·', ' ')} = {sp.latex(valor)}")
@@ -781,6 +852,215 @@ def _formulas_do_bloco(base: mt.Montagem, no: mt.No, resposta: mt.Resposta | Non
                     f"{sp.latex(mt.limpar(condicao.esquerda, condicao.positiva))} "
                     f"{sinal} {sp.latex(condicao.direita)}"
                 )
+
+
+def _conferidos(pares: Sequence[tuple[str, bool]]) -> str:
+    return "".join(
+        f'<div class="mi-ok"><b>✓</b>{_e(rotulo)}</div>'
+        if certo
+        else f'<div class="mi-nao"><b>✕</b>{_e(rotulo)}</div>'
+        for rotulo, certo in pares
+    )
+
+
+def _mudar_formula(p: Parte, id_: str, **mudancas: str) -> None:
+    estado = st.session_state
+    no = _no_do_tipo(p, id_, mb.FORMULA)
+    if no is None:
+        return
+    opcoes = no.setdefault("opcoes", {})
+    opcoes.update(mudancas)
+    opcoes["sistema"] = p.sistema.chave
+    no["portas"] = mb.portas_para_a_tela(mb.FORMULA, opcoes)
+    _trocar_grafo(p, mc.tirar_fios_soltos(estado[p.k("grafo")], id_.split("/")[:-1]))
+    estado[p.k("modelo_atual")] = None
+
+
+def _ao_digitar_formula(p: Parte, id_: str, campo: str) -> None:
+    _mudar_formula(p, id_, texto=str(st.session_state.get(campo) or ""))
+
+
+def _ao_escolher_letra(p: Parte, id_: str, letra: str, campo: str) -> None:
+    estado = st.session_state
+    no = _no_do_tipo(p, id_, mb.FORMULA)
+    if no is None:
+        return
+    dimensoes = mf.dimensoes_das_letras((no.get("opcoes") or {}).get("dimensoes"))
+    dimensoes[letra] = estado[campo]
+    _mudar_formula(p, id_, dimensoes=json.dumps(dimensoes, sort_keys=True))
+
+
+def _ao_escolher_saida(p: Parte, id_: str, campo: str) -> None:
+    _mudar_formula(p, id_, saida=st.session_state[campo])
+
+
+def _inspetor_da_formula(p: Parte, no: mt.No) -> None:
+    estado = st.session_state
+    opcoes = dict(no.opcoes)
+    texto = opcoes.get("texto", "").strip()
+    campo = f"{p.prefixo}_formula_{no.id}"
+    estado[campo] = texto
+    _titulo_de_secao("Sua fórmula")
+    st.text_input(
+        "Fórmula",
+        key=campo,
+        on_change=_ao_digitar_formula,
+        args=(p, no.id, campo),
+        placeholder="M = q*L^2/8",
+        help=_AJUDA_DA_FORMULA,
+    )
+    if not texto:
+        return
+    try:
+        formula = mf.ler(texto)
+    except mf.ErroDeFormula:
+        return  # a mensagem já aparece no fim do inspetor, com os erros do bloco
+    sistema = p.sistema.chave
+    dimensoes = mf.dimensoes_das_letras(opcoes.get("dimensoes"))
+    novas = [letra for letra in formula.letras if mf.e_letra_nova(letra, sistema)]
+    if novas:
+        _titulo_de_secao("Letras novas")
+    for letra in novas:
+        chave = f"{p.prefixo}_letra_{no.id}_{letra}"
+        estado[chave] = mf.grandeza_da_letra(letra, sistema, dimensoes).dimensao
+        st.selectbox(
+            f"O que é {letra}",
+            g.dimensoes_do_sistema(sistema),
+            key=chave,
+            format_func=g.ROTULOS_DAS_DIMENSOES.__getitem__,
+            on_change=_ao_escolher_letra,
+            args=(p, no.id, letra, chave),
+            help="Diz a unidade da letra. Com isso o programa confere se a fórmula fecha.",
+        )
+    if formula.tem_valor and (not formula.nome or mf.e_letra_nova(formula.nome, sistema)):
+        possiveis = mf.dimensoes_possiveis(formula, sistema, dimensoes)
+        if len(possiveis) > 1:
+            chave = f"{p.prefixo}_saida_{no.id}"
+            estado[chave] = mf.dimensao_da_saida(formula, sistema, dimensoes, opcoes.get("saida"))
+            st.selectbox(
+                "O resultado é",
+                possiveis,
+                key=chave,
+                format_func=g.ROTULOS_DAS_DIMENSOES.__getitem__,
+                on_change=_ao_escolher_saida,
+                args=(p, no.id, chave),
+                help="Só liga em bolinha da mesma grandeza. Medida e altura têm a mesma unidade.",
+            )
+    problemas = mf.problemas_de_unidade(formula, sistema, dimensoes)
+    _titulo_de_secao("Verificação automática")
+    st.html(_conferidos([("As unidades fecham", not problemas)]))
+    for problema in problemas:
+        st.caption(problema)
+
+
+def _com_edicoes(
+    linhas: Sequence[Mapping[str, Any]], mudancas: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Aplica o que o st.data_editor guarda: linhas editadas, apagadas e acrescentadas."""
+    novas = [dict(linha) for linha in linhas]
+    for indice, campos in (mudancas.get("edited_rows") or {}).items():
+        if 0 <= int(indice) < len(novas):
+            novas[int(indice)].update(campos)
+    apagadas = {int(i) for i in mudancas.get("deleted_rows") or ()}
+    novas = [linha for i, linha in enumerate(novas) if i not in apagadas]
+    novas.extend(dict(linha) for linha in mudancas.get("added_rows") or ())
+    return novas
+
+
+def _rotulo_da_peca(nome: str) -> str:
+    return f"{nome} · K {_numero(fl.PECAS[nome])}"
+
+
+def _ao_editar_pecas(p: Parte, id_: str, chave: str) -> None:
+    estado = st.session_state
+    no = _no_do_tipo(p, id_, "perda_local")
+    if no is None:
+        return
+    atuais = fl.ler_pecas((no.get("opcoes") or {}).get("pecas"))
+    nomes = list(fl.PECAS)
+    linhas = [{"Peça": _rotulo_da_peca(nome), "Qtd": atuais.get(nome, 0)} for nome in nomes]
+    novas = _com_edicoes(linhas, estado[chave])[: len(nomes)]
+    pecas = {
+        nome: int(x.get("Qtd") or 0)
+        for nome, x in zip(nomes, novas, strict=False)
+        if (x.get("Qtd") or 0) > 0
+    }
+    no.setdefault("opcoes", {})["pecas"] = json.dumps(pecas, ensure_ascii=False, sort_keys=True)
+    estado[p.k("versao")] += 1
+    estado[p.k("modelo_atual")] = None
+
+
+def _pecas_do_bloco(p: Parte, no: mt.No) -> None:
+    atuais = fl.ler_pecas(dict(no.opcoes).get("pecas"))
+    quadro = pd.DataFrame(
+        [{"Peça": _rotulo_da_peca(nome), "Qtd": atuais.get(nome, 0)} for nome in fl.PECAS]
+    )
+    chave = f"{p.prefixo}_pecas_{no.id}"
+    _titulo_de_secao("Peças da linha")
+    st.data_editor(
+        quadro,
+        key=chave,
+        hide_index=True,
+        disabled=("Peça",),
+        width="stretch",
+        on_change=_ao_editar_pecas,
+        args=(p, no.id, chave),
+        column_config={
+            "Peça": st.column_config.TextColumn(width=185),
+            "Qtd": st.column_config.NumberColumn(
+                width=48,
+                min_value=0,
+                max_value=99,
+                step=1,
+                help="Quantas peças iguais há neste trecho.",
+            ),
+        },
+    )
+    st.caption("A soma vai para K_L. K de peça aberta, valor típico: varia com o fabricante.")
+
+
+def _ao_editar_pontos(p: Parte, id_: str, chave: str, titulo: str, fator: float) -> None:
+    estado = st.session_state
+    no = _no_do_tipo(p, id_, "curva_bomba")
+    if no is None:
+        return
+    atuais = fl.ler_pontos((no.get("opcoes") or {}).get("pontos"))
+    linhas = [{titulo: q / fator, "H (m)": h} for q, h in atuais]
+    pontos = [
+        [float(x[titulo]) * fator, float(x["H (m)"])]
+        for x in _com_edicoes(linhas, estado[chave])
+        if x.get(titulo) is not None and x.get("H (m)") is not None
+    ]
+    no.setdefault("opcoes", {})["pontos"] = json.dumps(pontos)
+    estado[p.k("versao")] += 1
+    estado[p.k("modelo_atual")] = None
+
+
+def _pontos_da_bomba(p: Parte, no: mt.No, u: Unidades) -> None:
+    fator = u.fator(g.VAZAO)
+    titulo = f"Q ({u.rotulo(g.VAZAO)})"
+    pontos = fl.ler_pontos(dict(no.opcoes).get("pontos"))
+    quadro = pd.DataFrame(
+        [{titulo: q / fator, "H (m)": h} for q, h in pontos],
+        columns=[titulo, "H (m)"],
+        dtype=float,
+    )
+    chave = f"{p.prefixo}_pontos_{no.id}_{titulo}"
+    _titulo_de_secao("Pontos do catálogo da bomba")
+    st.data_editor(
+        quadro,
+        key=chave,
+        hide_index=True,
+        num_rows="dynamic",
+        width="stretch",
+        on_change=_ao_editar_pontos,
+        args=(p, no.id, chave, titulo, fator),
+        column_config={
+            titulo: st.column_config.NumberColumn(min_value=0.0, help="Vazão do ponto."),
+            "H (m)": st.column_config.NumberColumn(min_value=0.0, help="Altura nessa vazão."),
+        },
+    )
+    st.caption("Com dois pontos ou mais, H_0 e a_b saem da curva. Sem pontos, digite os dois.")
 
 
 def _ligacoes_do_bloco(p: Parte, dados: Mapping[str, Any], id_: str) -> None:
@@ -834,10 +1114,13 @@ def _inspetor_bloco(
         _topo_do_inspetor("Decisão", bloco.nome, bloco.dica)
         _inspetor_resultado(resposta, u)
         return
-    _topo_do_inspetor("Módulo", bloco.nome, bloco.dica, bloco.formula)
+    chip = dict(no.opcoes).get("texto", "") if no.tipo == mb.FORMULA else bloco.formula
+    _topo_do_inspetor("Módulo", bloco.nome, bloco.dica, chip)
     if no.tipo == mb.REFERENCIA:
         _inspetor_referencia(p, no, u, diagnosticos)
         return
+    if no.tipo == mb.FORMULA:
+        _inspetor_da_formula(p, no)
     proprias = dict(base.letras_do_bloco).get(no.id, ())
     letras = [item for item in base.grandezas if item.chave in proprias]
     if letras or bloco.opcoes:
@@ -845,6 +1128,10 @@ def _inspetor_bloco(
     if letras:
         _campos(p, letras, alvo, u)
     _opcoes_dos_blocos(p, [no] if bloco.opcoes else [])
+    if no.tipo == "perda_local":
+        _pecas_do_bloco(p, no)
+    elif no.tipo == "curva_bomba":
+        _pontos_da_bomba(p, no, u)
     _uso_do_bloco(no, resposta)
     _ligacoes_do_bloco(p, dados, no.id)
     with st.expander("Fórmula, hipóteses e detalhes", icon=":material/functions:"):
@@ -1115,7 +1402,10 @@ def _inspetor_fio(
     valor = base.saidas.get(no_id, {}).get(porta)
     bloco = next((n for n in base.grafo.nos if n.id == no_id), None)
     definicao = (
-        next((x for x in mb.POR_CHAVE[bloco.tipo].saidas if x.chave == porta), None)
+        next(
+            (x for x in mb.portas_de(bloco.tipo, dict(bloco.opcoes))[1] if x.chave == porta),
+            None,
+        )
         if bloco
         else None
     )
@@ -1142,15 +1432,7 @@ def _inspetor_fio(
         vazio = '<div class="mi-sub">Ponha um esforço ou um trecho para ter o que levar.</div>'
         st.html(texto or vazio)
     _titulo_de_secao("Verificação automática")
-    conferidas = mc.conferir_fio(dict(dados), selecao, caminho)
-    st.html(
-        "".join(
-            f'<div class="mi-ok"><b>✓</b>{_e(rotulo)}</div>'
-            if certo
-            else f'<div class="mi-nao"><b>✕</b>{_e(rotulo)}</div>'
-            for rotulo, certo in conferidas
-        )
-    )
+    st.html(_conferidos(mc.conferir_fio(dict(dados), selecao, caminho)))
     _acoes_do_fio(p, selecao)
     if definicao is not None:
         with st.expander("Por que esta conexão é diferente?", icon=":material/help:"):
@@ -1288,6 +1570,8 @@ def _ao_escolher_alvo(p: Parte) -> None:
 
 def _ao_digitar_adotado(p: Parte, campo: str, fator: float) -> None:
     estado = st.session_state
+    if not _da_rodada_atual(p, campo):
+        return
     valor = estado.get(campo)
     estado[p.k("adotado")] = None if valor is None else float(valor) * fator
 
@@ -1372,6 +1656,48 @@ def _resposta(p: Parte, grafo: mt.Grafo, resposta: mt.Resposta, u: Unidades) -> 
             st.latex(item.equacao)
     if resposta.faltam and any(i.com_numeros for i in resposta.isoladas):
         st.caption(p.sistema.aviso_da_base)
+
+
+def _grafico_da_bomba(resposta: mt.Resposta, valores: Mapping[str, float], u: Unidades) -> None:
+    linhas = mt.curvas_da_bomba(resposta, valores)
+    if not linhas or resposta.valor is None:
+        return
+    fator = u.fator(g.VAZAO)
+    eixo = f"Q ({u.rotulo(g.VAZAO)})"
+    quadro = pd.DataFrame(
+        [
+            {eixo: q / fator, "Curva": nome, "H (m)": h}
+            for q, sistema, bomba in linhas
+            for nome, h in (("Sistema", sistema), ("Bomba", bomba))
+        ]
+    )
+    altura = next((x.esquerda for x in resposta.conferencia if x.igualdade), None)
+    _titulo_da_pagina("Ponto de operação")
+    curvas = (
+        alt.Chart(quadro)
+        .mark_line(strokeWidth=2)
+        .encode(
+            x=alt.X(f"{eixo}:Q", title=eixo),
+            y=alt.Y("H (m):Q", title="H (m)"),
+            color=alt.Color("Curva:N", legend=alt.Legend(orient="bottom", title=None)),
+            tooltip=[
+                alt.Tooltip(f"{eixo}:Q", format=".3f"),
+                alt.Tooltip("H (m):Q", format=".2f"),
+                "Curva:N",
+            ],
+        )
+    )
+    camadas = curvas
+    if altura is not None:
+        ponto = pd.DataFrame([{eixo: resposta.valor / fator, "H (m)": altura}])
+        camadas = curvas + alt.Chart(ponto).mark_point(
+            size=120, filled=True, color="#172033"
+        ).encode(x=f"{eixo}:Q", y="H (m):Q")
+        st.caption(
+            f"A bomba entrega {_com_unidade(resposta.valor, g.VAZAO_Q, u)} com "
+            f"{_numero(altura)} m de altura."
+        )
+    st.altair_chart(camadas.properties(height=300, autosize=SO_NA_LARGURA), width="stretch")
 
 
 def _quadro(resposta: mt.Resposta, u: Unidades) -> None:
@@ -1783,6 +2109,119 @@ def _busca_em_faixas(
             )
 
 
+def _ao_usar_do_catalogo(
+    p: Parte, campo: str, pecas: Mapping[str, cat.Peca], alvo: str | None
+) -> None:
+    estado = st.session_state
+    peca = pecas.get(estado.get(campo) or "")
+    if peca is None:
+        return
+    for chave, valor in peca.valores:
+        if chave == alvo:
+            estado[p.k("adotado")] = valor
+        else:
+            estado[p.k("valores")][chave] = valor
+            estado[p.k("origens")][chave] = f"Catálogo: {peca.nome}"
+    estado[p.k("revisao")] += 1
+
+
+def _quadro_do_catalogo(escolha: cat.Escolha) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Peça": linha.peca.nome,
+                "Massa (kg/m)": linha.peca.massa,
+                "Uso (%)": round(linha.uso * 100.0, 1),
+                "Manda": linha.manda,
+                "Situação": "Passa" if linha.passa else "Não passa",
+            }
+            for linha in escolha.linhas[:_LINHAS_DO_CATALOGO]
+        ]
+    )
+
+
+def _escolher_do_catalogo(p: Parte, montagem: mt.Montagem, alvo: str | None) -> None:
+    fontes = cat.fontes(montagem)
+    if not fontes:
+        return
+    estado = st.session_state
+    ligada = st.toggle(
+        "Escolher do catálogo",
+        key=p.k("catalogo_ligado"),
+        help="Testa cada perfil, barra ou tubo comercial e diz o mais leve que passa.",
+    )
+    if not ligada:
+        return
+    por_no = {f.no: f for f in fontes}
+    no_escolhido = p.k("catalogo_no")
+    if estado.get(no_escolhido) not in por_no:
+        estado[no_escolhido] = fontes[0].no
+    if len(fontes) > 1:
+        st.selectbox(
+            "Qual bloco",
+            list(por_no),
+            key=no_escolhido,
+            format_func=lambda id_: f"{por_no[id_].rotulo} ({id_})",
+            help="O bloco cuja medida vem do catálogo.",
+        )
+    fonte = por_no[estado[no_escolhido]]
+    campo_familias = p.k(f"catalogo_familias_{fonte.no}")
+    if campo_familias not in estado:
+        estado[campo_familias] = list(fonte.familias)
+    familias = fonte.familias
+    if len(familias) > 1:
+        familias = tuple(
+            st.multiselect(
+                "Famílias",
+                list(fonte.familias),
+                key=campo_familias,
+                help="Tire as famílias que não servem para esta obra.",
+            )
+        )
+    try:
+        escolha = cat.testar(montagem, fonte, estado[p.k("valores")], familias)
+    except cat.ErroDoCatalogo as erro:
+        st.info(str(erro), icon=":material/info:")
+        return
+    st.caption(f"Testou {escolha.testadas} peças, e {escolha.aprovadas} passaram.")
+    melhor = escolha.melhor
+    if melhor is None:
+        pior = escolha.linhas[0]
+        st.warning(
+            f"Nenhuma peça passa. A que chega mais perto é {pior.peca.nome}, com uso de "
+            f"{_numero(pior.uso * 100.0)} %.",
+            icon=":material/warning:",
+        )
+    else:
+        peso = f" Pesa {_numero(melhor.peca.massa)} kg/m." if melhor.peca.massa else ""
+        st.success(
+            f"**A mais leve que passa: {melhor.peca.nome}**. Uso de "
+            f"{_numero(melhor.uso * 100.0)} %, e manda {melhor.manda}.{peso}",
+            icon=":material/check_circle:",
+        )
+    st.dataframe(_quadro_do_catalogo(escolha), hide_index=True, width="stretch")
+    boas = {linha.peca.nome: linha.peca for linha in escolha.linhas if linha.passa}
+    if boas:
+        campo = p.k("catalogo_peca")
+        if estado.get(campo) not in boas:
+            estado[campo] = next(iter(boas))
+        esquerda, direita = st.columns([3, 1], vertical_alignment="bottom")
+        esquerda.selectbox(
+            "Peça para usar",
+            list(boas),
+            key=campo,
+            help="Vem na ordem da mais leve para a mais pesada.",
+        )
+        direita.button(
+            "Usar esta peça",
+            key=p.k("catalogo_usar"),
+            on_click=_ao_usar_do_catalogo,
+            args=(p, campo, boas, alvo),
+            help="Preenche as medidas com as da peça. Voltar desfaz.",
+            width="stretch",
+        )
+
+
 def _passo_a_passo(resposta: mt.Resposta) -> None:
     letra = _letra(resposta.alvo)
     for item in resposta.isoladas:
@@ -1855,12 +2294,72 @@ def _ao_abrir_do_projeto(p: Parte, campo: str) -> None:
     _abrir_documento(p, doc)
 
 
+def _documentos(
+    p: Parte,
+    titulo: str,
+    dados: Mapping[str, Any],
+    resposta: mt.Resposta,
+    u: Unidades,
+    faces: Mapping[str, Mapping[str, str]],
+    hipoteses: Sequence[str],
+) -> None:
+    """O Word e o Excel só são gerados no clique, como nas outras páginas."""
+    estado = st.session_state
+    valores = dict(estado[p.k("valores")])
+    origens = dict(estado[p.k("origens")])
+    conta = resposta.montagem
+    if conta is None or resposta.valor is None or resposta.faltam:
+        st.caption("Com todos os valores preenchidos, dá para baixar em Word e em Excel.")
+        return
+
+    def word() -> bytes:
+        return mw.gerar_word(
+            titulo,
+            dados,
+            resposta,
+            u,
+            valores,
+            origens,
+            faces,
+            rg.texto_da_resposta(resposta, u),
+            hipoteses,
+            projeto_ativo_persistente(),
+        )
+
+    def excel() -> bytes:
+        return mp.gerar_planilha(titulo, conta, resposta, u, origens)
+
+    st.download_button(
+        "Baixar em Word",
+        data=word,
+        file_name="montagem.docx",
+        mime=_MIME_WORD,
+        on_click="ignore",
+        icon=":material/description:",
+        key=p.k("baixar_word"),
+        help="Os blocos, os dados, as fórmulas, o resultado e o que não passou.",
+    )
+    st.download_button(
+        "Baixar em Excel",
+        data=excel,
+        file_name="montagem.xlsx",
+        mime=_MIME_EXCEL,
+        on_click="ignore",
+        icon=":material/table_chart:",
+        key=p.k("baixar_excel"),
+        help="A planilha tem fórmulas vivas: mudou um dado, a conta acompanha.",
+    )
+
+
 def _salvar_e_abrir(
     p: Parte,
     doc: Mapping[str, Any],
     base: mt.Montagem,
     resposta: mt.Resposta | None,
     u: Unidades,
+    dados: Mapping[str, Any],
+    faces: Mapping[str, Mapping[str, str]],
+    hipoteses: Sequence[str],
 ) -> None:
     estado = st.session_state
     st.caption(armazenamento.frase_de_persistencia())
@@ -1870,9 +2369,10 @@ def _salvar_e_abrir(
     esquerda, direita = st.columns(2, gap="large")
     with esquerda:
         st.markdown("**Registrar no projeto**")
+        if not estado.get(p.k("titulo")):
+            estado[p.k("titulo")] = estado.get(p.k("modelo_atual")) or p.titulo
         titulo = st.text_input(
             "Título do cálculo",
-            value=estado.get(p.k("modelo_atual")) or p.titulo,
             key=p.k("titulo"),
             help="O nome que aparece no memorial e na lista de registros.",
         )
@@ -1923,6 +2423,8 @@ def _salvar_e_abrir(
             key=p.k("baixar"),
             help="Um arquivo com os blocos e os valores, para guardar fora do programa.",
         )
+        if resposta is not None:
+            _documentos(p, titulo, dados, resposta, u, faces, hipoteses)
         campo = f"{p.prefixo}_arquivo_{estado[p.k('revisao')]}"
         st.file_uploader(
             "Abrir arquivo de montagem",
@@ -1975,7 +2477,16 @@ def tela_do_montador(p: Parte) -> None:
     for diagnostico in diagnosticos:
         if diagnostico.situacao != rg.EM_DIA:
             erros[diagnostico.no] = diagnostico.mensagem
-    faces, luzes = _faces(grafo, dados, base, resposta, estado[p.k("valores")], alvo, u)
+    faces, luzes = _faces(
+        grafo,
+        dados,
+        base,
+        resposta,
+        estado[p.k("valores")],
+        alvo,
+        u,
+        _numeros_da_conta(p, resposta),
+    )
     marcas = {
         "erros": erros,
         "faces": faces,
@@ -2039,8 +2550,10 @@ def tela_do_montador(p: Parte) -> None:
         st.caption("Materiais do cadastro que servem: " + "; ".join(resposta.materiais) + ".")
     _titulo_da_pagina("Condições")
     _quadro(resposta, u)
-    _busca_em_faixas(p, base, alvo, resposta, u)
     valores = {k: v for k, v in estado[p.k("valores")].items() if v is not None}
+    _grafico_da_bomba(resposta, valores, u)
+    _busca_em_faixas(p, base, alvo, resposta, u)
+    _escolher_do_catalogo(p, base, alvo)
     if resposta.valor is not None and resposta.sentido != mt.IGUAL:
         _titulo_da_pagina("Em volta da resposta")
         _grafico_de_uso(resposta, valores, u)
@@ -2049,8 +2562,6 @@ def tela_do_montador(p: Parte) -> None:
         _passo_a_passo(resposta)
     with st.expander("De onde veio cada valor", icon=":material/account_tree:"):
         _de_onde_veio(p, base, u)
-    with st.expander("Salvar, abrir e registrar", icon=":material/save:"):
-        _salvar_e_abrir(p, doc, base, resposta, u)
     hipoteses = [
         "Pré-dimensionamento: não substitui a verificação por norma.",
         *base.hipoteses,
@@ -2067,4 +2578,6 @@ def tela_do_montador(p: Parte) -> None:
             "Escoamento permanente e incompressível, com a linha em série e a mesma vazão em todos "
             "os trechos. Propriedades dos fluidos e rugosidades são valores típicos de tabela.",
         )
+    with st.expander("Salvar, abrir e registrar", icon=":material/save:"):
+        _salvar_e_abrir(p, doc, base, resposta, u, dados, faces, hipoteses)
     fronteira_modelo(hipoteses, titulo="Hipóteses desta conta")

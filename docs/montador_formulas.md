@@ -123,6 +123,62 @@ e não pelo nome. Se o registro mudar, a Central marca o cálculo como desatuali
 valor velho e o novo; quem atualiza é o usuário, porque a troca muda a conta. Registro apagado ou de
 outra grandeza também aparece no bloco, com a mensagem de cada caso. O que vem de fora nunca muda sozinho.
 
+## Fórmula própria
+
+O bloco **Fórmula própria** recebe uma conta digitada no inspetor. Há três formas:
+
+- `q*L^2/8` entrega um valor por uma bolinha, para ligar em outro bloco.
+- `M = q*L^2/8` entrega o mesmo valor, com nome, e também uma equação para o bloco Em função de.
+- `M*c/I <= S_y/n` é uma condição, como a de um critério.
+
+Cada letra vira uma bolinha de entrada, e quem não está ligado vira campo de valor. Letra igual à do
+programa (S_y, M_x, n, d) usa o mesmo valor e a mesma unidade dos outros blocos. Letra nova recebe uma
+sugestão pelo costume (M é momento, I é inércia, c é medida), e o inspetor deixa trocar. Com isso a
+página confere a unidade: as parcelas somadas e os dois lados do sinal precisam bater, e o resultado sai
+na grandeza que a conta der. Função só recebe número puro.
+
+O texto vem de quem digita e vai para arquivos que circulam, então não vira código: o leitor é próprio,
+sem `eval` nem `sympify`, e só conhece números, letras, `+ − * / ^`, parênteses, `sqrt`, `sin`,
+`cos`, `tan`, `exp`, `ln`, `log10` e `abs`. O resto é recusado dizendo onde parou, como `2q` (falta
+o sinal de vezes) ou `log` (que pede `ln` ou `log10`). Fórmula guardada num conjunto vai junto para a
+biblioteca.
+
+## Escolher do catálogo
+
+O interruptor abaixo das condições testa as peças que existem para comprar, em vez de uma faixa de
+números: perfil I (W, HP e I), tubo circular, barra redonda e barra chata na parte de materiais, e os
+tubos comerciais na de fluidos. Cada peça troca as letras do bloco dela, e a lista volta da mais leve
+para a mais pesada (ou do menor diâmetro, nos tubos), com o uso e quem manda. "Usar esta peça"
+preenche as medidas, e a letra pedida vira o valor adotado.
+
+Perfil I entra pelas quatro medidas, sem os raios de concordância: a inércia fica um pouco abaixo da
+real, a favor da segurança. Com equação na montagem, cada peça dá um resultado diferente, e o catálogo
+pede para escolher a peça no bloco.
+
+## Fadiga completa
+
+Três blocos fazem a fadiga de eixo com as mesmas contas do Assistente de cargas
+(`core/elementos_eixos.py` e `core/fatigue.py`), e há caso de aceite que confere os dois caminhos:
+
+- **Limite de fadiga:** S_e = k_a·k_b·k_c·k_d·k_e·k_div·S_e', com acabamento, fator de tamanho pelo
+  diâmetro (ou informado), carregamento e confiabilidade. Com d em aberto, k_b acompanha a resposta.
+- **Entalhe:** K_f e K_fs do ressalto (curvas de Peterson e Neuber), da chaveta, do canal de anel, do
+  furo e do cubo prensado. Sem raio definido, q fica em 1, a favor da segurança.
+- **Fadiga de eixo:** DE-Goodman, DE-Gerber, DE-Soderberg ou DE-ASME elíptico, com vida infinita ou
+  finita em N_c ciclos (S_f na reta log-log de 0,9·S_ut em 10³ a S_e em 10⁶). Com o material ligado,
+  confere também o escoamento no primeiro ciclo.
+
+## Word e Excel
+
+Na aba "Salvar, abrir e registrar", com a conta completa, saem dois arquivos:
+
+- **Word:** resultado, o desenho dos blocos, os dados com a origem de cada valor, as condições, o
+  passo a passo, as hipóteses e o que não passou. As fórmulas vão como equação do próprio Word, que dá
+  para editar.
+- **Excel:** cada letra numa célula com nome (`v_S_y`), e cada condição com as duas fórmulas e o uso.
+  Mudou um dado, a conta acompanha. O fator de atrito vai por Swamee-Jain, a cerca de 1 % de
+  Colebrook, e a planilha avisa; o K_t de ressalto fica com o número do programa.
+
 ## Como acrescentar uma equação
 
 Basta um `Bloco` em `BLOCOS`, em `core/montador_blocos.py`: a prancheta, os campos e a conta leem dali.
@@ -150,6 +206,7 @@ pontos dela. O teste `test_todo_bloco_tem_o_que_a_tela_precisa` confere o catál
 - Na torção de perfil I vale Saint-Venant, sem empenamento impedido.
 - Euler só vale para coluna esbelta; a coluna curta recebe aviso, sem a fórmula de Johnson.
 - Os números da fórmula parcial estão na base: forças em N, medidas em mm, tensões em MPa.
-- DE-Goodman é fadiga simplificada: não substitui a página Análise de fadiga.
+- A fadiga é de eixo, com as fórmulas de Shigley: peça soldada, carga variável com espectro e dano
+  acumulado pedem a Análise de fadiga.
 - As unidades da tela valem dentro do Montador. Os envios entre páginas seguem copiando valores: só o
   bloco Cálculo registrado acompanha o registro.

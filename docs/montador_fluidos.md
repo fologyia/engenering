@@ -30,6 +30,37 @@ para digitar por cima.
 - **Equações:** pressão na profundidade, força em superfície plana, empuxo, arrasto, orifício ou
   venturi, canal (Manning) e golpe de aríete.
 
+## Bomba, peças e tubos comerciais
+
+- **Curva da bomba:** acha o ponto de operação, onde a curva da bomba cruza a do sistema. A curva é a
+  parábola H = H_0 − a·Q², ajustada pelos pontos do catálogo da bomba digitados no inspetor (dois ou
+  mais). Abaixo da resposta sai o gráfico das duas curvas, com o ponto marcado.
+- **Peças:** no inspetor das perdas localizadas, a tabela soma o K das curvas, tês, registros,
+  válvulas, entrada e saída. São valores típicos de peça aberta: variam com o diâmetro e o fabricante.
+- **Tubo comercial:** no trecho, preenche D com o diâmetro interno do aço Sch 40 (ASME B36.10M) ou do
+  PVC soldável (ficha técnica da linha soldável, NBR 5648). Tubo de PVC com rugosidade de aço recebe
+  aviso. "Escolher do catálogo" testa todos e devolve o menor que passa.
+
+## Exemplos conferidos
+
+A Central de validação refaz estes exemplos com os blocos, a cada abertura:
+
+| Exemplo | Fonte | Resultado |
+|---|---|---|
+| Perda num tubo de 0,5 m, Q = 0,416 m³/s | Maurer, exemplo 4.1 | h_f = 0,61 m |
+| Vazão com h_f = 0,6 m | Maurer, seção 4.5.2 | Q = 0,413 m³/s |
+| Diâmetro com Q e h_f | Maurer, seção 4.6.2 | D = 0,501 m |
+| Ponto de operação da bomba | Maurer, exemplos 7.1 a 7.3 | Q = 12,05 pés³/s, H = 53,3 pés |
+| Lâmina num canal retangular | Maurer, exemplo 5.10 | y = 0,498 m e 1,180 m |
+| Força na comporta, 6 m de água | Maurer, exemplo 3.3 | F_h = 176.268 N |
+| NPSH disponível | Omni Calculator | 7,41 m |
+| Golpe de aríete | Joukowsky | 2,4 MPa |
+
+O livro aberto de Maurer (Hydraulics and Water Resources: Examples Using R) congela o atrito na curva do
+sistema do exemplo da bomba. O caso de aceite faz o mesmo; na prancheta, Colebrook é refeito a cada
+vazão, e a vazão sai cerca de 6 % maior. As propriedades da água foram conferidas em duas tabelas
+(saturação pela IAPWS) e as rugosidades na tabela de Moody.
+
 ## Como acrescentar uma equação
 
 Basta um `Bloco` em `core/montador_fluidos.py`, com `dominio=mb.FLUIDOS`. Letra nova vai em

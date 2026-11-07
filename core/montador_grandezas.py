@@ -38,6 +38,65 @@ RUGOSIDADE = "rugosidade"
 AREA = "area"
 VOLUME = "volume"
 ACELERACAO = "aceleracao"
+INERCIA = "inercia"
+CURVA_BOMBA = "curva_bomba"  # a da parábola H = H_0 − a·Q²
+
+#: Potências de força, comprimento e tempo de cada dimensão. Como cada sistema fecha sozinho na base,
+#: é por aqui que se confere se uma fórmula tem os dois lados na mesma unidade.
+EXPOENTES: dict[str, tuple[int, int, int]] = {
+    MEDIDA: (0, 1, 0),
+    COMPRIMENTO: (0, 1, 0),
+    FORCA: (1, 0, 0),
+    MOMENTO: (1, 1, 0),
+    DISTRIBUIDA: (1, -1, 0),
+    TENSAO: (1, -2, 0),
+    MODULO: (1, -2, 0),
+    POTENCIA: (1, 1, -1),
+    ROTACAO: (0, 0, -1),
+    ANGULO: (0, 0, 0),
+    PURO: (0, 0, 0),
+    FLECHA_EI: (1, 3, 0),
+    DIAMETRO: (0, 1, 0),
+    VAZAO: (0, 3, -1),
+    VELOCIDADE: (0, 1, -1),
+    PRESSAO: (1, -2, 0),
+    ALTURA: (0, 1, 0),
+    MASSA_ESPECIFICA: (1, -4, 2),
+    VISCOSIDADE: (1, -2, 1),
+    RUGOSIDADE: (0, 1, 0),
+    AREA: (0, 2, 0),
+    VOLUME: (0, 3, 0),
+    ACELERACAO: (0, 1, -2),
+    INERCIA: (0, 4, 0),
+    CURVA_BOMBA: (0, -5, 2),
+}
+ROTULOS_DAS_DIMENSOES = {
+    PURO: "Número puro",
+    MEDIDA: "Medida da seção",
+    COMPRIMENTO: "Comprimento",
+    FORCA: "Força",
+    MOMENTO: "Momento",
+    DISTRIBUIDA: "Carga distribuída",
+    TENSAO: "Tensão",
+    MODULO: "Módulo do material",
+    POTENCIA: "Potência",
+    ROTACAO: "Rotação",
+    ANGULO: "Ângulo",
+    FLECHA_EI: "Flecha vezes E·I",
+    DIAMETRO: "Diâmetro",
+    VAZAO: "Vazão",
+    VELOCIDADE: "Velocidade",
+    PRESSAO: "Pressão",
+    ALTURA: "Altura",
+    MASSA_ESPECIFICA: "Massa específica",
+    VISCOSIDADE: "Viscosidade",
+    RUGOSIDADE: "Rugosidade",
+    AREA: "Área",
+    VOLUME: "Volume",
+    ACELERACAO: "Aceleração",
+    INERCIA: "Momento de inércia",
+    CURVA_BOMBA: "Queda da curva da bomba",
+}
 
 MEDIDAS = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 FORCAS = {"N": 1.0, "kN": 1000.0}
@@ -62,6 +121,7 @@ class Sistema:
     fixas: Mapping[str, tuple[str, float]]
     derivadas: Mapping[str, Callable[[Unidades], tuple[str, float]]]
     aviso_da_base: str
+    dimensoes: tuple[str, ...] = ()  # o que uma letra nova pode ser, nesta ordem
 
 
 @dataclass(frozen=True, eq=False)
@@ -139,9 +199,29 @@ SISTEMA_SOLIDOS = Sistema(
         ROTACAO: ("rpm", 1.0),
         ANGULO: ("°", math.pi / 180.0),
         PURO: ("", 1.0),
+        AREA: ("mm²", 1.0),
+        VOLUME: ("mm³", 1.0),
+        INERCIA: ("mm⁴", 1.0),
     },
     {DISTRIBUIDA: _distribuida, FLECHA_EI: _flecha_ei},
     "Com números, a fórmula está na base: forças em N, medidas em mm, tensões em MPa.",
+    (
+        PURO,
+        MEDIDA,
+        COMPRIMENTO,
+        FORCA,
+        MOMENTO,
+        DISTRIBUIDA,
+        TENSAO,
+        MODULO,
+        POTENCIA,
+        ROTACAO,
+        ANGULO,
+        AREA,
+        VOLUME,
+        INERCIA,
+        FLECHA_EI,
+    ),
 )
 
 SISTEMA_FLUIDOS = Sistema(
@@ -194,9 +274,28 @@ SISTEMA_FLUIDOS = Sistema(
         ACELERACAO: ("m/s²", 1.0),
         FORCA: ("N", 1.0),
         PURO: ("", 1.0),
+        CURVA_BOMBA: ("m/(m³/h)²", 3600.0**2),
     },
     {},
     "Com números, a fórmula está no SI: metros, segundos, quilogramas, pascals e watts.",
+    (
+        PURO,
+        ALTURA,
+        DIAMETRO,
+        COMPRIMENTO,
+        RUGOSIDADE,
+        FORCA,
+        VAZAO,
+        VELOCIDADE,
+        PRESSAO,
+        POTENCIA,
+        MASSA_ESPECIFICA,
+        VISCOSIDADE,
+        AREA,
+        VOLUME,
+        ACELERACAO,
+        CURVA_BOMBA,
+    ),
 )
 
 
@@ -212,6 +311,8 @@ class Grandeza:
     padrao: float | None = None  # na base do sistema
     zero_ok: bool = False  # esforço pode ser zero; medida e limite, não
     maximo: float | None = None  # valor que não pode ser alcançado, como k = 1
+    minimo: float | None = None  # o menor valor que faz sentido, como K_t = 1
+    teto: float | None = None  # o maior valor que faz sentido, como q = 1
 
     @property
     def simbolo(self) -> sp.Symbol:
@@ -242,6 +343,12 @@ class Grandeza:
         if self.maximo is not None and valor >= self.maximo:
             limite = f"{self.maximo:g}".replace(".", ",")
             return f"{self.texto} precisa ficar abaixo de {limite}."
+        if self.minimo is not None and valor < self.minimo:
+            limite = f"{self.minimo:g}".replace(".", ",")
+            return f"{self.texto} precisa ser pelo menos {limite}."
+        if self.teto is not None and valor > self.teto:
+            limite = f"{self.teto:g}".replace(".", ",")
+            return f"{self.texto} vai no máximo até {limite}."
         return None
 
 
@@ -329,10 +436,20 @@ G = _g(
 FS = _g("n", "n", "Fator de segurança", PURO, "Quantas vezes a falha fica acima da carga.", 1.5)
 
 # Coeficientes
-KT = _g("K_t", "K_t", "Concentração de tensão normal", PURO, "1 é sem concentração.", 1.0)
-KTS = _g("K_ts", "K_ts", "Concentração de cisalhamento", PURO, "1 é sem concentração.", 1.0)
-KF = _g("K_f", "K_f", "Fator de fadiga na flexão", PURO, "1 é sem entalhe.", 1.0)
-KFS = _g("K_fs", "K_fs", "Fator de fadiga na torção", PURO, "1 é sem entalhe.", 1.0)
+KT = replace(
+    _g("K_t", "K_t", "Concentração de tensão normal", PURO, "1 é sem concentração.", 1.0),
+    minimo=1.0,
+)
+KTS = replace(
+    _g("K_ts", "K_ts", "Concentração de cisalhamento", PURO, "1 é sem concentração.", 1.0),
+    minimo=1.0,
+)
+KF = replace(
+    _g("K_f", "K_f", "Fator de fadiga na flexão", PURO, "1 é sem entalhe.", 1.0), minimo=1.0
+)
+KFS = replace(
+    _g("K_fs", "K_fs", "Fator de fadiga na torção", PURO, "1 é sem entalhe.", 1.0), minimo=1.0
+)
 K_FLAMB = _g(
     "K",
     "K",
@@ -347,6 +464,40 @@ MA = _esforco("M_a", "M_a", "Momento alternado", MOMENTO, "Metade da variação 
 MM = _esforco("M_m", "M_m", "Momento médio", MOMENTO, "A média do momento no ciclo.")
 TA = _esforco("T_a", "T_a", "Torque alternado", MOMENTO, "Metade da variação do torque.")
 TM = _esforco("T_m", "T_m", "Torque médio", MOMENTO, "A média do torque no ciclo.")
+K_TAMANHO = _g(
+    "k_b", "k_b", "Fator de tamanho", PURO, "De Marin. Peça de 50 mm: cerca de 0,81.", 0.85
+)
+K_TEMPERATURA = _g("k_d", "k_d", "Fator de temperatura", PURO, "1 até cerca de 300 °C.", 1.0)
+K_CONFIANCA = _g("k_e", "k_e", "Fator de confiabilidade", PURO, "1 é 50 %. 0,814 é 99 %.", 1.0)
+K_DIVERSOS = _g(
+    "k_div",
+    "k_div",
+    "Fator de efeitos diversos",
+    PURO,
+    "Corrosão, revestimento, solda. 1 quando não há nada disso.",
+    1.0,
+)
+N_CICLOS = replace(
+    _g(
+        "N_c",
+        "N_c",
+        "Vida pedida",
+        PURO,
+        "Ciclos até a falha, de mil a um milhão. Acima disso é vida infinita.",
+        1e6,
+    ),
+    minimo=1e3,
+)
+D_MAIOR = _g("D_r", "D_r", "Diâmetro maior do ressalto", MEDIDA, "O lado grosso do ressalto.")
+R_ENTALHE = _g("r_e", "r_e", "Raio de concordância", MEDIDA, "O raio do canto do ressalto.")
+Q_NORMAL = replace(
+    _g("q_e", "q_e", "Sensibilidade na flexão", PURO, "De 0 a 1. Na dúvida, 1 a favor.", 1.0),
+    teto=1.0,
+)
+Q_CORTE = replace(
+    _g("q_es", "q_es", "Sensibilidade na torção", PURO, "De 0 a 1. Na dúvida, 1 a favor.", 1.0),
+    teto=1.0,
+)
 
 # Limites de deformação
 RELACAO_FLECHA = _g(
@@ -455,3 +606,32 @@ DELTA_V = _g(
 P_GOLPE = _g(
     "Delta_p_g", "Δp_g", "Sobrepressão do golpe", PRESSAO, "Pressão extra no fechamento rápido."
 )
+H_ZERO = _g("H_0", "H_0", "Altura com vazão zero", ALTURA, "O começo da curva da bomba.")
+A_BOMBA = _esforco(
+    "a_b",
+    "a_b",
+    "Queda da curva da bomba",
+    CURVA_BOMBA,
+    "O a de H = H_0 − a·Q². Os pontos do catálogo da bomba dão este valor sozinhos.",
+)
+
+_TODAS: tuple[Grandeza, ...] = tuple(
+    v for v in tuple(globals().values()) if isinstance(v, Grandeza)
+)
+_INICIO_DE_FLUIDOS = _TODAS.index(RHO)
+#: A mesma letra muda de sentido entre as partes: h é a altura da seção, ou a profundidade.
+_LETRAS = {
+    SISTEMA_SOLIDOS.chave: _TODAS[:_INICIO_DE_FLUIDOS],
+    SISTEMA_FLUIDOS.chave: _TODAS[_INICIO_DE_FLUIDOS:],
+}
+_SISTEMAS = {SISTEMA_SOLIDOS.chave: SISTEMA_SOLIDOS, SISTEMA_FLUIDOS.chave: SISTEMA_FLUIDOS}
+
+
+def letras_conhecidas(sistema: str) -> dict[str, Grandeza]:
+    """As letras do programa nesta parte, pelo nome do símbolo."""
+    return {item.chave: item for item in _LETRAS.get(sistema, ())}
+
+
+def dimensoes_do_sistema(sistema: str) -> tuple[str, ...]:
+    item = _SISTEMAS.get(sistema)
+    return item.dimensoes if item is not None else (PURO,)

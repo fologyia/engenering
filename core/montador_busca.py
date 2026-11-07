@@ -183,6 +183,18 @@ def _avaliar(
     return usos, valido, area
 
 
+def usos_nos_pontos(
+    montagem: Montagem,
+    chaves: Sequence[str],
+    fixos: tuple[tuple[str, float], ...],
+    pontos: Sequence[np.ndarray],
+) -> tuple[tuple[str, ...], np.ndarray, np.ndarray]:
+    """Para quem já tem a lista do que testar: os nomes, os usos e quem é válido."""
+    conta = _preparar(montagem, tuple(chaves), fixos)
+    usos, valido, _ = _avaliar(conta, pontos)
+    return conta.nomes, usos, valido
+
+
 def _nota(
     objetivo: Objetivo,
     chaves: Sequence[str],

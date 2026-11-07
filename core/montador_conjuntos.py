@@ -51,8 +51,8 @@ def portas_do_no(no: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[dict
     bloco = mb.POR_CHAVE.get(str(no.get("tipo")))
     if bloco is None:
         return [], []
-    entradas = [mb.porta_para_tela(p) for p in bloco.entradas]
-    saidas = [mb.porta_para_tela(p) for p in bloco.saidas]
+    na_tela = mb.portas_para_a_tela(bloco.chave, no.get("opcoes") or {})
+    entradas, saidas = na_tela["entradas"], na_tela["saidas"]
     if bloco.chave == mb.REFERENCIA:
         dimensao = (no.get("opcoes") or {}).get("dimensao")
         saidas = [{**p, "dimensao": dimensao} for p in saidas]
@@ -121,6 +121,24 @@ def fio_existe(dados: dict[str, Any], fio: Mapping[str, Any], caminho: Sequence[
     except ErroDeConjunto:
         return False
     return any(_mesmo_fio(f, fio) for f in atual["fios"])
+
+
+def tirar_fios_soltos(dados: Mapping[str, Any], caminho: Sequence[str] = ()) -> dict[str, Any]:
+    """Tira os fios cuja bolinha sumiu: mudar a fórmula pode tirar uma letra."""
+    novo = deepcopy(dict(dados))
+    atual = nivel(novo, caminho)
+    portas = {str(n.get("id")): portas_do_no(n) for n in atual["nos"]}
+
+    def vale(fio: Mapping[str, Any]) -> bool:
+        de, para = portas.get(str(fio.get("de"))), portas.get(str(fio.get("para")))
+        if de is None or para is None:
+            return False
+        return any(p["chave"] == fio.get("saida") for p in de[1]) and any(
+            p["chave"] == fio.get("entrada") for p in para[0]
+        )
+
+    atual["fios"] = [f for f in atual["fios"] if vale(f)]
+    return novo
 
 
 def conferir_fio(

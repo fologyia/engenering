@@ -221,37 +221,11 @@ def test_eixo_girando_sem_esforco_explica():
 # Unidades coerentes
 # ---------------------------------------------------------------------------
 
-EXPOENTES = {  # força, comprimento e tempo
-    g.MEDIDA: (0, 1, 0),
-    g.COMPRIMENTO: (0, 1, 0),
-    g.FORCA: (1, 0, 0),
-    g.MOMENTO: (1, 1, 0),
-    g.DISTRIBUIDA: (1, -1, 0),
-    g.TENSAO: (1, -2, 0),
-    g.MODULO: (1, -2, 0),
-    g.POTENCIA: (1, 1, -1),
-    g.ROTACAO: (0, 0, -1),
-    g.ANGULO: (0, 0, 0),
-    g.PURO: (0, 0, 0),
-    g.FLECHA_EI: (1, 3, 0),
-    g.DIAMETRO: (0, 1, 0),
-    g.VAZAO: (0, 3, -1),
-    g.VELOCIDADE: (0, 1, -1),
-    g.PRESSAO: (1, -2, 0),
-    g.ALTURA: (0, 1, 0),
-    g.MASSA_ESPECIFICA: (1, -4, 2),
-    g.VISCOSIDADE: (1, -2, 1),
-    g.RUGOSIDADE: (0, 1, 0),
-    g.AREA: (0, 2, 0),
-    g.VOLUME: (0, 3, 0),
-    g.ACELERACAO: (0, 1, -2),
-}
-
 
 def _escala(item: g.Grandeza, f: float, l_: float, t: float) -> float:
     if item.chave == g.MANNING.chave:
         return t * l_ ** (-1.0 / 3.0)  # n de Manning não é adimensional: s/m^(1/3)
-    a, b, c = EXPOENTES[item.dimensao]
+    a, b, c = g.EXPOENTES[item.dimensao]
     return f**a * l_**b * t**c
 
 

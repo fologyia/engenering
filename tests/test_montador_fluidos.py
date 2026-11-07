@@ -150,8 +150,8 @@ def test_dois_trechos_em_serie_tem_letras_proprias_e_a_mesma_vazao():
 def test_fluido_da_tabela_preenche_as_propriedades():
     m = montar(("fluido", {"fluido": "Água a 60 °C"}), "trecho", "carga", mb.RESULTADO)
     padroes = dict(m.padroes)
-    assert padroes["rho"] == pytest.approx(983.3)
-    assert padroes["mu"] == pytest.approx(4.67e-4)
+    assert padroes["rho"] == pytest.approx(983.2)
+    assert padroes["mu"] == pytest.approx(4.66e-4)
     assert dict(m.origens)["rho"] == "Tabela: Água a 60 °C"
 
 

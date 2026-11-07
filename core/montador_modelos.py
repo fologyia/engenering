@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from core import elementos_eixos as ee
 from core import montador_blocos as mb
 from core import montador_conjuntos as mc
 from core import montador_grandezas as g
@@ -40,8 +41,8 @@ def _fila(*tipos: str) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     ]
     fios = []
     for a, b in zip(nos, nos[1:], strict=False):
-        saida = mb.POR_CHAVE[a["tipo"]].saidas[0]
-        entrada = mb.POR_CHAVE[b["tipo"]].entradas[0]
+        saida = mb.portas_de(a["tipo"], {})[1][0]
+        entrada = mb.portas_de(b["tipo"], {})[0][0]
         fios.append(_fio(a["id"], saida.chave, b["id"], entrada.chave))
     return nos, fios
 
@@ -65,6 +66,8 @@ class Modelo:
         fios += [_fio(*fio) for fio in self.fios]
         for no in nos:
             no["opcoes"] = dict(self.opcoes.get(no["id"], {}))
+            if no["tipo"] == mb.FORMULA:
+                no["portas"] = mb.portas_para_a_tela(mb.FORMULA, no["opcoes"])
         organizar(nos, fios)
         dados = {"nos": nos, "fios": fios}
         if self.conjunto is not None:
@@ -75,6 +78,7 @@ class Modelo:
 
 
 _R = mb.RESULTADO
+_DICA_DA_FORMULA = "Digite a conta no inspetor: as letras viram bolinhas e a unidade é conferida."
 
 MODELOS: tuple[Modelo, ...] = (
     Modelo(
@@ -221,9 +225,49 @@ MODELOS: tuple[Modelo, ...] = (
         {"d": 100.0, "t": 2.0, "S_y": 250.0, "n": 2.0},
         ("tubo_parede", "pressao_interna", "von_mises", _R),
     ),
+    Modelo(
+        "Eixo em fadiga, com Marin e entalhe",
+        "S_e pelos fatores de Marin, K_f do ressalto e o escoamento no primeiro ciclo.",
+        "d",
+        {
+            "M_x": 2e5,
+            "T": 1.5e5,
+            "S_y": 420.0,
+            "S_ut": 690.0,
+            "D_r": 60.0,
+            "r_e": 3.0,
+            "n": 2.0,
+        },
+        ("circular", "flexao", "torcao", "goodman", _R),
+        (("m1", "material"), ("m2", "limite_fadiga"), ("m3", "entalhe")),
+        (
+            ("m1", "saida", "n4", "material"),
+            ("m1", "saida", "m2", "material"),
+            ("m1", "saida", "m3", "material"),
+            ("m2", "se", "n4", "se"),
+            ("m3", "kf", "n4", "kf"),
+            ("m3", "kfs", "n4", "kfs"),
+        ),
+        {
+            "n4": {"esforcos": mb.EIXO_GIRANDO},
+            "m2": {"confiabilidade": "90 %"},
+            "m3": {"entalhe": ee.ENTALHE_RESSALTO},
+        },
+    ),
+    Modelo(
+        "Fórmula própria",
+        _DICA_DA_FORMULA,
+        "d",
+        {"M_x": 5e5, "S_y": 250.0, "n": 2.0},
+        (_R,),
+        (("n2", mb.FORMULA),),
+        (("n2", "condicao", "n1", "condicoes"),),
+        {"n2": {"texto": "32*M_x/(pi*d^3) <= S_y/n", "sistema": g.SISTEMA_SOLIDOS.chave}},
+    ),
 )
 
 _LINHA = {"D": 0.1, "L": 100.0}
+_BOMBA = {"D": 0.1, "L": 200.0, "K_L": 8.0, "H_est": 15.0, "Delta_p": 0.0}
 MODELOS_FLUIDOS: tuple[Modelo, ...] = (
     Modelo(
         "Vazão num tubo por gravidade",
@@ -238,6 +282,23 @@ MODELOS_FLUIDOS: tuple[Modelo, ...] = (
         "D",
         {"Q": 0.01, "L": 100.0, "K_L": 2.5, "H_d": 2.0},
         ("fluido", "trecho", "perda_local", "carga", _R),
+    ),
+    Modelo(
+        "Fórmula própria",
+        _DICA_DA_FORMULA,
+        "V",
+        {"H_d": 5.0},
+        (_R,),
+        (("n2", mb.FORMULA),),
+        (("n2", "condicao", "n1", "condicoes"),),
+        {"n2": {"texto": "V^2/(2*g) <= H_d", "sistema": g.SISTEMA_FLUIDOS.chave}},
+    ),
+    Modelo(
+        "Ponto de operação da bomba",
+        "Onde a curva da bomba cruza a do sistema: a vazão que a bomba entrega de verdade.",
+        "Q",
+        {**_BOMBA, "H_0": 40.0, "a_b": 400000.0},
+        ("fluido", "trecho", "perda_local", "curva_bomba", _R),
     ),
     Modelo(
         "Potência da bomba",

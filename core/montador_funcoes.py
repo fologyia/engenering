@@ -1,16 +1,25 @@
 """Funções do montador que não têm forma fechada: a letra fica na fórmula, e o número sai daqui.
 
 O fator de atrito é o caso típico: Colebrook é implícita. Na fórmula ele aparece como f(Re, ε/D), e
-a conta numérica resolve por iteração. Quem acrescentar outra função assim registra em ``FUNCOES``,
-para o motor saber calcular com ela em número.
+a conta numérica resolve por iteração. Os fatores de Marin e a sensibilidade ao entalhe vão por trás
+da mesma porta: mudam de fórmula por faixa, e o diâmetro pedido pode estar dentro deles. Quem
+acrescentar outra função assim registra em ``FUNCOES``, para o motor saber calcular com ela em número.
+
+As contas de fadiga são as de ``core/elementos_eixos.py`` e ``core/fatigue.py``, escritas para receber
+vetores: o Assistente de cargas e o Montador têm de dar o mesmo número.
 """
 
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 import sympy as sp
+
+from core import elementos_eixos as ee
+from core import fatigue as ft
 
 RE_LAMINAR = 2300.0
 RE_TURBULENTO = 4000.0
@@ -67,5 +76,136 @@ class AtritoDarcy(sp.Function):
         return f"{texto}^{{{printer.doprint(exp)}}}" if exp is not None else texto
 
 
+def _em_vetor(funcao: Callable[..., float]) -> Callable[..., Any]:
+    """Uma conta de um número passa a aceitar vetores. Valor fora do válido vira nan."""
+
+    def um(*numeros: float) -> float:
+        try:
+            return float(funcao(*numeros))
+        except (ValueError, ZeroDivisionError, OverflowError):
+            return math.nan
+
+    vetorizada = np.vectorize(um, otypes=[float])
+
+    def chamar(*numeros: Any) -> Any:
+        resposta = vetorizada(*numeros)
+        return float(resposta) if np.ndim(resposta) == 0 else resposta
+
+    return chamar
+
+
+#: A posição é o número que entra na fórmula: a sympy só guarda números.
+MATERIAIS_DE_FADIGA = ("aco", "ferro_fundido", "aluminio", "cobre")
+_NOME_EM_FADIGA = {"aco": "aco", "ferro_fundido": "ferro", "aluminio": "aluminio", "cobre": "cobre"}
+
+
+def _limite_base(sut: float, indice: float) -> float:
+    return ft.se_linha(sut, _NOME_EM_FADIGA[MATERIAIS_DE_FADIGA[int(indice)]])[0]
+
+
+def _superficie(sut: float, a: float, b: float) -> float:
+    return min(a * sut**b, 1.0)
+
+
+def _tamanho(d: float) -> float:
+    return ft.fator_tamanho(min(d, 254.0), "flexao", "shigley") if d >= 2.79 else 1.0
+
+
+def _sensibilidade(sut: float, raio: float, torcao: float) -> float:
+    return ee.sensibilidade(sut, raio, "torcao" if torcao else "flexao")
+
+
+def _kt(diametro_maior: float, d: float, raio: float, torcao: float) -> float:
+    if d <= 0.0:
+        return math.nan
+    return ee.kt_ressalto(diametro_maior, d, raio, "torcao" if torcao else "flexao")
+
+
+def _vida(s_1000: float, se: float, ciclos: float) -> float:
+    """S_f(N) da reta log-log entre 10³ e 10⁶ ciclos. Depois de 10⁶ segue caindo: a favor."""
+    return s_1000 * (ciclos / 1e3) ** (math.log10(se / s_1000) / 3.0)
+
+
+limite_base = _em_vetor(_limite_base)
+fator_de_superficie = _em_vetor(_superficie)
+fator_de_tamanho = _em_vetor(_tamanho)
+sensibilidade_neuber = _em_vetor(_sensibilidade)
+kt_do_ressalto = _em_vetor(_kt)
+resistencia_em_vida = _em_vetor(_vida)
+
+
+class _Numerica(sp.Function):
+    """Uma função que a sympy trata como uma letra positiva, com o número vindo de fora."""
+
+    is_real = True
+    is_positive = True
+    funcao: Any = None
+    texto = ""
+
+    def _eval_evalf(self, prec: int) -> sp.Float | None:
+        if all(a.is_number for a in self.args):
+            valor = type(self).funcao(*(float(a) for a in self.args))
+            return sp.Float(float(valor), prec)
+        return None
+
+    def _latex(self, printer: Any, exp: Any = None) -> str:
+        texto = self.texto
+        return f"{texto}^{{{printer.doprint(exp)}}}" if exp is not None else texto
+
+
+class LimiteBase(_Numerica):
+    nargs = 2
+    funcao = staticmethod(limite_base)
+    texto = "S_{e}'"
+
+
+class FatorSuperficie(_Numerica):
+    nargs = 3
+    funcao = staticmethod(fator_de_superficie)
+    texto = "k_{a}"
+
+
+class FatorTamanho(_Numerica):
+    nargs = 1
+    funcao = staticmethod(fator_de_tamanho)
+    texto = "k_{b}"
+
+
+class SensibilidadeNeuber(_Numerica):
+    nargs = 3
+    funcao = staticmethod(sensibilidade_neuber)
+    texto = "q"
+
+
+class KtRessalto(_Numerica):
+    nargs = 4
+    funcao = staticmethod(kt_do_ressalto)
+    texto = "K_{t}"
+
+
+class ResistenciaEmVida(_Numerica):
+    nargs = 3
+    funcao = staticmethod(resistencia_em_vida)
+    texto = "S_{f}"
+
+
+#: Elas não têm forma fechada: simplificar não adianta e custa caro.
+NUMERICAS: tuple[type[sp.Function], ...] = (
+    AtritoDarcy,
+    LimiteBase,
+    FatorSuperficie,
+    FatorTamanho,
+    SensibilidadeNeuber,
+    KtRessalto,
+    ResistenciaEmVida,
+)
 #: O que o ``lambdify`` precisa para calcular estas funções em número.
-FUNCOES: dict[str, Any] = {"AtritoDarcy": fator_de_atrito}
+FUNCOES: dict[str, Any] = {
+    "AtritoDarcy": fator_de_atrito,
+    "LimiteBase": limite_base,
+    "FatorSuperficie": fator_de_superficie,
+    "FatorTamanho": fator_de_tamanho,
+    "SensibilidadeNeuber": sensibilidade_neuber,
+    "KtRessalto": kt_do_ressalto,
+    "ResistenciaEmVida": resistencia_em_vida,
+}

@@ -247,7 +247,14 @@ def casos() -> tuple[CasoDeAceite, ...]:
             fonte=FONTE_M22,
         ),
         *_casos_de_solda(),
+        *_casos_do_montador(),
     )
+
+
+def _casos_do_montador() -> tuple[CasoDeAceite, ...]:
+    from core import montador_aceite  # aqui dentro: a sympy demora para carregar
+
+    return montador_aceite.casos()
 
 
 FONTE_SOLDA = "Exercícios de solda enviados pelo usuário (29/10/2026): o valor da apostila"
