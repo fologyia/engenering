@@ -279,6 +279,19 @@ MENU: tuple[GrupoMenu, ...] = (
         ),
     ),
     GrupoMenu(
+        "Mecânica dos fluidos",
+        ":material/water_drop:",
+        "Tubulação, bombas, NPSH, hidrostática, medidores e canais.",
+        (
+            ItemMenu(
+                "app_pages/montador_fluidos.py",
+                "Montador de fluidos",
+                ":material/water_drop:",
+                "Ligar fluido, tubo e verificação e isolar a vazão, o diâmetro ou a potência",
+            ),
+        ),
+    ),
+    GrupoMenu(
         "Seções e materiais",
         ":material/category:",
         "Desenhar uma seção, consultar ou cadastrar perfis e materiais.",

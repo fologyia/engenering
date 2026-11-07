@@ -307,7 +307,13 @@ Prancheta para desenhar qualquer seção: chapas, círculos, polígonos e furos,
 
 ### Montador de fórmulas
 
-Prancheta de blocos: seção, esforços, critério e "Em função de". Devolve a equação isolada na medida, na carga ou no material, ponto a ponto da seção, e diz qual condição manda. Letra sem valor fica na fórmula. O momento entra em XX e em YY, pelo valor ou por força vezes distância, para achar a força ou a distância máxima. Blocos de viga e de potência trocam M, V e T pelas fórmulas deles, e von Mises, Tresca, DE-Goodman, flecha, Euler e giro podem ser ligados juntos. Detalhes e como acrescentar um bloco em `docs/montador_formulas.md`.
+Prancheta de blocos: seção, esforços, critério e "Em função de". Devolve a equação isolada na medida, na carga ou no material, ponto a ponto da seção, e diz qual condição manda. Letra sem valor fica na fórmula. Com até três incógnitas, a busca testa as faixas e refina até convergir, pela menor área, pelo maior ou menor valor de uma letra, ou com todas as condições no limite. O momento entra em XX e em YY, pelo valor ou por força vezes distância, para achar a força ou a distância máxima. Blocos de viga e de potência trocam M, V e T pelas fórmulas deles, e von Mises, Tresca, DE-Goodman, flecha, Euler e giro podem ser ligados juntos. Detalhes e como acrescentar um bloco em `docs/montador_formulas.md`.
+
+A prancheta tem biblioteca, inspetor e cartões com os valores de cada bloco. Selecionar uma ligação mostra o que passa nela e os blocos que cabem no meio, com prévia. Blocos viram conjuntos reutilizáveis, a montagem é salva em arquivo ou registrada no projeto, e o bloco Cálculo registrado lê o resultado de outro cálculo por identidade e versão: se o registro mudar, o Montador avisa e a Central de validação marca como desatualizado.
+
+### Mecânica dos fluidos
+
+O mesmo montador, com blocos de fluidos e unidades próprias: fluido, trechos com Darcy-Weisbach (Colebrook no turbulento e 64/Re no laminar), perdas localizadas, altura e potência de bomba, NPSH, velocidade máxima, pressão na profundidade, força em superfície plana, empuxo, arrasto, orifício ou venturi, canal (Manning) e golpe de aríete. A linha é em série, com a mesma vazão em todos os trechos. Detalhes em `docs/montador_fluidos.md`.
 
 ### Assistente de cargas e elementos de máquinas
 

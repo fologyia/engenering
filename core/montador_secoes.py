@@ -36,10 +36,14 @@ _ESFORCOS = {"Mx": "mx", "My": "my", "N": "n", "Vy": "vy", "Vx": "vx", "T": "t"}
 
 @dataclass(frozen=True)
 class Validade:
-    """``expressao`` precisa dar zero ou mais. Com os números prontos, o programa confere."""
+    """``expressao`` precisa dar zero ou mais. Com os números prontos, o programa confere.
+
+    ``restringe``: fora daqui a fórmula não existe, e a busca nem testa. Sem isso, é só um aviso.
+    """
 
     expressao: sp.Expr
     mensagem: str
+    restringe: bool = True
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,7 @@ def test_modulos_tecnicos_seguem_o_menu():
 
 def test_grupos_na_ordem_do_trabalho_e_com_descricao():
     nomes = [g.nome for g in nv.MENU]
-    assert nomes[:7] == [
+    assert nomes[:8] == [
         "Projeto",
         "Cargas e vento",
         "Modelo SolidWorks",
@@ -35,6 +35,7 @@ def test_grupos_na_ordem_do_trabalho_e_com_descricao():
         "Ligações e bases",
         "Entrega",
         "Mecânica geral",
+        "Mecânica dos fluidos",
     ]
     assert all(g.descricao and g.itens for g in nv.MENU)
     assert all(len(i.tarefa) <= 90 for i in nv.todos_os_itens())

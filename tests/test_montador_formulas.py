@@ -337,7 +337,7 @@ def test_euler_em_coluna_curta_avisa():
     ]
     fios = [
         {"de": "s", "saida": "saida", "para": "f", "entrada": "entrada"},
-        {"de": "m", "saida": "sy", "para": "f", "entrada": "limite"},
+        {"de": "m", "saida": "saida", "para": "f", "entrada": "material"},
         {"de": "f", "saida": "condicao", "para": "r", "entrada": "condicoes"},
     ]
     m = mt.montar(mt.grafo_de_dados({"nos": nos, "fios": fios}))
@@ -376,9 +376,6 @@ def test_de_goodman_bate_com_shigley():
         "S_ut": 735.0,
         "n": 1.5,
     }
-    # Zero não é positivo: momentos nulos entram pequenos, como na conta real.
-    valores["M_m"] = 1e-9
-    valores["T_a"] = 1e-9
     r = mt.isolar(m, "d", valores)
     d3 = 16 * 1.5 / math.pi * (2 * 1.7 * 142e3 / 195 + math.sqrt(3) * 1.5 * 124e3 / 735)
     assert r.valor == pytest.approx(d3 ** (1 / 3), rel=1e-6)
@@ -572,16 +569,18 @@ def test_secao_desenhada_sem_escolher_diz_o_que_fazer(catalogo_vazio):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("modelo", mm.MODELOS, ids=lambda m: m.nome)
+@pytest.mark.parametrize("modelo", [*mm.MODELOS, *mm.MODELOS_FLUIDOS], ids=lambda m: m.nome)
 def test_todo_modelo_monta_e_responde(modelo):
     grafo = mt.grafo_de_dados(modelo.grafo())
-    assert len(grafo.fios) == len(modelo.grafo()["fios"])
+    if modelo.conjunto is None:
+        assert len(grafo.fios) == len(modelo.grafo()["fios"])
     m = mt.montar(grafo)
     assert not m.erros
     valores = dict(modelo.valores)
     for item in m.grandezas:
         if item.padrao is not None:
             valores.setdefault(item.chave, item.padrao)
+    valores = {**dict(m.padroes), **valores}
     r = mt.isolar(m, modelo.alvo, valores)
     assert r.valor is not None, r.alertas
     assert max(linha.uso for linha in r.conferencia) == pytest.approx(1.0, rel=1e-5)
@@ -646,7 +645,7 @@ def test_limpar_nao_quebra_e_diz_como_comecar():
     at = abrir()
     at.button(key="mf_limpar").click().run()
     assert not at.exception
-    assert any("Comece por uma seção" in i.value for i in at.info)
+    assert any("Comece por um bloco" in i.value for i in at.info)
 
 
 def test_edicao_da_prancheta_refaz_a_conta():

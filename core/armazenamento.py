@@ -191,7 +191,9 @@ def restauracao_pendente() -> bool:
 
 
 def _catalogos_do_usuario() -> list[tuple[str, Path]]:
-    arquivos = (section_catalog.ARQUIVO_USUARIO, material_catalog.ARQUIVO_USUARIO)
+    # Os conjuntos do Montador ficam aqui pelo caminho: importar o montador traria a sympy na partida.
+    conjuntos = section_catalog.PASTA_DADOS / "conjuntos_usuario.json"
+    arquivos = (section_catalog.ARQUIVO_USUARIO, material_catalog.ARQUIVO_USUARIO, conjuntos)
     return [(f"{PASTA_CATALOGOS}/{arquivo.name}", arquivo) for arquivo in arquivos]
 
 

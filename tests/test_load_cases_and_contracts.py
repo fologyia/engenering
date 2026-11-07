@@ -103,9 +103,12 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "vigas_eixos",
         "analise_fadiga",
         "circulo_mohr",
+        "montador_formulas",
         "analise_sensibilidade",
         "assistente_cargas",
     ]
+    fluidos = [item.id for item in listar_modulos(grupo="Mecânica dos fluidos")]
+    assert fluidos == ["montador_fluidos"]
     cargas = [item.id for item in listar_modulos(grupo="Cargas e vento")]
     assert cargas == [
         "cargas_esqueleto",

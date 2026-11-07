@@ -25,15 +25,30 @@ _PRANCHETA = _registrar()
 
 
 def prancheta_de_blocos(
-    dados: Mapping[str, Any], *, key: str, ao_editar: Callable[[], None]
+    dados: Mapping[str, Any],
+    *,
+    key: str,
+    ao_editar: Callable[[], None],
+    ao_selecionar: Callable[[], None],
+    ao_comandar: Callable[[], None],
 ) -> Any:
-    """``dados``: catalogo, grafo, versao, ajustar e marcas. A edição chega em ``.edicao``."""
+    """``dados``: catalogo, grafo, versao, ajustar, marcas e selecionar. Gestos vêm nos callbacks."""
     global _PRANCHETA
+
+    def chamar() -> Any:
+        return _PRANCHETA(
+            data=dict(dados),
+            key=key,
+            on_edicao_change=ao_editar,
+            on_selecao_change=ao_selecionar,
+            on_comando_change=ao_comandar,
+        )
+
     try:
-        return _PRANCHETA(data=dict(dados), key=key, on_edicao_change=ao_editar)
+        return chamar()
     except ValueError as erro:
         # O registro é do servidor, e este módulo pode sobreviver a um servidor novo.
         if "is not registered" not in str(erro):
             raise
         _PRANCHETA = _registrar()
-        return _PRANCHETA(data=dict(dados), key=key, on_edicao_change=ao_editar)
+        return chamar()

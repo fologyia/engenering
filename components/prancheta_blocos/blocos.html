@@ -1,17 +1,36 @@
 <div class="mf">
-  <div class="paleta" data-paleta></div>
-  <div class="barra">
-    <div class="bloco">
-      <button type="button" data-a="desfazer" title="Desfazer (Ctrl+Z)">↶</button>
-      <button type="button" data-a="refazer" title="Refazer (Ctrl+Y)">↷</button>
+  <aside class="biblioteca" data-biblioteca aria-label="Biblioteca de blocos">
+    <div class="bib-cabeca"><span class="bib-rot">Biblioteca</span><span class="bib-conta" data-conta></span></div>
+    <div class="bib-titulo">Inserir no fluxo</div>
+    <input type="search" data-busca placeholder="Buscar bloco..." aria-label="Buscar bloco" />
+    <p class="bib-ajuda" data-ajuda></p>
+    <div class="lista" data-lista></div>
+  </aside>
+  <div class="miolo">
+    <div class="topo-barra">
+      <span class="luz falta" data-luz></span>
+      <div class="situacao-texto">
+        <strong data-titulo>Monte os blocos</strong>
+        <span data-detalhe></span>
+      </div>
+      <div class="acoes">
+        <button type="button" class="forte" data-a="agrupar" hidden title="Junta os blocos marcados num conjunto">Agrupar</button>
+        <button type="button" class="icone" data-a="desfazer" title="Desfazer (Ctrl+Z)" aria-label="Desfazer">↶</button>
+        <button type="button" class="icone" data-a="refazer" title="Refazer (Ctrl+Y)" aria-label="Refazer">↷</button>
+        <button type="button" class="forte" data-a="organizar" title="Alinha os blocos da esquerda para a direita">Organizar</button>
+      </div>
     </div>
-    <div class="bloco">
-      <button type="button" data-a="menos" title="Afastar">−</button>
-      <button type="button" data-a="mais" title="Aproximar">+</button>
-      <button type="button" data-a="ver" title="Mostra todos os blocos">Ver tudo</button>
-      <button type="button" data-a="organizar" title="Alinha os blocos da esquerda para a direita">Organizar</button>
+    <nav class="trilha" data-trilha aria-label="Onde você está" hidden></nav>
+    <svg tabindex="0" role="application" aria-label="Prancheta de blocos da fórmula"></svg>
+    <div class="rodape">
+      <div class="dica" data-dica></div>
+      <div class="zoom">
+        <button type="button" data-a="biblioteca" title="Mostra ou esconde a biblioteca">Biblioteca</button>
+        <button type="button" data-a="menos" title="Afastar" aria-label="Afastar">−</button>
+        <span data-zoom>100%</span>
+        <button type="button" data-a="mais" title="Aproximar" aria-label="Aproximar">+</button>
+        <button type="button" class="ajuste" data-a="ver" title="Mostra todos os blocos">Ajustar à tela</button>
+      </div>
     </div>
-    <span class="dica" data-dica></span>
   </div>
-  <svg tabindex="0" role="application" aria-label="Prancheta de blocos da fórmula"></svg>
 </div>

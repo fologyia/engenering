@@ -1,14 +1,14 @@
 """O catálogo de blocos do montador de fórmulas.
 
-Para acrescentar uma equação, basta acrescentar um ``Bloco`` a ``BLOCOS``: a prancheta, a tabela de
-valores e a conta leem daqui. Um bloco declara as portas e tem uma função ``calcular`` que recebe o
-``Contexto`` e devolve o valor de cada saída. Fórmula de viga ou de origem de esforço usa ``origem``,
-que precisa só das expressões.
+Para acrescentar uma equação, basta acrescentar um ``Bloco`` a ``BLOCOS``: a prancheta, os campos e a
+conta leem daqui. Um bloco declara as portas e tem uma função ``calcular`` que recebe o ``Contexto`` e
+devolve o valor de cada saída. Fórmula de viga ou de origem de esforço usa ``origem``, que precisa só
+das expressões. Os blocos de fluidos ficam em :mod:`core.montador_fluidos`.
 
-Há três tipos de fio. O da **seção** leva a seção e as tensões somadas até ali, e por isso os esforços
-ficam em fila: Seção → Flexão → Cortante → Critério. O de **valor** troca uma letra pela fórmula de
-outro bloco, como o M da flexão por F·L/4 da viga. O de **condição** leva "isto ≤ aquilo" até o bloco
-do resultado.
+Há quatro tipos de fio. O da **seção** leva a seção e os esforços somados até ali, e por isso os
+esforços ficam em fila: Seção → Flexão → Cortante → Critério. O de **valor** troca uma letra pela
+fórmula de outro bloco, como o M da flexão por F·L/4 da viga. O de **material** leva as propriedades
+de uma vez. O de **condição** leva "isto ≤ aquilo" até o bloco do resultado.
 """
 
 from __future__ import annotations
@@ -29,27 +29,97 @@ from core.montador_secoes import Estado, Secao, Validade
 SECAO = "secao"
 VALOR = "valor"
 CONDICAO = "condicao"
+MATERIAL = "material"
+LINHA = "linha"
+
+SOLIDOS = "solidos"
+FLUIDOS = "fluidos"
+COMUM = "comum"
 
 GRUPO_SECAO = "Seção"
 GRUPO_ORIGEM = "De onde vem o esforço"
 GRUPO_ESFORCO = "Esforços"
 GRUPO_MATERIAL = "Material"
 GRUPO_CRITERIO = "Critério"
+GRUPO_FLUIDO = "Fluido"
+GRUPO_TUBULACAO = "Tubulação"
+GRUPO_VERIFICACAO = "Verificações"
+GRUPO_EQUACOES = "Equações"
 GRUPO_RESULTADO = "Resultado"
+GRUPO_OUTROS = "Outros cálculos"
 GRUPOS = (
     GRUPO_SECAO,
     GRUPO_ORIGEM,
     GRUPO_ESFORCO,
     GRUPO_MATERIAL,
     GRUPO_CRITERIO,
+    GRUPO_FLUIDO,
+    GRUPO_TUBULACAO,
+    GRUPO_VERIFICACAO,
+    GRUPO_EQUACOES,
     GRUPO_RESULTADO,
+    GRUPO_OUTROS,
 )
+#: A cor do cabeçalho do bloco na prancheta.
+#: A ordem da biblioteca: primeiro o que começa a montagem, e o resultado no fim.
+ORDEM_DOS_GRUPOS = (
+    GRUPO_SECAO,
+    GRUPO_ORIGEM,
+    GRUPO_ESFORCO,
+    GRUPO_MATERIAL,
+    GRUPO_CRITERIO,
+    GRUPO_FLUIDO,
+    GRUPO_TUBULACAO,
+    GRUPO_VERIFICACAO,
+    GRUPO_EQUACOES,
+    GRUPO_RESULTADO,
+    GRUPO_OUTROS,
+)
+#: A faixa de cima de cada cartão da prancheta.
+CATEGORIA_DO_GRUPO = {
+    GRUPO_SECAO: "SEÇÃO",
+    GRUPO_ORIGEM: "ORIGEM DO ESFORÇO",
+    GRUPO_ESFORCO: "ESFORÇO",
+    GRUPO_MATERIAL: "PROPRIEDADES",
+    GRUPO_CRITERIO: "VERIFICAÇÃO",
+    GRUPO_FLUIDO: "FLUIDO",
+    GRUPO_TUBULACAO: "TUBULAÇÃO",
+    GRUPO_VERIFICACAO: "VERIFICAÇÃO",
+    GRUPO_EQUACOES: "EQUAÇÃO",
+    GRUPO_RESULTADO: "DECISÃO",
+    GRUPO_OUTROS: "OUTROS CÁLCULOS",
+}
+CLASSE_DO_GRUPO = {
+    GRUPO_SECAO: "g-secao",
+    GRUPO_ORIGEM: "g-origem",
+    GRUPO_ESFORCO: "g-esforco",
+    GRUPO_MATERIAL: "g-material",
+    GRUPO_CRITERIO: "g-criterio",
+    GRUPO_FLUIDO: "g-secao",
+    GRUPO_TUBULACAO: "g-esforco",
+    GRUPO_VERIFICACAO: "g-criterio",
+    GRUPO_EQUACOES: "g-origem",
+    GRUPO_RESULTADO: "g-resultado",
+    GRUPO_OUTROS: "g-material",
+}
 
 RESULTADO = "resultado"
+REFERENCIA = "referencia"
 SEM_MATERIAL = "Escolha o material"
 FLECHA_RELATIVA = "Relação L/δ"
 FLECHA_ABSOLUTA = "Valor de δ"
 FLECHAS = (FLECHA_RELATIVA, FLECHA_ABSOLUTA)
+INFORMAR_FADIGA = "Informar alternado e médio"
+EIXO_GIRANDO = "Eixo girando: flexão alternada e torque constante"
+ESFORCOS_DA_FADIGA = (INFORMAR_FADIGA, EIXO_GIRANDO)
+
+#: E e G típicos por categoria do cadastro, em MPa. O cadastro só guarda S_y e S_ut.
+MODULOS_POR_CATEGORIA = {
+    "aco": (200000.0, 80000.0, "aço"),
+    "aluminio": (71000.0, 27000.0, "alumínio"),
+    "cobre": (110000.0, 41000.0, "liga de cobre"),
+    "ferro_fundido": (100000.0, 41000.0, "ferro fundido"),
+}
 
 
 class ErroDeBloco(ValueError):
@@ -81,7 +151,10 @@ class Opcao:
 
 @dataclass(frozen=True)
 class Condicao:
-    """``esquerda`` ≤ ``direita``: a inequação de um critério num ponto da seção."""
+    """``esquerda`` ≤ ``direita``: a inequação de um critério num ponto da seção.
+
+    Com ``igualdade``, é uma equação: não há limite, e o que se quer é a letra que fecha a conta.
+    """
 
     nome: str
     criterio: str
@@ -92,10 +165,22 @@ class Condicao:
     tensoes: tuple[tuple[str, sp.Expr], ...] = ()
     validade: tuple[Validade, ...] = ()
     positiva: bool = True  # no estado biaxial, σ_x − σ_y pode dar negativo, e o módulo fica
+    igualdade: bool = False
+    no: str = ""  # o bloco que gerou a condição
 
     @property
     def letras(self) -> set[sp.Symbol]:
         return self.esquerda.free_symbols | self.direita.free_symbols
+
+
+@dataclass(frozen=True)
+class Material:
+    """O que passa no fio de material. A letra fica na fórmula, com o valor nos campos."""
+
+    sy: sp.Expr
+    sut: sp.Expr
+    e: sp.Expr
+    g: sp.Expr
 
 
 @dataclass
@@ -106,20 +191,34 @@ class Contexto:
     opcoes: Mapping[str, str]
     ligados: Mapping[str, Any]
     numerar: bool = False
+    zeros: frozenset[str] = frozenset()  # letras com valor zero: somem da conta
     grandezas: dict[str, Grandeza] = field(default_factory=dict)
     padroes: dict[str, float] = field(default_factory=dict)
+    origens: dict[str, str] = field(default_factory=dict)
     alertas: list[str] = field(default_factory=list)
     hipoteses: list[str] = field(default_factory=list)
     marcas: set[str] = field(default_factory=set)
+    proprias: list[str] = field(default_factory=list)
 
-    def letra(self, grandeza: Grandeza, porta: str | None = None) -> sp.Expr:
-        """O que está ligado na porta, ou a própria letra, que vira uma linha na tabela de valores."""
+    def _numerada(self, grandeza: Grandeza, fixa: bool = False) -> Grandeza:
+        return grandeza.com_indice(self.indice) if self.numerar and not fixa else grandeza
+
+    def letra(self, grandeza: Grandeza, porta: str | None = None, *, fixa: bool = False) -> sp.Expr:
+        """O que está ligado na porta, ou a própria letra, que vira um campo de valor."""
         ligado = self.ligados.get(porta) if porta else None
         if ligado is not None:
             return ligado
-        grandeza = grandeza.com_indice(self.indice) if self.numerar else grandeza
+        grandeza = self._numerada(grandeza, fixa)
         self.grandezas.setdefault(grandeza.chave, grandeza)
-        return grandeza.simbolo
+        self.proprias.append(grandeza.chave)
+        return sp.S.Zero if grandeza.chave in self.zeros else grandeza.simbolo
+
+    def padrao(self, grandeza: Grandeza, valor: float, origem: str) -> None:
+        """Um valor que o bloco sugere, com a procedência dele."""
+        grandeza = self._numerada(grandeza)
+        self.grandezas.setdefault(grandeza.chave, grandeza)
+        self.padroes[grandeza.chave] = valor
+        self.origens[grandeza.chave] = origem
 
     def estado(self) -> Estado:
         estado = self.ligados.get("entrada")
@@ -127,10 +226,8 @@ class Contexto:
             raise ErroDeBloco("Ligue uma seção aqui.")
         return estado
 
-    def opcao(self, bloco: Bloco, chave: str) -> str:
-        opcao = next(o for o in bloco.opcoes if o.chave == chave)
-        valor = self.opcoes.get(chave)
-        return valor if valor in opcao.lista() else opcao.padrao
+    def material(self) -> Material | None:
+        return self.ligados.get("material")
 
 
 @dataclass(frozen=True)
@@ -146,11 +243,13 @@ class Bloco:
     opcoes: tuple[Opcao, ...] = ()
     numerar: bool = False  # o segundo bloco igual usa outra letra: M₂
     face: Callable[[Mapping[str, str]], str] | None = None  # a fórmula muda com a escolha
+    dominio: str = SOLIDOS
 
 
 _ENTRADA = Porta("entrada", "Seção", SECAO)
 _SAIDA = Porta("saida", "Seção", SECAO)
 _CONDICAO = Porta("condicao", "Condição", CONDICAO)
+_ENTRADA_MATERIAL = Porta("material", "Material", MATERIAL)
 
 
 def _secao(
@@ -165,6 +264,7 @@ def _secao(
         secao = fabrica(c)
         for grandeza in secao.grandezas:
             c.grandezas.setdefault(grandeza.chave, grandeza)
+            c.proprias.append(grandeza.chave)
         c.hipoteses.extend(secao.hipoteses)
         c.alertas.extend(secao.avisos)
         return {"saida": Estado.inicial(secao)}
@@ -306,6 +406,7 @@ def _pressao(c: Contexto) -> dict[str, Any]:
     fina = Validade(
         1 / circunferencial - sp.Rational(1, 10),
         "A parede não está fina: acima de t = d/20 as tensões da pressão pedem a fórmula de Lamé.",
+        restringe=False,
     )
     c.hipoteses.append(
         "Pressão em parede fina, com o diâmetro externo: σ_c = p·d/(2·t) e σ_l = p·d/(4·t)."
@@ -317,13 +418,19 @@ def _material(c: Contexto) -> dict[str, Any]:
     nome = c.opcoes.get("material", SEM_MATERIAL)
     if nome != SEM_MATERIAL:
         material = mc.obter(nome)
+        fonte = f"Cadastro: {nome}"
         if material.sy_MPa > 0:
-            c.padroes[g.SY.chave] = material.sy_MPa
+            c.padrao(g.SY, material.sy_MPa, fonte)
         else:
             c.marcas.add("fragil")
-        c.padroes[g.SUT.chave] = material.sut_MPa
-        c.grandezas.setdefault(g.SUT.chave, g.SUT)
-    return {"sy": c.letra(g.SY), "sut": c.letra(g.SUT)}
+        c.padrao(g.SUT, material.sut_MPa, fonte)
+        modulos = MODULOS_POR_CATEGORIA.get(material.categoria)
+        if modulos is not None:
+            e, cisalhamento, rotulo = modulos
+            c.padrao(g.E, e, f"Valor típico de {rotulo}: confira")
+            c.padrao(g.G, cisalhamento, f"Valor típico de {rotulo}: confira")
+    saida = Material(c.letra(g.SY), c.letra(g.SUT), c.letra(g.E), c.letra(g.G))
+    return {"saida": saida}
 
 
 def _principal(t: ms.Tensao) -> sp.Expr:
@@ -375,31 +482,36 @@ def _nos_pontos(
     return {"condicao": condicoes}
 
 
+def _limite_de_escoamento(c: Contexto) -> sp.Expr:
+    material = c.material()
+    resistencia = material.sy if material else c.letra(g.SY)
+    return resistencia / c.letra(g.FS)
+
+
 def _von_mises(c: Contexto) -> dict[str, Any]:
     c.marcas.add("ductil")
-    limite = c.letra(g.SY, "limite") / c.letra(g.FS)
 
     def funcao(t: ms.Tensao) -> Sequence[sp.Expr]:
         return (sp.sqrt(t.sx**2 - t.sx * t.sy + t.sy**2 + 3 * t.tau**2),)
 
-    return _nos_pontos(c, "von Mises", "\\sigma_{eq}", limite, funcao)
+    return _nos_pontos(c, "von Mises", "\\sigma_{eq}", _limite_de_escoamento(c), funcao)
 
 
 def _tresca(c: Contexto) -> dict[str, Any]:
     c.marcas.add("ductil")
-    limite = c.letra(g.SY, "limite") / c.letra(g.FS)
 
     def funcao(t: ms.Tensao) -> Sequence[sp.Expr]:
         # Com σ_y, as duas principais podem ter o mesmo sinal, e a terceira, zero, entra na diferença.
         diferenca = sp.sqrt((t.sx - t.sy) ** 2 + 4 * t.tau**2)
         return (diferenca,) if t.sy == 0 else (diferenca, _principal(t))
 
-    return _nos_pontos(c, "Tresca", "\\sigma_{eq}", limite, funcao)
+    return _nos_pontos(c, "Tresca", "\\sigma_{eq}", _limite_de_escoamento(c), funcao)
 
 
 def _rankine(c: Contexto) -> dict[str, Any]:
-    c.marcas.add("fragil_ok")
-    limite = c.letra(g.SUT, "limite") / c.letra(g.FS)
+    material = c.material()
+    resistencia = material.sut if material else c.letra(g.SUT)
+    limite = resistencia / c.letra(g.FS)
     c.hipoteses.append("Maior tensão principal: critério de material frágil, em tração.")
     return _nos_pontos(c, "Maior principal", "\\sigma_{1}", limite, lambda t: (_principal(t),))
 
@@ -408,8 +520,19 @@ def _goodman(c: Contexto) -> dict[str, Any]:
     estado = c.estado()
     fibra = estado.secao.pontos[0]
     kf, kfs = c.letra(g.KF), c.letra(g.KFS)
-    ma, mm = c.letra(g.MA), c.letra(g.MM)
-    ta, tm = c.letra(g.TA), c.letra(g.TM)
+    if c.opcoes.get("esforcos", INFORMAR_FADIGA) == EIXO_GIRANDO:
+        if not estado.secao.redonda:
+            raise ErroDeBloco("Eixo girando vale para seção redonda.")
+        if estado.mx == 0 and estado.my == 0 and estado.t == 0:
+            raise ErroDeBloco("Ponha flexão ou torção antes deste bloco.")
+        ma, mm = sp.sqrt(estado.mx**2 + estado.my**2), sp.S.Zero
+        ta, tm = sp.S.Zero, estado.t
+        c.hipoteses.append(
+            "Eixo girando: a flexão alterna por inteiro a cada volta, e o torque fica constante."
+        )
+    else:
+        ma, mm = c.letra(g.MA), c.letra(g.MM)
+        ta, tm = c.letra(g.TA), c.letra(g.TM)
 
     def equivalente(momento: sp.Expr, torque: sp.Expr) -> sp.Expr:
         sigma = kf * momento * fibra.por_momento
@@ -417,9 +540,13 @@ def _goodman(c: Contexto) -> dict[str, Any]:
         return sp.sqrt(sigma**2 + 3 * tau**2)
 
     alternada, media = equivalente(ma, ta), equivalente(mm, tm)
-    esquerda = alternada / c.letra(g.SE) + media / c.letra(g.SUT, "limite")
+    material = c.material()
+    ruptura = material.sut if material else c.letra(g.SUT)
+    esquerda = alternada / c.letra(g.SE) + media / ruptura
     c.hipoteses.append(
-        "Fadiga pelo critério de Goodman com von Mises nas parcelas alternada e média (DE-Goodman)."
+        "Fadiga simplificada, para pré-dimensionamento: DE-Goodman com von Mises nas parcelas "
+        "alternada e média. Confira em Análise de fadiga, e ligue também um critério de escoamento: "
+        "Goodman não vê o escoamento no primeiro ciclo."
     )
     condicao = Condicao(
         "Fadiga (Goodman) na fibra externa",
@@ -445,7 +572,8 @@ def _flecha(c: Contexto) -> dict[str, Any]:
         limite = c.letra(g.DELTA_ADM)
     secao = estado.secao
     inercia = secao.inercia_y if c.opcoes.get("eixo") == ms.EIXO_YY else secao.inercia
-    esquerda = produto / (c.letra(g.E) * inercia)
+    material = c.material()
+    esquerda = produto / ((material.e if material else c.letra(g.E)) * inercia)
     return {
         "condicao": [
             Condicao("Flecha", "Flecha", esquerda, limite, "\\delta", "", (), estado.validade)
@@ -458,15 +586,16 @@ def _flambagem(c: Contexto) -> dict[str, Any]:
     secao = estado.secao
     area_sobre_i = secao.area / secao.inercia_min
     forca = c.letra(g.N, "valor")
-    e, l_, k = c.letra(g.E), c.letra(g.L), c.letra(g.K_FLAMB)
+    material = c.material()
+    e = material.e if material else c.letra(g.E)
+    l_, k = c.letra(g.L), c.letra(g.K_FLAMB)
     critica = sp.pi**2 * e * secao.inercia_min / (k * l_) ** 2
     esquerda = c.letra(g.FS) * forca
     validade = list(estado.validade)
-    sy = c.ligados.get("limite")
-    if sy is not None:
+    if material is not None:
         validade.append(
             Validade(
-                (k * l_) ** 2 * area_sobre_i - 2 * sp.pi**2 * e / sy,
+                (k * l_) ** 2 * area_sobre_i - 2 * sp.pi**2 * e / material.sy,
                 "A coluna ficou curta: abaixo da esbeltez de transição, Euler passa da carga real. "
                 "Use a fórmula de Johnson ou a Flambagem de colunas.",
             )
@@ -488,7 +617,9 @@ def _flambagem(c: Contexto) -> dict[str, Any]:
 
 def _giro(c: Contexto) -> dict[str, Any]:
     estado = c.estado().usando_o_lado()
-    esquerda = c.letra(g.T, "valor") * c.letra(g.L) / (c.letra(g.G) * estado.secao.polar)
+    material = c.material()
+    modulo = material.g if material else c.letra(g.G)
+    esquerda = c.letra(g.T, "valor") * c.letra(g.L) / (modulo * estado.secao.polar)
     condicao = Condicao(
         "Giro por torção",
         "Giro",
@@ -506,8 +637,12 @@ def _resultado(c: Contexto) -> dict[str, Any]:
     return {}
 
 
-_LIMITE_SY = Porta("limite", "S_y", VALOR, g.TENSAO)
-_LIMITE_SUT = Porta("limite", "S_ut", VALOR, g.TENSAO)
+def _referencia(c: Contexto) -> dict[str, Any]:
+    valor = c.opcoes.get("valor")
+    if valor in (None, ""):
+        raise ErroDeBloco("Escolha o cálculo registrado.")
+    return {"saida": sp.Float(float(valor))}
+
 
 BLOCOS: tuple[Bloco, ...] = (
     _secao(
@@ -656,20 +791,21 @@ BLOCOS: tuple[Bloco, ...] = (
         "material",
         "Material",
         GRUPO_MATERIAL,
-        "Traz S_y e S_ut do cadastro. A letra fica na fórmula, com o valor na tabela.",
-        "S_y · S_ut",
+        "Traz S_y, S_ut, E e G de uma vez. As letras ficam na fórmula, com o valor nos campos.",
+        "S_y · S_ut · E · G",
         (),
-        (Porta("sy", "S_y", VALOR, g.TENSAO), Porta("sut", "S_ut", VALOR, g.TENSAO)),
+        (Porta("saida", "Material", MATERIAL),),
         _material,
         (
             Opcao(
                 "material",
                 "Material",
-                "Vem do cadastro de materiais. Sem escolher, S_y e S_ut ficam em letra.",
+                "Vem do cadastro de materiais. Sem escolher, as propriedades ficam em letra.",
                 lambda: (SEM_MATERIAL, *mc.listar_nomes()),
                 SEM_MATERIAL,
             ),
         ),
+        numerar=True,
     ),
     Bloco(
         "von_mises",
@@ -677,7 +813,7 @@ BLOCOS: tuple[Bloco, ...] = (
         GRUPO_CRITERIO,
         "Material dúctil: junta σ e τ de cada ponto na tensão equivalente.",
         "√(σ² + 3·τ²) ≤ S_y/n",
-        (_ENTRADA, _LIMITE_SY),
+        (_ENTRADA, _ENTRADA_MATERIAL),
         (_CONDICAO,),
         _von_mises,
     ),
@@ -687,7 +823,7 @@ BLOCOS: tuple[Bloco, ...] = (
         GRUPO_CRITERIO,
         "Material dúctil, mais conservador que von Mises.",
         "√(σ² + 4·τ²) ≤ S_y/n",
-        (_ENTRADA, _LIMITE_SY),
+        (_ENTRADA, _ENTRADA_MATERIAL),
         (_CONDICAO,),
         _tresca,
     ),
@@ -697,7 +833,7 @@ BLOCOS: tuple[Bloco, ...] = (
         GRUPO_CRITERIO,
         "Material frágil, como ferro fundido cinzento.",
         "σ₁ ≤ S_ut/n",
-        (_ENTRADA, _LIMITE_SUT),
+        (_ENTRADA, _ENTRADA_MATERIAL),
         (_CONDICAO,),
         _rankine,
     ),
@@ -705,11 +841,21 @@ BLOCOS: tuple[Bloco, ...] = (
         "goodman",
         "Fadiga de eixo",
         GRUPO_CRITERIO,
-        "DE-Goodman: flexão e torção alternadas e médias. Dispensa os blocos de esforço.",
+        "DE-Goodman simplificado. Usa os esforços da fila no eixo girando, ou os que você informar.",
         "σ_a'/S_e + σ_m'/S_ut ≤ 1/n",
-        (_ENTRADA, _LIMITE_SUT),
+        (_ENTRADA, _ENTRADA_MATERIAL),
         (_CONDICAO,),
         _goodman,
+        (
+            Opcao(
+                "esforcos",
+                "De onde vêm os esforços",
+                "No eixo girando, a flexão da fila vira alternada e o torque fica constante, sem "
+                "repetir valores. Para outros ciclos, informe as quatro parcelas.",
+                ESFORCOS_DA_FADIGA,
+                INFORMAR_FADIGA,
+            ),
+        ),
     ),
     Bloco(
         "flecha",
@@ -717,7 +863,7 @@ BLOCOS: tuple[Bloco, ...] = (
         GRUPO_CRITERIO,
         "Liga a seção e a saída δ·EI de um bloco de viga.",
         "δ = (δ·EI)/(E·I)",
-        (_ENTRADA, Porta("flecha", "δ·EI", VALOR, g.FLECHA_EI)),
+        (_ENTRADA, Porta("flecha", "δ·EI", VALOR, g.FLECHA_EI), _ENTRADA_MATERIAL),
         (_CONDICAO,),
         _flecha,
         (
@@ -743,7 +889,7 @@ BLOCOS: tuple[Bloco, ...] = (
         GRUPO_CRITERIO,
         "Coluna esbelta em compressão, na inércia mais fraca da seção.",
         "n·N ≤ π²·E·I/(K·L)²",
-        (_ENTRADA, Porta("valor", "N", VALOR, g.FORCA), _LIMITE_SY),
+        (_ENTRADA, Porta("valor", "N", VALOR, g.FORCA), _ENTRADA_MATERIAL),
         (_CONDICAO,),
         _flambagem,
     ),
@@ -753,7 +899,7 @@ BLOCOS: tuple[Bloco, ...] = (
         GRUPO_CRITERIO,
         "Rigidez do eixo: o quanto ele torce no trecho.",
         "φ = T·L/(G·J)",
-        (_ENTRADA, Porta("valor", "T", VALOR, g.MOMENTO)),
+        (_ENTRADA, Porta("valor", "T", VALOR, g.MOMENTO), _ENTRADA_MATERIAL),
         (_CONDICAO,),
         _giro,
     ),
@@ -766,33 +912,54 @@ BLOCOS: tuple[Bloco, ...] = (
         (Porta("condicoes", "Condições", CONDICAO, varias=True),),
         (),
         _resultado,
+        dominio=COMUM,
+    ),
+    Bloco(
+        REFERENCIA,
+        "Cálculo registrado",
+        GRUPO_OUTROS,
+        "Traz um resultado de outro cálculo do projeto, com identidade e revisão: se ele mudar, a "
+        "página avisa.",
+        "registro · resultado",
+        (),
+        (Porta("saida", "Valor", VALOR, "livre"),),
+        _referencia,
+        dominio=COMUM,
     ),
 )
 
 POR_CHAVE: dict[str, Bloco] = {b.chave: b for b in BLOCOS}
 
 
-def catalogo_para_tela() -> list[dict[str, Any]]:
-    """O que a prancheta precisa saber de cada bloco."""
+def registrar(blocos: Sequence[Bloco]) -> None:
+    """Outra parte do Montador acrescenta os blocos dela ao mesmo motor."""
+    POR_CHAVE.update({b.chave: b for b in blocos})
 
-    def porta(p: Porta) -> dict[str, Any]:
-        return {
-            "chave": p.chave,
-            "rotulo": p.rotulo,
-            "tipo": p.tipo,
-            "dimensao": p.dimensao,
-            "varias": p.varias,
-        }
 
+def porta_para_tela(p: Porta) -> dict[str, Any]:
+    return {
+        "chave": p.chave,
+        "rotulo": p.rotulo,
+        "tipo": p.tipo,
+        "dimensao": p.dimensao,
+        "varias": p.varias,
+    }
+
+
+def catalogo_para_tela(dominio: str = SOLIDOS) -> list[dict[str, Any]]:
+    """O que a prancheta precisa saber de cada bloco desta parte do Montador."""
     return [
         {
             "chave": b.chave,
             "nome": b.nome,
             "grupo": b.grupo,
+            "classe": CLASSE_DO_GRUPO.get(b.grupo, "g-secao"),
+            "categoria": CATEGORIA_DO_GRUPO.get(b.grupo, ""),
             "dica": b.dica,
             "formula": b.formula,
-            "entradas": [porta(p) for p in b.entradas],
-            "saidas": [porta(p) for p in b.saidas],
+            "entradas": [porta_para_tela(p) for p in b.entradas],
+            "saidas": [porta_para_tela(p) for p in b.saidas],
         }
-        for b in BLOCOS
+        for b in sorted(POR_CHAVE.values(), key=lambda x: ORDEM_DOS_GRUPOS.index(x.grupo))
+        if b.dominio in (dominio, COMUM)
     ]
