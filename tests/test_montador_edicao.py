@@ -7,8 +7,10 @@ evento no estado da sessão, antes do script, e depois a página roda inteira.
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterator, MutableMapping
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest import mock
 
 from streamlit.testing.v1 import AppTest
@@ -33,21 +35,42 @@ def abrir(parte: mm.Parte) -> AppTest:
     return at
 
 
+class _Sessao(MutableMapping):
+    """A sessão do AppTest vista pelo callback, com o evento da prancheta por cima.
+
+    Lê e grava chave por chave, sem listar a sessão: o ``filtered_state`` do AppTest existe no
+    Streamlit daqui e não no do CI.
+    """
+
+    def __init__(self, at: AppTest, chave: str, evento: Any) -> None:
+        self._at, self._chave, self._evento = at, chave, evento
+
+    def __getitem__(self, chave: str) -> Any:
+        if chave == self._chave:
+            return self._evento
+        return self._at.session_state[chave]
+
+    def __setitem__(self, chave: str, valor: Any) -> None:
+        self._at.session_state[chave] = valor
+
+    def __delitem__(self, chave: str) -> None:
+        del self._at.session_state[chave]
+
+    def __contains__(self, chave: object) -> bool:
+        return chave == self._chave or chave in self._at.session_state
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
+
+
 def _no_callback(at: AppTest, parte: mm.Parte, chamada, **evento) -> None:
-    """Roda o callback como o Streamlit roda, e devolve à sessão o que ele trocou."""
-    original = dict(at.session_state.filtered_state)
-    estado = dict(original)
-    estado[parte.k("prancheta")] = SimpleNamespace(**evento)
-    with mock.patch.object(ui.st, "session_state", estado):
+    """Roda o callback como o Streamlit roda: antes do script, no estado da sessão."""
+    sessao = _Sessao(at, parte.k("prancheta"), SimpleNamespace(**evento))
+    with mock.patch.object(ui.st, "session_state", sessao):
         chamada()
-    for chave, valor in estado.items():
-        if chave != parte.k("prancheta") and (
-            chave not in original or original[chave] is not valor
-        ):
-            at.session_state[chave] = valor
-    for chave in original:
-        if chave not in estado:
-            del at.session_state[chave]
 
 
 def _comandos(at: AppTest, parte: mm.Parte, *itens: dict, repetir: tuple = ()) -> None:
