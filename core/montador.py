@@ -234,6 +234,8 @@ class Montagem:
     origens: tuple[tuple[str, str], ...] = ()  # de onde veio o padrão de cada letra
     letras_do_bloco: tuple[tuple[str, tuple[str, ...]], ...] = ()
     saidas: Mapping[str, Mapping[str, Any]] = field(default_factory=dict, compare=False, hash=False)
+    #: Dos blocos que numeram a letra: 2 é o segundo trecho, o de L₂. Sai da ordem dos fios.
+    indices: tuple[tuple[str, int], ...] = ()
 
     def grandeza(self, chave: str) -> Grandeza | None:
         return next((item for item in self.grandezas if item.chave == chave), None)
@@ -252,6 +254,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
     marcas: set[str] = set()
     saidas: dict[str, Mapping[str, Any]] = {}
     contagem: dict[str, int] = {}
+    indices: dict[str, int] = {}
     condicoes: list[Condicao] = []
     letras_do_bloco: dict[str, tuple[str, ...]] = {}
     tem_resultado = False
@@ -260,6 +263,8 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
         bloco = mb.POR_CHAVE[no.tipo]
         entradas, _ = mb.portas_de(no.tipo, dict(no.opcoes))
         contagem[no.tipo] = contagem.get(no.tipo, 0) + 1
+        if bloco.numerar:
+            indices[no.id] = contagem[no.tipo]
         ligados: dict[str, Any] = {}
         for fio in grafo.fios:
             if fio.para != no.id:
@@ -327,6 +332,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
         tuple(origens.items()),
         tuple(letras_do_bloco.items()),
         saidas,
+        tuple(indices.items()),
     )
 
 

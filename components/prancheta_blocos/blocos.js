@@ -2,6 +2,9 @@
 // Python a cada gesto terminado, e os avisos de cada bloco voltam em `marcas`. O catálogo também vem
 // de lá, e por isso um bloco novo em core/montador_blocos.py aparece aqui sem mudar este arquivo.
 // A tela é redesenhada inteira a cada mudança: o SVG não guarda estado, quem guarda é `e`.
+// O histórico do Ctrl+Z mora no Python, junto com os valores: assim um Ctrl+Z só desfaz na ordem em
+// que tudo foi feito, fio ou número. Os pedidos vão numerados e em fila (veja `comandar`).
+// A caixinha de digitar número é a de editor_numerico.js, que o Python junta na frente deste arquivo.
 
 const ESTADOS = new WeakMap()
 const LARGURA = 176
@@ -26,6 +29,11 @@ const MATERIAL = "material"
 const DICA = "Clique num bloco da biblioteca para pôr na fila. Arraste de uma bolinha a outra para ligar."
 const AJUDA = "Clique para pôr na fila. Selecione uma ligação para inserir no meio dela."
 const AJUDA_FIO = "Ligação selecionada. Passe o cursor sobre uma opção para ver como fica."
+const SEPARADOR = " · "
+const DICA_DO_EDITOR = "Vale conta e unidade: 300/2, 1,5 m, +10. Vazio vira letra."
+const ESPERA_DO_REENVIO = 1500 // sem resposta nesse tempo, o pedido vai de novo
+const REENVIOS = 3
+const ESPERA_MAXIMA = 4000 // depois disso a prancheta volta a aceitar gestos, com ou sem resposta
 
 const copiar = (v) => JSON.parse(JSON.stringify(v))
 const escapar = (t) =>
@@ -60,8 +68,73 @@ function canonico(v) {
   return JSON.stringify(v ?? null)
 }
 
+// As mesmas duas linhas de `quebrar`, sem perder de quem é cada pedaço: o pedaço com chave é um
+// número do bloco, e vira campo na prancheta. `mais` diz que sobrou pedaço fora do cartão.
+function quebrarPedacos(pedacos, limite) {
+  if (!pedacos?.length) return []
+  const largura = (itens) => itens.reduce((n, p, i) => n + p.t.length + (i ? SEPARADOR.length : 0), 0)
+  const linhas = [{ itens: [], mais: false }]
+  for (const pedaco of pedacos) {
+    const atual = linhas[linhas.length - 1]
+    const junto = largura(atual.itens) + (atual.itens.length ? SEPARADOR.length : 0) + pedaco.t.length
+    if (junto <= limite || !atual.itens.length) atual.itens.push({ ...pedaco })
+    else if (linhas.length < 2) linhas.push({ itens: [{ ...pedaco }], mais: false })
+    else {
+      atual.mais = true
+      break
+    }
+  }
+  // Pedaço comprido é cortado no fim, como em `cortar`, e continua sendo o mesmo número.
+  for (const linha of linhas) {
+    let sobra = limite - (linha.mais ? 2 : 0)
+    const cabem = []
+    for (const [i, p] of linha.itens.entries()) {
+      const espaco = sobra - (i ? SEPARADOR.length : 0)
+      if (espaco < 2) {
+        linha.mais = true
+        break
+      }
+      if (p.t.length > espaco) p.t = `${p.t.slice(0, espaco - 1)}…`
+      cabem.push(p)
+      sobra = espaco - p.t.length
+    }
+    linha.itens = cabem
+  }
+  return linhas
+}
+
+// O número na caixinha sem perder casas: 0,0000001 não pode virar 0 só por abrir e fechar.
+function textoParaEditar(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return ""
+  if (v === 0) return "0"
+  let s = String(Number(v.toPrecision(12)))
+  if (/e/i.test(s)) {
+    const casas = Math.min(20, Math.max(0, 11 - Math.floor(Math.log10(Math.abs(v)))))
+    s = v.toFixed(casas).replace(/\.?0+$/, "")
+  }
+  return s.replace(".", ",")
+}
+
+function mesmoNumero(a, b) {
+  if (a === null || a === undefined || b === null || b === undefined) return (a ?? null) === (b ?? null)
+  return Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b))
+}
+
+// O que se digita no cartão. `campo` é o que o Python mandou da letra: v (na unidade da tela) e u.
+// Vazio devolve a letra à fórmula, como no inspetor. A unidade do próprio campo pode vir junto.
+function lerDoCartao(texto, campo) {
+  let s = String(texto ?? "").trim()
+  if (!s) return { valor: null }
+  const unidade = campo.u ?? ""
+  if (unidade && s.toLowerCase().endsWith(unidade.toLowerCase())) s = s.slice(0, s.length - unidade.length).trim()
+  if (!s) return { erro: "Digite um número." }
+  const semNumero = campo.v === null || campo.v === undefined
+  if (semNumero && /^[+*/]/.test(s)) return { erro: "Esta letra ainda não tem número: digite o valor." }
+  return lerValorDigitado(s, campo.v ?? 0, unidade)
+}
+
 function criar(raiz) {
-  const svg = raiz.querySelector("svg")
+  const svg = raiz.querySelector(".miolo > svg") // o botão de duplicar também tem um svg, o ícone
   const lista = raiz.querySelector("[data-lista]")
   const busca = raiz.querySelector("[data-busca]")
   const biblioteca = raiz.querySelector("[data-biblioteca]")
@@ -73,7 +146,11 @@ function criar(raiz) {
   const titulo = raiz.querySelector("[data-titulo]")
   const detalhe = raiz.querySelector("[data-detalhe]")
   const luz = raiz.querySelector("[data-luz]")
+  const miolo = raiz.querySelector(".miolo")
   const botaoAgrupar = raiz.querySelector('[data-a="agrupar"]')
+  const botaoDuplicar = raiz.querySelector('[data-a="duplicar"]')
+  const botaoDesfazer = raiz.querySelector('[data-a="desfazer"]')
+  const botaoRefazer = raiz.querySelector('[data-a="refazer"]')
   dica.textContent = DICA
 
   const e = {
@@ -94,8 +171,23 @@ function criar(raiz) {
     pendente: null,
     realce: null,
     fantasma: null,
-    passado: [],
-    futuro: [],
+    fila: [], // pedidos ao Python ainda sem confirmação
+    n: 0,
+    versaoDoPython: -1,
+    ultimoSoPosicao: false,
+    colados: {}, // senha da colagem → cópia: original, até o Python dizer que viu
+    copiado: null,
+    historia: {},
+    esperando: 0, // quando um Ctrl+Z saiu, e a conta ainda não voltou
+    esperandoAcao: "",
+    avisoVisto: null,
+    avisoAntes: 0,
+    mudando: new Map(), // letra digitada no cartão → número do pedido
+    ultimoToque: null,
+    editando: null,
+    proxima: null,
+    vigia: null,
+    reenvios: 0,
     filtro: "",
     abertos: null,
     selecionarVisto: -1,
@@ -141,8 +233,16 @@ function criar(raiz) {
   }
   function conteudo(no) {
     const face = e.marcas.faces?.[prefixo() + no.id] ?? {}
+    const forte = cortar(face.b ?? "", LETRAS_DO_DESTAQUE)
+    // Sem número para mudar, o texto quebra como sempre quebrou: por palavra, se for uma frase só.
+    if (face.p?.some(([, c]) => c)) {
+      const pedacos = face.p.map(([t, c]) => ({ t: String(t), c: c || "" }))
+      const copia = pedacos.some((p) => p.c && e.marcas.campos?.[p.c]?.copia)
+      return { linhas: quebrarPedacos(pedacos, LETRAS_POR_LINHA), forte, copia }
+    }
     const texto = face.a ?? (no.tipo === CONJUNTO ? "" : tipoDe(no)?.formula ?? "")
-    return { linhas: quebrar(texto, LETRAS_POR_LINHA), forte: cortar(face.b ?? "", LETRAS_DO_DESTAQUE) }
+    const linhas = quebrar(texto, LETRAS_POR_LINHA).map((t) => ({ itens: [{ t, c: "" }], mais: false }))
+    return { linhas, forte, copia: false }
   }
   const altura = (no) => {
     const p = portas(no)
@@ -167,17 +267,53 @@ function criar(raiz) {
   // Sozinho, só liga a mesma letra: M com M. T também é momento, e ligar errado seria pior que não ligar.
   const mesmaLetra = (s, ent) => liga(s, ent) && s.rotulo === ent.rotulo
 
-  function guardar() {
-    e.passado.push(copiar({ raiz: e.raiz, caminho: e.caminho }))
-    if (e.passado.length > 60) e.passado.shift()
-    e.futuro = []
+  function pedidoDeEdicao(soPosicao, extra = {}) {
+    const pedido = { grafo: copiar(e.raiz), versao: e.versao, so_posicao: soPosicao, ...extra }
+    if (Object.keys(e.colados).length) pedido.colados = copiar(e.colados)
+    return pedido
   }
   function enviar(soPosicao = false) {
     e.versao += 1
-    e.enviar?.("edicao", { grafo: copiar(e.raiz), versao: e.versao, so_posicao: soPosicao })
+    e.ultimoSoPosicao = soPosicao
+    e.enviar?.("edicao", pedidoDeEdicao(soPosicao))
+    vigiar()
     avisarSelecao()
     desenhar()
     montarLista()
+  }
+  // Duas rodadas pedidas juntas viram uma só no Streamlit, e a de antes se perde. Cada pedido leva
+  // por isso os de antes ainda sem confirmação, e o Python só faz o que tiver número novo.
+  function comandar(item) {
+    e.n += 1
+    e.fila.push({ ...item, n: e.n })
+    e.enviar?.("comando", { lista: copiar(e.fila) })
+    vigiar()
+    return e.n
+  }
+  // O que ficou sem resposta vai de novo: o gesto que se perdeu numa rodada juntada com outra.
+  function vigiar() {
+    clearTimeout(e.vigia)
+    const atrasado = e.versao > e.versaoDoPython || e.fila.length || Object.keys(e.colados).length
+    if (!atrasado) {
+      e.reenvios = 0
+      return
+    }
+    if (e.reenvios >= REENVIOS) return
+    e.vigia = setTimeout(() => {
+      e.reenvios += 1
+      const atras = e.versao > e.versaoDoPython
+      if (atras || Object.keys(e.colados).length) {
+        // Só a colagem sem resposta: o desenho já é o do Python, e não troca a conta.
+        e.enviar?.("edicao", pedidoDeEdicao(atras ? e.ultimoSoPosicao : true))
+      }
+      if (e.fila.length) e.enviar?.("comando", { lista: copiar(e.fila) })
+      vigiar()
+    }, ESPERA_DO_REENVIO)
+  }
+  // Enquanto o Ctrl+Z não volta, um gesto novo sairia do desenho de antes e brigaria com ele.
+  const ocupado = () => Boolean(e.esperando) && performance.now() - e.esperando < ESPERA_MAXIMA
+  function avisarOcupado() {
+    dica.textContent = "Espere um instante: a conta do Ctrl+Z ainda está voltando."
   }
   function avisarSelecao() {
     let valor = { tipo: "nada" }
@@ -229,17 +365,17 @@ function criar(raiz) {
 
   // ---- ligação automática: quem só clica na biblioteca já sai com a fila montada
   function fimDaFila(fora) {
-    const nos = [...nivel().nos].reverse().filter((n) => n !== fora)
+    const nos = [...nivel().nos].reverse().filter((n) => !fora.has(n.id))
     const livre = nos.find((n) => {
       const s = portas(n).saidas.find(daFila)
       return s && !temFioDeSaida(n, s.chave)
     })
     return livre ?? nos.find((n) => portas(n).saidas.some(daFila))
   }
-  function encaixarNaFila(no, entrada, saida) {
+  function encaixarNaFila(entra, entrada, sai, saida, fora) {
     // Esforço novo entra antes de quem lê a fila: fica Seção → esforços → critério.
     const consumidor = [...nivel().nos].reverse().find((n) => {
-      if (n === no) return false
+      if (fora.has(n.id)) return false
       const p = portas(n)
       const ent = p.entradas.find(daFila)
       return ent && !p.saidas.some(daFila) && temFioDeEntrada(n, ent.chave)
@@ -247,26 +383,42 @@ function criar(raiz) {
     if (!consumidor) return false
     const chave = portas(consumidor).entradas.find(daFila).chave
     const fio = nivel().fios.find((f) => f.para === consumidor.id && f.entrada === chave)
-    if (!ligar(fio.de, fio.saida, no.id, entrada.chave)) return false
-    return ligar(no.id, saida.chave, consumidor.id, chave)
+    if (!ligar(fio.de, fio.saida, entra.id, entrada.chave)) return false
+    return ligar(sai.id, saida.chave, consumidor.id, chave)
   }
-  function ligarSozinho(no) {
-    const p = portas(no)
-    const entradaDaFila = p.entradas.find(daFila)
-    const saidaDaFila = p.saidas.find(daFila)
-    if (!(entradaDaFila && saidaDaFila && encaixarNaFila(no, entradaDaFila, saidaDaFila)) && entradaDaFila) {
-      const fim = fimDaFila(no)
-      if (fim) ligar(fim.id, portas(fim).saidas.find(daFila).chave, no.id, entradaDaFila.chave)
+  // Vale para um bloco só e para os que chegam juntos numa colagem: o grupo entra na fila como um
+  // bloco, pelo primeiro que ainda não recebe e pelo último que ainda não entrega.
+  function ligarGrupo(grupo) {
+    const ids = new Set(grupo.map((n) => n.id))
+    const livreNaEntrada = (n) => {
+      const x = portas(n).entradas.find(daFila)
+      return x && !temFioDeEntrada(n, x.chave)
     }
-    if (saidaDaFila && !temFioDeSaida(no, saidaDaFila.chave)) {
+    const livreNaSaida = (n) => {
+      const x = portas(n).saidas.find(daFila)
+      return x && !temFioDeSaida(n, x.chave)
+    }
+    const entra = grupo.find(livreNaEntrada)
+    const sai = [...grupo].reverse().find(livreNaSaida)
+    const entradaDaFila = entra ? portas(entra).entradas.find(daFila) : null
+    const saidaDaFila = sai ? portas(sai).saidas.find(daFila) : null
+    if (!(entradaDaFila && saidaDaFila && encaixarNaFila(entra, entradaDaFila, sai, saidaDaFila, ids)) && entradaDaFila) {
+      const fim = fimDaFila(ids)
+      if (fim) ligar(fim.id, portas(fim).saidas.find(daFila).chave, entra.id, entradaDaFila.chave)
+    }
+    if (saidaDaFila && !temFioDeSaida(sai, saidaDaFila.chave)) {
       const livre = nivel().nos.find(
-        (n) => n !== no && portas(n).entradas.some((x) => daFila(x) && x.tipo === saidaDaFila.tipo && !temFioDeEntrada(n, x.chave)),
+        (n) => !ids.has(n.id) && portas(n).entradas.some((x) => daFila(x) && x.tipo === saidaDaFila.tipo && !temFioDeEntrada(n, x.chave)),
       )
       if (livre) {
         const ent = portas(livre).entradas.find((x) => daFila(x) && !temFioDeEntrada(livre, x.chave))
-        ligar(no.id, saidaDaFila.chave, livre.id, ent.chave)
+        ligar(sai.id, saidaDaFila.chave, livre.id, ent.chave)
       }
     }
+    for (const no of grupo) ligarOutros(no)
+  }
+  function ligarOutros(no) {
+    const p = portas(no)
     for (const ent of p.entradas) {
       if (ent.tipo === VALOR && !temFioDeEntrada(no, ent.chave)) {
         const achado = [...nivel().nos].reverse().find(
@@ -351,15 +503,18 @@ function criar(raiz) {
     return no
   }
   function acrescentar(chave) {
+    if (ocupado()) {
+      avisarOcupado()
+      return
+    }
     if (chave === RESULTADO && nivel().nos.some((n) => n.tipo === chave)) {
       dica.textContent = "A prancheta já tem o bloco Em função de."
       return
     }
-    guardar()
     const no = criarNo(chave)
     ;[no.x, no.y] = lugarLivre(no)
     nivel().nos.push(no)
-    ligarSozinho(no)
+    ligarGrupo([no])
     e.sel = { no: no.id }
     dica.textContent = e.catalogo[chave].dica
     enviar()
@@ -385,7 +540,10 @@ function criar(raiz) {
     const entrada = b.entradas.find((p) => liga(s, p))
     const saida = b.saidas.find((p) => liga(p, ent))
     if (!entrada || !saida) return
-    guardar()
+    if (ocupado()) {
+      avisarOcupado()
+      return
+    }
     const no = criarNo(chave)
     const ponta = pontaDoFio(fio)
     no.x = Math.round((ponta.a[0] + ponta.b[0]) / 2 - LARGURA / 2)
@@ -402,8 +560,11 @@ function criar(raiz) {
   }
   function apagar() {
     const n = nivel()
+    if (ocupado()) {
+      avisarOcupado()
+      return
+    }
     if (e.multi.size) {
-      guardar()
       n.fios = n.fios.filter((f) => !e.multi.has(f.de) && !e.multi.has(f.para))
       n.nos = n.nos.filter((x) => !e.multi.has(x.id))
       e.multi.clear()
@@ -412,7 +573,6 @@ function criar(raiz) {
       return
     }
     if (!e.sel) return
-    guardar()
     if (e.sel.no) {
       const id = e.sel.no
       const no = noPorId(id)
@@ -464,7 +624,20 @@ function criar(raiz) {
     if (largura * ESCALA_LEGIVEL <= svg.getBoundingClientRect().width) return
     organizar()
     e.versao += 1
-    e.enviar?.("edicao", { grafo: copiar(e.raiz), versao: e.versao, so_posicao: true })
+    e.ultimoSoPosicao = true
+    // `automatico`: o Python junta esta arrumação com a mudança de antes, e não abre um passo só
+    // para ela no Ctrl+Z.
+    e.enviar?.("edicao", pedidoDeEdicao(true, { automatico: true }))
+    vigiar()
+  }
+  function algumVisivel() {
+    const r = svg.getBoundingClientRect()
+    const esc = e.vista.esc
+    return nivel().nos.some((n) => {
+      const x = n.x * esc + e.vista.x
+      const y = n.y * esc + e.vista.y
+      return x + LARGURA * esc > 0 && x < r.width && y + altura(n) * esc > 0 && y < r.height
+    })
   }
   function ajustarVista(quebrarFila = false) {
     const r = svg.getBoundingClientRect()
@@ -525,22 +698,115 @@ function criar(raiz) {
     desenhar()
   }
 
+  // ---- copiar e colar: a cópia nasce com os números do original, e o Python marca de onde vieram
+  function copiarSelecao() {
+    const ids = e.multi.size ? [...e.multi] : e.sel?.no ? [e.sel.no] : []
+    const nos = nivel().nos.filter((n) => ids.includes(n.id) && conhecido(n) && n.tipo !== RESULTADO)
+    if (!nos.length) {
+      dica.textContent = ids.length
+        ? "O bloco Em função de não se copia: a prancheta tem um só."
+        : "Selecione um bloco para copiar."
+      return false
+    }
+    const escolhidos = new Set(nos.map((n) => n.id))
+    const naFila = (f) => {
+      const destino = noPorId(f.para)
+      const porta = destino ? portas(destino).entradas.find((p) => p.chave === f.entrada) : null
+      return porta ? daFila(porta) : false
+    }
+    // Vão junto os fios de dentro e os que trazem número ou material de fora. A fila não: a cópia
+    // entra nela como um bloco novo, depois do original.
+    e.copiado = {
+      prefixo: prefixo(),
+      nos: copiar(nos),
+      fios: copiar(nivel().fios.filter((f) => escolhidos.has(f.para) && (escolhidos.has(f.de) || !naFila(f)))),
+    }
+    dica.textContent =
+      nos.length > 1
+        ? `${nos.length} blocos copiados. Ctrl+V cola com os mesmos números.`
+        : "Bloco copiado. Ctrl+V cola com os mesmos números."
+    return true
+  }
+  function colar() {
+    if (ocupado()) {
+      avisarOcupado()
+      return
+    }
+    const c = e.copiado
+    if (!c) {
+      dica.textContent = "Copie um bloco antes: selecione e aperte Ctrl+C."
+      return
+    }
+    const n = nivel()
+    const ids = new Map()
+    const criados = []
+    for (const original of c.nos) {
+      const no = copiar(original)
+      no.id = idNovo()
+      ids.set(original.id, no.id)
+      n.nos.push(no)
+      criados.push(no)
+    }
+    // Logo abaixo do original, descendo até achar lugar sem cobrir outro bloco.
+    const novos = new Set(criados.map((x) => x.id))
+    const bate = (a) =>
+      n.nos.some(
+        (b) =>
+          !novos.has(b.id) && a.x < b.x + LARGURA + 16 && a.x + LARGURA + 16 > b.x && a.y < b.y + altura(b) + 12 && a.y + altura(a) + 12 > b.y,
+      )
+    const lugares = criados.map((x) => [x.x, x.y])
+    const topo = Math.min(...criados.map((x) => x.y))
+    const passo = Math.max(...criados.map((x) => x.y + altura(x))) - topo + FOLGA_Y
+    for (let k = 1; k <= 8; k += 1) {
+      criados.forEach((x, i) => {
+        x.y = lugares[i][1] + passo * k
+      })
+      if (!criados.some(bate)) break
+    }
+    const mesmoNivel = c.prefixo === prefixo()
+    for (const f of c.fios) {
+      const para = ids.get(f.para)
+      const de = ids.get(f.de) ?? (mesmoNivel && noPorId(f.de) ? f.de : null)
+      if (para && de) ligar(de, f.saida, para, f.entrada)
+    }
+    ligarGrupo(criados)
+    e.multi.clear()
+    if (criados.length === 1) e.sel = { no: criados[0].id }
+    else {
+      e.sel = null
+      for (const x of criados) e.multi.add(x.id)
+    }
+    // A senha é a versão que vai com este desenho: única, e o Python devolve quando já preencheu.
+    e.colados[String(e.versao + 1)] = Object.fromEntries(
+      criados.map((x, i) => [prefixo() + x.id, c.prefixo + c.nos[i].id]),
+    )
+    dica.textContent = "Colado com os números do original: mude só o que for diferente."
+    enviar()
+  }
+  function andarNaHistoria(acao) {
+    if (editor.aberto()) editor.fechar() // quem aperta Ctrl+Z com a caixinha aberta desiste do número
+    e.esperando = performance.now()
+    e.esperandoAcao = acao
+    e.avisoAntes = e.avisoVisto ?? 0
+    dica.textContent = acao === "desfazer" ? "Desfazendo: a conta já volta." : "Refazendo: a conta já volta."
+    comandar({ acao, versao: e.versao, grafo: copiar(e.raiz) })
+    atualizarBotoes()
+  }
+  function atualizarBotoes() {
+    const h = e.historia ?? {}
+    botaoDesfazer.disabled = !h.desfazer && e.versao <= e.versaoDoPython && !e.fila.length
+    botaoRefazer.disabled = !h.refazer && !e.fila.some((x) => x.acao === "desfazer")
+  }
+
   const acoes = {
     desfazer() {
-      if (!e.passado.length) return
-      e.futuro.push(copiar({ raiz: e.raiz, caminho: e.caminho }))
-      ;({ raiz: e.raiz, caminho: e.caminho } = e.passado.pop())
-      e.sel = null
-      montarTrilha()
-      enviar()
+      andarNaHistoria("desfazer")
     },
     refazer() {
-      if (!e.futuro.length) return
-      e.passado.push(copiar({ raiz: e.raiz, caminho: e.caminho }))
-      ;({ raiz: e.raiz, caminho: e.caminho } = e.futuro.pop())
-      e.sel = null
-      montarTrilha()
-      enviar()
+      andarNaHistoria("refazer")
+    },
+    duplicar() {
+      if (copiarSelecao()) colar()
     },
     mais() {
       const r = svg.getBoundingClientRect()
@@ -555,7 +821,10 @@ function criar(raiz) {
       desenhar()
     },
     organizar() {
-      guardar()
+      if (ocupado()) {
+        avisarOcupado()
+        return
+      }
       organizar()
       ajustarVista()
       enviar(true)
@@ -566,7 +835,11 @@ function criar(raiz) {
     },
     agrupar() {
       if (e.multi.size < 2) return
-      e.enviar?.("comando", { acao: "agrupar", ids: [...e.multi], caminho: [...e.caminho], versao: e.versao })
+      if (ocupado()) {
+        avisarOcupado()
+        return
+      }
+      comandar({ acao: "agrupar", ids: [...e.multi], caminho: [...e.caminho], versao: e.versao })
       e.multi.clear()
       e.sel = null
       desenhar()
@@ -692,6 +965,26 @@ function criar(raiz) {
     return `<circle class="porta t-${p.tipo}${extra}" data-porta="${lado}:${no.id}:${p.chave}" cx="${x}" cy="${y}" r="7.5"><title>${escapar(p.rotulo)}</title></circle>
       <text class="rotulo" x="${tx}" y="${y + 3.5}" text-anchor="${ancora}">${escapar(p.rotulo)}</text>`
   }
+  // O número de cada letra vira um pedaço clicável. A letra pedida não: o valor dela sai da conta.
+  function pedacosDaLinha(linha) {
+    const campos = e.marcas.campos ?? {}
+    let s = ""
+    linha.itens.forEach((p, i) => {
+      if (i) s += escapar(SEPARADOR)
+      const campo = p.c ? campos[p.c] : null
+      if (!campo || campo.alvo) {
+        s += escapar(p.t)
+        return
+      }
+      const classes = ["editavel", campo.copia ? "copiado" : "", e.mudando.has(p.c) ? "pendente" : ""]
+      const titulo = campo.copia
+        ? `${campo.t}: copiado de ${campo.copia}. Dois cliques para mudar.`
+        : `${campo.t}: dois cliques para mudar.`
+      s += `<tspan class="${classes.filter(Boolean).join(" ")}" data-chave="${escapar(p.c)}">${escapar(p.t)}<title>${escapar(titulo)}</title></tspan>`
+    })
+    if (linha.mais) s += " …"
+    return s
+  }
   function desenharBloco(no, destaque) {
     const p = portas(no)
     const h = altura(no)
@@ -699,7 +992,7 @@ function criar(raiz) {
     const erro = erroDe(no)
     const sel = e.sel?.no === no.id || e.multi.has(no.id)
     const fraco = destaque && !destaque.has(no.id)
-    const { linhas, forte } = conteudo(no)
+    const { linhas, forte, copia } = conteudo(no)
     const classe = classeDe(no)
     const categoria = no.tipo === CONJUNTO ? "CONJUNTO REUTILIZÁVEL" : tipoDe(no)?.categoria ?? ""
     const luzDoBloco = erro ? "erro" : e.marcas.luzes?.[chave] ?? e.marcas.situacao?.nivel ?? "falta"
@@ -716,8 +1009,12 @@ function criar(raiz) {
       ${nomeNoCartao(no)}`
     let linhaY = y + 58
     for (const linha of linhas) {
-      s += `<text class="linha" x="${x + 12}" y="${linhaY}">${escapar(linha)}</text>`
+      s += `<text class="linha" x="${x + 12}" y="${linhaY}">${pedacosDaLinha(linha)}</text>`
       linhaY += 13
+    }
+    if (copia) {
+      // Pendurado na borda de cima, para não brigar com o texto do cartão.
+      s += `<g class="selo-copia"><rect x="${x + LARGURA - 66}" y="${y - 8}" width="46" height="14" rx="4"/><text x="${x + LARGURA - 43}" y="${y + 2.4}" text-anchor="middle">CÓPIA</text><title>Números copiados de outro bloco. Dois cliques num número mudam o valor; Enter na caixinha confirma o que já está certo.</title></g>`
     }
     if (forte) {
       s += `<text class="destaque" x="${x + 12}" y="${linhaY + 2}">${escapar(forte)}</text>`
@@ -804,6 +1101,72 @@ function criar(raiz) {
     svg.style.backgroundPosition = `${e.vista.x}px ${e.vista.y}px`
     zoom.textContent = `${Math.round(e.vista.esc * 100)}%`
     botaoAgrupar.hidden = e.multi.size < 2
+    const umBloco = noPorId(e.sel?.no)
+    botaoDuplicar.disabled = !(e.multi.size || (umBloco && umBloco.tipo !== RESULTADO))
+  }
+
+  // ---- o número no próprio cartão
+  const editor = criarEditorVivo(miolo, {
+    aoFechar() {
+      e.editando = null
+    },
+    aoTab(voltar) {
+      editor.confirmar(vizinhaDoCampo(voltar ? -1 : 1))
+    },
+    depoisDoTeclado() {
+      svg.focus({ preventScroll: true })
+    },
+  })
+  const entradaDoEditor = miolo.querySelector(".editor input")
+  function camposDoBloco(id) {
+    return [...svg.querySelectorAll("[data-no] [data-chave]")]
+      .filter((t) => t.closest("[data-no]").dataset.no === id)
+  }
+  function elementoDoCampo(id, chave) {
+    return camposDoBloco(id).find((t) => t.dataset.chave === chave) ?? null
+  }
+  function vizinhaDoCampo(passo) {
+    const atual = e.editando
+    if (!atual) return null
+    const lista = [...new Set(camposDoBloco(atual.no).map((t) => t.dataset.chave))]
+    if (lista.length < 2) return null
+    const k = lista.indexOf(atual.chave)
+    return { no: atual.no, chave: lista[(k + passo + lista.length) % lista.length] }
+  }
+  function editarLetra(id, chave) {
+    const campo = e.marcas.campos?.[chave]
+    const alvo = elementoDoCampo(id, chave)
+    if (!campo || !alvo || campo.alvo) return false
+    if (editor.aberto() && !editor.confirmar()) return false
+    e.editando = { no: id, chave }
+    editor.abrir(alvo, {
+      valor: campo.v ?? 0,
+      texto: textoParaEditar(campo.v),
+      unidade: campo.u ?? "",
+      nome: campo.copia ? `${campo.t}: ${campo.n}. Copiado de ${campo.copia}: Enter confirma.` : `${campo.t}: ${campo.n}`,
+      dica: DICA_DO_EDITOR,
+      ler: (texto) => lerDoCartao(texto, campo),
+      aplicar(v, seguinte) {
+        const antes = campo.v ?? null
+        if (mesmoNumero(v, antes)) {
+          // Enter sem mudar nada num número copiado quer dizer que ele está certo.
+          if (campo.copia && antes !== null) {
+            comandar({ acao: "valor", chave, valor: antes, unidade: campo.u ?? "", conferir: true })
+          }
+          if (seguinte) setTimeout(() => editarLetra(seguinte.no, seguinte.chave), 0)
+          return ""
+        }
+        e.proxima = seguinte
+        e.mudando.set(chave, comandar({ acao: "valor", chave, valor: v, unidade: campo.u ?? "" }))
+        desenhar()
+        return ""
+      },
+    })
+    entradaDoEditor?.select() // digitar já troca o número inteiro
+    return true
+  }
+  function primeiraLetra(id) {
+    return camposDoBloco(id)[0]?.dataset.chave ?? null
   }
 
   // ---- ponteiro
@@ -831,9 +1194,7 @@ function criar(raiz) {
   function concluir(a, b) {
     if (!a || !b || a.lado === b.lado) return false
     const [saida, entrada] = a.lado === "s" ? [a, b] : [b, a]
-    guardar()
     if (!ligar(saida.no, saida.chave, entrada.no, entrada.chave)) {
-      e.passado.pop()
       dica.textContent = "Essas duas bolinhas não ligam: as grandezas são diferentes, ou o fio fecharia um laço."
       return false
     }
@@ -853,6 +1214,27 @@ function criar(raiz) {
       svg.setPointerCapture(ev.pointerId)
     } catch {
       // ponteiro sintético não captura, e o gesto segue pelos eventos do próprio svg
+    }
+    if (ocupado()) {
+      // Até a conta do Ctrl+Z voltar, a prancheta só deixa andar pela vista.
+      avisarOcupado()
+      e.gesto = { tipo: "pan", inicio: [ev.clientX, ev.clientY], vista: { ...e.vista } }
+      svg.classList.add("puxando")
+      return
+    }
+    const duplo = segundoToque(ev)
+    if (duplo?.chave) {
+      // Sem o padrão do toque, o navegador poria o foco de volta na prancheta e a caixinha fecharia.
+      ev.preventDefault()
+      e.gesto = null
+      editarLetra(duplo.no, duplo.chave)
+      return
+    }
+    if (duplo && noPorId(duplo.no)?.tipo === CONJUNTO) {
+      ev.preventDefault()
+      e.gesto = null
+      abrirConjunto(duplo.no)
+      return
     }
     const fecha = ev.target.closest?.("[data-fecha]")
     if (fecha) {
@@ -887,7 +1269,6 @@ function criar(raiz) {
         const f = n.fios.findIndex((x) => x.para === porta.no && x.entrada === porta.chave)
         const varias = portas(noPorId(porta.no)).entradas.find((p) => p.chave === porta.chave)?.varias
         if (f >= 0 && !varias) {
-          guardar()
           const [antigo] = n.fios.splice(f, 1)
           e.gesto = { tipo: "fio", lado: "s", no: antigo.de, chave: antigo.saida, ponta: mundo(ev), soltou: true }
           desenhar()
@@ -935,10 +1316,20 @@ function criar(raiz) {
     if (e.sel) selecionar(null)
     else desenhar()
   })
-  svg.addEventListener("dblclick", (ev) => {
-    const alvo = ev.target.closest?.("[data-no]")
-    if (alvo && noPorId(alvo.dataset.no)?.tipo === CONJUNTO) abrirConjunto(alvo.dataset.no)
-  })
+  // Dois toques são contados aqui, e não pelo dblclick: o primeiro toque redesenha o bloco, o
+  // elemento tocado some, e o navegador não manda nem o click nem o dblclick.
+  function segundoToque(ev) {
+    const bloco = ev.target.closest?.("[data-no]")
+    const numero = ev.target.closest?.("[data-chave]")
+    const marca = bloco ? `${bloco.dataset.no}|${numero?.dataset.chave ?? ""}` : null
+    const antes = e.ultimoToque
+    const agora = performance.now()
+    e.ultimoToque = marca ? { marca, t: agora, x: ev.clientX, y: ev.clientY } : null
+    if (!marca || antes?.marca !== marca || agora - antes.t > 450) return null
+    if (Math.hypot(ev.clientX - antes.x, ev.clientY - antes.y) > 8) return null
+    e.ultimoToque = null
+    return { no: bloco.dataset.no, chave: numero?.dataset.chave ?? null }
+  }
   svg.addEventListener("pointermove", (ev) => {
     const g = e.gesto
     if (!g) {
@@ -961,7 +1352,6 @@ function criar(raiz) {
       const [dx, dy] = [x - g.inicio[0], y - g.inicio[1]]
       if (!g.moveu && Math.hypot(dx, dy) * e.vista.esc < 4) return
       if (!g.moveu) {
-        guardar()
         g.moveu = true
         g.no = noPorId(g.no.id)
       }
@@ -1000,6 +1390,7 @@ function criar(raiz) {
   svg.addEventListener("wheel", (ev) => {
     if (!ev.ctrlKey) return
     ev.preventDefault()
+    if (editor.aberto()) editor.confirmar() // a caixinha não acompanha o zoom
     const [x, y] = noPonteiro(ev)
     aproximar(ev.deltaY < 0 ? 1.1 : 1 / 1.1, x, y)
   }, { passive: false })
@@ -1036,10 +1427,15 @@ function criar(raiz) {
     } else if (setas[ev.key]) {
       ev.preventDefault()
       vizinho(...setas[ev.key])
-    } else if (ev.key === "Enter") {
+    } else if (ev.key === "Enter" || ev.key === "F2") {
+      // Enter abre o conjunto; nos outros blocos, Enter e F2 abrem o primeiro número do cartão.
       const no = noPorId(e.sel?.no)
-      if (no?.tipo === CONJUNTO) abrirConjunto(no.id)
-      else if (e.sel?.fio !== undefined) {
+      const letra = no && !ocupado() ? primeiraLetra(no.id) : null
+      if (ev.key === "Enter" && no?.tipo === CONJUNTO) abrirConjunto(no.id)
+      else if (letra) {
+        ev.preventDefault()
+        editarLetra(no.id, letra)
+      } else if (ev.key === "Enter" && e.sel?.fio !== undefined) {
         biblioteca.classList.remove("fechada")
         busca.focus()
       }
@@ -1057,6 +1453,12 @@ function criar(raiz) {
     } else if (ctrl && ev.key.toLowerCase() === "y") {
       ev.preventDefault()
       acoes.refazer()
+    } else if (ctrl && ev.key.toLowerCase() === "c") {
+      ev.preventDefault()
+      copiarSelecao()
+    } else if (ctrl && ev.key.toLowerCase() === "v") {
+      ev.preventDefault()
+      colar()
     }
   })
   raiz.querySelectorAll("[data-a]").forEach((b) => {
@@ -1186,6 +1588,7 @@ function criar(raiz) {
     const s = e.marcas.situacao ?? { nivel: "falta", titulo: "Monte os blocos", detalhe: "" }
     luz.className = `luz ${s.nivel}`
     titulo.textContent = s.titulo
+    titulo.title = s.titulo
     detalhe.textContent = s.detalhe
     detalhe.title = s.detalhe
   }
@@ -1203,7 +1606,6 @@ function criar(raiz) {
     const novo = dados.grafo ?? { nos: [], fios: [] }
     if (dados.versao >= e.versao) {
       if (canonico(novo) !== canonico(e.raiz)) {
-        if (e.versao >= 0) guardar()
         e.raiz = copiar(novo)
         let atual = e.raiz
         const valido = []
@@ -1216,6 +1618,7 @@ function criar(raiz) {
         e.caminho = valido
         if (e.sel?.no && !noPorId(e.sel.no)) e.sel = null
         if (e.sel?.fio !== undefined && !nivel().fios[e.sel.fio]) e.sel = null
+        for (const id of [...e.multi]) if (!noPorId(id)) e.multi.delete(id)
         montarTrilha()
         refazerLista = true
       }
@@ -1223,6 +1626,7 @@ function criar(raiz) {
     }
     e.marcas = dados.marcas ?? {}
     mostrarSituacao()
+    if (receberConfirmacoes(dados) && !algumVisivel()) ajustarVista() // o Ctrl+Z trouxe blocos de fora da vista
     const pedido = dados.selecionar
     if (pedido && pedido.n !== e.selecionarVisto) {
       // A tela em Python também escolhe: inserir pelo inspetor seleciona o bloco novo.
@@ -1252,6 +1656,41 @@ function criar(raiz) {
     }
     if (refazerLista) montarLista()
     desenhar()
+    // A caixinha aberta num número que sumiu fecha; o Tab depois de mudar um número abre o seguinte.
+    if (e.editando && editor.aberto() && !elementoDoCampo(e.editando.no, e.editando.chave)) editor.fechar()
+    if (e.proxima && !editor.aberto()) {
+      const { no, chave } = e.proxima
+      e.proxima = null
+      editarLetra(no, chave)
+    }
+  }
+
+  // O que o Python já fez: os pedidos confirmados saem da fila, e o Ctrl+Z diz o que desfez.
+  // Devolve se um Ctrl+Z acabou de voltar.
+  function receberConfirmacoes(dados) {
+    if (Number.isInteger(dados.versao)) e.versaoDoPython = dados.versao
+    const recebido = Number.isInteger(dados.recebido) ? dados.recebido : 0
+    e.n = Math.max(e.n, recebido)
+    e.fila = e.fila.filter((x) => x.n > recebido)
+    for (const [chave, n] of [...e.mudando]) if (n <= recebido) e.mudando.delete(chave)
+    for (const senha of dados.colagens ?? []) delete e.colados[senha]
+    e.historia = dados.historia ?? {}
+    const aviso = e.historia.aviso ?? null
+    const numero = aviso?.n ?? 0
+    if (e.avisoVisto === null) e.avisoVisto = numero // o que já havia ao abrir a página não é novidade
+    const voltou = Boolean(e.esperando) && !e.fila.some((x) => x.acao === "desfazer" || x.acao === "refazer")
+    if (voltou) {
+      e.esperando = 0
+      if (aviso && numero !== e.avisoAntes) dica.textContent = aviso.texto
+      else dica.textContent = e.esperandoAcao === "desfazer" ? "Não há o que desfazer." : "Não há o que refazer."
+      e.avisoVisto = numero
+    } else if (aviso && numero !== e.avisoVisto) {
+      e.avisoVisto = numero
+      dica.textContent = aviso.texto
+    }
+    atualizarBotoes()
+    vigiar()
+    return voltou
   }
 
   new ResizeObserver(() => {

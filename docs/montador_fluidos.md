@@ -11,6 +11,12 @@ A fila é **Fluido → trechos → perdas → verificação → Em função de**
 a vazão e os trechos somados. Cada bloco acrescenta o dele, e por isso a ordem dos trechos não muda a
 perda total. Os 13 modelos prontos abrem com números de exemplo.
 
+Para um segundo trecho parecido, selecione o trecho e use Ctrl+C e Ctrl+V: ele entra antes da
+verificação com D₂, L₂ e ε₂ iguais aos do primeiro, marcados como cópia, e é só mudar o que for
+diferente, com dois cliques no número do cartão. As perdas localizadas usam a velocidade do trecho de
+antes delas: apagar o primeiro trecho, com as perdas logo depois dele, deixa as perdas sem trecho, e a
+página avisa.
+
 ## O que a conta faz
 
 **Perda de carga.** Darcy-Weisbach em cada trecho, h_f = f·(L/D)·V²/(2·g), mais K_L·V²/(2·g) nas perdas

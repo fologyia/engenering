@@ -36,6 +36,7 @@ from core import montador_conjuntos as mc
 from core import montador_fluidos as fl
 from core import montador_formula as mf
 from core import montador_grandezas as g
+from core import montador_historico as mh
 from core import montador_planilha as mp
 from core import montador_registro as rg
 from core import montador_word as mw
@@ -186,12 +187,24 @@ def _titulo_do_campo(grandeza: Grandeza, u: Unidades) -> str:
 # ---------------------------------------------------------------------------
 
 
+_DA_MONTAGEM = ("grafo", "valores", "origens", "padroes", "alvo", "adotado", "modelo_atual")
+
+
 def _instantaneo(p: Parte) -> dict[str, Any]:
     estado = st.session_state
-    return {
-        nome: json.loads(json.dumps(estado.get(p.k(nome))))
-        for nome in ("grafo", "valores", "origens", "padroes", "alvo", "adotado", "modelo_atual")
-    }
+    return {nome: json.loads(json.dumps(estado.get(p.k(nome)))) for nome in _DA_MONTAGEM}
+
+
+def _restaurar(p: Parte, foto: Mapping[str, Any], versao: int) -> None:
+    """Volta a montagem inteira de uma vez. A cópia é para o histórico não mudar junto com a tela."""
+    estado = st.session_state
+    copia = json.loads(json.dumps(foto))
+    # Acima da versão da prancheta: senão ela fica com o desenho que tem e ignora o que volta.
+    _trocar_grafo(p, copia["grafo"], versao=max(versao, estado.get(p.k("versao"), 0)) + 1)
+    for nome in _DA_MONTAGEM[1:]:
+        estado[p.k(nome)] = copia[nome]
+    estado[p.k("revisao")] = estado.get(p.k("revisao"), 0) + 1
+    _outra_montagem(p)  # os números já vêm com os blocos certos
 
 
 def _trocar_grafo(p: Parte, dados: Mapping[str, Any], *, versao: int | None = None) -> None:
@@ -216,6 +229,14 @@ def _aplicar(p: Parte, modelo: Modelo) -> None:
     estado[p.k("selecao")] = None
     estado[p.k("mudanca")] = ""
     estado.pop(p.k("ultima"), None)
+    _outra_montagem(p)
+
+
+def _outra_montagem(p: Parte) -> None:
+    """Os valores chegaram junto com os blocos: não há letra de antes para acompanhar."""
+    estado = st.session_state
+    estado[p.k("letras_por_no")] = None
+    estado[p.k("colar")] = {}
 
 
 def _iniciar(p: Parte) -> None:
@@ -258,6 +279,25 @@ def _ao_editar(p: Parte) -> None:
     _trocar_grafo(p, mc.tirar_portas_mortas(evento["grafo"]), versao=int(evento.get("versao", 0)))
     if not evento.get("so_posicao"):  # arrumar a prancheta não troca a conta
         estado[p.k("modelo_atual")] = None
+    elif evento.get("automatico"):
+        estado[p.k("juntar")] = True  # a prancheta se arrumou sozinha: não é passo para desfazer
+    _guardar_colagens(p, evento.get("colados"))
+
+
+def _guardar_colagens(p: Parte, colados: Any) -> None:
+    """Cada colagem tem uma senha, e a prancheta manda de novo até ver a senha de volta.
+
+    Os números só vão para a cópia depois de montar: é lá que se sabe a letra de cada bloco.
+    """
+    if not isinstance(colados, Mapping):
+        return
+    estado = st.session_state
+    feitas = set(estado.get(p.k("colagens")) or ())
+    pendentes = dict(estado.get(p.k("colar")) or {})
+    for senha, pares in colados.items():
+        if str(senha) not in feitas and isinstance(pares, Mapping):
+            pendentes[str(senha)] = {str(k): str(v) for k, v in pares.items()}
+    estado[p.k("colar")] = pendentes
 
 
 def _ao_selecionar(p: Parte) -> None:
@@ -267,10 +307,40 @@ def _ao_selecionar(p: Parte) -> None:
 
 
 def _ao_comandar(p: Parte) -> None:
+    """Os pedidos da prancheta vêm em fila, numerados.
+
+    Duas rodadas pedidas juntas viram uma só no Streamlit, e a de antes se perde. Por isso cada
+    pedido traz também os de antes que ainda não voltaram confirmados, e aqui só entra o que é novo.
+    """
     estado = st.session_state
     evento = getattr(estado.get(p.k("prancheta")), "comando", None)
-    if not evento or evento.get("acao") != "agrupar":
+    if not isinstance(evento, Mapping):
         return
+    if "lista" not in evento:
+        _comandar(p, evento)  # um pedido só, sem fila
+        return
+    ultimo = estado.get(p.k("comandos"), 0)
+    for item in evento.get("lista") or ():
+        n = item.get("n") if isinstance(item, Mapping) else None
+        if isinstance(n, bool) or not isinstance(n, int) or n <= ultimo:
+            continue
+        _comandar(p, item)
+        ultimo = n
+    estado[p.k("comandos")] = ultimo
+
+
+def _comandar(p: Parte, item: Mapping[str, Any]) -> None:
+    acao = item.get("acao")
+    if acao == "agrupar":
+        _agrupar(p, item)
+    elif acao == "valor":
+        _valor_do_cartao(p, item)
+    elif acao in ("desfazer", "refazer"):
+        _andar_na_historia(p, item, para_tras=acao == "desfazer")
+
+
+def _agrupar(p: Parte, evento: Mapping[str, Any]) -> None:
+    estado = st.session_state
     try:
         novo = mc.agrupar(
             estado[p.k("grafo")], list(evento.get("ids") or ()), "", evento.get("caminho") or ()
@@ -281,6 +351,55 @@ def _ao_comandar(p: Parte) -> None:
     estado[p.k("erro_conjunto")] = ""
     _trocar_grafo(p, novo, versao=int(evento.get("versao", 0)) + 1)
     estado[p.k("modelo_atual")] = None
+
+
+def _valor_do_cartao(p: Parte, item: Mapping[str, Any]) -> None:
+    """O número digitado no próprio cartão. Chega na unidade da tela e fica guardado na base."""
+    estado = st.session_state
+    chave = str(item.get("chave") or "")
+    dimensao = (estado.get(p.k("campos")) or {}).get(chave)
+    if dimensao is None or chave == estado.get(p.k("alvo")):
+        return  # a letra saiu da montagem, ou virou a letra pedida, desde o desenho
+    u = Unidades(p.sistema, tuple(estado[p.k("unidades")]))
+    if item.get("unidade") != u.rotulo(dimensao):
+        return  # a unidade da tela mudou desde o desenho: o número seria lido errado
+    origens = estado[p.k("origens")]
+    if item.get("conferir"):
+        if mh.copiada(origens.get(chave)):
+            origens[chave] = _DIGITADO
+        return
+    valor = item.get("valor")
+    if valor is not None and (
+        isinstance(valor, bool) or not isinstance(valor, (int, float)) or not math.isfinite(valor)
+    ):
+        return
+    estado[p.k("valores")][chave] = None if valor is None else float(valor) * u.fator(dimensao)
+    origens[chave] = _DIGITADO
+    estado[p.k("revisao")] += 1
+
+
+def _andar_na_historia(p: Parte, item: Mapping[str, Any], *, para_tras: bool) -> None:
+    estado = st.session_state
+    historico = estado.get(p.k("historico"))
+    if historico is None:
+        return
+    versao = item.get("versao")
+    versao = versao if isinstance(versao, int) and not isinstance(versao, bool) else 0
+    grafo = item.get("grafo")
+    # O gesto de logo antes do Ctrl+Z pode ter se perdido no caminho: o desenho vem junto e entra
+    # primeiro, para o Ctrl+Z desfazer esse gesto, e não o anterior a ele.
+    if isinstance(grafo, Mapping) and versao > estado.get(p.k("versao"), 0):
+        novo = mc.tirar_portas_mortas(grafo)
+        if rg.assinatura({"grafo": novo}) != rg.assinatura({"grafo": estado[p.k("grafo")]}):
+            estado[p.k("modelo_atual")] = None
+        _trocar_grafo(p, novo, versao=versao)
+    mh.registrar(historico, _instantaneo(p))
+    antes = historico["atual"]
+    foto = mh.desfazer(historico) if para_tras else mh.refazer(historico)
+    if foto is None:
+        return
+    _restaurar(p, foto, versao)
+    estado[p.k("andou")] = {"de": antes, "para": foto, "desfeito": para_tras}
 
 
 def _limpar(p: Parte) -> None:
@@ -297,6 +416,7 @@ def _limpar(p: Parte) -> None:
     estado[p.k("adotado")] = None
     estado[p.k("revisao")] += 1
     estado[p.k("selecao")] = None
+    _outra_montagem(p)
 
 
 def _voltar(p: Parte) -> None:
@@ -313,6 +433,7 @@ def _voltar(p: Parte) -> None:
     estado[p.k("revisao")] += 1
     estado[p.k("selecao")] = None
     estado[p.k("anterior")] = atual
+    _outra_montagem(p)
 
 
 def _abrir_documento(p: Parte, doc: Mapping[str, Any]) -> None:
@@ -330,6 +451,7 @@ def _abrir_documento(p: Parte, doc: Mapping[str, Any]) -> None:
     estado[p.k("modelo_atual")] = None
     estado[p.k("selecao")] = None
     estado[p.k("salvo")] = rg.assinatura(doc)
+    _outra_montagem(p)
 
 
 def _ao_trocar_unidade(p: Parte) -> None:
@@ -372,7 +494,7 @@ def _cabecalho(p: Parte) -> None:
         key=p.k("limpar"),
         on_click=_limpar,
         args=(p,),
-        help="Apaga os blocos para começar do zero. O botão Voltar traz tudo de volta.",
+        help="Apaga os blocos para começar do zero. Voltar, ou Ctrl+Z na prancheta, traz de volta.",
         width="stretch",
     )
     colunas[n + 2].button(
@@ -435,6 +557,138 @@ def _alvo(p: Parte, montagem: mt.Montagem) -> str | None:
     return escolhida.chave
 
 
+def _acompanhar_os_blocos(p: Parte, base: mt.Montagem) -> None:
+    """O número segue o bloco: apagar o primeiro trecho não dá ao segundo os números do apagado."""
+    estado = st.session_state
+    depois = mh.letras_por_no(base)
+    antes = estado.get(p.k("letras_por_no"))
+    estado[p.k("letras_por_no")] = depois
+    trocas = mh.renomes(antes, depois) if antes else {}
+    if not trocas:
+        return
+    em_uso = {chave for _, _, letras in depois.values() for chave in letras}
+    alvo = estado.get(p.k("alvo"))
+    mh.aplicar_renomes(
+        trocas, depois, estado[p.k("valores")], estado[p.k("origens")], estado[p.k("padroes")]
+    )
+    if alvo in trocas and alvo not in em_uso:
+        estado[p.k("alvo")] = trocas[alvo]
+    estado[p.k("revisao")] += 1
+
+
+def _preencher_copias(p: Parte, base: mt.Montagem) -> None:
+    """A cópia nasce com os números do original, marcados com a procedência até alguém mexer."""
+    estado = st.session_state
+    pendentes = estado.get(p.k("colar")) or {}
+    if not pendentes:
+        return
+    colados = {novo: original for pares in pendentes.values() for novo, original in pares.items()}
+    padroes_do_bloco = dict(base.padroes)
+
+    def padrao(chave: str) -> float | None:
+        if chave in padroes_do_bloco:
+            return padroes_do_bloco[chave]
+        grandeza = base.grandeza(chave)
+        return grandeza.padrao if grandeza is not None else None
+
+    def texto(chave: str) -> str:
+        grandeza = base.grandeza(chave)
+        return grandeza.texto if grandeza is not None else chave
+
+    mh.copiar_valores(
+        mh.letras_da_copia(base, colados),
+        estado[p.k("valores")],
+        estado[p.k("origens")],
+        estado[p.k("padroes")],
+        padroes_do_bloco,
+        padrao,
+        texto,
+    )
+    estado[p.k("colagens")] = [*(estado.get(p.k("colagens")) or ()), *pendentes][-50:]
+    estado[p.k("colar")] = {}
+    estado[p.k("revisao")] += 1
+
+
+def _registrar_historia(p: Parte) -> None:
+    """Toda mudança entra aqui, venha de onde vier: da prancheta, do inspetor ou do cartão."""
+    estado = st.session_state
+    atual = _instantaneo(p)
+    juntar = bool(estado.pop(p.k("juntar"), False))
+    historico = estado.get(p.k("historico"))
+    if historico is None:
+        estado[p.k("historico")] = mh.novo(atual)
+    else:
+        mh.registrar(historico, atual, juntar=juntar)
+
+
+def _o_que_mudou(
+    de: Mapping[str, Any], para: Mapping[str, Any], base: mt.Montagem, u: Unidades
+) -> str:
+    """O que o Ctrl+Z fez, em poucas palavras: a conta demora um instante, e a tela diz o porquê."""
+    m = mh.mudanca(de, para)
+    blocos_de = mh.blocos(de.get("grafo") or {})
+    blocos_para = mh.blocos(para.get("grafo") or {})
+    if m.tipos or len(m.entraram) + len(m.sairam) > 2 or (m.entraram and m.sairam):
+        return "a montagem voltou como estava"
+    if m.entraram or m.sairam:
+        partes = [f"o bloco {_nome_do_no(blocos_para[i])} voltou" for i in m.entraram]
+        partes += [f"o bloco {_nome_do_no(blocos_de[i])} saiu" for i in m.sairam]
+        return " e ".join(partes)
+    partes = []
+    valores = para.get("valores") or {}
+    mudaram = [c for c in m.valores if base.grandeza(c) is not None]
+    if 0 < len(mudaram) <= 2:
+        for chave in mudaram:
+            grandeza = base.grandeza(chave)
+            valor = valores.get(chave)
+            if valor is None:
+                partes.append(f"{grandeza.texto} ficou como letra")
+            else:
+                partes.append(f"{grandeza.texto} voltou a {_com_unidade(valor, grandeza, u)}")
+    elif mudaram:
+        partes.append(f"{len(mudaram)} valores voltaram como eram")
+    elif m.origens:
+        origens = para.get("origens") or {}
+        textos = ", ".join(_texto_da_letra(base, c) for c in m.origens)
+        varios = len(m.origens) > 1
+        if any(mh.copiada(origens.get(c)) for c in m.origens):
+            marcado = "voltaram a ficar marcados" if varios else "voltou a ficar marcado"
+            partes.append(f"{textos} {marcado} como cópia")
+        else:
+            partes.append(f"{textos} {'ficaram conferidos' if varios else 'ficou conferido'}")
+    if m.alvo:
+        alvo = base.grandeza(str(para.get("alvo") or ""))
+        partes.append(f"a letra pedida voltou a {alvo.texto}" if alvo else "a letra pedida voltou")
+    elif m.adotado:
+        partes.append("o valor adotado voltou")
+    if m.opcoes:
+        partes.append(f"a escolha do bloco {_nome_do_no(blocos_para[m.opcoes[0]])} voltou")
+    elif m.fios:
+        partes.append("a ligação voltou como era")
+    if not partes and m.lugares:
+        partes.append("os blocos voltaram ao lugar")
+    return " e ".join(partes[:2])
+
+
+def _texto_da_letra(base: mt.Montagem, chave: str) -> str:
+    grandeza = base.grandeza(chave)
+    return grandeza.texto if grandeza is not None else chave
+
+
+def _contar_o_que_andou(p: Parte, base: mt.Montagem, u: Unidades) -> None:
+    estado = st.session_state
+    andou = estado.pop(p.k("andou"), None)
+    if not andou:
+        return
+    texto = _o_que_mudou(andou["de"], andou["para"], base, u)
+    feito = "Desfeito" if andou["desfeito"] else "Refeito"
+    anterior = estado.get(p.k("aviso_historia")) or {}
+    estado[p.k("aviso_historia")] = {
+        "n": anterior.get("n", 0) + 1,
+        "texto": f"{feito}: {texto}." if texto else f"{feito}.",
+    }
+
+
 # ---------------------------------------------------------------------------
 # O que vai para a prancheta
 # ---------------------------------------------------------------------------
@@ -444,6 +698,27 @@ def _sinal(sentido: str | None) -> str:
     return {mt.MINIMO: "≥", mt.MAXIMO: "≤"}.get(sentido or "", "=")
 
 
+def _pedacos_no_cartao(
+    chaves: Sequence[str],
+    base: mt.Montagem,
+    valores: Mapping[str, float | None],
+    alvo: str | None,
+    u: Unidades,
+) -> list[list[str]]:
+    """Cada letra do cartão com a chave dela: na prancheta, dois cliques no pedaço mudam o número."""
+    pedacos = []
+    for chave in chaves:
+        grandeza = base.grandeza(chave)
+        if grandeza is None:
+            continue
+        valor = valores.get(chave)
+        if valor is None or chave == alvo:
+            pedacos.append([f"{grandeza.texto} = ?", chave])
+        else:
+            pedacos.append([f"{grandeza.texto} = {_com_unidade(valor, grandeza, u)}", chave])
+    return pedacos
+
+
 def _letras_no_cartao(
     chaves: Sequence[str],
     base: mt.Montagem,
@@ -451,17 +726,29 @@ def _letras_no_cartao(
     alvo: str | None,
     u: Unidades,
 ) -> str:
-    partes = []
-    for chave in chaves:
-        grandeza = base.grandeza(chave)
-        if grandeza is None:
-            continue
-        valor = valores.get(chave)
-        if valor is None or chave == alvo:
-            partes.append(f"{grandeza.texto} = ?")
-        else:
-            partes.append(f"{grandeza.texto} = {_com_unidade(valor, grandeza, u)}")
-    return " · ".join(partes)
+    return " · ".join(texto for texto, _ in _pedacos_no_cartao(chaves, base, valores, alvo, u))
+
+
+def _campos_do_cartao(
+    base: mt.Montagem,
+    valores: Mapping[str, float | None],
+    origens: Mapping[str, str],
+    alvo: str | None,
+    u: Unidades,
+) -> dict[str, dict[str, Any]]:
+    """O que a caixinha do cartão precisa de cada letra: o número já na unidade da tela."""
+    campos = {}
+    for item in base.grandezas:
+        valor = valores.get(item.chave)
+        campos[item.chave] = {
+            "t": item.texto,
+            "n": item.nome,
+            "v": _para_o_campo(valor, u.fator(item.dimensao)),
+            "u": u.rotulo(item.dimensao),
+            "alvo": item.chave == alvo,
+            "copia": mh.copiada(origens.get(item.chave)) if valor is not None else "",
+        }
+    return campos
 
 
 def _conjuntos_de(nos: Sequence[Mapping[str, Any]], prefixo: str = "") -> Iterator[str]:
@@ -484,7 +771,11 @@ def _marcar_criterios(
             por_bloco.setdefault(linha.no, []).append(linha)
     for id_, lista in por_bloco.items():
         maior = max(linha.uso for linha in lista)
-        faces.setdefault(id_, {})["a"] = f"Utilização = {_numero(maior * 100.0)} %"
+        face = faces.setdefault(id_, {})
+        uso = f"Utilização = {_numero(maior * 100.0)} %"
+        # No cartão, os números do critério continuam à vista depois do uso, para mudar ali mesmo.
+        face["p"] = [[uso, ""], *(x for x in face.get("p", ()) if x[1])]
+        face["a"] = uso
         luzes[id_] = "erro" if maior > 1.0 + 1e-9 else "ok"
     pedidos: dict[str, list[mt.Isolada]] = {}
     for item in resposta.isoladas:
@@ -536,16 +827,18 @@ def _faces(
     for no in grafo.nos:
         bloco = mb.POR_CHAVE[no.tipo]
         letras = proprias.get(no.id, ())
-        texto = _letras_no_cartao(letras, base, valores, alvo, u)
-        if not texto and bloco.face is not None:
-            texto = bloco.face(dict(no.opcoes))
+        pedacos = _pedacos_no_cartao(letras, base, valores, alvo, u)
+        if not pedacos and bloco.face is not None:
+            pedacos = [[bloco.face(dict(no.opcoes)), ""]]
         if bloco.grupo in (mb.GRUPO_MATERIAL, mb.GRUPO_FLUIDO) and bloco.opcoes:
             escolha = dict(no.opcoes).get(bloco.opcoes[0].chave, bloco.opcoes[0].padrao)
-            texto = " · ".join(x for x in (str(escolha), texto) if x)
-        if no.tipo == mb.FORMULA:
-            texto = dict(no.opcoes).get("texto", "") or texto
+            pedacos = [[str(escolha), ""], *pedacos]
+        if no.tipo == mb.FORMULA and dict(no.opcoes).get("texto"):
+            pedacos = [[dict(no.opcoes)["texto"], ""]]
+        pedacos = [x for x in pedacos if x[0]]
+        texto = " · ".join(x[0] for x in pedacos)
         if texto:
-            faces[no.id] = {"a": texto}
+            faces[no.id] = {"a": texto, "p": pedacos}
         faltam = any(valores.get(c) is None and c != alvo for c in letras)
         luzes[no.id] = "falta" if faltam else "ok"
         destaque = _SAIDA_NO_CARTAO.get(no.tipo)
@@ -563,7 +856,8 @@ def _faces(
         dentro = [no.id for no in grafo.nos if no.id.startswith(f"{id_}/")]
         letras = tuple(dict.fromkeys(c for i in dentro for c in proprias.get(i, ())))
         forte = next((faces[i]["b"] for i in dentro if faces.get(i, {}).get("b")), "")
-        faces[id_] = {"a": _letras_no_cartao(letras, base, valores, alvo, u), "b": forte}
+        pedacos = _pedacos_no_cartao(letras, base, valores, alvo, u)
+        faces[id_] = {"a": " · ".join(x[0] for x in pedacos), "b": forte, "p": pedacos}
         achadas = {luzes.get(i) for i in dentro}
         luzes[id_] = next((luz for luz in _PIOR_PRIMEIRO if luz in achadas), "ok")
     return faces, luzes
@@ -577,6 +871,7 @@ def _situacao(
     diagnosticos: Sequence[rg.Diagnostico],
     padroes_em_uso: Sequence[str],
     salvo: bool,
+    copiados: Sequence[str] = (),
 ) -> dict[str, str]:
     """A linha acima da prancheta: completo não quer dizer aprovado."""
     if not grafo.nos:
@@ -615,6 +910,8 @@ def _situacao(
         return {"nivel": "alerta", "titulo": "Referência a conferir", "detalhe": ruins[0].mensagem}
     quantas = len(montagem.condicoes)
     partes = [f"{quantas} {'condição' if quantas == 1 else 'condições'}"]
+    if copiados:
+        partes.append(f"número copiado em {', '.join(copiados)}")
     if padroes_em_uso:
         partes.append(f"valor padrão em {', '.join(padroes_em_uso)}")
     partes.append("alterações não salvas" if not salvo else "salvo")
@@ -737,12 +1034,40 @@ def _origem_dos_valores(p: Parte, letras: Sequence[Grandeza]) -> None:
     origens = st.session_state[p.k("origens")]
     valores = st.session_state[p.k("valores")]
     grupos: dict[str, list[str]] = {}
+    copias: list[Grandeza] = []
     for item in letras:
         origem = origens.get(item.chave)
-        if origem and origem != _DIGITADO and valores.get(item.chave) is not None:
+        if not origem or origem == _DIGITADO or valores.get(item.chave) is None:
+            continue
+        if mh.copiada(origem):
+            copias.append(item)
+        else:
             grupos.setdefault(origem, []).append(item.texto)
     for origem, nomes in grupos.items():
         st.caption(f"{', '.join(nomes)}: {origem.lower() if origem[0] == 'P' else origem}.")
+    if not copias:
+        return
+    novas = ", ".join(item.texto for item in copias)
+    fontes = ", ".join(mh.copiada(origens[item.chave]) for item in copias)
+    if len(copias) == 1:
+        st.caption(f"{novas}: copiado de {fontes}. Confira se serve aqui.")
+    else:
+        st.caption(f"{novas}: copiados de {fontes}. Confira se servem aqui.")
+    st.button(
+        "Os números copiados estão certos",
+        key=p.k("conferir_copias"),
+        on_click=_conferir_copias,
+        args=(p, tuple(item.chave for item in copias)),
+        help="Marca os números copiados como conferidos: passam a contar como digitados.",
+        width="stretch",
+    )
+
+
+def _conferir_copias(p: Parte, chaves: Sequence[str]) -> None:
+    origens = st.session_state[p.k("origens")]
+    for chave in chaves:
+        if mh.copiada(origens.get(chave)):
+            origens[chave] = _DIGITADO
 
 
 def _campos(p: Parte, letras: Sequence[Grandeza], alvo: str | None, u: Unidades) -> None:
@@ -816,7 +1141,8 @@ def _inspetor_geral(
     _topo_do_inspetor(
         "Montagem",
         "Valores da montagem",
-        "Clique num bloco ou numa ligação para ver só o dele. Campo vazio fica como letra.",
+        "Clique num bloco ou numa ligação para ver só o dele. Dois cliques num número do cartão "
+        "também mudam o valor. Campo vazio fica como letra.",
     )
     com_opcoes = [no for no in grafo.nos if mb.POR_CHAVE[no.tipo].opcoes]
     if base.grandezas or com_opcoes:
@@ -2445,8 +2771,15 @@ def tela_do_montador(p: Parte) -> None:
     dados = estado[p.k("grafo")]
     grafo = mt.grafo_de_dados(dados)
     base = mt.montar(grafo)
+    # Nesta ordem, e sem nada na tela no meio: o número segue o bloco, a cópia recebe os números do
+    # original, as letras novas ganham o padrão, e só então a montagem entra no histórico.
+    _acompanhar_os_blocos(p, base)
+    _preencher_copias(p, base)
     _sincronizar_valores(p, base)
     alvo = _alvo(p, base)
+    _registrar_historia(p)
+    _contar_o_que_andou(p, base, u)
+    estado[p.k("campos")] = {item.chave: item.dimensao for item in base.grandezas}
     resposta: mt.Resposta | None = None
     falha = ""
     if alvo is not None and base.condicoes:
@@ -2473,6 +2806,13 @@ def tela_do_montador(p: Parte) -> None:
         and estado[p.k("valores")].get(item.chave) is not None
         and item.chave != alvo
     ]
+    copiados = [
+        item.texto
+        for item in base.grandezas
+        if mh.copiada(estado[p.k("origens")].get(item.chave))
+        and estado[p.k("valores")].get(item.chave) is not None
+        and item.chave != alvo
+    ]
     erros = dict(base.erros)
     for diagnostico in diagnosticos:
         if diagnostico.situacao != rg.EM_DIA:
@@ -2491,10 +2831,14 @@ def tela_do_montador(p: Parte) -> None:
         "erros": erros,
         "faces": faces,
         "luzes": luzes,
-        "situacao": _situacao(grafo, base, resposta, falha, diagnosticos, padroes_em_uso, salvo),
+        "situacao": _situacao(
+            grafo, base, resposta, falha, diagnosticos, padroes_em_uso, salvo, copiados
+        ),
         "rastro": _rastro(grafo, resposta),
+        "campos": _campos_do_cartao(base, estado[p.k("valores")], estado[p.k("origens")], alvo, u),
     }
     catalogo = [*mb.catalogo_para_tela(p.dominio), *mc.catalogo_de_conjuntos(p.dominio)]
+    historico = estado[p.k("historico")]
     prancha, lateral = st.columns([2.7, 1], gap="small")
     with prancha:
         prancheta_de_blocos(
@@ -2505,6 +2849,13 @@ def tela_do_montador(p: Parte) -> None:
                 "ajustar": estado[p.k("ajuste")],
                 "marcas": marcas,
                 "selecionar": estado.pop(p.k("pedido"), None),
+                "historia": {
+                    "desfazer": bool(historico["passado"]),
+                    "refazer": bool(historico["futuro"]),
+                    "aviso": estado.get(p.k("aviso_historia")),
+                },
+                "recebido": estado.get(p.k("comandos"), 0),
+                "colagens": list(estado.get(p.k("colagens")) or ()),
             },
             key=p.k("prancheta"),
             ao_editar=lambda: _ao_editar(p),

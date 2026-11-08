@@ -105,6 +105,13 @@ button {
 button:hover {
   background: var(--st-secondary-background-color);
 }
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+button:disabled:hover {
+  background: transparent;
+}
 button:focus-visible,
 input:focus-visible,
 summary:focus-visible {
@@ -140,6 +147,7 @@ summary:focus-visible {
   color: #16836f;
 }
 .miolo {
+  position: relative; /* a caixinha de digitar o número fica por cima da prancheta */
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -163,6 +171,9 @@ summary:focus-visible {
 .situacao-texto strong {
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap; /* prancheta estreita: o título encolhe e não passa por baixo dos botões */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .situacao-texto span {
   font-size: 11px;
@@ -187,19 +198,24 @@ summary:focus-visible {
 .luz.alerta {
   background: #d97706;
 }
-.acoes {
+/* As classes da prancheta ficam presas ao lugar delas: a caixinha do número usa os mesmos nomes. */
+.topo-barra .acoes {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
-.acoes .icone {
+.topo-barra .acoes .icone {
   font-size: 15px;
   padding: 3px 8px;
   opacity: 0.75;
 }
-.acoes .forte {
+.topo-barra .acoes .forte {
   font-weight: 600;
+}
+/* Desligado tem de se ver: sem isto os ícones ficavam com a opacidade de sempre. */
+.topo-barra .acoes button:disabled {
+  opacity: 0.3;
 }
 .trilha {
   display: flex;
@@ -223,7 +239,7 @@ summary:focus-visible {
 .trilha span {
   opacity: 0.6;
 }
-svg {
+.miolo > svg {
   display: block;
   width: 100%;
   height: 482px;
@@ -237,11 +253,19 @@ svg {
   background-image: radial-gradient(circle, var(--st-border-color) 1px, transparent 1.2px);
   background-size: 22px 22px;
 }
-svg.teclado:focus {
+.miolo > svg.teclado:focus {
   box-shadow: inset 0 0 0 2px var(--st-primary-color);
 }
-svg.puxando {
+.miolo > svg.puxando {
   cursor: grabbing;
+}
+.desenho-do-botao {
+  display: block;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
 }
 .rodape {
   display: flex;
@@ -252,7 +276,7 @@ svg.puxando {
   box-sizing: border-box;
   border-top: 1px solid var(--st-border-color);
 }
-.dica {
+.rodape .dica {
   flex: 1;
   min-width: 0;
   font-size: 11px;
@@ -350,7 +374,7 @@ svg.puxando {
 .luz-no.alerta {
   fill: #d97706;
 }
-.nome {
+text.nome {
   fill: var(--st-text-color);
   font-size: 13px;
   font-weight: 700;
@@ -369,11 +393,44 @@ svg.puxando {
 .fecha:hover {
   opacity: 1 !important;
 }
-.linha {
+text.linha {
   fill: var(--st-text-color);
   font-family: var(--st-code-font);
   font-size: 9.6px;
   opacity: 0.85;
+  pointer-events: none;
+}
+/* Só o número recebe o clique: o resto da linha deixa o bloco ser puxado. */
+text.linha .editavel {
+  pointer-events: auto;
+  cursor: text;
+  text-decoration: none;
+}
+.no:hover text.linha .editavel,
+.no.sel text.linha .editavel {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+text.linha .editavel:hover {
+  fill: var(--st-primary-color);
+}
+text.linha .copiado {
+  fill: #b45309;
+  font-weight: 700;
+}
+text.linha .pendente {
+  opacity: 0.4;
+}
+.selo-copia rect {
+  fill: color-mix(in srgb, #d97706 14%, var(--st-background-color));
+  stroke: #d97706;
+  stroke-width: 1;
+}
+.selo-copia text {
+  fill: #b45309;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   pointer-events: none;
 }
 .destaque {

@@ -9,8 +9,36 @@ Letra sem valor continua na fórmula, e assim sai `h = 1,6·√M` quando só o m
 A tela tem três colunas: a biblioteca, a prancheta e o inspetor. Quem clica num bloco da biblioteca
 já recebe a fila ligada: **Seção → esforços → critério → Em função de**. Um esforço novo entra antes
 do critério, e apagar um esforço do meio não quebra a fila. As bolinhas ligam à mão também: arraste de
-uma à outra, ou clique em uma e depois na outra. Puxar uma entrada já ligada solta o fio. Ctrl+Z desfaz,
-Ctrl+Y refaz, Delete apaga o selecionado, as setas andam de um bloco ao outro, e Enter abre o conjunto.
+uma à outra, ou clique em uma e depois na outra. Puxar uma entrada já ligada solta o fio. Delete apaga
+o selecionado, as setas andam de um bloco ao outro, e Enter abre o conjunto.
+
+**O número no próprio cartão.** Dois cliques num número do cartão (M_x = 2 kN·m) abrem ali a caixinha
+das medidas dos desenhos: vale conta (300/2), unidade (2000 N·m num campo em kN·m) e valor relativo
+(+10, *1,2). Enter confirma, Esc desiste, Tab vai ao número seguinte do mesmo bloco, e campo vazio
+volta a ser letra. Enter ou F2 com o bloco selecionado abre o primeiro número. A letra pedida não abre:
+o valor dela sai da conta. O inspetor continua valendo, e os dois mostram o mesmo número.
+
+**Um Ctrl+Z só.** Ctrl+Z desfaz e Ctrl+Y refaz tudo, na ordem em que foi feito: bloco, fio, número
+digitado no cartão ou no inspetor, escolha de um bloco, Limpar e modelo aberto. O histórico guarda a
+montagem inteira (blocos, fios e valores juntos) e mora no Python, junto com os valores. Por isso cada
+Ctrl+Z refaz a conta e tem a mesma espera curta de mudar um valor; a linha de baixo da prancheta diz o
+que voltou ("Desfeito: S_y voltou a 250 MPa."). Enquanto a conta volta, a prancheta só deixa mover a
+vista: um gesto novo sairia do desenho de antes. Os pedidos vão numerados, cada um com os de antes que
+ainda não voltaram confirmados, porque o Streamlit junta duas rodadas pedidas ao mesmo tempo e a
+primeira se perderia; o que ficar sem resposta vai de novo.
+
+**Copiar e colar.** Ctrl+C e Ctrl+V, ou o botão de duplicar acima da prancheta, copiam o bloco
+selecionado (ou os marcados com Shift). A cópia entra na fila depois do original, como um bloco novo da
+biblioteca, e leva os fios de dentro do grupo e os que trazem número ou material de fora. Ela nasce com
+os números do original: o segundo trecho já vem com D₂ e L₂ iguais aos do primeiro, e só se muda o que
+for diferente. Cada número copiado fica marcado "Copiado de L" no inspetor, no arquivo e no Word, e o
+cartão leva a etiqueta CÓPIA, até alguém mudar o número ou confirmar que ele está certo (Enter na
+caixinha sem mudar nada, ou "Os números copiados estão certos" no inspetor). O que a cópia já traria
+sozinha, o padrão do programa e o da tabela, fica com a procedência de lá.
+
+**O número segue o bloco.** O segundo bloco igual usa outra letra (M₂, L₂), e a letra sai da ordem dos
+fios. Apagar o primeiro faz o segundo virar M, e os números vão junto com ele: o bloco que ficou não
+passa a mostrar os do bloco apagado.
 
 Há quatro tipos de fio. O azul leva a seção e as tensões somadas até ali. O laranja troca uma letra pela
 fórmula de outro bloco: ligando a viga na flexão, M vira F·L/4, e a equação passa a falar em F e L. O
@@ -34,7 +62,8 @@ Mostra o que está selecionado, e cada coisa do seu jeito:
 - **Em função de:** a resposta, quem manda e o uso de cada condição.
 
 Abaixo dos resultados, "De onde veio cada valor" diz a procedência campo a campo (digitado, exemplo do
-modelo, padrão do programa, tabela), e a página avisa o que mudou na resposta, e por causa de qual valor.
+modelo, padrão do programa, tabela, copiado de outro bloco), e a página avisa o que mudou na resposta, e
+por causa de qual valor.
 Rastrear este resultado acende na prancheta o caminho de quem decide.
 
 Modelo completo não quer dizer aprovado. A faixa de cima da prancheta só diz que a conta fecha, e o

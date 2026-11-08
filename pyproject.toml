@@ -68,6 +68,7 @@ files = [
     "core/montador_conjuntos.py",
     "core/montador_fluidos.py",
     "core/montador_funcoes.py",
+    "core/montador_historico.py",
     "core/montador_registro.py",
     "core/montador_grandezas.py",
     "core/montador_modelos.py",

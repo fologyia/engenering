@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 _PASTA = Path(__file__).parent / "prancheta_blocos"
+_COMUM = Path(__file__).parent / "editor_numerico"  # a caixinha do número, a mesma dos desenhos
 _NOME = "mecanica_toolkit_prancheta_blocos"
 
 
@@ -16,8 +17,10 @@ def _registrar() -> Any:
     return st.components.v2.component(
         _NOME,
         html=(_PASTA / "blocos.html").read_text(encoding="utf-8"),
-        css=(_PASTA / "blocos.css").read_text(encoding="utf-8"),
-        js=(_PASTA / "blocos.js").read_text(encoding="utf-8"),
+        css=_COMUM.with_suffix(".css").read_text(encoding="utf-8")
+        + (_PASTA / "blocos.css").read_text(encoding="utf-8"),
+        js=_COMUM.with_suffix(".js").read_text(encoding="utf-8")
+        + (_PASTA / "blocos.js").read_text(encoding="utf-8"),
     )
 
 
@@ -32,7 +35,12 @@ def prancheta_de_blocos(
     ao_selecionar: Callable[[], None],
     ao_comandar: Callable[[], None],
 ) -> Any:
-    """``dados``: catalogo, grafo, versao, ajustar, marcas e selecionar. Gestos vêm nos callbacks."""
+    """``dados``: catalogo, grafo, versao, ajustar, marcas, selecionar, historia, recebido e colagens.
+
+    Os gestos vêm nos callbacks: ``edicao`` traz o desenho (e as colagens ainda sem confirmação),
+    ``selecao`` o que está escolhido, e ``comando`` a fila numerada de pedidos (número digitado no
+    cartão, Ctrl+Z, Ctrl+Y e agrupar). ``recebido`` e ``colagens`` dizem à prancheta o que já entrou.
+    """
     global _PRANCHETA
 
     def chamar() -> Any:
