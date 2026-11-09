@@ -50,6 +50,28 @@ Selecionar uma ligação muda a biblioteca: ela passa a mostrar primeiro o que c
 cursor mostra a prévia na prancheta. Clicar insere o bloco no meio do fio, que vira origem → novo →
 destino. O resto do desenho não anda.
 
+**A biblioteca esconde o que não serve.** Com blocos na prancheta, a biblioteca tira o que não cabe
+na montagem (`core/montador_uso.py`). Duas coisas decidem:
+
+- **A forma da seção.** Pressão interna só vale em tubo. As peças do eixo, a potência, a engrenagem,
+  a polia, a inclinação, a rotação crítica e o entalhe valem só em seção redonda, maciça ou tubo.
+- **O tipo de peça.** Eixo que gira não se mistura com tubo com pressão nem com coluna comprimida
+  (flambagem de Euler). Tubo com pressão e coluna se misturam: a camisa de um cilindro hidráulico tem
+  pressão por dentro e flamba.
+
+Funciona nos dois sentidos. Com perfil I e flambagem de Euler, somem a pressão interna e as peças do
+eixo. Com uma engrenagem, somem o perfil I, a seção retangular, a desenhada, a pressão e a flambagem.
+A fadiga com "Eixo girando" conta como peça de eixo.
+
+As seções não escondem umas às outras: a viga em perfil I e o pino redondo que a segura cabem na
+mesma montagem, e com os dois as peças do eixo voltam. Bloco dentro de um conjunto também conta, e um
+conjunto salvo some quando algum bloco dele não cabe.
+
+Esconder não proíbe. O alto da lista diz quantos blocos ficaram de fora, e **Mostrar todos** traz
+todos de volta, em cinza. Passar o cursor num bloco em cinza mostra o motivo. Quando a montagem muda,
+a biblioteca volta a esconder. Com uma ligação selecionada, o inspetor também deixa de fora o que não
+serve e diz quantos. A parte de fluidos não esconde nada, porque tanque, tubo e canal se misturam.
+
 ## O inspetor
 
 Mostra o que está selecionado, e cada coisa do seu jeito:

@@ -51,6 +51,7 @@ from core import montador_planilha as mp
 from core import montador_registro as rg
 from core import montador_repasse as rp
 from core import montador_sensibilidade as ms
+from core import montador_uso as mus
 from core import montador_word as mw
 from core.montador_grandezas import Grandeza, Unidades
 from core.montador_modelos import Modelo, Parte
@@ -1693,7 +1694,19 @@ def _ao_tirar_fio(p: Parte, selecao: Mapping[str, Any]) -> None:
 def _acoes_do_fio(p: Parte, selecao: Mapping[str, Any]) -> None:
     estado = st.session_state
     caminho = list(selecao.get("caminho") or ())
-    chaves = mc.compativeis(estado[p.k("grafo")], selecao, p.dominio, caminho)
+    todas = mc.compativeis(estado[p.k("grafo")], selecao, p.dominio, caminho)
+    fora = mus.blocos_escondidos(estado[p.k("grafo")], todas)
+    chaves = [chave for chave in todas if chave not in fora]
+    if len(fora) == 1:
+        st.caption(
+            "1 bloco que cabe nesta ligação não serve nesta montagem e fica de fora. "
+            '"Mostrar todos", na biblioteca, traz ele de volta.'
+        )
+    elif fora:
+        st.caption(
+            f"{len(fora)} blocos que cabem nesta ligação não servem nesta montagem e ficam de "
+            'fora. "Mostrar todos", na biblioteca, traz eles de volta.'
+        )
     if chaves:
         campo = p.k("inserir_bloco")
         if estado.get(campo) not in chaves:
@@ -3310,12 +3323,14 @@ def tela_do_montador(p: Parte) -> None:
         "campos": _campos_do_cartao(base, estado[p.k("valores")], estado[p.k("origens")], alvo, u),
     }
     catalogo = [*mb.catalogo_para_tela(p.dominio), *mc.catalogo_de_conjuntos(p.dominio)]
+    escondidos = mus.escondidos(dados, catalogo)
     historico = estado[p.k("historico")]
     prancha, lateral = st.columns([2.7, 1], gap="small")
     with prancha:
         prancheta_de_blocos(
             {
                 "catalogo": catalogo,
+                "escondidos": escondidos,
                 "grafo": dados,
                 "versao": estado[p.k("versao")],
                 "ajustar": estado[p.k("ajuste")],

@@ -139,6 +139,38 @@ summary:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.item.fora {
+  opacity: 0.5;
+}
+.item.fora:hover,
+.item.fora:focus-visible {
+  opacity: 0.85;
+}
+.escondidos {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-bottom: 4px;
+  padding: 6px 7px;
+  font-size: 11px;
+  line-height: 1.35;
+  background: var(--st-secondary-background-color);
+  border-radius: 8px;
+}
+.escondidos span {
+  opacity: 0.8;
+}
+.escondidos button {
+  padding: 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--st-primary-color);
+}
+.escondidos button:hover {
+  background: transparent;
+  text-decoration: underline;
+}
 .item em {
   font-style: normal;
   font-size: 9.5px;

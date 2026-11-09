@@ -190,6 +190,9 @@ function criar(raiz) {
     reenvios: 0,
     filtro: "",
     abertos: null,
+    escondidos: {}, // chave → por que o bloco não serve nesta montagem, vindo do Python
+    assinaturaFora: "",
+    mostrarTodos: false,
     selecionarVisto: -1,
     ultimaSelecao: "null",
     ajustarAoMedir: false,
@@ -1491,6 +1494,10 @@ function criar(raiz) {
     const formula = document.createElement("span")
     formula.textContent = b.formula
     botao.append(nome, formula)
+    if (Object.hasOwn(e.escondidos, chave)) {
+      botao.classList.add("fora")
+      botao.title = `Não serve nesta montagem. ${e.escondidos[chave]}\n\n${b.dica}`
+    }
     if (previa) {
       const selo = document.createElement("em")
       selo.textContent = "✓ COMPATÍVEL"
@@ -1515,6 +1522,29 @@ function criar(raiz) {
     caixa.addEventListener("toggle", () => aoAlternar?.(caixa.open))
     return caixa
   }
+  // O aviso no alto da lista: quantos blocos a montagem escondeu, e o botão que traz todos de volta.
+  function avisoDosEscondidos(quantos) {
+    const caixa = document.createElement("div")
+    caixa.className = "escondidos"
+    const texto = document.createElement("span")
+    const um = quantos === 1
+    const comNome = e.filtro ? " com esse nome" : ""
+    texto.textContent = e.mostrarTodos
+      ? `Em cinza, ${um ? "o bloco" : `os ${quantos} blocos`}${comNome} que não ${um ? "serve" : "servem"} nesta montagem.`
+      : `${um ? "1 bloco" : `${quantos} blocos`}${comNome} não ${um ? "serve" : "servem"} nesta montagem e ${um ? "ficou escondido" : "ficaram escondidos"}.`
+    const botao = document.createElement("button")
+    botao.type = "button"
+    botao.textContent = e.mostrarTodos ? "Esconder de novo" : "Mostrar todos"
+    botao.title = e.mostrarTodos
+      ? "Volta a esconder o que não cabe na seção ou no tipo de peça da montagem."
+      : "A forma da seção e o tipo de peça decidem: pressão interna pede tubo, e as peças do eixo pedem eixo redondo. Passe o cursor num bloco em cinza para ver o motivo."
+    botao.addEventListener("click", () => {
+      e.mostrarTodos = !e.mostrarTodos
+      montarLista()
+    })
+    caixa.append(texto, botao)
+    return caixa
+  }
   function montarLista() {
     const fio = fioSelecionado()
     const achou = (chave) => {
@@ -1522,22 +1552,25 @@ function criar(raiz) {
       const b = e.catalogo[chave]
       return semAcento(`${b.nome} ${b.dica} ${b.formula} ${b.grupo}`).includes(e.filtro)
     }
-    const partes = []
+    const escondido = (chave) => Object.hasOwn(e.escondidos, chave)
+    const serve = (chave) => e.mostrarTodos || !escondido(chave)
+    const quantosFora = e.ordem.filter((c) => achou(c) && escondido(c)).length
+    const partes = quantosFora ? [avisoDosEscondidos(quantosFora)] : []
     if (fio) {
-      const boas = compativeis(fio).filter(achou)
+      const boas = compativeis(fio).filter((c) => achou(c) && serve(c))
       conta.textContent = `${boas.length} compatíve${boas.length === 1 ? "l" : "is"}`
       ajuda.textContent = boas.length ? AJUDA_FIO : "Nenhum bloco cabe nesta ligação."
       for (const chave of boas) {
         partes.push(itemDaLista(chave, () => inserirNoFio(fio, chave), true))
       }
-      const resto = e.ordem.filter((c) => !boas.includes(c) && achou(c))
+      const resto = e.ordem.filter((c) => !boas.includes(c) && achou(c) && serve(c))
       if (resto.length) partes.push(grupoDaLista("Outros blocos", resto, false))
     } else {
       conta.textContent = ""
       ajuda.textContent = AJUDA
       const grupos = new Map()
       for (const chave of e.ordem) {
-        if (!achou(chave)) continue
+        if (!achou(chave) || !serve(chave)) continue
         const grupo = e.catalogo[chave].grupo
         if (!grupos.has(grupo)) grupos.set(grupo, [])
         grupos.get(grupo).push(chave)
@@ -1553,7 +1586,7 @@ function criar(raiz) {
           }),
         )
       }
-      if (!grupos.size) {
+      if (!grupos.size && !quantosFora) {
         const vazio = document.createElement("p")
         vazio.className = "lista-titulo"
         vazio.textContent = "Nenhum bloco com esse nome."
@@ -1601,6 +1634,15 @@ function criar(raiz) {
       e.assinatura = assinatura
       e.catalogo = Object.fromEntries(catalogo.map((b) => [b.chave, b]))
       e.ordem = catalogo.map((b) => b.chave)
+      refazerLista = true
+    }
+    const fora = dados.escondidos ?? {}
+    const assinaturaFora = canonico(fora)
+    if (assinaturaFora !== e.assinaturaFora) {
+      // A montagem mudou o que serve: "Mostrar todos" valia para a montagem de antes.
+      e.assinaturaFora = assinaturaFora
+      e.escondidos = fora
+      e.mostrarTodos = false
       refazerLista = true
     }
     const novo = dados.grafo ?? { nos: [], fios: [] }
