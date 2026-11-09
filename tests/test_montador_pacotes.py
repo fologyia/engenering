@@ -14,9 +14,11 @@ from streamlit.testing.v1 import AppTest
 from core import montador as mt
 from core import montador_blocos as mb
 from core import montador_conjuntos as mc
+from core import montador_eixo as me
 from core import montador_grandezas as g
 from core import montador_modelos as mm
 from core import montador_registro as rg
+from core.montador_funcoes import TABELADAS
 from core.montador_grandezas import Unidades, unidades_padrao
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
@@ -237,6 +239,7 @@ def _escala(item: g.Grandeza, f: float, l_: float, t: float) -> float:
 def test_toda_condicao_tem_os_dois_lados_na_mesma_unidade(modelo):
     """Mudar a escala de força, comprimento e tempo não pode mudar quem passa: 5·uso = 5·uso."""
     m = mt.montar(mt.grafo_de_dados(modelo.grafo()))
+    tipos = {no.id: no.tipo for no in m.grafo.nos}
     base = {item.chave: 1.3 + 0.41 * i for i, item in enumerate(m.grandezas)}
     base.update({"k": 0.5, "t_f": 0.3, "t_w": 0.2, "b_f": 4.0, "h": 9.0})
     for condicao in m.condicoes:
@@ -247,6 +250,10 @@ def test_toda_condicao_tem_os_dois_lados_na_mesma_unidade(modelo):
         }
         if condicao.esquerda.has(sp.Function):
             continue  # f(Re, ε/D) é adimensional: a parte com atrito se confere nos testes de fluidos
+        if condicao.direita.has(*TABELADAS):
+            continue  # valor de tabela, como a interferência da NBR 6158, não muda com a escala
+        if tipos[condicao.no] == me.TIPO:
+            continue  # o eixo com trechos tem as posições na tabela, em mm: a escala não chega nelas
         antes = complex((condicao.esquerda / condicao.direita).subs(trocas).evalf())
         depois = complex((condicao.esquerda / condicao.direita).subs(escalados).evalf())
         assert depois.real == pytest.approx(antes.real, rel=1e-6), condicao.nome

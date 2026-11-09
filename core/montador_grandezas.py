@@ -25,6 +25,10 @@ ROTACAO = "rotacao"
 ANGULO = "angulo"
 PURO = "puro"
 FLECHA_EI = "flecha_ei"  # δ·E·I: a flecha da viga, sem saber a seção
+GIRO_EI = "giro_ei"  # θ·E·I: a inclinação da viga, sem saber a seção
+MASSA = "massa"
+MICRO = "micro"  # interferência e rugosidade, em µm
+TEMPO = "tempo"
 
 # Só de fluidos
 DIAMETRO = "diametro"
@@ -56,6 +60,10 @@ EXPOENTES: dict[str, tuple[int, int, int]] = {
     ANGULO: (0, 0, 0),
     PURO: (0, 0, 0),
     FLECHA_EI: (1, 3, 0),
+    GIRO_EI: (1, 2, 0),
+    MASSA: (1, -1, 2),
+    MICRO: (0, 1, 0),
+    TEMPO: (0, 0, 1),
     DIAMETRO: (0, 1, 0),
     VAZAO: (0, 3, -1),
     VELOCIDADE: (0, 1, -1),
@@ -83,6 +91,10 @@ ROTULOS_DAS_DIMENSOES = {
     ROTACAO: "Rotação",
     ANGULO: "Ângulo",
     FLECHA_EI: "Flecha vezes E·I",
+    GIRO_EI: "Inclinação vezes E·I",
+    MASSA: "Massa",
+    MICRO: "Medida fina, em µm",
+    TEMPO: "Tempo",
     DIAMETRO: "Diâmetro",
     VAZAO: "Vazão",
     VELOCIDADE: "Velocidade",
@@ -166,6 +178,13 @@ def _flecha_ei(u: Unidades) -> tuple[str, float]:
     )
 
 
+def _giro_ei(u: Unidades) -> tuple[str, float]:
+    return (
+        f"{u.rotulo(FORCA)}·{u.rotulo(COMPRIMENTO)}²",
+        u.fator(FORCA) * u.fator(COMPRIMENTO) ** 2,
+    )
+
+
 SISTEMA_SOLIDOS = Sistema(
     "solidos",
     (
@@ -202,8 +221,13 @@ SISTEMA_SOLIDOS = Sistema(
         AREA: ("mm²", 1.0),
         VOLUME: ("mm³", 1.0),
         INERCIA: ("mm⁴", 1.0),
+        # Massa em t, porque N = t·mm/s²: a conta de rotação crítica fecha sozinha em N, mm e s.
+        MASSA: ("kg", 1e-3),
+        MASSA_ESPECIFICA: ("kg/m³", 1e-12),
+        MICRO: ("µm", 1e-3),
+        TEMPO: ("h", 3600.0),
     },
-    {DISTRIBUIDA: _distribuida, FLECHA_EI: _flecha_ei},
+    {DISTRIBUIDA: _distribuida, FLECHA_EI: _flecha_ei, GIRO_EI: _giro_ei},
     "Com números, a fórmula está na base: forças em N, medidas em mm, tensões em MPa.",
     (
         PURO,
@@ -221,6 +245,11 @@ SISTEMA_SOLIDOS = Sistema(
         VOLUME,
         INERCIA,
         FLECHA_EI,
+        GIRO_EI,
+        MASSA,
+        MASSA_ESPECIFICA,
+        MICRO,
+        TEMPO,
     ),
 )
 
@@ -511,6 +540,278 @@ PHI_ADM = _g("phi_adm", "φ_adm", "Giro admissível", ANGULO, "O maior giro que 
 # Só para ligar blocos
 FLECHA = _g(
     "Delta_EI", "δ·EI", "Flecha vezes E·I", FLECHA_EI, "Vem do bloco de viga, que não sabe a seção."
+)
+
+# Engrenagem e polia
+D_ENGRENAGEM = _g(
+    "d_g",
+    "d_g",
+    "Diâmetro primitivo da engrenagem",
+    MEDIDA,
+    "Na engrenagem reta, d = m·z. Na helicoidal, d = m_n·z/cos ψ.",
+)
+PHI_N = Grandeza(
+    "phi_n",
+    "φ_n",
+    "Ângulo de pressão",
+    ANGULO,
+    "20° é o padrão. 14,5° em engrenagens antigas, e 25° em algumas de carga alta.",
+    math.radians(20.0),
+    maximo=math.radians(45.0),
+)
+PSI = Grandeza(
+    "psi",
+    "ψ",
+    "Ângulo de hélice",
+    ANGULO,
+    "Zero na engrenagem reta. Na helicoidal, de 15° a 30°.",
+    0.0,
+    zero_ok=True,
+    maximo=math.radians(60.0),
+)
+D_POLIA = _g(
+    "d_pol",
+    "d_pol",
+    "Diâmetro da polia",
+    MEDIDA,
+    "Diâmetro primitivo da polia que está neste eixo.",
+)
+MU_CORREIA = Grandeza(
+    "mu_c",
+    "μ_c",
+    "Atrito da correia",
+    PURO,
+    "Borracha em polia de ferro fundido: cerca de 0,3. Na correia em V, a cunha entra à parte.",
+    0.3,
+)
+THETA_ABRACAMENTO = Grandeza(
+    "theta_c",
+    "θ_c",
+    "Abraçamento na polia menor",
+    ANGULO,
+    "180° com polias iguais. Com polias diferentes, é o ângulo na polia menor que manda.",
+    math.pi,
+    maximo=2.0 * math.pi,
+)
+
+# Vigas e eixos
+A_CARGA = _g(
+    "a_m",
+    "a_m",
+    "Distância da carga ao apoio",
+    COMPRIMENTO,
+    "Da carga até o apoio mais perto dela: no máximo L/2.",
+)
+C_BALANCO = _g(
+    "c_b", "c_b", "Balanço da carga", COMPRIMENTO, "Do mancal até a carga que fica do lado de fora."
+)
+F_1 = _esforco("F_1", "F_1", "Primeira força", FORCA, "A força mais perto do apoio A.")
+F_2 = _esforco("F_2", "F_2", "Segunda força", FORCA, "A força mais perto do apoio B.")
+A_1 = _g("a_1", "a_1", "Posição da primeira força", COMPRIMENTO, "Do apoio A até a primeira força.")
+A_2 = _g("a_2", "a_2", "Posição da segunda força", COMPRIMENTO, "Do apoio A até a segunda força.")
+
+# Rigidez do eixo
+THETA_ADM = _g(
+    "theta_adm",
+    "θ_adm",
+    "Inclinação admissível",
+    ANGULO,
+    "O maior giro da seção que o mancal ou a engrenagem aceitam.",
+)
+RHO_EIXO = _g(
+    "rho_e",
+    "ρ_e",
+    "Massa específica do eixo",
+    MASSA_ESPECIFICA,
+    "Aço: 7850 kg/m³. Alumínio: 2700 kg/m³.",
+    7850e-12,
+)
+M_PECA = _g("m_p", "m_p", "Massa da peça", MASSA, "Engrenagem, polia ou volante preso no eixo.")
+F_CRITICA = replace(
+    _g(
+        "f_cr",
+        "f_cr",
+        "Folga da rotação crítica",
+        PURO,
+        "Quantas vezes a rotação crítica fica acima da de trabalho. 1,3 é o mínimo, e 2 é a folga "
+        "recomendada.",
+        1.3,
+    ),
+    minimo=1.0,
+)
+
+# Chaveta
+L_CHAVETA = _g(
+    "L_ch",
+    "L_ch",
+    "Comprimento da chaveta",
+    MEDIDA,
+    "Comprimento total. Com as pontas arredondadas, o que trabalha é L_ch − b.",
+)
+SY_CHAVETA = _g(
+    "S_y_ch",
+    "S_y,ch",
+    "Escoamento da chaveta",
+    TENSAO,
+    "Aço de chaveta C45 ou AISI 1045: cerca de 310 a 430 MPa.",
+    350.0,
+)
+SY_CUBO = _g(
+    "S_y_cubo",
+    "S_y,cubo",
+    "Escoamento do cubo",
+    TENSAO,
+    "Do material do cubo. Ferro fundido cinzento não escoa: use o limite de pressão do fabricante.",
+)
+K_SERVICO = replace(
+    _g(
+        "K_s",
+        "K_s",
+        "Fator de serviço",
+        PURO,
+        "Multiplica o torque. Carga uniforme: 1,0 a 1,25. Choque moderado: 1,5. Choque pesado: 2,0.",
+        1.25,
+    ),
+    minimo=1.0,
+)
+B_CHAVETA = _g("b_ch", "b_ch", "Largura da chaveta", MEDIDA, "Largura da seção da chaveta.")
+H_CHAVETA = _g("h_ch", "h_ch", "Altura da chaveta", MEDIDA, "Altura total da chaveta.")
+T1_CHAVETA = _g(
+    "t_1",
+    "t_1",
+    "Profundidade do rasgo no eixo",
+    MEDIDA,
+    "O que sobra da altura da chaveta trabalha no cubo.",
+)
+
+# Cubo prensado
+D_CUBO = _g(
+    "D_cubo",
+    "D_cubo",
+    "Diâmetro externo do cubo",
+    MEDIDA,
+    "Por fora do cubo, na região do ajuste. Usual: de 1,5 a 2 vezes d.",
+)
+L_AJUSTE = _g(
+    "L_aj",
+    "L_aj",
+    "Comprimento do ajuste",
+    MEDIDA,
+    "Quanto do cubo fica apertado no eixo, sem os chanfros. Usual: de 0,5 a 2 vezes d.",
+)
+MU_AJUSTE = Grandeza(
+    "mu_aj",
+    "μ_aj",
+    "Atrito do ajuste",
+    PURO,
+    "Aço com aço, seco e montado a quente: cerca de 0,15. Lubrificado e na prensa: cerca de 0,10.",
+    0.12,
+)
+E_CUBO = _g(
+    "E_cubo",
+    "E_cubo",
+    "Módulo do cubo",
+    MODULO,
+    "Aço: 200 GPa. Ferro fundido cinzento: cerca de 100 GPa.",
+    200000.0,
+)
+NU_EIXO = Grandeza("nu_e", "ν_e", "Poisson do eixo", PURO, "Aço: 0,3.", 0.3, maximo=0.5)
+NU_CUBO = Grandeza(
+    "nu_cubo", "ν_cubo", "Poisson do cubo", PURO, "Aço: 0,3. Ferro fundido: 0,26.", 0.3, maximo=0.5
+)
+RZ_EIXO = Grandeza(
+    "Rz_e",
+    "Rz_e",
+    "Rugosidade do eixo",
+    MICRO,
+    "A montagem amassa os picos, e parte da interferência some. Retificado: cerca de 4 µm.",
+    4e-3,
+    zero_ok=True,
+)
+RZ_CUBO = Grandeza(
+    "Rz_cubo",
+    "Rz_cubo",
+    "Rugosidade do furo",
+    MICRO,
+    "Rugosidade do furo do cubo. Mandrilado ou alargado: de 6,3 a 10 µm.",
+    6.3e-3,
+    zero_ok=True,
+)
+DELTA_MIN = _g(
+    "delta_min",
+    "δ_mín",
+    "Interferência mínima",
+    MICRO,
+    "A menor interferência no diâmetro, com as tolerâncias do eixo e do furo.",
+)
+DELTA_MAX = _g(
+    "delta_max",
+    "δ_máx",
+    "Interferência máxima",
+    MICRO,
+    "A maior interferência no diâmetro, com as tolerâncias do eixo e do furo.",
+)
+F_AX_CUBO = _esforco(
+    "F_ac",
+    "F_ac",
+    "Força axial no cubo",
+    FORCA,
+    "Força ao longo do eixo que o ajuste também precisa segurar.",
+)
+
+# Rolamento
+C_DINAMICA = _g("C_din", "C", "Capacidade dinâmica", FORCA, "O C do catálogo do rolamento.")
+C_ESTATICA = _g("C_0", "C_0", "Capacidade estática", FORCA, "O C₀ do catálogo do rolamento.")
+VIDA_HORAS = _g(
+    "L_h",
+    "L_h",
+    "Vida pedida",
+    TEMPO,
+    "Máquina de 8 h por dia: de 10 a 25 mil horas. De 24 h por dia: de 40 a 60 mil horas.",
+    20000.0 * 3600.0,
+)
+F_RADIAL_MANCAL = _esforco(
+    "F_rm", "F_rm", "Força radial no mancal", FORCA, "A reação do eixo neste mancal."
+)
+F_AXIAL_MANCAL = Grandeza(
+    "F_am",
+    "F_am",
+    "Força axial no mancal",
+    FORCA,
+    "Força ao longo do eixo que este rolamento segura. Zero quando o outro mancal segura.",
+    0.0,
+    zero_ok=True,
+)
+F_APLICACAO = replace(
+    _g(
+        "f_ap",
+        "f_ap",
+        "Fator de aplicação",
+        PURO,
+        "Engrenagens de precisão: 1,0 a 1,2. Choque leve: 1,2 a 1,5. Britador, moinho e peneira: "
+        "1,5 a 3.",
+        1.2,
+    ),
+    minimo=1.0,
+)
+X_ROLAMENTO = _g(
+    "X_r", "X", "Fator radial", PURO, "O X do catálogo para a relação F_a/F_r do caso."
+)
+Y_ROLAMENTO = Grandeza(
+    "Y_r",
+    "Y",
+    "Fator axial",
+    PURO,
+    "O Y do catálogo para a relação F_a/F_r do caso.",
+    zero_ok=True,
+)
+S0_MINIMO = _g(
+    "s_0",
+    "s_0",
+    "Segurança estática mínima",
+    PURO,
+    "Serviço normal: 1. Silencioso: 2. Com choques: de 1,5 a 3.",
+    1.5,
 )
 
 # Fluidos

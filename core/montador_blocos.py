@@ -54,6 +54,7 @@ GRUPO_ORIGEM = "De onde vem o esforço"
 GRUPO_ESFORCO = "Esforços"
 GRUPO_MATERIAL = "Material"
 GRUPO_CRITERIO = "Critério"
+GRUPO_PECAS = "Peças do eixo"
 GRUPO_FLUIDO = "Fluido"
 GRUPO_TUBULACAO = "Tubulação"
 GRUPO_VERIFICACAO = "Verificações"
@@ -66,6 +67,7 @@ GRUPOS = (
     GRUPO_ESFORCO,
     GRUPO_MATERIAL,
     GRUPO_CRITERIO,
+    GRUPO_PECAS,
     GRUPO_FLUIDO,
     GRUPO_TUBULACAO,
     GRUPO_VERIFICACAO,
@@ -81,6 +83,7 @@ ORDEM_DOS_GRUPOS = (
     GRUPO_ESFORCO,
     GRUPO_MATERIAL,
     GRUPO_CRITERIO,
+    GRUPO_PECAS,
     GRUPO_FLUIDO,
     GRUPO_TUBULACAO,
     GRUPO_VERIFICACAO,
@@ -95,6 +98,7 @@ CATEGORIA_DO_GRUPO = {
     GRUPO_ESFORCO: "ESFORÇO",
     GRUPO_MATERIAL: "PROPRIEDADES",
     GRUPO_CRITERIO: "VERIFICAÇÃO",
+    GRUPO_PECAS: "PEÇA DO EIXO",
     GRUPO_FLUIDO: "FLUIDO",
     GRUPO_TUBULACAO: "TUBULAÇÃO",
     GRUPO_VERIFICACAO: "VERIFICAÇÃO",
@@ -108,6 +112,7 @@ CLASSE_DO_GRUPO = {
     GRUPO_ESFORCO: "g-esforco",
     GRUPO_MATERIAL: "g-material",
     GRUPO_CRITERIO: "g-criterio",
+    GRUPO_PECAS: "g-criterio",
     GRUPO_FLUIDO: "g-secao",
     GRUPO_TUBULACAO: "g-esforco",
     GRUPO_VERIFICACAO: "g-criterio",
@@ -234,6 +239,8 @@ class Contexto:
     hipoteses: list[str] = field(default_factory=list)
     marcas: set[str] = field(default_factory=set)
     proprias: list[str] = field(default_factory=list)
+    #: Hipóteses do bloco que só se conferem com os números, como a ≤ L/2 na viga.
+    validades: list[Validade] = field(default_factory=list)
 
     def _numerada(self, grandeza: Grandeza, fixa: bool = False) -> Grandeza:
         return grandeza.com_indice(self.indice) if self.numerar and not fixa else grandeza
@@ -350,15 +357,41 @@ def origem(
     formula: str,
     entradas: Sequence[Grandeza],
     saidas: Mapping[str, tuple[str, str, Callable[..., sp.Expr]]],
+    *,
+    entram: Sequence[Grandeza] = (),
+    numerar: bool = False,
+    validar: Callable[..., Sequence[Validade]] | None = None,
 ) -> Bloco:
-    """Um bloco só de fórmulas. ``saidas``: chave, rótulo, dimensão e a função das letras."""
+    """Um bloco só de fórmulas. ``saidas``: chave, rótulo, dimensão e a função das letras.
+
+    As letras de ``entram`` também ganham bolinha de entrada: a força da viga pode vir da
+    engrenagem. Com ``numerar``, só elas mudam no segundo bloco igual; vão e posição continuam as
+    mesmas, porque os dois planos de um eixo têm o mesmo vão.
+    """
+    com_porta = {g_.chave for g_ in entram}
 
     def calcular(c: Contexto) -> dict[str, Any]:
-        letras = [c.letra(g_) for g_ in entradas]
+        letras = [
+            c.letra(g_, g_.chave if g_.chave in com_porta else None, fixa=g_.chave not in com_porta)
+            for g_ in entradas
+        ]
+        if validar is not None:
+            c.validades.extend(validar(*letras))
         return {k: funcao(*letras) for k, (_, _, funcao) in saidas.items()}
 
+    portas_de_entrada = tuple(Porta(g_.chave, g_.texto, VALOR, g_.dimensao) for g_ in entram)
     portas = tuple(Porta(k, rotulo, VALOR, dim) for k, (rotulo, dim, _) in saidas.items())
-    return Bloco(chave, nome, GRUPO_ORIGEM, dica, formula, (), portas, calcular)
+    return Bloco(
+        chave,
+        nome,
+        GRUPO_ORIGEM,
+        dica,
+        formula,
+        portas_de_entrada,
+        portas,
+        calcular,
+        numerar=numerar,
+    )
 
 
 def _esforco(
@@ -873,6 +906,182 @@ def _referencia(c: Contexto) -> dict[str, Any]:
     return {"saida": sp.Float(float(valor))}
 
 
+def _carga_fora_do_meio(f: sp.Expr, a: sp.Expr, l_: sp.Expr) -> list[Validade]:
+    return [
+        Validade(
+            l_ / 2 - a,
+            "Na viga com a carga fora do meio, a_m é a distância até o apoio mais perto da carga: "
+            "precisa ficar até L/2. Se a carga está mais perto do outro apoio, meça a partir dele.",
+            restringe=False,
+        )
+    ]
+
+
+def _reacoes(
+    f1: sp.Expr, f2: sp.Expr, a1: sp.Expr, a2: sp.Expr, l_: sp.Expr
+) -> tuple[sp.Expr, sp.Expr]:
+    return (f1 * (l_ - a1) + f2 * (l_ - a2)) / l_, (f1 * a1 + f2 * a2) / l_
+
+
+def _giro_no_apoio(f: sp.Expr, a: sp.Expr, l_: sp.Expr) -> sp.Expr:
+    """θ·EI no apoio a uma distância a da força: P·a·b·(L + b)/(6L), com b = L − a."""
+    b = l_ - a
+    return f * a * b * (l_ + b) / (6 * l_)
+
+
+SOB_F1 = "Sob a força F_1"
+SOB_F2 = "Sob a força F_2"
+_ONDE_NA_VIGA = Opcao(
+    "secao",
+    "Seção conferida",
+    "O momento e a cortante que saem são os da seção sob a força escolhida. Confira as duas, uma "
+    "de cada vez, ou ponha dois blocos.",
+    (SOB_F1, SOB_F2),
+    SOB_F1,
+)
+
+
+def _calcular_duas_cargas(c: Contexto) -> dict[str, Any]:
+    f1 = c.letra(g.F_1, g.F_1.chave)
+    f2 = c.letra(g.F_2, g.F_2.chave)
+    a1, a2, l_ = c.letra(g.A_1), c.letra(g.A_2), c.letra(g.L)
+    c.validades.extend(
+        (
+            Validade(a2 - a1, "A primeira força precisa ficar antes da segunda: a_1 ≤ a_2.", False),
+            Validade(l_ - a2, "As duas forças precisam ficar dentro do vão: a_2 ≤ L.", False),
+        )
+    )
+    ra, rb = _reacoes(f1, f2, a1, a2, l_)
+    if c.opcoes.get("secao", SOB_F1) == SOB_F2:
+        momento, cortante = rb * (l_ - a2), rb
+    else:
+        momento, cortante = ra * a1, ra
+    c.hipoteses.append(
+        "Viga com duas forças no mesmo sentido: o maior momento fica sob uma delas, e a cortante "
+        "que sai é a do trecho entre o apoio e a força escolhida."
+    )
+    return {
+        "M": momento,
+        "V": cortante,
+        "R_A": ra,
+        "R_B": rb,
+        "giro": _giro_no_apoio(f1, a1, l_) + _giro_no_apoio(f2, a2, l_),
+        "giro_b": _giro_no_apoio(f1, l_ - a1, l_) + _giro_no_apoio(f2, l_ - a2, l_),
+    }
+
+
+_VIGAS_NOVAS: tuple[Bloco, ...] = (
+    origem(
+        "biapoiada_fora",
+        "Biapoiada: carga fora do meio",
+        "Uma força a uma distância a_m do apoio mais perto. É o eixo com a engrenagem fora do meio.",
+        "M = F·a·(L − a)/L",
+        (g.F, g.A_CARGA, g.L),
+        {
+            "M": ("M", g.MOMENTO, lambda f, a, l_: f * a * (l_ - a) / l_),
+            "V": ("V", g.FORCA, lambda f, a, l_: f * (l_ - a) / l_),
+            "flecha": (
+                "δ·EI",
+                g.FLECHA_EI,
+                lambda f, a, l_: (
+                    f * a * (l_**2 - a**2) ** sp.Rational(3, 2) / (9 * sp.sqrt(3) * l_)
+                ),
+            ),
+            "R": ("R", g.FORCA, lambda f, a, l_: f * (l_ - a) / l_),
+            "giro": ("θ·EI", g.GIRO_EI, _giro_no_apoio),
+            "giro_carga": (
+                "θ·EI na carga",
+                g.GIRO_EI,
+                lambda f, a, l_: f * a * (l_ - a) * (l_ - 2 * a) / (3 * l_),
+            ),
+        },
+        entram=(g.F,),
+        numerar=True,
+        validar=_carga_fora_do_meio,
+    ),
+    Bloco(
+        "biapoiada_duas",
+        "Biapoiada: duas cargas",
+        GRUPO_ORIGEM,
+        "Duas forças no mesmo sentido, como duas engrenagens no mesmo eixo. Posições a partir do "
+        "apoio A.",
+        "R_A = Σ F·(L − a)/L",
+        (
+            Porta(g.F_1.chave, g.F_1.texto, VALOR, g.FORCA),
+            Porta(g.F_2.chave, g.F_2.texto, VALOR, g.FORCA),
+        ),
+        (
+            Porta("M", "M", VALOR, g.MOMENTO),
+            Porta("V", "V", VALOR, g.FORCA),
+            Porta("R_A", "R_A", VALOR, g.FORCA),
+            Porta("R_B", "R_B", VALOR, g.FORCA),
+            Porta("giro", "θ·EI em A", VALOR, g.GIRO_EI),
+            Porta("giro_b", "θ·EI em B", VALOR, g.GIRO_EI),
+        ),
+        _calcular_duas_cargas,
+        (_ONDE_NA_VIGA,),
+        face=lambda opcoes: (
+            "M = R_B·(L − a_2)" if opcoes.get("secao", SOB_F1) == SOB_F2 else "M = R_A·a_1"
+        ),
+    ),
+    origem(
+        "biapoiada_balanco",
+        "Biapoiada com balanço",
+        "Eixo em dois mancais com a engrenagem ou a polia do lado de fora, a c_b do mancal.",
+        "M = F·c · R = F·(L + c)/L",
+        (g.F, g.C_BALANCO, g.L),
+        {
+            "M": ("M", g.MOMENTO, lambda f, c_, l_: f * c_),
+            "V": ("V", g.FORCA, lambda f, c_, l_: f),
+            "flecha": ("δ·EI", g.FLECHA_EI, lambda f, c_, l_: f * c_**2 * (l_ + c_) / 3),
+            "R": ("R", g.FORCA, lambda f, c_, l_: f * (l_ + c_) / l_),
+            "giro": ("θ·EI", g.GIRO_EI, lambda f, c_, l_: f * c_ * l_ / 3),
+            "giro_carga": (
+                "θ·EI na carga",
+                g.GIRO_EI,
+                lambda f, c_, l_: f * c_ * (2 * l_ + 3 * c_) / 6,
+            ),
+        },
+        entram=(g.F,),
+        numerar=True,
+    ),
+    origem(
+        "engastada_apoiada_meio",
+        "Engastada e apoiada: carga no meio",
+        "Uma ponta presa e a outra apoiada, com a força no meio do vão.",
+        "M = 3·F·L/16 · R = 11·F/16",
+        (g.F, g.L),
+        {
+            "M": ("M", g.MOMENTO, lambda f, l_: 3 * f * l_ / 16),
+            "V": ("V", g.FORCA, lambda f, l_: 11 * f / 16),
+            "flecha": ("δ·EI", g.FLECHA_EI, lambda f, l_: f * l_**3 / (48 * sp.sqrt(5))),
+            "R": ("R", g.FORCA, lambda f, l_: 11 * f / 16),
+            "giro": ("θ·EI", g.GIRO_EI, lambda f, l_: f * l_**2 / 32),
+        },
+        entram=(g.F,),
+    ),
+    origem(
+        "engastada_apoiada_distribuida",
+        "Engastada e apoiada: distribuída",
+        "Uma ponta presa e a outra apoiada, com carga uniforme.",
+        "M = q·L²/8 · R = 5·q·L/8",
+        (g.Q, g.L),
+        {
+            "M": ("M", g.MOMENTO, lambda q, l_: q * l_**2 / 8),
+            "V": ("V", g.FORCA, lambda q, l_: 5 * q * l_ / 8),
+            "flecha": (
+                "δ·EI",
+                g.FLECHA_EI,
+                lambda q, l_: (39 + 55 * sp.sqrt(33)) / 65536 * q * l_**4,
+            ),
+            "R": ("R", g.FORCA, lambda q, l_: 5 * q * l_ / 8),
+            "giro": ("θ·EI", g.GIRO_EI, lambda q, l_: q * l_**3 / 48),
+        },
+        entram=(g.Q,),
+    ),
+)
+
+
 _BLOCO_DA_FORMULA = Bloco(
     FORMULA,
     "Fórmula própria",
@@ -941,7 +1150,10 @@ BLOCOS: tuple[Bloco, ...] = (
             "M": ("M", g.MOMENTO, lambda f, l_: f * l_ / 4),
             "V": ("V", g.FORCA, lambda f, l_: f / 2),
             "flecha": ("δ·EI", g.FLECHA_EI, lambda f, l_: f * l_**3 / 48),
+            "R": ("R", g.FORCA, lambda f, l_: f / 2),
+            "giro": ("θ·EI", g.GIRO_EI, lambda f, l_: f * l_**2 / 16),
         },
+        entram=(g.F,),
     ),
     origem(
         "biapoiada_distribuida",
@@ -953,7 +1165,10 @@ BLOCOS: tuple[Bloco, ...] = (
             "M": ("M", g.MOMENTO, lambda q, l_: q * l_**2 / 8),
             "V": ("V", g.FORCA, lambda q, l_: q * l_ / 2),
             "flecha": ("δ·EI", g.FLECHA_EI, lambda q, l_: 5 * q * l_**4 / 384),
+            "R": ("R", g.FORCA, lambda q, l_: q * l_ / 2),
+            "giro": ("θ·EI", g.GIRO_EI, lambda q, l_: q * l_**3 / 24),
         },
+        entram=(g.Q,),
     ),
     origem(
         "balanco_ponta",
@@ -965,7 +1180,10 @@ BLOCOS: tuple[Bloco, ...] = (
             "M": ("M", g.MOMENTO, lambda f, l_: f * l_),
             "V": ("V", g.FORCA, lambda f, l_: f),
             "flecha": ("δ·EI", g.FLECHA_EI, lambda f, l_: f * l_**3 / 3),
+            "R": ("R", g.FORCA, lambda f, l_: f),
+            "giro": ("θ·EI", g.GIRO_EI, lambda f, l_: f * l_**2 / 2),
         },
+        entram=(g.F,),
     ),
     origem(
         "balanco_distribuida",
@@ -977,8 +1195,12 @@ BLOCOS: tuple[Bloco, ...] = (
             "M": ("M", g.MOMENTO, lambda q, l_: q * l_**2 / 2),
             "V": ("V", g.FORCA, lambda q, l_: q * l_),
             "flecha": ("δ·EI", g.FLECHA_EI, lambda q, l_: q * l_**4 / 8),
+            "R": ("R", g.FORCA, lambda q, l_: q * l_),
+            "giro": ("θ·EI", g.GIRO_EI, lambda q, l_: q * l_**3 / 6),
         },
+        entram=(g.Q,),
     ),
+    *_VIGAS_NOVAS,
     origem(
         "potencia",
         "Potência e rotação",
@@ -1252,6 +1474,10 @@ BLOCOS: tuple[Bloco, ...] = (
 )
 
 POR_CHAVE: dict[str, Bloco] = {b.chave: b for b in BLOCOS}
+#: Blocos cujas bolinhas dependem do que foi escolhido neles, como o eixo com trechos.
+PORTAS_VARIAVEIS: dict[
+    str, Callable[[Mapping[str, Any]], tuple[tuple[Porta, ...], tuple[Porta, ...]]]
+] = {}
 
 
 @lru_cache(maxsize=256)
@@ -1288,6 +1514,9 @@ def portas_de(tipo: str, opcoes: Mapping[str, Any]) -> tuple[tuple[Porta, ...], 
             str(opcoes.get("saida", "")),
             str(opcoes.get("sistema", g.SISTEMA_SOLIDOS.chave)),
         )
+    variavel = PORTAS_VARIAVEIS.get(tipo)
+    if variavel is not None:
+        return variavel(opcoes)
     bloco = POR_CHAVE[tipo]
     return bloco.entradas, bloco.saidas
 

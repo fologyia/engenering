@@ -23,10 +23,12 @@ from openpyxl.workbook.defined_name import DefinedName
 from core import montador as mt
 from core.montador_funcoes import (
     MATERIAIS_DE_FADIGA,
+    TABELADAS,
     AtritoDarcy,
+    CargaEquivalenteXY,
+    CargaEstatica,
     FatorSuperficie,
     FatorTamanho,
-    KtRessalto,
     LimiteBase,
     ResistenciaEmVida,
     SensibilidadeNeuber,
@@ -44,8 +46,8 @@ _AVISO_DO_ATRITO = (
     "programa usa: a conta da planilha pode diferir um pouco do programa."
 )
 _AVISO_DO_KT = (
-    "K_t de ressalto vem das curvas de Peterson e não tem fórmula simples: na planilha ele fica com "
-    "o valor calculado pelo programa."
+    "K_t de ressalto, as medidas da chaveta da DIN 6885, a interferência da NBR 6158 e o X e Y do "
+    "rolamento vêm de curva ou de tabela: na planilha ficam com o valor calculado pelo programa."
 )
 
 
@@ -116,8 +118,14 @@ def _funcao(e: sp.Expr) -> str:
     if isinstance(e, ResistenciaEmVida):
         s, se, n = a
         return f"({s})*(({n})/1000)^(LOG10(({se})/({s}))/3)"
-    if isinstance(e, KtRessalto):
-        raise SemFormula("K_t de ressalto")
+    if isinstance(e, CargaEquivalenteXY):
+        radial, axial, x, y = a
+        return f"MAX({radial},{x}*{radial}+{y}*{axial})"
+    if isinstance(e, CargaEstatica):
+        radial, axial = a
+        return f"MAX({radial},0.6*{radial}+0.5*{axial})"
+    if isinstance(e, TABELADAS):
+        raise SemFormula(type(e).__name__)
     raise SemFormula(type(e).__name__)
 
 
@@ -142,9 +150,9 @@ def _neuber(sut: str, raio: str, torcao: bool) -> str:
 
 
 def _com_numeros_no_que_falta(expressao: sp.Expr, numeros: Mapping[sp.Symbol, sp.Float]) -> sp.Expr:
-    """K_t de ressalto não tem fórmula: entra o valor que o programa calculou."""
+    """O que vem de curva ou de tabela não tem fórmula: entra o valor que o programa calculou."""
     return expressao.replace(
-        lambda e: isinstance(e, KtRessalto),
+        lambda e: isinstance(e, TABELADAS),
         lambda e: sp.Float(float(sp.N(e.subs(numeros)))),
     )
 
@@ -210,7 +218,7 @@ def gerar_planilha(
         direita = item_condicao.direita
         if esquerda.has(AtritoDarcy) or direita.has(AtritoDarcy):
             avisos.append(_AVISO_DO_ATRITO)
-        if esquerda.has(KtRessalto) or direita.has(KtRessalto):
+        if esquerda.has(*TABELADAS) or direita.has(*TABELADAS):
             avisos.append(_AVISO_DO_KT)
         aba.cell(linha, 1, item_condicao.nome)
         aba.cell(linha, 2, "=" + em_excel(_com_numeros_no_que_falta(esquerda, numeros)))

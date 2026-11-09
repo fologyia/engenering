@@ -184,6 +184,72 @@ Assistente de cargas e Vigas e eixos já usam (`core/montador_repasse.py` faz a 
   enquanto a página ainda mostra o que o Montador mandou: se a pessoa mudou os números lá, ou outra
   página mandou depois, ele não aparece.
 
+## Peças do eixo
+
+Para montar um eixo inteiro na prancheta: a engrenagem ou a polia dão as forças, as vigas dão o
+momento de cada plano, e as peças que ficam no eixo entram com as condições delas. As contas são as do
+Assistente de cargas, escritas em letra, e a Central de validação confere os dois caminhos.
+
+- **Engrenagem:** da potência e da rotação (ou do torque T) e do diâmetro primitivo saem F_t = 2·T/d,
+  F_r = F_t·tg φ_n/cos ψ e F_a = F_t·tg ψ. A radial e a tangencial ficam a 90°: cada uma vai para um
+  plano, e a seção redonda junta as duas.
+- **Polia e correia:** a carga no eixo pela equação de Euler (F₁/F₂ = e^(μ·θ), com o canal em V), sem a
+  parcela centrífuga. A pré-tensão instalada acima do mínimo carrega mais o eixo.
+- **Vigas novas:** carga fora do meio (a_m é a distância até o apoio mais perto; acima de L/2, aviso),
+  duas cargas (o momento sob a força escolhida e as duas reações), biapoiada com balanço (a polia fora
+  dos mancais) e engastada e apoiada, com carga no meio ou distribuída. As vigas de antes ganharam a
+  bolinha de entrada da força e as saídas R (reação) e θ·EI (inclinação vezes E·I).
+- **Chaveta:** DIN 6885 pelo diâmetro (b, h e t₁ mudam com d) ou informada; corte e esmagamento no eixo,
+  no cubo e na chaveta, com K_s, pontas e uma ou duas chavetas, como na DIN 6892. Passou de 1,5·d, aviso.
+- **Cubo prensado:** Lamé com a interferência da NBR 6158 (H7/p6 a H7/u6, pelo diâmetro) menos o
+  alisamento da rugosidade; transmissão por atrito com a menor interferência e escoamento do cubo e do
+  eixo com a maior.
+- **Rolamento:** ligue a reação R (uma por plano, que se somam como vetores) e diga a vida em horas: sai
+  a capacidade C que o rolamento precisa ter, pela ISO 281, com X e Y de Shigley nas esferas de sulco
+  profundo. Também confere a segurança estática s₀.
+- **Inclinação:** θ = θ·EI/(E·I) no mancal ou na engrenagem, com os limites da Tabela 7-2 de Shigley.
+- **Rotação crítica:** Dunkerley com o eixo biapoiado e uma peça entre os mancais ou em balanço. Fica
+  abaixo da real, a favor da segurança.
+
+Os modelos "Eixo com engrenagem", "Rigidez do eixo", "Polia em balanço", "Chaveta: comprimento mínimo",
+"Cubo prensado: comprimento do ajuste" e "Rolamento: capacidade C" já abrem montados.
+
+## Eixo com trechos
+
+O bloco **Eixo com trechos** faz o eixo inteiro numa conta só. As duas tabelas ficam logo abaixo da
+prancheta, com o desenho do eixo em escala:
+
+- **Trechos**, da esquerda para a direita: comprimento, diâmetro como múltiplo de d, o entalhe do trecho
+  (liso, rasgo de chaveta, canal de anel, furo, cubo prensado) e o raio do canto no fim (r/d). O ressalto
+  entre dois trechos entra sozinho.
+- **Elementos:** um mancal A, um mancal B e as cargas, com o sentido da força em cada plano, o torque que
+  entra (um elemento) e os que saem, a força axial com o raio dela e a massa da peça.
+
+Cada força vira uma letra com bolinha no bloco (F_v1, F_h1, T_e1, F_a1), e a engrenagem liga direto
+nelas. As posições e as relações são números; as forças e o d ficam em letra. Como todos os diâmetros
+são proporcionais a d, o momento de cada seção e a inclinação saem como uma soma das forças com pesos que
+só dependem do arranjo, calculados uma vez pela integração exata de M/k⁴ trecho a trecho
+(`core/montador_eixo.py`). Por isso a conta acha o d que faz o eixo inteiro passar e diz em qual seção
+ele quebraria primeiro.
+
+As seções conferidas são o ombro do lado fino, onde o raio do canto concentra a tensão, e o entalhe de
+cada trecho nos pontos de carga: entre dois pontos de carga o momento de cada plano é uma reta e o
+torque é constante, e o pior fica sempre num desses pontos. Em cada seção entram fadiga e escoamento no
+primeiro ciclo, com o k_b do diâmetro dela; nos mancais e nas engrenagens marcadas, a inclinação; e no
+eixo todo, a rotação crítica por Dunkerley, com a massa do eixo e das peças. As saídas R_A e R_B levam
+as reações para o rolamento.
+
+Com um diâmetro só, o d por DE-Goodman e a inclinação no mancal batem com o Eixo de transmissão do
+Assistente de cargas (casos de aceite na Central).
+
+## O que mais pesa
+
+Com a resposta pronta, cada número sobe e desce 10 %, um de cada vez, e a conta roda de novo
+(`core/montador_sensibilidade.py`). A tabela mostra quanto a resposta muda, do que mais pesa ao que
+menos pesa, e avisa quando outra condição passa a mandar. Os que quase não mexem (menos de 0,1 %)
+aparecem numa linha só. Só entram as condições perto do limite (uso de 75 % para cima): uma com folga
+maior não chega a mandar com 10 % a mais numa letra.
+
 ## Fórmula própria
 
 O bloco **Fórmula própria** recebe uma conta digitada no inspetor. Há três formas:
@@ -238,7 +304,8 @@ Na aba "Salvar, abrir e registrar", com a conta completa, saem dois arquivos:
   para editar.
 - **Excel:** cada letra numa célula com nome (`v_S_y`), e cada condição com as duas fórmulas e o uso.
   Mudou um dado, a conta acompanha. O fator de atrito vai por Swamee-Jain, a cerca de 1 % de
-  Colebrook, e a planilha avisa; o K_t de ressalto fica com o número do programa.
+  Colebrook, e a planilha avisa. O que vem de curva ou de tabela (K_t de ressalto, as medidas da
+  chaveta, a interferência do ajuste, o X e Y do rolamento) fica com o número do programa.
 
 ## Como acrescentar uma equação
 
@@ -266,6 +333,9 @@ pontos dela. O teste `test_todo_bloco_tem_o_que_a_tela_precisa` confere o catál
 - Sem flambagem local nem flambagem lateral: perfil I e tubo fino pedem as páginas próprias.
 - Na torção de perfil I vale Saint-Venant, sem empenamento impedido.
 - Euler só vale para coluna esbelta; a coluna curta recebe aviso, sem a fórmula de Johnson.
+- No eixo com trechos, os mancais são apoios simples e rígidos, o binário da força axial fica no plano
+  vertical com o sentido da tabela, e só um elemento recebe o torque. Carga que inverte e espectro de
+  cargas pedem a Análise de fadiga.
 - Os números da fórmula parcial estão na base: forças em N, medidas em mm, tensões em MPa.
 - A fadiga é de eixo, com as fórmulas de Shigley: peça soldada, carga variável com espectro e dano
   acumulado pedem a Análise de fadiga.

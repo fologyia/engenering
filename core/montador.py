@@ -24,6 +24,10 @@ import sympy as sp
 
 from core import material_catalog as mc
 from core import montador_blocos as mb
+from core import (
+    montador_eixo,  # noqa: F401  (registra o eixo com trechos)
+    montador_pecas,  # noqa: F401  (registra os blocos de peça)
+)
 from core import montador_fluidos as mfl
 from core import montador_grandezas as g
 from core.montador_blocos import Condicao, Contexto, ErroDeBloco
@@ -236,6 +240,8 @@ class Montagem:
     saidas: Mapping[str, Mapping[str, Any]] = field(default_factory=dict, compare=False, hash=False)
     #: Dos blocos que numeram a letra: 2 é o segundo trecho, o de L₂. Sai da ordem dos fios.
     indices: tuple[tuple[str, int], ...] = ()
+    #: Hipóteses dos blocos que não passam pelo fio da seção, como a ≤ L/2 na viga.
+    validades: tuple[Validade, ...] = ()
 
     def grandeza(self, chave: str) -> Grandeza | None:
         return next((item for item in self.grandezas if item.chave == chave), None)
@@ -257,6 +263,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
     indices: dict[str, int] = {}
     condicoes: list[Condicao] = []
     letras_do_bloco: dict[str, tuple[str, ...]] = {}
+    validades: list[Validade] = []
     tem_resultado = False
     area: sp.Expr | None = None
     for no in ordem:
@@ -289,6 +296,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
             alertas,
             hipoteses,
             marcas,
+            validades=validades,
         )
         try:
             calculado = dict(bloco.calcular(contexto))
@@ -317,6 +325,10 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
     for condicao in condicoes:
         for validade in condicao.validade:
             nomes |= {s.name for s in validade.expressao.free_symbols}
+    # Só as hipóteses de quem chega a uma condição: um bloco solto não tem o que avisar.
+    proprias_da_conta = [
+        v for v in dict.fromkeys(validades) if {s.name for s in v.expressao.free_symbols} <= nomes
+    ]
     usadas = tuple(item for chave, item in grandezas.items() if chave in nomes)
     return Montagem(
         tuple(condicoes),
@@ -333,6 +345,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
         tuple(letras_do_bloco.items()),
         saidas,
         tuple(indices.items()),
+        tuple(proprias_da_conta),
     )
 
 
@@ -371,6 +384,16 @@ _SECAO_DE_AMOSTRA = {
     g.TF.chave: 10.0,
     g.TW.chave: 6.0,
     g.ESCALA.chave: 1.0,
+    # A viga também tem sinais a decidir: a carga fica dentro do vão, e L − a é positivo.
+    g.L.chave: 1000.0,
+    g.A_CARGA.chave: 250.0,
+    g.C_BALANCO.chave: 100.0,
+    g.A_1.chave: 200.0,
+    g.A_2.chave: 700.0,
+    # Ângulo de amostra acima de 90° troca o sinal da tangente: a engrenagem fica no usual.
+    g.PHI_N.chave: 0.35,
+    g.PSI.chave: 0.26,
+    g.THETA_ABRACAMENTO.chave: 3.0,
 }
 
 
@@ -480,12 +503,33 @@ def _real(expressao: sp.Expr) -> float | None:
     return valor.real
 
 
-def _funcao(expressao: sp.Expr, x: sp.Symbol) -> Callable[[float], float]:
-    bruta = sp.lambdify(x, expressao, [FUNCOES, "math"])
+@lru_cache(maxsize=4096)
+def _compilada(expressao: sp.Expr, simbolos: tuple[sp.Symbol, ...], modulo: str) -> Any:
+    """Gerar o código da conta custa mais do que rodar: a mesma condição volta a cada rodada."""
+    return sp.lambdify(simbolos, expressao, [FUNCOES, modulo])
+
+
+def _argumentos(
+    expressao: sp.Expr, x: sp.Symbol, numeros: Mapping[sp.Symbol, sp.Float] | None
+) -> tuple[sp.Expr, tuple[sp.Symbol, ...], tuple[float, ...]]:
+    """As letras viram argumentos da conta compilada, e os números entram na chamada."""
+    if not numeros:
+        return expressao, (x,), ()
+    outros = tuple(sorted((s for s in expressao.free_symbols if s != x), key=lambda s: s.name))
+    if any(s not in numeros for s in outros):
+        return expressao.subs(numeros), (x,), ()
+    return expressao, (x, *outros), tuple(float(numeros[s]) for s in outros)
+
+
+def _funcao(
+    expressao: sp.Expr, x: sp.Symbol, numeros: Mapping[sp.Symbol, sp.Float] | None = None
+) -> Callable[[float], float]:
+    expressao, simbolos, fixos = _argumentos(expressao, x, numeros)
+    bruta = _compilada(expressao, simbolos, "math")
 
     def chamar(valor: float) -> float:
         try:
-            resultado = bruta(valor)
+            resultado = bruta(valor, *fixos)
         except (ValueError, ZeroDivisionError, OverflowError):
             return math.nan
         if isinstance(resultado, complex):
@@ -495,22 +539,60 @@ def _funcao(expressao: sp.Expr, x: sp.Symbol) -> Callable[[float], float]:
     return chamar
 
 
-def _dentro(validades: Sequence[Validade], x: sp.Symbol) -> list[Callable[[float], float]]:
+def _na_grade(
+    expressao: sp.Expr, x: sp.Symbol, numeros: Mapping[sp.Symbol, sp.Float] | None = None
+) -> Callable[[np.ndarray], np.ndarray]:
+    """A mesma conta de ``_funcao``, mas na grade inteira de uma vez.
+
+    Ponto a ponto, uma condição com os fatores de Marin levava dezenas de milissegundos só para
+    varrer a grade. O que não é número de verdade, como raiz de negativo, vira nan, como lá.
+    """
+    compilada, simbolos, fixos = _argumentos(expressao, x, numeros)
+    bruta = _compilada(compilada, simbolos, "numpy")
+
+    def chamar(valores: np.ndarray) -> np.ndarray:
+        with np.errstate(all="ignore"):
+            try:
+                resultado = np.asarray(bruta(valores, *fixos))
+            except (ValueError, ZeroDivisionError, OverflowError, TypeError):
+                escalar = _funcao(expressao, x, numeros)
+                return np.array([escalar(v) for v in valores.tolist()])
+            if np.iscomplexobj(resultado):
+                resultado = np.where(resultado.imag == 0.0, resultado.real, np.nan)
+            resultado = np.broadcast_to(resultado.astype(float), valores.shape)
+            return np.where(np.isfinite(resultado), resultado, np.nan)
+
+    return chamar
+
+
+def _dentro(
+    validades: Sequence[Validade], x: sp.Symbol, numeros: Mapping[sp.Symbol, sp.Float]
+) -> list[Callable[[np.ndarray], np.ndarray]]:
+    conhecidas = {x, *numeros}
     return [
-        _funcao(v.expressao, x)
+        _na_grade(v.expressao, x, numeros)
         for v in validades
-        if v.restringe and v.expressao.free_symbols <= {x}
+        if v.restringe and v.expressao.free_symbols <= conhecidas
     ]
 
 
+@lru_cache(maxsize=4096)
+def _latex(expressao: sp.Expr) -> str:
+    return sp.latex(expressao)
+
+
 def _raizes(
-    f: Callable[[float], float], dominio: Sequence[Callable[[float], float]]
+    f: Callable[[float], float],
+    na_grade: Callable[[np.ndarray], np.ndarray],
+    dominio: Sequence[Callable[[np.ndarray], np.ndarray]],
 ) -> list[float]:
     """Toda troca de sinal na grade, refinada por bisseção."""
+    valores = na_grade(_GRADE_LOG)
+    for condicao in dominio:
+        valores = np.where(condicao(_GRADE_LOG) >= 0, valores, np.nan)
     achadas = []
     anterior: tuple[float, float] | None = None
-    for atual in _GRADE_LOG.tolist():
-        valor = f(atual) if all(c(atual) >= 0 for c in dominio) else math.nan
+    for atual, valor in zip(_GRADE_LOG.tolist(), valores.tolist(), strict=True):
         if not math.isfinite(valor):
             anterior = None
             continue
@@ -609,14 +691,25 @@ def _com_numeros(forma: FormaFechada, numeros: Mapping[sp.Symbol, sp.Float]) -> 
     return sp.latex(parcial).replace(".", "{,}")
 
 
+def _fecha(
+    condicao: Condicao, x: sp.Symbol, numeros: Mapping[sp.Symbol, sp.Float], valor: float
+) -> bool:
+    """A raiz da forma fechada zera mesmo a equação com os números de agora."""
+    esquerda = _funcao(condicao.esquerda, x, numeros)(valor)
+    direita = _funcao(condicao.direita, x, numeros)(valor)
+    if not (math.isfinite(esquerda) and math.isfinite(direita)):
+        return False
+    return abs(esquerda - direita) <= 1e-6 * max(abs(esquerda), abs(direita), 1e-300)
+
+
 def _isolar_uma(
     condicao: Condicao,
     x: sp.Symbol,
     numeros: Mapping[sp.Symbol, sp.Float],
 ) -> Isolada:
     esquerda, direita = condicao.esquerda, condicao.direita
-    tensao = sp.latex(limpar(esquerda, condicao.positiva))
-    equacao = f"{tensao} = {sp.latex(direita)}"
+    tensao = _latex(limpar(esquerda, condicao.positiva))
+    equacao = f"{tensao} = {_latex(direita)}"
     livres = esquerda.free_symbols | direita.free_symbols
     resto = livres - set(numeros) - {x}
     if x not in livres:
@@ -633,19 +726,18 @@ def _isolar_uma(
     com_numeros = _com_numeros(forma, numeros) if forma else ""
     if resto:
         return Isolada(condicao, forma, equacao, tensao, com_numeros, None, None, False, None)
-    diferenca = (esquerda - direita).subs(numeros)
-    f = _funcao(diferenca, x)
-    dominio = _dentro(
-        [Validade(v.expressao.subs(numeros), v.mensagem, v.restringe) for v in condicao.validade],
-        x,
-    )
+    diferenca = esquerda - direita
+    f = _funcao(diferenca, x, numeros)
+    dominio = _dentro(condicao.validade, x, numeros)
     if forma is not None:
         valor = _real(forma.expressao.subs(numeros))
-        if valor is None or valor <= 0.0:
-            return Isolada(condicao, forma, equacao, tensao, com_numeros, None, None, False, None)
-        lado = IGUAL if condicao.igualdade else _lado(f, valor)
-        return Isolada(condicao, forma, equacao, tensao, com_numeros, valor, lado, False, None)
-    raizes = _raizes(f, dominio)
+        if valor is not None and valor > 0.0 and _fecha(condicao, x, numeros, valor):
+            lado = IGUAL if condicao.igualdade else _lado(f, valor)
+            return Isolada(condicao, forma, equacao, tensao, com_numeros, valor, lado, False, None)
+        # A forma fechada escolheu um sinal pela amostra, e com estes números ele não vale: a conta
+        # numérica acha a raiz certa, e a fórmula em letras sai da tela para não enganar.
+        forma, com_numeros = None, ""
+    raizes = _raizes(f, _na_grade(diferenca, x, numeros), dominio)
     if not raizes:
         return Isolada(condicao, None, equacao, tensao, "", None, None, False, None)
     lados = [_lado(f, r) for r in raizes]
@@ -657,15 +749,25 @@ def _isolar_uma(
     return Isolada(condicao, None, equacao, tensao, "", valor, lado, False, None)
 
 
+def _no_valor(
+    expressao: sp.Expr, x: sp.Symbol, numeros: Mapping[sp.Symbol, sp.Float], final: float
+) -> float | None:
+    """O número da expressão, pela conta compilada. Letra sem número fica sem resposta."""
+    if not expressao.free_symbols <= {x, *numeros}:
+        return None
+    valor = _funcao(expressao, x, numeros)(final)
+    return valor if math.isfinite(valor) else None
+
+
 def _conferir(
     isoladas: Sequence[Isolada], valores: Mapping[str, float], x: sp.Symbol, final: float
 ) -> tuple[LinhaConferida, ...]:
-    tudo = {**_numeros(valores, x), x: sp.Float(final)}
+    numeros = _numeros(valores, x)
     linhas = []
     for item in isoladas:
         c = item.condicao
-        esquerda = _real(c.esquerda.subs(tudo))
-        direita = _real(c.direita.subs(tudo))
+        esquerda = _no_valor(c.esquerda, x, numeros, final)
+        direita = _no_valor(c.direita, x, numeros, final)
         if esquerda is None or direita is None:
             continue
         uso = esquerda / direita if direita else math.inf
@@ -674,18 +776,19 @@ def _conferir(
 
 
 def _alertas_da_validade(
-    isoladas: Sequence[Isolada], valores: Mapping[str, float], x: sp.Symbol, final: float
+    isoladas: Sequence[Isolada],
+    valores: Mapping[str, float],
+    x: sp.Symbol,
+    final: float,
+    dos_blocos: Sequence[Validade] = (),
 ) -> list[str]:
-    tudo = {**_numeros(valores, x), x: sp.Float(final)}
+    numeros = _numeros(valores, x)
     alertas: list[str] = []
-    for item in isoladas:
-        for v in item.condicao.validade:
-            expressao = v.expressao.subs(tudo)
-            if expressao.free_symbols:
-                continue
-            numero = _real(expressao)
-            if numero is not None and numero < -_FOLGA and v.mensagem not in alertas:
-                alertas.append(v.mensagem)
+    todas = [v for item in isoladas for v in item.condicao.validade] + list(dos_blocos)
+    for v in dict.fromkeys(todas):
+        numero = _no_valor(v.expressao, x, numeros, final)
+        if numero is not None and numero < -_FOLGA and v.mensagem not in alertas:
+            alertas.append(v.mensagem)
     return alertas
 
 
@@ -792,7 +895,7 @@ def isolar(
     materiais: tuple[str, ...] = ()
     if valor is not None:
         conferencia = _conferir(isoladas, usados, x, valor)
-        alertas += _alertas_da_validade(isoladas, usados, x, valor)
+        alertas += _alertas_da_validade(isoladas, usados, x, valor, conta.validades)
         materiais = _materiais_que_servem(grandeza, valor, sentido)
     medida: float | None = None
     conferencia_adotada: tuple[LinhaConferida, ...] = ()
@@ -800,7 +903,9 @@ def isolar(
         medida = float(adotado)
         conferencia_adotada = _conferir(isoladas, usados, x, medida)
         alertas += [
-            a for a in _alertas_da_validade(isoladas, usados, x, medida) if a not in alertas
+            a
+            for a in _alertas_da_validade(isoladas, usados, x, medida, conta.validades)
+            if a not in alertas
         ]
     return Resposta(
         grandeza,
@@ -860,9 +965,9 @@ def curvas(
         c = item.condicao
         if item.independente:
             continue
-        uso = _funcao((c.esquerda / c.direita).subs(numeros), x)
-        for valor in np.geomspace(resposta.valor * 0.5, resposta.valor * 2.0, pontos).tolist():
-            calculado = uso(valor)
+        uso = _na_grade(c.esquerda / c.direita, x, numeros)
+        grade = np.geomspace(resposta.valor * 0.5, resposta.valor * 2.0, pontos)
+        for valor, calculado in zip(grade.tolist(), uso(grade).tolist(), strict=True):
             if math.isfinite(calculado):
                 linhas.append((c.nome, valor, calculado))
     return linhas

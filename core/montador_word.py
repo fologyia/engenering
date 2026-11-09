@@ -21,11 +21,19 @@ from core import montador as mt
 from core import montador_blocos as mb
 from core.beam_charts import _fonte
 from core.montador_funcoes import (
+    AlturaDaChaveta,
     AtritoDarcy,
+    CargaEquivalenteEsferas,
+    CargaEquivalenteXY,
+    CargaEstatica,
     FatorSuperficie,
     FatorTamanho,
+    InterferenciaMaxima,
+    InterferenciaMinima,
     KtRessalto,
+    LarguraDaChaveta,
     LimiteBase,
+    RasgoDaChaveta,
     ResistenciaEmVida,
     SensibilidadeNeuber,
 )
@@ -73,6 +81,14 @@ _FUNCOES_DO_MONTADOR: tuple[tuple[type[sp.Function], str, str], ...] = (
     (KtRessalto, "K", "t"),
     (ResistenciaEmVida, "S", "f"),
     (AtritoDarcy, "f", ""),
+    (LarguraDaChaveta, "b", "ch"),
+    (AlturaDaChaveta, "h", "ch"),
+    (RasgoDaChaveta, "t", "1"),
+    (InterferenciaMinima, "δ", "mín"),
+    (InterferenciaMaxima, "δ", "máx"),
+    (CargaEquivalenteEsferas, "P", ""),
+    (CargaEquivalenteXY, "P", ""),
+    (CargaEstatica, "P", "0"),
 )
 _NOMES_DE_FUNCAO = {
     sp.sin: "sen",

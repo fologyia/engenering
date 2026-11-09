@@ -19,6 +19,7 @@ import numpy as np
 import sympy as sp
 
 from core import elementos_eixos as ee
+from core import elementos_mancais as em
 from core import fatigue as ft
 
 RE_LAMINAR = 2300.0
@@ -126,12 +127,49 @@ def _vida(s_1000: float, se: float, ciclos: float) -> float:
     return s_1000 * (ciclos / 1e3) ** (math.log10(se / s_1000) / 3.0)
 
 
+#: A ordem dos ajustes é o número que entra na fórmula, como nos materiais de fadiga.
+AJUSTES_DO_CUBO = tuple(ee.AJUSTES)
+
+
+def _chaveta(d: float, coluna: int) -> float:
+    """b, h ou t₁ da DIN 6885-1, em mm. Fora da tabela, a conta não existe."""
+    return ee.chaveta_din(d)[coluna]
+
+
+def _interferencia(d: float, indice: float, maxima: int) -> float:
+    """Interferência do ajuste H7 da NBR 6158 na base, em mm: a tabela dá em µm."""
+    return ee.interferencia_do_ajuste(d, AJUSTES_DO_CUBO[int(indice)])[maxima] / 1000.0
+
+
+def _equivalente_esferas(radial: float, axial: float, c0: float) -> float:
+    """P = máx(F_r; X·F_r + Y·F_a), com X e Y da Tabela 11-1 de Shigley, como no Assistente."""
+    x, y, _ = em.fatores_xy(axial, radial, c0)
+    return max(radial, x * radial + y * axial)
+
+
+def _equivalente_xy(radial: float, axial: float, x: float, y: float) -> float:
+    return max(radial, x * radial + y * axial)
+
+
+def _estatica(radial: float, axial: float) -> float:
+    """P₀ = máx(F_r; 0,6·F_r + 0,5·F_a), a do rolamento rígido de esferas."""
+    return max(radial, 0.6 * radial + 0.5 * axial)
+
+
 limite_base = _em_vetor(_limite_base)
 fator_de_superficie = _em_vetor(_superficie)
 fator_de_tamanho = _em_vetor(_tamanho)
 sensibilidade_neuber = _em_vetor(_sensibilidade)
 kt_do_ressalto = _em_vetor(_kt)
 resistencia_em_vida = _em_vetor(_vida)
+largura_da_chaveta = _em_vetor(lambda d: _chaveta(d, 0))
+altura_da_chaveta = _em_vetor(lambda d: _chaveta(d, 1))
+rasgo_da_chaveta = _em_vetor(lambda d: _chaveta(d, 2))
+interferencia_minima = _em_vetor(lambda d, i: _interferencia(d, i, 0))
+interferencia_maxima = _em_vetor(lambda d, i: _interferencia(d, i, 1))
+carga_equivalente_esferas = _em_vetor(_equivalente_esferas)
+carga_equivalente_xy = _em_vetor(_equivalente_xy)
+carga_estatica = _em_vetor(_estatica)
 
 
 class _Numerica(sp.Function):
@@ -189,6 +227,54 @@ class ResistenciaEmVida(_Numerica):
     texto = "S_{f}"
 
 
+class LarguraDaChaveta(_Numerica):
+    nargs = 1
+    funcao = staticmethod(largura_da_chaveta)
+    texto = "b_{ch}"
+
+
+class AlturaDaChaveta(_Numerica):
+    nargs = 1
+    funcao = staticmethod(altura_da_chaveta)
+    texto = "h_{ch}"
+
+
+class RasgoDaChaveta(_Numerica):
+    nargs = 1
+    funcao = staticmethod(rasgo_da_chaveta)
+    texto = "t_{1}"
+
+
+class InterferenciaMinima(_Numerica):
+    nargs = 2
+    funcao = staticmethod(interferencia_minima)
+    texto = "\\delta_{mín}"
+
+
+class InterferenciaMaxima(_Numerica):
+    nargs = 2
+    funcao = staticmethod(interferencia_maxima)
+    texto = "\\delta_{máx}"
+
+
+class CargaEquivalenteEsferas(_Numerica):
+    nargs = 3
+    funcao = staticmethod(carga_equivalente_esferas)
+    texto = "P"
+
+
+class CargaEquivalenteXY(_Numerica):
+    nargs = 4
+    funcao = staticmethod(carga_equivalente_xy)
+    texto = "P"
+
+
+class CargaEstatica(_Numerica):
+    nargs = 2
+    funcao = staticmethod(carga_estatica)
+    texto = "P_{0}"
+
+
 #: Elas não têm forma fechada: simplificar não adianta e custa caro.
 NUMERICAS: tuple[type[sp.Function], ...] = (
     AtritoDarcy,
@@ -198,6 +284,24 @@ NUMERICAS: tuple[type[sp.Function], ...] = (
     SensibilidadeNeuber,
     KtRessalto,
     ResistenciaEmVida,
+    LarguraDaChaveta,
+    AlturaDaChaveta,
+    RasgoDaChaveta,
+    InterferenciaMinima,
+    InterferenciaMaxima,
+    CargaEquivalenteEsferas,
+    CargaEquivalenteXY,
+    CargaEstatica,
+)
+#: As que vêm de tabela ou de escolha: a planilha leva o valor calculado, e não uma fórmula.
+TABELADAS: tuple[type[sp.Function], ...] = (
+    KtRessalto,
+    LarguraDaChaveta,
+    AlturaDaChaveta,
+    RasgoDaChaveta,
+    InterferenciaMinima,
+    InterferenciaMaxima,
+    CargaEquivalenteEsferas,
 )
 #: O que o ``lambdify`` precisa para calcular estas funções em número.
 FUNCOES: dict[str, Any] = {
@@ -208,4 +312,12 @@ FUNCOES: dict[str, Any] = {
     "SensibilidadeNeuber": sensibilidade_neuber,
     "KtRessalto": kt_do_ressalto,
     "ResistenciaEmVida": resistencia_em_vida,
+    "LarguraDaChaveta": largura_da_chaveta,
+    "AlturaDaChaveta": altura_da_chaveta,
+    "RasgoDaChaveta": rasgo_da_chaveta,
+    "InterferenciaMinima": interferencia_minima,
+    "InterferenciaMaxima": interferencia_maxima,
+    "CargaEquivalenteEsferas": carga_equivalente_esferas,
+    "CargaEquivalenteXY": carga_equivalente_xy,
+    "CargaEstatica": carga_estatica,
 }

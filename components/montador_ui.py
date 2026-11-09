@@ -25,7 +25,9 @@ import pandas as pd
 import streamlit as st
 import sympy as sp
 
+from components import montador_eixo_ui as eixo_ui
 from components import repasse_do_montador as rpm
+from components.edicao_de_tabela import com_edicoes as _com_edicoes
 from components.figuras import SO_NA_LARGURA
 from components.prancheta_blocos_ui import prancheta_de_blocos
 from components.project_tools import (
@@ -40,6 +42,7 @@ from core import montador_blocos as mb
 from core import montador_busca as bs
 from core import montador_catalogo as cat
 from core import montador_conjuntos as mc
+from core import montador_eixo as me
 from core import montador_fluidos as fl
 from core import montador_formula as mf
 from core import montador_grandezas as g
@@ -47,6 +50,7 @@ from core import montador_historico as mh
 from core import montador_planilha as mp
 from core import montador_registro as rg
 from core import montador_repasse as rp
+from core import montador_sensibilidade as ms
 from core import montador_word as mw
 from core.montador_grandezas import Grandeza, Unidades
 from core.montador_modelos import Modelo, Parte
@@ -81,6 +85,8 @@ _LINHAS_DO_CATALOGO = 12
 _SAIDA_NO_CARTAO = {
     "limite_fadiga": ("se", "S_e", g.TENSAO),
     "entalhe": ("kf", "K_f", g.PURO),
+    "engrenagem": ("F_t", "F_t", g.FORCA),
+    "polia": ("F", "F", g.FORCA),
 }
 _AJUDA_DA_FORMULA = (
     "Três formas: q*L^2/8 dá um valor; M = q*L^2/8 dá um valor com nome e também uma equação; "
@@ -1294,20 +1300,6 @@ def _inspetor_da_formula(p: Parte, no: mt.No) -> None:
         st.caption(problema)
 
 
-def _com_edicoes(
-    linhas: Sequence[Mapping[str, Any]], mudancas: Mapping[str, Any]
-) -> list[dict[str, Any]]:
-    """Aplica o que o st.data_editor guarda: linhas editadas, apagadas e acrescentadas."""
-    novas = [dict(linha) for linha in linhas]
-    for indice, campos in (mudancas.get("edited_rows") or {}).items():
-        if 0 <= int(indice) < len(novas):
-            novas[int(indice)].update(campos)
-    apagadas = {int(i) for i in mudancas.get("deleted_rows") or ()}
-    novas = [linha for i, linha in enumerate(novas) if i not in apagadas]
-    novas.extend(dict(linha) for linha in mudancas.get("added_rows") or ())
-    return novas
-
-
 def _rotulo_da_peca(nome: str) -> str:
     return f"{nome} · K {_numero(fl.PECAS[nome])}"
 
@@ -1473,6 +1465,8 @@ def _inspetor_bloco(
         _pecas_do_bloco(p, no)
     elif no.tipo == "curva_bomba":
         _pontos_da_bomba(p, no, u)
+    elif no.tipo == me.TIPO:
+        eixo_ui.ajuda_no_inspetor()
     _uso_do_bloco(no, resposta)
     _ligacoes_do_bloco(p, dados, no.id)
     with st.expander("Fórmula, hipóteses e detalhes", icon=":material/functions:"):
@@ -2120,10 +2114,88 @@ def _anotar_mudanca(p: Parte, resposta: mt.Resposta, u: Unidades) -> None:
     estado[p.k("mudanca")] = texto + "."
 
 
+def _variacao_em_texto(fracao: float | None) -> str:
+    if fracao is None:
+        return "—"
+    numero = fracao * 100.0
+    if abs(numero) < 0.05:
+        return "0 %"
+    return f"{'+' if numero > 0 else '−'}{abs(numero):.1f} %".replace(".", ",")
+
+
+def _pesos(p: Parte, resposta: mt.Resposta) -> list[ms.Peso]:
+    """A conta é refeita duas vezes por letra: guarda até a montagem ou um número mudar."""
+    estado = st.session_state
+    conta = resposta.montagem
+    chave = (
+        hash(conta.grafo) if conta is not None else 0,
+        resposta.alvo.chave,
+        tuple(sorted(resposta.valores_usados.items())),
+    )
+    guardado = estado.get(p.k("pesos"))
+    if guardado is not None and guardado[0] == chave:
+        return list(guardado[1])
+    lista = ms.pesos(resposta)
+    estado[p.k("pesos")] = (chave, tuple(lista))
+    return lista
+
+
+def _o_que_mais_pesa(p: Parte, resposta: mt.Resposta, u: Unidades) -> None:
+    """Cada número sobe e desce 10 %, e a conta inteira roda de novo."""
+    if resposta.valor is None or resposta.faltam:
+        return
+    lista = _pesos(p, resposta)
+    pesam = [peso for peso in lista if not peso.quase_nada]
+    if not lista:
+        return
+    alvo = resposta.alvo.texto
+    _titulo_da_pagina("O que mais pesa")
+    if pesam:
+        primeiro = pesam[0]
+        st.markdown(
+            f"Pesa mais **{primeiro.grandeza.texto}** ({primeiro.grandeza.nome.lower()}): 10 % a "
+            f"mais muda {alvo} em **{_variacao_em_texto(primeiro.sobe)}**."
+        )
+        linhas = [
+            {
+                "Letra": f"{peso.grandeza.texto}: {peso.grandeza.nome}",
+                "Valor": _com_unidade(peso.valor, peso.grandeza, u),
+                f"{alvo} com +10 %": _variacao_em_texto(peso.sobe),
+                f"{alvo} com −10 %": _variacao_em_texto(peso.desce),
+                "Passa a mandar": peso.manda_depois or "",
+            }
+            for peso in pesam
+        ]
+        quadro = pd.DataFrame(linhas)
+        if not any(linha["Passa a mandar"] for linha in linhas):
+            quadro = quadro.drop(columns="Passa a mandar")
+        st.dataframe(quadro, hide_index=True, width="stretch")
+    fracos = [peso.grandeza.texto for peso in lista if peso.quase_nada]
+    texto = (
+        "Cada número sobe e desce 10 %, um de cada vez, e a conta roda de novo. Assim aparece "
+        "também quando outra condição passa a mandar."
+    )
+    if fracos:
+        texto += f" Quase não mexem na resposta: {', '.join(fracos)}."
+    st.caption(texto)
+
+
+_CURVAS_NO_GRAFICO = 8
+
+
 def _grafico_de_uso(resposta: mt.Resposta, valores: Mapping[str, float], u: Unidades) -> None:
     linhas = mt.curvas(resposta, valores)
     if not linhas:
         return
+    perto = sorted(resposta.conferencia, key=lambda linha: linha.uso, reverse=True)
+    if len(perto) > _CURVAS_NO_GRAFICO:
+        # O eixo com trechos tem dezenas de condições: com todas, o gráfico vira um novelo.
+        mostradas = {linha.nome for linha in perto[:_CURVAS_NO_GRAFICO]}
+        linhas = [linha for linha in linhas if linha[0] in mostradas]
+        st.caption(
+            f"O gráfico mostra as {_CURVAS_NO_GRAFICO} condições mais perto do limite. As outras "
+            "estão no quadro de condições."
+        )
     fator = u.fator(resposta.alvo.dimensao)
     rotulo = u.rotulo(resposta.alvo.dimensao)
     eixo = f"{resposta.alvo.texto} ({rotulo})" if rotulo else resposta.alvo.texto
@@ -3270,6 +3342,7 @@ def tela_do_montador(p: Parte) -> None:
         st.warning(alerta, icon=":material/warning:")
     if falha:
         st.error(falha, icon=":material/error:")
+    eixo_ui.editores_dos_eixos(p, grafo, base, resposta, u)
     if not base.condicoes or alvo is None:
         if not base.erros and not grafo.nos:
             st.info(
@@ -3303,6 +3376,7 @@ def tela_do_montador(p: Parte) -> None:
     _grafico_da_bomba(resposta, valores, u)
     _busca_em_faixas(p, base, alvo, resposta, u)
     _escolher_do_catalogo(p, base, alvo)
+    _o_que_mais_pesa(p, resposta, u)
     if resposta.valor is not None and resposta.sentido != mt.IGUAL:
         _titulo_da_pagina("Em volta da resposta")
         _grafico_de_uso(resposta, valores, u)

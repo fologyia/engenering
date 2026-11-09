@@ -9,6 +9,10 @@ from typing import Any
 from core import elementos_eixos as ee
 from core import montador_blocos as mb
 from core import montador_conjuntos as mc
+from core import (
+    montador_eixo,  # noqa: F401  (registra o eixo com trechos)
+    montador_pecas,  # noqa: F401  (registra os blocos de peça)
+)
 from core import montador_grandezas as g
 
 _LARGURA = 202
@@ -66,8 +70,8 @@ class Modelo:
         fios += [_fio(*fio) for fio in self.fios]
         for no in nos:
             no["opcoes"] = dict(self.opcoes.get(no["id"], {}))
-            if no["tipo"] == mb.FORMULA:
-                no["portas"] = mb.portas_para_a_tela(mb.FORMULA, no["opcoes"])
+            if no["tipo"] == mb.FORMULA or no["tipo"] in mb.PORTAS_VARIAVEIS:
+                no["portas"] = mb.portas_para_a_tela(no["tipo"], no["opcoes"])
         organizar(nos, fios)
         dados = {"nos": nos, "fios": fios}
         if self.conjunto is not None:
@@ -78,6 +82,9 @@ class Modelo:
 
 
 _R = mb.RESULTADO
+#: Uma engrenagem de 15 kW a 1450 rpm, com primitivo de 80 mm: os modelos de peça partem dela.
+_ENGRENAGEM = {"P": 15e6, "n_rot": 1450.0, "d_g": 80.0}
+_ACO_DO_EIXO = {"S_y": 420.0, "S_ut": 690.0, "E": 200000.0, "G": 80000.0}
 _DICA_DA_FORMULA = "Digite a conta no inspetor: as letras viram bolinhas e a unidade é conferida."
 
 MODELOS: tuple[Modelo, ...] = (
@@ -253,6 +260,133 @@ MODELOS: tuple[Modelo, ...] = (
             "m2": {"confiabilidade": "90 %"},
             "m3": {"entalhe": ee.ENTALHE_RESSALTO},
         },
+    ),
+    Modelo(
+        "Eixo com engrenagem",
+        "A engrenagem dá F_r e F_t, cada uma num plano, e o eixo sai por fadiga com o rasgo.",
+        "d",
+        {**_ENGRENAGEM, **_ACO_DO_EIXO, "a_m": 100.0, "L": 300.0, "n": 2.0},
+        ("circular", "flexao", "flexao_y", "torcao", "goodman", _R),
+        (
+            ("e1", "engrenagem"),
+            ("v1", "biapoiada_fora"),
+            ("v2", "biapoiada_fora"),
+            ("m1", "material"),
+            ("m2", "limite_fadiga"),
+            ("m3", "entalhe"),
+        ),
+        (
+            ("e1", "F_r", "v1", "F"),
+            ("e1", "F_t", "v2", "F"),
+            ("v1", "M", "n2", "valor"),
+            ("v2", "M", "n3", "valor"),
+            ("e1", "T", "n4", "valor"),
+            ("m1", "saida", "n5", "material"),
+            ("m1", "saida", "m2", "material"),
+            ("m1", "saida", "m3", "material"),
+            ("m2", "se", "n5", "se"),
+            ("m3", "kf", "n5", "kf"),
+            ("m3", "kfs", "n5", "kfs"),
+        ),
+        {
+            "n5": {"esforcos": mb.EIXO_GIRANDO},
+            "m2": {"confiabilidade": "90 %"},
+            "m3": {"entalhe": ee.ENTALHE_CHAVETA},
+        },
+    ),
+    Modelo(
+        "Rigidez do eixo",
+        "Inclinação no mancal, com os dois planos da engrenagem, e rotação crítica com a peça.",
+        "d",
+        {**_ENGRENAGEM, **_ACO_DO_EIXO, "a_m": 100.0, "L": 300.0, "m_p": 3e-3},
+        ("circular", "inclinacao", _R),
+        (
+            ("e1", "engrenagem"),
+            ("v1", "biapoiada_fora"),
+            ("v2", "biapoiada_fora"),
+            ("m1", "material"),
+            ("c1", "rotacao_critica"),
+        ),
+        (
+            ("e1", "F_r", "v1", "F"),
+            ("e1", "F_t", "v2", "F"),
+            ("v1", "giro", "n2", "giro"),
+            ("v2", "giro", "n2", "giro_2"),
+            ("m1", "saida", "n2", "material"),
+            ("n1", "saida", "c1", "entrada"),
+            ("m1", "saida", "c1", "material"),
+            ("c1", "condicao", "n3", "condicoes"),
+        ),
+        {"c1": {"massas": "Eixo e uma peça entre os mancais"}},
+    ),
+    Modelo(
+        "Polia em balanço",
+        "A polia fora dos mancais: o momento maior fica no mancal, e a reação passa da força.",
+        "d",
+        {
+            "P": 7.5e6,
+            "n_rot": 1750.0,
+            "d_pol": 120.0,
+            "c_b": 80.0,
+            "L": 250.0,
+            "S_y": 420.0,
+            "n": 2.0,
+        },
+        ("circular", "flexao", "torcao", "von_mises", _R),
+        (("p1", "polia"), ("v1", "biapoiada_balanco")),
+        (
+            ("p1", "F", "v1", "F"),
+            ("v1", "M", "n2", "valor"),
+            ("p1", "T", "n3", "valor"),
+        ),
+    ),
+    Modelo(
+        "Chaveta: comprimento mínimo",
+        "O torque da potência passa pela chaveta da DIN 6885 do diâmetro do eixo.",
+        "L_ch",
+        {"P": 15e6, "n_rot": 1450.0, "d": 40.0, "S_y": 420.0, "S_y_cubo": 250.0, "n": 2.0},
+        ("chaveta", _R),
+        (("p1", "potencia"),),
+        (("p1", "T", "n1", "T"),),
+    ),
+    Modelo(
+        "Cubo prensado: comprimento do ajuste",
+        "Quanto do cubo precisa ficar apertado no eixo para segurar o torque sem chaveta.",
+        "L_aj",
+        {
+            "T": 4e5,
+            "d": 60.0,
+            "D_cubo": 110.0,
+            "S_y": 420.0,
+            "S_y_cubo": 300.0,
+            "E": 200000.0,
+            "n": 1.5,
+            "F_ac": 0.0,
+        },
+        ("cubo_prensado", _R),
+    ),
+    Modelo(
+        "Rolamento: capacidade C",
+        "A reação do mancal vai para o rolamento, e a vida em horas dá o C do catálogo.",
+        "C_din",
+        {"F": 5000.0, "a_m": 100.0, "L": 300.0, "n_rot": 1450.0, "C_0": 20000.0},
+        ("rolamento", _R),
+        (("v1", "biapoiada_fora"),),
+        (("v1", "R", "n1", "R"),),
+    ),
+    Modelo(
+        "Eixo com trechos",
+        "O eixo inteiro: ombros, rasgos, mancais e a engrenagem, com a seção que quebra primeiro.",
+        "d",
+        {**_ENGRENAGEM, **_ACO_DO_EIXO, "n": 1.5},
+        ("eixo_trechos", _R),
+        (("e1", "engrenagem"), ("m1", "material")),
+        (
+            ("e1", "F_r", "n1", "v1"),
+            ("e1", "F_t", "n1", "h1"),
+            ("e1", "T", "n1", "t1"),
+            ("m1", "saida", "n1", "material"),
+        ),
     ),
     Modelo(
         "Fórmula própria",
