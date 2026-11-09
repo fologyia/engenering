@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components import repasse_do_montador as repasse
 from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.ui import cabecalho_pagina, comparador_cenarios, configurar_pagina, fronteira_modelo
@@ -102,6 +103,8 @@ if dados:
             "Informe propriedades manuais ou use um critério apropriado a materiais frágeis.",
             icon=":material/warning:",
         )
+
+repasse.aviso(repasse.ESTATICA)  # o Montador mudou depois de mandar estas tensões?
 
 with st.form("formulario_estatico"):
     st.subheader("Entradas")

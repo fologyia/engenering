@@ -15,6 +15,8 @@ from __future__ import annotations
 import html
 import json
 import math
+import time
+from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
@@ -23,9 +25,14 @@ import pandas as pd
 import streamlit as st
 import sympy as sp
 
+from components import repasse_do_montador as rpm
 from components.figuras import SO_NA_LARGURA
 from components.prancheta_blocos_ui import prancheta_de_blocos
-from components.project_tools import botao_registrar_calculo, projeto_ativo_persistente
+from components.project_tools import (
+    botao_registrar_calculo,
+    id_registro_existente,
+    projeto_ativo_persistente,
+)
 from components.ui import fronteira_modelo
 from core import armazenamento
 from core import montador as mt
@@ -39,6 +46,7 @@ from core import montador_grandezas as g
 from core import montador_historico as mh
 from core import montador_planilha as mp
 from core import montador_registro as rg
+from core import montador_repasse as rp
 from core import montador_word as mw
 from core.montador_grandezas import Grandeza, Unidades
 from core.montador_modelos import Modelo, Parte
@@ -1080,14 +1088,21 @@ def _campos(p: Parte, letras: Sequence[Grandeza], alvo: str | None, u: Unidades)
     _origem_dos_valores(p, [item for item in letras if item.chave != alvo])
 
 
-def _numeros_da_conta(p: Parte, resposta: mt.Resposta | None) -> dict[sp.Symbol, sp.Float]:
-    valores = {k: v for k, v in st.session_state[p.k("valores")].items() if v is not None}
+def _numeros_de(
+    valores: Mapping[str, float | None], resposta: mt.Resposta | None
+) -> dict[sp.Symbol, sp.Float]:
+    """Os números da conta: os valores, e a resposta (ou o adotado) no lugar da letra pedida."""
+    usados = {k: v for k, v in valores.items() if v is not None}
     if resposta is not None:
-        valores = dict(resposta.valores_usados)
+        usados = dict(resposta.valores_usados)
         valor = resposta.adotado or resposta.valor
         if valor is not None:
-            valores[resposta.alvo.chave] = valor
-    return {sp.Symbol(k, positive=True): sp.Float(v) for k, v in valores.items()}
+            usados[resposta.alvo.chave] = valor
+    return {sp.Symbol(k, positive=True): sp.Float(v) for k, v in usados.items()}
+
+
+def _numeros_da_conta(p: Parte, resposta: mt.Resposta | None) -> dict[sp.Symbol, sp.Float]:
+    return _numeros_de(st.session_state[p.k("valores")], resposta)
 
 
 # ---------------------------------------------------------------------------
@@ -2548,6 +2563,369 @@ def _escolher_do_catalogo(p: Parte, montagem: mt.Montagem, alvo: str | None) -> 
         )
 
 
+# ---------------------------------------------------------------------------
+# Comparar duas montagens
+# ---------------------------------------------------------------------------
+
+
+def _guardar_como_a(p: Parte) -> None:
+    st.session_state[p.k("comparar_a")] = {
+        "foto": _instantaneo(p),
+        "hora": time.strftime("%H:%M"),
+    }
+
+
+def _voltar_para_a(p: Parte) -> None:
+    """Põe A na prancheta. Entra no histórico como qualquer mudança: Ctrl+Z desfaz."""
+    estado = st.session_state
+    a = estado.get(p.k("comparar_a"))
+    if not a:
+        return
+    _restaurar(p, a["foto"], estado.get(p.k("versao"), 0))
+    estado[p.k("ajuste")] = estado.get(p.k("ajuste"), 0) + 1
+    estado[p.k("selecao")] = None
+
+
+def _esquecer_a(p: Parte) -> None:
+    st.session_state.pop(p.k("comparar_a"), None)
+    st.session_state.pop(p.k("comparar_a_conta"), None)
+
+
+def _conta_da_foto(p: Parte, foto: Mapping[str, Any]) -> tuple[mt.Montagem, mt.Resposta | None]:
+    """A conta de A, guardada enquanto A não muda: a página roda a cada clique."""
+    estado = st.session_state
+    marca = json.dumps(foto, sort_keys=True, default=str)
+    guardada = estado.get(p.k("comparar_a_conta"))
+    if guardada and guardada[0] == marca:
+        return guardada[1], guardada[2]
+    base = mt.montar(mt.grafo_de_dados(foto["grafo"]))
+    resposta = None
+    alvo = foto.get("alvo")
+    if alvo and base.condicoes and alvo in {x.chave for x in _opcoes_de_alvo(base)}:
+        try:
+            resposta = mt.isolar(base, alvo, foto["valores"], foto.get("adotado"))
+        except ValueError:
+            resposta = None
+    estado[p.k("comparar_a_conta")] = (marca, base, resposta)
+    return base, resposta
+
+
+def _variacao(antes: float | None, depois: float | None) -> str:
+    if antes is None or depois is None or antes == 0.0:
+        return ""
+    porcento = (depois / antes - 1.0) * 100.0
+    if abs(porcento) < 0.05:
+        return "igual"
+    return f"{'+' if porcento > 0 else ''}{_numero(porcento)} %"
+
+
+def _usos(resposta: mt.Resposta | None) -> dict[str, float]:
+    if resposta is None:
+        return {}
+    linhas = resposta.conferencia_adotada or resposta.conferencia
+    return {x.nome: x.uso for x in linhas if not x.igualdade}
+
+
+def _area_da_secao(base: mt.Montagem, numeros: Mapping[sp.Symbol, sp.Float]) -> float | None:
+    return mt.numero_de(base.area, numeros) if base.area is not None else None
+
+
+def _texto_da_area(area: float | None, u: Unidades) -> str:
+    if area is None:
+        return "—"
+    return f"{_numero(area / u.fator(g.AREA))} {u.rotulo(g.AREA)}".strip()
+
+
+def _nomes_dos_blocos(dados: Mapping[str, Any]) -> Counter[str]:
+    return Counter(
+        _nome_do_no(no) for no in mh.blocos(dados).values() if no.get("tipo") != mt.CONJUNTO
+    )
+
+
+def _linhas_da_comparacao(
+    a: tuple[mt.Montagem, mt.Resposta | None, Mapping[str, Any]],
+    b: tuple[mt.Montagem, mt.Resposta | None, Mapping[str, Any]],
+    u: Unidades,
+) -> list[dict[str, str]]:
+    """A × agora: a resposta, quem manda, o uso de cada condição, a área e o que mudou."""
+    (base_a, resp_a, foto_a), (base_b, resp_b, foto_b) = a, b
+    linhas: list[dict[str, str]] = []
+
+    def linha(rotulo: str, de_a: str, de_b: str, diferenca: str = "") -> None:
+        linhas.append({"": rotulo, "A": de_a, "Agora": de_b, "Diferença": diferenca})
+
+    def resposta(r: mt.Resposta | None) -> str:
+        return rg.texto_da_resposta(r, u) if r is not None else "sem resposta"
+
+    mesma_letra = resp_a is not None and resp_b is not None and resp_a.alvo == resp_b.alvo
+    linha(
+        "Resposta",
+        resposta(resp_a),
+        resposta(resp_b),
+        _variacao(resp_a.valor, resp_b.valor) if mesma_letra and resp_a and resp_b else "",
+    )
+    manda_a = resp_a.manda.condicao.nome if resp_a and resp_a.manda else "—"
+    manda_b = resp_b.manda.condicao.nome if resp_b and resp_b.manda else "—"
+    linha("Quem manda", manda_a, manda_b)
+    usos_a, usos_b = _usos(resp_a), _usos(resp_b)
+    for nome in dict.fromkeys([*usos_b, *usos_a]):
+        uso_a, uso_b = usos_a.get(nome), usos_b.get(nome)
+        diferenca = ""
+        if uso_a is not None and uso_b is not None and abs(uso_b - uso_a) >= 5e-4:
+            pontos = (uso_b - uso_a) * 100.0
+            diferenca = f"{'+' if pontos > 0 else ''}{_numero(pontos)} p.p."
+        linha(
+            f"Uso: {nome}",
+            "—" if uso_a is None else f"{_numero(uso_a * 100.0)} %",
+            "—" if uso_b is None else f"{_numero(uso_b * 100.0)} %",
+            diferenca,
+        )
+    area_a = _area_da_secao(base_a, _numeros_de(foto_a["valores"], resp_a))
+    area_b = _area_da_secao(base_b, _numeros_de(foto_b["valores"], resp_b))
+    if area_a is not None or area_b is not None:
+        linha(
+            "Área da seção",
+            _texto_da_area(area_a, u),
+            _texto_da_area(area_b, u),
+            _variacao(area_a, area_b),
+        )
+    pedidas = {foto_a.get("alvo"), foto_b.get("alvo")}
+    grandezas = {x.chave: x for x in (*base_a.grandezas, *base_b.grandezas)}
+    for chave, grandeza in grandezas.items():
+        if chave in pedidas:
+            continue
+        de_a, de_b = foto_a["valores"].get(chave), foto_b["valores"].get(chave)
+        presente_a, presente_b = base_a.grandeza(chave), base_b.grandeza(chave)
+        if presente_a and presente_b and de_a == de_b:
+            continue
+        linha(
+            grandeza.texto,
+            _com_unidade(de_a, grandeza, u) if presente_a and de_a is not None else "—",
+            _com_unidade(de_b, grandeza, u) if presente_b and de_b is not None else "—",
+            _variacao(de_a, de_b) if presente_a and presente_b else "",
+        )
+    nomes_a, nomes_b = _nomes_dos_blocos(foto_a["grafo"]), _nomes_dos_blocos(foto_b["grafo"])
+    so_a, so_b = nomes_a - nomes_b, nomes_b - nomes_a
+    if so_a:
+        linha("Blocos só em A", ", ".join(sorted(so_a.elements())), "—")
+    if so_b:
+        linha("Blocos só na de agora", "—", ", ".join(sorted(so_b.elements())))
+    return linhas
+
+
+def _comparar(p: Parte, base: mt.Montagem, resposta: mt.Resposta | None, u: Unidades) -> None:
+    estado = st.session_state
+    _titulo_da_pagina("Comparar duas montagens")
+    a = estado.get(p.k("comparar_a"))
+    if not a:
+        st.caption(
+            "Guarde a montagem de agora como A, mude o que quiser na prancheta, e veja as duas "
+            "lado a lado: aço ou alumínio, uma seção ou outra, com cortante ou sem."
+        )
+        st.button(
+            "Guardar como A",
+            key=p.k("guardar_a"),
+            on_click=_guardar_como_a,
+            args=(p,),
+            icon=":material/bookmark_add:",
+            help="Guarda os blocos e os números de agora. Depois é só mudar e comparar.",
+        )
+        return
+    agora = _instantaneo(p)
+    base_a, resposta_a = _conta_da_foto(p, a["foto"])
+    linhas = _linhas_da_comparacao((base_a, resposta_a, a["foto"]), (base, resposta, agora), u)
+    st.dataframe(pd.DataFrame(linhas), hide_index=True, width="stretch")
+    if a["foto"] == agora:
+        st.caption(
+            f"A foi guardada às {a['hora']} e ainda é igual à de agora: mude algo na prancheta."
+        )
+    else:
+        st.caption(f"A foi guardada às {a['hora']}. A coluna Agora acompanha a prancheta.")
+    colunas = st.columns(3)
+    colunas[0].button(
+        "Trocar A pela de agora",
+        key=p.k("trocar_a"),
+        on_click=_guardar_como_a,
+        args=(p,),
+        help="Guarda a montagem de agora no lugar de A.",
+        width="stretch",
+    )
+    colunas[1].button(
+        "Voltar para A",
+        key=p.k("voltar_a"),
+        on_click=_voltar_para_a,
+        args=(p,),
+        help="Põe A de volta na prancheta. Ctrl+Z na prancheta desfaz.",
+        width="stretch",
+    )
+    colunas[2].button(
+        "Esquecer A",
+        key=p.k("esquecer_a"),
+        on_click=_esquecer_a,
+        args=(p,),
+        help="Tira a comparação da página.",
+        width="stretch",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Levar para outras análises
+# ---------------------------------------------------------------------------
+
+
+def _quem_manda_no(resposta: mt.Resposta | None) -> str | None:
+    return resposta.manda.condicao.no if resposta is not None and resposta.manda else None
+
+
+def _com_numero(resposta: mt.Resposta | None) -> bool:
+    return resposta is not None and resposta.valor is not None and not resposta.faltam
+
+
+def _valores_do_ponto(ponto: rp.PontoDaSecao) -> dict[str, float]:
+    return {"sigma_x": ponto.sigma_x, "sigma_y": ponto.sigma_y, "tau_xy": ponto.tau_xy}
+
+
+def _valores_da_fadiga(fadiga: rp.Fadiga) -> dict[str, float]:
+    valores = {"sigma_a": fadiga.sigma_a, "sigma_m": fadiga.sigma_m}
+    if fadiga.d is not None:
+        valores["d"] = fadiga.d
+    return valores
+
+
+def _atualizar_repasses(p: Parte, base: mt.Montagem, resposta: mt.Resposta | None) -> None:
+    """O que foi levado a outra análise, refeito com a montagem de agora: lá o aviso compara."""
+    if p.dominio != mb.SOLIDOS or not rpm.repasses():
+        return
+    numeros = _numeros_da_conta(p, resposta) if _com_numero(resposta) else {}
+
+    def calcular(destino: str, repasse: Mapping[str, Any]) -> tuple[dict[str, float] | None, str]:
+        if not numeros:
+            return None, "a conta ficou sem número"
+        if destino == rpm.FADIGA:
+            fadiga = rp.fadiga(base, numeros)
+            if fadiga is None:
+                return None, "o bloco Fadiga de eixo não está mais ligado"
+            return _valores_da_fadiga(fadiga), ""
+        nome = str(repasse.get("ponto") or "")
+        achados = rp.pontos(base, numeros, _quem_manda_no(resposta))
+        ponto = next((x for x in achados if x.nome == nome), None)
+        if ponto is None:
+            return None, f"o ponto {nome} não está mais na seção"
+        return _valores_do_ponto(ponto), ""
+
+    rpm.atualizar(p.prefixo, calcular)
+
+
+def _levar_para_outras_analises(
+    p: Parte, base: mt.Montagem, resposta: mt.Resposta, registro: Mapping[str, Any] | None
+) -> None:
+    """O ponto escolhido vai à Análise estática e ao Círculo de Mohr; a fadiga, à Análise de fadiga."""
+    if p.dominio != mb.SOLIDOS:
+        return
+    _titulo_da_pagina("Levar para outras análises")
+    if not _com_numero(resposta):
+        st.caption("Com todos os valores preenchidos, as tensões vão para as outras análises.")
+        return
+    numeros = _numeros_da_conta(p, resposta)
+    pontos = rp.pontos(base, numeros, _quem_manda_no(resposta))
+    fadiga = rp.fadiga(base, numeros)
+    if not pontos and fadiga is None:
+        st.caption("Sem uma seção ligada a um critério, não há tensão para levar.")
+        return
+    estado = st.session_state
+    ponto: rp.PontoDaSecao | None = None
+    if pontos:
+        por_nome = {x.nome: x for x in pontos}
+        chave = p.k("ponto_levado")
+        if estado.get(chave) not in por_nome:
+            estado[chave] = max(pontos, key=lambda x: x.von_mises).nome
+        # Só o nome na lista: o Streamlit não renova o rótulo da opção já escolhida, e um número
+        # no rótulo ficaria velho depois de mudar a montagem. Os números vão na linha de baixo.
+        nome = st.selectbox(
+            "Ponto da seção",
+            list(por_nome),
+            key=chave,
+            help="Começa no de maior von Mises. Vão σx, σy e τxy dele, com a resposta no lugar "
+            "da letra pedida.",
+        )
+        ponto = por_nome[nome]
+        st.caption(
+            f"σx = {_numero(ponto.sigma_x)} MPa · σy = {_numero(ponto.sigma_y)} MPa · "
+            f"τxy = {_numero(ponto.tau_xy)} MPa · von Mises = {_numero(ponto.von_mises)} MPa"
+        )
+    colunas = st.columns(3)
+    vai_estatica = colunas[0].button(
+        "Análise estática",
+        icon=":material/analytics:",
+        key=p.k("levar_estatica"),
+        disabled=ponto is None,
+        width="stretch",
+        help="Leva σx, σy e τxy do ponto. Lá entram o material e o fator de segurança.",
+    )
+    vai_mohr = colunas[1].button(
+        "Círculo de Mohr",
+        icon=":material/donut_large:",
+        key=p.k("levar_mohr"),
+        disabled=ponto is None,
+        width="stretch",
+        help="Leva o estado plano do ponto: tensões principais e cisalhamento máximo.",
+    )
+    vai_fadiga = colunas[2].button(
+        "Análise de fadiga",
+        icon=":material/cycle:",
+        key=p.k("levar_fadiga"),
+        disabled=fadiga is None,
+        width="stretch",
+        help=(
+            "Leva σa' e σm' do bloco Fadiga de eixo e o d da seção redonda."
+            if fadiga is not None
+            else "Ponha o bloco Fadiga de eixo: é ele que separa a parte alternada da média."
+        ),
+    )
+    if fadiga is not None:
+        st.caption(
+            "Na fadiga, σa' e σm' vão como o Montador calculou, já com K_f e K_fs. Lá o entalhe "
+            "fica em Sem entalhe, para não contar duas vezes, e o carregamento em Flexão, de fator "
+            "1, como no von Mises das parcelas."
+            + (
+                ""
+                if fadiga.d is not None
+                else " A seção não é redonda: informe o d equivalente lá."
+            )
+        )
+    origem_id = id_registro_existente(dict(registro)) if registro is not None else None
+    if origem_id is None:
+        st.caption(
+            ":material/link_off: A montagem ainda não foi registrada no projeto: os números vão, "
+            "mas sem uma origem rastreável. Registre em Salvar, abrir e registrar."
+        )
+    else:
+        st.caption(":material/link: Vai junto a origem: o registro desta montagem no projeto.")
+    st.caption(
+        "Se a montagem mudar depois do envio, a página que recebeu avisa e traz os números novos."
+    )
+    titulo = _titulo_do_registro(p)
+    if ponto is not None and (vai_estatica or vai_mohr):
+        destino = rpm.ESTATICA if vai_estatica else rpm.MOHR
+        rpm.enviar(
+            destino,
+            _valores_do_ponto(ponto),
+            f"{titulo} · {ponto.nome}",
+            origem_id,
+            parte=p.prefixo,
+            ponto=ponto.nome,
+        )
+    if fadiga is not None and vai_fadiga:
+        rpm.enviar(
+            rpm.FADIGA,
+            _valores_da_fadiga(fadiga),
+            f"{titulo} · fadiga",
+            origem_id,
+            parte=p.prefixo,
+            ponto="fadiga",
+        )
+
+
 def _passo_a_passo(resposta: mt.Resposta) -> None:
     letra = _letra(resposta.alvo)
     for item in resposta.isoladas:
@@ -2677,15 +3055,45 @@ def _documentos(
     )
 
 
-def _salvar_e_abrir(
+def _titulo_do_registro(p: Parte) -> str:
+    """O título do cálculo, com o do modelo quando ninguém escreveu um."""
+    estado = st.session_state
+    if not estado.get(p.k("titulo")):
+        estado[p.k("titulo")] = estado.get(p.k("modelo_atual")) or p.titulo
+    return str(estado[p.k("titulo")])
+
+
+def _registro(
     p: Parte,
     doc: Mapping[str, Any],
     base: mt.Montagem,
     resposta: mt.Resposta | None,
     u: Unidades,
+) -> dict[str, Any] | None:
+    """O registro técnico desta montagem. Sai uma vez por rodada: registrar e levar usam o mesmo."""
+    if resposta is None or resposta.valor is None:
+        return None
+    return rg.registro_tecnico(
+        modulo=p.titulo,
+        modulo_id=p.modulo_id,
+        dominio=p.dominio,
+        titulo=_titulo_do_registro(p),
+        resposta=resposta,
+        montagem=resposta.montagem or base,
+        doc=doc,
+        u=u,
+    )
+
+
+def _salvar_e_abrir(
+    p: Parte,
+    doc: Mapping[str, Any],
+    resposta: mt.Resposta | None,
+    u: Unidades,
     dados: Mapping[str, Any],
     faces: Mapping[str, Mapping[str, str]],
     hipoteses: Sequence[str],
+    registro: Mapping[str, Any] | None,
 ) -> None:
     estado = st.session_state
     st.caption(armazenamento.frase_de_persistencia())
@@ -2695,30 +3103,18 @@ def _salvar_e_abrir(
     esquerda, direita = st.columns(2, gap="large")
     with esquerda:
         st.markdown("**Registrar no projeto**")
-        if not estado.get(p.k("titulo")):
-            estado[p.k("titulo")] = estado.get(p.k("modelo_atual")) or p.titulo
+        _titulo_do_registro(p)
         titulo = st.text_input(
             "Título do cálculo",
             key=p.k("titulo"),
             help="O nome que aparece no memorial e na lista de registros.",
         )
-        if resposta is None or resposta.valor is None:
+        if registro is None:
             st.caption(
                 "Complete a conta para registrar: resultado sem número não entra no projeto."
             )
-        else:
-            registro = rg.registro_tecnico(
-                modulo=p.titulo,
-                modulo_id=p.modulo_id,
-                dominio=p.dominio,
-                titulo=titulo,
-                resposta=resposta,
-                montagem=resposta.montagem or base,
-                doc=doc,
-                u=u,
-            )
-            if botao_registrar_calculo(registro, key=p.k("registrar")):
-                estado[p.k("salvo")] = rg.assinatura(doc)
+        elif botao_registrar_calculo(dict(registro), key=p.k("registrar")):
+            estado[p.k("salvo")] = rg.assinatura(doc)
         montagens = rg.montagens_do_projeto(projeto_ativo_persistente(), p.modulo_id)
         if montagens:
             rotulos = {
@@ -2787,6 +3183,7 @@ def tela_do_montador(p: Parte) -> None:
             resposta = mt.isolar(base, alvo, estado[p.k("valores")], estado.get(p.k("adotado")))
         except ValueError as erro:
             falha = str(erro)
+    _atualizar_repasses(p, base, resposta)  # antes de qualquer saída da página
     projeto = projeto_ativo_persistente()
     diagnosticos = rg.conferir_referencias(grafo, projeto, p.dominio, u)
     doc = rg.documento(
@@ -2798,6 +3195,7 @@ def tela_do_montador(p: Parte) -> None:
         estado.get(p.k("adotado")),
         estado[p.k("unidades")],
     )
+    registro = _registro(p, doc, base, resposta, u)
     salvo = estado.get(p.k("salvo")) == rg.assinatura(doc)
     padroes_em_uso = [
         item.texto
@@ -2909,6 +3307,8 @@ def tela_do_montador(p: Parte) -> None:
         _titulo_da_pagina("Em volta da resposta")
         _grafico_de_uso(resposta, valores, u)
         _grafico_de_varredura(p, resposta.montagem or base, resposta, valores, u)
+    _comparar(p, base, resposta, u)
+    _levar_para_outras_analises(p, base, resposta, registro)
     with st.expander("Passo a passo", icon=":material/list_alt:"):
         _passo_a_passo(resposta)
     with st.expander("De onde veio cada valor", icon=":material/account_tree:"):
@@ -2930,5 +3330,5 @@ def tela_do_montador(p: Parte) -> None:
             "os trechos. Propriedades dos fluidos e rugosidades são valores típicos de tabela.",
         )
     with st.expander("Salvar, abrir e registrar", icon=":material/save:"):
-        _salvar_e_abrir(p, doc, base, resposta, u, dados, faces, hipoteses)
+        _salvar_e_abrir(p, doc, resposta, u, dados, faces, hipoteses, registro)
     fronteira_modelo(hipoteses, titulo="Hipóteses desta conta")

@@ -70,6 +70,7 @@ files = [
     "core/montador_funcoes.py",
     "core/montador_historico.py",
     "core/montador_registro.py",
+    "core/montador_repasse.py",
     "core/montador_grandezas.py",
     "core/montador_modelos.py",
     "core/montador_secoes.py",

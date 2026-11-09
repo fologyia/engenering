@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components import repasse_do_montador as repasse
 from components.figuras import mostrar_figura
 from components.material_verification import mostrar_verificacao_material
 from components.project_tools import (
@@ -28,9 +29,12 @@ EXEMPLOS_2D = {
     "compressao": ("Compressão com cisalhamento", (-90.0, -30.0, -40.0)),
 }
 _estado_assistente = st.session_state.get("mohr_assistente_2d")
+# Quem mandou o estado: o Assistente de cargas, Vigas e eixos, ou o Montador de fórmulas.
+_ORIGEM_DO_ESTADO = (_estado_assistente or {}).get("origem") or "Assistente"
+_NOME_DA_ORIGEM = "Assistente de cargas" if _ORIGEM_DO_ESTADO == "Assistente" else _ORIGEM_DO_ESTADO
 if _estado_assistente:
     EXEMPLOS_2D["assistente"] = (
-        f"Assistente — {_estado_assistente['descricao']}",
+        f"{_ORIGEM_DO_ESTADO} — {_estado_assistente['descricao']}",
         (
             float(_estado_assistente["sigma_x"]),
             float(_estado_assistente["sigma_y"]),
@@ -471,6 +475,8 @@ if modo == "Estado plano (2D)":
             key="mohr_2d_exemplo",
             persist_state="session",
         )
+        if exemplo == "assistente":
+            repasse.aviso(repasse.MOHR)  # o Montador mudou depois de mandar este estado?
         padroes = EXEMPLOS_2D[exemplo][1]
         entradas = st.columns(3)
         with entradas[0]:
@@ -731,7 +737,7 @@ if modo == "Estado plano (2D)":
     )
     if exemplo == "assistente" and not origem_assistente:
         st.caption(
-            ":material/link_off: Este estado veio do Assistente de cargas, mas "
+            f":material/link_off: Este estado veio do {_NOME_DA_ORIGEM}, mas "
             "ainda não foi registrado lá — a origem não será rastreada até que "
             "seja registrado."
         )

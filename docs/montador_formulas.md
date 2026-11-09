@@ -152,6 +152,38 @@ e não pelo nome. Se o registro mudar, a Central marca o cálculo como desatuali
 valor velho e o novo; quem atualiza é o usuário, porque a troca muda a conta. Registro apagado ou de
 outra grandeza também aparece no bloco, com a mensagem de cada caso. O que vem de fora nunca muda sozinho.
 
+## Comparar duas montagens
+
+"Guardar como A" fotografa a montagem inteira: blocos, fios e números. Depois é só mudar o que quiser na
+prancheta (aço ou alumínio, uma seção ou outra, com cortante ou sem) e a página põe A e a de agora lado a
+lado: a resposta, quem manda, o uso de cada condição, a área da seção, cada número que mudou e os blocos
+que só uma das duas tem, com a diferença em % (no uso, em pontos percentuais). A conta de A é refeita uma
+vez e guardada enquanto A não muda. "Voltar para A" põe A de volta na prancheta e entra no histórico, e
+por isso o Ctrl+Z desfaz; "Trocar A pela de agora" guarda a de agora no lugar; "Esquecer A" tira a
+comparação. A vale para a sessão, e cada parte do Montador tem a sua.
+
+## Levar para outras análises
+
+Com a conta fechada, o Montador leva o estado de tensão de um ponto da seção para a **Análise estática**
+e para o **Círculo de Mohr**, e a fadiga para a **Análise de fadiga**, pelas mesmas chaves que o
+Assistente de cargas e Vigas e eixos já usam (`core/montador_repasse.py` faz a conta;
+`components/repasse_do_montador.py`, o envio e o aviso).
+
+- **Ponto:** a lista traz os pontos da seção que chega ao critério de quem manda, depois de todos os
+  esforços e da concentração de tensão, e começa no de maior von Mises. Vão σx, σy e τxy, com a resposta
+  no lugar da letra pedida. Num tubo sob pressão, σy é a tensão circunferencial.
+- **Fadiga:** só com o bloco Fadiga de eixo, que é quem separa a parte alternada da média. Vão σa' e σm'
+  como o Montador calculou, já com K_f e K_fs, e o d da seção redonda para o fator de tamanho. Lá o
+  entalhe fica em "Sem entalhe", para não contar duas vezes, e o carregamento em Flexão, de fator 1,
+  como no von Mises das parcelas. O material e os fatores de Marin escolhem-se na Análise de fadiga.
+- **Origem:** se a montagem foi registrada no projeto, vai junto o registro dela, e o cálculo de destino
+  guarda essa origem. Sem registro, a página diz que os números vão sem origem rastreável.
+- **Aviso quando muda:** cada envio fica guardado com os números que foram. A cada rodada o Montador
+  refaz os números do mesmo ponto, e a página que recebeu avisa "a montagem mudou depois do envio: σx foi
+  de 166,7 para 233,3 MPa", com "Trazer os números novos" e "Manter os de antes". O aviso só vale
+  enquanto a página ainda mostra o que o Montador mandou: se a pessoa mudou os números lá, ou outra
+  página mandou depois, ele não aparece.
+
 ## Fórmula própria
 
 O bloco **Fórmula própria** recebe uma conta digitada no inspetor. Há três formas:

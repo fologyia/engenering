@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components import repasse_do_montador as repasse
 from components.figuras import SO_NA_LARGURA, mostrar_figura
 from components.project_tools import botao_registrar_calculo, construir_registro_tecnico
 from components.robustez import secao_protegida
@@ -64,6 +65,7 @@ st.info(
     r"$S_e=C_{carreg}\,C_{tamanho}\,C_{superf}\,C_{temp}\,C_{conf}\,S'_e$. "
     "Cada bloco abaixo mostra como seu fator é obtido."
 )
+repasse.aviso(repasse.FADIGA)  # o Montador mudou depois de mandar σa, σm e d?
 
 modelo = st.segmented_control(
     "Referência para os fatores de Marin",
