@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping
+from typing import Any
 
 import sympy as sp
 
@@ -45,9 +46,15 @@ def resolver(
     alvo: str,
     valores: Mapping[str, float],
     opcoes: Mapping[str, Mapping[str, str]] | None = None,
+    ligar: tuple[tuple[str, str, str, str], ...] = (),
+    extras: tuple[tuple[str, str], ...] = (),
 ) -> mt.Resposta:
-    """Monta a fila de blocos e isola a letra pedida, com os padrões da própria montagem."""
-    modelo = Modelo("caso", "", alvo, dict(valores), tipos, opcoes=dict(opcoes or {}))
+    """Monta a fila de blocos e isola a letra pedida, com os padrões da própria montagem.
+
+    ``extras`` e ``ligar`` acrescentam blocos e fios fora da fila, como a condição de um bloco que
+    também tem valores.
+    """
+    modelo = Modelo("caso", "", alvo, dict(valores), tipos, extras, ligar, dict(opcoes or {}))
     base = mt.montar(mt.grafo_de_dados(modelo.grafo()))
     com_padroes = {
         **{i.chave: i.padrao for i in base.grandezas if i.padrao is not None},
@@ -221,7 +228,7 @@ def _eixo_no_montador() -> float:
 
 _PECAS = "Montador: peças do eixo"
 _DO_ASSISTENTE = "A mesma peça calculada pelo Assistente de cargas (core/elementos_*.py)"
-_ENGRENAGEM_DO_CASO = {
+_ENGRENAGEM_DO_CASO: dict[str, Any] = {
     "potencia_kW": 15.0,
     "rotacao_rpm": 1450.0,
     "modulo_mm": 3.0,
@@ -265,6 +272,83 @@ def _forca_radial_no_montador() -> float:
         }.items()
     }
     return float(base.saidas["e"]["F_r"].subs(numeros))
+
+
+def _par_do_assistente() -> float:
+    """A largura em que o dente do Assistente chega ao limite: Lewis cai com b, e o contato com √b."""
+    largura = _ENGRENAGEM_DO_CASO["largura_mm"]
+    pedidas = []
+    for v in et.calcular_engrenagem(_ENGRENAGEM_DO_CASO).verificacoes:
+        if v.solicitante is None or v.resistente is None:
+            continue
+        uso = float(v.solicitante) / float(v.resistente)
+        if "Lewis" in v.nome:
+            pedidas.append(largura * uso)
+        elif "contato" in v.nome:
+            pedidas.append(largura * uso**2)
+    return max(pedidas)
+
+
+def _par_no_montador() -> float:
+    caso = _ENGRENAGEM_DO_CASO
+    return _valor(
+        resolver(
+            ("par_engrenagens", _R),
+            "b_g",
+            {
+                "P": caso["potencia_kW"] * 1e6,
+                "n_rot": caso["rotacao_rpm"],
+                "m_n": caso["modulo_mm"],
+                "z_1": float(caso["z1"]),
+                "z_2": float(caso["z2"]),
+                "phi_n": math.radians(caso["angulo_pressao"]),
+                "psi": math.radians(caso["angulo_helice"]),
+                "K_o": caso["ko"],
+                "K_m": caso["km"],
+                "n": caso["fs"],
+                "E": caso["e_GPa"] * 1000.0,
+                "nu_g": caso["poisson"],
+                "HB": caso["dureza_HB"],
+            },
+            {"n1": {"processo": caso["processo"], "grau": caso["grau"]}},
+            ligar=(("n1", "condicao", "n2", "condicoes"),),
+        )
+    )
+
+
+_CONICA_DO_CASO = {
+    "torque_Nm": 200.0,
+    "modulo_mm": 4.0,
+    "z1": 18,
+    "z2": 36,
+    "largura_mm": 24.0,
+    "angulo_pressao": 20.0,
+}
+
+
+def _conica_no_montador() -> float:
+    base = mt.montar(
+        mt.grafo_de_dados(
+            {
+                "nos": [
+                    {"id": "c", "tipo": "engrenagem_conica", "opcoes": {"torque": "Pelo torque T"}}
+                ],
+                "fios": [],
+            }
+        )
+    )
+    numeros = {
+        sp.Symbol(k, positive=True): sp.Float(v)
+        for k, v in {
+            "T": 200e3,
+            "m_c": 4.0,
+            "z_c1": 18.0,
+            "z_c2": 36.0,
+            "b_c": 24.0,
+            "phi_n": math.radians(20.0),
+        }.items()
+    }
+    return float(base.saidas["c"]["F_r"].subs(numeros))
 
 
 _CHAVETA_DO_CASO = {
@@ -538,6 +622,24 @@ def casos() -> tuple[CasoDeAceite, ...]:
             "F_r (N)",
             _forca_radial_do_assistente(),
             _forca_radial_no_montador,
+            1e-9,
+            _DO_ASSISTENTE,
+        ),
+        CasoDeAceite(
+            _PECAS,
+            "Par helicoidal, Lewis e contato",
+            "b mínimo (mm)",
+            _par_do_assistente(),
+            _par_no_montador,
+            1e-6,
+            _DO_ASSISTENTE,
+        ),
+        CasoDeAceite(
+            _PECAS,
+            "Engrenagem cônica, eixos a 90°",
+            "F_r no pinhão (N)",
+            _metrica(et.calcular_conica(_CONICA_DO_CASO), "Força radial no pinhão") * 1000.0,
+            _conica_no_montador,
             1e-9,
             _DO_ASSISTENTE,
         ),

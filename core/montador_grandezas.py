@@ -594,6 +594,89 @@ THETA_ABRACAMENTO = Grandeza(
     maximo=2.0 * math.pi,
 )
 
+# Par de engrenagens: o dente
+M_MODULO = _g(
+    "m_n",
+    "m_n",
+    "Módulo normal",
+    MEDIDA,
+    "O tamanho do dente. Normalizados: 1; 1,25; 1,5; 2; 2,5; 3; 4; 5; 6; 8; 10 e 12 mm.",
+)
+Z_PINHAO = Grandeza(
+    "z_1",
+    "z_1",
+    "Dentes do pinhão",
+    PURO,
+    "A engrenagem menor do par. Com 20°, abaixo de 17 dentes o corte adelgaça o pé do dente.",
+    minimo=12.0,
+)
+Z_COROA = Grandeza(
+    "z_2",
+    "z_2",
+    "Dentes da coroa",
+    PURO,
+    "A engrenagem maior do par. Evite razão inteira exata, para os mesmos dentes não se "
+    "encontrarem sempre.",
+    minimo=12.0,
+)
+B_DENTE = _g(
+    "b_g", "b_g", "Largura do dente", MEDIDA, "A largura útil do dente. Usual: de 8 a 16 módulos."
+)
+K_SOBRECARGA = replace(
+    _g(
+        "K_o",
+        "K_o",
+        "Fator de sobrecarga",
+        PURO,
+        "Choques do acionamento e da máquina. Uniforme: 1,00. Choque moderado: 1,25. Choque "
+        "pesado: 1,75.",
+        1.25,
+    ),
+    minimo=1.0,
+)
+K_DISTRIBUICAO = replace(
+    _g(
+        "K_m",
+        "K_m",
+        "Fator de distribuição da carga",
+        PURO,
+        "Desalinhamento e flexão do eixo. Rígida e bem alinhada: 1,3. Montagem comum: 1,6. Pouco "
+        "rígida: 2,0.",
+        1.6,
+    ),
+    minimo=1.0,
+)
+DUREZA = Grandeza(
+    "HB",
+    "HB",
+    "Dureza Brinell do dente",
+    PURO,
+    "Aço beneficiado comum: de 200 a 350 HB. As curvas da AGMA usadas aqui vão até cerca de 400.",
+    300.0,
+    minimo=100.0,
+)
+NU_ENGRENAGEM = Grandeza(
+    "nu_g", "ν_g", "Poisson das engrenagens", PURO, "Aço: 0,3.", 0.3, maximo=0.5
+)
+
+# Engrenagem cônica: letras próprias, porque o par cônico e o reto do mesmo eixo são outros dentes
+M_CONICA = _g(
+    "m_c", "m_c", "Módulo da cônica", MEDIDA, "Medido na ponta maior do dente, a de fora do cone."
+)
+Z_PINHAO_CONICO = Grandeza(
+    "z_c1", "z_c1", "Dentes do pinhão cônico", PURO, "A engrenagem menor do par cônico.", minimo=6.0
+)
+Z_COROA_CONICA = Grandeza(
+    "z_c2", "z_c2", "Dentes da coroa cônica", PURO, "A engrenagem maior do par cônico.", minimo=6.0
+)
+B_CONICA = _g(
+    "b_c",
+    "b_c",
+    "Largura do dente da cônica",
+    MEDIDA,
+    "Ao longo da geratriz do cone. Limite usual: 10 módulos ou um terço da geratriz.",
+)
+
 # Vigas e eixos
 A_CARGA = _g(
     "a_m",

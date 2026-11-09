@@ -341,6 +341,54 @@ MODELOS: tuple[Modelo, ...] = (
         ),
     ),
     Modelo(
+        "Par de engrenagens: módulo do dente",
+        "Lewis no pinhão e na coroa e contato no flanco: o menor módulo para essa largura.",
+        "m_n",
+        {
+            "P": 15e6,
+            "n_rot": 1450.0,
+            "z_1": 25.0,
+            "z_2": 76.0,
+            "b_g": 50.0,
+            "E": 205000.0,
+            "n": 1.5,
+        },
+        (_R,),
+        (("p1", "par_engrenagens"),),
+        (("p1", "condicao", "n1", "condicoes"),),
+    ),
+    Modelo(
+        "Pinhão cônico em balanço",
+        "As forças da cônica no eixo com trechos: a axial vai ao mancal A, com o binário no raio "
+        "médio r_m que a cônica mostra.",
+        "d",
+        {
+            **_ACO_DO_EIXO,
+            "P": 7.5e6,
+            "n_rot": 1450.0,
+            "m_c": 4.0,
+            "z_c1": 18.0,
+            "z_c2": 36.0,
+            "b_c": 24.0,
+            "n": 1.5,
+        },
+        ("eixo_trechos", _R),
+        (("c1", "engrenagem_conica"), ("m1", "material")),
+        (
+            ("c1", "F_r", "n1", "v1"),
+            ("c1", "F_t", "n1", "h1"),
+            ("c1", "T", "n1", "t1"),
+            ("c1", "F_a", "n1", "a1"),
+            ("m1", "saida", "n1", "material"),
+        ),
+        {
+            "n1": {
+                "trechos": '[{"nome": "Assento do pinhão", "comprimento": 40.0, "relacao": 1.0, "entalhe": "Rasgo de chaveta (fresa de topo)", "raio": 0.05}, {"nome": "Assento do mancal A", "comprimento": 25.0, "relacao": 1.2, "entalhe": "Eixo liso", "raio": 0.03}, {"nome": "Corpo", "comprimento": 105.0, "relacao": 1.4, "entalhe": "Eixo liso", "raio": 0.03}, {"nome": "Assento do mancal B", "comprimento": 25.0, "relacao": 1.2, "entalhe": "Eixo liso", "raio": 0.03}, {"nome": "Ponta do acoplamento", "comprimento": 40.0, "relacao": 1.0, "entalhe": "Rasgo de chaveta (fresa de topo)", "raio": 0.02}]',
+                "elementos": '[{"nome": "Pinhão cônico", "x": 20.0, "funcao": "Carga", "vertical": "+", "horizontal": "+", "torque": "Sai", "axial": true, "raio": 30.63, "binario": "+", "massa": 1.5, "engrenagem": false}, {"nome": "Mancal A", "x": 52.5, "funcao": "Mancal A"}, {"nome": "Mancal B", "x": 182.5, "funcao": "Mancal B"}, {"nome": "Acoplamento", "x": 215.0, "funcao": "Carga", "torque": "Entra", "massa": 1.0}]',
+            }
+        },
+    ),
+    Modelo(
         "Chaveta: comprimento mínimo",
         "O torque da potência passa pela chaveta da DIN 6885 do diâmetro do eixo.",
         "L_ch",

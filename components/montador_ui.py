@@ -87,6 +87,8 @@ _SAIDA_NO_CARTAO = {
     "entalhe": ("kf", "K_f", g.PURO),
     "engrenagem": ("F_t", "F_t", g.FORCA),
     "polia": ("F", "F", g.FORCA),
+    "par_engrenagens": ("F_t", "F_t", g.FORCA),
+    "engrenagem_conica": ("F_t", "F_t", g.FORCA),
 }
 _AJUDA_DA_FORMULA = (
     "Três formas: q*L^2/8 dá um valor; M = q*L^2/8 dá um valor com nome e também uma equação; "

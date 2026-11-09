@@ -7,6 +7,7 @@ bolinha. O inspetor é estreito para sete colunas: por isso as tabelas ficam aqu
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 from collections.abc import Mapping, Sequence
@@ -17,7 +18,7 @@ import streamlit as st
 import sympy as sp
 
 from components.edicao_de_tabela import com_edicoes
-from components.figuras import mostrar_figura
+from components.figuras import largura_do_png
 from core import desenho_do_eixo as de
 from core import elementos_eixos as ee
 from core import montador as mt
@@ -264,6 +265,25 @@ def _tabela_dos_elementos(p: Parte, no: mt.No, arranjo: me.Arranjo, u: Unidades)
     )
 
 
+def _figura_na_pagina(figura: Any) -> None:
+    """O desenho vai dentro da página, e não pelo servidor de arquivos do Streamlit.
+
+    A prancheta pede outra rodada logo depois de trocar o modelo. O Streamlit apagava a imagem da
+    rodada interrompida, e quando a seguinte gerava o mesmo desenho, com o mesmo endereço, o
+    navegador não buscava de novo: a figura ficava quebrada até a próxima mudança no eixo.
+    """
+    if not figura.png:
+        return
+    dados = base64.b64encode(figura.png).decode("ascii")
+    st.html(
+        f'<figure style="margin:0 auto;text-align:center;max-width:{largura_do_png(figura.png)}px">'
+        f'<img src="data:image/png;base64,{dados}" alt="{html.escape(figura.titulo)}" '
+        'style="width:100%;height:auto">'
+        '<figcaption style="font-size:.85rem;opacity:.72;margin-top:.35rem;line-height:1.4">'
+        f"{html.escape(figura.legenda)}</figcaption></figure>"
+    )
+
+
 def _chave_do_d(base: mt.Montagem, no: mt.No) -> str:
     return g.D.com_indice(dict(base.indices).get(no.id, 1)).chave
 
@@ -363,7 +383,7 @@ def editores_dos_eixos(
             comprimento=u.par(g.COMPRIMENTO),
             medida=u.par(g.MEDIDA),
         )
-        mostrar_figura(figura)
+        _figura_na_pagina(figura)
         if (
             resposta is not None
             and resposta.manda is not None

@@ -20,6 +20,7 @@ import sympy as sp
 
 from core import elementos_eixos as ee
 from core import elementos_mancais as em
+from core import elementos_transmissao as et
 from core import fatigue as ft
 
 RE_LAMINAR = 2300.0
@@ -170,6 +171,8 @@ interferencia_maxima = _em_vetor(lambda d, i: _interferencia(d, i, 1))
 carga_equivalente_esferas = _em_vetor(_equivalente_esferas)
 carga_equivalente_xy = _em_vetor(_equivalente_xy)
 carga_estatica = _em_vetor(_estatica)
+#: Y de Lewis pela Tabela 14-2 de Shigley, a mesma do Assistente: abaixo de 12 dentes não existe.
+fator_de_lewis = _em_vetor(et.fator_lewis)
 
 
 class _Numerica(sp.Function):
@@ -275,6 +278,12 @@ class CargaEstatica(_Numerica):
     texto = "P_{0}"
 
 
+class FatorLewis(_Numerica):
+    nargs = 1
+    funcao = staticmethod(fator_de_lewis)
+    texto = "Y"
+
+
 #: Elas não têm forma fechada: simplificar não adianta e custa caro.
 NUMERICAS: tuple[type[sp.Function], ...] = (
     AtritoDarcy,
@@ -292,6 +301,7 @@ NUMERICAS: tuple[type[sp.Function], ...] = (
     CargaEquivalenteEsferas,
     CargaEquivalenteXY,
     CargaEstatica,
+    FatorLewis,
 )
 #: As que vêm de tabela ou de escolha: a planilha leva o valor calculado, e não uma fórmula.
 TABELADAS: tuple[type[sp.Function], ...] = (
@@ -302,6 +312,7 @@ TABELADAS: tuple[type[sp.Function], ...] = (
     InterferenciaMinima,
     InterferenciaMaxima,
     CargaEquivalenteEsferas,
+    FatorLewis,
 )
 #: O que o ``lambdify`` precisa para calcular estas funções em número.
 FUNCOES: dict[str, Any] = {
@@ -320,4 +331,5 @@ FUNCOES: dict[str, Any] = {
     "CargaEquivalenteEsferas": carga_equivalente_esferas,
     "CargaEquivalenteXY": carga_equivalente_xy,
     "CargaEstatica": carga_estatica,
+    "FatorLewis": fator_de_lewis,
 }

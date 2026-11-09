@@ -18,6 +18,7 @@ import sympy as sp
 
 from core import elementos_eixos as ee
 from core import elementos_mancais as em
+from core import elementos_transmissao as et
 from core import montador_blocos as mb
 from core import montador_grandezas as g
 from core.montador_blocos import (
@@ -41,6 +42,7 @@ from core.montador_funcoes import (
     CargaEquivalenteEsferas,
     CargaEquivalenteXY,
     CargaEstatica,
+    FatorLewis,
     InterferenciaMaxima,
     InterferenciaMinima,
     LarguraDaChaveta,
@@ -142,6 +144,201 @@ def _polia(c: Contexto) -> dict[str, Any]:
         "T": torque,
         "F": sp.sqrt(tenso**2 + frouxo**2 - 2 * tenso * frouxo * sp.cos(abracamento)),
         "F_1": tenso,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Par de engrenagens: as forças e o dente, numa conta só
+# ---------------------------------------------------------------------------
+
+EIXO_DO_PINHAO = "Eixo do pinhão"
+EIXO_DA_COROA = "Eixo da coroa"
+_QUAL_EIXO = Opcao(
+    "eixo",
+    "Eixo desta conta",
+    "A potência, a rotação e o torque são do eixo escolhido. As forças são as mesmas nos dois; "
+    "na cônica, a radial de um é a axial do outro.",
+    (EIXO_DO_PINHAO, EIXO_DA_COROA),
+    EIXO_DO_PINHAO,
+)
+PROCESSO_PADRAO = "Caracol (hob)"
+_VELOCIDADE_DO_KV = 25.0  # m/s: acima disso o K_v de Barth e AGMA não vale para engrenagem comum
+
+
+def fator_dinamico(processo: str, velocidade: sp.Expr) -> sp.Expr:
+    """K_v de Barth e AGMA em letra (Shigley, eq. 14-4), igual a ``et.fator_dinamico``."""
+    if processo == "Fundido":
+        return (sp.Float(3.05) + velocidade) / sp.Float(3.05)
+    if processo == "Fresado":
+        return (sp.Float(6.1) + velocidade) / sp.Float(6.1)
+    if processo == "Retificado":
+        return sp.sqrt((sp.Float(5.56) + sp.sqrt(velocidade)) / sp.Float(5.56))
+    return (sp.Float(3.56) + sp.sqrt(velocidade)) / sp.Float(3.56)
+
+
+def _torque_do_pinhao(c: Contexto, z1: sp.Expr, z2: sp.Expr) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
+    """Torque deste eixo, torque e rotação do pinhão. Sem perdas no engrenamento."""
+    deste_eixo = _torque(c)
+    rotacao = c.letra(g.ROT, fixa=True)
+    if c.opcoes.get("eixo", EIXO_DO_PINHAO) == EIXO_DA_COROA:
+        return deste_eixo, deste_eixo * z1 / z2, rotacao * z2 / z1
+    return deste_eixo, deste_eixo, rotacao
+
+
+def _par_de_engrenagens(c: Contexto) -> dict[str, Any]:
+    modulo = c.letra(g.M_MODULO)
+    z1, z2 = c.letra(g.Z_PINHAO), c.letra(g.Z_COROA)
+    largura = c.letra(g.B_DENTE)
+    pressao = c.letra(g.PHI_N, fixa=True)
+    helice = c.letra(g.PSI)
+    sobrecarga = c.letra(g.K_SOBRECARGA, fixa=True)
+    distribuicao = c.letra(g.K_DISTRIBUICAO, fixa=True)
+    dureza = c.letra(g.DUREZA, fixa=True)
+    poisson = c.letra(g.NU_ENGRENAGEM, fixa=True)
+    n = c.letra(g.FS, fixa=True)
+    material = c.material()
+    modulo_e = material.e if material else c.letra(g.E, fixa=True)
+    deste_eixo, torque, rotacao = _torque_do_pinhao(c, z1, z2)
+
+    transversal = sp.atan(sp.tan(pressao) / sp.cos(helice))
+    d1 = modulo * z1 / sp.cos(helice)
+    d2 = modulo * z2 / sp.cos(helice)
+    tangencial = 2 * torque / d1
+    velocidade = sp.pi * d1 * rotacao / 60000  # m/s, com d em mm e n em rpm
+    processo = c.opcoes.get("processo", PROCESSO_PADRAO)
+    grau = c.opcoes.get("grau", et.GRAUS_AGMA[0])
+    carga = sobrecarga * fator_dinamico(processo, velocidade) * distribuicao * tangencial
+    # Lewis com o número virtual de dentes z/cos³ψ, e as resistências de aço beneficiado da AGMA.
+    flexao_1 = carga / (largura * modulo * FatorLewis(z1 / sp.cos(helice) ** 3))
+    flexao_2 = carga / (largura * modulo * FatorLewis(z2 / sp.cos(helice) ** 3))
+    elastico = sp.sqrt(modulo_e / (2 * sp.pi * (1 - poisson**2)))
+    raios = 1 / (d1 * sp.sin(transversal) / 2) + 1 / (d2 * sp.sin(transversal) / 2)
+    contato = elastico * sp.sqrt(carga / (largura * sp.cos(transversal)) * raios)
+    flexao_admissivel = et.resistencia_flexao_agma(dureza, grau) / n
+    contato_admissivel = et.resistencia_contato_agma(dureza, grau) / n
+    validade = (
+        Validade(z1 - 12, "O fator de Lewis começa em 12 dentes."),
+        Validade(z2 - z1, "z_1 é o pinhão, o menor do par: z_2 precisa ser maior ou igual.", False),
+        Validade(
+            16 * modulo - largura,
+            "A largura passou de 16 módulos: o eixo precisa ser muito rígido para o dente encostar "
+            "por inteiro.",
+            False,
+        ),
+        Validade(
+            largura - 8 * modulo,
+            "A largura ficou abaixo de 8 módulos: o dente fica estreito para a carga e caro de "
+            "fazer.",
+            False,
+        ),
+        Validade(
+            z1 - 2 * sp.cos(helice) / sp.sin(transversal) ** 2,
+            "Com tão poucos dentes, o corte adelgaça o pé do dente do pinhão: aumente z_1 ou use "
+            "correção de perfil.",
+            False,
+        ),
+        Validade(
+            _VELOCIDADE_DO_KV - velocidade,
+            "Velocidade na primitiva acima de 25 m/s: o K_v deixa de valer para engrenagem comum, e "
+            "a precisão e a lubrificação pedem projeto próprio.",
+            False,
+        ),
+    )
+    c.hipoteses.append(
+        "Dente de perfil evolvente e altura normal. Pré-dimensionamento por Lewis e por contato de "
+        "Hertz, como no Assistente de cargas: não é o cálculo AGMA 2001 nem o ISO 6336."
+    )
+    c.hipoteses.append(
+        "Pinhão e coroa do mesmo aço beneficiado: S_t e S_c das Figuras 14-2 e 14-5 de Shigley "
+        "pela dureza. K_v de Barth e AGMA pela fabricação do dente."
+    )
+    if helice != 0:
+        c.hipoteses.append(
+            "Na helicoidal, a conta de contato não credita a razão de contato do dente inclinado, a "
+            "favor da segurança. A força axial F_a precisa de um mancal que a segure."
+        )
+    condicoes = [
+        Condicao(
+            "Flexão no dente do pinhão (Lewis)",
+            "Dente",
+            flexao_1,
+            flexao_admissivel,
+            "\\sigma_{1}",
+            validade=validade,
+        ),
+        Condicao(
+            "Flexão no dente da coroa (Lewis)",
+            "Dente",
+            flexao_2,
+            flexao_admissivel,
+            "\\sigma_{2}",
+            validade=validade,
+        ),
+        Condicao(
+            "Pressão de contato no flanco",
+            "Dente",
+            contato,
+            contato_admissivel,
+            "\\sigma_{c}",
+            validade=validade,
+        ),
+    ]
+    return {
+        "T": deste_eixo,
+        "F_t": tangencial,
+        "F_r": tangencial * sp.tan(pressao) / sp.cos(helice),
+        "F_a": tangencial * sp.tan(helice),
+        "condicao": condicoes,
+    }
+
+
+def _conica(c: Contexto) -> dict[str, Any]:
+    modulo = c.letra(g.M_CONICA)
+    z1, z2 = c.letra(g.Z_PINHAO_CONICO), c.letra(g.Z_COROA_CONICA)
+    largura = c.letra(g.B_CONICA)
+    pressao = c.letra(g.PHI_N, fixa=True)
+    deste_eixo = _torque(c)
+    coroa = c.opcoes.get("eixo", EIXO_DO_PINHAO) == EIXO_DA_COROA
+    torque = deste_eixo * z1 / z2 if coroa else deste_eixo
+    cone = sp.atan(z1 / z2)  # ângulo do cone do pinhão, com os eixos a 90°
+    d1 = modulo * z1
+    medio = d1 - largura * sp.sin(cone)
+    tangencial = 2 * torque / medio
+    radial = tangencial * sp.tan(pressao) * sp.cos(cone)
+    axial = tangencial * sp.tan(pressao) * sp.sin(cone)
+    geratriz = d1 / (2 * sp.sin(cone))
+    c.validades.extend(
+        (
+            Validade(medio, "A largura é grande demais para este pinhão: o primitivo médio sumiu."),
+            Validade(
+                10 * modulo - largura,
+                "A largura passou de 10 módulos: a ponta fina do dente quase não trabalha.",
+                False,
+            ),
+            Validade(
+                geratriz / 3 - largura,
+                "A largura passou de um terço da geratriz do cone: a ponta fina do dente quase não "
+                "trabalha.",
+                False,
+            ),
+        )
+    )
+    c.hipoteses.append(
+        "Engrenagem cônica de dente reto com os eixos a 90°: as forças agem no meio da largura do "
+        "dente, no primitivo médio (Shigley, cap. 13), como no Assistente de cargas."
+    )
+    c.hipoteses.append(
+        "No eixo da coroa, a radial é a axial do pinhão, e a axial é a radial dele. O binário da "
+        "axial vale F_a vezes o raio médio, que sai pela bolinha r_m."
+    )
+    raio_pinhao = medio / 2
+    raio_coroa = medio / 2 * z2 / z1
+    return {
+        "T": deste_eixo,
+        "F_t": tangencial,
+        "F_r": axial if coroa else radial,
+        "F_a": radial if coroa else axial,
+        "r_m": raio_coroa if coroa else raio_pinhao,
     }
 
 
@@ -566,6 +763,62 @@ BLOCOS_PECAS: tuple[Bloco, ...] = (
         ),
         _polia,
         (_COMO_ENTRA_O_TORQUE, _TIPO_DE_CORREIA),
+        numerar=True,
+    ),
+    Bloco(
+        "par_engrenagens",
+        "Par de engrenagens",
+        GRUPO_PECAS,
+        "O par inteiro: as forças no eixo e o dente, por flexão (Lewis) e por contato. Isola o "
+        "módulo, a largura ou a dureza.",
+        "σ = K_o·K_v·K_m·F_t/(b·m·Y)",
+        (_ENTRA_TORQUE, _MATERIAL),
+        (
+            Porta("T", "T", VALOR, g.MOMENTO),
+            Porta("F_t", "F_t", VALOR, g.FORCA),
+            Porta("F_r", "F_r", VALOR, g.FORCA),
+            Porta("F_a", "F_a", VALOR, g.FORCA),
+            _SAI_CONDICAO,
+        ),
+        _par_de_engrenagens,
+        (
+            _COMO_ENTRA_O_TORQUE,
+            _QUAL_EIXO,
+            Opcao(
+                "processo",
+                "Fabricação do dente",
+                "Dá o fator dinâmico K_v: dente mais preciso sofre menos choque. Caracol (hob) é o "
+                "processo comum; retificado, o de precisão.",
+                et.PROCESSOS,
+                PROCESSO_PADRAO,
+            ),
+            Opcao(
+                "grau",
+                "Qualidade do aço (AGMA)",
+                "Grau 1: aço comercial. Grau 2: aço com controle de limpeza e de tratamento "
+                "térmico, com resistência maior.",
+                et.GRAUS_AGMA,
+                et.GRAUS_AGMA[0],
+            ),
+        ),
+        numerar=True,
+    ),
+    Bloco(
+        "engrenagem_conica",
+        "Engrenagem cônica",
+        GRUPO_ORIGEM,
+        "Par cônico de dente reto, com os eixos a 90°: as forças no eixo do pinhão ou da coroa.",
+        "F_t = 2·T/d_m · F_r = F_t·tg φ·cos γ",
+        (_ENTRA_TORQUE,),
+        (
+            Porta("T", "T", VALOR, g.MOMENTO),
+            Porta("F_t", "F_t", VALOR, g.FORCA),
+            Porta("F_r", "F_r", VALOR, g.FORCA),
+            Porta("F_a", "F_a", VALOR, g.FORCA),
+            Porta("r_m", "r_m", VALOR, g.MEDIDA),
+        ),
+        _conica,
+        (_COMO_ENTRA_O_TORQUE, _QUAL_EIXO),
         numerar=True,
     ),
     Bloco(

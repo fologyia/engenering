@@ -26,6 +26,7 @@ from core.montador_funcoes import (
     CargaEquivalenteEsferas,
     CargaEquivalenteXY,
     CargaEstatica,
+    FatorLewis,
     FatorSuperficie,
     FatorTamanho,
     InterferenciaMaxima,
@@ -89,6 +90,7 @@ _FUNCOES_DO_MONTADOR: tuple[tuple[type[sp.Function], str, str], ...] = (
     (CargaEquivalenteEsferas, "P", ""),
     (CargaEquivalenteXY, "P", ""),
     (CargaEstatica, "P", "0"),
+    (FatorLewis, "Y", ""),
 )
 _NOMES_DE_FUNCAO = {
     sp.sin: "sen",

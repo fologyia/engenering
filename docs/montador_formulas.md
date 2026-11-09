@@ -199,6 +199,15 @@ Assistente de cargas, escritas em letra, e a Central de validação confere os d
   duas cargas (o momento sob a força escolhida e as duas reações), biapoiada com balanço (a polia fora
   dos mancais) e engastada e apoiada, com carga no meio ou distribuída. As vigas de antes ganharam a
   bolinha de entrada da força e as saídas R (reação) e θ·EI (inclinação vezes E·I).
+- **Par de engrenagens:** o par inteiro num bloco: as forças no eixo, como o bloco Engrenagem, e o
+  dente, por flexão de Lewis no pinhão e na coroa (com o número virtual de dentes z/cos³ψ) e por
+  contato de Hertz no flanco, com K_o, K_v pela fabricação e K_m, como no Assistente de cargas. Isola o
+  módulo, a largura ou a dureza; o diâmetro primitivo sai do módulo e dos dentes, e por isso a força e
+  o dente nunca usam diâmetros diferentes. A potência e a rotação podem ser do eixo do pinhão ou da
+  coroa. Fora de 8 a 16 módulos de largura, com poucos dentes ou acima de 25 m/s, a página avisa.
+- **Engrenagem cônica:** par de dente reto com os eixos a 90°, com as forças no primitivo médio. No
+  eixo da coroa, a radial é a axial do pinhão e a axial é a radial dele. A saída r_m é o raio médio,
+  o que vai na coluna "Raio da axial" do eixo com trechos.
 - **Chaveta:** DIN 6885 pelo diâmetro (b, h e t₁ mudam com d) ou informada; corte e esmagamento no eixo,
   no cubo e na chaveta, com K_s, pontas e uma ou duas chavetas, como na DIN 6892. Passou de 1,5·d, aviso.
 - **Cubo prensado:** Lamé com a interferência da NBR 6158 (H7/p6 a H7/u6, pelo diâmetro) menos o
@@ -211,7 +220,8 @@ Assistente de cargas, escritas em letra, e a Central de validação confere os d
 - **Rotação crítica:** Dunkerley com o eixo biapoiado e uma peça entre os mancais ou em balanço. Fica
   abaixo da real, a favor da segurança.
 
-Os modelos "Eixo com engrenagem", "Rigidez do eixo", "Polia em balanço", "Chaveta: comprimento mínimo",
+Os modelos "Eixo com engrenagem", "Par de engrenagens: módulo do dente", "Pinhão cônico em balanço",
+"Rigidez do eixo", "Polia em balanço", "Chaveta: comprimento mínimo",
 "Cubo prensado: comprimento do ajuste" e "Rolamento: capacidade C" já abrem montados.
 
 ## Eixo com trechos
