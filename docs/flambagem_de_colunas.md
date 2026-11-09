@@ -151,3 +151,37 @@ programa:
 Se os momentos já vêm de uma análise de 2ª ordem com as imperfeições, a opção “já são de 2ª
 ordem” deixa só o `B₁`. O vínculo da mão-francesa segue o apoio do eixo que ela flete
 (`vinculo_do_apoio`); com “Informar K” ele é escolhido.
+
+## Travamentos informados (09/11/2026)
+
+O botão **Informar onde a coluna é travada** (`col_trav_ativar`, item 3) troca L_x e L_y por uma
+tabela: a altura de cada travamento a partir da base, se ele trava L_x (a coluna não anda em y ali),
+se trava L_y (não anda em x) e o que trava. As linhas ficam em `col_trav_linhas`; a tabela na tela
+tem a chave `col_trav_tabela_<revisão>` e é refeita a cada edição (`com_edicoes`). O núcleo está
+em `core/travamentos_da_coluna.py`, sem Streamlit:
+
+- `organizar` tira o travamento numa ponta ou fora da coluna (as pontas são a condição de apoio) e
+  o que não trava nenhum plano, com o aviso na tela; alturas a menos de 1 mm são o mesmo ponto.
+- `trechos_do_eixo` dá a cada trecho o K da Tabela E.1 pelas pontas dele: a ponta da coluna com a
+  condição escolhida e o travamento como pino (`PONTAS`; na (f), pino embaixo e o engaste que anda
+  em cima, como na figura da tabela). Entre travamentos K = 1,0; da base engastada até o primeiro,
+  0,7 ou 0,8. O pino no travamento despreza a continuidade, a favor da segurança (soltar um
+  vínculo nunca aumenta a carga crítica; há teste com 75 sorteios contra a coluna contínua).
+- Acima do último travamento de uma coluna em balanço, o trecho (pino e ponta livre) não fica de
+  pé sozinho: `comprimento_de_flambagem` faz a flambagem elástica da coluna inteira, contínua
+  (12 elementos de viga por trecho, autovalor por Cholesky; erro < 0,002 %), com os travamentos
+  como apoios laterais rígidos. Com o K recomendado, o engaste da base vira uma mola
+  k = u·tan u·E·I/L, u = π/2,1 (≈ 20·E·I/L), que dá K = 2,1 à coluna sem travamentos. O K desse
+  trecho pode passar de 3 sem ser engano: `EntradaColuna.k_pela_coluna_continua` cala o aviso de
+  digitação.
+- Com “Informar K”, o mesmo K vale para todos os trechos.
+- O trecho de maior K·L vai para `Lx_mm`/`kx` (e y). O maior trecho, sem o K, vai para o B₁
+  (`Lx_B1_mm`/`Ly_B1_mm`, K = 1) e, em y, para o L_b da FLT quando o campo fica em 0.
+- Mão-francesa: com travamentos no plano dela, `esforcos_mao_francesa(..., travamentos_mm,
+  pontas)` tira o momento de H da coluna contínua com os travamentos como apoios
+  (`momento_da_forca_horizontal`); sem travamentos, as fórmulas de antes (o teste confere que a
+  coluna contínua as reproduz).
+- Desenho: os travamentos nas alturas informadas, com a altura ao lado; registro, memorial e Word
+  levam `travamentos`, `trechos_em_x`/`trechos_em_y` e o maior trecho do B₁.
+
+O travamento é suposto rígido e resistente; o programa não o dimensiona (AISC 360-16, Appendix 6).

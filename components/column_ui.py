@@ -9,7 +9,7 @@ rodada. O botão "Comparar normas" liga e desliga um painel com a mesma coluna n
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from components.column_help import AJUDA
+from components.edicao_de_tabela import com_edicoes
 from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -27,6 +28,7 @@ from core import column_buckling as cb
 from core import material_catalog as mat
 from core import perfis_compostos as pc
 from core import section_catalog as catalogo_perfis
+from core import travamentos_da_coluna as tc
 from core.column_design import E_ACO, ESPESSURA_MIN_ANGLO, G_ACO, Secao
 from core.coluna_word import gerar_word_coluna
 from core.desenho_da_coluna import ColunaEmPe, MaoFrancesaNoDesenho, figura_da_coluna
@@ -698,6 +700,128 @@ class DadosComprimentos:
     deslocavel_x: bool = False
     deslocavel_y: bool = False
     segunda_ordem: bool = False
+    travamentos: tuple[tc.Travamento, ...] = ()  # os informados que entram na conta
+    trechos_x: tc.EixoTravado | None = None
+    trechos_y: tc.EixoTravado | None = None
+
+    def alturas(self, eixo: str) -> tuple[float, ...]:
+        """As alturas dos travamentos que travam L_x (``"x"``) ou L_y (``"y"``)."""
+        trechos = self.trechos_x if eixo == "x" else self.trechos_y
+        return () if trechos is None else trechos.alturas_mm
+
+    @property
+    def k_pela_coluna_continua(self) -> tuple[str, ...]:
+        """Os eixos em que o trecho que governa tirou o K da flambagem da coluna inteira."""
+        return tuple(
+            t.eixo for t in (self.trechos_x, self.trechos_y) if t and t.governa.pela_coluna_inteira
+        )
+
+
+# A tabela de travamentos: as linhas ficam na sessão; a tabela na tela é refeita a cada edição.
+_TRAV_LINHAS = "col_trav_linhas"
+_TRAV_REVISAO = "col_trav_revisao"
+_TRAV_ALTURA = "Altura da base (mm)"
+_TRAV_X = "Trava L_x"
+_TRAV_Y = "Trava L_y"
+_TRAV_QUE = "O que trava"
+_TRAV_COLUNAS = (_TRAV_ALTURA, _TRAV_X, _TRAV_Y, _TRAV_QUE)
+
+
+def _linha_de_travamento(linha: Mapping[str, Any]) -> dict[str, Any]:
+    """A linha como a tabela a deixa, com tipos firmes: altura vazia fica None (linha nova)."""
+    altura = linha.get(_TRAV_ALTURA)
+    try:
+        altura = float(altura) if altura is not None else None
+    except (TypeError, ValueError):
+        altura = None
+    if altura is not None and not math.isfinite(altura):
+        altura = None
+    marcado = {
+        coluna: True if linha.get(coluna) is None else bool(linha.get(coluna))
+        for coluna in (_TRAV_X, _TRAV_Y)
+    }
+    descricao = linha.get(_TRAV_QUE)
+    texto = "" if descricao is None or descricao != descricao else str(descricao)
+    return {_TRAV_ALTURA: altura, **marcado, _TRAV_QUE: texto}
+
+
+def _ao_editar_travamentos(chave: str) -> None:
+    linhas = com_edicoes(st.session_state.get(_TRAV_LINHAS) or [], st.session_state[chave])
+    st.session_state[_TRAV_LINHAS] = [_linha_de_travamento(linha) for linha in linhas]
+    st.session_state[_TRAV_REVISAO] = st.session_state.get(_TRAV_REVISAO, 0) + 1
+
+
+def _tabela_de_travamentos(comprimento: float) -> list[tc.Travamento]:
+    """A tabela em que se acrescentam os travamentos; devolve os que têm altura."""
+    linhas = st.session_state.get(_TRAV_LINHAS)
+    if not isinstance(linhas, list):  # primeira vez: um exemplo no meio da altura
+        linhas = [{_TRAV_ALTURA: float(round(comprimento / 2.0)), _TRAV_X: True, _TRAV_Y: True,
+                   _TRAV_QUE: ""}]  # fmt: skip
+        st.session_state[_TRAV_LINHAS] = linhas
+    linhas = [_linha_de_travamento(linha) for linha in linhas]
+    chave = f"col_trav_tabela_{st.session_state.get(_TRAV_REVISAO, 0)}"
+    tabela = pd.DataFrame(linhas, columns=list(_TRAV_COLUNAS)).astype(
+        {_TRAV_ALTURA: "float64", _TRAV_X: "bool", _TRAV_Y: "bool", _TRAV_QUE: "object"}
+    )
+    st.data_editor(
+        tabela,
+        key=chave,
+        hide_index=True,
+        num_rows="dynamic",
+        width="stretch",
+        on_change=_ao_editar_travamentos,
+        args=(chave,),
+        column_config={
+            _TRAV_ALTURA: st.column_config.NumberColumn(
+                min_value=0.0, step=10.0, help=AJUDA["trav_altura"]
+            ),
+            _TRAV_X: st.column_config.CheckboxColumn(default=True, help=AJUDA["trav_x"]),
+            _TRAV_Y: st.column_config.CheckboxColumn(default=True, help=AJUDA["trav_y"]),
+            _TRAV_QUE: st.column_config.TextColumn(help=AJUDA["trav_que"]),
+        },
+    )
+    return [
+        tc.Travamento(linha[_TRAV_ALTURA], linha[_TRAV_X], linha[_TRAV_Y], linha[_TRAV_QUE])
+        for linha in linhas
+        if linha[_TRAV_ALTURA] is not None
+    ]
+
+
+def _mostrar_trechos(eixos: Sequence[tc.EixoTravado], fora: Sequence[str]) -> None:
+    """Os trechos de cada eixo, com o K de cada um e o que governa."""
+    for aviso in fora:
+        st.warning(aviso, icon=":material/warning:")
+    linhas = []
+    for eixo in eixos:
+        governa = eixo.indice_que_governa
+        for i, trecho in enumerate(eixo.trechos):
+            linhas.append(
+                {
+                    "Eixo": f"L_{eixo.eixo} (em torno de {eixo.eixo})",
+                    "Trecho (mm)": f"{trecho.de_mm:.0f} a {trecho.ate_mm:.0f}",
+                    "L (mm)": trecho.comprimento_mm,
+                    "K": trecho.k,
+                    "K·L (mm)": trecho.kl_mm,
+                    "De onde vem o K": trecho.como,
+                    "Governa": "sim" if i == governa else "",
+                }
+            )
+    st.dataframe(
+        pd.DataFrame(linhas),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "L (mm)": st.column_config.NumberColumn(format="%.0f"),
+            "K": st.column_config.NumberColumn(format="%.2f"),
+            "K·L (mm)": st.column_config.NumberColumn(format="%.0f"),
+        },
+    )
+    if any(t.pela_coluna_inteira for e in eixos for t in e.trechos):
+        st.caption(
+            "Acima do último travamento de uma coluna em balanço, o trecho tem um pino embaixo e "
+            "a ponta livre: sozinho, ele não fica de pé. O K dele sai da flambagem da coluna "
+            "inteira, contínua, com os travamentos como apoios laterais."
+        )
 
 
 def _deslocavel(apoio: str, k: float) -> bool:
@@ -741,14 +865,26 @@ def formulario_comprimentos() -> DadosComprimentos:
             passo=100.0,
             alvo=topo[0],
         )
-        mesmo = topo[1].toggle(
-            "Mesmo comprimento destravado nos dois eixos",
-            value=True,
-            key="col_mesmo_L",
-            persist_state="session",
-            help=AJUDA["mesmo_L"],
-        )
-        if mesmo:
+        with topo[1]:
+            pelos_travamentos = st.toggle(
+                "Informar onde a coluna é travada (alturas, em x e em y)",
+                value=False,
+                key="col_trav_ativar",
+                persist_state="session",
+                help=AJUDA["trav_ativar"],
+            )
+            mesmo = not pelos_travamentos and st.toggle(
+                "Mesmo comprimento destravado nos dois eixos",
+                value=True,
+                key="col_mesmo_L",
+                persist_state="session",
+                help=AJUDA["mesmo_L"],
+            )
+        informados: list[tc.Travamento] = []
+        if pelos_travamentos:
+            informados = _tabela_de_travamentos(comprimento)
+            lx = ly = comprimento
+        elif mesmo:
             lx = ly = comprimento
         else:
             destravados = st.columns(2)
@@ -780,13 +916,30 @@ def formulario_comprimentos() -> DadosComprimentos:
             apoio_x, kx = _apoio("x", k_recomendado)
         with apoios[1]:
             apoio_y, ky = _apoio("y", k_recomendado)
+        deslocavel_x, deslocavel_y = _deslocavel(apoio_x, kx), _deslocavel(apoio_y, ky)
+        trechos_x: tc.EixoTravado | None = None
+        trechos_y: tc.EixoTravado | None = None
+        if pelos_travamentos:
+            em_x, em_y, fora = tc.organizar(informados, comprimento)
+            try:
+                trechos_x = tc.trechos_do_eixo("x", comprimento, em_x, apoio_x, kx, k_recomendado)
+                trechos_y = tc.trechos_do_eixo("y", comprimento, em_y, apoio_y, ky, k_recomendado)
+            except ValueError as erro:
+                st.error(
+                    f"Não foi possível dividir a coluna nos trechos: {erro}",
+                    icon=":material/error:",
+                )
+                st.stop()
+            _mostrar_trechos((trechos_x, trechos_y), fora)
+            lx, kx = trechos_x.governa.comprimento_mm, trechos_x.governa.k
+            ly, ky = trechos_y.governa.comprimento_mm, trechos_y.governa.k
         st.caption(
             f"K_x·L_x = {kx:.2f} × {lx:.0f} = **{kx * lx:.0f} mm** · "
             f"K_y·L_y = {ky:.2f} × {ly:.0f} = **{ky * ly:.0f} mm** "
             f"({'K recomendado para projeto' if k_recomendado else 'K teórico'}, "
-            "exceto onde o K foi informado)."
+            + ("no trecho que governa em cada eixo, " if pelos_travamentos else "")
+            + "exceto onde o K foi informado)."
         )
-        deslocavel_x, deslocavel_y = _deslocavel(apoio_x, kx), _deslocavel(apoio_y, ky)
         segunda_ordem = False
         if deslocavel_x or deslocavel_y:
             planos = " e ".join(
@@ -837,6 +990,9 @@ def formulario_comprimentos() -> DadosComprimentos:
     return DadosComprimentos(
         comprimento, lx, ly, kx, ky, apoio_x, apoio_y, k_recomendado, lz, kz,
         deslocavel_x, deslocavel_y, segunda_ordem,
+        travamentos=tuple(t for t in informados if tc.aceito(t, comprimento)),
+        trechos_x=trechos_x,
+        trechos_y=trechos_y,
     )  # fmt: skip
 
 
@@ -1333,7 +1489,14 @@ def formulario_mao_francesa(secao: Secao, comprimentos: DadosComprimentos) -> Da
         )
         try:
             esforcos = cb.esforcos_mao_francesa(
-                forca * 1e3 * gamma, angulo, altura, comprimento_mm, vinculo, excentricidade
+                forca * 1e3 * gamma,
+                angulo,
+                altura,
+                comprimento_mm,
+                vinculo,
+                excentricidade,
+                travamentos_mm=comprimentos.alturas(eixo),
+                pontas=tc.PONTAS.get(apoio),
             )
         except ValueError as erro:
             st.error(str(erro), icon=":material/error:")
@@ -1409,6 +1572,8 @@ def _coluna_em_pe(
         comprimentos.apoio_y,
         mf,
         () if ligacoes is None else ligacoes.avaliacao.posicoes_mm,
+        None if comprimentos.trechos_x is None else comprimentos.trechos_x.alturas_mm,
+        None if comprimentos.trechos_y is None else comprimentos.trechos_y.alturas_mm,
     )
 
 
@@ -1554,7 +1719,8 @@ def montar_entrada(
         razao_m1_m2_y=flexao.razao_y,
         forcas_transversais_x=flexao.diagrama_x == DIAG_TRANSVERSAL or mf_em_x,
         forcas_transversais_y=flexao.diagrama_y == DIAG_TRANSVERSAL or mf_em_y,
-        Lb_mm=flexao.Lb_mm,
+        # L_b em branco: com os travamentos, o maior trecho entre os que travam L_y
+        Lb_mm=flexao.Lb_mm or _maior_trecho(comprimentos.trechos_y),
         Cb=flexao.Cb,
         momentos_cb_kNm=flexao.momentos_cb,
         MRd_x_informado_kNm=flexao.MRd_x_kNm,
@@ -1566,7 +1732,14 @@ def montar_entrada(
         deslocavel_y=comprimentos.deslocavel_y,
         momentos_de_segunda_ordem=comprimentos.segunda_ordem,
         ligacoes=None if ligacoes is None else ligacoes.ligacoes,
+        Lx_B1_mm=_maior_trecho(comprimentos.trechos_x),
+        Ly_B1_mm=_maior_trecho(comprimentos.trechos_y),
+        k_pela_coluna_continua=comprimentos.k_pela_coluna_continua,
     )
+
+
+def _maior_trecho(trechos: tc.EixoTravado | None) -> float | None:
+    return None if trechos is None else trechos.maior_trecho_mm
 
 
 # ---------------------------------------------------------------------------
@@ -1893,6 +2066,13 @@ def _contexto_do_registro(
         "condicao_apoio_x": comprimentos.apoio_x,
         "condicao_apoio_y": comprimentos.apoio_y,
         "k_recomendado_de_norma": comprimentos.k_recomendado,
+        "travamentos": tc.texto_dos_travamentos(comprimentos.travamentos) or None,
+        "trechos_em_x": None
+        if comprimentos.trechos_x is None
+        else tc.texto_dos_trechos(comprimentos.trechos_x),
+        "trechos_em_y": None
+        if comprimentos.trechos_y is None
+        else tc.texto_dos_trechos(comprimentos.trechos_y),
         "permanente_kN": cargas.permanente_kN,
         "variavel_kN": cargas.variavel_kN,
         "gamma_g": cargas.gamma_g,

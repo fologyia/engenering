@@ -7,8 +7,9 @@
 
 As arestas do perfil saem da forma da seção (:func:`core.desenho_da_secao.forma_da_secao`): cada
 canto vira uma linha vertical, cheia se dá para vê-la e tracejada se fica escondida atrás do aço
-(olhando de y negativo na frontal e de x negativo na lateral). Os travamentos aparecem a cada
-comprimento destravado e a mão-francesa entra na vista do plano em que ela age (o que flete o eixo
+(olhando de y negativo na frontal e de x negativo na lateral). Os travamentos aparecem nas alturas
+informadas (os de L_y na frontal e os de L_x na lateral) ou, sem elas, a cada comprimento
+destravado; a mão-francesa entra na vista do plano em que ela age (o que flete o eixo
 x está no plano y–z). A altura está em escala; a largura também, salvo quando o perfil ficaria fino
 demais para ler — aí ela é aumentada e a legenda diz isso.
 """
@@ -22,6 +23,7 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw
 
 from core import desenho_girado as dg
+from core import travamentos_da_coluna as tc
 from core.beam_charts import ImagemDiagrama, _fonte, figura_final
 from core.column_design import Secao
 from core.desenho_da_secao import FormaDaSecao, forma_da_secao
@@ -39,14 +41,7 @@ _LARGURA_MINIMA_PX = 26.0  # abaixo disto a largura do perfil é aumentada no de
 Ponto = tuple[float, float]
 
 #: O que cada condição de apoio da Tabela E.1 põe na base e no topo da coluna.
-APOIOS_NAS_PONTAS: dict[str, tuple[str, str]] = {
-    "Biapoiada (pino-pino)": ("pino", "pino"),
-    "Engastada-livre (em balanço)": ("engaste", "livre"),
-    "Engastada-pino": ("engaste", "pino"),
-    "Biengastada": ("engaste", "engaste"),
-    "Biengastada com translação (deslocável)": ("engaste", "engaste deslocável"),
-    "Engastada-pino com translação (deslocável)": ("engaste", "pino deslocável"),
-}
+APOIOS_NAS_PONTAS: dict[str, tuple[str, str]] = tc.PONTAS
 
 
 @dataclass(frozen=True)
@@ -73,6 +68,13 @@ class ColunaEmPe:
     apoio_y: str
     mao_francesa: MaoFrancesaNoDesenho | None = None
     espacadores_mm: tuple[float, ...] = ()  # altura de cada espaçador da barra composta
+    # Alturas (da base) dos travamentos informados de L_x e de L_y; None = um a cada L destravado.
+    travas_x_mm: tuple[float, ...] | None = None
+    travas_y_mm: tuple[float, ...] | None = None
+
+    @property
+    def travas_informadas(self) -> bool:
+        return self.travas_x_mm is not None or self.travas_y_mm is not None
 
 
 @dataclass(frozen=True)
@@ -205,6 +207,20 @@ def _travamento(dr: ImageDraw.ImageDraw, ponto: Ponto, meia_px: float) -> None:
         )
 
 
+def _travas_informadas(
+    dr: ImageDraw.ImageDraw, pontos: Sequence[Ponto], alturas: Sequence[float], meia_px: float
+) -> None:
+    """Os travamentos nas alturas informadas, com a altura escrita ao lado quando cabe."""
+    fonte = _fonte(10 * ESC)
+    ultimo_y: float | None = None
+    for ponto, altura in sorted(zip(pontos, alturas, strict=True), key=lambda p: -p[0][1]):
+        _travamento(dr, ponto, meia_px)
+        if ultimo_y is None or ultimo_y - ponto[1] >= 13 * ESC:  # o texto não encosta no de baixo
+            x = ponto[0] - meia_px - 32 * ESC
+            dr.text((x, ponto[1]), _n(altura), fill=_TRAVA, font=fonte, anchor="rm")
+            ultimo_y = ponto[1]
+
+
 def _planta(
     dr: ImageDraw.ImageDraw, forma: FormaDaSecao, horizontal: str, centro: Ponto, lado_px: float
 ) -> None:
@@ -302,8 +318,11 @@ def _uma_vista(
     na_base, no_topo = APOIOS_NAS_PONTAS.get(apoio, ("pino", "pino"))
     _apoio(dr, px(0.0, 0.0), meia_px, na_base, True)
     _apoio(dr, px(0.0, c.comprimento_mm), meia_px, no_topo, False)
-    destravado = c.ly_mm if horizontal == "x" else c.lx_mm
-    if destravado > 0:
+    informadas = c.travas_y_mm if horizontal == "x" else c.travas_x_mm
+    if informadas is not None:
+        _travas_informadas(dr, [px(0.0, z) for z in informadas], informadas, meia_px)
+    elif not c.travas_informadas:
+        destravado = c.ly_mm if horizontal == "x" else c.lx_mm
         z = destravado
         while z < c.comprimento_mm - 1e-6 and z > 0:
             _travamento(dr, px(0.0, z), meia_px)
@@ -452,7 +471,12 @@ def figura_da_coluna(c: ColunaEmPe) -> ImagemDiagrama:
         ("eixo", "eixo da coluna (por G)"),
         ("pino", "apoio de pino (impede o deslocamento)"),
         ("engaste", "engaste (impede também o giro)"),
-        ("trava", "travamento lateral (a cada L destravado)"),
+        (
+            "trava",
+            "travamento lateral (altura da base, em mm)"
+            if c.travas_informadas
+            else "travamento lateral (a cada L destravado)",
+        ),
     ]
     if c.espacadores_mm:
         itens.append(("espacador", f"{len(c.espacadores_mm)} espaçadores entre os perfis"))

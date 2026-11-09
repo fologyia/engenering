@@ -177,6 +177,14 @@ GENERICA = {
     [
         pytest.param({}, id="padrao-barra-circular"),
         pytest.param({"col_tipo_secao": ui.SEC_CATALOGO}, id="catalogo"),
+        pytest.param(
+            {
+                "col_trav_ativar": True,
+                **MAO_FRANCESA,
+                "col_apoio_y": "Engastada-livre (em balanço)",
+            },
+            id="travamentos-informados-com-mao-francesa",
+        ),
         pytest.param(COMPOSTA, id="composta-2-cantoneiras"),
         pytest.param(
             {**COMPOSTA, "col_cmp_cantoneira": ui.CANTONEIRA_INFORMADA, "col_cmp_auto": False},

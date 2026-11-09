@@ -97,6 +97,7 @@ files = [
     "core/bolted_joint_check.py",
     "core/checklist_templates.py",
     "core/column_buckling.py",
+    "core/travamentos_da_coluna.py",
     "core/cantoneiras.py",
     "core/perfis_compostos.py",
     "core/column_design.py",

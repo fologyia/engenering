@@ -1356,7 +1356,7 @@ elif modulo == "Flambagem de colunas":
             ],
             [
                 "L, L_x, L_y",
-                "Comprimento total da coluna e os comprimentos destravados de cada eixo (desligue “Mesmo comprimento destravado” quando o travamento difere por plano), em mm",
+                "Comprimento total da coluna e os comprimentos destravados de cada eixo (desligue “Mesmo comprimento destravado” quando o travamento difere por plano), em mm; ou ligue “Informar onde a coluna é travada” e dê a altura de cada travamento e o plano que ele trava",
                 "Desenho ou montagem; travamentos laterais",
             ],
             [
@@ -1415,7 +1415,9 @@ elif modulo == "Flambagem de colunas":
            deixam o resultado em **ALERTA** até as paredes serem informadas ou a
            seção ser confirmada como compacta.
         3. Informe o **comprimento total** e, se o travamento difere por plano,
-           desligue “Mesmo comprimento destravado” e informe L_x e L_y. Escolha a
+           desligue “Mesmo comprimento destravado” e informe L_x e L_y — ou ligue
+           “Informar onde a coluna é travada” e preencha a tabela com a altura de cada
+           travamento: o programa acha o trecho que governa em cada eixo. Escolha a
            condição de apoio de cada eixo — deixe o K recomendado ligado, salvo se a
            ligação for de fato ideal.
         4. Informe os **esforços de cálculo**: N_Sd (ou as cargas características),

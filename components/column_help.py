@@ -37,6 +37,9 @@ AJUDA: dict[str, str] = {
         "com imperfeições.\n\n"
         "**Coluna deslocável** (em balanço ou com uma ponta que se desloca de lado): o programa "
         "soma ao momento o desaprumo da coluna e o amplia pelo B₂ (efeito P-Δ), que o B₁ não pega."
+        "\n\n**Travamentos no meio da coluna:** cada trecho entre eles tem o seu K e o pior "
+        "governa; o travamento é tratado como pino, sem a ajuda da continuidade da coluna (a favor "
+        "da segurança)."
     ),
     "sec_4": (
         "Informe os esforços **de cálculo** (já majorados) que chegam à coluna: a força de "
@@ -333,6 +336,30 @@ AJUDA: dict[str, str] = {
         "Altura real da coluna, de apoio a apoio. É o comprimento usado no efeito local da "
         "compressão sobre a flexão (B₁, com K = 1) e o limite da altura da mão-francesa."
     ),
+    "trav_ativar": (
+        "Ligue quando a coluna é travada de lado em pontos conhecidos (vigas, contraventamentos, "
+        "mãos-francesas) e informe, na tabela, a altura de cada um a partir da base e o plano que "
+        "ele trava. Pode haver vários, diferentes em x e em y. O programa divide a coluna em "
+        "trechos, dá a cada trecho o K da Tabela E.1 pelas pontas dele (o travamento conta como "
+        "um pino) e usa o trecho de maior K·L em cada eixo. O travamento precisa ser firme: o "
+        "programa não o dimensiona."
+    ),
+    "trav_altura": (
+        "Distância da base da coluna até o travamento, em mm. Fica entre 0 e L: as pontas da "
+        "coluna são a condição de apoio, escolhida logo abaixo."
+    ),
+    "trav_x": (
+        "Marque se este ponto impede a coluna de se curvar em torno de x (o eixo forte): ali ela "
+        "não anda na direção y. Entra no L_x."
+    ),
+    "trav_y": (
+        "Marque se este ponto impede a coluna de se curvar em torno de y (o eixo fraco): ali ela "
+        "não anda na direção x. Entra no L_y e no L_b da flambagem lateral com torção."
+    ),
+    "trav_que": (
+        "Opcional: o que trava a coluna neste ponto (viga V3, contraventamento, mão-francesa). "
+        "Sai no registro e no Word."
+    ),
     "mesmo_L": (
         "Ligado: o comprimento destravado é o comprimento total nos dois eixos. Desligue se "
         "há travamento lateral em um dos planos (ex.: viga que trava só o eixo fraco) e "
@@ -437,7 +464,8 @@ AJUDA: dict[str, str] = {
     "Lb": (
         "Distância entre os pontos em que a **mesa comprimida** é impedida de se deslocar para "
         "o lado (flambagem lateral com torção, FLT), na flexão em torno de x. **0 = igual ao "
-        "comprimento destravado de y.**"
+        "comprimento destravado de y**; com os travamentos informados, o maior trecho entre os "
+        "que travam L_y."
     ),
     "cb_modo": (
         "C_b corrige a flambagem lateral quando o momento não é igual ao longo da barra. "

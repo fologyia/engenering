@@ -33,6 +33,7 @@ from typing import Any
 
 from core import column_design as cd
 from core import perfis_compostos as pc
+from core import travamentos_da_coluna as tc
 from core.column_design import Secao
 from core.steel_sections import (
     PerfilAco,
@@ -214,6 +215,14 @@ _VINCULO_DO_APOIO = {
 }
 
 
+# As pontas (base, topo) de cada vínculo da mão-francesa, para a coluna contínua com travamentos.
+_PONTAS_DO_VINCULO = {
+    VINCULOS_MAO_FRANCESA[0]: (tc.ENGASTE, tc.LIVRE),
+    VINCULOS_MAO_FRANCESA[1]: (tc.PINO, tc.PINO),
+    VINCULOS_MAO_FRANCESA[2]: (tc.ENGASTE, tc.PINO),
+}
+
+
 def vinculo_do_apoio(apoio: str) -> str | None:
     """O vínculo da mão-francesa que combina com o apoio do eixo; None para o K informado."""
     return _VINCULO_DO_APOIO.get(apoio)
@@ -241,6 +250,8 @@ def esforcos_mao_francesa(
     comprimento_mm: float,
     vinculo: str = VINCULOS_MAO_FRANCESA[0],
     excentricidade_mm: float = 0.0,
+    travamentos_mm: Sequence[float] = (),
+    pontas: tuple[str, str] | None = None,
 ) -> EsforcosMaoFrancesa:
     """Decompõe a força da mão-francesa e obtém o momento que ela impõe à coluna.
 
@@ -249,6 +260,11 @@ def esforcos_mao_francesa(
     (:data:`VINCULOS_MAO_FRANCESA`); o da excentricidade, ``V·e``, é somado
     integralmente — conservador, já que só no engaste de base ele chega
     inteiro à seção crítica.
+
+    Com ``travamentos_mm`` (alturas, da base, dos travamentos no plano da mão-francesa), H age na
+    coluna contínua com os travamentos como apoios: o momento sai da análise elástica, com as
+    pontas da condição de apoio (``pontas``, de :data:`core.travamentos_da_coluna.PONTAS`) ou,
+    sem elas, as do vínculo.
     """
     f = _nao_negativo("forca_N", forca_N)
     theta = float(angulo_graus)
@@ -261,7 +277,17 @@ def esforcos_mao_francesa(
     e = _nao_negativo("excentricidade_mm", excentricidade_mm)
     rad = math.radians(theta)
     v, h = f * math.cos(rad), f * math.sin(rad)
-    m_h, expressao = _momento_forca_horizontal(h, a, l, vinculo)
+    travas = tuple(t for t in travamentos_mm if tc.TOLERANCIA_MM < t < l - tc.TOLERANCIA_MM)
+    if travas:
+        base, topo = pontas or _PONTAS_DO_VINCULO[vinculo]
+        braco, onde = tc.momento_da_forca_horizontal(l, travas, base, topo, a)
+        m_h = h * braco
+        expressao = (
+            f"M = H·{braco:.0f} mm (coluna contínua com {len(travas)} travamento"
+            f"{'s' if len(travas) > 1 else ''} como apoio; maior a {onde:.0f} mm da base)"
+        )
+    else:
+        m_h, expressao = _momento_forca_horizontal(h, a, l, vinculo)
     m_e = v * e
     return EsforcosMaoFrancesa(
         forca_N=f,
@@ -280,10 +306,16 @@ def esforcos_mao_francesa(
 
 
 def _avisos_de_entrada(
-    kx: float, ky: float, modulo_elasticidade_MPa: float, escoamento_MPa: float
+    kx: float,
+    ky: float,
+    modulo_elasticidade_MPa: float,
+    escoamento_MPa: float,
+    calculados: Sequence[str] = (),
 ) -> list[str]:
     avisos: list[str] = []
     for nome, k in (("Kx", kx), ("Ky", ky)):
+        if nome[1] in calculados:
+            continue  # K da coluna contínua com os travamentos: calculado, não digitado
         if not K_MINIMO <= k <= K_MAXIMO:
             avisos.append(
                 f"{nome} = {k:g} está fora da faixa física usual ({K_MINIMO:g} a "
@@ -856,6 +888,12 @@ class EntradaColuna:
     deslocavel_y: bool = False
     momentos_de_segunda_ordem: bool = False  # já com P-Δ e imperfeições: só o B₁
     ligacoes: pc.LigacoesDaComposta | None = None  # barra composta; sem isto, o mínimo da norma
+    # Com travamentos ao longo da coluna: o maior trecho entre eles no plano de cada flexão, que é
+    # o comprimento do B₁ (K = 1); sem isto, L_x e L_y. E os eixos cujo K saiu da flambagem da
+    # coluna inteira (balanço acima do último travamento), que pode passar de 3 sem ser engano.
+    Lx_B1_mm: float | None = None
+    Ly_B1_mm: float | None = None
+    k_pela_coluna_continua: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -920,7 +958,13 @@ def _validar(e: EntradaColuna) -> None:
         _positivo(nome, valor)
     if e.Cb < 1.0:
         raise ValueError("C_b não pode ser menor que 1,0 (1,0 = momento constante, conservador).")
-    for nome_opc, valor_opc in (("Lz_mm", e.Lz_mm), ("kz", e.kz), ("Lb_mm", e.Lb_mm)):
+    for nome_opc, valor_opc in (
+        ("Lz_mm", e.Lz_mm),
+        ("kz", e.kz),
+        ("Lb_mm", e.Lb_mm),
+        ("Lx_B1_mm", e.Lx_B1_mm),
+        ("Ly_B1_mm", e.Ly_B1_mm),
+    ):
         if valor_opc is not None:
             _positivo(nome_opc, valor_opc)
     for nome_esf, valor_esf in (
@@ -1069,7 +1113,9 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
     aisc = norma == "AISC360_16_LRFD"
 
     linhas: list[Verificacao] = []
-    avisos: list[str] = _avisos_de_entrada(entrada.kx, entrada.ky, e_mod, fy)
+    avisos: list[str] = _avisos_de_entrada(
+        entrada.kx, entrada.ky, e_mod, fy, entrada.k_pela_coluna_continua
+    )
     bloqueios: list[str] = []
     ref_norma = {
         "NBR8800_2008": "NBR 8800:2008",
@@ -1392,9 +1438,9 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
     momentos: dict[str, dict[str, Any]] = {}
     delta = DESAPRUMO[norma]
     ref_b2 = "NBR Anexo D (D.2.3) e 4.9.7 / AISC Apêndice 8"
-    for eixo, m1_informado, comprimento, cm, inercia, k_plano, deslocavel in (
-        ("x", mx1, lx, cm_x, sec.Ix, entrada.kx, entrada.deslocavel_x),
-        ("y", my1, ly, cm_y, sec.Iy, entrada.ky, entrada.deslocavel_y),
+    for eixo, m1_informado, comprimento, comprimento_b1, cm, inercia, k_plano, deslocavel in (
+        ("x", mx1, lx, entrada.Lx_B1_mm or lx, cm_x, sec.Ix, entrada.kx, entrada.deslocavel_x),
+        ("y", my1, ly, entrada.Ly_B1_mm or ly, cm_y, sec.Iy, entrada.ky, entrada.deslocavel_y),
     ):
         # Coluna deslocável no plano: o desaprumo (força nocional no topo) soma momento mesmo sem
         # momento informado, e o deslocamento lateral amplia o momento por B₂ (P-Δ).
@@ -1415,10 +1461,10 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
             b2_com_ei = 1 / (1 - n_sd / n_e2) if n_sd < n_e2 else math.inf
             if b2_com_ei > B2_PEQUENA:
                 rigidez = 0.8
-        # B1 com o comprimento real no plano de flexão
-        n_e_real = math.pi**2 * rigidez * e_mod * inercia / comprimento**2 / 1000.0
+        # B1 com o comprimento real no plano de flexão (com travamentos, o maior trecho entre eles)
+        n_e_real = math.pi**2 * rigidez * e_mod * inercia / comprimento_b1**2 / 1000.0
         try:
-            dados["b1"] = cd.coef_B1(n_sd, rigidez * inercia, comprimento, cm, e_mod)
+            dados["b1"] = cd.coef_B1(n_sd, rigidez * inercia, comprimento_b1, cm, e_mod)
         except ValueError as erro:
             bloquear(
                 f"Amplificação B₁ em {eixo}",
@@ -1503,6 +1549,12 @@ def verificar_coluna(entrada: EntradaColuna) -> ResultadoColuna:
                 "NBR Anexo D (D.2.2) / Projeto C.2.2",
                 f"C_m/(1 − N_Sd/N_e{eixo}) = {cm:.2f}/(1 − {n_sd:.1f}/{n_e_real:.1f})"
                 + (f", N_e{eixo} com 0,8·E·I" if rigidez != 1.0 else "")
+                + (
+                    f", N_e{eixo} com K = 1 e o maior trecho entre travamentos, "
+                    f"{comprimento_b1:.0f} mm"
+                    if comprimento_b1 != comprimento
+                    else ""
+                )
                 + f"; {texto_m}",
             )
         )
@@ -1877,6 +1929,8 @@ def registro_coluna(
         "kx": entrada.kx,
         "ky": entrada.ky,
         "kz": entrada.kz,
+        "comprimento_B1_x_mm": entrada.Lx_B1_mm,
+        "comprimento_B1_y_mm": entrada.Ly_B1_mm,
         "forca_solicitante_kN": entrada.N_Sd_kN,
         "momento_x_kNm": entrada.Mx_kNm,
         "momento_y_kNm": entrada.My_kNm,
