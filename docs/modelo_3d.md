@@ -71,7 +71,8 @@ de viga para viga no mesmo modelo, e a API do Simulation não o dá. O programa:
    W 200 × 31,3, S₁ = 61,2 cm³ (W_y do catálogo) e S₂ = 301,9 cm³ (W_x 301,7); nas vigas U 8",
    S₂ = 147,5 cm³ — exatamente o que a macro mediu.
 2. **O axial**: pela ponta da base do quadro das fundações (início da lista = Fim 1 embaixo, o axial
-   sobe); o peso próprio confere — dentro dos elementos do pilar, a carga do PP aponta para baixo.
+   sobe). A base automática já sai do peso próprio (dentro dos elementos do pilar, a carga do PP
+   aponta para baixo); só a base escolhida à mão na ponta de cima fica sem direção, com o motivo.
 3. **O sentido**: num caso com carga distribuída transversal no pilar (o vento viga a viga põe carga
    em cada pilar), a carga que o Simulation mostra dentro dos elementos (V₁ e V₂ de uma ponta menos a
    da outra) tem de apontar para onde o plano de cargas mandou e ter o mesmo tamanho (0,5 a 2 vezes).

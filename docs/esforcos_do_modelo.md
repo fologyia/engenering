@@ -362,9 +362,32 @@ com o resultado, o que passou e o que não passou).
 Para cada barra marcada como **Pilar**, os esforços na ponta de **base**, caso a caso, **sem combinar
 nem majorar** (critério Anglo, item 5.9: quem projeta a fundação faz as combinações dela).
 
-* **Base**: a ponta inicial ou final da lista de pontos do pilar no arquivo. Automática = a ponta
-  mais comprimida (o peso próprio faz a compressão crescer para baixo); com as duas pontas iguais
-  (sem peso próprio no estudo), escolhe-se na coluna "Base (pilar)" da tabela das barras.
+* **Base**: a ponta inicial ou final da lista de pontos do pilar no arquivo — o SolidWorks não
+  diz qual é a de baixo, e lista uns pilares do pé para o topo e outros do topo para o pé.
+  Automática = pelo **peso próprio** (`qf.base_pelos_esforcos`), nesta ordem:
+  1. nos **casos de gravidade** (`qf.casos_de_gravidade`: o PP e os de reação para cima com a
+     horizontal até 10 % da vertical), dentro de cada elemento do pilar a normal muda do peso do
+     trecho, e a compressão cresce para baixo. Não depende do que as vigas entregam nos nós. O PP
+     decide; sem ele, os outros casos têm de concordar;
+  2. o mesmo no estudo único, com gravidade e vento juntos (`qf.casos_com_gravidade`);
+  3. sem peso no pilar (gravidade desligada no estudo), a ponta mais comprimida — só nos casos de
+     gravidade;
+  4. a combinação de pontas em que a soma das bases fecha com a reação vertical em todos os casos,
+     quando só uma fecha (até 12 pilares por decidir);
+  5. sem nada disso, o programa pede a escolha na coluna "Base (pilar)" da tabela das barras.
+
+  Um caso **só de vento nunca decide a base**: o pilar de barlavento é tracionado, e a maior força
+  fica na base com o sinal trocado. Até 10/11/2026 a regra era "a ponta mais comprimida do caso
+  com a maior diferença entre as pontas": com as vigas entregando carga ao longo da altura, esse
+  caso era um vento, e a base saía no topo dos pilares tracionados — a soma das bases não fechava
+  com a reação, e o painel mandava refazer arquivos que estavam certos. A variação da normal só
+  conta acima do arredondamento do arquivo (cinco algarismos por valor, somados nos elementos).
+* **Base escolhida na ponta de cima**: quando a escolha da tabela contraria o peso próprio, a
+  escolha fica, mas o quadro avisa (`QuadroDeFundacoes.de_ponta_cabeca`), o painel "Antes de
+  verificar" mostra o erro com o botão que volta a base para Automática, e os arquivos de forças
+  são conferidos com a ponta de baixo de verdade — o erro da escolha não vira "as forças não são
+  do caso". A seção 8 tem a tabela "Como o programa leu a base de cada pilar" (ponta usada, de
+  onde veio e a situação).
 * **Convenção**: N = força vertical na fundação, compressão positiva (negativo = arrancamento);
   V₁, V₂, M₁, M₂ e T = esforços internos na seção da base, nos eixos 1 e 2 da seção do SolidWorks.
 * **Conferência**: a soma de N das bases tem de bater com a reação vertical total do modelo (2 % ou
@@ -374,9 +397,13 @@ nem majorar** (critério Anglo, item 5.9: quem projeta a fundação faz as combi
   Anglo e a convenção, Quadro, Compressão por pilar), CSV e registro no projeto (capítulo de cálculo
   no memorial com as duas tabelas).
 * **Nos eixos do modelo** (`ds.na_fundacao_no_modelo`): com a direção da seção de cada pilar no
-  Simulation (`core/direcoes_da_secao.py`: a linha pela macro v6, o sentido por um caso de vento
-  viga a viga com carga no pilar), o quadro ganha F e M nos dois eixos horizontais do SolidWorks
-  (FX, FZ, MX, MZ com Y vertical) — a força e o momento que o pilar faz na fundação, o contrário da
+  Simulation, o quadro ganha F e M nos dois eixos horizontais do SolidWorks. A direção vem, pela
+  ordem: do esqueleto (`core/direcoes_da_secao.py`: a linha pela macro v6, o sentido por um caso
+  de vento viga a viga com carga no pilar) ou, no pilar que ficou sem ela, **das reações da macro**
+  (`ReacoesNasBases.direcoes`, juntadas por `ds.com_as_direcoes`): a cortante na base, girada, tem
+  de ser a reação horizontal no pé do pilar em todos os casos com os `-apoios.csv`. Assim o vento
+  aplicado nos nós (a forma simplificada, sem carga ao longo do pilar) também dá a direção. São
+  FX, FZ, MX, MZ com Y vertical — a força e o momento que o pilar faz na fundação, o contrário da
   reação. Conferido num pilar em balanço: a fundação recebe q·L e o momento (L²/2)·(ẑ × q), com o
   Fim 1 na base ou no topo. Os pilares sem a direção ficam vazios, e o motivo aparece.
 

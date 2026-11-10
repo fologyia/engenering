@@ -163,6 +163,30 @@ def test_sem_cortante_nos_casos_da_macro_nao_ha_direcao():
     assert any(f.startswith("W0:") and "sem a direção da seção" in f for f in r.faltam)
 
 
+def test_direcoes_que_valeram_levam_o_quadro_das_fundacoes_aos_eixos_do_modelo():
+    """Com os apoios da macro, a direção da seção de cada pilar sai das reações: o quadro das
+    fundações (forças da viga) dá, nos eixos do modelo, o mesmo que a macro — sem precisar de um
+    caso de vento com carga ao longo do pilar."""
+    dados, apoios, geometria = montar()
+    r = rb.montar(dados, apoios, plano=t.plano(), geometria=geometria)
+    assert set(r.direcoes) == {b.viga for b in t.BARRAS[:4]}
+    assert all(d.sabida and d.linha == "reações da macro" for d in r.direcoes.values())
+    quadro = qf.montar_quadro(dados)
+    completas = ds.com_as_direcoes(None, r.direcoes)
+    assert completas.sabidas == 4 and not completas.avisos
+    no_modelo = ds.na_fundacao_no_modelo(completas, quadro, "Y")
+    for barra, pe in zip(t.BARRAS[:4], t.PES, strict=True):
+        for caso in t.CASOS:
+            forca, momento = t.resolver(caso).reacoes[pe]
+            fx, fz, mx, mz = no_modelo[(barra.viga, caso)]
+            assert (fx, fz) == pytest.approx((-forca[0] / 1e3, -forca[2] / 1e3), abs=2e-3)
+            assert (mx, mz) == pytest.approx((-momento[0] / 1e3, -momento[2] / 1e3), abs=2e-3)
+    # A direção que o esqueleto já deu não é trocada pela da macro.
+    do_teste = direcoes(dados)
+    mantidas = ds.com_as_direcoes(do_teste, r.direcoes)
+    assert all(mantidas.pilares[p].linha == "teste" for p in do_teste.pilares)
+
+
 # ------------------------------------------------------------------ eixos e tabelas
 def test_eixos_da_fundacao_e_do_solidworks():
     dados, apoios, geometria = montar()

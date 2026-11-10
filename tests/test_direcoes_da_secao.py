@@ -160,7 +160,7 @@ def test_ordem_dos_elementos_contra_o_peso_proprio():
         eixo_vertical="Z",
     )
     _, pilar, _ = calcular(d, corpo((1.0, 0.0, 0.0)))
-    assert not pilar.sabida and "não confere com o peso próprio" in pilar.sentido
+    assert not pilar.sabida and "é a ponta de cima" in pilar.sentido
 
 
 def test_linha_pelo_perfil_da_v5():

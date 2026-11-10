@@ -87,8 +87,20 @@ AJUDA: dict[str, str] = {
     ),
     "fundacoes_no_modelo": (
         "Para dar a força e o momento do pilar nos eixos do SolidWorks, o programa precisa saber "
-        "para que lado a seção do pilar está virada no Simulation: a linha pela macro v6 e o "
-        "sentido por um caso de vento viga a viga (carga em cada pilar), importado aqui."
+        "para que lado a seção do pilar está virada no Simulation. Com os arquivos -apoios.csv "
+        "da macro, ele acha isso sozinho: gira a cortante da base até ser a reação horizontal no "
+        "pé do pilar. Sem eles, usa a linha da macro v6 e um caso de vento viga a viga (carga em "
+        "cada pilar)."
+    ),
+    "res_bases": (
+        "O arquivo do SolidWorks lista os pontos de cada pilar numa ordem, sem dizer qual ponta é "
+        "a de baixo. O programa acha a base pelo peso próprio: no caso PP a compressão do pilar "
+        "cresce para baixo. Um caso de vento não serve para isso, porque o pilar pode estar "
+        "tracionado. Para escolher à mão, use a coluna Base (pilar) da tabela das barras."
+    ),
+    "btn_diag_bases": (
+        "Volta a coluna Base (pilar) desses pilares para Automática e grava no projeto. O programa "
+        "passa a usar a ponta de baixo, achada pelo peso próprio."
     ),
     "sec_envoltoria": (
         "Para cada barra, o pior de todas as combinações do plano de cargas, ponto a ponto: a "

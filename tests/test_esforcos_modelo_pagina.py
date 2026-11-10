@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -301,3 +302,62 @@ def test_esqueleto_mostra_a_origem_as_formas_e_os_avisos(banco_com_projeto):
     salvar_projeto(projeto, motivo="teste")
     t = abrir()
     assert any("versão antiga da macro" in w.value for w in t.warning)
+
+
+def _gravar_o_portico_3d(base_do_primeiro: str | None = None):
+    from core import apoios_do_modelo as am
+    from core import leitura_do_modelo as ld
+    from tests import portico_3d_teste01 as p3
+    from tests.test_nucleo_esforcos_ponta_a_ponta import montar
+
+    dados, apoios, geometria = montar()
+    primeiro = p3.BARRAS[0].viga
+    if base_do_primeiro is not None:
+        dados = em.com_membros(
+            dados, {primeiro: replace(dados.membros[primeiro], base=base_do_primeiro)}
+        )
+    projeto = obter_projeto_ativo()
+    projeto["plano_de_cargas"] = pc.para_dicionario(p3.plano())
+    projeto["esforcos_do_modelo"] = em.para_dicionario(dados)
+    projeto["apoios_do_modelo"] = am.para_dicionario(apoios)
+    projeto["geometria_do_modelo"] = ld.para_dicionario(geometria)
+    salvar_projeto(projeto, motivo="teste")
+    return primeiro
+
+
+def test_base_de_cada_pilar_e_forca_nos_eixos_do_modelo_pela_macro(banco_com_projeto):
+    _gravar_o_portico_3d()
+    t = abrir(em_ver_quadro="Quadro completo")
+    assert not sem_ajuda(t), sorted(sem_ajuda(t))
+    bases = next(d.value for d in t.dataframe if "Base no arquivo" in d.value.columns)
+    assert len(bases) == 4 and set(bases["Situação"]) == {"Certo"}
+    assert set(bases["Base no arquivo"]) == {em.BASE_INICIO, em.BASE_FIM}
+    assert all("peso próprio" in origem for origem in bases["Como o programa soube"])
+    # A direção da seção saiu das reações da macro: os quatro pilares nos eixos do modelo.
+    assert not any("com a força nos eixos do modelo" in c.value for c in t.caption)
+    completo = next(d.value for d in t.dataframe if "V1 (kN)" in d.value.columns)
+    assert {"FX (kN)", "FZ (kN)", "MX (kN·m)", "MZ (kN·m)"} <= set(completo.columns)
+    assert completo["FX (kN)"].notna().all() and len(completo) == 4 * 6
+    assert not any(a.startswith("em_diag_bases_") for a in (b.key or "" for b in t.button))
+
+
+def test_base_escolhida_no_topo_tem_o_botao_que_corrige(banco_com_projeto):
+    from core import quadro_fundacoes as qf
+
+    # O primeiro pilar do pórtico é listado do pé para o topo: Fim da lista é a ponta de cima.
+    pilar = _gravar_o_portico_3d(base_do_primeiro=em.BASE_FIM)
+    t = abrir()
+    textos = [m.value for m in t.markdown]
+    assert any("foi escolhida na ponta que é a de cima" in texto for texto in textos)
+    # O erro é da escolha: nenhum arquivo de forças leva a culpa.
+    assert not any("à fundação, mas a reação" in texto for texto in textos)
+    assert {m.label: m.value for m in t.metric}["Para corrigir"] == "1"
+    bases = next(d.value for d in t.dataframe if "Base no arquivo" in d.value.columns)
+    assert sum(s.startswith("Ponta de cima") for s in bases["Situação"]) == 1
+    botao = next(b for b in t.button if (b.key or "").startswith("em_diag_bases_"))
+    botao.click().run()
+    assert not t.exception
+    gravado = em.esforcos_do_projeto(obter_projeto_ativo())
+    assert gravado.membros[pilar].base == em.BASE_AUTOMATICA
+    quadro = qf.montar_quadro(gravado)
+    assert not quadro.de_ponta_cabeca and not quadro.pendentes

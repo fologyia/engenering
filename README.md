@@ -417,7 +417,7 @@ interação e verificação completa dos pontos críticos pelo motor da Flambage
 modos, FLT/FLM/FLA, B₁, N + Mx + My, esbeltez), cantoneiras pela 5.3.5.4, cortante; registro com o
 capítulo de cada barra no memorial. **Quadro de cargas para as fundações** (`core/quadro_fundacoes.py`):
 os esforços na base de cada pilar, caso a caso, sem combinar nem majorar (critério Anglo 5.9), com a
-base achada pela ponta mais comprimida, conferência da soma contra a reação total, Excel, CSV e
+base achada pelo peso próprio do pilar (nunca por um caso de vento), conferência da soma contra a reação total, Excel, CSV e
 registro no memorial. **Placas de base dos pilares** (`core/placa_base_pilares.py`): uma placa padrão
 verificada em cada pilar pelo AISC Design Guide 1 com os esforços da base combinados (ELU) — contato,
 espessura da placa, tração e cisalhamento nos chumbadores — e, com o critério Anglo, placa ≥ 16 mm,

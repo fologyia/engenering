@@ -30,7 +30,7 @@ from __future__ import annotations
 import io
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from core import apoios_do_modelo as am
@@ -98,6 +98,9 @@ class ReacoesNasBases:
     conferencia: tuple[pc.ItemDeConferencia, ...] = ()
     faltam: tuple[str, ...] = ()  # o que ficou de fora e por quê
     avisos: tuple[str, ...] = ()
+    #: A direção da seção de cada pilar (nome no Simulation) que valeu: a do esqueleto ou a que
+    #: as reações da macro deram.
+    direcoes: Mapping[str, ds.DirecoesDaSecao] = field(default_factory=dict)
 
     def acao(self, pe: str, caso: str) -> AcaoNoPe | None:
         return next((a for a in self.acoes if a.pe == pe and a.caso == caso), None)
@@ -479,6 +482,7 @@ def montar(
         tuple(_conferir(dados, pes, acoes, casos)),
         tuple(faltam),
         tuple(avisos),
+        dict(direcoes_dos_pilares),
     )
 
 

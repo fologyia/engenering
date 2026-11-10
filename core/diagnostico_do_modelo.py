@@ -48,6 +48,7 @@ NIVEL_INFO = em.NIVEL_INFO  # falta algo, mas o resto vale
 
 ACAO_TROCAR_NOMES = "trocar_nomes"
 ACAO_TIRAR_GRADE = "tirar_grade"
+ACAO_BASES_AUTOMATICAS = "bases_automaticas"
 #: ``Achado.detalhe["sobre"]`` dos achados do arquivo de forças de um caso (as reações e os apoios
 #: do caso podem estar certos).
 SOBRE_AS_FORCAS = "forcas"
@@ -90,7 +91,7 @@ class Achado:
     titulo: str
     problema: str
     passos: tuple[str, ...] = ()
-    acao: str = ""  # ACAO_TROCAR_NOMES, ACAO_TIRAR_GRADE ou vazio
+    acao: str = ""  # ACAO_TROCAR_NOMES, ACAO_TIRAR_GRADE, ACAO_BASES_AUTOMATICAS ou vazio
     detalhe: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -145,6 +146,13 @@ class _Bases:
 
 def _bases(dados: em.EsforcosDoModelo) -> _Bases:
     quadro = qf.montar_quadro(dados)
+    if quadro.de_ponta_cabeca:
+        # A base escolhida na ponta de cima tem o achado dela (:func:`_bases_dos_pilares`): os
+        # arquivos de forças são conferidos com a ponta de baixo de verdade, para o erro da
+        # escolha não virar "as forças não são do caso" em todos os casos.
+        quadro = qf.montar_quadro(
+            qf.com_as_bases_automaticas(dados, [p.pilar for p in quadro.de_ponta_cabeca])
+        )
     por_caso: dict[str, dict[str, tuple[float, float]]] = {}
     for p in quadro.pilares:
         for c in p.cargas:
@@ -704,6 +712,56 @@ def _forcas_de_cada_caso(
 
 
 # ---------------------------------------------------------------------------------------------
+# A base de cada pilar
+# ---------------------------------------------------------------------------------------------
+def _bases_dos_pilares(dados: em.EsforcosDoModelo) -> list[Achado]:
+    """A base escolhida na ponta de cima (para corrigir) e a base que o programa não achou."""
+    quadro = qf.montar_quadro(dados)
+    achados: list[Achado] = []
+    virados = [p.pilar for p in quadro.de_ponta_cabeca]
+    if virados:
+        achados.append(
+            Achado(
+                NIVEL_ERRO,
+                "Base do pilar escolhida na ponta de cima",
+                f"Na tabela das barras, a base de {_lista(virados)} foi escolhida na ponta que é "
+                "a de cima: no peso próprio a compressão do pilar cresce para a outra ponta. Com "
+                "a base no topo, o quadro das fundações, as placas de base e as reações desses "
+                "pilares saem com os esforços do topo, e a soma não fecha com a reação do modelo.",
+                (
+                    "Clique no botão abaixo: a base desses pilares volta para Automática e o "
+                    "programa usa a ponta de baixo.",
+                    "Ou, na tabela das barras (passo 4), troque a coluna Base (pilar) desses "
+                    "pilares para Automática e grave a tabela.",
+                ),
+                acao=ACAO_BASES_AUTOMATICAS,
+                detalhe={"pilares": virados},
+            )
+        )
+    pendentes = quadro.pendentes
+    if pendentes:
+        motivos = sorted({p.origem_da_base.split(":", 1)[0] for p in pendentes})
+        achados.append(
+            Achado(
+                NIVEL_ATENCAO,
+                "Base do pilar sem definição",
+                f"O programa não achou qual ponta de {_lista([p.pilar for p in pendentes])} é a "
+                f"de baixo ({'; '.join(motivos)}). Sem a base, esses pilares ficam fora do quadro "
+                "das fundações, e a soma das bases não é conferida com a reação do modelo.",
+                (
+                    "Importe o caso PP (peso próprio) com a gravidade ligada no estudo: o "
+                    "programa acha a base pela compressão, que cresce para baixo.",
+                    "Ou, na tabela das barras (passo 4), escolha Início da lista ou Fim da lista "
+                    "na coluna Base (pilar) e confira no quadro das fundações se a soma das bases "
+                    "bate com a reação vertical.",
+                ),
+                detalhe={"pilares": [p.pilar for p in pendentes]},
+            )
+        )
+    return achados
+
+
+# ---------------------------------------------------------------------------------------------
 # Outras conferências
 # ---------------------------------------------------------------------------------------------
 def _assinatura(caso: em.CasoImportado) -> frozenset[tuple[str, str]]:
@@ -1065,6 +1123,7 @@ def diagnosticar(
         return [replace(a, detalhe={**a.detalhe, "sobre": SOBRE_AS_FORCAS}) for a in achados_]
 
     achados = [
+        *_protegido("base de cada pilar", lambda: _bases_dos_pilares(dados)),
         *_protegido("forças de cada caso", forcas),
         *_protegido("plano de cargas e reações", lambda: _plano_e_reacoes(dados, plano)),
         *_protegido("rodadas do estudo", lambda: _rodadas(dados)),
@@ -1119,3 +1178,8 @@ def corrigir_nomes(
 
 def tirar_grade(plano: pc.PlanoDeCargas) -> pc.PlanoDeCargas:
     return cpm.sem_cargas_da_grade(plano)
+
+
+def bases_automaticas(dados: em.EsforcosDoModelo, pilares: Sequence[str]) -> em.EsforcosDoModelo:
+    """A base dos ``pilares`` de volta em Automática (o programa acha a ponta de baixo)."""
+    return qf.com_as_bases_automaticas(dados, pilares)

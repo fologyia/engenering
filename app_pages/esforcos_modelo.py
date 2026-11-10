@@ -37,6 +37,7 @@ from core import load_combinations as comb
 from core import placa_base_pilares as pb
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
+from core import reacoes_nas_bases as rb
 from core import section_catalog as sc
 from core import sensores_do_modelo as sm
 from core import verificacao_barras as vb
@@ -409,6 +410,19 @@ with st.container(border=True), secao_protegida("Antes de verificar"):
                         + ", ".join(f"{a} → {b}" for a, b in mapa.items()),
                     ):
                         st.rerun()
+            if achado.acao == dm.ACAO_BASES_AUTOMATICAS and st.button(
+                "Voltar a base desses pilares para Automática",
+                icon=":material/vertical_align_bottom:",
+                type="primary",
+                key=f"em_diag_bases_{indice}",
+                help=AJUDA["btn_diag_bases"],
+            ):
+                corrigidos = dm.bases_automaticas(dados, list(achado.detalhe.get("pilares", [])))
+                if gravar_campos_do_projeto(
+                    {"esforcos_do_modelo": em.para_dicionario(corrigidos)},
+                    "Base dos pilares de volta em Automática",
+                ):
+                    st.rerun()
     for certo in diagnostico.certos:
         st.caption(f":material/check_circle: {certo}")
 
@@ -593,7 +607,10 @@ with st.container(border=True), secao_protegida("4. Barras do modelo"):
             ),
             "Base (pilar)": st.column_config.SelectboxColumn(
                 options=list(em.BASES),
-                help="Qual ponta do pilar é a base, para o quadro das fundações.",
+                help=(
+                    "Qual ponta do pilar é a base, para o quadro das fundações. Deixe em "
+                    "Automática: o programa acha a ponta de baixo pelo peso próprio."
+                ),
             ),
             **{
                 c: st.column_config.NumberColumn(
@@ -880,6 +897,35 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
             no_modelo = ds.na_fundacao_no_modelo(direcoes, quadro, dados.eixo_vertical)
         except (ArithmeticError, ValueError, KeyError):
             direcoes = None
+    apoios_do_modelo = am.do_projeto(projeto)
+    if quadro.pilares and apoios_do_modelo.casos:
+        # Com os apoios da macro, a direção da seção de cada pilar sai das reações: a cortante na
+        # base, girada, tem de ser a reação horizontal no pé dele.
+        try:
+            pela_macro = rb.montar(
+                dados,
+                apoios_do_modelo,
+                plano=plano,
+                geometria=geometria_quadro,
+                leituras=leituras,
+                direcoes=direcoes,
+            ).direcoes
+            direcoes = ds.com_as_direcoes(direcoes, pela_macro)
+            no_modelo = ds.na_fundacao_no_modelo(direcoes, quadro, dados.eixo_vertical)
+        except (ArithmeticError, ValueError, KeyError):
+            pass
+    if quadro.pilares:
+        with st.expander(
+            "Como o programa leu a base de cada pilar",
+            expanded=bool(quadro.pendentes or quadro.de_ponta_cabeca),
+            icon=":material/vertical_align_bottom:",
+        ):
+            st.dataframe(
+                pd.DataFrame(qf.linhas_das_bases(quadro), columns=list(qf.COLUNAS_DAS_BASES)),
+                hide_index=True,
+                width="stretch",
+            )
+            st.caption(qf.NOTA_DAS_BASES, help=AJUDA["res_bases"])
     if quadro.pilares and any(p.cargas for p in quadro.pilares):
         numeros = qf.resumo_numerico(quadro)
         colunas = st.columns(3)
@@ -973,7 +1019,6 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
             rotulo="Registrar o quadro das fundações no projeto ativo",
             identificar_peca=False,
         )
-    apoios_do_modelo = am.do_projeto(projeto)
     if apoios_do_modelo.casos:
         st.subheader("Reação em cada apoio (pela macro)", help=AJUDA["sec_apoios"])
         quadro_apoios = am.montar_quadro(

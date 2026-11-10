@@ -285,9 +285,9 @@ def _direcoes_do_pilar(
                 return _com(
                     vazio,
                     sentido=(
-                        "a ordem dos elementos do pilar no arquivo não confere com o peso "
-                        "próprio (o PP aponta para cima ao longo dele): escolha a base na tabela "
-                        "das barras"
+                        "a base escolhida na tabela das barras é a ponta de cima (no PP a "
+                        "compressão cresce para a outra ponta): volte a Base (pilar) para "
+                        "Automática"
                     ),
                 )
     # A linha da direção 1.
@@ -409,21 +409,36 @@ def direcoes_dos_pilares(
             pilares[pilar.pilar] = DirecoesDaSecao(
                 pilar.pilar, corpo.nome, (0.0, 0.0, 1.0), None, None, 1.0, "", f"erro: {erro}"
             )
-    avisos: list[str] = []
+    return DirecoesDosPilares(pilares, _avisos(pilares))
+
+
+def _avisos(pilares: Mapping[str, DirecoesDaSecao]) -> tuple[str, ...]:
     sem = [d for d in pilares.values() if not d.sabida]
-    if pilares and sem:
-        motivos: dict[str, list[str]] = {}
-        for d in sem:
-            motivos.setdefault(d.sentido, []).append(d.viga)
-        partes = [
-            f"{', '.join(nomes[:3])}{'…' if len(nomes) > 3 else ''}: {motivo}"
-            for motivo, nomes in motivos.items()
-        ]
-        avisos.append(
-            f"Reação horizontal sem direção em {len(sem)} de {len(pilares)} pilar(es) — V₁ e V₂ "
-            "ficam no rótulo. " + " · ".join(partes[:3]) + "."
-        )
-    return DirecoesDosPilares(pilares, tuple(avisos))
+    if not pilares or not sem:
+        return ()
+    motivos: dict[str, list[str]] = {}
+    for d in sem:
+        motivos.setdefault(d.sentido, []).append(d.viga)
+    partes = [
+        f"{', '.join(nomes[:3])}{'…' if len(nomes) > 3 else ''}: {motivo}"
+        for motivo, nomes in motivos.items()
+    ]
+    return (
+        f"Reação horizontal sem direção em {len(sem)} de {len(pilares)} pilar(es) — V₁ e V₂ "
+        "ficam no rótulo. " + " · ".join(partes[:3]) + ".",
+    )
+
+
+def com_as_direcoes(
+    direcoes: DirecoesDosPilares | None, novas: Mapping[str, DirecoesDaSecao]
+) -> DirecoesDosPilares:
+    """As direções com as ``novas`` por cima (as que as reações da macro deram): só troca a do
+    pilar que ainda não tinha a direção sabida. Os avisos são refeitos."""
+    pilares = dict(direcoes.pilares) if direcoes is not None else {}
+    for pilar, d in novas.items():
+        if d.sabida and not (pilar in pilares and pilares[pilar].sabida):
+            pilares[pilar] = d
+    return DirecoesDosPilares(pilares, _avisos(pilares))
 
 
 def eixos_horizontais(eixo_vertical: str) -> tuple[str, str]:
