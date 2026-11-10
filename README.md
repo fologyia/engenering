@@ -148,6 +148,8 @@ computador.
 
 ### Central de relatórios
 
+- **juntar o projeto num documento**: o quadro das etapas (o que cada página registrou e o que
+  falta) e o botão que deixa um de cada cálculo, na ordem do projeto, tirando os repetidos;
 - **memorial de cálculo como molde**: os cálculos registrados entram completos
   (entradas, equações, resultados, figuras, premissas e conclusão) e todo campo
   que o programa não conhece sai como `[a preencher]`, localizável com Ctrl+F
@@ -259,6 +261,9 @@ na página inicial e nas páginas de cada etapa com o que o projeto ativo já te
 
 ### Vigas e eixos
 
+- **desenhada numa prancheta** como no Equilíbrio de uma peça (apoios, rótulas e cargas com clique e
+  arraste, painel do item, medidas editáveis, Ctrl+Z), com a seção e o material nos campos de cima,
+  a conta refeita a cada mudança e as reações no próprio desenho; o modo texto continua;
 - barra reta com apoios de rolete, pino, engaste, engaste deslizante e trava axial;
 - rótulas internas (vigas Gerber) e vãos contínuos isostáticos ou hiperestáticos;
 - cargas pontuais, distribuídas uniformes e trapezoidais, momentos concentrados,

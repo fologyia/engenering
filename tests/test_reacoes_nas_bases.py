@@ -224,10 +224,97 @@ def test_excel_para_o_engenheiro_civil():
     assert any("não devem ser combinadas nem majoradas" in x for x in leia)
     assert any(x.startswith("OK — W90") for x in leia)
     folha = livro["Reações por pé"]
-    cabecalho = [c.value for c in folha[1]]
-    assert cabecalho == rb.colunas(r) and folha.max_row == 1 + 4 * len(t.CASOS)
-    assert folha.auto_filter.ref and folha.freeze_panes == "A2"
+    # A linha 1 separa a ação na fundação da reação do apoio; a 2 é o cabeçalho.
+    assert folha["C1"].value == rb.GRUPO_ACAO and folha["L1"].value == rb.GRUPO_REACAO
+    cabecalho = [c.value for c in folha[2]]
+    assert cabecalho == rb.colunas_do_excel(r) and folha.max_row == 2 + 4 * len(t.CASOS)
+    assert cabecalho[:11] == rb.colunas(r)[:11] and cabecalho[11:17] == rb.colunas_da_reacao(r)[2:8]
+    assert folha.auto_filter.ref.startswith("A2:") and folha.freeze_panes == "C3"
+    # A reação é a ação com o sinal trocado, na mesma linha.
+    for linha in folha.iter_rows(min_row=3, values_only=True):
+        assert linha[11:17] == pytest.approx([-v for v in linha[2:8]], abs=1e-9)
+    assert any(x.startswith("Ação = ") for x in leia) and any(
+        x.startswith("Reação = ") for x in leia
+    )
     assert rb.nome_do_arquivo("teste01 / Rev. 0") == "reacoes_nas_bases_teste01___Rev__0.xlsx"
+
+
+def test_reacao_e_a_acao_com_o_sinal_trocado():
+    dados, apoios, geometria = montar()
+    r = rb.montar(dados, apoios, plano=t.plano(), geometria=geometria)
+    for eixos in rb.EIXOS:
+        acao = rb.linhas(r, t.plano(), eixos)
+        reacao = rb.linhas_da_reacao(r, t.plano(), eixos)
+        assert [l[:2] for l in reacao] == [l[:2] for l in acao]
+        for a, re_ in zip(acao, reacao, strict=True):
+            assert re_[2:8] == pytest.approx([-v for v in a[2:8]], abs=1e-12)
+            assert re_[8:] == a[11:]
+    pp = dict(zip(rb.colunas_da_reacao(r), rb.linhas_da_reacao(r, t.plano())[0], strict=True))
+    assert pp["Caso"] == "PP" and pp["Rz (kN)"] > 0  # o apoio empurra a estrutura para cima
+
+
+def test_excel_com_os_desenhos():
+    from core import desenho_eixos_fundacao as de
+    from core.desenho_reacoes import figura_das_reacoes
+
+    dados, apoios, geometria = montar()
+    r = rb.montar(dados, apoios, plano=t.plano(), geometria=geometria)
+    eixos = de.figura_dos_eixos("Y")
+    projeto = de.figura_do_projeto(geometria, r)
+    assert eixos.png and projeto is not None and projeto.png
+    assert "4 pés (A1, A2, A3, A4)" in projeto.legenda
+    figuras = [
+        ("Sistema de coordenadas", de.png_para_o_excel(eixos)),
+        ("O projeto e os pés", de.png_para_o_excel(projeto)),
+        ("Ação — PP", de.png_para_o_excel(figura_das_reacoes(r, "PP"))),
+    ]
+    livro = load_workbook(io.BytesIO(rb.xlsx(r, t.plano(), figuras=figuras)))
+    assert livro.sheetnames[-1] == "Desenhos"
+    desenhos = livro["Desenhos"]
+    assert len(desenhos._images) == 3
+    assert desenhos["A1"].value == "Sistema de coordenadas"
+    # sem esqueleto não há desenho do projeto
+    assert de.figura_do_projeto(ld.GeometriaDoModelo(), r) is None
+
+
+def test_sistema_de_coordenadas_do_modelo_com_z_para_cima():
+    from core import desenho_eixos_fundacao as de
+
+    figura = de.figura_dos_eixos("Z", rb.EIXOS_MODELO)
+    assert figura.png and "da fundação" in figura.legenda  # com o Z para cima, são os mesmos
+    assert "do SolidWorks" in de.figura_dos_eixos("Y", rb.EIXOS_MODELO).legenda
+
+
+def test_modelo_3d_desenha_as_mesmas_reacoes():
+    """O Modelo em 3D usa as reações da página: a vertical e a horizontal de cada pé, a reação
+    do apoio na estrutura (a ação com o sinal trocado), no pé de cada pilar."""
+    from core import cena_do_modelo as cm
+
+    dados, apoios, geometria = montar()
+    r = rb.montar(dados, apoios, plano=t.plano(), geometria=geometria)
+    nomes = cm.Nomes.do_projeto(geometria, dados)
+    a = cm.apoios_e_reacoes(
+        geometria, "Y", dados, nomes, "W0", plano=t.plano(), reacoes_nas_bases=r
+    )
+    assert "as mesmas da página Reações nas bases" in a.conferencia
+    assert "W0: a soma dos 4 pés" in a.conferencia
+    verticais = {s.rotulo.split(" · ")[0]: s for s in a.reacoes if s.vetor[:2] == (0.0, 0.0)}
+    horizontais = [s for s in a.reacoes if s.vetor[2] == 0.0]
+    assert set(verticais) == {"A1", "A2", "A3", "A4"} and len(horizontais) == 4
+    for pe in r.pes:
+        acao = rb.nos_eixos(r.acao(pe.rotulo, "W0").forca_kN, "Y", rb.EIXOS_FUNDACAO)
+        seta = verticais[pe.rotulo]
+        assert seta.vetor[2] == pytest.approx(-acao[2])
+        assert seta.ponto == pytest.approx(rb.nos_eixos(pe.ponto, "Y", rb.EIXOS_FUNDACAO))
+        h = next(s for s in horizontais if s.ponto == seta.ponto)
+        assert h.vetor[:2] == pytest.approx((-acao[0], -acao[1]))
+    assert a.soma_vertical_kN == pytest.approx(
+        sum(-rb.nos_eixos(x.forca_kN, "Y", rb.EIXOS_FUNDACAO)[2] for x in r.acoes if x.caso == "W0")
+    )
+    assert [x.tipo for x in a.apoios] == ["engastado"] * 4
+    # caso que não está nas reações: volta ao quadro das fundações
+    b = cm.apoios_e_reacoes(geometria, "Y", dados, nomes, "", reacoes_nas_bases=r)
+    assert not b.reacoes
 
 
 # ------------------------------------------------------------------ pendências
@@ -323,8 +410,12 @@ def test_pagina_com_o_portico_e_o_excel(banco_com_projeto):
     assert any("Nada pendente" in s.value for s in at.success)
     tabela = next(d.value for d in at.dataframe if "De onde veio" in d.value.columns)
     assert len(tabela) == 24 and set(tabela["Pé"]) == {"A1", "A2", "A3", "A4"}
-    botao = at.get("download_button")[0]
-    assert "Excel" in _rotulo(botao)
+    assert any("Excel" in _rotulo(b) for b in at.get("download_button"))
+    assert any("sistema de coordenadas" in _rotulo(b) for b in at.get("download_button"))
+    assert any("desenho do projeto" in _rotulo(b) for b in at.get("download_button"))
+    reacao = next(d.value for d in at.dataframe if "Rz (kN)" in d.value.columns)
+    assert len(reacao) == 24
+    assert reacao["Rz (kN)"].tolist() == pytest.approx((-tabela["Fz (kN)"]).tolist(), abs=1e-9)
     at.radio(key="rb_eixos").set_value(rb.EIXOS_MODELO).run()
     assert not at.exception
     assert any("Eixos do modelo do SolidWorks (Y para cima)" in c.value for c in at.caption)

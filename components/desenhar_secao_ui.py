@@ -12,6 +12,7 @@ from typing import Any
 
 import streamlit as st
 
+from components import volta_da_secao as vs
 from components.assistente_cargas_ui import (
     abrir_caso_preenchido,
     enviar_para_mohr,
@@ -421,6 +422,22 @@ def _uso(analise: sd.Analise, forma: sd.Forma) -> None:
             if erro:
                 st.session_state[AVISO] = erro
             st.rerun()
+        volta = vs.de_onde_veio()
+        if volta is not None:
+            st.button(
+                f"Salvar e voltar ao {volta['rotulo']}",
+                type="primary",
+                icon=":material/keyboard_return:",
+                width="stretch",
+                key="secao_salvar_e_voltar",
+                disabled=not pode_usar,
+                on_click=_salvar_e_voltar,
+                args=(nome, analise),
+                help=(
+                    f"Grava a seção no catálogo com este nome e volta ao {volta['rotulo']}, com a "
+                    "seção já escolhida no bloco que a pediu."
+                ),
+            )
         colunas = st.columns(2)
         livre = forma.familia == sd.FAMILIA_LIVRE
         for indice, (destino, rotulo, icone, so_perfil) in enumerate(DESTINOS):
@@ -732,10 +749,44 @@ def _registro(analise: sd.Analise) -> None:
         )
 
 
+def _salvar_e_voltar(nome: str, analise: sd.Analise) -> None:
+    erro = _salvar(nome, analise)
+    if erro:
+        st.session_state[AVISO] = erro
+        return
+    vs.marcar_volta(nome)
+
+
+def _aviso_de_volta() -> None:
+    """Quem veio de outra página (o Montador) vê para onde a seção vai e como voltar."""
+    volta = vs.de_onde_veio()
+    if volta is None:
+        return
+    with st.container(border=True):
+        colunas = st.columns([4, 1], vertical_alignment="center")
+        colunas[0].info(
+            f"Você veio do **{volta['rotulo']}**. Desenhe a seção, dê um nome e clique em "
+            "**Salvar e voltar** (no quadro Usar esta seção): ela volta já escolhida no bloco que "
+            "a pediu.",
+            icon=":material/keyboard_return:",
+        )
+        colunas[1].button(
+            "Voltar sem seção",
+            icon=":material/undo:",
+            key="secao_voltar_sem",
+            on_click=vs.marcar_volta,
+            args=(None,),
+            width="stretch",
+            help=f"Volta ao {volta['rotulo']} sem trazer seção nenhuma.",
+        )
+
+
 def tela() -> None:
     _iniciar()
+    vs.trocar_se_marcado()
     if st.session_state.pop(IR_PARA, False):
         st.switch_page("app_pages/assistente_cargas.py")
+    _aviso_de_volta()
     with secao_protegida("Modelos"):
         _inicio_do_desenho()
     with st.container():

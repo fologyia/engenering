@@ -16,6 +16,24 @@ Este documento registra as convenções, equações e limites do módulo
 - unidades internas: N, mm, MPa e N·mm. A interface e a linguagem de texto
   usam m, kN, kN·m, kN/m, mm, GPa e MPa.
 
+## A prancheta (`components/prancheta_viga`, `core/viga_desenhada.py`)
+
+O modelo se **desenha**, como no Equilíbrio de uma peça: a barra de 0 a L, os apoios (Pino, Rolete,
+Engaste, Deslizante = engaste deslizante, Trava axial, Mola com kv e kr), as rótulas e as cargas
+(Força, Momento, Distribuída trapezoidal, Axial com excentricidade, Axial distribuída e Torque), cada
+uma com o seu caso para as combinações. Clique para pôr, arraste para mover, o painel do item para
+os valores, as medidas e os valores clicáveis no desenho (editor de números), Ctrl+Z/Ctrl+Y, Delete,
+grade com ímã nos pontos que já existem, a ponta da barra arrastável e o L editável. Mudar uma
+medida empurra tudo o que está depois dela.
+
+O desenho vira as linhas do modelo em texto (`linhas_do_desenho`), com a seção, o material e o peso
+próprio dos campos de cima — o mesmo interpretador e as mesmas validações do modo texto —, e a conta
+refaz a cada mudança; as reações voltam ao desenho (`marcas`) e os diagramas, a tensão, o registro
+e o repasse continuam embaixo como antes. **Modelo pronto** leva um exemplo ao desenho
+(`desenho_do_modelo`), **Trazer do texto** lê o modo texto e **Começar do zero** deixa só a barra.
+O modo **Texto (script)** continua, com o botão Calcular diagramas. O antigo modo Formulário (tabelas
+de apoios e cargas) saiu: os campos de seção e material ficaram no desenho.
+
 ## Modelo numérico
 
 A barra é resolvida por **rigidez direta**. São criados nós em toda

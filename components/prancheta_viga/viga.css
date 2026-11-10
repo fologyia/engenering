@@ -1,0 +1,41 @@
+/* A barra: o resto vem da prancheta do equilíbrio (equilibrio.css). */
+.pv svg {
+  height: 430px;
+}
+.mola {
+  fill: none;
+  stroke: var(--st-text-color);
+  stroke-width: 1.5;
+}
+.rotula {
+  fill: var(--st-background-color);
+  stroke: var(--st-text-color);
+  stroke-width: 2;
+}
+.rotula.sel {
+  stroke: #d97706;
+  stroke-width: 3;
+}
+.axial {
+  stroke: #7c3aed;
+  stroke-width: 2;
+  fill: none;
+}
+.axial-p {
+  fill: #7c3aed;
+}
+.axial.sel {
+  stroke: #d97706;
+  stroke-width: 3;
+}
+.axial.sel-p {
+  fill: #d97706;
+}
+.axial-t {
+  fill: #7c3aed;
+  font-weight: 600;
+}
+.caso-t {
+  font-size: 11px;
+  opacity: 0.7;
+}

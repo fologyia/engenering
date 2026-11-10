@@ -23,6 +23,7 @@ from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import plano_de_cargas as pc
+from core import reacoes_nas_bases as rb
 from core import vento_estrutura_aberta as va
 from core import vento_por_barras as vpb
 
@@ -201,7 +202,13 @@ def mostrar_modelo_3d(projeto: Any) -> None:
             cargas = cm.cargas_do_caso(plano, str(caso_das_cargas), geometria, eixo, nomes)
         if reacoes:
             apoios = cm.apoios_e_reacoes(
-                geometria, eixo, dados, nomes, caso_das_reacoes, plano=plano
+                geometria,
+                eixo,
+                dados,
+                nomes,
+                caso_das_reacoes,
+                plano=plano,
+                reacoes_nas_bases=rb.do_projeto(projeto) if caso_das_reacoes else None,
             )
             avisos.extend(apoios.avisos)
         titulo = "Modelo em 3D"

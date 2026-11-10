@@ -33,10 +33,15 @@ profundidade e enquadramento. A mesma cena sai em SVG (páginas) e em PNG (memor
   item" no SolidWorks). Por área, por nó ou por texto livre ("Pórtico P1…") não têm lugar certo:
   ficam listadas como não localizadas. Direção: X e Y com o sinal do valor; "Z (vertical)" positivo
   para baixo.
-- **Reações** (Esforços do modelo › quadro das fundações): o N na base de cada barra marcada como
-  Pilar, como seta para cima no pé dela (compressão positiva), e a **horizontal H** como seta quando
-  o programa sabe para que lado o Simulation virou a seção do pilar (abaixo); sem isso, V₁ e V₂ ficam
-  no rótulo (H = √(V₁² + V₂²)) e o aviso diz por quê.
+- **Reações**: as **mesmas da página Reações nas bases** (`rb.do_projeto`): a reação de cada
+  apoio lida pela macro (`-apoios.csv`, as três forças e os momentos) ou, sem ela, a base do pilar
+  levada aos eixos do modelo pela direção da seção. Em cada pé, a seta vertical (N, com o rótulo do
+  pé e o momento) e a horizontal H, no sentido em que o apoio empurra a estrutura; a conferência
+  diz de onde veio e se a soma dos pés fecha com a reação total do caso. Antes (até 10/11) o 3D
+  usava só o quadro das fundações e a horizontal ficava no rótulo quando a direção da seção não
+  saía do caso — por isso as setas não acompanhavam o modelo tratado. Sem as reações nas bases
+  (sem caso importado), volta ao quadro das fundações: o N na base de cada barra marcada como
+  Pilar e a horizontal quando a direção da seção é sabida.
 - **Apoios**: no pé de cada pilar do quadro — engastado quando a base tem momento (> 0,05 kN·m) num
   caso importado, articulado quando nunca tem. Os pés no chão (até 20 cm do ponto mais baixo) que
   não estão no quadro saem sem o tipo, com aviso. Pilar do quadro com o pé longe do chão vira aviso

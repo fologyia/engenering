@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw
 from core import desenho_girado as dg
 from core import reacoes_nas_bases as rb
 from core.beam_charts import ImagemDiagrama, _fonte, figura_final
+from core.desenho_eixos_fundacao import simbolo_saindo
 
 ESC = dg.ESC
 _COMPRESSAO = "#93c5fd"
@@ -134,6 +135,9 @@ def figura_das_reacoes(r: rb.ReacoesNasBases, caso: str) -> ImagemDiagrama | Non
     # ------------------------------------------------------------------ eixos da fundação
     origem = (40 * ESC, 560 * ESC)
     dg.eixos_da_peca(dr, origem, tela, ("X", "Y"))
+    # Z saindo da tela (para cima): ⊙
+    simbolo_saindo(dr, origem, 7 * ESC, dg.COR_COTA)
+    dg.rotulo(dr, origem, (1.0, -1.0), 10 * ESC, "Z (sai da tela)", dg.COR_COTA, fonte)
     # ------------------------------------------------------------------ legenda
     itens: list[tuple[str, str, str]] = [
         ("ponto", _COMPRESSAO_BORDA, "N de compressão (a área do círculo cresce com N)"),
@@ -144,12 +148,14 @@ def figura_das_reacoes(r: rb.ReacoesNasBases, caso: str) -> ImagemDiagrama | Non
         ("", dg.COR_TEXTO, f"Caso: {caso}"),
         ("", dg.COR_COTA, "Valores característicos, sem combinar:"),
         ("", dg.COR_COTA, "N e H em kN; M (horizontal) em kN·m."),
-        ("", dg.COR_COTA, "Ação da estrutura na fundação."),
+        ("", dg.COR_COTA, "AÇÃO da estrutura na fundação (a reação"),
+        ("", dg.COR_COTA, "do apoio no SolidWorks é o contrário)."),
+        ("", dg.COR_COTA, "No canto, Z sai da tela: para cima."),
     ]
     if not vetores:
         itens.append(("", dg.COR_COTA, "Este caso não tem valor em nenhum pé."))
     dg.legenda(dr, 680 * ESC, 110 * ESC, itens)
-    titulo = f"Reações nas bases — {caso}"
+    titulo = f"Ação da estrutura na fundação — {caso}"
     dr.text((18 * ESC, 14 * ESC), titulo, fill=dg.COR_TEXTO, font=_fonte(16 * ESC))
     dr.text(
         (18 * ESC, 38 * ESC),
@@ -158,5 +164,8 @@ def figura_das_reacoes(r: rb.ReacoesNasBases, caso: str) -> ImagemDiagrama | Non
         fill=dg.COR_COTA,
         font=_fonte(11 * ESC),
     )
-    legenda = f"Planta dos pés com as reações do caso {caso} (características, sem combinar)."
+    legenda = (
+        f"Planta dos pés com a ação da estrutura na fundação no caso {caso} (característica, sem "
+        "combinar; a reação do apoio é a mesma com o sinal trocado)."
+    )
     return figura_final(imagem, titulo, legenda)

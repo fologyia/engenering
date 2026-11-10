@@ -1,0 +1,44 @@
+<div class="pe pv">
+  <div class="barra">
+    <div class="bloco">
+      <button type="button" data-f="mover" title="Selecionar e mover (V)">Selecionar</button>
+    </div>
+    <div class="grupo"><span class="rot">Apoios</span>
+    <div class="bloco">
+      <button type="button" data-f="Pino" title="Segura na vertical e na horizontal e deixa girar">Pino</button>
+      <button type="button" data-f="Rolete" title="Segura só na vertical e deixa girar">Rolete</button>
+      <button type="button" data-f="Engaste" title="Segura tudo, inclusive o giro">Engaste</button>
+      <button type="button" data-f="Deslizante" title="Engaste deslizante: trava o giro e a horizontal, deixa correr na vertical">Deslizante</button>
+      <button type="button" data-f="Trava axial" title="Segura só na direção da barra (x)">Trava axial</button>
+      <button type="button" data-f="Mola" title="Apoio elástico: rigidez vertical kv e de giro kr">Mola</button>
+    </div></div>
+    <div class="bloco">
+      <button type="button" data-f="Rótula" title="Articulação interna: o momento é zero ali">Rótula</button>
+    </div>
+    <div class="grupo"><span class="rot">Cargas</span>
+    <div class="bloco">
+      <button type="button" data-f="Força" title="Clique na barra para uma força para baixo, ou arraste para cima ou para baixo">Força</button>
+      <button type="button" data-f="Momento" title="Clique no ponto do momento">Momento</button>
+      <button type="button" data-f="Distribuída" title="Clique na barra para carregar ela inteira, ou arraste do início ao fim">Distribuída</button>
+      <button type="button" data-f="Axial" title="Força na direção da barra">Axial</button>
+      <button type="button" data-f="Axial distribuída" title="Força por metro na direção da barra: arraste do início ao fim">Axial dist.</button>
+      <button type="button" data-f="Torque" title="Momento que torce a barra em volta do eixo dela">Torque</button>
+    </div></div>
+    <span class="vao"></span>
+    <label class="grade" title="As medidas pulam de quanto em quanto. O ímã nos pontos que já existem vale em qualquer grade.">
+      Grade <select data-c="grade"></select>
+    </label>
+    <div class="bloco">
+      <button type="button" data-a="desfazer" title="Desfazer (Ctrl+Z)">↶</button>
+      <button type="button" data-a="refazer" title="Refazer (Ctrl+Y)">↷</button>
+      <button type="button" data-a="maisLonge" title="Afastar (Ctrl + rodinha)">−</button>
+      <button type="button" data-a="maisPerto" title="Aproximar (Ctrl + rodinha)">+</button>
+      <button type="button" data-a="ajustar" title="Mostrar a barra inteira">Ver tudo</button>
+    </div>
+  </div>
+  <div class="painel" data-painel></div>
+  <div class="area">
+    <svg tabindex="0" aria-label="Prancheta da barra"></svg>
+  </div>
+  <div class="rodape"><span data-i="xy"></span><span data-i="dica"></span></div>
+</div>

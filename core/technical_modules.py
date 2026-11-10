@@ -129,6 +129,21 @@ def _registrar_padrao() -> None:
             aliases=("Pilares do modelo", "Travamentos dos pilares"),
         ),
         ModuloTecnico(
+            id="reacoes_nas_bases",
+            titulo="Reações nas bases",
+            versao="1.0",
+            pagina="app_pages/reacoes_nas_bases.py",
+            grupo_navegacao="Modelo SolidWorks",
+            ordem=14,
+            icone=":material/foundation:",
+            descricao=(
+                "A força e o momento de cada pé, caso a caso e sem combinar, para quem projeta a "
+                "fundação: a ação na fundação e a reação no apoio, o sistema de coordenadas e o "
+                "Excel."
+            ),
+            aliases=("Reações das bases", "Cargas para a fundação"),
+        ),
+        ModuloTecnico(
             id="sensores_do_modelo",
             titulo="Sensores do modelo",
             versao="1.0",

@@ -115,6 +115,21 @@ def banco_isolado(tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture(autouse=True)
+def _catalogos_do_usuario_isolados(tmp_path, monkeypatch):
+    """Nenhum teste grava no catálogo de perfis ou de materiais de quem roda a suíte.
+
+    ``data/perfis_usuario.json`` e ``data/materiais_usuario.json`` são os cadastros do usuário
+    (fora do git). Um teste que salva uma seção (Desenhar seção, Salvar e voltar) sem isolar o
+    catálogo deixaria a seção de teste nas listas do programa de verdade — aconteceu em 10/11
+    num script de conferência. Os testes que querem um catálogo próprio trocam por cima.
+    """
+    from core import material_catalog, section_catalog
+
+    monkeypatch.setattr(section_catalog, "ARQUIVO_USUARIO", tmp_path / "perfis_usuario.json")
+    monkeypatch.setattr(material_catalog, "ARQUIVO_USUARIO", tmp_path / "materiais_usuario.json")
+
+
+@pytest.fixture(autouse=True)
 def _espelho_remoto_desligado(monkeypatch):
     """Nenhum teste fala com o GitHub de verdade nem herda a configuração de quem roda a suíte.
 

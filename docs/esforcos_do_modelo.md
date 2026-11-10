@@ -404,10 +404,25 @@ fundação — **característicos, sem combinar nem majorar** (Anglo 5.9): o eng
   contam a grade no plano nem o eixo forte; os do arquivo de forças só se algum pé do caso saiu da
   base do pilar). Com pendência, o Excel sai **PRELIMINAR** e a página lista o que corrigir.
 * **Eixos**: da fundação (X e Y na planta, Z para cima: Y = −Z do SolidWorks) ou os do SolidWorks.
-* **Excel**: Leia-me (nota da Anglo, convenção, conferência, avisos, pendências), Casos (natureza,
-  γ e ψ da NBR 8800 — ψ só nas variáveis), Locação (coordenadas e engastado/articulado), Reações por
-  pé (pé × caso, com filtro: Fx…Mz, N, H, M horizontal, descrição, pilar e de onde veio) e Resumo
-  por pé (maior compressão, arrancamento, H e M, com o caso).
+* **Ação × reação**: a tabela principal é a **ação da estrutura na fundação** (a carga para
+  projetar a fundação, Fz < 0 = compressão); a **reação do apoio na estrutura** (o que o SolidWorks
+  mostra) é a mesma com o sinal trocado (Rx…MRz). Na página, uma aba para cada; no Excel, lado a
+  lado na aba Reações por pé, com uma linha de título em cima de cada grupo
+  (`GRUPO_ACAO`, `GRUPO_REACAO`).
+* **Desenhos** (`core/desenho_eixos_fundacao.py`): o **sistema de coordenadas** (os eixos do
+  SolidWorks e os da fundação no mesmo isométrico, a correspondência X = X, Y = −Z, Z = Y, a planta
+  com o Z saindo da tela ⊙ e a frente com o Y entrando ⊗, e o pé de um pilar com a ação e a
+  reação, My pela mão direita) e **o projeto e os pés** (o modelo em 3D com A1, A2… e o triedro da
+  fundação). A planta de cada caso (`core/desenho_reacoes.py`) leva o ⊙ do Z e o título "Ação da
+  estrutura na fundação". Na vista 2D, ⊙ = eixo saindo da tela (ponta da flecha) e ⊗ = entrando
+  (cauda da flecha).
+* **Excel**: Leia-me (nota da Anglo, convenção, ação e reação, conferência, avisos, pendências),
+  Casos (natureza, γ e ψ da NBR 8800 — ψ só nas variáveis), Locação (coordenadas e
+  engastado/articulado), Reações por pé (pé × caso, com filtro: a ação Fx…Mz, N, H, M horizontal;
+  a reação Rx…MRz; descrição, pilar e de onde veio), Resumo por pé (maior compressão, arrancamento,
+  H e M, com o caso) e Desenhos (o sistema de coordenadas, o projeto e a planta de cada caso).
+* **Registro** (`registro_das_reacoes`, módulo `reacoes_nas_bases`): a locação, a ação, a reação e
+  o resumo em tabelas, o sistema de coordenadas e o projeto em 3D — entra no memorial.
 
 ## Placas de base dos pilares (`core/placa_base_pilares.py`)
 

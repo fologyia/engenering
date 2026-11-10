@@ -50,6 +50,15 @@ botões daqui fazem o mesmo caminho. O Perfil pela norma continua pelo catálogo
 medidas de alma e mesa. Seção sem eixos principais em x e y dá aviso: M/W não mostra a flexão no outro
 eixo, e a conta certa está em Tensões na seção.
 
+### Ir desenhar e voltar com a seção (`components/volta_da_secao.py`)
+
+O bloco **Seção desenhada** do Montador de fórmulas e o **Perfil do catálogo** de Vigas e eixos têm
+o botão **Desenhar uma seção nova**: grava de onde veio (`VOLTA`) e abre esta página, que mostra o
+aviso "Você veio do …" e o botão **Salvar e voltar** (no quadro Usar esta seção). Ele salva no
+catálogo e volta com a seção já escolhida no bloco ou no perfil (`CHEGOU`, lida uma vez só por
+`chegada`). "Voltar sem seção" volta sem mudar nada. O `st.switch_page` não roda em callback: os
+botões marcam e a troca de página acontece na rodada.
+
 ## Tensões na seção
 
 **Normal.** Flexão oblíqua completa, com Ixy. O mapa mostra a linha neutra.

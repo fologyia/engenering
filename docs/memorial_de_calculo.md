@@ -55,6 +55,21 @@ Os demais módulos sem tabela continuam com o capítulo de sempre (`core/memoria
 * Análises de mesmo título ganham "(cálculo 1 de 2)", e as de outros módulos (estática, fadiga, vigas…)
   continuam com o capítulo de sempre.
 
+## Juntar o projeto num documento (`core/memorial_do_projeto.py`)
+
+Na Central de relatórios, o quadro **Juntar o projeto num documento** mostra, etapa por etapa
+(cargas, vento, contraventamento, barras, sensores, pilares, vigas, escadas, ligações, placas de
+base, fundações, modelo em 3D), o que cada página registrou e o que falta (num projeto com o modelo
+do SolidWorks, as etapas do modelo sem registro aparecem com o link da página). O botão **Juntar**:
+
+* deixa **um de cada** cálculo: nas páginas do modelo inteiro (Esforços do modelo — barras, placas,
+  quadro das fundações —, Colunas do modelo, Reações nas bases, Cargas do esqueleto, Sensores), o
+  registro novo do mesmo tipo substitui o anterior; nas outras, só a cópia idêntica (mesmo título,
+  peça, entradas e resultados) — duas colunas diferentes com o mesmo título continuam as duas;
+* marca os repetidos como **Superado** (ficam no histórico, saem do memorial);
+* grava a composição do memorial na **ordem do projeto**, e o Emitir agora já sai assim. Sem juntar,
+  o padrão também já é um de cada, na ordem do projeto.
+
 ## Para incluir em outro documento
 
 O perfil **Para incluir em outro documento** (Central de relatórios) gera só os capítulos

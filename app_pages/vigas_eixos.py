@@ -4,7 +4,9 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components import volta_da_secao as vs
 from components.figuras import mostrar_figura
+from components.prancheta_viga_ui import prancheta_da_viga
 from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
@@ -16,6 +18,7 @@ from core import beam_analysis as vigas
 from core import beam_script as escrita
 from core import materials as materiais_base
 from core import section_catalog as catalogo_perfis
+from core import viga_desenhada as vd
 from core.desenho_da_viga import figura_da_viga
 from core.materials_registry import avaliar_material
 from core.project_criteria import normalizar_criterios_projeto
@@ -121,13 +124,19 @@ cabecalho_pagina(
 )
 st.caption(
     "Barra reta com qualquer combinação de apoios, rótulas internas e cargas — "
-    "inclusive isostática e hiperestática. O modelo é descrito por **texto e "
-    "números** (ou por formulário) e resolvido por rigidez direta com elementos "
-    "de Euler-Bernoulli; dentro de cada trecho, V(x), M(x) e a linha elástica "
-    "saem de integração analítica, não de interpolação."
+    "inclusive isostática e hiperestática. O modelo é **desenhado** na prancheta (ou "
+    "escrito em texto) e resolvido por rigidez direta com elementos de Euler-Bernoulli; "
+    "dentro de cada trecho, V(x), M(x) e a linha elástica saem de integração analítica, "
+    "não de interpolação."
 )
 
 st.session_state.setdefault(CHAVE_SCRIPT, escrita.EXEMPLOS["Viga biapoiada com carga distribuída"])
+# A seção que voltou de Desenhar seção entra no perfil do catálogo, antes dos campos.
+_secao_nova = vs.chegada("vigas")
+if _secao_nova is not None:
+    st.session_state["vigas_form_tipo_secao"] = "Perfil do catálogo"
+    st.session_state["vigas_form_perfil"] = str(_secao_nova["nome"])
+    st.session_state["vigas_modo"] = "Desenho"
 
 projeto_ativo = obter_projeto_ativo()
 materiais_projeto = list((projeto_ativo or {}).get("materiais_projeto", []))
@@ -137,18 +146,497 @@ materiais_projeto = list((projeto_ativo or {}).get("materiais_projeto", []))
 # 1. Entrada do modelo
 # ---------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# Seção e material (os mesmos campos no desenho de sempre)
+# ---------------------------------------------------------------------------
+def _secao_e_material() -> tuple[str, str, bool]:
+    """A seção transversal, o material e o peso próprio: as linhas do modelo em texto."""
+    st.markdown("**Seção transversal**")
+    tipo_secao = st.segmented_control(
+        "Tipo de seção",
+        [
+            "Retangular",
+            "Circular maciça",
+            "Tubo circular",
+            "Tubo retangular",
+            "Perfil I soldado",
+            "Perfil do catálogo",
+        ],
+        default="Retangular",
+        required=True,
+        width="stretch",
+        key="vigas_form_tipo_secao",
+        persist_state="session",
+    )
+    erro_secao = None
+    num = escrita.formatar_numero
+    # Cada ramo produz a seção (para a prévia) e a linha de script
+    # equivalente. A linha é o comando paramétrico — `secao retangular
+    # 100 200` — e não um `secao manual` com as propriedades já
+    # calculadas: assim o texto fica legível, o interpretador recalcula
+    # exatamente as mesmas propriedades e o nome da seção chega intacto
+    # ao registro e ao memorial.
+    try:
+        if tipo_secao == "Retangular":
+            colunas = st.columns(2)
+            base = colunas[0].number_input(
+                "Base b (mm)",
+                min_value=0.1,
+                value=100.0,
+                step=5.0,
+                key="vigas_form_ret_b",
+                persist_state="session",
+            )
+            altura = colunas[1].number_input(
+                "Altura h (mm)",
+                min_value=0.1,
+                value=200.0,
+                step=5.0,
+                key="vigas_form_ret_h",
+                persist_state="session",
+            )
+            secao = vigas.secao_retangular(base, altura)
+            linha_secao = f"secao retangular {num(base)} {num(altura)}"
+        elif tipo_secao == "Circular maciça":
+            diametro = st.number_input(
+                "Diâmetro d (mm)",
+                min_value=0.1,
+                value=60.0,
+                step=2.0,
+                key="vigas_form_circ_d",
+                persist_state="session",
+            )
+            secao = vigas.secao_circular_macica(diametro)
+            linha_secao = f"secao circular {num(diametro)}"
+        elif tipo_secao == "Tubo circular":
+            colunas = st.columns(2)
+            de = colunas[0].number_input(
+                "Diâmetro externo (mm)",
+                min_value=0.1,
+                value=60.3,
+                step=1.0,
+                key="vigas_form_tubo_de",
+                persist_state="session",
+            )
+            di = colunas[1].number_input(
+                "Diâmetro interno (mm)",
+                min_value=0.0,
+                value=54.3,
+                step=1.0,
+                key="vigas_form_tubo_di",
+                persist_state="session",
+            )
+            secao = vigas.secao_tubo_circular(de, di)
+            linha_secao = f"secao tubo {num(de)} {num(di)}"
+        elif tipo_secao == "Tubo retangular":
+            colunas = st.columns(3)
+            largura = colunas[0].number_input(
+                "Largura (mm)",
+                min_value=0.1,
+                value=100.0,
+                step=5.0,
+                key="vigas_form_tr_b",
+                persist_state="session",
+            )
+            altura = colunas[1].number_input(
+                "Altura (mm)",
+                min_value=0.1,
+                value=200.0,
+                step=5.0,
+                key="vigas_form_tr_h",
+                persist_state="session",
+            )
+            espessura = colunas[2].number_input(
+                "Espessura (mm)",
+                min_value=0.1,
+                value=6.0,
+                step=0.5,
+                key="vigas_form_tr_t",
+                persist_state="session",
+            )
+            secao = vigas.secao_tubo_retangular(largura, altura, espessura)
+            linha_secao = f"secao tubo_retangular {num(largura)} {num(altura)} {num(espessura)}"
+        elif tipo_secao == "Perfil I soldado":
+            colunas = st.columns(4)
+            altura = colunas[0].number_input(
+                "Altura h (mm)",
+                min_value=1.0,
+                value=300.0,
+                step=10.0,
+                key="vigas_form_i_h",
+                persist_state="session",
+            )
+            mesa = colunas[1].number_input(
+                "Largura da mesa (mm)",
+                min_value=1.0,
+                value=150.0,
+                step=5.0,
+                key="vigas_form_i_bf",
+                persist_state="session",
+            )
+            alma = colunas[2].number_input(
+                "Espessura da alma (mm)",
+                min_value=0.1,
+                value=8.0,
+                step=0.5,
+                key="vigas_form_i_tw",
+                persist_state="session",
+            )
+            espessura_mesa = colunas[3].number_input(
+                "Espessura da mesa (mm)",
+                min_value=0.1,
+                value=12.0,
+                step=0.5,
+                key="vigas_form_i_tf",
+                persist_state="session",
+            )
+            secao = vigas.secao_i_simetrica(altura, mesa, alma, espessura_mesa)
+            linha_secao = (
+                f"secao perfil_i {num(altura)} {num(mesa)} {num(alma)} {num(espessura_mesa)}"
+            )
+        else:
+            colunas = st.columns([3, 1])
+            nome_perfil = colunas[0].selectbox(
+                "Perfil do catálogo",
+                list(catalogo_perfis.listar_perfis()),
+                key="vigas_form_perfil",
+                persist_state="session",
+                help="Os perfis do catálogo do programa e as seções salvas em Desenhar seção.",
+            )
+            eixo = colunas[1].selectbox(
+                "Eixo de flexão",
+                ["x", "y"],
+                key="vigas_form_eixo",
+                persist_state="session",
+            )
+            if st.button(
+                "Desenhar uma seção nova",
+                icon=":material/draw:",
+                key="vigas_desenhar_secao",
+                help=(
+                    "Abre Desenhar seção. Desenhe, dê um nome e clique em Salvar e voltar: a "
+                    "seção volta já escolhida aqui."
+                ),
+            ):
+                vs.ir_desenhar("app_pages/vigas_eixos.py", "Vigas e eixos", "vigas", "perfil")
+            secao = vigas.secao_de_perfil_catalogo(
+                catalogo_perfis.obter_perfil(nome_perfil), eixo=eixo
+            )
+            linha_secao = f"secao perfil {escrita.texto_entre_aspas(nome_perfil)} eixo={eixo}"
+    except ValueError as erro:
+        erro_secao = str(erro)
+        secao = None
+
+    if erro_secao:
+        st.error(f"Seção inválida: {erro_secao}", icon=":material/error:")
+        st.stop()
+    st.caption(
+        f":material/info: {secao.descricao} · A = {numero(secao.area_mm2, 0)} mm² · "
+        f"I = {secao.inercia_mm4:.4g} mm⁴ · W = {secao.modulo_resistencia_inferior_mm3:.4g} mm³ · "
+        f"J = {secao.constante_torcao_mm4:.4g} mm⁴"
+    )
+
+    st.markdown("**Material**")
+    # A mesma escolha das outras páginas de cálculo: material qualificado
+    # do projeto (rastreável), catálogo orientativo ou valores próprios.
+    opcoes_material = {"manual": "— valores informados manualmente —"}
+    for item in materiais_projeto:
+        opcoes_material[f"projeto::{item['nome']}"] = (
+            f"Projeto · {item.get('nome')} · {avaliar_material(item)['nivel']}"
+        )
+    try:
+        for nome_catalogo in materiais_base.listar_nomes():
+            opcoes_material[f"catalogo::{nome_catalogo}"] = (
+                f"Catálogo orientativo · {nome_catalogo}"
+            )
+    except (FileNotFoundError, ValueError) as erro:
+        st.warning(f"Base de materiais indisponível: {erro}", icon=":material/warning:")
+    if st.session_state.get("vigas_form_material") not in opcoes_material:
+        st.session_state["vigas_form_material"] = "manual"
+    escolha_material = st.selectbox(
+        "Material",
+        list(opcoes_material),
+        format_func=lambda valor: opcoes_material[valor],
+        key="vigas_form_material",
+        persist_state="session",
+        help=(
+            "Um material do projeto leva o vínculo de rastreabilidade para o "
+            "registro; o catálogo é orientativo."
+        ),
+    )
+
+    linha_material = ""
+    e_padrao, g_padrao, sy_padrao, densidade_padrao = escrita._MATERIAIS_PRONTOS["aco"]
+    if escolha_material.startswith("projeto::"):
+        linha_material = "material projeto " + escrita.texto_entre_aspas(
+            escolha_material.split("::", 1)[1]
+        )
+    elif escolha_material.startswith("catalogo::"):
+        linha_material = "material catalogo " + escrita.texto_entre_aspas(
+            escolha_material.split("::", 1)[1]
+        )
+
+    if linha_material:
+        # Deixa o próprio interpretador resolver o material: assim o modo
+        # formulário e o modo texto não podem discordar sobre Sy.
+        try:
+            previa = escrita.interpretar(
+                f"viga 1\nsecao circular 10\napoio 0 pino\n{linha_material}",
+                materiais_projeto=materiais_projeto,
+            )
+        except escrita.ErroDeScript as erro:
+            st.error(str(erro), icon=":material/error:")
+            st.stop()
+        material_previa = previa.material
+        densidade_padrao = material_previa.densidade_kg_m3
+        colunas_material = st.columns(3)
+        colunas_material[0].metric(
+            "E", f"{material_previa.modulo_elasticidade_MPa / 1_000.0:.4g} GPa", border=True
+        )
+        colunas_material[1].metric(
+            "G", f"{material_previa.modulo_cisalhamento_MPa / 1_000.0:.4g} GPa", border=True
+        )
+        colunas_material[2].metric(
+            "Sy",
+            "—"
+            if not material_previa.escoamento_MPa
+            else f"{material_previa.escoamento_MPa:.4g} MPa",
+            border=True,
+        )
+        st.caption(f":material/verified: {material_previa.fonte}")
+    else:
+        colunas_material = st.columns(3)
+        modulo_e = colunas_material[0].number_input(
+            "E (GPa)",
+            min_value=0.1,
+            value=float(e_padrao),
+            step=5.0,
+            key="vigas_form_E",
+            persist_state="session",
+        )
+        modulo_g = colunas_material[1].number_input(
+            "G (GPa)",
+            min_value=0.1,
+            value=float(g_padrao),
+            step=1.0,
+            key="vigas_form_G",
+            persist_state="session",
+        )
+        escoamento = colunas_material[2].number_input(
+            "Sy (MPa)",
+            min_value=0.0,
+            value=float(sy_padrao),
+            step=10.0,
+            key="vigas_form_Sy",
+            persist_state="session",
+            help="Zero deixa o fator de segurança em branco.",
+        )
+        linha_material = (
+            f"material E={num(modulo_e)} G={num(modulo_g)} "
+            f"densidade={num(densidade_padrao)}"
+            + (f" Sy={num(escoamento)}" if escoamento > 0 else "")
+        )
+
+    peso_proprio = st.checkbox(
+        "Somar o peso próprio da barra",
+        value=False,
+        key="vigas_form_peso",
+        persist_state="session",
+        help=f"Densidade considerada: {densidade_padrao:.0f} kg/m³.",
+    )
+    return linha_secao, linha_material, peso_proprio
+
+
+# ---------------------------------------------------------------------------
+# O desenho
+# ---------------------------------------------------------------------------
+DESENHO = "vigas_desenho"
+DESENHO_VERSAO = "vigas_desenho_versao"
+DESENHO_AJUSTE = "vigas_desenho_ajuste"
+PRANCHETA = "vigas_prancheta"
+
+
+def _trocar_desenho(dados, *, ajustar: bool = False, versao: int | None = None) -> None:
+    estado = st.session_state
+    estado[DESENHO] = vd.normalizar(dados)
+    estado[DESENHO_VERSAO] = estado.get(DESENHO_VERSAO, 0) + 1 if versao is None else versao
+    if ajustar:
+        estado[DESENHO_AJUSTE] = estado.get(DESENHO_AJUSTE, 0) + 1
+
+
+def _ao_desenhar() -> None:
+    evento = getattr(st.session_state.get(PRANCHETA), "edicao", None)
+    if not isinstance(evento, dict) or not isinstance(evento.get("dados"), dict):
+        return
+    if int(evento.get("versao", -1)) < st.session_state.get(DESENHO_VERSAO, 0):
+        return  # um desenho mais velho que o da página
+    _trocar_desenho(evento["dados"], versao=int(evento.get("versao", 0)))
+
+
+def _levar_exemplo() -> None:
+    nome = st.session_state.get("vigas_exemplo_desenho")
+    if nome not in escrita.EXEMPLOS:
+        return
+    try:
+        viga = escrita.interpretar(escrita.EXEMPLOS[nome], materiais_projeto=materiais_projeto)
+    except (escrita.ErroDeScript, ValueError):
+        return
+    _trocar_desenho(vd.desenho_do_modelo(viga), ajustar=True)
+
+
+def _trazer_do_texto() -> None:
+    try:
+        viga = escrita.interpretar(
+            st.session_state.get(CHAVE_SCRIPT, ""), materiais_projeto=materiais_projeto
+        )
+    except (escrita.ErroDeScript, ValueError) as erro:
+        st.session_state["vigas_desenho_aviso"] = f"O modelo em texto não foi lido: {erro}"
+        return
+    _trocar_desenho(vd.desenho_do_modelo(viga), ajustar=True)
+
+
+def _modo_desenho() -> str:
+    """O desenho com a seção e o material: resolve a barra e devolve o modelo em texto."""
+    estado = st.session_state
+    if DESENHO not in estado:
+        _trocar_desenho(vd.exemplo(), ajustar=True)
+    colunas = st.columns([3, 1, 1, 1], vertical_alignment="bottom")
+    colunas[0].selectbox(
+        "Modelo pronto",
+        list(escrita.EXEMPLOS),
+        key="vigas_exemplo_desenho",
+        persist_state="session",
+        help="Um dos modelos prontos, para começar daí. Leva só a barra, os apoios e as cargas.",
+    )
+    # Botões com o valor lido aqui (e não por callback): ficam antes da prancheta e da conta, que
+    # já veem o desenho novo nesta mesma rodada.
+    if colunas[1].button(
+        "Levar ao desenho",
+        icon=":material/download:",
+        width="stretch",
+        key="vigas_levar_exemplo",
+        help="Troca o desenho pelo modelo pronto escolhido ao lado.",
+    ):
+        _levar_exemplo()
+    if colunas[2].button(
+        "Trazer do texto",
+        icon=":material/code:",
+        width="stretch",
+        key="vigas_trazer_texto",
+        help="Troca o desenho pelo modelo escrito no modo Texto (script).",
+    ):
+        _trazer_do_texto()
+    if colunas[3].button(
+        "Começar do zero",
+        icon=":material/delete_sweep:",
+        width="stretch",
+        key="vigas_limpar_desenho",
+        help="Deixa só a barra, sem apoios nem cargas.",
+    ):
+        _trocar_desenho(vd.vazio(estado[DESENHO]["L"]), ajustar=True)
+    nome_modelo = st.text_input(
+        "Nome do modelo",
+        value="Viga",
+        key="vigas_form_nome",
+        persist_state="session",
+        help="Como a barra aparece no registro e no memorial.",
+    )
+    with st.container(border=True):
+        linha_secao, linha_material, peso_proprio = _secao_e_material()
+    combinacoes_projeto = list((projeto_ativo or {}).get("combinacoes_carga", []))
+    linhas_combinacoes: list[str] = []
+    if combinacoes_projeto:
+        if st.checkbox(
+            "Envelopar com as combinações do projeto",
+            key="vigas_desenho_combinacoes",
+            persist_state="session",
+            help=(
+                "Resolve a barra em cada combinação do projeto ativo e desenha a envoltória. "
+                "Dê o caso de cada carga no painel do desenho (vazio é Permanente)."
+            ),
+        ):
+            linhas_combinacoes = escrita.linhas_de_combinacoes_do_projeto(
+                list((projeto_ativo or {}).get("casos_carga", [])), combinacoes_projeto
+            )
+    dados = estado[DESENHO]
+    linhas_modelo = [
+        f"nome {escrita.texto_entre_aspas(nome_modelo or 'Viga')}",
+        linha_secao,
+        linha_material,
+        *vd.linhas_do_desenho(dados),
+        *(["peso_proprio"] if peso_proprio else []),
+        *linhas_combinacoes,
+    ]
+    texto = "\n".join(linhas_modelo)
+    faltam = vd.problemas(dados)
+    falha = ""
+    if faltam:
+        marcas = vd.marcas_de_erro(faltam[0])
+        estado.pop(CHAVE_RESULTADO, None)
+    else:
+        try:
+            modelo_desenhado = escrita.interpretar(texto, materiais_projeto=materiais_projeto)
+            resultado_desenhado = vigas.analisar_viga(modelo_desenhado)
+            combinacoes = escrita.combinacoes_do_script(texto)
+            envoltoria_desenhada = (
+                vigas.analisar_envoltoria(modelo_desenhado, combinacoes) if combinacoes else None
+            )
+        except (escrita.ErroDeScript, ValueError) as erro:
+            falha = str(erro)
+            marcas = vd.marcas_de_erro("A barra não fica parada ou falta um dado: veja abaixo.")
+            estado.pop(CHAVE_RESULTADO, None)
+        else:
+            estado[CHAVE_RESULTADO] = {
+                "script": texto,
+                "resultado": resultado_desenhado,
+                "envoltoria": envoltoria_desenhada,
+            }
+            marcas = vd.marcas(resultado_desenhado, dados)
+    prancheta_da_viga(
+        {
+            "dados": dados,
+            "versao": estado[DESENHO_VERSAO],
+            "ajustar": estado.get(DESENHO_AJUSTE, 0),
+            "marcas": marcas,
+        },
+        key=PRANCHETA,
+        ao_editar=_ao_desenhar,
+    )
+    # Os avisos ficam embaixo: em cima, empurrariam as ferramentas durante o desenho.
+    aviso = estado.pop("vigas_desenho_aviso", "")
+    if aviso:
+        st.warning(aviso, icon=":material/warning:")
+    for texto_falta in faltam:
+        st.info(texto_falta, icon=":material/info:")
+    if falha:
+        st.error(f"Não foi possível resolver a barra: {falha}", icon=":material/error:")
+    st.caption(
+        "Positivo para cima (força e distribuída), anti-horário (momento) e para +x (axial e "
+        "torque). A conta refaz sozinha a cada mudança no desenho; as reações aparecem nele."
+    )
+    with st.expander(
+        "Modelo equivalente em texto (copie para reaproveitar)", icon=":material/code:"
+    ):
+        st.code(texto, language="text")
+    return texto
+
+
 with st.container(border=True), secao_protegida("1. Modelo da barra"):
     st.subheader("1. Modelo da barra")
     modo = st.segmented_control(
         "Como você prefere informar o modelo?",
-        ["Texto (script)", "Formulário"],
-        default="Texto (script)",
+        ["Desenho", "Texto (script)"],
+        default="Desenho",
         required=True,
         width="stretch",
-        key="vigas_modo_entrada",
+        key="vigas_modo",
         persist_state="session",
+        help=(
+            "Desenho: a barra, os apoios e as cargas na prancheta, como no Equilíbrio de uma peça. "
+            "Texto: o modelo escrito, uma instrução por linha."
+        ),
     )
-
     if modo == "Texto (script)":
         colunas_exemplo = st.columns([3, 1])
         exemplo = colunas_exemplo[0].selectbox(
@@ -226,445 +714,10 @@ with st.container(border=True), secao_protegida("1. Modelo da barra"):
                         )
 
         texto_modelo = st.session_state[CHAVE_SCRIPT]
-
     else:
-        colunas_geometria = st.columns(2)
-        comprimento_m = colunas_geometria[0].number_input(
-            "Comprimento total L (m)",
-            min_value=0.01,
-            value=6.0,
-            step=0.5,
-            key="vigas_form_comprimento",
-            persist_state="session",
-        )
-        nome_modelo = colunas_geometria[1].text_input(
-            "Nome do modelo",
-            value="Viga",
-            key="vigas_form_nome",
-            persist_state="session",
-        )
+        texto_modelo = _modo_desenho()
 
-        st.markdown("**Seção transversal**")
-        tipo_secao = st.segmented_control(
-            "Tipo de seção",
-            [
-                "Retangular",
-                "Circular maciça",
-                "Tubo circular",
-                "Tubo retangular",
-                "Perfil I soldado",
-                "Perfil do catálogo",
-            ],
-            default="Retangular",
-            required=True,
-            width="stretch",
-            key="vigas_form_tipo_secao",
-            persist_state="session",
-        )
-        erro_secao = None
-        num = escrita.formatar_numero
-        # Cada ramo produz a seção (para a prévia) e a linha de script
-        # equivalente. A linha é o comando paramétrico — `secao retangular
-        # 100 200` — e não um `secao manual` com as propriedades já
-        # calculadas: assim o texto fica legível, o interpretador recalcula
-        # exatamente as mesmas propriedades e o nome da seção chega intacto
-        # ao registro e ao memorial.
-        try:
-            if tipo_secao == "Retangular":
-                colunas = st.columns(2)
-                base = colunas[0].number_input(
-                    "Base b (mm)",
-                    min_value=0.1,
-                    value=100.0,
-                    step=5.0,
-                    key="vigas_form_ret_b",
-                    persist_state="session",
-                )
-                altura = colunas[1].number_input(
-                    "Altura h (mm)",
-                    min_value=0.1,
-                    value=200.0,
-                    step=5.0,
-                    key="vigas_form_ret_h",
-                    persist_state="session",
-                )
-                secao = vigas.secao_retangular(base, altura)
-                linha_secao = f"secao retangular {num(base)} {num(altura)}"
-            elif tipo_secao == "Circular maciça":
-                diametro = st.number_input(
-                    "Diâmetro d (mm)",
-                    min_value=0.1,
-                    value=60.0,
-                    step=2.0,
-                    key="vigas_form_circ_d",
-                    persist_state="session",
-                )
-                secao = vigas.secao_circular_macica(diametro)
-                linha_secao = f"secao circular {num(diametro)}"
-            elif tipo_secao == "Tubo circular":
-                colunas = st.columns(2)
-                de = colunas[0].number_input(
-                    "Diâmetro externo (mm)",
-                    min_value=0.1,
-                    value=60.3,
-                    step=1.0,
-                    key="vigas_form_tubo_de",
-                    persist_state="session",
-                )
-                di = colunas[1].number_input(
-                    "Diâmetro interno (mm)",
-                    min_value=0.0,
-                    value=54.3,
-                    step=1.0,
-                    key="vigas_form_tubo_di",
-                    persist_state="session",
-                )
-                secao = vigas.secao_tubo_circular(de, di)
-                linha_secao = f"secao tubo {num(de)} {num(di)}"
-            elif tipo_secao == "Tubo retangular":
-                colunas = st.columns(3)
-                largura = colunas[0].number_input(
-                    "Largura (mm)",
-                    min_value=0.1,
-                    value=100.0,
-                    step=5.0,
-                    key="vigas_form_tr_b",
-                    persist_state="session",
-                )
-                altura = colunas[1].number_input(
-                    "Altura (mm)",
-                    min_value=0.1,
-                    value=200.0,
-                    step=5.0,
-                    key="vigas_form_tr_h",
-                    persist_state="session",
-                )
-                espessura = colunas[2].number_input(
-                    "Espessura (mm)",
-                    min_value=0.1,
-                    value=6.0,
-                    step=0.5,
-                    key="vigas_form_tr_t",
-                    persist_state="session",
-                )
-                secao = vigas.secao_tubo_retangular(largura, altura, espessura)
-                linha_secao = f"secao tubo_retangular {num(largura)} {num(altura)} {num(espessura)}"
-            elif tipo_secao == "Perfil I soldado":
-                colunas = st.columns(4)
-                altura = colunas[0].number_input(
-                    "Altura h (mm)",
-                    min_value=1.0,
-                    value=300.0,
-                    step=10.0,
-                    key="vigas_form_i_h",
-                    persist_state="session",
-                )
-                mesa = colunas[1].number_input(
-                    "Largura da mesa (mm)",
-                    min_value=1.0,
-                    value=150.0,
-                    step=5.0,
-                    key="vigas_form_i_bf",
-                    persist_state="session",
-                )
-                alma = colunas[2].number_input(
-                    "Espessura da alma (mm)",
-                    min_value=0.1,
-                    value=8.0,
-                    step=0.5,
-                    key="vigas_form_i_tw",
-                    persist_state="session",
-                )
-                espessura_mesa = colunas[3].number_input(
-                    "Espessura da mesa (mm)",
-                    min_value=0.1,
-                    value=12.0,
-                    step=0.5,
-                    key="vigas_form_i_tf",
-                    persist_state="session",
-                )
-                secao = vigas.secao_i_simetrica(altura, mesa, alma, espessura_mesa)
-                linha_secao = (
-                    f"secao perfil_i {num(altura)} {num(mesa)} {num(alma)} {num(espessura_mesa)}"
-                )
-            else:
-                colunas = st.columns([3, 1])
-                nome_perfil = colunas[0].selectbox(
-                    "Perfil do catálogo",
-                    list(catalogo_perfis.listar_perfis()),
-                    key="vigas_form_perfil",
-                    persist_state="session",
-                )
-                eixo = colunas[1].selectbox(
-                    "Eixo de flexão",
-                    ["x", "y"],
-                    key="vigas_form_eixo",
-                    persist_state="session",
-                )
-                secao = vigas.secao_de_perfil_catalogo(
-                    catalogo_perfis.obter_perfil(nome_perfil), eixo=eixo
-                )
-                linha_secao = f"secao perfil {escrita.texto_entre_aspas(nome_perfil)} eixo={eixo}"
-        except ValueError as erro:
-            erro_secao = str(erro)
-            secao = None
-
-        if erro_secao:
-            st.error(f"Seção inválida: {erro_secao}", icon=":material/error:")
-            st.stop()
-        st.caption(
-            f":material/info: {secao.descricao} · A = {numero(secao.area_mm2, 0)} mm² · "
-            f"I = {secao.inercia_mm4:.4g} mm⁴ · W = {secao.modulo_resistencia_inferior_mm3:.4g} mm³ · "
-            f"J = {secao.constante_torcao_mm4:.4g} mm⁴"
-        )
-
-        st.markdown("**Material**")
-        # A mesma escolha das outras páginas de cálculo: material qualificado
-        # do projeto (rastreável), catálogo orientativo ou valores próprios.
-        opcoes_material = {"manual": "— valores informados manualmente —"}
-        for item in materiais_projeto:
-            opcoes_material[f"projeto::{item['nome']}"] = (
-                f"Projeto · {item.get('nome')} · {avaliar_material(item)['nivel']}"
-            )
-        try:
-            for nome_catalogo in materiais_base.listar_nomes():
-                opcoes_material[f"catalogo::{nome_catalogo}"] = (
-                    f"Catálogo orientativo · {nome_catalogo}"
-                )
-        except (FileNotFoundError, ValueError) as erro:
-            st.warning(f"Base de materiais indisponível: {erro}", icon=":material/warning:")
-        if st.session_state.get("vigas_form_material") not in opcoes_material:
-            st.session_state["vigas_form_material"] = "manual"
-        escolha_material = st.selectbox(
-            "Material",
-            list(opcoes_material),
-            format_func=lambda valor: opcoes_material[valor],
-            key="vigas_form_material",
-            persist_state="session",
-            help=(
-                "Um material do projeto leva o vínculo de rastreabilidade para o "
-                "registro; o catálogo é orientativo."
-            ),
-        )
-
-        linha_material = ""
-        e_padrao, g_padrao, sy_padrao, densidade_padrao = escrita._MATERIAIS_PRONTOS["aco"]
-        if escolha_material.startswith("projeto::"):
-            linha_material = "material projeto " + escrita.texto_entre_aspas(
-                escolha_material.split("::", 1)[1]
-            )
-        elif escolha_material.startswith("catalogo::"):
-            linha_material = "material catalogo " + escrita.texto_entre_aspas(
-                escolha_material.split("::", 1)[1]
-            )
-
-        if linha_material:
-            # Deixa o próprio interpretador resolver o material: assim o modo
-            # formulário e o modo texto não podem discordar sobre Sy.
-            try:
-                previa = escrita.interpretar(
-                    f"viga 1\nsecao circular 10\napoio 0 pino\n{linha_material}",
-                    materiais_projeto=materiais_projeto,
-                )
-            except escrita.ErroDeScript as erro:
-                st.error(str(erro), icon=":material/error:")
-                st.stop()
-            material_previa = previa.material
-            densidade_padrao = material_previa.densidade_kg_m3
-            colunas_material = st.columns(3)
-            colunas_material[0].metric(
-                "E", f"{material_previa.modulo_elasticidade_MPa / 1_000.0:.4g} GPa", border=True
-            )
-            colunas_material[1].metric(
-                "G", f"{material_previa.modulo_cisalhamento_MPa / 1_000.0:.4g} GPa", border=True
-            )
-            colunas_material[2].metric(
-                "Sy",
-                "—"
-                if not material_previa.escoamento_MPa
-                else f"{material_previa.escoamento_MPa:.4g} MPa",
-                border=True,
-            )
-            st.caption(f":material/verified: {material_previa.fonte}")
-        else:
-            colunas_material = st.columns(3)
-            modulo_e = colunas_material[0].number_input(
-                "E (GPa)",
-                min_value=0.1,
-                value=float(e_padrao),
-                step=5.0,
-                key="vigas_form_E",
-                persist_state="session",
-            )
-            modulo_g = colunas_material[1].number_input(
-                "G (GPa)",
-                min_value=0.1,
-                value=float(g_padrao),
-                step=1.0,
-                key="vigas_form_G",
-                persist_state="session",
-            )
-            escoamento = colunas_material[2].number_input(
-                "Sy (MPa)",
-                min_value=0.0,
-                value=float(sy_padrao),
-                step=10.0,
-                key="vigas_form_Sy",
-                persist_state="session",
-                help="Zero deixa o fator de segurança em branco.",
-            )
-            linha_material = (
-                f"material E={num(modulo_e)} G={num(modulo_g)} "
-                f"densidade={num(densidade_padrao)}"
-                + (f" Sy={num(escoamento)}" if escoamento > 0 else "")
-            )
-
-        peso_proprio = st.checkbox(
-            "Somar o peso próprio da barra",
-            value=False,
-            key="vigas_form_peso",
-            persist_state="session",
-            help=f"Densidade considerada: {densidade_padrao:.0f} kg/m³.",
-        )
-
-        st.markdown(
-            "**Apoios** — veja a Tabela 12.1: rolete e pino têm M = 0; o engaste "
-            "trava também a rotação. `kv` e `kr` só valem para o tipo **mola** "
-            "(apoio elástico) e devem ficar vazios nos demais."
-        )
-        apoios_padrao = pd.DataFrame(
-            [
-                {"x (m)": 0.0, "tipo": "pino", "kv (N/mm)": None, "kr (N·mm/rad)": None},
-                {
-                    "x (m)": float(comprimento_m),
-                    "tipo": "rolete",
-                    "kv (N/mm)": None,
-                    "kr (N·mm/rad)": None,
-                },
-            ]
-        )
-        apoios_editados = st.data_editor(
-            apoios_padrao,
-            num_rows="dynamic",
-            hide_index=True,
-            width="stretch",
-            key="vigas_form_apoios",
-            column_config={
-                "x (m)": st.column_config.NumberColumn(format="%.4f", required=True),
-                "tipo": st.column_config.SelectboxColumn(
-                    options=["pino", "rolete", "engaste", "deslizante", "trava_axial", "mola"],
-                    required=True,
-                ),
-                "kv (N/mm)": st.column_config.NumberColumn(
-                    format="%.4g", min_value=0.0, help="Rigidez vertical do apoio elástico."
-                ),
-                "kr (N·mm/rad)": st.column_config.NumberColumn(
-                    format="%.4g", min_value=0.0, help="Rigidez rotacional do apoio elástico."
-                ),
-            },
-        )
-
-        st.markdown("**Rótulas internas** (opcional) — articulação que zera o momento fletor.")
-        rotulas_editadas = st.data_editor(
-            pd.DataFrame({"x (m)": pd.Series(dtype="float")}),
-            num_rows="dynamic",
-            hide_index=True,
-            width="stretch",
-            key="vigas_form_rotulas",
-            column_config={"x (m)": st.column_config.NumberColumn(format="%.4f")},
-        )
-
-        st.markdown(
-            "**Cargas** — `x2` e `valor 2` só são usados por cargas distribuídas "
-            "(deixe `valor 2` vazio para carga uniforme). Positivo é **para cima**; "
-            "para uma carga de gravidade use valor negativo."
-        )
-        cargas_padrao = pd.DataFrame(
-            [
-                {
-                    "tipo": "Distribuída (kN/m)",
-                    "x ou x1 (m)": 0.0,
-                    "x2 (m)": float(comprimento_m),
-                    "valor": -15.0,
-                    "valor 2": None,
-                },
-                {
-                    "tipo": "Força pontual (kN)",
-                    "x ou x1 (m)": float(comprimento_m) / 2,
-                    "x2 (m)": None,
-                    "valor": -20.0,
-                    "valor 2": None,
-                },
-            ]
-        )
-        cargas_editadas = st.data_editor(
-            cargas_padrao,
-            num_rows="dynamic",
-            hide_index=True,
-            width="stretch",
-            key="vigas_form_cargas",
-            column_config={
-                "tipo": st.column_config.SelectboxColumn(options=list(TIPOS_CARGA), required=True),
-                "x ou x1 (m)": st.column_config.NumberColumn(format="%.4f", required=True),
-                "x2 (m)": st.column_config.NumberColumn(format="%.4f"),
-                "valor": st.column_config.NumberColumn(format="%.4f", required=True),
-                "valor 2": st.column_config.NumberColumn(format="%.4f"),
-            },
-        )
-
-        # O formulário é convertido para o mesmo script do modo texto: assim os
-        # dois modos compartilham exatamente o mesmo parser e as mesmas
-        # validações, em vez de manterem dois caminhos que podem divergir.
-        linhas_script = [
-            f"nome {escrita.texto_entre_aspas(nome_modelo or 'Viga')}",
-            f"viga {num(comprimento_m)}",
-            linha_secao,
-            linha_material,
-        ]
-        for _, linha in apoios_editados.dropna(subset=["x (m)", "tipo"]).iterrows():
-            rigidezes = ""
-            for coluna, rotulo in (("kv (N/mm)", "kv"), ("kr (N·mm/rad)", "kr")):
-                valor = linha.get(coluna)
-                if not pd.isna(valor) and float(valor) > 0:
-                    rigidezes += f" {rotulo}={num(float(valor))}"
-            linhas_script.append(f"apoio {num(float(linha['x (m)']))} {linha['tipo']}{rigidezes}")
-        for _, linha in rotulas_editadas.dropna(subset=["x (m)"]).iterrows():
-            linhas_script.append(f"rotula {num(float(linha['x (m)']))}")
-        prefixos = {
-            "Força pontual (kN)": "P",
-            "Momento concentrado (kN·m)": "M",
-            "Distribuída (kN/m)": "q",
-            "Carga axial (kN)": "N",
-            "Axial distribuída (kN/m)": "qn",
-            "Torque (kN·m)": "T",
-        }
-        for _, linha in cargas_editadas.dropna(subset=["tipo", "x ou x1 (m)", "valor"]).iterrows():
-            comando = prefixos[str(linha["tipo"])]
-            x1 = float(linha["x ou x1 (m)"])
-            valor = float(linha["valor"])
-            if comando in {"q", "qn"}:
-                x2 = linha["x2 (m)"]
-                if pd.isna(x2):
-                    st.error(
-                        f"A carga distribuída em x = {x1:g} m precisa de um `x2 (m)`.",
-                        icon=":material/error:",
-                    )
-                    st.stop()
-                valor2 = linha["valor 2"]
-                sufixo = "" if pd.isna(valor2) else f" {num(float(valor2))}"
-                linhas_script.append(f"{comando} {num(x1)} {num(float(x2))} {num(valor)}{sufixo}")
-            else:
-                linhas_script.append(f"{comando} {num(x1)} {num(valor)}")
-        if peso_proprio:
-            linhas_script.append("peso_proprio")
-        texto_modelo = "\n".join(linhas_script)
-
-        with st.expander(
-            "Modelo equivalente em texto (copie para reaproveitar)", icon=":material/code:"
-        ):
-            st.code(texto_modelo, language="text")
-
-analisar = st.button(
+analisar = modo == "Texto (script)" and st.button(
     "Calcular diagramas",
     type="primary",
     icon=":material/calculate:",

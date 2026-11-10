@@ -664,6 +664,8 @@ def _figuras_3d(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
 def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     """Figuras que qualquer módulo pode gravar no registro, redesenhadas aqui.
 
+    * ``figura_eixos_fundacao`` — o sistema de coordenadas das reações nas bases, com a ação e a
+      reação no pé (:mod:`core.desenho_eixos_fundacao`);
     * ``figura_ligacao`` — o desenho da ligação (:mod:`core.ligacoes`);
     * ``figura_base_de_pilar`` — a planta e o corte da base (:mod:`core.desenho_placa_base`);
     * ``figura_forcas_por_nivel`` — a elevação com a força do vento em cada nível
@@ -682,6 +684,19 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     from core import portico_plano as pp
 
     figuras: list[Any] = []
+    eixos_fundacao = resultados.get("figura_eixos_fundacao")
+    if isinstance(eixos_fundacao, Mapping):
+        from core import desenho_eixos_fundacao as de
+
+        figuras.append(
+            (
+                de.figura_dos_eixos(
+                    str(eixos_fundacao.get("eixo_vertical") or "Y"),
+                    str(eixos_fundacao.get("eixos") or "fundação"),
+                ),
+                LARGURA_DESENHO_MM,
+            )
+        )
     figuras.extend(_figuras_3d(resultados))
     ligacao = resultados.get("figura_ligacao")
     if isinstance(ligacao, Mapping):

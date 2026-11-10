@@ -482,6 +482,36 @@ def montar(
     )
 
 
+def do_projeto(projeto: Mapping[str, object]) -> ReacoesNasBases:
+    """As reações nas bases do projeto gravado, como a página Reações nas bases as monta (os
+    apoios da macro, o esqueleto, o plano e a direção da seção de cada pilar): o Modelo em 3D
+    desenha as mesmas."""
+    from core import cena_do_modelo as cm  # o desenho 3D importa este módulo
+
+    dados = em.esforcos_do_projeto(projeto)
+    plano = pc.plano_do_projeto(projeto)
+    apoios = am.do_projeto(projeto)
+    geometria = ld.geometria_do_projeto(projeto)
+    leituras = ld.ler_barras(dados, geometria, plano)
+    quadro = qf.montar_quadro(dados)
+    direcoes = None
+    if quadro.pilares and geometria.corpos:
+        try:
+            direcoes = cm.direcoes_do_projeto(
+                geometria,
+                dados.eixo_vertical,
+                dados,
+                cm.Nomes.do_projeto(geometria, dados),
+                quadro,
+                plano,
+            )
+        except (ArithmeticError, ValueError, KeyError):
+            direcoes = None
+    return montar(
+        dados, apoios, plano=plano, geometria=geometria, leituras=leituras, direcoes=direcoes
+    )
+
+
 def _conferir(
     dados: em.EsforcosDoModelo,
     pes: Sequence[Pe],
@@ -602,6 +632,59 @@ def linhas(
                 ]
             )
     return saida
+
+
+#: Os títulos que separam, na tabela, a ação na fundação da reação do apoio.
+GRUPO_ACAO = "AÇÃO DA ESTRUTURA NA FUNDAÇÃO — a carga para o projeto da fundação"
+GRUPO_REACAO = (
+    "REAÇÃO DO APOIO NA ESTRUTURA — como o SolidWorks mostra (a ação com o sinal trocado)"
+)
+EXPLICA_ACAO = (
+    "Ação = a força e o momento que a estrutura faz na fundação: é a carga para projetar a "
+    "fundação (Fz negativa = para baixo, compressão)."
+)
+EXPLICA_REACAO = (
+    "Reação = a força e o momento que o apoio faz na estrutura, o que o SolidWorks mostra no "
+    "apoio: o mesmo valor da ação com o sinal trocado (Rz positiva = o apoio empurra para cima)."
+)
+
+
+def colunas_da_reacao(r: ReacoesNasBases, eixos: str = EIXOS_FUNDACAO) -> list[str]:
+    del r, eixos  # os nomes não mudam com os eixos; ficam como em :func:`colunas`
+    return [
+        "Pé",
+        "Caso",
+        *(f"R{e} (kN)" for e in ("x", "y", "z")),
+        *(f"MR{e} (kN·m)" for e in ("x", "y", "z")),
+        "Descrição do caso",
+        "Pilar",
+        "De onde veio",
+    ]
+
+
+def linhas_da_reacao(
+    r: ReacoesNasBases, plano: pc.PlanoDeCargas | None = None, eixos: str = EIXOS_FUNDACAO
+) -> list[list[object]]:
+    """A reação do apoio na estrutura (a ação com o sinal trocado), pé a pé e caso a caso."""
+    return [
+        [l[0], l[1], *(_arredondar(-float(v)) for v in l[2:8]), *l[11:]]  # type: ignore[arg-type]
+        for l in linhas(r, plano, eixos)
+    ]
+
+
+def colunas_do_excel(r: ReacoesNasBases, eixos: str = EIXOS_FUNDACAO) -> list[str]:
+    """A aba Reações por pé: o pé e o caso, a ação (9 colunas), a reação (6) e a identificação."""
+    acao = colunas(r, eixos)
+    return [*acao[:11], *colunas_da_reacao(r, eixos)[2:8], *acao[11:]]
+
+
+def linhas_do_excel(
+    r: ReacoesNasBases, plano: pc.PlanoDeCargas | None = None, eixos: str = EIXOS_FUNDACAO
+) -> list[list[object]]:
+    return [
+        [*a[:11], *re[2:8], *a[11:]]
+        for a, re in zip(linhas(r, plano, eixos), linhas_da_reacao(r, plano, eixos), strict=True)
+    ]
 
 
 COLUNAS_LOCACAO = ["Pé", "Pilar", "Perfil", "X (m)", "Y (m)", "Z (m)", "Trabalha como"]
@@ -751,9 +834,13 @@ def xlsx(
     responsavel: str = "",
     pendentes: Sequence[dm.Achado] = (),
     hoje: date | None = None,
+    figuras: Sequence[tuple[str, bytes]] = (),
 ) -> bytes:
-    """A planilha para quem projeta a fundação: Leia-me, Casos, Locação, Reações por pé, Resumo."""
+    """A planilha para quem projeta a fundação: Leia-me, Casos, Locação, Reações por pé (a ação
+    na fundação e a reação do apoio, com o título de cada uma), Resumo e, com as ``figuras``
+    (título, PNG), a aba Desenhos: o sistema de coordenadas, o projeto e a planta de cada caso."""
     from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as ImagemExcel
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
@@ -795,6 +882,11 @@ def xlsx(
     for texto in (
         NOTA_COMBINACOES,
         convencao(r, eixos),
+        EXPLICA_ACAO,
+        EXPLICA_REACAO,
+        "Na aba Reações por pé, as duas vêm lado a lado, cada uma com o seu título; a aba Resumo "
+        "por pé e o desenho de cada caso são da ação na fundação."
+        + (" O sistema de coordenadas está desenhado na aba Desenhos." if figuras else ""),
         "Unidades: kN e kN·m; coordenadas em m.",
         f"Casos: {', '.join(r.casos)}. Pés: {len(r.pes)} (locação na aba Locação).",
         "De onde veio: "
@@ -829,11 +921,148 @@ def xlsx(
 
     tabela("Casos", COLUNAS_CASOS, linhas_dos_casos(r, plano))
     tabela("Locação", COLUNAS_LOCACAO, linhas_da_locacao(r, eixos))
-    tabela("Reações por pé", colunas(r, eixos), linhas(r, plano, eixos))
+    tabela("Reações por pé", colunas_do_excel(r, eixos), linhas_do_excel(r, plano, eixos))
+    folha = livro["Reações por pé"]
+    # Os títulos dos grupos numa linha em cima do cabeçalho: ação | reação.
+    folha.insert_rows(1)
+    grupos = (
+        (1, 2, "Pé e caso", "475569"),
+        (3, 11, GRUPO_ACAO, "B91C1C"),
+        (12, 17, GRUPO_REACAO, "15803D"),
+        (18, 20, "Identificação", "475569"),
+    )
+    for inicio, fim, texto, cor in grupos:
+        folha.merge_cells(start_row=1, start_column=inicio, end_row=1, end_column=fim)
+        celula = folha.cell(1, inicio, texto)
+        celula.font = Font(bold=True, color="FFFFFF")
+        celula.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        for k in range(inicio, fim + 1):
+            folha.cell(1, k).fill = PatternFill("solid", fgColor=cor)
+            if 2 < k < 18:
+                folha.cell(2, k).fill = PatternFill(
+                    "solid", fgColor="FDE9E7" if k <= 11 else "E7F5EC"
+                )
+                folha.cell(2, k).font = Font(bold=True, color=cor)
+    folha.row_dimensions[1].height = 34
+    folha.freeze_panes = "C3"
+    folha.auto_filter.ref = f"A2:{get_column_letter(folha.max_column)}{folha.max_row}"
     tabela("Resumo por pé", COLUNAS_RESUMO, linhas_do_resumo(r))
+    if figuras:
+        desenhos = livro.create_sheet("Desenhos")
+        linha = 1
+        for titulo_da_figura, png in figuras:
+            desenhos.cell(linha, 1, titulo_da_figura).font = Font(bold=True, size=12)
+            imagem = ImagemExcel(io.BytesIO(png))
+            desenhos.add_image(imagem, f"A{linha + 1}")
+            # ~20 px por linha do Excel
+            linha += 3 + math.ceil(imagem.height / 20)
     saida = io.BytesIO()
     livro.save(saida)
     return saida.getvalue()
+
+
+MODULO_ID = "reacoes_nas_bases"
+MODULO_TITULO = "Reações nas bases"
+
+
+def _celula(valor: object) -> str:
+    if isinstance(valor, float):
+        return _n(valor, 2)
+    return str(valor)
+
+
+def registro_das_reacoes(
+    r: ReacoesNasBases,
+    plano: pc.PlanoDeCargas | None = None,
+    *,
+    eixos: str = EIXOS_FUNDACAO,
+    pendentes: Sequence[dm.Achado] = (),
+    cena: Mapping[str, object] | None = None,
+    legenda_da_cena: str = "",
+) -> dict[str, object]:
+    """As reações nas bases para o memorial: a ação de cada pé caso a caso (a carga para a
+    fundação), a reação do apoio (o sinal trocado), a locação, os casos e o resumo; com o sistema
+    de coordenadas desenhado e, com a ``cena`` (a do projeto com os pés), o modelo em 3D."""
+    from core.technical_records import criar_registro_tecnico
+
+    acao = linhas(r, plano, eixos)
+    destaque = (
+        f"Ação da estrutura na fundação em {len(r.pes)} pé(s) para os casos "
+        f"{', '.join(r.casos)}, característica e sem combinar (critério Anglo, item 5.9). "
+        "A reação do apoio é a mesma com o sinal trocado."
+    )
+    resumo_linhas = linhas_do_resumo(r)
+    if resumo_linhas:
+        compressoes = [(l[2], l[0], l[3]) for l in resumo_linhas if isinstance(l[2], float)]
+        if compressoes:
+            valor, pe, caso = max(compressoes, key=lambda v: v[0])
+            destaque += f" Maior compressão: {_n(valor)} kN no pé {pe} ({caso})."
+    cabecalho_acao = colunas(r, eixos)
+    tabela_acao = {
+        "legenda": f"{GRUPO_ACAO}. {EXPLICA_ACAO}",
+        "cabecalhos": [*cabecalho_acao[:11]],
+        "linhas": [[_celula(v) for v in l[:11]] for l in acao],
+        "fonte": 6.5,
+    }
+    cabecalho_reacao = colunas_da_reacao(r, eixos)
+    tabela_reacao = {
+        "legenda": f"{GRUPO_REACAO}. {EXPLICA_REACAO}",
+        "cabecalhos": cabecalho_reacao[:8],
+        "linhas": [[_celula(v) for v in l[:8]] for l in linhas_da_reacao(r, plano, eixos)],
+        "fonte": 6.5,
+    }
+    tabela_locacao = {
+        "legenda": "Locação dos pés (m).",
+        "cabecalhos": COLUNAS_LOCACAO,
+        "linhas": [[_celula(v) for v in l] for l in linhas_da_locacao(r, eixos)],
+    }
+    tabela_resumo = {
+        "legenda": "O maior de cada pé entre os casos (ação na fundação, característica).",
+        "cabecalhos": [c.strip() for c in COLUNAS_RESUMO],
+        "linhas": [[_celula(v) for v in l] for l in resumo_linhas],
+        "fonte": 6.5,
+    }
+    resultados: dict[str, object] = {
+        "destaque_memorial": destaque,
+        "tabelas_memorial": [tabela_locacao, tabela_acao, tabela_reacao, tabela_resumo],
+        "figura_eixos_fundacao": {"eixo_vertical": r.eixo_vertical, "eixos": eixos},
+    }
+    if cena:
+        from core import cena_3d as c3
+
+        azimute, elevacao = c3.VISTAS[c3.VISTA_ISOMETRICA]
+        resultados["figura_3d"] = {
+            "cena": dict(cena),
+            "azimute": azimute,
+            "elevacao": elevacao,
+            "perfil_real": True,
+            "legenda": legenda_da_cena or "O projeto e os pés.",
+        }
+    alertas = [i.texto for i in r.conferencia if i.nivel != pc.NIVEL_OK]
+    alertas += list(r.faltam)
+    alertas += [f"Pendência: {a.titulo}." for a in pendentes]
+    return criar_registro_tecnico(
+        modulo=MODULO_TITULO,
+        modulo_id=MODULO_ID,
+        titulo=f"Reações nas bases — {len(r.pes)} pé(s), {len(r.casos)} caso(s)",
+        status="Atenção" if pendentes or r.faltam else "Calculado",
+        resumo=destaque,
+        entradas={
+            "casos": ", ".join(r.casos),
+            "pes": len(r.pes),
+            "eixos": "da fundação (Z para cima)" if eixos == EIXOS_FUNDACAO else "do SolidWorks",
+        },
+        resultados=resultados,
+        metodo=(
+            "A reação de cada apoio lida do SolidWorks pela macro exportar_casos_de_carga ou, sem "
+            "ela, a força na base de cada pilar levada aos eixos do modelo pela direção da seção; a "
+            "soma dos pés conferida contra a reação total de cada caso. " + convencao(r, eixos)
+        ),
+        premissas=[NOTA_COMBINACOES, EXPLICA_ACAO, EXPLICA_REACAO],
+        alertas=alertas,
+        referencias=[f"{ca.REFERENCIA}, item 5.9."],
+        conclusao=destaque,
+    )
 
 
 def nome_do_arquivo(projeto: str = "") -> str:

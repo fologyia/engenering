@@ -44,10 +44,38 @@ AJUDA: dict[str, str] = {
         "do SolidWorks: os do modelo, com o Y para cima. Os valores são os mesmos; só muda o nome "
         "do eixo."
     ),
+    "sec_eixos": (
+        "O sistema de coordenadas das tabelas, desenhado para o engenheiro civil: os eixos do "
+        "SolidWorks e os da fundação lado a lado, a planta (Z saindo da tela, ⊙) e a frente (Y "
+        "entrando na tela, ⊗), e a diferença entre a ação na fundação e a reação no apoio. Na outra "
+        "aba, o modelo em 3D com o nome de cada pé (A1, A2…), o mesmo das tabelas."
+    ),
+    "btn_png_eixos": (
+        "Baixa o desenho do sistema de coordenadas em PNG, para mandar junto ou pôr num relatório."
+    ),
+    "btn_png_projeto": (
+        "Baixa o modelo em 3D com o nome de cada pé em PNG (o mesmo que vai na aba Desenhos do "
+        "Excel)."
+    ),
+    "tab_acao": (
+        "A força e o momento que a estrutura faz na fundação, em cada pé e caso: é a carga para "
+        "projetar a fundação. Fz negativa é para baixo (compressão); N = −Fz."
+    ),
+    "tab_reacao": (
+        "A força e o momento que o apoio faz na estrutura: é o que o SolidWorks mostra em Força de "
+        "reação. É a ação com o sinal trocado — os mesmos números, ao contrário."
+    ),
+    "reg_reacoes": (
+        "Grava no projeto a ação de cada pé caso a caso, a reação do apoio, a locação, o resumo, o "
+        "sistema de coordenadas e o projeto com os pés: é o que entra no memorial (Central de "
+        "relatórios)."
+    ),
     "btn_excel": (
         "Baixa a planilha para o engenheiro civil: Leia-me (convenção, conferência e pendências), "
         "Casos (natureza e coeficientes de cada caso, para combinar), Locação dos pés, Reações por "
-        "pé (todos os pés e casos, com filtro) e Resumo por pé (o maior de cada um). Com pendência "
-        "para corrigir, o título sai como PRELIMINAR."
+        "pé (a ação na fundação e a reação no apoio lado a lado, cada uma com o título, com "
+        "filtro), Resumo por pé (o maior de cada um) e Desenhos (o sistema de coordenadas, o "
+        "projeto com os pés e a planta de cada caso). Com pendência para corrigir, o título sai "
+        "como PRELIMINAR."
     ),
 }

@@ -15,6 +15,7 @@ from components.project_tools import (
     tratar_conflito_de_gravacao,
 )
 from components.ui import cabecalho_pagina
+from core import memorial_do_projeto as mdp
 from core.memorial_blocos import contar_imagens
 from core.project_report import (
     MODULOS_FORA_DO_MEMORIAL,
@@ -164,11 +165,10 @@ _secoes_rapidas = [
 _so_capitulos_rapido = _perfil_rapido in PERFIS_SOMENTE_CAPITULOS
 # Registros superados não entram por padrão: o cálculo que os substituiu é
 # o que responde pela peça. Quem quiser anexá-los marca na composição abaixo.
-_ids_vigentes = [
-    item["id"]
-    for item in projeto.get("registros_tecnicos", [])
-    if not registro_superado(item) and _entra_no_memorial(item)
-]
+# Do mesmo cálculo registrado várias vezes, só o mais novo; na ordem do projeto.
+_ids_vigentes = mdp.ordem_do_projeto(
+    projeto.get("registros_tecnicos", []), fora=sorted(MODULOS_FORA_DO_MEMORIAL)
+)
 _registros_rapidos = [
     valor
     for valor in (_config_projeto.get("registros_incluidos") or _ids_vigentes)
@@ -185,6 +185,78 @@ _metadata_rapida = {
     "situacao": _ident_projeto.get("situacao") or "Para revisão",
     "emissao": date.today().strftime("%d/%m/%Y"),
 }
+
+# ---------------------------------------------------------------------------
+# Juntar o projeto
+# ---------------------------------------------------------------------------
+_quadro_do_projeto = mdp.quadro(projeto, fora=sorted(MODULOS_FORA_DO_MEMORIAL))
+_repetidos = sum(linha.repetidos for linha in _quadro_do_projeto)
+with st.container(border=True):
+    st.markdown(
+        "##### Juntar o projeto num documento",
+        help=(
+            "O memorial junta o que cada página registrou neste projeto: um de cada cálculo (o "
+            "mais novo, quando o mesmo foi registrado mais de uma vez), na ordem do projeto — "
+            "cargas, vento, barras, pilares, vigas, escadas, ligações, placas de base, fundações "
+            "e o modelo em 3D."
+        ),
+    )
+    if _quadro_do_projeto:
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Etapa": linha.etapa,
+                        "No memorial": linha.situacao,
+                        "Cálculos": " · ".join(linha.titulos) or "—",
+                        "Registrado em": linha.ultimo or "—",
+                    }
+                    for linha in _quadro_do_projeto
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+        _faltam = [linha for linha in _quadro_do_projeto if not linha.calculos and linha.pagina]
+        if _faltam:
+            st.caption(
+                ":material/info: Para entrar no memorial, registre em cada página (botão "
+                "“Registrar … no projeto ativo”):"
+            )
+            with st.container(horizontal=True):
+                for _linha in _faltam:
+                    st.page_link(_linha.pagina, label=_linha.etapa, icon=":material/arrow_outward:")
+    else:
+        st.caption("Nenhum cálculo registrado ainda neste projeto.")
+    if st.button(
+        "Juntar: um de cada cálculo, na ordem do projeto"
+        + (f" (tira {_repetidos} repetido(s))" if _repetidos else ""),
+        icon=":material/merge:",
+        key="juntar_projeto",
+        disabled=not _quadro_do_projeto,
+        help=(
+            "Os registros repetidos do mesmo cálculo viram Superado (ficam no histórico, saem do "
+            "memorial) e a composição do memorial passa a ser um de cada, na ordem do projeto. "
+            "Depois é só emitir logo abaixo."
+        ),
+    ):
+        _juntado, _superados, _ordem = mdp.juntar(projeto, fora=sorted(MODULOS_FORA_DO_MEMORIAL))
+        with tratar_conflito_de_gravacao():
+            _salvo = salvar_projeto(
+                _juntado,
+                motivo=(
+                    f"Memorial: projeto juntado ({len(_ordem)} cálculo(s), {_superados} "
+                    "repetido(s) superado(s))"
+                ),
+            )
+        registrar_gravacao_vista(_salvo)
+        st.session_state.pop(f"composicao_relatorio_{projeto['id']}", None)
+        st.toast(
+            f"Projeto juntado: {len(_ordem)} cálculo(s) no memorial"
+            + (f", {_superados} repetido(s) superado(s)." if _superados else "."),
+            icon=":material/merge:",
+        )
+        st.rerun()
 
 _chave_rapida = f"relatorio_rapido_{projeto['id']}"
 with st.container(border=True):

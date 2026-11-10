@@ -27,6 +27,7 @@ import sympy as sp
 
 from components import montador_eixo_ui as eixo_ui
 from components import repasse_do_montador as rpm
+from components import volta_da_secao as vs
 from components.edicao_de_tabela import com_edicoes as _com_edicoes
 from components.figuras import SO_NA_LARGURA
 from components.prancheta_blocos_ui import prancheta_de_blocos
@@ -977,6 +978,32 @@ def _saida_em_numero(
     return f"{_numero(numero / u.fator(dimensao))} {u.rotulo(dimensao)}".strip()
 
 
+#: A opção do bloco Seção desenhada com o nome da seção salva em Desenhar seção.
+OPCAO_DO_DESENHO = "desenho"
+
+
+def _secao_que_voltou(p: Parte) -> None:
+    """A seção desenhada que voltou de Desenhar seção entra no bloco que a pediu."""
+    chegou = vs.chegada(p.prefixo)
+    if chegou is None:
+        return
+    estado = st.session_state
+    no = rg.por_id(estado[p.k("grafo")]["nos"], str(chegou["campo"]))
+    bloco = mb.POR_CHAVE.get(str(no.get("tipo"))) if no is not None else None
+    opcao = next((o for o in bloco.opcoes if o.chave == OPCAO_DO_DESENHO), None) if bloco else None
+    nome = str(chegou["nome"])
+    if no is None or opcao is None or nome not in opcao.lista():
+        estado[p.k("aviso_secao")] = (
+            f"A seção {nome} foi salva, mas o bloco que a pediu não está mais na montagem: "
+            "escolha-a na lista do bloco Seção desenhada."
+        )
+        return
+    no.setdefault("opcoes", {})[OPCAO_DO_DESENHO] = nome
+    estado[p.k("versao")] += 1
+    estado[p.k("modelo_atual")] = None
+    estado[p.k("aviso_secao")] = f"A seção {nome}, que você acabou de desenhar, já está no bloco."
+
+
 def _opcoes_dos_blocos(p: Parte, nos: Sequence[mt.No]) -> None:
     """A lista de cada bloco que tem escolha, como a seção desenhada e o material."""
     estado = st.session_state
@@ -995,6 +1022,16 @@ def _opcoes_dos_blocos(p: Parte, nos: Sequence[mt.No]) -> None:
                 args=(p, no.id, opcao.chave, chave),
                 help=opcao.ajuda,
             )
+            if opcao.chave == OPCAO_DO_DESENHO and st.button(
+                "Desenhar uma seção nova",
+                icon=":material/draw:",
+                key=f"{p.prefixo}_desenhar_{no.id}",
+                help=(
+                    "Abre Desenhar seção. Desenhe, dê um nome e clique em Salvar e voltar: a "
+                    "seção volta já escolhida neste bloco."
+                ),
+            ):
+                vs.ir_desenhar(f"app_pages/{p.modulo_id}.py", p.titulo, p.prefixo, no.id)
 
 
 def _da_rodada_atual(p: Parte, campo: str) -> bool:
@@ -3248,6 +3285,10 @@ def _salvar_e_abrir(
 def tela_do_montador(p: Parte) -> None:
     st.html(_ESTILO)
     _iniciar(p)
+    _secao_que_voltou(p)
+    aviso_da_secao = st.session_state.pop(p.k("aviso_secao"), "")
+    if aviso_da_secao:
+        st.toast(aviso_da_secao, icon=":material/draw:")
     _cabecalho(p)
     estado = st.session_state
     u = Unidades(p.sistema, tuple(estado[p.k("unidades")]))

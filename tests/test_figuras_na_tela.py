@@ -157,8 +157,7 @@ def test_vigas_e_eixos_nao_ordena_a_area():
 def test_resultado_de_viga_sem_normal_nao_mostra_zero_negativo():
     pagina = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=180)
     pagina.run()
-    pagina.switch_page("app_pages/vigas_eixos.py").run()
-    next(b for b in pagina.button if b.label == "Calcular diagramas").click().run()
+    pagina.switch_page("app_pages/vigas_eixos.py").run()  # o desenho se resolve sozinho
     assert not pagina.exception
     valores = {m.label: m.value for m in pagina.metric}
     assert valores["Normal máximo |N|"] == "0.00 kN"

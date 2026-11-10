@@ -10,7 +10,11 @@ Viabilidade das setas (o que dá para mostrar com o que o programa lê):
   corpo ou da viga do Simulation): kN/m vira um pente ao longo da barra, kN uma seta no meio dela
   (no SolidWorks é a força "por item"). Carga por área, por nó ou por texto livre ("Pórtico P1…")
   não tem lugar certo e fica listada como não localizada.
-* **Reações** — o quadro das fundações dá, em cada pilar marcado como Pilar, o N na base (vertical,
+* **Reações** — as mesmas da página Reações nas bases (:func:`core.reacoes_nas_bases.do_projeto`):
+  a reação de cada apoio lida pela macro (``-apoios.csv``, as três forças e os momentos) ou, sem
+  ela, a base do pilar levada aos eixos do modelo pela direção da seção; a seta vertical e a
+  horizontal saem do pé, no sentido em que o apoio empurra a estrutura. Sem essas reações, o
+  quadro das fundações dá, em cada pilar marcado como Pilar, o N na base (vertical,
   compressão positiva): vira uma seta para cima no pé do pilar. As forças horizontais V₁ e V₂ estão
   nos eixos da seção do Simulation: com a direção 1 da seção (macro v6) e o sentido tirado de um
   caso com carga no pilar (:mod:`core.direcoes_da_secao`), viram a seta horizontal H; sem isso,
@@ -25,6 +29,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from core import cantoneiras
 from core import cargas_pelo_modelo as cpm
@@ -38,6 +43,9 @@ from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import section_catalog as sc
 from core import vento_por_barras as vpb
+
+if TYPE_CHECKING:
+    from core import reacoes_nas_bases as rb
 
 COR_POR_TIPO = "Tipo de barra"
 COR_POR_PERFIL = "Perfil"
@@ -583,11 +591,21 @@ def apoios_e_reacoes(
     caso: str = "",
     *,
     plano: pc.PlanoDeCargas | None = None,
+    reacoes_nas_bases: rb.ReacoesNasBases | None = None,
 ) -> ApoiosNaCena:
-    """Os apoios no pé dos pilares e, com um caso importado, a reação em cada um: a vertical
-    sempre; a horizontal quando a direção da seção do pilar é sabida (:mod:`core.direcoes_da_secao`,
-    com o ``plano`` de cargas para tirar o sentido)."""
+    """Os apoios no pé dos pilares e, com um caso importado, a reação em cada um.
+
+    Com as ``reacoes_nas_bases`` do projeto (as da página Reações nas bases) e o caso nelas, as
+    setas são essas: a reação de cada apoio da macro ou da base do pilar, vertical e horizontal.
+    Sem elas: a vertical do quadro das fundações sempre e a horizontal quando a direção da seção
+    do pilar é sabida (:mod:`core.direcoes_da_secao`, com o ``plano`` de cargas para o sentido)."""
     corpos = _corpos(g)
+    pelas_reacoes = (
+        reacoes_nas_bases is not None
+        and bool(caso)
+        and any(a.caso == caso for a in reacoes_nas_bases.acoes)
+        and any(pe.ponto is not None for pe in reacoes_nas_bases.pes)
+    )
     avisos: list[str] = []
     if dados is not None and dados.casos:
         try:
@@ -612,6 +630,13 @@ def apoios_e_reacoes(
             avisos.append(f"As direções das seções dos pilares não foram lidas ({erro}).")
         else:
             avisos.extend(direcoes.avisos)
+    if pelas_reacoes:
+        # As setas são as da página Reações nas bases; a direção da seção de cada pilar continua
+        # na tabela, para conferir no SolidWorks (os avisos dela não valem para estas setas).
+        assert reacoes_nas_bases is not None
+        return _pelas_reacoes_nas_bases(
+            corpos, eixo_vertical, reacoes_nas_bases, caso, direcoes=direcoes
+        )
     if quadro is not None and quadro.pilares:
         for pilar in quadro.pilares:
             corpo = corpos.get(inverso.get(pilar.pilar, ld.nome_do_corpo(pilar.pilar)))
@@ -671,10 +696,20 @@ def apoios_e_reacoes(
                 )
         if caso and not reacoes and caso not in dados.casos:  # type: ignore[union-attr]
             avisos.append(f"O caso {caso} não foi importado em Esforços do modelo: sem reações.")
-    # O pé de cada barra em pé que chega no chão e não está no quadro (sem o tipo).
+    _apoios_no_chao(corpos, eixo_vertical, apoios, avisos)
+    return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma, (soma_h[0], soma_h[1]),
+                        horizontais, direcoes, conferencia)  # fmt: skip
+
+
+def _apoios_no_chao(
+    corpos: Mapping[str, ld.CorpoDoModelo],
+    eixo_vertical: str,
+    apoios: list[c3.ApoioCena],
+    avisos: list[str],
+) -> None:
+    """O pé de cada barra que chega no chão e não tem apoio ainda (sem o tipo)."""
     if not corpos:
-        return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma, (soma_h[0], soma_h[1]),
-                            horizontais, direcoes, conferencia)  # fmt: skip
+        return
     chao = min(_pe(c, eixo_vertical)[2] for c in corpos.values())
     sem_tipo = 0
     for corpo in corpos.values():
@@ -691,8 +726,85 @@ def apoios_e_reacoes(
             "barra como Pilar (Esforços do modelo) para o programa dizer engastado ou articulado e "
             "mostrar a reação."
         )
-    return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma, (soma_h[0], soma_h[1]),
-                        horizontais, direcoes, conferencia)  # fmt: skip
+
+
+def _pelas_reacoes_nas_bases(
+    corpos: Mapping[str, ld.CorpoDoModelo],
+    eixo_vertical: str,
+    r: rb.ReacoesNasBases,
+    caso: str,
+    *,
+    direcoes: ds.DirecoesDosPilares | None = None,
+) -> ApoiosNaCena:
+    """As setas das reações do ``caso`` como na página Reações nas bases: em cada pé, a reação
+    do apoio na estrutura (a ação na fundação com o sinal trocado), a vertical e a horizontal."""
+    apoios: list[c3.ApoioCena] = []
+    reacoes: list[c3.SetaCena] = []
+    avisos: list[str] = []
+    soma = 0.0
+    soma_h = [0.0, 0.0]
+    horizontais = 0
+    fora: list[str] = []
+    fontes: set[str] = set()
+    for pe in r.pes:
+        if pe.ponto is None:
+            fora.append(pe.rotulo)
+            continue
+        ponto = _planta(pe.ponto, eixo_vertical)
+        tipo = {
+            "engastado": c3.APOIO_ENGASTE,
+            "articulado": c3.APOIO_ARTICULADO,
+        }.get(pe.comportamento, c3.APOIO_DESCONHECIDO)
+        acao = r.acao(pe.rotulo, caso)
+        if acao is not None and tipo == c3.APOIO_DESCONHECIDO:
+            tipo = (
+                c3.APOIO_ENGASTE
+                if any(
+                    math.hypot(*_planta(a.momento_kNm, eixo_vertical)[:2]) > MOMENTO_DE_ENGASTE_KNM
+                    for a in r.acoes
+                    if a.pe == pe.rotulo
+                )
+                else c3.APOIO_ARTICULADO
+            )
+        apoios.append(c3.ApoioCena(ponto, tipo, pe.rotulo, "apoio"))
+        if acao is None:
+            fora.append(pe.rotulo)
+            continue
+        fontes.add(acao.fonte)
+        forca = _planta(tuple(-v for v in acao.forca_kN), eixo_vertical)  # a reação na estrutura
+        momento = _planta(tuple(-v for v in acao.momento_kNm), eixo_vertical)
+        if not c3.finito(*forca, *momento):
+            fora.append(pe.rotulo)
+            continue
+        n = forca[2]
+        h = math.hypot(forca[0], forca[1])
+        m = math.hypot(momento[0], momento[1])
+        rotulo = f"{pe.rotulo} · N {_n(n, 1)} kN" + (f" · M {_n(m, 2)} kN·m" if m >= 0.005 else "")
+        if abs(n) >= REACAO_MINIMA_KN:
+            reacoes.append(c3.SetaCena(ponto, (0.0, 0.0, n), rotulo, COR_DA_REACAO, True, "reacao"))
+        if h >= REACAO_MINIMA_KN:
+            reacoes.append(
+                c3.SetaCena(ponto, (forca[0], forca[1], 0.0), f"H {_n(h, 1)} kN", COR_DA_REACAO,
+                            True, "reacao")
+            )  # fmt: skip
+        soma += n
+        soma_h = [soma_h[0] + forca[0], soma_h[1] + forca[1]]
+        horizontais += 1
+    if fora:
+        avisos.append(
+            f"{caso}: {', '.join(fora)} sem reação neste caso (o motivo está em Reações nas bases)."
+        )
+    conferencia = next((i.texto for i in r.conferencia if i.texto.startswith(f"{caso}:")), "")
+    if fontes:
+        conferencia = (
+            "Reações de cada pé pela "
+            + " e pela ".join(sorted(fontes))
+            + " — as mesmas da página Reações nas bases."
+            + (f" {conferencia}" if conferencia else "")
+        )
+    _apoios_no_chao(corpos, eixo_vertical, apoios, avisos)
+    return ApoiosNaCena(tuple(apoios), tuple(reacoes), tuple(avisos), soma,
+                        (soma_h[0], soma_h[1]), horizontais, direcoes, conferencia)  # fmt: skip
 
 
 # ---------------------------------------------------------------------------------------------
