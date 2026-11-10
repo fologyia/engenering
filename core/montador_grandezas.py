@@ -723,6 +723,101 @@ F_CRITICA = replace(
     minimo=1.0,
 )
 
+# Fuso (parafuso de potência)
+F_FUSO = _g("F_fu", "F_fu", "Carga do fuso", FORCA, "A força axial que o fuso empurra ou levanta.")
+D_FUSO = _g(
+    "d_fu", "d_fu", "Diâmetro do fuso", MEDIDA, "O diâmetro maior da rosca, como o 40 de Tr 40×7."
+)
+P_FUSO = _g(
+    "p_fu", "p_fu", "Passo da rosca", MEDIDA, "Distância entre dois filetes, como o 7 de Tr 40×7."
+)
+Z_FUSO = replace(
+    _g(
+        "z_fu",
+        "z_fu",
+        "Entradas da rosca",
+        PURO,
+        "Quantos filetes começam juntos. Mais entradas: o fuso anda mais por volta e trava menos.",
+        1.0,
+    ),
+    minimo=1.0,
+)
+MU_ROSCA = _g(
+    "mu_r",
+    "μ_r",
+    "Atrito na rosca",
+    PURO,
+    "Aço em bronze lubrificado: 0,10 a 0,15. Aço em aço: 0,15 a 0,20.",
+    0.15,
+)
+MU_COLAR = _g(
+    "mu_c",
+    "μ_c",
+    "Atrito no colar",
+    PURO,
+    "Colar com rolamento axial: cerca de 0,01. Colar deslizante: 0,10 a 0,15.",
+    0.01,
+)
+D_COLAR = _g(
+    "d_c", "d_c", "Diâmetro médio do colar", MEDIDA, "Onde o colar encosta e gira com atrito.", 60.0
+)
+FILETES = replace(
+    _g(
+        "n_fi",
+        "n_fi",
+        "Filetes engajados na porca",
+        PURO,
+        "Altura da porca dividida pelo passo. Mais filetes: menos pressão em cada um.",
+        8.0,
+    ),
+    minimo=1.0,
+)
+P_ADM_FILETE = _g(
+    "p_adm",
+    "p_adm",
+    "Pressão admissível nos filetes",
+    TENSAO,
+    "Shigley, Tabela 8-4: aço em bronze, de 11 a 17 MPa em baixa velocidade.",
+    11.0,
+)
+SY_PORCA = _g(
+    "S_y_porca",
+    "S_y,porca",
+    "Escoamento da porca",
+    TENSAO,
+    "Do material da porca. Bronze: cerca de 200 MPa.",
+    200.0,
+)
+L_FUSO = _g(
+    "L_fu",
+    "L_fu",
+    "Comprimento livre comprimido",
+    COMPRIMENTO,
+    "O maior trecho do fuso que trabalha comprimido, entre a porca e o mancal.",
+)
+K_FUSO = replace(
+    _g(
+        "K_fu",
+        "K_fu",
+        "Fator de comprimento do fuso",
+        PURO,
+        "Duas pontas guiadas: 1,0. Uma engastada e outra guiada: 0,7. Em balanço: 2,0.",
+        1.0,
+    ),
+    minimo=0.5,
+)
+N_FLAMBAGEM = replace(
+    _g(
+        "n_fl",
+        "n_fl",
+        "Fator mínimo à flambagem",
+        PURO,
+        "Margem sobre a carga crítica do fuso. Comece com 3.",
+        3.0,
+    ),
+    minimo=1.0,
+)
+
 # Chaveta
 L_CHAVETA = _g(
     "L_ch",

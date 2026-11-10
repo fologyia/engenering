@@ -398,6 +398,23 @@ MODELOS: tuple[Modelo, ...] = (
         (("p1", "T", "n1", "T"),),
     ),
     Modelo(
+        "Fuso: diâmetro mínimo",
+        "Tr com passo de 7 mm levantando 20 kN: corpo, filetes, porca e flambagem do fuso.",
+        "d_fu",
+        {
+            "F_fu": 20e3,
+            "p_fu": 7.0,
+            "S_y": 420.0,
+            "S_y_porca": 200.0,
+            "n": 2.0,
+            "L_fu": 800.0,
+            "E": 205000.0,
+        },
+        (_R,),
+        (("f1", "fuso"),),
+        (("f1", "condicao", "n1", "condicoes"),),
+    ),
+    Modelo(
         "Cubo prensado: comprimento do ajuste",
         "Quanto do cubo precisa ficar apertado no eixo para segurar o torque sem chaveta.",
         "L_aj",

@@ -20,6 +20,7 @@ import sympy as sp
 
 from core import elementos_eixos as ee
 from core import elementos_mancais as em
+from core import elementos_molas_atrito as ema
 from core import elementos_transmissao as et
 from core import fatigue as ft
 
@@ -171,6 +172,8 @@ interferencia_maxima = _em_vetor(lambda d, i: _interferencia(d, i, 1))
 carga_equivalente_esferas = _em_vetor(_equivalente_esferas)
 carga_equivalente_xy = _em_vetor(_equivalente_xy)
 carga_estatica = _em_vetor(_estatica)
+#: S_cr da coluna por Johnson ou por Euler, conforme a esbeltez: a mesma do fuso no Assistente.
+tensao_critica_coluna = _em_vetor(ema.tensao_critica_coluna)
 #: Y de Lewis pela Tabela 14-2 de Shigley, a mesma do Assistente: abaixo de 12 dentes não existe.
 fator_de_lewis = _em_vetor(et.fator_lewis)
 
@@ -284,6 +287,12 @@ class FatorLewis(_Numerica):
     texto = "Y"
 
 
+class TensaoCritica(_Numerica):
+    nargs = 3
+    funcao = staticmethod(tensao_critica_coluna)
+    texto = "S_{cr}"
+
+
 #: Elas não têm forma fechada: simplificar não adianta e custa caro.
 NUMERICAS: tuple[type[sp.Function], ...] = (
     AtritoDarcy,
@@ -302,6 +311,7 @@ NUMERICAS: tuple[type[sp.Function], ...] = (
     CargaEquivalenteXY,
     CargaEstatica,
     FatorLewis,
+    TensaoCritica,
 )
 #: As que vêm de tabela ou de escolha: a planilha leva o valor calculado, e não uma fórmula.
 TABELADAS: tuple[type[sp.Function], ...] = (
@@ -332,4 +342,5 @@ FUNCOES: dict[str, Any] = {
     "CargaEquivalenteXY": carga_equivalente_xy,
     "CargaEstatica": carga_estatica,
     "FatorLewis": fator_de_lewis,
+    "TensaoCritica": tensao_critica_coluna,
 }

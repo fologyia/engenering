@@ -81,6 +81,7 @@ USOS: dict[str, Uso] = {
     "rolamento": _PECA_DE_EIXO,
     "inclinacao": _PECA_DE_EIXO,
     "rotacao_critica": _PECA_DE_EIXO,
+    "fuso": _PECA_DE_EIXO,
     # O eixo com trechos é a própria seção do eixo, redonda.
     "eixo_trechos": Uso(forma=REDONDA, formas=_REDONDAS, familia=EIXO),
 }

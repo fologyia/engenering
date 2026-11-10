@@ -32,6 +32,7 @@ from core.montador_funcoes import (
     LimiteBase,
     ResistenciaEmVida,
     SensibilidadeNeuber,
+    TensaoCritica,
 )
 from core.montador_grandezas import Unidades
 
@@ -124,6 +125,12 @@ def _funcao(e: sp.Expr) -> str:
     if isinstance(e, CargaEstatica):
         radial, axial = a
         return f"MAX({radial},0.6*{radial}+0.5*{axial})"
+    if isinstance(e, TensaoCritica):
+        # Euler acima da esbeltez de transição π·√(2E/S_y); Johnson abaixo.
+        esbeltez, sy, modulo = a
+        euler = f"PI()^2*{modulo}/({esbeltez})^2"
+        johnson = f"{sy}*(1-{sy}*({esbeltez})^2/(4*PI()^2*{modulo}))"
+        return f"IF({esbeltez}>=PI()*SQRT(2*{modulo}/{sy}),{euler},{johnson})"
     if isinstance(e, TABELADAS):
         raise SemFormula(type(e).__name__)
     raise SemFormula(type(e).__name__)

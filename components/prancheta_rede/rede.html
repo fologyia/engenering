@@ -1,0 +1,26 @@
+<div class="pr">
+  <div class="barra">
+    <div class="bloco">
+      <button type="button" data-f="mover" title="Selecionar e mover (V). Arraste o fundo para andar pelo desenho.">Selecionar</button>
+      <button type="button" data-f="reservatorio" title="Reservatório ou caixa d'água: clique onde ele fica (R)">Reservatório</button>
+      <button type="button" data-f="no" title="Ponto de consumo: clique no vazio, ou em cima de um tubo para dividir o tubo (N)">Nó</button>
+      <button type="button" data-f="tubo" title="Clique num nó e no seguinte; clique no vazio cria o nó ali. Esc ou duplo clique termina (T)">Tubo</button>
+    </div>
+    <span class="vao"></span>
+    <label class="grade" title="O ponto pula de quanto em quanto metros. Os nós grudam uns nos outros em qualquer grade.">
+      Grade <select data-c="grade"></select>
+    </label>
+    <div class="bloco">
+      <button type="button" data-a="apagar" title="Apagar o selecionado (Delete). Apagar um nó apaga os tubos dele.">Apagar</button>
+      <button type="button" data-a="desfazer" title="Desfazer (Ctrl+Z)">↶</button>
+      <button type="button" data-a="refazer" title="Refazer (Ctrl+Y)">↷</button>
+      <button type="button" data-a="maisLonge" title="Afastar (rodinha)">−</button>
+      <button type="button" data-a="maisPerto" title="Aproximar (rodinha)">+</button>
+      <button type="button" data-a="ajustar" title="Mostrar a rede inteira">Ver tudo</button>
+    </div>
+  </div>
+  <div class="area">
+    <svg tabindex="0" aria-label="Prancheta da rede de tubos"></svg>
+  </div>
+  <div class="rodape"><span data-i="xy"></span><span data-i="dica"></span></div>
+</div>

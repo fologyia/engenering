@@ -18,6 +18,7 @@ import sympy as sp
 
 from core import elementos_eixos as ee
 from core import elementos_mancais as em
+from core import elementos_molas_atrito as ema
 from core import elementos_transmissao as et
 from core import montador_blocos as mb
 from core import montador_grandezas as g
@@ -47,6 +48,7 @@ from core.montador_funcoes import (
     InterferenciaMinima,
     LarguraDaChaveta,
     RasgoDaChaveta,
+    TensaoCritica,
 )
 from core.montador_secoes import Validade
 
@@ -686,6 +688,149 @@ def _inclinacao(c: Contexto) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Fuso (parafuso de potência)
+# ---------------------------------------------------------------------------
+
+COM_COLAR = "Com colar"
+SEM_COLAR = "Sem colar (ponta ou mancal sem atrito)"
+CONFERIR_FLAMBAGEM = "Conferir a flambagem do fuso"
+SO_TRACIONADO = "O fuso só trabalha tracionado"
+NAO_EXIGIR_TRAVA = "Só avisar se não trava sozinho"
+EXIGIR_TRAVA = "Exigir que a rosca trave sozinha"
+
+
+def _fuso(c: Contexto) -> dict[str, Any]:
+    """Shigley, cap. 8, como o fuso do Assistente (:func:`core.elementos_molas_atrito.calcular_fuso`)."""
+    ligada = c.ligados.get("F")
+    forca = ligada if ligada is not None else c.letra(g.F_FUSO)
+    d = c.letra(g.D_FUSO)
+    passo = c.letra(g.P_FUSO)
+    entradas = c.letra(g.Z_FUSO, fixa=True)
+    atrito = c.letra(g.MU_ROSCA, fixa=True)
+    filetes = c.letra(g.FILETES, fixa=True)
+    n = c.letra(g.FS, fixa=True)
+    material = c.material()
+    escoamento = material.sy if material else c.letra(g.SY, fixa=True)
+    rosca = c.opcoes.get("rosca", ema.ROSCA_TRAPEZOIDAL)
+    secante = 1 / sp.cos(sp.rad(sp.nsimplify(ema.ROSCAS.get(rosca, 15.0))))
+    medio = d - passo / 2
+    raiz = d - passo
+    avanco = entradas * passo
+    folga = sp.pi * medio - atrito * avanco * secante
+    torque = forca * medio / 2 * (avanco + sp.pi * atrito * medio * secante) / folga
+    trava = sp.pi * atrito * medio * secante - avanco  # ≥ 0: a rosca segura a carga sozinha
+    if c.opcoes.get("colar", COM_COLAR) == COM_COLAR:
+        torque += forca * c.letra(g.MU_COLAR, fixa=True) * c.letra(g.D_COLAR, fixa=True) / 2
+    validade = [
+        Validade(raiz, "O passo precisa ser menor que o diâmetro do fuso."),
+        Validade(
+            folga,
+            "Com este atrito e este avanço, o fuso trava ao subir: nenhum torque levanta a carga.",
+        ),
+    ]
+    exigir = c.opcoes.get("trava", NAO_EXIGIR_TRAVA) == EXIGIR_TRAVA
+    if not exigir:
+        validade.append(
+            Validade(
+                trava,
+                "A rosca não é autotravante: sob carga, o fuso desce sozinho. É preciso freio ou "
+                "trava.",
+                restringe=False,
+            )
+        )
+    feitas = tuple(validade)
+    normal = 4 * forca / (sp.pi * raiz**2)
+    torcao = 16 * torque / (sp.pi * raiz**3)
+    pressao = forca / (sp.pi * medio * filetes * passo / 2)
+    flexao = 6 * sp.Rational(38, 100) * forca / (sp.pi * raiz * passo)
+    corte_fuso = 3 * forca / (2 * sp.pi * raiz * filetes * passo)
+    corte_porca = 3 * forca / (2 * sp.pi * d * filetes * passo)
+    cisalhamento = sp.Rational(577, 1000)
+    condicoes = [
+        Condicao(
+            "von Mises no corpo do fuso",
+            "Fuso",
+            sp.sqrt(normal**2 + 3 * torcao**2),
+            escoamento / n,
+            "\\sigma_{vM}",
+            tensoes=(("\\sigma", normal), ("\\tau", torcao)),
+            validade=feitas,
+        ),
+        Condicao(
+            "Pressão nos filetes",
+            "Fuso",
+            pressao,
+            c.letra(g.P_ADM_FILETE, fixa=True),
+            "p_{filete}",
+            validade=feitas,
+        ),
+        Condicao(
+            "Flexão no filete do fuso",
+            "Fuso",
+            flexao,
+            escoamento / n,
+            "\\sigma_{b}",
+            validade=feitas,
+        ),
+        Condicao(
+            "Corte nos filetes do fuso",
+            "Fuso",
+            corte_fuso,
+            cisalhamento * escoamento / n,
+            "\\tau_{fuso}",
+            validade=feitas,
+        ),
+        Condicao(
+            "Corte nos filetes da porca",
+            "Fuso",
+            corte_porca,
+            cisalhamento * c.letra(g.SY_PORCA, fixa=True) / n,
+            "\\tau_{porca}",
+            validade=feitas,
+        ),
+    ]
+    if exigir:
+        condicoes.append(
+            Condicao(
+                "Autotravamento da rosca",
+                "Fuso",
+                avanco,
+                sp.pi * atrito * medio * secante,
+                "\\ell",
+                validade=feitas,
+            )
+        )
+    if c.opcoes.get("flambagem", CONFERIR_FLAMBAGEM) == CONFERIR_FLAMBAGEM:
+        modulo = material.e if material else c.letra(g.E, fixa=True)
+        esbeltez = c.letra(g.K_FUSO, fixa=True) * c.letra(g.L_FUSO, fixa=True) / (raiz / 4)
+        critica = TensaoCritica(esbeltez, escoamento, modulo) * sp.pi * raiz**2 / 4
+        condicoes.append(
+            Condicao(
+                "Flambagem do fuso",
+                "Fuso",
+                c.letra(g.N_FLAMBAGEM, fixa=True) * forca,
+                critica,
+                "n_{fl} \\cdot F",
+                validade=feitas,
+            )
+        )
+        c.hipoteses.append(
+            "Flambagem do fuso pela raiz da rosca (r = d_r/4): Johnson na coluna curta e Euler na "
+            "longa, como no Assistente de cargas."
+        )
+    c.hipoteses.append(
+        "Fuso pelo Shigley, cap. 8: diâmetro médio d − p/2, raiz d − p e altura de contato p/2, "
+        "valores aproximados das roscas trapezoidais. Na rosca normalizada, confira na tabela."
+    )
+    c.hipoteses.append(
+        "O primeiro filete engajado leva 38 % da carga na flexão. A torção do corpo usa o torque "
+        "de subida com o colar, o caso mais carregado."
+    )
+    c.hipoteses.append("Sem carga lateral no fuso: a guia absorve o momento.")
+    return {"T": torque, "condicao": condicoes}
+
+
 def _rotacao_critica(c: Contexto) -> dict[str, Any]:
     estado = c.estado()
     secao = estado.secao
@@ -908,6 +1053,50 @@ BLOCOS_PECAS: tuple[Bloco, ...] = (
                 "fator a₁ da ISO 281.",
                 tuple(em.A1_CONFIABILIDADE),
                 "90 %",
+            ),
+        ),
+        numerar=True,
+    ),
+    Bloco(
+        "fuso",
+        "Fuso (parafuso de potência)",
+        GRUPO_PECAS,
+        "Rosca que transforma giro em força: o torque para subir, o corpo, os filetes, a "
+        "flambagem e se ele trava sozinho. Isola o diâmetro, o passo ou a carga.",
+        "T = F·d_m/2·(ℓ + π·μ·d_m·sec α)/(π·d_m − μ·ℓ·sec α)",
+        (Porta("F", "F", VALOR, g.FORCA), _MATERIAL),
+        (Porta("T", "T", VALOR, g.MOMENTO), _SAI_CONDICAO),
+        _fuso,
+        (
+            Opcao(
+                "rosca",
+                "Rosca",
+                "Trapezoidal ISO é a usual no Brasil (Tr 40×7). Quadrada rende mais, mas é cara de "
+                "fazer. O ângulo do filete aumenta o atrito.",
+                tuple(ema.ROSCAS),
+                ema.ROSCA_TRAPEZOIDAL,
+            ),
+            Opcao(
+                "colar",
+                "Colar",
+                "O colar é onde o fuso ou a porca encosta e gira: com atrito, ele soma torque.",
+                (COM_COLAR, SEM_COLAR),
+                COM_COLAR,
+            ),
+            Opcao(
+                "flambagem",
+                "Flambagem",
+                "Fuso que empurra a carga trabalha comprimido e pode flambar. Se ele só puxa, não.",
+                (CONFERIR_FLAMBAGEM, SO_TRACIONADO),
+                CONFERIR_FLAMBAGEM,
+            ),
+            Opcao(
+                "trava",
+                "Autotravamento",
+                "Exigir faz a rosca segurar a carga parada sem freio. Vibração reduz o atrito: em "
+                "carga sobre pessoas, ponha freio ou trava mesmo assim.",
+                (NAO_EXIGIR_TRAVA, EXIGIR_TRAVA),
+                NAO_EXIGIR_TRAVA,
             ),
         ),
         numerar=True,

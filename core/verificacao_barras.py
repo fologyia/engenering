@@ -201,6 +201,7 @@ def _verificar_perfil(
     lb_mm: float,
     cb: float,
     norma: str,
+    extras: Mapping[str, Any] | None = None,
 ) -> ResultadoDaBarra:
     perfil = sc.obter_perfil(cfg.perfil)
     secao = cbk.secao_de_perfil(perfil)
@@ -216,6 +217,8 @@ def _verificar_perfil(
         Mx_kNm=1e-3,
         My_kNm=1e-3,
     )
+    if extras:
+        base = replace(base, **extras)
     referencia = cbk.verificar_coluna(base)
     nc_rd = referencia.compressao["Nc_Rd"] if referencia.compressao else None
     mx_rd, my_rd = referencia.mrd_x_kNm, referencia.mrd_y_kNm
@@ -459,6 +462,33 @@ def verificar_barra_com_esforcos(
             linhas=tuple(v for v in resultado.linhas if v.nome != "Torção (informativo)"),
         )
     return resultado
+
+
+def verificar_com_comprimentos(
+    membro: str,
+    cfg: em.ConfiguracaoDoMembro,
+    combinados: Sequence[em.Combinado],
+    *,
+    b2: float,
+    aco: str,
+    norma: str,
+    cb: float,
+    lx_mm: float,
+    ly_mm: float,
+    lb_mm: float,
+    extras: Mapping[str, Any] | None = None,
+) -> ResultadoDaBarra:
+    """A verificação de uma barra do modelo com os comprimentos de flambagem K·L dados por quem
+    chama, como os pilares de :mod:`core.colunas_do_modelo`, que tiram o K de cada trecho entre os
+    travamentos. ``extras`` vai para a :class:`~core.column_buckling.EntradaColuna` (o comprimento
+    do B₁ e os eixos cujo K veio da coluna inteira)."""
+    if aco not in ACOS:
+        raise ValueError(f"Aço desconhecido: {aco!r}.")
+    fy = ACOS[aco][0]
+    triplas = _triplas(combinados, cfg.eixo_forte, b2)
+    if cfg.perfil in ct.CATALOGO_CANTONEIRAS:
+        return _verificar_cantoneira(membro, cfg, triplas, fy, max(lx_mm, ly_mm))
+    return _verificar_perfil(membro, cfg, triplas, fy, lx_mm, ly_mm, lb_mm, cb, norma, extras)
 
 
 def estados_ultimos(estados: Sequence[str]) -> list[str]:

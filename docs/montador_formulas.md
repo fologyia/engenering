@@ -241,10 +241,20 @@ Assistente de cargas, escritas em letra, e a Central de validação confere os d
 - **Inclinação:** θ = θ·EI/(E·I) no mancal ou na engrenagem, com os limites da Tabela 7-2 de Shigley.
 - **Rotação crítica:** Dunkerley com o eixo biapoiado e uma peça entre os mancais ou em balanço. Fica
   abaixo da real, a favor da segurança.
+- **Fuso (parafuso de potência):** a conta do fuso do Assistente de cargas (Shigley, cap. 8) em
+  letra: torque para subir T = F·d_m/2·(ℓ + π·μ·d_m·sec α)/(π·d_m − μ·ℓ·sec α), mais o colar; von Mises
+  no corpo pela raiz d − p; pressão, flexão (38 % da carga no primeiro filete) e corte nos filetes do
+  fuso e da porca; flambagem pela raiz, com Johnson na coluna curta e Euler na longa
+  (`TensaoCritica`, a mesma função do Assistente). A saída T vai ao motor ou à chaveta. Opções: rosca
+  trapezoidal ISO, ACME ou quadrada, colar com ou sem atrito, fuso só tracionado (sem flambagem) e
+  exigir que a rosca trave sozinha (vira condição; senão, só avisa). Como a flambagem do fuso já está
+  dentro do bloco, a biblioteca esconde o bloco Flambagem de Euler numa montagem com fuso.
 
 Os modelos "Eixo com engrenagem", "Par de engrenagens: módulo do dente", "Pinhão cônico em balanço",
 "Rigidez do eixo", "Polia em balanço", "Chaveta: comprimento mínimo",
-"Cubo prensado: comprimento do ajuste" e "Rolamento: capacidade C" já abrem montados.
+"Cubo prensado: comprimento do ajuste", "Rolamento: capacidade C" e "Fuso: diâmetro mínimo" já
+abrem montados. O caso de aceite "Fuso Tr 40×7, carga máxima" confere a carga máxima do
+Montador contra a do Assistente (35 317,8 N, governada pela pressão nos filetes).
 
 ## Eixo com trechos
 

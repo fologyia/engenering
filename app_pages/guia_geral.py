@@ -77,6 +77,7 @@ opcoes = [
     "Cargas do esqueleto",
     "Plano de cargas",
     "Esforços do modelo",
+    "Colunas do modelo",
     "Lista de material",
     "Casos de carga",
     "Central de validação",
@@ -2335,6 +2336,42 @@ elif modulo == "Esforços do modelo":
             """
         )
     link_modulo("app_pages/esforcos_modelo.py", "Abrir Esforços do modelo")
+
+
+elif modulo == "Colunas do modelo":
+    st.header("Colunas do modelo")
+    st.markdown(
+        "Todos os pilares do modelo do SolidWorks verificados de uma vez, cada um com os "
+        "**travamentos lidos do esqueleto**: a barra que encosta no pilar o trava na direção dela. "
+        "A que chega na direção da alma trava **L_x**; a que chega na direção da mesa trava "
+        "**L_y**. As alturas dividem o pilar em trechos, e cada trecho recebe o K da Tabela E.1 "
+        "pelas suas pontas, como na tabela de travamentos da página Flambagem de colunas."
+    )
+    with st.expander("Como usar", expanded=True):
+        st.markdown(
+            """
+            1. Em **Esforços do modelo**, envie os resultados de cada caso e o esqueleto da macro.
+            2. Abra **Colunas do modelo** e diga como o pé dos pilares está preso no apoio:
+               rotulado (a favor da segurança) ou engastado.
+            3. Veja a tabela dos pilares: onde cada um é travado, o K·L que governa em cada eixo
+               e o aproveitamento. Escolha um pilar para ver os trechos e a verificação completa.
+            4. Para um pilar com travamento especial, digitado à mão, use a tabela de travamentos
+               da página **Flambagem de colunas**.
+            """
+        )
+    with st.expander("O que o programa supõe"):
+        st.markdown(
+            """
+            - Os nós da estrutura contam como travados de lado; o deslocamento da estrutura
+              inteira entra pelo **B₂** do tipo Pilar, em Esforços do modelo.
+            - Topo sem nada encostado é ponta livre: o trecho de cima sai da flambagem da coluna
+              inteira. Um resto de esqueleto de até 0,40 m acima do último nó não é balanço.
+            - Sem a direção da alma (macro anterior à v5), as duas posições são testadas e vale
+              a pior.
+            - O travamento é suposto rígido; as barras que travam são verificadas à parte.
+            """
+        )
+    link_modulo("app_pages/colunas_do_modelo.py", "Abrir Colunas do modelo")
 
 
 elif modulo == "Cargas do esqueleto":

@@ -116,6 +116,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Importar o SolidWorks e verificar barras, fundações e placas de base",
             ),
             ItemMenu(
+                "app_pages/colunas_do_modelo.py",
+                "Colunas do modelo",
+                ":material/view_column:",
+                "Verificar todos os pilares com os travamentos lidos do esqueleto, em x e em y",
+            ),
+            ItemMenu(
                 "app_pages/sensores_do_modelo.py",
                 "Sensores do modelo",
                 ":material/sensors:",
@@ -288,6 +294,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Montador de fluidos",
                 ":material/water_drop:",
                 "Ligar fluido, tubo e verificação e isolar a vazão, o diâmetro ou a potência",
+            ),
+            ItemMenu(
+                "app_pages/rede_de_tubos.py",
+                "Rede de tubos",
+                ":material/lan:",
+                "Rede com ramais e malhas: a vazão de cada trecho e a pressão de cada nó",
             ),
         ),
     ),

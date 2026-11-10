@@ -18,6 +18,7 @@ import sympy as sp
 
 from core import elementos_eixos as ee
 from core import elementos_mancais as em
+from core import elementos_molas_atrito as ema
 from core import elementos_transmissao as et
 from core import montador as mt
 from core import montador_blocos as mb
@@ -561,6 +562,64 @@ def _inclinacao_do_assistente() -> float:
     return 40.0 * (float(giro or 0.0) / 0.001) ** 0.25
 
 
+_FUSO_DO_CASO: dict[str, Any] = {
+    "forca_kN": 20.0,
+    "rotacao_rpm": 60.0,
+    "rosca": ema.ROSCA_TRAPEZOIDAL,
+    "d_mm": 40.0,
+    "passo_mm": 7.0,
+    "entradas": 1,
+    "filetes": 8.0,
+    "atrito": 0.15,
+    "atrito_colar": 0.01,
+    "d_colar_mm": 60.0,
+    "sy_MPa": 420.0,
+    "sy_porca_MPa": 200.0,
+    "p_adm_MPa": 11.0,
+    "fs": 2.0,
+    "comprimento_mm": 800.0,
+    "k": 1.0,
+    "e_GPa": 205.0,
+    "fs_flambagem": 3.0,
+}
+
+
+def _fuso_do_assistente() -> float:
+    """A maior carga do Tr 40×7 no Assistente: a que leva a pior verificação a 100 %."""
+
+    def pior(forca_kN: float) -> float:
+        r = ema.calcular_fuso({**_FUSO_DO_CASO, "forca_kN": forca_kN})
+        return max(v.aproveitamento or 0.0 for v in r.verificacoes)
+
+    baixo, alto = 1.0, 1000.0
+    for _ in range(80):
+        meio = (baixo + alto) / 2
+        baixo, alto = (meio, alto) if pior(meio) < 1.0 else (baixo, meio)
+    return (baixo + alto) / 2 * 1000.0
+
+
+def _fuso_no_montador() -> float:
+    return _valor(
+        resolver(
+            (_R,),
+            "F_fu",
+            {
+                "d_fu": 40.0,
+                "p_fu": 7.0,
+                "S_y": 420.0,
+                "S_y_porca": 200.0,
+                "p_adm": 11.0,
+                "n": 2.0,
+                "L_fu": 800.0,
+                "E": 205000.0,
+                "n_fl": 3.0,
+            },
+            ligar=(("f1", "condicao", "n1", "condicoes"),),
+            extras=(("f1", "fuso"),),
+        )
+    )
+
+
 def casos() -> tuple[CasoDeAceite, ...]:
     return (
         CasoDeAceite(_MODULO, "Exemplo 4.1", "h_f (m)", 0.61, _perda, 0.005, _MAURER),
@@ -688,6 +747,15 @@ def casos() -> tuple[CasoDeAceite, ...]:
             _inclinacao_do_assistente(),
             lambda: _valor(_eixo_de_um_diametro()),
             0.001,
+            _DO_ASSISTENTE,
+        ),
+        CasoDeAceite(
+            _PECAS,
+            "Fuso Tr 40×7, carga máxima",
+            "F (N)",
+            _fuso_do_assistente(),
+            _fuso_no_montador,
+            1e-6,
             _DO_ASSISTENTE,
         ),
     )

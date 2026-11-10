@@ -185,3 +185,25 @@ em `core/travamentos_da_coluna.py`, sem Streamlit:
   levam `travamentos`, `trechos_em_x`/`trechos_em_y` e o maior trecho do B₁.
 
 O travamento é suposto rígido e resistente; o programa não o dimensiona (AISC 360-16, Appendix 6).
+
+## Travamentos lidos do modelo: página Colunas do modelo (10/11/2026)
+
+A tabela de travamentos desta página é para digitar à mão um pilar com travamento especial. Para
+todos os pilares do modelo do SolidWorks de uma vez, a página **Colunas do modelo** (grupo Modelo
+SolidWorks, `core/colunas_do_modelo.py`) lê os travamentos do esqueleto da macro:
+
+- `ler_pilar`: cada barra que encosta no pilar (`core.travamentos.ligacoes`) entra na altura dela,
+  medida da base. Ela trava L_x se chega na direção da alma (|cos| ≥ 0,5) e L_y se chega na da
+  mesa. Barras a menos de 0,10 m uma da outra são o mesmo nó. A direção da alma vem da macro v5 ou
+  mais nova; sem ela, `verificar_colunas` testa as duas posições e fica com a pior.
+- Pontas: o pé no apoio do modelo é rotulado ou engastado, como o usuário escolhe (o arquivo não
+  diz); o pé sobre outra barra é um nó (pino). O topo com barra encostada é um nó; sem nada, é
+  livre, e o trecho de cima sai da coluna inteira. Um resto de até 0,40 m acima do último nó não é
+  balanço. `tc.trechos_pelas_pontas` recebe a base e o topo direto; com a base rotulada e o topo
+  livre sem travamento, a coluna não fica de pé e o pilar fica pendente, com o motivo.
+- Os nós contam como travados de lado; o deslocamento da estrutura entra pelo B₂ do tipo Pilar
+  (método da amplificação dos esforços). A verificação é a das barras do modelo
+  (`verificacao_barras.verificar_com_comprimentos`) com o K·L do trecho que governa em cada eixo, o
+  B₁ no maior trecho e o L_b entre os travamentos de L_y. Sem travamento no meio e com a base
+  rotulada, o pilar sai igual à verificação de Esforços do modelo (há teste).
+

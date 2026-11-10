@@ -191,6 +191,46 @@ def trechos_do_eixo(
     ``apoio`` é uma condição da Tabela E.1 (:data:`PONTAS`); qualquer outra coisa é o K informado
     (``k_do_apoio``), que vale para todos os trechos. ``alturas_mm`` já vem de :func:`organizar`.
     """
+    return _trechos(eixo, comprimento_mm, alturas_mm, PONTAS.get(apoio), k_do_apoio, recomendado)
+
+
+def trechos_pelas_pontas(
+    eixo: str,
+    comprimento_mm: float,
+    alturas_mm: Sequence[float],
+    base: str,
+    topo: str,
+    recomendado: bool = True,
+) -> EixoTravado:
+    """O mesmo, com a base e o topo dados direto (:data:`PINO`, :data:`ENGASTE`, :data:`LIVRE`
+    ou :data:`GUIADO`), como nos pilares lidos do modelo, em que cada ponta é o que ela encosta.
+
+    Base rotulada e topo livre só ficam de pé com um travamento, e então o trecho de cima sai da
+    coluna inteira; sem travamento, a coluna é um mecanismo e a conta para com ``ValueError``.
+    """
+    if base not in _NOMES or topo not in _NOMES:
+        raise ValueError(f"Ponta desconhecida: {base!r}, {topo!r}.")
+    if LIVRE in (base, topo) and PINO in (base, topo) and not alturas_mm:
+        raise ValueError(
+            "A coluna com uma ponta rotulada e a outra livre, sem travamento no meio, não fica de "
+            "pé."
+        )
+    if base == LIVRE:
+        raise ValueError("A coluna com a base livre não fica de pé.")
+    return _trechos(eixo, comprimento_mm, alturas_mm, (base, topo), 1.0, recomendado)
+
+
+_NOMES = (PINO, ENGASTE, LIVRE, GUIADO)
+
+
+def _trechos(
+    eixo: str,
+    comprimento_mm: float,
+    alturas_mm: Sequence[float],
+    pontas: tuple[str, str] | None,
+    k_do_apoio: float,
+    recomendado: bool,
+) -> EixoTravado:
     comprimento = float(comprimento_mm)
     if not math.isfinite(comprimento) or comprimento <= 0:
         raise ValueError("O comprimento da coluna deve ser maior que zero.")
@@ -198,7 +238,6 @@ def trechos_do_eixo(
         [a for a in alturas_mm if TOLERANCIA_MM < a < comprimento - TOLERANCIA_MM]
     )
     pontos = (0.0, *alturas, comprimento)
-    pontas = PONTAS.get(apoio)
     ultimo = len(pontos) - 2
     trechos: list[Trecho] = []
     for i, (de, ate) in enumerate(zip(pontos, pontos[1:], strict=False)):

@@ -198,6 +198,8 @@ PASSOS: tuple[Passo, ...] = (
         (
             "Na tabela das barras: Aplicar as sugestões; confira tipo, perfil e Lx/Ly/Lb.",
             "Veja o pior caso de cada barra e a verificação; ajuste o modelo se algo não passa.",
+            "Na página Colunas do modelo, confira os pilares com os travamentos lidos do esqueleto "
+            "(em x e em y) e diga como o pé está preso; registre no projeto.",
             "Registre a verificação, o quadro das fundações e as placas no projeto.",
             "Na página Reações nas bases, baixe o Excel com a força e o momento de cada pé, caso a "
             "caso, para quem projeta a fundação.",

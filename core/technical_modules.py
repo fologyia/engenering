@@ -115,6 +115,20 @@ def _registrar_padrao() -> None:
             aliases=("Esforços do SolidWorks", "Verificação das barras do modelo"),
         ),
         ModuloTecnico(
+            id="colunas_do_modelo",
+            titulo="Colunas do modelo",
+            versao="1.0",
+            pagina="app_pages/colunas_do_modelo.py",
+            grupo_navegacao="Modelo SolidWorks",
+            ordem=12,
+            icone=":material/view_column:",
+            descricao=(
+                "Todos os pilares do modelo do SolidWorks com os travamentos lidos do esqueleto, "
+                "em x e em y: o K de cada trecho pela Tabela E.1 e a verificação pela NBR 8800."
+            ),
+            aliases=("Pilares do modelo", "Travamentos dos pilares"),
+        ),
+        ModuloTecnico(
             id="sensores_do_modelo",
             titulo="Sensores do modelo",
             versao="1.0",
@@ -301,6 +315,20 @@ def _registrar_padrao() -> None:
             ordem=70,
             icone=":material/water_drop:",
             descricao="Blocos de fluido, tubulação e verificação, com a fórmula isolada.",
+        ),
+        ModuloTecnico(
+            id="rede_de_tubos",
+            titulo="Rede de tubos",
+            versao="1.0",
+            pagina="app_pages/rede_de_tubos.py",
+            grupo_navegacao="Mecânica dos fluidos",
+            ordem=71,
+            icone=":material/lan:",
+            descricao=(
+                "Rede de tubos com ramais e malhas, com reservatórios e bombas: vazão, velocidade e "
+                "perda de cada trecho e pressão de cada nó."
+            ),
+            aliases=("Rede de distribuição", "Hardy Cross"),
         ),
         ModuloTecnico(
             id="analise_sensibilidade",
