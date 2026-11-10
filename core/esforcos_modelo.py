@@ -172,16 +172,100 @@ def _decodificar(conteudo: bytes) -> str:
     return conteudo.decode("latin-1")
 
 
+#: Um número que só pode ser milhar: grupos de três algarismos depois de cada separador.
+_SO_MILHAR = {
+    ".": re.compile(r"[+-]?[1-9]\d{0,2}(?:\.\d{3})+"),
+    ",": re.compile(r"[+-]?[1-9]\d{0,2}(?:,\d{3})+"),
+}
+_NUMERO = re.compile(r"([+-]?[\d.,]*\d)(?:[eE]([+-]?\d+))?")
+
+
 def numero(texto: str, *, decimal_virgula: bool = True) -> float | None:
-    """Número do CSV: "78.611" → 78611, "-1.019,1" → −1019,1, "1,4815E+05" → 148150."""
+    """Número do CSV: "78.611" → 78611, "-1.019,1" → −1019,1, "1,4815E+05" → 148150.
+
+    ``decimal_virgula`` só decide o caso ambíguo, em que o separador pode ser de milhar ("78.611"
+    com a vírgula decimal é 78611; com o ponto decimal, 78,611). O que não é ambíguo vale pelo
+    próprio número: com ponto e vírgula juntos, o último é o decimal ("1,014.4" é 1014,4 nos dois
+    formatos), e um separador que não fecha grupos de três não é de milhar ("461.49", "0.632")."""
     s = texto.strip().replace(" ", "").replace(" ", "")
-    if not s or s in ("-", "—"):
+    achado = _NUMERO.fullmatch(s)
+    if achado is None:
         return None
-    s = s.replace(".", "").replace(",", ".") if decimal_virgula else s.replace(",", "")
+    mantissa, expoente = achado.group(1), achado.group(2)
+    tem_ponto, tem_virgula = "." in mantissa, "," in mantissa
+    decimal = ""
+    if tem_ponto and tem_virgula:
+        decimal = "," if mantissa.rfind(",") > mantissa.rfind(".") else "."
+    elif tem_virgula and (decimal_virgula or not _SO_MILHAR[","].fullmatch(mantissa)):
+        decimal = ","
+    elif tem_ponto and (not decimal_virgula or not _SO_MILHAR["."].fullmatch(mantissa)):
+        decimal = "."
+    for separador in ".,":
+        if separador != decimal:
+            mantissa = mantissa.replace(separador, "")
+    if decimal:
+        mantissa = mantissa.replace(decimal, ".")
     try:
-        return float(s)
+        valor = float(mantissa + (f"e{expoente}" if expoente else ""))
     except ValueError:
         return None
+    return valor if math.isfinite(valor) else None
+
+
+def virgula_e_decimal(linhas: Iterable[str], sep: str, padrao: bool | None = None) -> bool:
+    """O arquivo escreve os números com vírgula decimal (padrão brasileiro) ou com ponto?
+
+    Decide pelos próprios números, não pelo separador das colunas: um computador com o ponto
+    decimal grava "sep=;" do mesmo jeito. Vale a prova que não é ambígua — ponto e vírgula no
+    mesmo número, ou um separador que não fecha grupos de três. Sem prova nenhuma (ou com provas
+    dos dois lados), fica o ``padrao`` (vírgula decimal quando as colunas vêm com ";")."""
+    com_virgula, com_ponto = _provas_do_formato(linhas, sep)
+    if com_virgula and not com_ponto:
+        return True
+    if com_ponto and not com_virgula:
+        return False
+    return (sep == ";") if padrao is None else padrao
+
+
+def _provas_do_formato(linhas: Iterable[str], sep: str) -> tuple[int, int]:
+    """Quantos números do arquivo só podem ter a vírgula decimal e quantos só o ponto."""
+    com_virgula = com_ponto = 0
+    for linha in linhas:
+        for campo in linha.split(sep):
+            achado = _NUMERO.fullmatch(campo.strip())
+            if achado is None:
+                continue
+            mantissa = achado.group(1)
+            tem_ponto, tem_virgula = "." in mantissa, "," in mantissa
+            if tem_ponto and tem_virgula:
+                if mantissa.rfind(",") > mantissa.rfind("."):
+                    com_virgula += 1
+                else:
+                    com_ponto += 1
+            elif tem_virgula and not _SO_MILHAR[","].fullmatch(mantissa):
+                com_virgula += 1
+            elif tem_ponto and not _SO_MILHAR["."].fullmatch(mantissa):
+                com_ponto += 1
+    return com_virgula, com_ponto
+
+
+def formato_do_lote(conteudos: Iterable[bytes]) -> bool | None:
+    """A vírgula é decimal nos arquivos enviados juntos? ``None`` sem prova (ou com provas dos
+    dois lados).
+
+    Os arquivos de uma remessa saem do mesmo computador: o arquivo de reações, com meia dúzia de
+    números ("7.500" é 7500 ou 7,5?), herda o formato que o de forças prova."""
+    com_virgula = com_ponto = 0
+    for conteudo in conteudos:
+        linhas = _decodificar(conteudo).splitlines()
+        virgula, ponto = _provas_do_formato(linhas, _separador(linhas))
+        com_virgula += virgula
+        com_ponto += ponto
+    if com_virgula and not com_ponto:
+        return True
+    if com_ponto and not com_virgula:
+        return False
+    return None
 
 
 def _separador(linhas: Sequence[str]) -> str:
@@ -230,14 +314,20 @@ def _estudo_e_data(linhas: Sequence[str]) -> tuple[str, str]:
     return estudo, data
 
 
-def ler_arquivo(conteudo: bytes, nome_arquivo: str = "") -> ArquivoLido:
+def ler_arquivo(
+    conteudo: bytes, nome_arquivo: str = "", *, virgula_decimal: bool | None = None
+) -> ArquivoLido:
     """Reconhece e lê um CSV do SolidWorks (forças da viga, reações ou tensões).
+
+    ``virgula_decimal``: o formato dos números dos arquivos enviados juntos
+    (:func:`formato_do_lote`), para o arquivo que não prova o dele; a prova do próprio arquivo
+    vale mais.
 
     Só sai :class:`ArquivoInvalido`: um trecho inesperado do arquivo vira essa mensagem e uma
     ocorrência no diagnóstico (com ``MECANICA_TOOLKIT_ERROS=levantar``, a falha original sobe).
     """
     try:
-        lido = _ler_arquivo(conteudo, nome_arquivo)
+        lido = _ler_arquivo(conteudo, nome_arquivo, virgula_decimal)
         return replace(lido, caso_de_carga=_caso_de_carga(_decodificar(conteudo).splitlines()))
     except ArquivoInvalido:
         raise
@@ -254,7 +344,9 @@ def ler_arquivo(conteudo: bytes, nome_arquivo: str = "") -> ArquivoLido:
         ) from erro
 
 
-def _ler_arquivo(conteudo: bytes, nome_arquivo: str) -> ArquivoLido:
+def _ler_arquivo(
+    conteudo: bytes, nome_arquivo: str, virgula_decimal: bool | None = None
+) -> ArquivoLido:
     texto = _decodificar(conteudo)
     linhas = texto.splitlines()
     if not linhas:
@@ -268,7 +360,7 @@ def _ler_arquivo(conteudo: bytes, nome_arquivo: str) -> ArquivoLido:
         )
     assinatura = hashlib.sha256(conteudo).hexdigest()
     sep = _separador(linhas)
-    decimal_virgula = sep == ";"
+    decimal_virgula = virgula_e_decimal(linhas, sep, virgula_decimal)
     estudo, data = _estudo_e_data(linhas)
     normal_todo = _normal(texto[:3000])
     for indice, linha in enumerate(linhas[:30]):

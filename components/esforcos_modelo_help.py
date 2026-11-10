@@ -30,7 +30,19 @@ AJUDA: dict[str, str] = {
     ),
     "eixo_vertical": (
         "O eixo vertical do modelo: no SolidWorks costuma ser o Y. Serve para separar a reação "
-        "vertical da horizontal na conferência."
+        "vertical da horizontal na conferência. Com o caso PP importado, o programa acha o eixo "
+        "sozinho pelo peso próprio e trava esta escolha."
+    ),
+    "eixo_provado": (
+        "No PP só há gravidade: a reação dele aponta para cima no eixo vertical, e as barras "
+        "mostram o peso próprio ao longo delas. Com essa prova o programa usa o eixo certo, mesmo "
+        "que o projeto tenha sido gravado com o outro."
+    ),
+    "res_tratamentos": (
+        "Erros de leitura que o programa conserta sozinho, porque a prova está nos arquivos: o "
+        "eixo vertical, a base de cada pilar, o eixo forte e o perfil pela seção do modelo, o tipo "
+        "da barra que ficou vazio, os ventos com o nome trocado e a reação total que faltou. O "
+        "que muda os números de um caso aparece acima, como item para conferir."
     ),
     "res_arquivos": (
         "O que foi reconhecido em cada arquivo. Confira a coluna Caso: é o código do plano de "

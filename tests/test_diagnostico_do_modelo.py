@@ -199,7 +199,10 @@ def test_avisos_de_malha_viram_uma_linha_so():
 
 
 # ------------------------------------------------------------------ página
-def test_painel_na_pagina_e_o_botao_de_trocar_os_nomes(banco_com_projeto):
+def test_painel_na_pagina_trata_sozinho_os_ventos_com_o_nome_trocado(banco_com_projeto):
+    """Antes havia o botão "Trocar os nomes no programa". Agora a troca tem prova (cada vento do
+    estudo é, em direção e valor, um vento do plano) e o programa usa cada resultado no caso
+    certo sem pedir nada; ao gravar qualquer edição, os nomes certos ficam gravados."""
     from tests.test_esforcos_modelo_pagina import abrir, sem_ajuda
 
     trocado = {**REACOES, "W90": REACOES["W270"], "W270": REACOES["W90"]}
@@ -210,15 +213,18 @@ def test_painel_na_pagina_e_o_botao_de_trocar_os_nomes(banco_com_projeto):
         em.com_parametros(dados(trocado), {"Pilar": em.ParametrosDoTipo(b2=1.1)})
     )
     salvar_projeto(projeto, motivo="teste")
+    assert not dm.diagnosticar(dados(trocado), plano()).tudo_certo  # sem o tratamento, é erro
     t = abrir()
     assert not sem_ajuda(t), sorted(sem_ajuda(t))
     assert "Antes de verificar: o que conferir" in [s.value for s in t.subheader]
-    metricas = {m.label: m.value for m in t.metric}
-    assert metricas["Para corrigir"] == "1"
-    botao = next(b for b in t.button if b.key and b.key.startswith("em_diag_nomes_"))
-    botao.click().run()
+    assert any("Tudo confere" in s.value for s in t.success)
+    assert any("**Casos de vento com o nome trocado.**" in m.value for m in t.markdown)
+    assert not any((b.key or "").startswith("em_diag_nomes_") for b in t.button)
+    # Só de abrir a página nada é gravado: o projeto continua com os nomes como chegaram.
+    salvo = em.esforcos_do_projeto(obter_projeto_ativo())
+    assert salvo.casos["W270"].reacoes.modelo == pytest.approx(REACOES["W90"])
+    t.button(key="em_gravar_barras").click().run()
     assert not t.exception, [str(e.value) for e in t.exception]
     salvo = em.esforcos_do_projeto(obter_projeto_ativo())
     assert salvo.casos["W270"].reacoes.modelo == pytest.approx(REACOES["W270"])
     assert dm.diagnosticar(salvo, plano()).tudo_certo
-    assert any("Tudo confere" in s.value for s in t.success)

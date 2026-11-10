@@ -149,6 +149,7 @@ files = [
     "core/apoios_do_modelo.py",
     "core/diagnostico_do_modelo.py",
     "core/reacoes_nas_bases.py",
+    "core/tratamento_do_modelo.py",
     "core/memorial_do_projeto.py",
     "core/viga_desenhada.py",
     "core/desenho_eixos_fundacao.py",

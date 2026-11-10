@@ -224,7 +224,12 @@ def test_placas_de_base_na_pagina(banco_com_projeto):
 
 
 def test_placas_sem_pilar_marcado_explicam_o_que_fazer(banco_com_projeto):
-    gravar_no_projeto(importar("PP"))
+    # A barra sem tipo ganha sozinha o da leitura (tratamento automático): "nenhum pilar" só
+    # acontece quando o usuário marcou todas como outra coisa.
+    dados = importar("PP")
+    gravar_no_projeto(
+        em.com_membros(dados, {b: replace(c, tipo="Viga") for b, c in dados.membros.items()})
+    )
     t = abrir()
     assert not t.exception
     assert any("verificar as placas" in i.value for i in t.info)
@@ -341,21 +346,23 @@ def test_base_de_cada_pilar_e_forca_nos_eixos_do_modelo_pela_macro(banco_com_pro
     assert not any(a.startswith("em_diag_bases_") for a in (b.key or "" for b in t.button))
 
 
-def test_base_escolhida_no_topo_tem_o_botao_que_corrige(banco_com_projeto):
+def test_base_escolhida_no_topo_e_tratada_sem_pedir_nada(banco_com_projeto):
     from core import quadro_fundacoes as qf
 
     # O primeiro pilar do pórtico é listado do pé para o topo: Fim da lista é a ponta de cima.
     pilar = _gravar_o_portico_3d(base_do_primeiro=em.BASE_FIM)
     t = abrir()
     textos = [m.value for m in t.markdown]
-    assert any("foi escolhida na ponta que é a de cima" in texto for texto in textos)
-    # O erro é da escolha: nenhum arquivo de forças leva a culpa.
+    assert any("**Base do pilar escolhida na ponta de cima.**" in texto for texto in textos)
+    # Nem a escolha nem os arquivos de forças viram item para corrigir.
     assert not any("à fundação, mas a reação" in texto for texto in textos)
-    assert {m.label: m.value for m in t.metric}["Para corrigir"] == "1"
+    assert "Para corrigir" not in {m.label for m in t.metric}
+    assert not any((b.key or "").startswith("em_diag_bases_") for b in t.button)
     bases = next(d.value for d in t.dataframe if "Base no arquivo" in d.value.columns)
-    assert sum(s.startswith("Ponta de cima") for s in bases["Situação"]) == 1
-    botao = next(b for b in t.button if (b.key or "").startswith("em_diag_bases_"))
-    botao.click().run()
+    assert set(bases["Situação"]) == {"Certo"}
+    # O projeto só muda quando o usuário grava alguma coisa: aí fica a base certa.
+    assert em.esforcos_do_projeto(obter_projeto_ativo()).membros[pilar].base == em.BASE_FIM
+    t.button(key="em_gravar_barras").click().run()
     assert not t.exception
     gravado = em.esforcos_do_projeto(obter_projeto_ativo())
     assert gravado.membros[pilar].base == em.BASE_AUTOMATICA

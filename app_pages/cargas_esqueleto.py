@@ -15,10 +15,10 @@ from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import cargas_esqueleto as ce
 from core import cargas_pelo_modelo as cpm
-from core import esforcos_modelo as em
 from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
 from core import plano_de_cargas as pc
+from core import tratamento_do_modelo as tm
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Cargas do esqueleto", ":material/grid_view:")
@@ -57,7 +57,7 @@ problemas: list[str] = []
 with st.container(border=True), secao_protegida("Cargas do piso pelo esqueleto do modelo"):
     st.subheader("Cargas do piso pelo esqueleto do modelo", help=AJUDA["sec_modelo"])
     geometria = ld.geometria_do_projeto(projeto)
-    esforcos = em.esforcos_do_projeto(projeto)
+    esforcos = tm.do_projeto(projeto).dados
     enviado = st.file_uploader(
         "Esqueleto do modelo (…_esqueleto.csv da macro)",
         type=["csv"],

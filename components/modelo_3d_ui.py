@@ -19,11 +19,11 @@ from core import cena_3d as c3
 from core import cena_3d_png
 from core import cena_do_modelo as cm
 from core import cena_escada as cesc
-from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import plano_de_cargas as pc
 from core import reacoes_nas_bases as rb
+from core import tratamento_do_modelo as tm
 from core import vento_estrutura_aberta as va
 from core import vento_por_barras as vpb
 
@@ -74,7 +74,7 @@ def mostrar_modelo_3d(projeto: Any) -> None:
             icon=":material/account_tree:",
         )
         return
-    dados = em.esforcos_do_projeto(projeto)
+    dados = tm.do_projeto(projeto).dados
     eixo = dados.eixo_vertical if dados.eixo_vertical in ("Y", "Z") else "Y"
     plano = pc.plano_do_projeto(projeto)
     nomes = cm.Nomes.do_projeto(geometria, dados)

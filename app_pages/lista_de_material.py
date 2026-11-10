@@ -11,9 +11,9 @@ from components.figuras import mostrar_figura
 from components.lista_de_material_help import AJUDA
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
-from core import esforcos_modelo as em
 from core import lista_de_material as lm
 from core import plano_de_cargas as pc
+from core import tratamento_do_modelo as tm
 from core.desenho_lista_material import figura_da_massa
 from core.project_store import obter_projeto_ativo
 
@@ -40,7 +40,7 @@ if projeto is None:
     st.stop()
 
 lista = lm.lista_do_projeto(projeto)
-dados = em.esforcos_do_projeto(projeto)
+dados = tm.do_projeto(projeto).dados
 versao = int(st.session_state.get("lm_versao", 0))
 ICONES = {
     pc.NIVEL_ERRO: ":material/error:",

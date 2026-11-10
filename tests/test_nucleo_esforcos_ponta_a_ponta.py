@@ -422,10 +422,11 @@ def test_com_o_modo_levantar_a_falha_sobe(monkeypatch):
         diagnostico(dados, apoios, geometria)
 
 
-@pytest.mark.parametrize("semente", range(40))
-def test_dados_estragados_nunca_quebram_o_painel(semente):
-    """Casos com números aleatórios, sem reações, sem barras, apoios sem posição e com nós
-    repetidos: o painel sempre sai (o modo levantar está ligado, então nada pode falhar)."""
+def dados_estragados(
+    semente: int,
+) -> tuple[em.EsforcosDoModelo, am.ApoiosDoModelo, ld.GeometriaDoModelo | None, pc.PlanoDeCargas]:
+    """O pórtico com casos de números aleatórios, sem reações, sem barras ou cortados, apoios sem
+    posição ou com nós repetidos, e às vezes sem o esqueleto."""
     gerador = np.random.default_rng(semente)
     dados, apoios, geometria = montar()
     casos = {}
@@ -467,6 +468,14 @@ def test_dados_estragados_nunca_quebram_o_painel(semente):
     plano = t.plano()
     if gerador.integers(0, 2):
         plano = pc.com_acao(plano, pc.nova_acao("T+", categoria=pc.CATEGORIA_TEMPERATURA))
-    d = diagnostico(dados, apoios, geometria if gerador.integers(0, 2) else None, plano)
+    return dados, apoios, geometria if gerador.integers(0, 2) else None, plano
+
+
+@pytest.mark.parametrize("semente", range(40))
+def test_dados_estragados_nunca_quebram_o_painel(semente):
+    """Com os dados estragados o painel sempre sai (o modo levantar está ligado, então nada pode
+    falhar)."""
+    dados, apoios, geometria, plano = dados_estragados(semente)
+    d = diagnostico(dados, apoios, geometria, plano)
     assert all(a.titulo and a.problema for a in d.achados)
     assert d.erros + d.atencoes <= len(d.achados)

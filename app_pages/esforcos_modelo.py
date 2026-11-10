@@ -11,7 +11,6 @@ import streamlit as st
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import (
     base_ativa,
-    gravar_campo_do_projeto,
     gravar_campos_do_projeto,
     mapa_do_projeto,
 )
@@ -40,6 +39,7 @@ from core import quadro_fundacoes as qf
 from core import reacoes_nas_bases as rb
 from core import section_catalog as sc
 from core import sensores_do_modelo as sm
+from core import tratamento_do_modelo as tm
 from core import verificacao_barras as vb
 from core.project_store import obter_projeto_ativo
 
@@ -66,7 +66,10 @@ if projeto is None:
     st.stop()
 
 plano = pc.plano_do_projeto(projeto)
-dados = em.esforcos_do_projeto(projeto)
+# O modelo como o programa o usa: o gravado, com o que tem prova nos arquivos já consertado
+# (core/tratamento_do_modelo.py). ``tratado.bruto`` é o que está no projeto.
+tratado = tm.do_projeto(projeto)
+dados = tratado.dados
 ICONES = {
     pc.NIVEL_ERRO: ":material/error:",
     pc.NIVEL_ATENCAO: ":material/warning:",
@@ -76,8 +79,20 @@ ICONES = {
 MOSTRAR = {pc.NIVEL_ERRO: st.error, pc.NIVEL_ATENCAO: st.warning, em.NIVEL_INFO: st.info}
 
 
+def campos_dos_esforcos(novos: em.EsforcosDoModelo) -> dict[str, object]:
+    """O que gravar de uma edição feita sobre os dados tratados: os casos recalculados só na
+    memória voltam a ser os do arquivo, e os apoios acompanham os casos renomeados."""
+    campos: dict[str, object] = {
+        "esforcos_do_modelo": em.para_dicionario(tratado.para_gravar(novos))
+    }
+    apoios_renomeados = tratado.apoios_para_gravar
+    if apoios_renomeados is not None:
+        campos["apoios_do_modelo"] = am.para_dicionario(apoios_renomeados)
+    return campos
+
+
 def gravar(novos: em.EsforcosDoModelo, motivo: str) -> bool:
-    return gravar_campo_do_projeto("esforcos_do_modelo", em.para_dicionario(novos), motivo)
+    return gravar_campos_do_projeto(campos_dos_esforcos(novos), motivo)
 
 
 if not plano.acoes:
@@ -115,15 +130,32 @@ def _conteudo(a: em.ArquivoLido) -> str:
 with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidWorks"):
     st.subheader("1. Enviar os arquivos do SolidWorks", help=AJUDA["sec_arquivos"])
     versao = int(st.session_state.get("em_versao", 0))
+    # Com o PP importado o eixo vertical tem prova (a reação do peso): deixa de ser escolha.
+    eixo_provado = tm.eixo_vertical_provado(dados, plano) is not None
+    # A escolha na tela é deste projeto: ao trocar de projeto, vale o eixo do novo (senão a
+    # escolha do anterior seria gravada nele).
+    if (
+        eixo_provado
+        or st.session_state.get("em_eixo_do_projeto") != projeto.get("id")
+        or st.session_state.get("em_eixo") not in ("Y", "Z")
+    ):
+        st.session_state["em_eixo"] = dados.eixo_vertical if dados.eixo_vertical == "Z" else "Y"
+    st.session_state["em_eixo_do_projeto"] = projeto.get("id")
     eixo = st.radio(
         "Eixo vertical do modelo",
         ["Y", "Z"],
-        index=0 if dados.eixo_vertical == "Y" else 1,
         format_func=lambda e: "Y para cima (SolidWorks)" if e == "Y" else "Z para cima (Robot)",
         horizontal=True,
         key="em_eixo",
         help=AJUDA["eixo_vertical"],
+        disabled=eixo_provado,
     )
+    if eixo_provado:
+        st.caption(
+            f":material/lock: O eixo vertical saiu do peso próprio: no PP a reação está em "
+            f"{dados.eixo_vertical}, para cima.",
+            help=AJUDA["eixo_provado"],
+        )
     enviados = st.file_uploader(
         "Arquivos CSV (forças da viga e forças de reação)",
         type=["csv", "txt"],
@@ -147,15 +179,22 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
     apoios_lidos: list[am.ApoiosDoCaso] = []
     fixacoes_lidas: am.FixacoesDoEstudo | None = None
     sensores_lidos: sm.QuadroDeSensores | None = None
+    # Os arquivos de uma remessa saem do mesmo computador: o formato dos números (vírgula ou
+    # ponto decimal) que um prova vale para o que não prova o dele.
+    formato = em.formato_do_lote(e.getvalue() for e in enviados or [])
     for enviado in enviados or []:
         conteudo = enviado.getvalue()
         tipo_dos_apoios = am.tipo_do_arquivo(conteudo)
         if tipo_dos_apoios is not None:
             try:
                 if tipo_dos_apoios == am.TIPO_APOIOS:
-                    apoios_lidos.append(am.ler_apoios(conteudo, enviado.name))
+                    apoios_lidos.append(
+                        am.ler_apoios(conteudo, enviado.name, virgula_decimal=formato)
+                    )
                 else:
-                    fixacoes_lidas = am.ler_fixacoes(conteudo, enviado.name)
+                    fixacoes_lidas = am.ler_fixacoes(
+                        conteudo, enviado.name, virgula_decimal=formato
+                    )
             except am.ArquivoDeApoiosInvalido as erro:
                 st.error(f"{enviado.name}: {erro}", icon=":material/error:")
             continue
@@ -182,7 +221,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
             )
             continue
         try:
-            lidos.append(em.ler_arquivo(conteudo, enviado.name))
+            lidos.append(em.ler_arquivo(conteudo, enviado.name, virgula_decimal=formato))
         except em.ArquivoInvalido as erro:
             st.error(f"{enviado.name}: {erro}", icon=":material/error:")
     if geometria_nova is not None:
@@ -300,11 +339,11 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
                 problemas.append(f"{a.nome_arquivo}: {erro}")
         for problema in problemas:
             st.error(problema, icon=":material/error:")
-        campos: dict[str, object] = {"esforcos_do_modelo": em.para_dicionario(novos)}
+        campos = campos_dos_esforcos(novos)
         if geometria_nova is not None:
             campos["geometria_do_modelo"] = ld.para_dicionario(geometria_nova)
         if apoios_lidos or fixacoes_lidas is not None:
-            apoios_novos = am.do_projeto(projeto)
+            apoios_novos = tratado.apoios_para_gravar or tratado.apoios_brutos
             for apoios_do_caso in apoios_lidos:
                 apoios_novos = am.com_caso(apoios_novos, apoios_do_caso)
             if fixacoes_lidas is not None:
@@ -341,7 +380,7 @@ ESTILO_DO_ACHADO = {
 #: O painel guarda a leitura do modelo para a seção 3 (``None`` se o painel não rodou).
 diagnostico_do_painel: dm.Diagnostico | None = None
 with st.container(border=True), secao_protegida("Antes de verificar"):
-    apoios_salvos = am.do_projeto(projeto)
+    apoios_salvos = tratado.apoios
     diagnostico = dm.diagnosticar(
         dados,
         plano,
@@ -350,6 +389,7 @@ with st.container(border=True), secao_protegida("Antes de verificar"):
         leituras=leituras,
         ler_o_modelo=True,
         peso_da_estrutura_kN=lm.peso_da_estrutura_kN(lm.resumir(lm.lista_do_projeto(projeto))),
+        extras=tm.achados(tratado),
     )
     diagnostico_do_painel = diagnostico
     st.subheader("Antes de verificar: o que conferir", help=AJUDA["sec_diagnostico"])
@@ -423,6 +463,18 @@ with st.container(border=True), secao_protegida("Antes de verificar"):
                     "Base dos pilares de volta em Automática",
                 ):
                     st.rerun()
+    if tratado.certos:
+        with st.expander(
+            f"O programa tratou sozinho ({len(tratado.certos)})",
+            icon=":material/auto_fix_high:",
+        ):
+            st.caption(
+                "O que tinha prova nos próprios arquivos foi consertado na leitura, sem mudar o "
+                "que está gravado. Não precisa fazer nada.",
+                help=AJUDA["res_tratamentos"],
+            )
+            for tratamento in tratado.certos:
+                st.markdown(f"**{tratamento.titulo}.** {tratamento.texto}")
     for certo in diagnostico.certos:
         st.caption(f":material/check_circle: {certo}")
 
@@ -897,7 +949,7 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
             no_modelo = ds.na_fundacao_no_modelo(direcoes, quadro, dados.eixo_vertical)
         except (ArithmeticError, ValueError, KeyError):
             direcoes = None
-    apoios_do_modelo = am.do_projeto(projeto)
+    apoios_do_modelo = tratado.apoios
     if quadro.pilares and apoios_do_modelo.casos:
         # Com os apoios da macro, a direção da seção de cada pilar sai das reações: a cortante na
         # base, girada, tem de ser a reação horizontal no pé dele.

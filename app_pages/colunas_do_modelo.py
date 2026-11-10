@@ -18,6 +18,7 @@ from core import leitura_do_modelo as ld
 from core import load_combinations as comb
 from core import plano_de_cargas as pc
 from core import section_catalog as sc
+from core import tratamento_do_modelo as tm
 from core.desenho_da_coluna import APOIOS_NAS_PONTAS, ColunaEmPe, figura_da_coluna
 from core.project_store import obter_projeto_ativo
 
@@ -46,7 +47,7 @@ if projeto is None:
         icon=":material/folder_off:",
     )
     st.stop()
-dados = em.esforcos_do_projeto(projeto)
+dados = tm.do_projeto(projeto).dados
 geometria = ld.geometria_do_projeto(projeto)
 faltam = []
 if not dados.casos:

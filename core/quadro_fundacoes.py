@@ -74,6 +74,8 @@ class CargaNaBase:
     m1: float
     m2: float
     t: float
+    #: A ponta do elemento em que a base está no arquivo ("1" ou "2"; vazio se não se sabe).
+    fim: str = ""
 
 
 @dataclass(frozen=True)
@@ -127,10 +129,12 @@ def casos_de_gravidade(dados: em.EsforcosDoModelo) -> tuple[str, ...]:
     return (*primeiro, *outros)
 
 
-def _pelo_peso_nos_elementos(pontos: Sequence[em.PontoDeEsforco]) -> str | None:
-    """A ponta de baixo pela carga ao longo do pilar: dentro de cada elemento a normal muda do
-    peso do trecho, e a compressão cresce para baixo. Não depende das cargas que as vigas
-    entregam nos nós."""
+def variacao_dentro_dos_elementos(pontos: Sequence[em.PontoDeEsforco]) -> tuple[float, float]:
+    """(variação da normal dentro dos elementos ao longo da lista, limiar do arredondamento), kN.
+
+    Dentro de um elemento a normal só muda com carga ao longo do eixo da barra — num pilar, o
+    peso próprio. A soma não vê as cargas que as vigas entregam nos nós. Abaixo do limiar (os
+    cinco algarismos do arquivo, somados) a variação é ruído."""
     variacao = 0.0
     elementos = 0
     maior = max((abs(p.n) for p in pontos), default=0.0)
@@ -138,9 +142,16 @@ def _pelo_peso_nos_elementos(pontos: Sequence[em.PontoDeEsforco]) -> str | None:
         if a.elemento == b.elemento and a.fim != b.fim:
             variacao += b.n - a.n
             elementos += 1
-    if not elementos:
-        return None
-    if abs(variacao) <= max(PESO_MINIMO_KN, 2.0 * elementos * ALGARISMOS_DO_ARQUIVO * maior):
+    limiar = max(PESO_MINIMO_KN, 2.0 * elementos * ALGARISMOS_DO_ARQUIVO * maior)
+    return (variacao, limiar) if elementos else (0.0, math.inf)
+
+
+def _pelo_peso_nos_elementos(pontos: Sequence[em.PontoDeEsforco]) -> str | None:
+    """A ponta de baixo pela carga ao longo do pilar: dentro de cada elemento a normal muda do
+    peso do trecho, e a compressão cresce para baixo. Não depende das cargas que as vigas
+    entregam nos nós."""
+    variacao, limiar = variacao_dentro_dos_elementos(pontos)
+    if abs(variacao) <= limiar:
         return None
     # A normal cai (mais compressão) ao longo da lista: a lista desce, e a base é o fim dela.
     return BASE_FIM if variacao < 0 else BASE_INICIO
@@ -238,7 +249,7 @@ def _carga_na_ponta(
     pilar: str, caso: str, pontos: Sequence[em.PontoDeEsforco], base: str
 ) -> CargaNaBase:
     p = pontos[0] if base == BASE_INICIO else pontos[-1]
-    return CargaNaBase(pilar, caso, -p.n + 0.0, p.v1, p.v2, p.m1, p.m2, p.t)
+    return CargaNaBase(pilar, caso, -p.n + 0.0, p.v1, p.v2, p.m1, p.m2, p.t, p.fim)
 
 
 def _bases_pela_soma(

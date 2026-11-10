@@ -42,13 +42,13 @@ from core import contraventamento_do_esqueleto as cesq
 from core import contraventamento_estrutura_registro as reg
 from core import contraventamento_plataforma as cp
 from core import contraventamento_vento_barras as cvb
-from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import load_combinations as comb
 from core import perfis_compostos as pc
 from core import section_catalog as sc
 from core import steel_sections as ss
+from core import tratamento_do_modelo as tm
 from core import vento_aberto_registro as var
 from core import vento_estrutura_aberta as va
 from core import vento_nbr6123 as vb
@@ -252,7 +252,7 @@ def esqueleto_do_projeto() -> cesq.EsqueletoDoContraventamento | None:
     geometria = ld.geometria_do_projeto(projeto)
     if not geometria.corpos:
         return None
-    eixo = em.esforcos_do_projeto(projeto).eixo_vertical
+    eixo = tm.do_projeto(projeto).dados.eixo_vertical
     eixo = str(st.session_state.get(_chave("vb_eixo"), eixo if eixo in ("Y", "Z") else "Y"))
     try:
         return cesq.ler_esqueleto(geometria, eixo)
@@ -739,7 +739,7 @@ def formulario_metodo_do_vento(
                 "esqueleto em Cargas do esqueleto ou use os pórticos regulares."
             )
             return None
-        esforcos = em.esforcos_do_projeto(projeto)
+        esforcos = tm.do_projeto(projeto).dados
         linha = st.columns([1, 2, 1, 1])
         eixos = ["Y", "Z"]
         eixo = str(

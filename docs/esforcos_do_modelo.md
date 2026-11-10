@@ -27,6 +27,15 @@ Com o estudo resolvido, botão direito em **Resultados**:
 * Codificação UTF-8 ou a do Windows (cp1252), separador `;` (linha `sep=;`) ou `,`.
 * Números em português: ponto de milhar e vírgula decimal (`78.611` = 78 611; `-1.019,1`;
   `1,4815E+05`). Com separador `,`, o ponto é decimal.
+* **O formato sai do próprio arquivo** (`virgula_e_decimal`), não do separador das colunas: um
+  computador com o ponto decimal grava `sep=;` do mesmo jeito, e "459.59" lido com a regra errada
+  virava 45959, sem aviso. Vale a prova que não é ambígua — ponto e vírgula no mesmo número (o
+  último é o decimal) ou um separador que não fecha grupos de três ("461.49", "0.632"). O número
+  ambíguo ("24.805") segue o que o resto do arquivo prova; o arquivo sem prova (o de reações tem
+  meia dúzia de números) segue a **remessa** — os arquivos enviados juntos saem do mesmo
+  computador (`formato_do_lote`); sem prova nenhuma, vale o padrão do separador. Os arquivos da
+  macro (`-apoios.csv`, `-fixacoes.csv`) seguem a mesma regra. O que escapa disso (o arquivo de
+  reações enviado sozinho) o tratamento automático conserta depois, pela escala.
 * Colunas reconhecidas pelo nome, em português ou inglês (Axial, Cisalhamento1/Shear1, Momento 1/
   Moment1, Torque); unidades do cabeçalho (N, kN, lbf, kgf; N.m, N.mm, kN.m, lbf.in, lbf.ft),
   convertidas para kN e kN·m.
@@ -65,6 +74,60 @@ Para cada caso importado, nos eixos do plano (Z para cima; o Y do SolidWorks é 
   programa; com o estudo majorado a verificação majoraria duas vezes e o quadro das fundações, que
   pede cargas sem majorar (Anglo 5.9), sairia errado. Não há modo de importar estudo combinado.
 * Casos do plano ainda sem esforços e casos importados fora do plano são avisados.
+
+## Tratamento automático da leitura (`core/tratamento_do_modelo.py`)
+
+Entre o que fica gravado no projeto — os arquivos como chegaram e a tabela das barras como o
+usuário a deixou — e o que as páginas usam, há uma camada que **conserta sozinha o que tem prova
+nos próprios arquivos** e diz o que fez. Todas as páginas que leem o modelo do SolidWorks entram
+por ela (`tm.do_projeto(projeto)`): Esforços do modelo, Reações nas bases, Modelo em 3D, Colunas
+do modelo, Lista de material, Cargas do esqueleto, Vento barra a barra, Contraventamento e as
+reações que as Ligações buscam no modelo.
+
+Um erro de leitura tem três destinos:
+
+| Destino | Quando | O que o usuário vê |
+|---|---|---|
+| Tratado, certo | a prova está nos arquivos e não depende de opinião | nada a fazer; a lista "O programa tratou sozinho" no painel |
+| Tratado, a conferir | a prova é forte, mas o tratamento muda os números de um caso | um item "Para conferir" no painel |
+| Não tratável | falta arquivo, o estudo está errado no SolidWorks, dois casos iguais | o item "Para corrigir" do painel, com o passo a passo |
+
+Os tratamentos, na ordem em que rodam:
+
+0. **Escala das reações** — a reação total mil vezes maior ou menor que a soma dos apoios da
+   macro (ou, sem eles e no fim, que a soma das bases dos pilares): o arquivo de reações foi lido
+   com o separador decimal trocado.
+1. **Reação total pelos apoios** — sem o arquivo de reações de um caso, a reação total é a soma
+   das reações nos apoios da macro.
+2. **Eixo vertical** — o do PP (`eixo_vertical_provado`), com quatro provas juntas: quase toda a
+   reação num eixo só; para cima; a normal variando dentro dos elementos de alguma barra (o peso
+   próprio; um vento nos nós não faz isso); e nenhum caso que o plano diz ser só vertical com a
+   reação em outro eixo. Assim um arquivo de vento salvo com o nome do PP não vira o eixo do
+   modelo. Com a prova, a escolha do eixo na página fica travada.
+3. **Nomes dos ventos** — quando cada vento enviado é, em direção e valor, um vento do plano com
+   outro nome e a troca fecha entre eles (`em.mapa_de_nomes_dos_ventos`), cada resultado vai para
+   o caso certo: forças, reações e apoios.
+4. **Gravidade junto num caso** (a conferir) — o estudo duplicado do PP sem excluir a gravidade.
+   Duas provas: a reação vertical passa do plano exatamente pelo peso do PP (3 %), e dentro dos
+   elementos de cada pilar a normal varia como no PP (5 %). O estudo é linear: o programa
+   desconta o PP ponto a ponto, nas forças, nas reações e nos apoios (nó a nó; com nós
+   diferentes, os apoios do caso ficam de fora e ele sai pela base dos pilares).
+5. **Tabela das barras** — o tipo vazio (pela posição no esqueleto ou pelos esforços no PP), o
+   perfil vazio ou que veio só do nome da viga (o do modelo) e o eixo forte contra a seção. Os
+   comprimentos de flambagem **não** entram: são escolha de projeto e continuam no botão
+   "Aplicar as sugestões".
+6. **Base do pilar** — a base escolhida na ponta que o peso próprio mostra ser a de cima volta
+   para a automática.
+
+**Nada disso muda o que está gravado.** Quando a página grava uma edição feita sobre os dados
+tratados (`ModeloTratado.para_gravar`), os casos recalculados só na memória (a gravidade
+descontada) voltam a ter os números do arquivo; os outros tratamentos ficam gravados, porque são
+o valor certo — e os apoios acompanham os casos renomeados (`apoios_para_gravar`). Tratar o que
+já foi tratado não muda mais nada.
+
+Cada tratamento é protegido: se um falha com um dado fora do esperado, o estado volta ao de
+antes dele, a ocorrência fica registrada (`core/diagnostico.py`), o painel avisa "Não deu para
+tratar sozinho" com a referência, e os outros rodam.
 
 ## Antes de verificar (`core/diagnostico_do_modelo.py`)
 
@@ -490,6 +553,16 @@ de outro caso (W0 com o W90, W180 com o W0, SC com o PP), estudo base, gravidade
 majorado, nomes trocados, apoios de outra rodada, eixo vertical, B₂, o W270 real com o valor do vento
 em X — e o painel tem de apontar o problema certo, com o caso certo; dados estragados ao acaso nunca
 quebram o painel, e uma conferência que falha não derruba as outras.
+
+`tests/test_tratamento_do_modelo.py`: com o mesmo pórtico, cada tratamento automático — o modelo
+certo passa sem cópia nem mudança; a reação que falta, o eixo vertical (e o vento salvo como PP,
+que não vira o eixo), os ventos trocados, a gravidade junto (o caso tratado tem de ser o do cálculo,
+ponto a ponto, e o que se grava é o do arquivo), a tabela das barras, a base no topo, a escala de
+mil das reações; vários erros de uma vez, na ordem; um tratamento que falha não derruba os outros;
+40 conjuntos de dados estragados; e as páginas (o painel fica limpo, o eixo travado, e gravar a
+tabela leva o valor certo ao projeto). `tests/test_leitura_dos_numeros.py`: os números do CSV nos
+dois formatos, o formato pelo arquivo e pela remessa, e os arquivos do pórtico reescritos com o
+ponto decimal dão os mesmos esforços, reações e apoios.
 
 `tests/test_reacoes_nas_bases.py`: com o mesmo pórtico, cada pé em cada caso tem de ser a reação do
 cálculo (forças e momentos) pela macro, pela base do pilar (direção da seção dada ou tirada da

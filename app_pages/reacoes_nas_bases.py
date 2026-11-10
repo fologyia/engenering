@@ -10,17 +10,16 @@ from components.project_tools import botao_registrar_calculo
 from components.reacoes_nas_bases_help import AJUDA
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
-from core import apoios_do_modelo as am
 from core import cena_3d as c3
 from core import cena_do_modelo as cm
 from core import desenho_eixos_fundacao as de
 from core import diagnostico_do_modelo as dm
-from core import esforcos_modelo as em
 from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import reacoes_nas_bases as rb
+from core import tratamento_do_modelo as tm
 from core.desenho_reacoes import figura_das_reacoes
 from core.project_store import obter_projeto_ativo
 
@@ -42,7 +41,8 @@ if projeto is None:
         icon=":material/folder_off:",
     )
     st.stop()
-dados = em.esforcos_do_projeto(projeto)
+tratado = tm.do_projeto(projeto)  # o gravado, com o que tem prova já consertado
+dados = tratado.dados
 if not dados.casos:
     st.info(
         "O projeto ainda não tem os resultados do SolidWorks. Em **Esforços do modelo**, envie os "
@@ -57,7 +57,7 @@ if not dados.casos:
 
 with secao_protegida("Reações nas bases"):
     plano = pc.plano_do_projeto(projeto)
-    apoios = am.do_projeto(projeto)
+    apoios = tratado.apoios
     geometria = ld.geometria_do_projeto(projeto)
     leituras = ld.ler_barras(dados, geometria, plano)
     quadro = qf.montar_quadro(dados)
@@ -98,6 +98,10 @@ with secao_protegida("Reações nas bases"):
         colunas[2].metric("Pela macro", fontes.count(rb.FONTE_APOIO), help=AJUDA["res_macro"])
         colunas[3].metric("Pelos pilares", fontes.count(rb.FONTE_PILAR), help=AJUDA["res_pilar"])
         st.caption(rb.NOTA_COMBINACOES)
+        for tratamento in tratado.a_conferir:
+            st.warning(f"**{tratamento.titulo}.** {tratamento.texto}", icon=":material/rule:")
+        if tratado.certos:
+            st.caption(f":material/auto_fix_high: {tm.resumo(tratado)}")
         if pendentes:
             st.error(
                 "**Antes de mandar ao engenheiro civil, corrija** — estes problemas mudam as "

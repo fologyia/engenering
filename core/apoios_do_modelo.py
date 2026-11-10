@@ -112,8 +112,8 @@ def _linhas(conteudo: bytes) -> list[str]:
     return [linha.rstrip("\r") for linha in em._decodificar(conteudo).split("\n")]
 
 
-def _numeros(campos: Sequence[str]) -> list[float | None]:
-    return [em.numero(c) for c in campos]
+def _numeros(campos: Sequence[str], virgula: bool = True) -> list[float | None]:
+    return [em.numero(c, decimal_virgula=virgula) for c in campos]
 
 
 def _estudo(linhas: Sequence[str]) -> str:
@@ -123,7 +123,9 @@ def _estudo(linhas: Sequence[str]) -> str:
     return ""
 
 
-def ler_apoios(conteudo: bytes, nome_arquivo: str = "") -> ApoiosDoCaso:
+def ler_apoios(
+    conteudo: bytes, nome_arquivo: str = "", *, virgula_decimal: bool | None = None
+) -> ApoiosDoCaso:
     linhas = _linhas(conteudo)
     caso = em._caso_de_carga(linhas)
     if not caso:
@@ -133,6 +135,8 @@ def ler_apoios(conteudo: bytes, nome_arquivo: str = "") -> ApoiosDoCaso:
     nos: list[ReacaoNoNo] = []
     por_fixacao: list[tuple[str, tuple[float, ...]]] = []
     secao = ""
+    # A macro grava com o decimal do computador; sem prova no arquivo, vale o da remessa.
+    virgula = em.virgula_e_decimal(linhas, ";", virgula_decimal)
     for linha in linhas:
         normal = em._normal(linha)
         if normal.startswith("reacoesnosnos"):
@@ -143,7 +147,7 @@ def ler_apoios(conteudo: bytes, nome_arquivo: str = "") -> ApoiosDoCaso:
             continue
         campos = linha.split(";")
         if secao == "nos" and len(campos) >= 10 and campos[0].strip().lstrip("-").isdigit():
-            v = _numeros(campos[1:10])
+            v = _numeros(campos[1:10], virgula)
             if any(x is None for x in v[3:]):
                 continue
             ponto = None if any(x is None for x in v[:3]) else (v[0], v[1], v[2])
@@ -158,7 +162,7 @@ def ler_apoios(conteudo: bytes, nome_arquivo: str = "") -> ApoiosDoCaso:
         elif secao == "fixacoes" and len(campos) >= 7 and campos[0].strip():
             if em._normal(campos[0]) == "fixacao":
                 continue
-            v = _numeros(campos[1:7])
+            v = _numeros(campos[1:7], virgula)
             if all(x is not None for x in v):
                 por_fixacao.append((campos[0].strip(), tuple(float(x) for x in v)))  # type: ignore[arg-type]
     if not nos:
@@ -168,10 +172,13 @@ def ler_apoios(conteudo: bytes, nome_arquivo: str = "") -> ApoiosDoCaso:
     return ApoiosDoCaso(caso, _estudo(linhas), nome_arquivo, tuple(nos), tuple(por_fixacao))
 
 
-def ler_fixacoes(conteudo: bytes, nome_arquivo: str = "") -> FixacoesDoEstudo:
+def ler_fixacoes(
+    conteudo: bytes, nome_arquivo: str = "", *, virgula_decimal: bool | None = None
+) -> FixacoesDoEstudo:
     linhas = _linhas(conteudo)
     entidades: list[EntidadeFixada] = []
     dentro = False
+    virgula = em.virgula_e_decimal(linhas, ";", virgula_decimal)
     for linha in linhas:
         normal = em._normal(linha)
         if normal.startswith("fixacoesdoestudo"):
@@ -184,7 +191,7 @@ def ler_fixacoes(conteudo: bytes, nome_arquivo: str = "") -> FixacoesDoEstudo:
             continue
         tipo = em.numero(campos[1])
         indice = em.numero(campos[3])
-        x, y, z = (em.numero(c) for c in campos[5:8])
+        x, y, z = (em.numero(c, decimal_virgula=virgula) for c in campos[5:8])
         entidades.append(
             EntidadeFixada(
                 campos[0].strip(),

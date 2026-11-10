@@ -2453,8 +2453,9 @@ def reacoes_do_modelo(projeto: Mapping[str, Any] | None) -> list[ReacaoRegistrad
     from core import leitura_do_modelo as ld
     from core import load_combinations as comb
     from core import plano_de_cargas as pc
+    from core import tratamento_do_modelo as tm
 
-    dados = em.esforcos_do_projeto(projeto)
+    dados = tm.do_projeto(projeto).dados
     if not dados.casos:
         return []
     plano = pc.plano_do_projeto(projeto)

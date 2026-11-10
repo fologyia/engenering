@@ -411,6 +411,17 @@ do Simulation na aresta reta mais longa, medida pela macro v6 ou pelo catálogo)
 módulo resistente que o próprio Simulation usou (S = M/σ, com o "Listar tensões da viga"); o quadro
 das fundações ganha F e M **nos eixos do modelo**, e a página Ligações estruturais traz as forças
 das pontas de cada viga do modelo (combinação ELU com o maior cortante da alma).
+
+O **tratamento automático** (`core/tratamento_do_modelo.py`) fica entre o que está gravado e o
+que as páginas do SolidWorks usam: o que tem prova nos próprios arquivos o programa conserta
+sozinho e só lista o que fez — o eixo vertical (pelo peso do PP), a base de cada pilar, o eixo
+forte e o perfil pela seção do modelo, o tipo da barra que ficou vazio, os ventos com o nome
+trocado, a reação total que faltou (soma dos apoios da macro) ou que saiu mil vezes fora (separador
+decimal). O estudo duplicado do PP sem excluir a gravidade é descontado ponto a ponto e vira item
+para conferir. O que não tem prova continua no painel "Antes de verificar", com o passo a passo.
+Nada do que está gravado muda, e um tratamento que falha não derruba os outros. A leitura dos
+números decide o formato (vírgula ou ponto decimal) pelo próprio arquivo e pela remessa, não pelo
+separador das colunas.
 **Verificação de todas as barras** (`core/verificacao_barras.py`) pela NBR 8800 com os esforços de
 todas as combinações ELU em todos os pontos, multiplicados pelo B₂ do tipo: varredura rápida da
 interação e verificação completa dos pontos críticos pelo motor da Flambagem de colunas (todos os

@@ -19,10 +19,10 @@ from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.vento_barras_help import AJUDA
 from core import base_tecnica as bt
-from core import esforcos_modelo as em
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import plano_de_cargas as pc
+from core import tratamento_do_modelo as tm
 from core import vento_aberto_desenho as vad
 from core import vento_por_barras as vpb
 from core import vento_por_barras_registro as vbr
@@ -367,7 +367,7 @@ def mostrar_vento_por_barras() -> None:
         )
     erros: list[str] = []
     geometria = ld.geometria_do_projeto(projeto)
-    esforcos = em.esforcos_do_projeto(projeto)
+    esforcos = tm.do_projeto(projeto).dados
     ident = ce.formulario_identificacao()
     nomes_no_simulation: dict[str, str] = {}
     with st.container(border=True), secao_protegida("Barras ao vento"):

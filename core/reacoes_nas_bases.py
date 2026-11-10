@@ -255,7 +255,11 @@ def _direcao_pela_macro(
     eixos da seção) gira até ser a reação horizontal no pé dele, nos casos em que os apoios valem
     (mínimos quadrados no ângulo da direção 1). Só vale se, girada, bate em todos esses casos —
     e o axial também. ``None`` sem cortante para orientar ou se não bate."""
-    sinal = -1.0 if pilar.base == qf.BASE_INICIO else 1.0
+    # A força na ponta da base é −(esforço interno) num Fim 1 e +(esforço interno) num Fim 2.
+    # A ponta vem do próprio ponto do arquivo; sem ela, o início da lista é um Fim 1.
+    fim = next((c.fim for c in pilar.cargas if c.fim), "")
+    no_fim_1 = fim == "1" if fim else pilar.base == qf.BASE_INICIO
+    sinal = -1.0 if no_fim_1 else 1.0
     para_cima: Ponto | None = (0.0, 0.0, 1.0)
     if corpo is not None:
         vertical = 1 if eixo == "Y" else 2
@@ -270,10 +274,8 @@ def _direcao_pela_macro(
         )
     if para_cima is None:
         return None
-    # O axial vai do Fim 1 ao Fim 2: sobe quando a base é o início da lista.
-    axial = (
-        para_cima if pilar.base == qf.BASE_INICIO else (-para_cima[0], -para_cima[1], -para_cima[2])
-    )
+    # O axial vai do Fim 1 ao Fim 2: sobe quando a base é um Fim 1.
+    axial = para_cima if no_fim_1 else (-para_cima[0], -para_cima[1], -para_cima[2])
     e1 = _unitario(_vetorial(axial, (1.0, 0.0, 0.0))) or _unitario(
         _vetorial(axial, (0.0, 1.0, 0.0))
     )
@@ -491,10 +493,11 @@ def do_projeto(projeto: Mapping[str, object]) -> ReacoesNasBases:
     apoios da macro, o esqueleto, o plano e a direção da seção de cada pilar): o Modelo em 3D
     desenha as mesmas."""
     from core import cena_do_modelo as cm  # o desenho 3D importa este módulo
+    from core import tratamento_do_modelo as tm  # importa o diagnóstico, como este módulo
 
-    dados = em.esforcos_do_projeto(projeto)
+    tratado = tm.do_projeto(projeto)
+    dados, apoios = tratado.dados, tratado.apoios
     plano = pc.plano_do_projeto(projeto)
-    apoios = am.do_projeto(projeto)
     geometria = ld.geometria_do_projeto(projeto)
     leituras = ld.ler_barras(dados, geometria, plano)
     quadro = qf.montar_quadro(dados)

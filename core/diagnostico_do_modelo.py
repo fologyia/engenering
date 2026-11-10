@@ -1100,8 +1100,12 @@ def diagnosticar(
     achados_da_leitura: Sequence[ld.Achado] | None = None,
     ler_o_modelo: bool = False,
     peso_da_estrutura_kN: float | None = None,
+    extras: Sequence[Achado] = (),
 ) -> Diagnostico:
     """Tudo o que conferir e corrigir, do mais grave ao menos, e o que já confere.
+
+    ``extras``: achados que vêm de fora e entram no painel junto dos outros — os do tratamento
+    automático (:func:`core.tratamento_do_modelo.achados`).
 
     ``geometria`` (o esqueleto) liga cada pilar ao apoio do pé dele. Os problemas da leitura do
     modelo entram no painel pelos ``achados_da_leitura`` já calculados ou, com ``ler_o_modelo``,
@@ -1123,6 +1127,7 @@ def diagnosticar(
         return [replace(a, detalhe={**a.detalhe, "sobre": SOBRE_AS_FORCAS}) for a in achados_]
 
     achados = [
+        *extras,
         *_protegido("base de cada pilar", lambda: _bases_dos_pilares(dados)),
         *_protegido("forças de cada caso", forcas),
         *_protegido("plano de cargas e reações", lambda: _plano_e_reacoes(dados, plano)),
