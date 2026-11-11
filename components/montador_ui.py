@@ -18,6 +18,7 @@ import math
 import time
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 import altair as alt
@@ -36,11 +37,14 @@ from components.project_tools import (
     id_registro_existente,
     projeto_ativo_persistente,
 )
+from components.robustez import registrar_falha
 from components.ui import fronteira_modelo
 from core import armazenamento
+from core import diagnostico as dg
 from core import montador as mt
 from core import montador_blocos as mb
 from core import montador_busca as bs
+from core import montador_casos as mcs
 from core import montador_catalogo as cat
 from core import montador_conjuntos as mc
 from core import montador_eixo as me
@@ -136,6 +140,16 @@ _ESTILO = """
   opacity: .64;
 }
 .mi-secao { margin-top: .3rem; }
+.mi-resposta {
+  border-radius: .45rem; padding: .5rem .65rem; margin-bottom: .15rem;
+  background: rgba(27, 140, 90, .10); border: 1px solid rgba(27, 140, 90, .30);
+}
+.mi-resposta.falta { background: rgba(11, 110, 153, .07); border-color: rgba(11, 110, 153, .24); }
+.mi-resposta.erro { background: rgba(190, 50, 40, .08); border-color: rgba(190, 50, 40, .30); }
+.mi-valor {
+  font-family: "JetBrains Mono", monospace; font-size: 1.08rem; font-weight: 700;
+  line-height: 1.3; margin-top: .12rem; overflow-wrap: anywhere;
+}
 .mi-pagina { font-size: .72rem; margin-top: .6rem; }
 .mi-selo {
   font-size: .62rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
@@ -205,7 +219,16 @@ def _titulo_do_campo(grandeza: Grandeza, u: Unidades) -> str:
 # ---------------------------------------------------------------------------
 
 
-_DA_MONTAGEM = ("grafo", "valores", "origens", "padroes", "alvo", "adotado", "modelo_atual")
+_DA_MONTAGEM = (
+    "grafo",
+    "valores",
+    "origens",
+    "padroes",
+    "alvo",
+    "adotado",
+    "modelo_atual",
+    "casos",
+)
 
 
 def _instantaneo(p: Parte) -> dict[str, Any]:
@@ -220,7 +243,7 @@ def _restaurar(p: Parte, foto: Mapping[str, Any], versao: int) -> None:
     # Acima da versão da prancheta: senão ela fica com o desenho que tem e ignora o que volta.
     _trocar_grafo(p, copia["grafo"], versao=max(versao, estado.get(p.k("versao"), 0)) + 1)
     for nome in _DA_MONTAGEM[1:]:
-        estado[p.k(nome)] = copia[nome]
+        estado[p.k(nome)] = copia.get(nome)  # foto antiga, de antes dos casos, vem sem eles
     estado[p.k("revisao")] = estado.get(p.k("revisao"), 0) + 1
     _outra_montagem(p)  # os números já vêm com os blocos certos
 
@@ -243,6 +266,7 @@ def _aplicar(p: Parte, modelo: Modelo) -> None:
     estado[p.k("adotado")] = None
     estado[p.k("revisao")] = estado.get(p.k("revisao"), 0) + 1
     estado[p.k("modelo_atual")] = modelo.nome
+    estado[p.k("casos")] = None
     estado[p.k("titulo")] = modelo.nome
     estado[p.k("selecao")] = None
     estado[p.k("mudanca")] = ""
@@ -426,6 +450,7 @@ def _limpar(p: Parte) -> None:
     _trocar_grafo(p, {"nos": [], "fios": []})
     estado[p.k("ajuste")] += 1
     estado[p.k("modelo_atual")] = None
+    estado[p.k("casos")] = None
     estado[p.k("titulo")] = p.titulo
     estado[p.k("valores")] = {}
     estado[p.k("origens")] = {}
@@ -445,8 +470,8 @@ def _voltar(p: Parte) -> None:
         return
     atual = _instantaneo(p)
     _trocar_grafo(p, anterior["grafo"])
-    for nome in ("valores", "origens", "padroes", "alvo", "adotado", "modelo_atual"):
-        estado[p.k(nome)] = anterior[nome]
+    for nome in _DA_MONTAGEM[1:]:
+        estado[p.k(nome)] = anterior.get(nome)
     estado[p.k("ajuste")] += 1
     estado[p.k("revisao")] += 1
     estado[p.k("selecao")] = None
@@ -464,6 +489,7 @@ def _abrir_documento(p: Parte, doc: Mapping[str, Any]) -> None:
     estado[p.k("padroes")] = dict(mt.montar(mt.grafo_de_dados(doc["grafo"])).padroes)
     estado[p.k("alvo")] = doc["alvo"]
     estado[p.k("adotado")] = doc["adotado"]
+    estado[p.k("casos")] = doc.get("casos")
     estado[p.k("unidades")] = tuple(doc["unidades"])
     estado[p.k("revisao")] += 1
     estado[p.k("modelo_atual")] = None
@@ -484,8 +510,7 @@ def _cabecalho(p: Parte) -> None:
     for seletor, escolha in zip(p.sistema.seletores, estado[p.k("unidades")], strict=True):
         estado[p.k(f"u_{seletor.dimensao}")] = escolha
     estado[p.k("modelo")] = estado[p.k("modelo_atual")]
-    n = len(p.sistema.seletores)
-    colunas = st.columns([2.0, *([1.1] * n), 0.8, 0.8], vertical_alignment="bottom")
+    colunas = st.columns([3.0, 1.5, 1.0, 1.0], vertical_alignment="bottom")
     por_nome = p.por_nome
     colunas[0].selectbox(
         "Começar de um modelo",
@@ -498,16 +523,25 @@ def _cabecalho(p: Parte) -> None:
         format_func=lambda nome: f"{nome}: {por_nome[nome].dica}",
         help="Abre os blocos prontos com números de exemplo. Depois é só mudar por cima.",
     )
-    for coluna, seletor in zip(colunas[1:], p.sistema.seletores, strict=False):
-        coluna.selectbox(
-            seletor.rotulo,
-            tuple(seletor.opcoes),
-            key=p.k(f"u_{seletor.dimensao}"),
-            on_change=_ao_trocar_unidade,
-            args=(p,),
-            help=seletor.ajuda,
-        )
-    colunas[n + 1].button(
+    # Um botão só para as unidades: com um seletor por coluna, a linha não cabia em tela de
+    # notebook (os rótulos e os botões quebravam no meio da palavra).
+    with colunas[1].popover(
+        "Unidades",
+        icon=":material/straighten:",
+        help="As unidades dos números da tela: " + " · ".join(estado[p.k("unidades")]) + ".",
+        width="stretch",
+    ):
+        st.caption("Trocar a unidade converte os números que já estão na tela.")
+        for seletor in p.sistema.seletores:
+            st.selectbox(
+                seletor.rotulo,
+                tuple(seletor.opcoes),
+                key=p.k(f"u_{seletor.dimensao}"),
+                on_change=_ao_trocar_unidade,
+                args=(p,),
+                help=seletor.ajuda,
+            )
+    colunas[2].button(
         "Limpar",
         key=p.k("limpar"),
         on_click=_limpar,
@@ -515,7 +549,7 @@ def _cabecalho(p: Parte) -> None:
         help="Apaga os blocos para começar do zero. Voltar, ou Ctrl+Z na prancheta, traz de volta.",
         width="stretch",
     )
-    colunas[n + 2].button(
+    colunas[3].button(
         "Voltar",
         key=p.k("voltar"),
         on_click=_voltar,
@@ -1140,7 +1174,7 @@ def _numeros_de(
     """Os números da conta: os valores, e a resposta (ou o adotado) no lugar da letra pedida."""
     usados = {k: v for k, v in valores.items() if v is not None}
     if resposta is not None:
-        usados = dict(resposta.valores_usados)
+        usados = mt.valores_do_caso(resposta)  # com casos de carga, os do caso que manda
         valor = resposta.adotado or resposta.valor
         if valor is not None:
             usados[resposta.alvo.chave] = valor
@@ -1171,6 +1205,89 @@ def _topo_do_inspetor(selo: str, titulo: str, subtitulo: str = "", chip: str = "
     if chip:
         partes.append(f'<div class="mi-chip">{_e(chip)}</div>')
     st.html("".join(partes))
+
+
+@contextmanager
+def _parte(p: Parte, nome: str) -> Iterator[None]:
+    """Uma parte da página abaixo da prancheta: se ela falhar, as outras continuam na tela."""
+    try:
+        yield
+    except Exception as erro:
+        if dg.levantar_erros():
+            raise
+        registrar_falha(f"{p.titulo} › {nome}", erro)
+        st.caption(
+            f"A parte “{nome}” não pôde ser mostrada com esta montagem. O resto da página "
+            f"continua valendo (ref. {dg.referencia_da_falha(erro)})."
+        )
+
+
+def _resposta_no_inspetor(
+    resposta: mt.Resposta | None, falha: str, montagem: mt.Montagem, u: Unidades
+) -> None:
+    """A resposta fica ao lado da prancheta: mudar um número mostra o efeito sem rolar a página."""
+    if falha:
+        classe, valor, sub = "erro", "Sem resposta", falha
+    elif resposta is None:
+        if not montagem.condicoes:
+            return
+        classe, valor, sub = (
+            "falta",
+            "Sem resposta",
+            "Escolha a letra pedida no bloco Em função de.",
+        )
+    elif resposta.valor is not None and resposta.manda is not None:
+        classe, valor = "", rg.texto_da_resposta(resposta, u)
+        sub = f"Quem manda: {resposta.manda.condicao.nome}."
+        if resposta.conferencia_adotada:
+            pior = max(resposta.conferencia_adotada, key=lambda linha: linha.uso)
+            adotado = _com_unidade(resposta.adotado or 0.0, resposta.alvo, u)
+            situacao = "não passa" if pior.uso > 1.0 + 1e-9 else "passa"
+            sub += (
+                f" Com {resposta.alvo.texto} = {adotado}: {situacao}, uso de "
+                f"{_numero(pior.uso * 100.0)} %."
+            )
+            if situacao == "não passa":
+                classe = "erro"
+    else:
+        nomes = ", ".join(item.texto for item in resposta.faltam)
+        classe, valor = "falta", f"{resposta.alvo.texto} em letras"
+        sub = f"Para sair o número, preencha {nomes}." if nomes else "A fórmula está mais abaixo."
+    st.html(
+        f'<div class="mi-resposta {classe}"><span class="mi-rot">Resposta</span>'
+        f'<div class="mi-valor">{_e(valor)}</div><div class="mi-sub">{_e(sub)}</div></div>'
+    )
+
+
+def _como_usar(p: Parte) -> None:
+    primeiro = "uma seção" if p.dominio == mb.SOLIDOS else "um fluido e um trecho de tubo"
+    with st.expander("Como usar esta página", icon=":material/help:"):
+        st.markdown(
+            f"""
+1. **Comece de um modelo** parecido com a sua peça, ou clique em **Limpar** e monte do zero.
+2. **Monte na prancheta**: clique num bloco da biblioteca à esquerda e ele entra na fila. Comece por
+   {primeiro}, depois os esforços, um critério e, no fim, o bloco **Em função de**.
+3. **Ponha os números** no inspetor à direita. Campo vazio fica como letra na fórmula.
+4. **Escolha a letra pedida** em *Deixar em função de*. A resposta aparece no topo do inspetor, no
+   cartão do critério e, com a fórmula, logo abaixo da prancheta.
+
+**Na prancheta**
+
+| Para | Faça |
+|---|---|
+| Ver só um bloco ou uma ligação | Um clique nele |
+| Mudar um número no cartão | Dois cliques no número |
+| Ligar dois blocos | Arraste de uma bolinha até a outra |
+| Pôr um bloco no meio de uma ligação | Clique na ligação e depois no bloco da biblioteca |
+| Apagar o que está selecionado | Tecla Delete |
+| Desfazer e refazer | Ctrl+Z e Ctrl+Y |
+| Copiar e colar blocos | Ctrl+C e Ctrl+V |
+| Arrumar os blocos na tela | Botão Organizar |
+
+Abaixo da resposta ficam: as condições, a busca com várias incógnitas, a escolha no catálogo, o
+que mais pesa, a comparação de duas montagens e os documentos (Word, Excel e registro no projeto).
+"""
+        )
 
 
 def _titulo_de_secao(texto: str) -> None:
@@ -2010,6 +2127,23 @@ def _botao_rastrear(p: Parte, grafo: mt.Grafo) -> None:
         )
 
 
+def _numeros_do_caso_na_formula(resposta: mt.Resposta, u: Unidades) -> None:
+    """Na fórmula de um caso a mais, os números próprios dele já entraram: diz quais."""
+    conta = resposta.montagem
+    if conta is None or resposta.manda is None or not conta.casos:
+        return
+    caso = resposta.manda.condicao.caso
+    proprios = dict(conta.casos).get(caso)
+    if not proprios:
+        return
+    textos = [
+        f"{grandeza.texto} = {_com_unidade(valor, grandeza, u)}"
+        for chave, valor in proprios
+        if (grandeza := conta.grandeza(chave)) is not None
+    ]
+    st.caption(f"Na fórmula já entraram os números de {caso}: {', '.join(textos)}.")
+
+
 def _resposta(p: Parte, grafo: mt.Grafo, resposta: mt.Resposta, u: Unidades) -> None:
     letra = _letra(resposta.alvo)
     if resposta.valor is not None and resposta.manda is not None:
@@ -2020,6 +2154,7 @@ def _resposta(p: Parte, grafo: mt.Grafo, resposta: mt.Resposta, u: Unidades) -> 
         item = resposta.manda
         if item.formula is not None:
             st.latex(f"{letra} = {item.formula.latex}")
+            _numeros_do_caso_na_formula(resposta, u)
         else:
             st.caption(
                 "Esta equação não tem forma fechada simples: o número veio da conta numérica."
@@ -2101,8 +2236,8 @@ def _quadro(resposta: mt.Resposta, u: Unidades) -> None:
         linha: dict[str, Any] = {
             "Condição": nome,
             "Pede": pede,
-            "Valor": round(conferida.esquerda, 4) if conferida else None,
-            "Limite": round(conferida.direita, 4) if conferida else None,
+            "Atua": _numero(conferida.esquerda) if conferida else "—",
+            "Limite": _numero(conferida.direita) if conferida else "—",
             "Uso (%)": round(conferida.uso * 100.0, 1) if conferida else None,
         }
         if adotadas:
@@ -2111,6 +2246,10 @@ def _quadro(resposta: mt.Resposta, u: Unidades) -> None:
         linha["Manda"] = "●" if resposta.manda is not None and item is resposta.manda else ""
         linhas.append(linha)
     st.dataframe(pd.DataFrame(linhas), hide_index=True, width="stretch")
+    st.caption(
+        "Atua e Limite são os dois lados de cada condição, com a resposta no lugar da letra "
+        f"pedida. {u.sistema.aviso_da_base}"
+    )
     if adotadas:
         pior = max(resposta.conferencia_adotada, key=lambda linha: linha.uso)
         texto = _com_unidade(resposta.adotado or 0.0, resposta.alvo, u)
@@ -2727,7 +2866,11 @@ def _conta_da_foto(p: Parte, foto: Mapping[str, Any]) -> tuple[mt.Montagem, mt.R
     alvo = foto.get("alvo")
     if alvo and base.condicoes and alvo in {x.chave for x in _opcoes_de_alvo(base)}:
         try:
-            resposta = mt.isolar(base, alvo, foto["valores"], foto.get("adotado"))
+            conta = base
+            caso_base, casos = mcs.para_a_conta(foto.get("casos"))
+            if casos:
+                conta, _ = mt.com_casos(base, foto["valores"], alvo, caso_base, casos)
+            resposta = mt.isolar(conta, alvo, foto["valores"], foto.get("adotado"))
         except ValueError:
             resposta = None
     estado[p.k("comparar_a_conta")] = (marca, base, resposta)
@@ -2844,7 +2987,12 @@ def _comparar(p: Parte, base: mt.Montagem, resposta: mt.Resposta | None, u: Unid
     if not a:
         st.caption(
             "Guarde a montagem de agora como A, mude o que quiser na prancheta, e veja as duas "
-            "lado a lado: aço ou alumínio, uma seção ou outra, com cortante ou sem."
+            "lado a lado: "
+            + (
+                "aço ou alumínio, uma seção ou outra, com cortante ou sem."
+                if p.dominio == mb.SOLIDOS
+                else "um diâmetro ou outro, água ou óleo, com as perdas localizadas ou sem."
+            )
         )
         st.button(
             "Guardar como A",
@@ -3282,6 +3430,199 @@ def _salvar_e_abrir(
         )
 
 
+# ---------------------------------------------------------------------------
+# Casos de carga
+# ---------------------------------------------------------------------------
+
+#: As letras que costumam mudar de um caso para outro: o que é carga.
+_DIMENSOES_DE_CARGA = (g.FORCA, g.MOMENTO, g.PRESSAO, g.POTENCIA)
+
+
+def _casos_atuais(p: Parte) -> dict[str, Any]:
+    return mcs.normalizar(st.session_state.get(p.k("casos"))) or mcs.vazio()
+
+
+def _gravar_casos(p: Parte, casos: Mapping[str, Any]) -> None:
+    estado = st.session_state
+    estado[p.k("casos")] = mcs.normalizar(casos)
+    estado[p.k("casos_rev")] = estado.get(p.k("casos_rev"), 0) + 1
+
+
+def _ao_ligar_casos(p: Parte, letras: list[str], valores: dict[str, float]) -> None:
+    estado = st.session_state
+    casos = _casos_atuais(p)
+    casos["ligado"] = bool(estado.get(p.k("casos_ligado")))
+    if casos["ligado"] and not casos["lista"]:
+        casos["letras"] = casos["letras"] or letras
+        casos["lista"] = [
+            {
+                "nome": "Caso 2",
+                "valores": {k: v for k, v in valores.items() if k in casos["letras"]},
+            }
+        ]
+    _gravar_casos(p, casos)
+
+
+def _ao_mudar_nome_do_caso_base(p: Parte) -> None:
+    casos = _casos_atuais(p)
+    casos["base"] = str(st.session_state.get(p.k("casos_base")) or "")
+    _gravar_casos(p, casos)
+
+
+def _ao_escolher_letras_dos_casos(p: Parte) -> None:
+    casos = _casos_atuais(p)
+    casos["letras"] = list(st.session_state.get(p.k("casos_letras")) or ())
+    _gravar_casos(p, casos)
+
+
+def _linhas_dos_casos(
+    casos: Mapping[str, Any], colunas: Sequence[tuple[str, str, float]]
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "Caso": item["nome"],
+            **{
+                rotulo: (item["valores"][chave] / fator if chave in item["valores"] else None)
+                for rotulo, chave, fator in colunas
+            },
+        }
+        for item in casos["lista"]
+    ]
+
+
+def _ao_editar_casos(p: Parte, chave: str, colunas: list[tuple[str, str, float]]) -> None:
+    estado = st.session_state
+    casos = _casos_atuais(p)
+    novas = _com_edicoes(_linhas_dos_casos(casos, colunas), estado.get(chave) or {})
+    lista = []
+    for i, linha in enumerate(novas[: mcs.MAXIMO_DE_CASOS]):
+        valores = {}
+        for rotulo, letra, fator in colunas:
+            valor = linha.get(rotulo)
+            if (
+                isinstance(valor, (int, float))
+                and not isinstance(valor, bool)
+                and math.isfinite(valor)
+            ):
+                valores[letra] = float(valor) * fator
+        nome = str(linha.get("Caso") or "").strip() or f"Caso {i + 2}"
+        lista.append({"nome": nome, "valores": valores})
+    casos["lista"] = lista
+    _gravar_casos(p, casos)
+
+
+def _casos_de_carga(
+    p: Parte,
+    base: mt.Montagem,
+    alvo: str | None,
+    resposta: mt.Resposta,
+    u: Unidades,
+    avisos: Sequence[str],
+) -> None:
+    """Partida e regime, cheio e vazio: a mesma peça com cargas diferentes, e manda o pior."""
+    estado = st.session_state
+    _titulo_da_pagina("Casos de carga")
+    casos = _casos_atuais(p)
+    opcoes = {item.chave: item for item in base.grandezas if item.chave != alvo}
+    valores = {k: v for k, v in estado[p.k("valores")].items() if v is not None and k in opcoes}
+    padrao = [k for k, item in opcoes.items() if item.dimensao in _DIMENSOES_DE_CARGA]
+    estado[p.k("casos_ligado")] = casos["ligado"]
+    st.toggle(
+        "Mais de um caso de carga",
+        key=p.k("casos_ligado"),
+        on_change=_ao_ligar_casos,
+        args=(p, padrao, valores),
+        help=(
+            "A mesma peça com cargas diferentes, como partida e regime. Cada caso muda só as letras "
+            "escolhidas, e a resposta sai do pior caso."
+        ),
+    )
+    if not casos["ligado"]:
+        return
+    esquerda, direita = st.columns([1, 2], gap="medium")
+    estado[p.k("casos_base")] = casos["base"]
+    esquerda.text_input(
+        "Nome do caso do inspetor",
+        key=p.k("casos_base"),
+        on_change=_ao_mudar_nome_do_caso_base,
+        args=(p,),
+        max_chars=mcs.TAMANHO_DO_NOME,
+        help="Os valores do inspetor são o primeiro caso. Dê um nome a ele, como Regime.",
+    )
+    estado[p.k("casos_letras")] = [k for k in casos["letras"] if k in opcoes]
+    direita.multiselect(
+        "Letras que mudam de um caso para outro",
+        list(opcoes),
+        key=p.k("casos_letras"),
+        on_change=_ao_escolher_letras_dos_casos,
+        args=(p,),
+        format_func=lambda c: f"{opcoes[c].texto}: {opcoes[c].nome}",
+        help="Quase sempre os esforços. A letra pedida não muda: ela é a resposta.",
+    )
+    colunas = [
+        (
+            f"{opcoes[k].texto} ({u.rotulo(opcoes[k].dimensao)})"
+            if u.rotulo(opcoes[k].dimensao)
+            else opcoes[k].texto,
+            k,
+            u.fator(opcoes[k].dimensao),
+        )
+        for k in estado[p.k("casos_letras")]
+    ]
+    if not colunas:
+        st.info("Escolha ao menos uma letra que muda.", icon=":material/info:")
+        return
+    chave = f"{p.prefixo}_casos_tabela_{estado.get(p.k('casos_rev'), 0)}"
+    st.data_editor(
+        pd.DataFrame(_linhas_dos_casos(casos, colunas), columns=["Caso", *(c[0] for c in colunas)]),
+        key=chave,
+        on_change=_ao_editar_casos,
+        args=(p, chave, colunas),
+        num_rows="dynamic",
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Caso": st.column_config.TextColumn("Caso", max_chars=mcs.TAMANHO_DO_NOME),
+            **{
+                rotulo: st.column_config.NumberColumn(rotulo, format="%.6g")
+                for rotulo, _, _ in colunas
+            },
+        },
+    )
+    st.caption(
+        f"Uma linha por caso, além de “{casos['base']}”, que usa os valores do inspetor. Célula "
+        f"vazia vale o número de “{casos['base']}”. Até {mcs.MAXIMO_DE_CASOS} casos."
+    )
+    for aviso in avisos:
+        st.warning(aviso, icon=":material/warning:")
+    por_caso = mcs.resposta_de_cada_caso(resposta)
+    if not por_caso or resposta.valor is None:
+        return
+    quem = resposta.manda.condicao.caso if resposta.manda is not None else ""
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Caso": nome,
+                    "Pede": (
+                        f"{resposta.alvo.texto} {_sinal(item.lado)} "
+                        f"{_com_unidade(item.valor, resposta.alvo, u)}"
+                        if item is not None and item.valor is not None
+                        else "—"
+                    ),
+                    "Quem manda no caso": (
+                        item.condicao.nome.removeprefix(f"{nome}: ") if item is not None else "—"
+                    ),
+                    "Manda": "●" if nome == quem else "",
+                }
+                for nome, item in por_caso
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+    )
+
+
 def tela_do_montador(p: Parte) -> None:
     st.html(_ESTILO)
     _iniciar(p)
@@ -3290,6 +3631,7 @@ def tela_do_montador(p: Parte) -> None:
     if aviso_da_secao:
         st.toast(aviso_da_secao, icon=":material/draw:")
     _cabecalho(p)
+    _como_usar(p)
     estado = st.session_state
     u = Unidades(p.sistema, tuple(estado[p.k("unidades")]))
     dados = estado[p.k("grafo")]
@@ -3306,11 +3648,31 @@ def tela_do_montador(p: Parte) -> None:
     estado[p.k("campos")] = {item.chave: item.dimensao for item in base.grandezas}
     resposta: mt.Resposta | None = None
     falha = ""
+    conta = base
+    avisos_dos_casos: tuple[str, ...] = ()
+    if alvo is not None and base.condicoes and p.dominio == mb.SOLIDOS:
+        caso_base, casos = mcs.para_a_conta(estado.get(p.k("casos")))
+        if casos:
+            conta, avisos_dos_casos = mt.com_casos(
+                base, estado[p.k("valores")], alvo, caso_base, casos
+            )
     if alvo is not None and base.condicoes:
         try:
-            resposta = mt.isolar(base, alvo, estado[p.k("valores")], estado.get(p.k("adotado")))
+            with st.spinner("Fazendo a conta…"):
+                resposta = mt.isolar(
+                    conta, alvo, estado[p.k("valores")], estado.get(p.k("adotado"))
+                )
         except ValueError as erro:
             falha = str(erro)
+        except (ArithmeticError, RecursionError, TypeError, LookupError, AttributeError) as erro:
+            if dg.levantar_erros():
+                raise
+            registrar_falha(f"{p.titulo} › Resposta", erro)
+            falha = (
+                "O programa não conseguiu fechar esta conta com os valores e as ligações de agora. "
+                "Confira os números (zero, negativo ou muito fora de escala) e a letra pedida "
+                f"(ref. {dg.referencia_da_falha(erro)})."
+            )
     _atualizar_repasses(p, base, resposta)  # antes de qualquer saída da página
     projeto = projeto_ativo_persistente()
     diagnosticos = rg.conferir_referencias(grafo, projeto, p.dominio, u)
@@ -3322,6 +3684,7 @@ def tela_do_montador(p: Parte) -> None:
         alvo,
         estado.get(p.k("adotado")),
         estado[p.k("unidades")],
+        estado.get(p.k("casos")),
     )
     registro = _registro(p, doc, base, resposta, u)
     salvo = estado.get(p.k("salvo")) == rg.assinatura(doc)
@@ -3391,6 +3754,7 @@ def tela_do_montador(p: Parte) -> None:
             ao_comandar=lambda: _ao_comandar(p),
         )
     with lateral, st.container(key=p.k("inspetor"), height=_ALTURA_DA_PRANCHETA, border=True):
+        _resposta_no_inspetor(resposta, falha, base, u)
         _inspetor(p, dados, grafo, base, resposta, alvo, u, diagnosticos)
 
     erro_conjunto = estado.get(p.k("erro_conjunto"))
@@ -3428,22 +3792,36 @@ def tela_do_montador(p: Parte) -> None:
             st.warning(diagnostico.mensagem, icon=":material/warning:")
     if resposta.materiais:
         st.caption("Materiais do cadastro que servem: " + "; ".join(resposta.materiais) + ".")
+    if p.dominio == mb.SOLIDOS:
+        with _parte(p, "Casos de carga"):
+            _casos_de_carga(p, base, alvo, resposta, u, avisos_dos_casos)
     _titulo_da_pagina("Condições")
-    _quadro(resposta, u)
+    with _parte(p, "Condições"):
+        _quadro(resposta, u)
     valores = {k: v for k, v in estado[p.k("valores")].items() if v is not None}
-    _grafico_da_bomba(resposta, valores, u)
-    _busca_em_faixas(p, base, alvo, resposta, u)
-    _escolher_do_catalogo(p, base, alvo)
-    _o_que_mais_pesa(p, resposta, u)
+    with _parte(p, "Ponto de operação"):
+        _grafico_da_bomba(resposta, valores, u)
+    with _parte(p, "Procurar em faixas"):
+        _busca_em_faixas(p, conta, alvo, resposta, u)
+    with _parte(p, "Escolher do catálogo"):
+        _escolher_do_catalogo(p, conta, alvo)
+    with _parte(p, "O que mais pesa"), st.spinner("Vendo o que mais pesa…"):
+        _o_que_mais_pesa(p, resposta, u)
     if resposta.valor is not None and resposta.sentido != mt.IGUAL:
         _titulo_da_pagina("Em volta da resposta")
-        _grafico_de_uso(resposta, valores, u)
-        _grafico_de_varredura(p, resposta.montagem or base, resposta, valores, u)
-    _comparar(p, base, resposta, u)
-    _levar_para_outras_analises(p, base, resposta, registro)
-    with st.expander("Passo a passo", icon=":material/list_alt:"):
+        with _parte(p, "Em volta da resposta"):
+            _grafico_de_uso(resposta, valores, u)
+            _grafico_de_varredura(p, resposta.montagem or base, resposta, valores, u)
+    with _parte(p, "Comparar duas montagens"):
+        _comparar(p, base, resposta, u)
+    with _parte(p, "Levar para outras análises"):
+        _levar_para_outras_analises(p, base, resposta, registro)
+    with st.expander("Passo a passo", icon=":material/list_alt:"), _parte(p, "Passo a passo"):
         _passo_a_passo(resposta)
-    with st.expander("De onde veio cada valor", icon=":material/account_tree:"):
+    with (
+        st.expander("De onde veio cada valor", icon=":material/account_tree:"),
+        _parte(p, "De onde veio cada valor"),
+    ):
         _de_onde_veio(p, base, u)
     hipoteses = [
         "Pré-dimensionamento: não substitui a verificação por norma.",
@@ -3461,6 +3839,9 @@ def tela_do_montador(p: Parte) -> None:
             "Escoamento permanente e incompressível, com a linha em série e a mesma vazão em todos "
             "os trechos. Propriedades dos fluidos e rugosidades são valores típicos de tabela.",
         )
-    with st.expander("Salvar, abrir e registrar", icon=":material/save:"):
+    with (
+        st.expander("Salvar, abrir e registrar", icon=":material/save:"),
+        _parte(p, "Salvar, abrir e registrar"),
+    ):
         _salvar_e_abrir(p, doc, resposta, u, dados, faces, hipoteses, registro)
     fronteira_modelo(hipoteses, titulo="Hipóteses desta conta")

@@ -657,6 +657,9 @@ function criar(raiz) {
       caberNaLargura()
     }
     const nos = nivel().nos
+    // Vista posta pelo programa: se a janela mudar de tamanho, ela se ajusta de novo. Quem move ou
+    // aproxima à mão fica com a vista que escolheu.
+    e.vistaAutomatica = true
     if (!nos.length) {
       e.vista = { x: 0, y: 0, esc: 1 }
       return
@@ -677,6 +680,7 @@ function criar(raiz) {
   function aproximar(fator, cx, cy) {
     const esc = Math.min(2.5, Math.max(0.3, e.vista.esc * fator))
     const k = esc / e.vista.esc
+    e.vistaAutomatica = false
     e.vista = { esc, x: cx - (cx - e.vista.x) * k, y: cy - (cy - e.vista.y) * k }
     desenhar()
   }
@@ -1345,6 +1349,7 @@ function criar(raiz) {
       return
     }
     if (g.tipo === "pan") {
+      e.vistaAutomatica = false
       e.vista = {
         ...g.vista,
         x: g.vista.x + ev.clientX - g.inicio[0],
@@ -1736,7 +1741,7 @@ function criar(raiz) {
   }
 
   new ResizeObserver(() => {
-    if (e.ajustarAoMedir) ajustarVista()
+    if (e.ajustarAoMedir || e.vistaAutomatica) ajustarVista()
     desenhar()
   }).observe(svg)
   montarTrilha()

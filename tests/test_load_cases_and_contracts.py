@@ -103,6 +103,7 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "vigas_eixos",
         "analise_fadiga",
         "circulo_mohr",
+        "ajustes_e_tolerancias",
         "montador_formulas",
         "analise_sensibilidade",
         "assistente_cargas",

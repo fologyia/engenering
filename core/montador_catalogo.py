@@ -175,7 +175,7 @@ def testar(
     if problemas:
         raise ErroDoCatalogo(problemas[0])
     zeros = mt.letras_zeradas(base, bons)
-    conta = mt.montar(base.grafo, zeros) if zeros else base
+    conta = mt.remontar(base, zeros) if zeros else base
     faltam = [
         item.texto
         for item in conta.grandezas

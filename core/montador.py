@@ -22,6 +22,7 @@ from typing import Any
 import numpy as np
 import sympy as sp
 
+from core import diagnostico as dg
 from core import material_catalog as mc
 from core import montador_blocos as mb
 from core import (
@@ -76,6 +77,18 @@ class Grafo:
     fios: tuple[Fio, ...]
 
 
+def _opcoes_conhecidas(tipo: str, opcoes: Mapping[str, Any]) -> dict[str, str]:
+    """Escolha que o bloco não conhece (arquivo de outra versão, ou mexido à mão) sai: vale o padrão.
+
+    É o mesmo que o inspetor mostra nesse caso, e assim a tela e a conta dizem a mesma coisa.
+    """
+    limpas = {str(k): str(v) for k, v in opcoes.items()}
+    for opcao in mb.POR_CHAVE[tipo].opcoes:
+        if opcao.chave in limpas and limpas[opcao.chave] not in opcao.lista():
+            del limpas[opcao.chave]
+    return limpas
+
+
 def _abrir(
     dados: Mapping[str, Any],
     prefixo: str,
@@ -109,10 +122,9 @@ def _abrir(
                     str(porta.get("porta")),
                 )
         elif tipo in mb.POR_CHAVE:
-            opcoes = linha.get("opcoes") or {}
-            nos.append(
-                No(id_, str(tipo), tuple(sorted((str(k), str(v)) for k, v in opcoes.items())))
-            )
+            opcoes = linha.get("opcoes")
+            limpas = _opcoes_conhecidas(str(tipo), opcoes if isinstance(opcoes, Mapping) else {})
+            nos.append(No(id_, str(tipo), tuple(sorted(limpas.items()))))
     for linha in dados.get("fios") or ():
         if isinstance(linha, Mapping):
             fios.append(
@@ -242,6 +254,12 @@ class Montagem:
     indices: tuple[tuple[str, int], ...] = ()
     #: Hipóteses dos blocos que não passam pelo fio da seção, como a ≤ L/2 na viga.
     validades: tuple[Validade, ...] = ()
+    #: Casos de carga além dos valores do inspetor (que são o ``caso_base``): o nome e as letras
+    #: próprias de cada um. As condições deles já estão em ``condicoes``, com os números dentro,
+    #: e também em ``extras``, para a conta ser refeita com esforços zerados sem perdê-las.
+    caso_base: str = ""
+    casos: tuple[tuple[str, tuple[tuple[str, float], ...]], ...] = ()
+    extras: tuple[Condicao, ...] = ()
 
     def grandeza(self, chave: str) -> Grandeza | None:
         return next((item for item in self.grandezas if item.chave == chave), None)
@@ -302,6 +320,17 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
             calculado = dict(bloco.calcular(contexto))
         except ValueError as erro:
             erros[no.id] = str(erro)
+            letras_do_bloco[no.id] = tuple(dict.fromkeys(contexto.proprias))
+            continue
+        except Exception as erro:  # um bloco que quebra não derruba os outros nem a prancheta
+            if dg.levantar_erros():
+                raise
+            ocorrencia = dg.ocorrencia_de_falha(f"Montador: bloco {bloco.nome}", erro)
+            dg.gravar(ocorrencia)
+            erros[no.id] = (
+                "Este bloco não conseguiu fazer a conta com o que está ligado nele. Confira as "
+                f"ligações e as escolhas do bloco (ref. {ocorrencia.referencia})."
+            )
             letras_do_bloco[no.id] = tuple(dict.fromkeys(contexto.proprias))
             continue
         if "condicao" in calculado:
@@ -825,6 +854,97 @@ def letras_zeradas(
     return frozenset(chave for chave, valor in valores.items() if valor == 0.0 and chave != alvo)
 
 
+def _do_caso(condicao: Condicao, caso: str, trocas: Mapping[sp.Symbol, sp.Expr]) -> Condicao:
+    """A condição com o nome do caso na frente e os números próprios dele já dentro."""
+
+    def trocar(expressao: sp.Expr) -> sp.Expr:
+        return expressao.subs(trocas) if trocas else expressao
+
+    return replace(
+        condicao,
+        nome=f"{caso}: {condicao.nome}",
+        caso=caso,
+        esquerda=trocar(condicao.esquerda),
+        direita=trocar(condicao.direita),
+        tensoes=tuple((nome, trocar(t)) for nome, t in condicao.tensoes),
+        validade=tuple(replace(v, expressao=trocar(v.expressao)) for v in condicao.validade),
+    )
+
+
+def _juntar(
+    conta: Montagem,
+    caso_base: str,
+    casos: tuple[tuple[str, tuple[tuple[str, float], ...]], ...],
+    extras: tuple[Condicao, ...],
+) -> Montagem:
+    if not casos:
+        return conta
+    return replace(
+        conta,
+        condicoes=(*(_do_caso(c, caso_base, {}) for c in conta.condicoes), *extras),
+        caso_base=caso_base,
+        casos=casos,
+        extras=extras,
+    )
+
+
+def remontar(montagem: Montagem, zeros: frozenset[str]) -> Montagem:
+    """A conta de novo, com os esforços em zero fora dela, sem perder os casos de carga."""
+    conta = montar(montagem.grafo, zeros)
+    return _juntar(conta, montagem.caso_base, montagem.casos, montagem.extras)
+
+
+def _numero_da_formula(valor: float) -> sp.Expr:
+    """Inteiro sai sem o .0 na fórmula do caso: 24000000, e não 24000000.0."""
+    return sp.Integer(int(valor)) if float(valor).is_integer() else sp.Float(valor)
+
+
+def com_casos(
+    montagem: Montagem,
+    valores: Mapping[str, float | None],
+    alvo: str | None,
+    caso_base: str,
+    casos: Iterable[tuple[str, Mapping[str, float | None]]],
+) -> tuple[Montagem, tuple[str, ...]]:
+    """Cada caso de carga vira mais um jogo de condições, com os números próprios dele dentro.
+
+    A letra que o caso não muda continua letra, e recebe o valor do inspetor na hora da conta,
+    como no primeiro caso. A letra pedida nunca muda de caso para caso. Devolve também os avisos
+    de valores que não servem (negativo, por exemplo), com o nome do caso na frente.
+    """
+    nome_base = caso_base.strip() or "Caso 1"
+    vistos = {nome_base}
+    avisos: list[str] = []
+    extras: list[Condicao] = []
+    guardados: list[tuple[str, tuple[tuple[str, float], ...]]] = []
+    comuns = {k: v for k, v in valores.items() if k != alvo and v is not None}
+    for numero, (nome_bruto, trocas) in enumerate(casos, start=2):
+        nome = str(nome_bruto).strip() or f"Caso {numero}"
+        while nome in vistos:
+            nome = f"{nome} ({numero})"
+        vistos.add(nome)
+        proprios = {k: v for k, v in trocas.items() if k != alvo and v is not None}
+        limpos, problemas = conferir_valores(montagem, proprios)
+        avisos += [f"{nome}: {problema}" for problema in problemas]
+        juntos, _ = conferir_valores(montagem, {**comuns, **limpos})
+        conta = montar(montagem.grafo, letras_zeradas(montagem, juntos, alvo))
+        simbolos = {item.chave: item.simbolo for item in conta.grandezas}
+        numeros = {simbolos[k]: _numero_da_formula(v) for k, v in limpos.items() if k in simbolos}
+        extras += [_do_caso(c, nome, numeros) for c in conta.condicoes]
+        guardados.append((nome, tuple(sorted(limpos.items()))))
+    return _juntar(montagem, nome_base, tuple(guardados), tuple(extras)), tuple(avisos)
+
+
+def valores_do_caso(resposta: Resposta) -> dict[str, float]:
+    """Os números do caso que manda: os do inspetor, com os próprios do caso por cima."""
+    usados = dict(resposta.valores_usados)
+    conta = resposta.montagem
+    if conta is None or resposta.manda is None or not conta.casos:
+        return usados
+    proprios = dict(conta.casos).get(resposta.manda.condicao.caso)
+    return {**usados, **dict(proprios)} if proprios else usados
+
+
 def isolar(
     montagem: Montagem,
     alvo: str,
@@ -837,7 +957,7 @@ def isolar(
         raise ErroDeMontagem("Escolha uma grandeza que esteja no desenho.")
     limpos, invalidos = conferir_valores(montagem, {k: v for k, v in valores.items() if k != alvo})
     zeros = letras_zeradas(montagem, limpos, alvo)
-    conta = montar(montagem.grafo, zeros) if zeros else montagem
+    conta = remontar(montagem, zeros) if zeros else montagem
     if conta.grandeza(alvo) is None or not conta.condicoes:
         raise ErroDeMontagem(
             f"Com esses valores em zero, {grandeza.texto} não entra mais na conta. "

@@ -207,6 +207,7 @@ class Condicao:
     positiva: bool = True  # no estado biaxial, σ_x − σ_y pode dar negativo, e o módulo fica
     igualdade: bool = False
     no: str = ""  # o bloco que gerou a condição
+    caso: str = ""  # o caso de carga, quando a montagem tem mais de um
 
     @property
     def letras(self) -> set[sp.Symbol]:

@@ -74,7 +74,11 @@ serve e diz quantos. A parte de fluidos não esconde nada, porque tanque, tubo e
 
 ## O inspetor
 
-Mostra o que está selecionado, e cada coisa do seu jeito:
+No topo fica sempre a **resposta** (por exemplo, h ≥ 37,95 mm), quem manda e, com valor adotado,
+se ele passa. Assim dá para mudar um número e ver o efeito sem rolar a página. Sem todos os números,
+o quadro diz quais faltam; sem conta, diz o motivo.
+
+Abaixo dele, o inspetor mostra o que está selecionado, e cada coisa do seu jeito:
 
 - **Nada selecionado:** todos os valores da montagem.
 - **Bloco:** os valores só dele, o uso do critério, de quem recebe e para quem envia.
@@ -367,6 +371,43 @@ Basta um `Bloco` em `BLOCOS`, em `core/montador_blocos.py`: a prancheta, os camp
 
 Letra nova vai em `core/montador_grandezas.py`, e seção nova em `core/montador_secoes.py`, dizendo os
 pontos dela. O teste `test_todo_bloco_tem_o_que_a_tela_precisa` confere o catálogo.
+
+## Casos de carga
+
+A mesma peça com cargas diferentes, como partida e regime, ou cheio e vazio. Em **Casos de carga**,
+logo abaixo da resposta, ligue **Mais de um caso de carga**:
+
+- Os valores do inspetor são o primeiro caso. Dê um nome a ele, como Regime.
+- Escolha as **letras que mudam** de um caso para outro. O programa já sugere os esforços (força,
+  momento, pressão, potência). A letra pedida nunca muda: ela é a resposta.
+- Na tabela, uma linha por caso a mais. Célula vazia vale o número do primeiro caso. Até 12 casos.
+
+Na conta, cada caso entra com as condições dele, com o nome na frente (“Partida: von Mises na fibra
+externa”). A resposta sai do pior caso, do mesmo jeito que sai a condição que manda num caso só. Um
+quadro mostra quanto cada caso pede e qual manda.
+
+O resto da página vê todos os casos: o valor adotado é conferido em todos, a busca em faixas e o
+catálogo só aceitam o que passa em todos, e os gráficos mostram as condições de cada caso. Os
+cartões da prancheta e **Levar para outras análises** usam os números do caso que manda. Os casos
+entram no Ctrl+Z, em Comparar, no arquivo e no registro do projeto (com o caso que manda). O que
+fica de fora: o Montador de fluidos, porque lá a conta é uma igualdade, e “o que mais pesa”, que
+varia só os números do primeiro caso.
+
+## Quando alguma coisa dá errado
+
+- **Escolha que o bloco não conhece** (arquivo de outra versão, ou mexido à mão): vale o padrão do
+  bloco, o mesmo que o inspetor mostra.
+- **Bloco que não consegue fazer a conta:** só ele fica marcado na prancheta, com uma referência
+  para o arquivo de diagnóstico. Os outros blocos continuam.
+- **Conta que não fecha:** a prancheta e o inspetor continuam na tela, com o aviso do que conferir.
+- **Uma parte da página que falha** (condições, busca, catálogo, o que mais pesa, gráficos,
+  comparação, envios, documentos): só ela some, com uma linha no lugar. O resto continua valendo.
+- **Valor adotado ruim no arquivo** (texto, negativo, sem número): fica de fora.
+- **Conta demorada** (pinhão cônico, fuso): aparece "Fazendo a conta…". Na segunda vez ela é rápida.
+
+A linha de cima cabe em tela de notebook: as unidades ficam num botão só, **Unidades**. Quando a
+janela muda de tamanho, a prancheta se ajusta sozinha, a não ser que a vista tenha sido movida à mão.
+No alto da página, **Como usar esta página** tem os passos e os atalhos da prancheta.
 
 ## Limites
 

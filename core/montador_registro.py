@@ -21,6 +21,7 @@ from typing import Any
 
 from core import montador as mt
 from core import montador_blocos as mb
+from core import montador_casos as mcs
 from core import montador_grandezas as g
 from core.montador_grandezas import Sistema, Unidades
 from core.technical_records import STATUS_SUPERADO, criar_registro_tecnico
@@ -51,9 +52,10 @@ def documento(
     alvo: str | None,
     adotado: float | None,
     unidades: Sequence[str],
+    casos: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Tudo o que reabre a montagem como ela estava."""
-    return {
+    doc = {
         "formato": FORMATO,
         "dominio": dominio,
         "grafo": json.loads(json.dumps(grafo, ensure_ascii=False)),
@@ -63,6 +65,10 @@ def documento(
         "adotado": adotado,
         "unidades": list(unidades),
     }
+    normalizados = mcs.normalizar(casos)
+    if normalizados is not None and normalizados["lista"]:
+        doc["casos"] = normalizados
+    return doc
 
 
 def assinatura(doc: Mapping[str, Any]) -> str:
@@ -83,6 +89,8 @@ def assinatura(doc: Mapping[str, Any]) -> str:
         "alvo": doc.get("alvo"),
         "adotado": doc.get("adotado"),
     }
+    if doc.get("casos"):
+        conteudo["casos"] = doc["casos"]
     texto = json.dumps(conteudo, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
@@ -125,8 +133,16 @@ def ler_documento(conteudo: bytes | str, dominio: str, sistema: Sistema) -> dict
         "valores": valores,
         "origens": {str(k): str(v) for k, v in (doc.get("origens") or {}).items()},
         "alvo": doc.get("alvo") if isinstance(doc.get("alvo"), str) else None,
-        "adotado": float(adotado) if isinstance(adotado, (int, float)) else None,
+        "adotado": (
+            float(adotado)
+            if isinstance(adotado, (int, float))
+            and not isinstance(adotado, bool)
+            and math.isfinite(adotado)
+            and adotado > 0.0
+            else None
+        ),
         "unidades": unidades,
+        "casos": mcs.normalizar(doc.get("casos")),
     }
 
 
@@ -182,6 +198,19 @@ def saidas_publicas(
     return publicas
 
 
+def _dimensao_da_letra(montagem: mt.Montagem, chave: str) -> str:
+    grandeza = montagem.grandeza(chave)
+    return grandeza.dimensao if grandeza is not None else ""
+
+
+def _rotulo_da_letra(montagem: mt.Montagem, chave: str, u: Unidades) -> str:
+    grandeza = montagem.grandeza(chave)
+    if grandeza is None:
+        return chave
+    rotulo = u.rotulo(grandeza.dimensao)
+    return f"{grandeza.texto} ({rotulo})" if rotulo else grandeza.texto
+
+
 def registro_tecnico(
     *,
     modulo: str,
@@ -215,6 +244,19 @@ def registro_tecnico(
         resultados["utilizacao"] = max(medidas)
     if resposta.manda is not None:
         resultados["condicao_que_manda"] = resposta.manda.condicao.nome
+    if montagem.casos:
+        resultados["caso_que_manda"] = (
+            resposta.manda.condicao.caso if resposta.manda is not None else ""
+        ) or montagem.caso_base
+        entradas["casos_de_carga"] = {
+            nome: {
+                _rotulo_da_letra(montagem, chave, u): valor
+                / u.fator(_dimensao_da_letra(montagem, chave))
+                for chave, valor in proprios
+                if montagem.grandeza(chave) is not None
+            }
+            for nome, proprios in montagem.casos
+        }
     if resposta.adotado is not None:
         chave = f"{alvo.texto} adotado ({rotulo_alvo})" if rotulo_alvo else f"{alvo.texto} adotado"
         resultados[chave] = resposta.adotado / u.fator(alvo.dimensao)

@@ -18,7 +18,7 @@ from functools import lru_cache
 import numpy as np
 import sympy as sp
 
-from core.montador import Montagem, conferir_valores, letras_zeradas, montar
+from core.montador import Montagem, conferir_valores, letras_zeradas, remontar
 from core.montador_funcoes import FUNCOES
 
 MENOR_AREA = "area"
@@ -432,7 +432,7 @@ def procurar(
         raise ErroDeBusca(problemas[0])
     zeros = letras_zeradas(montagem, bons)
     if zeros:
-        montagem = montar(montagem.grafo, zeros)
+        montagem = remontar(montagem, zeros)
     valores = bons
     faltam = [
         item.texto

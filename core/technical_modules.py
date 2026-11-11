@@ -312,6 +312,20 @@ def _registrar_padrao() -> None:
             descricao="Transformações, tensões principais e estados 2D/3D.",
         ),
         ModuloTecnico(
+            id="ajustes_e_tolerancias",
+            titulo="Ajustes e tolerâncias",
+            versao="1.0",
+            pagina="app_pages/ajustes_e_tolerancias.py",
+            grupo_navegacao="Mecânica geral",
+            ordem=42,
+            icone=":material/settings_input_component:",
+            descricao=(
+                "Tolerâncias ISO de furo e eixo pela NBR 6158, folga ou interferência, aperto do "
+                "ajuste prensado e o ajuste que segura o torque."
+            ),
+            aliases=("Tolerâncias ISO", "Ajuste prensado", "H7/s6", "NBR 6158"),
+        ),
+        ModuloTecnico(
             id="montador_formulas",
             titulo="Montador de fórmulas",
             versao="1.0",

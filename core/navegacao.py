@@ -271,6 +271,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Verificar fadiga de carga que varia com o tempo",
             ),
             ItemMenu(
+                "app_pages/ajustes_e_tolerancias.py",
+                "Ajustes e tolerâncias",
+                ":material/settings_input_component:",
+                "Furo e eixo pela NBR 6158: folga, interferência e aperto do ajuste prensado",
+            ),
+            ItemMenu(
                 "app_pages/circulo_mohr.py",
                 "Círculo de Mohr",
                 ":material/radio_button_unchecked:",
