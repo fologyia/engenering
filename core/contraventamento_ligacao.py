@@ -329,7 +329,7 @@ def verificacoes_anglo(e: EntradaLigacao, n_parafusos: int) -> list[Verificacao]
             "—",
             ca.item("9.1"),
             "a ligação precisa resistir a ≥ 75 % da tração resistente da diagonal e ≥ 3 t: a "
-            "página Contraventamento de estruturas abertas confere com a diagonal escolhida",
+            "página Contraventamento confere com a diagonal escolhida",
         )
     )
     return linhas

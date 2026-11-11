@@ -1,6 +1,6 @@
-# Vento nas estruturas — NBR 6123:2023: escopo, hipóteses e conferências
+# Vento em edificações — NBR 6123:2023: escopo, hipóteses e conferências
 
-A página **Vento nas estruturas** calcula a ação do vento numa **edificação de planta retangular**
+A página **Vento em edificações** calcula a ação do vento numa **edificação de planta retangular**
 (galpão, edifício, plataforma fechada) pela **ABNT NBR 6123:2023**: da velocidade do local às
 pressões em cada zona das paredes e do telhado, às pressões de projeto das telhas e fixações, à
 força de arrasto, à torção e às **cargas por metro de um pórtico transversal**, com a solução do
@@ -81,7 +81,7 @@ fundação recebem (característica).
   `T₁ > 1 s` (estimado por `0,29·√h − 0,4` se não informado) ou `h/b ≥ 6`.
 * Pontes (seção 11). Topografia complexa e túnel de vento.
 * O pórtico é plano e linear, só com o vento; as combinações com peso próprio e sobrecarga
-  (NBR 8800/8681, γ_q = 1,4 e ψ₀ = 0,6) ficam em Casos e combinações de carga e em Estruturas de aço.
+  (NBR 8800/8681, γ_q = 1,4 e ψ₀ = 0,6) ficam em Casos e combinações de carga e em Barras, treliças e pórticos.
 
 ## `C_a` digitalizado
 

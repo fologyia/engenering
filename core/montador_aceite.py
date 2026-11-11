@@ -30,7 +30,7 @@ from core.montador_modelos import Modelo
 _MAURER = "Maurer, Hydraulics and Water Resources: Examples Using R (livro aberto)"
 _OMNI = "Exemplo de NPSH da Omni Calculator (conferido com a fórmula de NPSH disponível)"
 _JOUKOWSKY = "Fórmula de Joukowsky, Δp = ρ·a·ΔV, com a = 1200 m/s e ΔV = 2 m/s"
-_ASSISTENTE = "O mesmo eixo calculado por core/elementos_eixos.py, o do Assistente de cargas"
+_ASSISTENTE = "O mesmo eixo calculado por core/elementos_eixos.py, o do Cálculo de peças"
 _MODULO = "Montador de fluidos"
 _PES = 0.3048
 _PES3 = _PES**3
@@ -224,11 +224,11 @@ def _eixo_no_montador() -> float:
 
 
 # ---------------------------------------------------------------------------
-# Peças do eixo: o mesmo caso pelo Montador e pelo Assistente de cargas
+# Peças do eixo: o mesmo caso pelo Montador e pelo Cálculo de peças
 # ---------------------------------------------------------------------------
 
 _PECAS = "Montador: peças do eixo"
-_DO_ASSISTENTE = "A mesma peça calculada pelo Assistente de cargas (core/elementos_*.py)"
+_DO_ASSISTENTE = "A mesma peça calculada pelo Cálculo de peças (core/elementos_*.py)"
 _ENGRENAGEM_DO_CASO: dict[str, Any] = {
     "potencia_kW": 15.0,
     "rotacao_rpm": 1450.0,

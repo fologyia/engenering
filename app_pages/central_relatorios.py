@@ -67,18 +67,18 @@ def _entra_no_memorial(registro: dict) -> bool:
 
 
 st.set_page_config(
-    page_title="Central de relatórios",
+    page_title="Memorial de cálculo",
     page_icon=":material/description:",
     layout="wide",
 )
 
 cabecalho_pagina(
-    "Central de relatórios",
+    "Memorial de cálculo",
     "Monte um memorial por seções, selecione registros técnicos e emita Word editável ou PDF controlado.",
     categoria="DOCUMENTAÇÃO INDUSTRIAL",
     icone=":material/description:",
     cor="blue",
-    ajuda_modulo="Central de relatórios",
+    ajuda_modulo="Memorial de cálculo",
     acoes=(("app_pages/gestao_projetos.py", "Projeto", ":material/folder_managed:"),),
 )
 

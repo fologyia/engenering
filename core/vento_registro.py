@@ -26,7 +26,7 @@ from core.vento_nbr6123 import numero_ptbr
 from core.verificacao import linhas_para_registro, status_geral
 
 MODULO_ID = "vento_nbr6123"
-MODULO_TITULO = "Vento nas estruturas"
+MODULO_TITULO = "Vento em edificações"
 LARGURA_UTIL_DXA = 9360  # largura útil do memorial, em vinte avos de ponto
 
 

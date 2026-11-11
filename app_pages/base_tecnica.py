@@ -42,7 +42,7 @@ def _numero(valor: float, casas: int = 2) -> str:
 # ============================================================ formulário
 if projeto is None:
     st.info(
-        "Nenhum projeto ativo. Abra ou crie um em **Projetos permanentes** para gravar a base "
+        "Nenhum projeto ativo. Abra ou crie um em **Projetos** para gravar a base "
         "técnica. A consulta do critério Anglo, mais abaixo, funciona sem projeto.",
         icon=":material/folder_off:",
     )
@@ -464,9 +464,7 @@ with abas[7], secao_protegida("aba 8"):
 - Esbeltez: tração ≤ 300 (exceto barras redondas e peças com pré-tensão); compressão ≤ 200 (8.3).
 """
     )
-    st.page_link(
-        "app_pages/degrau_escada.py", label="Degrau de escada em grade", icon=":material/stairs:"
-    )
+    st.page_link("app_pages/degrau_escada.py", label="Escada em grade", icon=":material/stairs:")
 with abas[8], secao_protegida("aba 9"):
     st.dataframe(
         pd.DataFrame([{"Uso": a, "Material": b} for a, b in ca.MATERIAIS]),

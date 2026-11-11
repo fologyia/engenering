@@ -350,10 +350,10 @@ def test_guia_tem_o_capitulo_do_vento_com_exemplo_calculado_pelo_nucleo(banco_is
     t = AppTest.from_file(APP, default_timeout=180)
     t.run()
     t.switch_page("app_pages/guia_geral.py")
-    t.session_state["guia_modulo"] = "Vento nas estruturas"
+    t.session_state["guia_modulo"] = "Vento em edificações"
     t.run()
     assert not t.exception, [str(e.value) for e in t.exception]
-    assert any(h.value == "Vento nas estruturas" for h in t.header)
+    assert any(h.value == "Vento em edificações" for h in t.header)
     # O guia usa V₀ = 40 m/s (a página, 35): o exemplo é conferido pelo próprio núcleo.
     exemplo = ve.calcular_edificacao(
         ve.EntradaEdificio(

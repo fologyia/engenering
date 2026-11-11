@@ -5,7 +5,7 @@ Montador refaz os números do mesmo ponto (``atualizar``). A página que recebeu
 só avisa enquanto ainda mostra o que o Montador mandou: se outra página mandou depois, ou se a pessoa
 mudou os números lá, aquele envio não vale mais.
 
-As chaves de cada página são as mesmas que o Assistente de cargas e Vigas e eixos já usam.
+As chaves de cada página são as mesmas que o Cálculo de peças e Vigas e eixos já usam.
 """
 
 from __future__ import annotations

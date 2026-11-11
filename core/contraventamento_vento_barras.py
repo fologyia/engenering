@@ -1,6 +1,6 @@
 """Vento viga a viga, pilar a pilar, no contraventamento de estruturas abertas.
 
-A página Contraventamento de estruturas abertas pode tirar o vento do esqueleto do modelo em vez
+A página Contraventamento pode tirar o vento do esqueleto do modelo em vez
 dos pórticos regulares: cada barra recebe o vento dela (:mod:`core.vento_por_barras` — sombra,
 φ/C_a e η por plano, NBR 6123:2023, 8.3 e 8.4) e a força vai aos pisos pelas mesmas faixas de
 influência da grade (:mod:`core.vento_estrutura_aberta`): meia altura do andar de baixo e do de

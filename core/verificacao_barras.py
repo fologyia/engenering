@@ -10,7 +10,8 @@ de todas as combinações ELU do plano em todos os pontos da barra (:mod:`core.e
    (:mod:`core.column_buckling`): todos os modos de flambagem, flambagem local, FLT/FLM/FLA, B₁ com
    C_m = 1 (a favor da segurança), interação N + M_x + M_y e o limite de esbeltez do critério Anglo.
    Cantoneiras simples: compressão por 5.3.5.4 (:mod:`core.contraventamento_barras`).
-3. **Cortante** (resultante de V₁ e V₂ contra a alma) e **torção** informada.
+3. **Cortante** (resultante de V₁ e V₂ contra a alma) e **torção** pela NBR 8800:2008 5.5.2
+   (:mod:`core.torcao_barras`): T_Rd e a interação nos tubos, tensões elásticas nos outros.
 
 O estudo estático do SolidWorks é de primeira ordem: os esforços são multiplicados pelo **B₂** do
 tipo de barra (todos os esforços, sem separar a parcela de translação — a favor da segurança).
@@ -33,6 +34,7 @@ from core import esforcos_modelo as em
 from core import load_combinations as comb
 from core import plano_de_cargas as pc
 from core import section_catalog as sc
+from core import torcao_barras as tb
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import (
     STATUS_REGISTRO,
@@ -119,7 +121,7 @@ def _triplas(combinados: Sequence[em.Combinado], eixo_forte: str, b2: float) -> 
             b2 * v[forte],
             b2 * v[fraco],
             b2 * math.hypot(v[1], v[2]),
-            v[5],
+            b2 * v[5],  # o torque também passa pelo B₂, como os outros esforços
             b2 * abs(v[v_forte]),
             b2 * abs(v[v_fraco]),
         )
@@ -174,21 +176,73 @@ def _linhas_comuns(
                     f"{maior_fraco.combinacao}, {maior_fraco.ponto}; {texto_mesas}",
                 )
             )
-    maior_t = max(triplas, key=lambda x: abs(x.t))
-    linhas.append(
-        Verificacao(
-            "Torção (informativo)",
-            None,
-            abs(maior_t.t),
-            "kN·m",
-            "—",
-            f"maior torque {_n(abs(maior_t.t), 3)} kN·m ({maior_t.combinacao}, {maior_t.ponto}): "
-            "não verificado — confira se a barra trabalha à torção",
-            status="INFO",
-            tipo="informativo",
-        )
-    )
     return linhas
+
+
+def _esforcos_de_torcao(triplas: Sequence[_Tripla]) -> list[tb.EsforcoDeTorcao]:
+    return [
+        tb.EsforcoDeTorcao(
+            t.combinacao, t.ponto, t.n, t.m_forte, t.m_fraco, t.v_forte, t.v_fraco, t.t
+        )
+        for t in triplas
+    ]
+
+
+def _secao_aberta(perfil: Any, secao: Any) -> tb.SecaoAberta:
+    """Os dados da tensão elástica de um perfil do catálogo (I, U, T, barra maciça…)."""
+    d, bf = perfil.altura_mm, perfil.largura_mm
+    tw, tf = perfil.espessura_alma_mm, perfil.espessura_mesa_mm
+    if secao.tipo == "circ_macica":
+        espessura, alma, mesas = d / 2, perfil.area_mm2, perfil.area_mm2
+    elif secao.tipo == "ret_macica":
+        espessura, alma, mesas = min(bf, d), perfil.area_mm2, perfil.area_mm2
+    else:
+        espessura = max(tw, tf)
+        alma = perfil.area_cisalhamento_mm2 or d * tw
+        mesas = 2 * bf * tf
+    return tb.SecaoAberta(
+        perfil.j_mm4,
+        espessura,
+        perfil.area_mm2,
+        secao.Wx,
+        secao.Wy,
+        alma,
+        mesas,
+        secao.tipo in ("I", "U", "T"),
+    )
+
+
+def _linhas_de_torcao(
+    perfil: Any,
+    secao: Any,
+    fy: float,
+    triplas: Sequence[_Tripla],
+    resistencias: tb.Resistencias,
+    comprimento_mm: float,
+) -> list[Verificacao]:
+    try:
+        return tb.linhas_de_torcao(
+            secao.tipo,
+            dict(secao.dims or {}),
+            _secao_aberta(perfil, secao),
+            fy,
+            _esforcos_de_torcao(triplas),
+            resistencias,
+            comprimento_mm,
+        )
+    except (ValueError, KeyError, ZeroDivisionError) as erro:
+        return [
+            Verificacao(
+                "Torção",
+                None,
+                None,
+                "—",
+                tb.REFERENCIA_SECOES,
+                f"não foi possível verificar a torção desta seção: {erro}",
+                status="ALERTA",
+                tipo="informativo",
+            )
+        ]
 
 
 def _verificar_perfil(
@@ -303,7 +357,12 @@ def _verificar_perfil(
             melhor = (indice, t, linhas, governante, n_rd)
     assert melhor is not None
     indice, t, linhas, governante, n_rd = melhor
-    linhas = [*linhas, *_linhas_comuns(triplas, cortantes)]
+    resistencias = tb.Resistencias(nc_rd, nt_rd, mx_rd, my_rd, cortantes[0][0], cortantes[1][0])
+    linhas = [
+        *linhas,
+        *_linhas_comuns(triplas, cortantes),
+        *_linhas_de_torcao(perfil, secao, fy, triplas, resistencias, max(lx_mm, ly_mm, lb_mm)),
+    ]
     return ResultadoDaBarra(
         membro,
         cfg.perfil,
@@ -369,6 +428,25 @@ def _verificar_cantoneira(
         )
     )
     linhas += _linhas_comuns(triplas, None)
+    aba = cant.b_mm * cant.t_mm
+    linhas += tb.linhas_de_torcao(
+        "L",
+        {},
+        tb.SecaoAberta(
+            cant.j_mm4,
+            cant.t_mm,
+            cant.area_mm2,
+            cant.i_x_mm4 / (cant.b_mm - cant.x_barra_mm),
+            cant.i_x_mm4 / (cant.b_mm - cant.x_barra_mm),
+            aba,
+            aba,
+            False,
+        ),
+        fy,
+        _esforcos_de_torcao(triplas),
+        tb.Resistencias(None, nt_rd, None, None, None, None),
+        comprimento_mm,
+    )
     governante = max(
         (v for v in linhas if v.tipo == "resistencia"),
         key=lambda v: v.aproveitamento or 0.0,

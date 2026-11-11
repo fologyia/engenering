@@ -11,7 +11,7 @@ cabecalho_pagina(
     icone=":material/architecture:",
     cor="blue",
     ajuda_modulo="Flambagem de colunas",
-    acoes=(("app_pages/assistente_cargas.py", "Assistente de cargas", ":material/manufacturing:"),),
+    acoes=(("app_pages/assistente_cargas.py", "Cálculo de peças", ":material/manufacturing:"),),
     modulo_id="flambagem_colunas",
 )
 st.caption(

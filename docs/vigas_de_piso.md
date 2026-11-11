@@ -14,6 +14,7 @@ NBR 8800 e, quando ligado, pelo critério Anglo American AA-BR-DPST-DR-0001 Rev.
 | Mesa travada | Com a grade travando a mesa comprimida, L_b = espaçamento dos pontos travados e C_b = 1; sem travamento, L_b = vão e C_b do diagrama de momentos (5.4.2.3, R_m = 1). |
 | Cargas | Piso e acessórios (kN/m²), sobrecarga (kN/m², da base técnica), carga linear permanente (kN/m) e equipamento no meio do vão (kN). O peso próprio do perfil entra sozinho. |
 | Norma | NBR 8800:2025 (padrão), NBR 8800:2008 ou AISC 360-16 (motor da Flambagem de colunas). |
+| Vibração | Uso do piso (caminhar, pular ou dançar, aeróbica, só manutenção) e a flecha do apoio (mm, combinação frequente). |
 
 ## Cálculo (`calcular`)
 
@@ -32,6 +33,13 @@ NBR 8800 e, quando ligado, pelo critério Anglo American AA-BR-DPST-DR-0001 Rev.
   com W_Rd = 8·M_Rd/L.
 * **Frequência natural** (informativa): f ≈ 18/√δ (δ em mm, cargas permanentes), para comparar com a
   dos equipamentos apoiados (critério Anglo 5.7).
+* **Vibração do piso** (NBR 8800:2008 Anexo L, avaliação simplificada): flecha total do piso na
+  combinação frequente, G + ψ₁·Q com ψ₁ = 0,6 da sobrecarga, vigas biapoiadas, somando a **flecha do
+  apoio** (a viga que apoia esta, informada). Em nenhum caso a frequência f ≈ 18/√δ fica abaixo de
+  3 Hz (L.1.2). Pelo **uso do piso**: onde se caminha, δ ≤ 20 mm (4 Hz, L.3.2); onde se pula ou
+  dança, δ ≤ 9 mm (6 Hz); atividade rítmica muito repetitiva, δ ≤ 5 mm (8 Hz, L.3.3); só acesso de
+  manutenção, vale apenas o mínimo de 3 Hz. Piso de vão grande e pouco amortecimento pede a análise
+  dinâmica de L.2, que a página não faz.
 * **Perfil mais leve** (`perfil_mais_leve`): percorre a mesma família em ordem de massa e devolve o
   primeiro que atende; o botão **Adotar** troca o perfil da página.
 

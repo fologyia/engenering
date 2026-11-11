@@ -36,7 +36,7 @@ with st.container(border=True):
         )
         st.page_link(
             "app_pages/assistente_cargas.py",
-            label="Assistente de cargas",
+            label="Cálculo de peças",
             icon=":material/calculate:",
         )
         st.page_link("app_pages/desenhar_secao.py", label="Desenhar seção", icon=":material/draw:")
@@ -117,8 +117,11 @@ for inicio in range(0, len(nv.MENU), 3):
         with coluna, st.container(border=True, height="stretch"):
             st.markdown(f"#### {grupo.icone} {grupo.nome}")
             st.caption(grupo.descricao)
-            for item in grupo.itens:
-                st.page_link(item.pagina, label=item.titulo, icon=item.icone, help=item.tarefa)
+            for secao, itens in grupo.secoes():
+                if secao:
+                    st.markdown(f"**{secao}**")
+                for item in itens:
+                    st.page_link(item.pagina, label=item.titulo, icon=item.icone, help=item.tarefa)
 
 st.caption(
     ":material/engineering: Ferramenta de cálculo e conferência. O projeto e a responsabilidade "

@@ -1,4 +1,4 @@
-"""Os modelos de seção do Assistente de cargas, agora com ponto crítico e material.
+"""Os modelos de seção do Cálculo de peças, agora com ponto crítico e material.
 
 Cada modelo avalia vários pontos da seção de uma vez (fibras extremas, centroide, junção da mesa com
 a alma, cantos), e não só o ponto que o usuário escolheria: quem não sabe onde a peça sofre mais é

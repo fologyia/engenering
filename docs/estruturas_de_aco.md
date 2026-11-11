@@ -1,4 +1,4 @@
-# Estruturas de aço — escopo e hipóteses
+# Barras, treliças e pórticos — escopo e hipóteses
 
 Esta área organiza cinco ferramentas de pré-dimensionamento:
 
@@ -101,7 +101,7 @@ Abaixo da tabela de ações ficam três calculadoras com registro próprio:
   altura gradiente), `S₃` por grupo da Tabela 4, e força `F = C_f·q·A_e` ou carga
   por metro `w = C_f·q·d` com um `C_f` de referência das tabelas de barras
   prismáticas e treliças. `V₀` vem do mapa de isopletas e deve ser conferido. Para
-  edificações (paredes, telhado, pórtico), veja o módulo **Vento nas estruturas**
+  edificações (paredes, telhado, pórtico), veja o módulo **Vento em edificações**
   (`docs/vento_nbr6123.md`);
 - **guarda-corpo e impacto (`core/platform_loads.py`)**: carga horizontal
   uniforme no topo (1,0 kN/m em uso comum, 2,0 kN/m com concentração de

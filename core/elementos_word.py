@@ -1,4 +1,4 @@
-"""Documento Word (editável) de um caso do Assistente de cargas."""
+"""Documento Word (editável) de um caso do Cálculo de peças."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def gerar_word_do_caso(
     projeto: Mapping[str, Any] | None = None,
 ) -> bytes:
     documento = DocumentoWord()
-    documento.titulo(f"Assistente de cargas: {caso.titulo}")
+    documento.titulo(f"Cálculo de peças: {caso.titulo}")
     if projeto:
         documento.paragrafo(f"Projeto: {projeto.get('nome') or ''}", legenda=True)
     documento.paragrafo(caso.descricao)

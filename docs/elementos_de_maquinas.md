@@ -1,6 +1,6 @@
-# Elementos de máquinas no Assistente de cargas
+# Elementos de máquinas no Cálculo de peças
 
-O Assistente de cargas cobre 67 casos: 15 de estática e resistência, 34 de elementos de máquinas e
+O Cálculo de peças cobre 67 casos: 15 de estática e resistência, 34 de elementos de máquinas e
 18 de seção e tensão no ponto. Este documento registra as equações, as fontes, as hipóteses e o que
 **não** é feito nos elementos de máquinas. A estática está em `docs/estatica_e_resistencia.md`.
 

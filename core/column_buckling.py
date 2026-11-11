@@ -362,7 +362,7 @@ FORA_DO_ESCOPO = (
     "Cisalhamento na barra (NBR 5.4.3): só é avisado quando há mão-francesa ou força transversal.",
     "B₂ de um andar com várias colunas (ΣN_Sd, ΣH_Sd e Δh, Anexo D): aqui o B₂ e o desaprumo são "
     "os da coluna isolada, pelo apoio escolhido; num pórtico, use os da análise da estrutura.",
-    "Barra tracionada (λ ≤ 300, Anglo 8.3): verifique em Estruturas de aço (NBR 5.2).",
+    "Barra tracionada (λ ≤ 300, Anglo 8.3): verifique em Barras, treliças e pórticos (NBR 5.2).",
     "Fadiga, cargas dinâmicas e de impacto.",
     "Perfis formados a frio (NBR 14762).",
 )
@@ -2037,7 +2037,7 @@ def registro_coluna(
             }
         )
     if aprov_finito is not None:
-        # A Central de validação lê esta chave: acima de 1,0 bloqueia a emissão.
+        # A Validação do projeto lê esta chave: acima de 1,0 bloqueia a emissão.
         resultados["utilizacao_maxima"] = aprov_finito
     resultados = {chave: valor for chave, valor in resultados.items() if valor is not None}
 

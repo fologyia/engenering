@@ -31,16 +31,64 @@ def test_grupos_na_ordem_do_trabalho_e_com_descricao():
         "Projeto",
         "Cargas e vento",
         "Modelo SolidWorks",
-        "Barras e vigas",
-        "Ligações e bases",
+        "Estrutura metálica",
         "Entrega",
-        "Mecânica geral",
-        "Mecânica dos fluidos",
+        "Mecânica",
+        "Seções e materiais",
+        "Referências e ajuda",
     ]
     assert all(g.descricao and g.itens for g in nv.MENU)
     assert all(len(i.tarefa) <= 90 for i in nv.todos_os_itens())
     icones = [i.icone for i in nv.todos_os_itens()]
     assert len(set(icones)) >= len(icones) - 4  # quase todos distintos
-    assert nv.grupo_da_pagina("degrau_escada").nome == "Barras e vigas"
+    assert nv.grupo_da_pagina("degrau_escada").nome == "Estrutura metálica"
+    assert nv.item_da_pagina("app_pages/degrau_escada.py").secao == nv.BARRAS
     assert nv.grupo_da_pagina("desenhar_secao").nome == "Seções e materiais"
     assert nv.grupo_da_pagina("app_pages/inicio.py") is None
+
+
+def test_submenus_ficam_juntos_e_nao_se_repetem():
+    for grupo in nv.MENU:
+        nomes = [secao for secao, _ in grupo.secoes()]
+        assert len(nomes) == len(set(nomes)), grupo.nome
+        # Ou o grupo inteiro tem submenus, ou nenhum item tem.
+        assert all(nomes) or nomes == [""], grupo.nome
+    estrutura = next(g for g in nv.MENU if g.nome == "Estrutura metálica")
+    assert [s for s, _ in estrutura.secoes()] == [nv.BARRAS, nv.LIGACOES]
+    mecanica = next(g for g in nv.MENU if g.nome == "Mecânica")
+    assert [s for s, _ in mecanica.secoes()] == [nv.PECAS, nv.TENSOES, nv.FLUIDOS]
+
+
+def test_nomes_antigos_nao_sao_nome_de_outra_pagina():
+    titulos = {i.titulo for i in nv.todos_os_itens()}
+    for item in nv.todos_os_itens():
+        for antigo in item.outros_nomes:
+            assert antigo not in titulos, (item.titulo, antigo)
+
+
+def _app():
+    from streamlit.testing.v1 import AppTest
+
+    t = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=180)
+    t.run()
+    return t
+
+
+def test_menu_lateral_mostra_os_submenus_e_a_busca_acha_o_nome_antigo():
+    t = _app()
+    t.switch_page("app_pages/degrau_escada.py").run()
+    assert not t.exception
+    html = " ".join(e.proto.body for e in t.get("html"))
+    assert 'class="menu-secao">Barras e vigas<' in html
+    assert 'class="menu-secao">Ligações e bases<' in html
+    busca = t.selectbox(key="menu_busca")
+    assert any("Cálculo de peças" in o and "Assistente de cargas" in o for o in busca.options)
+
+
+def test_titulo_da_pagina_vem_do_menu():
+    t = _app()
+    t.switch_page("app_pages/estruturas_aco.py").run()
+    assert not t.exception
+    assert [x.value for x in t.title][:1] == ["Barras, treliças e pórticos"]
+    t.switch_page("app_pages/projeto_parafusos.py").run()
+    assert [x.value for x in t.title][:1] == ["Projeto de parafusos"]

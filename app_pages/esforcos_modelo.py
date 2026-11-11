@@ -59,7 +59,7 @@ mapa_do_projeto(AJUDA_BASE["sec_mapa"])
 projeto = obter_projeto_ativo()
 if projeto is None:
     st.info(
-        "Nenhum projeto ativo. Abra ou crie um em **Projetos permanentes**: os esforços ficam "
+        "Nenhum projeto ativo. Abra ou crie um em **Projetos**: os esforços ficam "
         "guardados no projeto.",
         icon=":material/folder_off:",
     )

@@ -465,7 +465,7 @@ def recomendados(d: float) -> list[Ajuste]:
 
 
 # ---------------------------------------------------------------------------------------------
-# Aperto de um ajuste com interferência (o cálculo do Assistente de cargas)
+# Aperto de um ajuste com interferência (a mesma conta da página Cálculo de peças)
 # ---------------------------------------------------------------------------------------------
 
 #: Os dados do aperto, sem o diâmetro e a interferência, que vêm do ajuste escolhido.

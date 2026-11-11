@@ -1,4 +1,4 @@
-"""Catálogo dos modelos do Assistente de cargas.
+"""Catálogo dos modelos do Cálculo de peças.
 
 Reúne num único lugar o que antes estava espalhado pela página: o rótulo do
 modelo, a que grupo de peça ele pertence, o texto que explica quando usá-lo,

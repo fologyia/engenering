@@ -149,7 +149,7 @@ Vistos no texto da NBR 8800:2025 e aplicados (nada mais sai "a confirmar" nesta 
   vista.
 * **6.3.3.2 Cisalhamento:** 0,45·A_b·f_ub/γ_a2 com a rosca no plano de corte (e parafuso comum),
   0,56 sem; atender também a 6.3.3.3. Vale também na placa de base do Design Guide 1
-  (`core/base_plate.py`, Estruturas de aço e Esforços do modelo), que usava a 6.6.5 e os 0,40 da 2008.
+  (`core/base_plate.py`, Barras, treliças e pórticos e Esforços do modelo), que usava a 6.6.5 e os 0,40 da 2008.
 * **Tabela 18:** os valores batem com os do programa; as notas a–i estão acima.
 * **12.3.3.1 (tolerâncias de montagem):** pilar aprumado com desvio até 1:500. É a tolerância de
   execução, não a imperfeição da análise; a flambagem continua com o desaprumo h/333 (0,3 %) da

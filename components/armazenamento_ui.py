@@ -97,7 +97,7 @@ def _botao_baixar_carteira(*, chave: str, rotulo: str = "Baixar meus projetos (J
         key=chave,
         help=(
             "Todos os projetos, com revisões e linha do tempo, num arquivo. Para trazê-los de "
-            "volta depois, use «Restaurar uma carteira exportada» no Painel industrial."
+            "volta depois, use «Restaurar uma carteira exportada» no Painel dos projetos."
         ),
     )
 

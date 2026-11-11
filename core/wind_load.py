@@ -12,7 +12,7 @@ perfil ou painel — em que o coeficiente aerodinâmico entra como dado. Para a 
 paralelepipédica (paredes, telhado, pórtico), use :mod:`core.vento_edificio`.
 
 Os nomes antigos continuam valendo (``fator_s1``, ``fator_s2``, ``fator_s3``, ``GRUPOS_S3``…), porque
-a página de Estruturas de aço e os registros já salvos os usam.
+a página de Barras, treliças e pórticos e os registros já salvos os usam.
 """
 
 from __future__ import annotations

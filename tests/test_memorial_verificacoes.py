@@ -675,6 +675,7 @@ class TestSaidaWord:
             "Snapshot",
             "Apêndice",
             "Central de validação",
+            "Validação do projeto",
         ):
             assert proibido not in texto, proibido
 

@@ -6,7 +6,7 @@ da mesma porta: mudam de fórmula por faixa, e o diâmetro pedido pode estar den
 acrescentar outra função assim registra em ``FUNCOES``, para o motor saber calcular com ela em número.
 
 As contas de fadiga são as de ``core/elementos_eixos.py`` e ``core/fatigue.py``, escritas para receber
-vetores: o Assistente de cargas e o Montador têm de dar o mesmo número.
+vetores: o Cálculo de peças e o Montador têm de dar o mesmo número.
 """
 
 from __future__ import annotations

@@ -78,7 +78,7 @@ def texto_pdf(conteudo: bytes) -> str:
 def test_registro_cumpre_o_contrato_do_programa():
     r = registro()
     assert avaliar_contrato_registro(r)["valido"]
-    assert r["modulo_id"] == "degrau_escada" and r["modulo"] == "Degrau de escada em grade"
+    assert r["modulo_id"] == "degrau_escada" and r["modulo"] == "Escada em grade"
     assert r["responsavel"] == "Eng. Y"
     assert "ESC-01" in r["titulo"] and "DS-A4-35/3" in r["titulo"]
 
@@ -288,7 +288,7 @@ def test_word_e_pdf_do_memorial_trazem_o_degrau_sem_palavras_proibidas():
     word = texto_word(gerar_relatorio_industrial_word(projeto))
     pdf = texto_pdf(gerar_relatorio_industrial_pdf(projeto))
     for texto in (word, pdf):
-        assert "Degrau de escada em grade" in texto and "DS-A4-35/3" in texto
+        assert "Escada em grade" in texto and "DS-A4-35/3" in texto
         assert "O que passou" in texto and "Não passou" in texto
         for proibido in PALAVRAS_PROIBIDAS:
             assert proibido not in texto, proibido

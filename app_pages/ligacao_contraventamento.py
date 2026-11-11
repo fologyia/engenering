@@ -12,7 +12,7 @@ cabecalho_pagina(
     icone=":material/hub:",
     cor="blue",
     ajuda_modulo="Ligação de contraventamento",
-    acoes=(("app_pages/vento_nbr6123.py", "Vento nas estruturas", ":material/air:"),),
+    acoes=(("app_pages/vento_nbr6123.py", "Vento em edificações", ":material/air:"),),
     modulo_id="ligacao_contraventamento",
 )
 st.caption(

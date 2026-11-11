@@ -386,7 +386,7 @@ def _material_do_projeto(identificador: str, materiais: tuple, n: int, texto: st
         if not materiais:
             raise ErroDeScript(
                 "O projeto ativo não tem materiais cadastrados. Cadastre em "
-                "Materiais técnicos, ou use `material catalogo <nome>`.",
+                "Materiais do projeto, ou use `material catalogo <nome>`.",
                 linha=n,
                 texto=texto,
             )
@@ -401,7 +401,7 @@ def _material_do_projeto(identificador: str, materiais: tuple, n: int, texto: st
     if e_gpa is None:
         raise ErroDeScript(
             f"O material {escolhido.get('nome')!r} do projeto não tem módulo de "
-            "elasticidade cadastrado. Complete-o em Materiais técnicos ou "
+            "elasticidade cadastrado. Complete-o em Materiais do projeto ou "
             "informe E= nesta linha.",
             linha=n,
             texto=texto,

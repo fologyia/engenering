@@ -1,4 +1,4 @@
-"""Textos dos “?” (dicas) da página Vento nas estruturas, em linguagem simples.
+"""Textos dos “?” (dicas) da página Vento em edificações, em linguagem simples.
 
 Ficam num módulo só para a página e os testes falarem do mesmo jeito e para um teste garantir que
 nenhum campo fique sem explicação. Aceitam Markdown (negrito e listas). Cada texto diz, na ordem:

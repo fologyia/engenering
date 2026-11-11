@@ -330,7 +330,7 @@ AJUDA: dict[str, str] = {
     ),
     "reg_registrar": (
         "Guarda este cálculo — entradas, resultados e a tabela de verificações — no projeto "
-        "ativo. Ele passa a fazer parte do memorial em Word e PDF e da Central de validação."
+        "ativo. Ele passa a fazer parte do memorial em Word e PDF e da Validação do projeto."
     ),
     "reg_comparar": (
         "Fixe um cenário (ex.: o M20 e depois o M22) para ver os resultados lado a lado. Os "
@@ -608,6 +608,6 @@ AJUDA: dict[str, str] = {
     ),
     "btn_memorial_pdf": (
         "O mesmo memorial desta ligação, em PDF, pronto para enviar. Para juntar com os outros "
-        "cálculos do projeto, registre a ligação e use a Central de relatórios."
+        "cálculos do projeto, registre a ligação e use o Memorial de cálculo."
     ),
 }

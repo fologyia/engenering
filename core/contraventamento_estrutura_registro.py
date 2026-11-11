@@ -25,7 +25,7 @@ from core.verificacao import (
 )
 
 MODULO_ID = "contraventamento_estrutura"
-MODULO_TITULO = "Contraventamento de estruturas abertas"
+MODULO_TITULO = "Contraventamento"
 LARGURA_UTIL_DXA = 9360
 
 REFERENCIAS = [
@@ -39,7 +39,7 @@ REFERENCIAS = [
 
 FORA_DO_ESCOPO = (
     "Pilares, vigas e bases: o programa dá o acréscimo de força nos pilares do painel, mas não os "
-    "verifica (use Flambagem de colunas e Estruturas de aço).",
+    "verifica (use Flambagem de colunas e Barras, treliças e pórticos).",
     "A chapa de nó: use a página Ligação de contraventamento com as forças mostradas aqui.",
     "O contraventamento horizontal do piso: piso em grade não é diafragma; a força de cada nível "
     "precisa chegar às linhas contraventadas por vigas ou por um contraventamento no plano do piso.",

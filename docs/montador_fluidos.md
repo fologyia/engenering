@@ -49,7 +49,7 @@ para digitar por cima.
 
 ## Exemplos conferidos
 
-A Central de validação refaz estes exemplos com os blocos, a cada abertura:
+A Validação do projeto refaz estes exemplos com os blocos, a cada abertura:
 
 | Exemplo | Fonte | Resultado |
 |---|---|---|

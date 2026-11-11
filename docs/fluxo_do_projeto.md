@@ -8,10 +8,10 @@ técnica, o Plano de cargas e o Guia mostram esse caminho com o que o projeto at
 | Etapa | Página | O que sai |
 | --- | --- | --- |
 | 1. Base técnica | **Base técnica do projeto** | critério do cliente, vento do local, tipo de estrutura (limite do deslocamento), sobrecarga, agressividade, vida útil |
-| 2. Ações | **Cargas do esqueleto** (o que não está no modelo), **Vento em estruturas abertas**, **Vento nas estruturas** | cargas características nas barras do esqueleto (piso, sobrecarga, guarda-corpo, escadas, equipamentos, tubulações, ligações); forças do vento por nível, por pórtico e em cada nó; CSV |
+| 2. Ações | **Cargas do esqueleto** (o que não está no modelo), **Vento em estruturas abertas**, **Vento em edificações** | cargas características nas barras do esqueleto (piso, sobrecarga, guarda-corpo, escadas, equipamentos, tubulações, ligações); forças do vento por nível, por pórtico e em cada nó; CSV |
 | 3. Plano de cargas | **Plano de cargas** | ações com código padrão, cargas para o modelo, combinações ELU e ELS numeradas; CSV |
-| 4. Verificações | **Esforços do modelo** (resultados do SolidWorks, placas de base), Vigas de piso, Placas de base, Contraventamento, Ligação, Estruturas de aço, Flambagem, Parafusos, Degrau | conferência das reações, pior caso de cada barra, tabelas de verificação com a norma e o item de cada linha; registro no projeto |
-| 5. Memorial | **Central de relatórios** | Word e PDF com os cálculos registrados (o plano de cargas não entra: o memorial é o molde dos cálculos) |
+| 4. Verificações | **Esforços do modelo** (resultados do SolidWorks, placas de base), Vigas de piso, Placas de base, Contraventamento, Ligação, Barras, treliças e pórticos, Flambagem, Parafusos, Degrau | conferência das reações, pior caso de cada barra, tabelas de verificação com a norma e o item de cada linha; registro no projeto |
+| 5. Memorial | **Memorial de cálculo** | Word e PDF com os cálculos registrados (o plano de cargas não entra: o memorial é o molde dos cálculos) |
 
 ## 1. Base técnica do projeto
 
@@ -27,14 +27,14 @@ mexer no hash dos critérios que marca registros como desatualizados (`core/base
 | Agressividade, vida útil, observações | Anotação do projeto. |
 
 **Quem lê a base:** Vento em estruturas abertas e Contraventamento (V₀, S₁, terreno, S₃, sobrecarga,
-tipo de estrutura, critério Anglo), Vento nas estruturas (V₀, relevo, terreno, grupo e S₃ do cliente),
-Estruturas de aço → ações de plataforma (vento), Ligação de contraventamento (critério Anglo). Cada
+tipo de estrutura, critério Anglo), Vento em edificações (V₀, relevo, terreno, grupo e S₃ do cliente),
+Barras, treliças e pórticos → ações de plataforma (vento), Ligação de contraventamento (critério Anglo). Cada
 página mostra de onde vieram os valores e tem o botão **Voltar aos valores da base técnica**. Os
 conflitos do critério aparecem como aviso (ver `docs/criterio_anglo.md`).
 
 ## 2. Vento em estruturas abertas — só o vento, para anotar e lançar no modelo
 
-A página usa os mesmos campos (mesmas chaves de sessão) do Contraventamento de estruturas abertas: o
+A página usa os mesmos campos (mesmas chaves de sessão) do Contraventamento: o
 que se digita numa aparece na outra. O cálculo é o do capítulo 8 da NBR 6123:2023
 (`core/vento_estrutura_aberta.py`; ver `docs/contraventamento_estrutura.md`). Saídas:
 
@@ -59,7 +59,7 @@ que se digita numa aparece na outra. O cálculo é o do capítulo 8 da NBR 6123:
   "por unidade de comprimento" (N/m).
 * **Enviar ao plano de cargas** — grava W0, W90, W180 e W270 (as de 180° e 270° com o sinal
   trocado), na forma escolhida: simplificada (padrão) ou nos nós, para casos mais complicados. A
-  mesma escolha está no Contraventamento de estruturas abertas.
+  mesma escolha está no Contraventamento.
 * **Registrar** — o memorial traz o capítulo de cálculo com as três tabelas (níveis, pórticos, nós).
 
 ### No SolidWorks (Simulation)
@@ -95,7 +95,7 @@ cargas que vão para o modelo.
 * **Critério Anglo 5.9** (`cobertura_das_combinacoes_anglo`): quais combinações mínimas do cliente já
   podem ser formadas e quais ações faltam; PRV, HT, HL e MO só contam se houver o equipamento.
 * **CSV** das ações, das cargas e das combinações (com o fator de cada ação em colunas).
-* Na página **Estruturas de aço → Combinações**, o botão **Trazer as ações do plano de cargas** monta a
+* Na página **Barras, treliças e pórticos → Combinações**, o botão **Trazer as ações do plano de cargas** monta a
   tabela com código, categoria, grupo e coeficientes do plano; N, V e M ficam zerados para receber os
   esforços característicos da barra tirados do modelo.
 * **Conferência do plano** (`conferir_plano`): erro para o que o modelo não aceita (temperatura em

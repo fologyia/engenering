@@ -393,7 +393,7 @@ def acoes_para_combinar(plano: PlanoDeCargas) -> list[comb.AcaoEstrutural]:
     return [comb.acao_da_categoria(a.codigo, a.categoria, grupo=a.grupo) for a in plano.acoes]
 
 
-#: Colunas do editor de ações da página Estruturas de aço (combinações de uma barra).
+#: Colunas do editor de ações da página Barras, treliças e pórticos (combinações de uma barra).
 COLUNAS_DOS_ESFORCOS = (
     "nome",
     "categoria",

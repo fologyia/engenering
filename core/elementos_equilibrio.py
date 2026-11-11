@@ -289,7 +289,7 @@ def _alertas(solucao: eq.Solucao, esforcos: Sequence[eq.Esforco], u: eq.Unidades
             f"A estática não separa as reações de {', '.join(soltas)}: há mais apoios que o "
             "necessário. O valor mostrado é uma divisão possível, e a soma é certa. A divisão real "
             "depende da rigidez e das folgas. Dimensione para o pior caso ou modele em Vigas e "
-            "eixos ou em Estruturas de aço."
+            "eixos ou em Barras, treliças e pórticos."
         )
     if not solucao.divisao_viavel:
         alertas.append(

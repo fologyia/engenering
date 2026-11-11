@@ -56,7 +56,7 @@ def registro(**mudancas) -> dict:
 # ------------------------------------------------------------------------------- o registro
 def test_registro_tem_identidade_entradas_e_tabelas():
     r = registro()
-    assert r["modulo_id"] == "vento_nbr6123" and r["modulo"] == "Vento nas estruturas"
+    assert r["modulo_id"] == "vento_nbr6123" and r["modulo"] == "Vento em edificações"
     assert r["status"] == "Calculado"
     assert r["entradas"]["v0_m_s"] == 40.0
     assert r["entradas"]["edicao_da_norma"] == "ABNT NBR 6123:2023"
@@ -210,7 +210,7 @@ def test_word_e_pdf_levam_as_tabelas_do_vento(documentos):
     )
     texto_pdf = "\n".join(p.extract_text() or "" for p in PdfReader(BytesIO(pdf)).pages)
     for texto in (texto_docx, texto_pdf):
-        assert "Vento nas estruturas" in texto
+        assert "Vento em edificações" in texto
         assert "Resultado: ATENDE" in texto
         assert "Pressão dinâmica sobre a estrutura" in texto
     assert "Δp" in texto_docx and "A1 e B1" in texto_docx

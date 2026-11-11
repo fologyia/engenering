@@ -69,7 +69,7 @@ COLUNAS_ELEMENTOS = (
 )
 FORA_DO_ESCOPO = (
     "Efeitos dinâmicos do vento (capítulo 9 da NBR 6123).",
-    "Muros, placas e coberturas isoladas (Tabelas 23 a 25): use o módulo Vento nas estruturas.",
+    "Muros, placas e coberturas isoladas (Tabelas 23 a 25): use o módulo Vento em edificações.",
     "As chapas do esqueleto não recebem vento sozinhas (podem ser só apoio de carga do modelo): "
     "a superfície real entra como painel.",
     "As combinações: estas são forças características — as combinações saem do plano de cargas.",

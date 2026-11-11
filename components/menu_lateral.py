@@ -53,6 +53,15 @@ _ESTILO = """
   margin-top: 0.45rem;
   letter-spacing: 0.04em;
 }
+/* Submenu dentro do grupo: um rótulo pequeno, e os itens dele com um recuo. */
+.menu-secao {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin: 0.45rem 0 0.1rem 0.45rem;
+}
 </style>
 """
 
@@ -62,9 +71,10 @@ def _opcoes_de_busca() -> dict[str, tuple[str, str | None]]:
     opcoes: dict[str, tuple[str, str | None]] = {}
     for grupo in nv.MENU:
         for item in grupo.itens:
-            opcoes[f"{item.titulo} · {item.tarefa}"] = (item.pagina, None)
+            antes = f" (também: {', '.join(item.outros_nomes)})" if item.outros_nomes else ""
+            opcoes[f"{item.titulo} · {item.tarefa}{antes}"] = (item.pagina, None)
     for caso in cat.CASOS.values():
-        opcoes[f"{caso.titulo} · Assistente de cargas, {caso.grupo}"] = (
+        opcoes[f"{caso.titulo} · Cálculo de peças, {caso.grupo}"] = (
             "app_pages/assistente_cargas.py",
             caso.id,
         )
@@ -120,7 +130,7 @@ def menu_lateral(paginas: dict[str, st.Page], atual: str) -> None:
             key=_BUSCA,
             on_change=_ao_buscar,
             label_visibility="collapsed",
-            help="Procura em todas as páginas e em todos os casos do Assistente de cargas.",
+            help="Procura em todas as páginas e em todos os casos do Cálculo de peças.",
         )
         _ligacao(nv.VISAO_GERAL)
 
@@ -148,8 +158,11 @@ def menu_lateral(paginas: dict[str, st.Page], atual: str) -> None:
                 icon=grupo.icone,
                 key=f"menu_{grupo.nome}_{atual}",
             ):
-                for item in grupo.itens:
-                    _ligacao(item)
+                for secao, itens in grupo.secoes():
+                    if secao:
+                        st.html(f'<div class="menu-secao">{secao}</div>')
+                    for item in itens:
+                        _ligacao(item)
 
         if atual and nv.item_da_pagina(atual) is not None and atual != nv.VISAO_GERAL.pagina:
             fixada = atual in fixados

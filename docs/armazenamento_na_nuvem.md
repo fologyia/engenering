@@ -6,7 +6,7 @@ No Streamlit Community Cloud o disco do aplicativo é **temporário**: é apagad
 atualização do código no GitHub, repouso por inatividade, manutenção da hospedagem. O banco de
 projetos (`projetos_industriais.sqlite3`) e os catálogos que o usuário cadastra (`perfis_usuario.json`,
 `materiais_usuario.json`) ficam nesse disco. O programa gravava e mostrava "salvo", mas na abertura
-seguinte o Painel industrial dizia "Nenhum projeto no banco".
+seguinte o Painel dos projetos dizia "Nenhum projeto no banco".
 
 Isso não é defeito de uma tela: é a natureza da hospedagem. A solução é guardar uma cópia **fora**
 do disco do servidor. No computador do usuário nada disso se aplica — o disco é dele.
@@ -16,7 +16,7 @@ do disco do servidor. No computador do usuário nada disso se aplica — o disco
 | Situação | O que a tela mostra | O que acontece com os dados |
 | --- | --- | --- |
 | No computador do usuário | Nada de especial: "Salvo no banco local." | O SQLite fica na pasta do usuário (ver README → *Onde ficam os dados*). |
-| Na nuvem, **sem** espelho | Aviso amarelo na barra lateral e no Painel industrial: "Versão web: dados temporários". Botão **Baixar meus projetos** em toda página. | Somem no próximo reinício. A carteira baixada traz tudo de volta (Painel → *Restaurar uma carteira exportada*). |
+| Na nuvem, **sem** espelho | Aviso amarelo na barra lateral e no Painel dos projetos: "Versão web: dados temporários". Botão **Baixar meus projetos** em toda página. | Somem no próximo reinício. A carteira baixada traz tudo de volta (Painel → *Restaurar uma carteira exportada*). |
 | Na nuvem, **com** espelho no GitHub | "Projetos sincronizados com o GitHub." Mensagem de confirmação: "Salvo e copiado para o GitHub." | Cada gravação é copiada para um repositório privado. Quando o aplicativo sobe de novo, o que o disco perdeu volta sozinho. |
 | Espelho configurado, mas o GitHub recusa (token vencido, fora do ar) | Aviso vermelho com a causa e o número de gravações que não chegaram. | O projeto continua salvo no disco do servidor; o envio fica numa fila e é tentado de novo a cada execução. Baixe a carteira antes de fechar. |
 
@@ -39,7 +39,7 @@ a cópia que sobrevive ao reinício.
    MECANICA_TOOLKIT_GITHUB_TOKEN = "github_pat_..."
    ```
 
-4. **Reinicie** o aplicativo (*Reboot*). Em *Painel industrial → Dados e backup* use
+4. **Reinicie** o aplicativo (*Reboot*). Em *Painel dos projetos → Dados e backup* use
    **Testar conexão** (deve responder "Conectado a … (privado)") e, se já havia projetos no disco do
    servidor, **Enviar todos os projetos ao GitHub agora**.
 

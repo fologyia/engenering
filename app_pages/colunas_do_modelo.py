@@ -1,4 +1,4 @@
-"""Colunas do modelo: todos os pilares do SolidWorks, com os travamentos lidos do esqueleto."""
+"""Pilares do modelo: todos os pilares do SolidWorks, com os travamentos lidos do esqueleto."""
 
 from __future__ import annotations
 
@@ -22,9 +22,9 @@ from core import tratamento_do_modelo as tm
 from core.desenho_da_coluna import APOIOS_NAS_PONTAS, ColunaEmPe, figura_da_coluna
 from core.project_store import obter_projeto_ativo
 
-configurar_pagina("Colunas do modelo", ":material/view_column:")
+configurar_pagina("Pilares do modelo", ":material/view_column:")
 cabecalho_pagina(
-    "Colunas do modelo",
+    "Pilares do modelo",
     "Todos os pilares do modelo do SolidWorks verificados de uma vez: os travamentos de cada um "
     "saem do esqueleto, em x e em y, e cada trecho recebe o seu K.",
     categoria="Modelo SolidWorks",
@@ -42,7 +42,7 @@ cabecalho_pagina(
 projeto = obter_projeto_ativo()
 if projeto is None:
     st.info(
-        "Nenhum projeto ativo. Abra ou crie um em **Projetos permanentes**: os pilares saem do "
+        "Nenhum projeto ativo. Abra ou crie um em **Projetos**: os pilares saem do "
         "modelo do SolidWorks gravado no projeto.",
         icon=":material/folder_off:",
     )

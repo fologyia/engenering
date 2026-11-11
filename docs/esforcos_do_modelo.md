@@ -413,7 +413,17 @@ Para cada barra, com as combinações **ELU** escolhidas (as de serviço ficam d
    escoamento da seção bruta e a interação; a ruptura da seção líquida depende da ligação.
 4. **Cantoneiras simples**: compressão pela 5.3.5.4 (`compressao_de_cantoneira_simples`), tração no
    escoamento e aviso quando a flexão passa de 10 % de f_y.
-5. **Cortante** (resultante de V₁ e V₂) contra 0,6·f_y·A_w/γ_a1 e **torção** informada.
+5. **Cortante** (resultante de V₁ e V₂) contra 0,6·f_y·A_w/γ_a1.
+6. **Torção** pela NBR 8800:2008 5.5.2, com o torque também multiplicado pelo B₂:
+   - **tubos redondos e retangulares:** T_Rd da 5.5.2.1 (escoamento e flambagem por torção). Até 20 %
+     de T_Rd a torção é desprezada (5.5.2.2); acima, (N/N_Rd + M/M_Rd) + (V/V_Rd + T/T_Rd)² ≤ 1,0, com
+     os dois eixos somados, a favor da segurança;
+   - **outras seções** (I, U, T, cantoneira, barra maciça): tensões elásticas da 5.5.2.3,
+     τ_T + τ_V ≤ 0,6·f_y/γ_a1 e σ = N/A + Mx/Wx + My/Wy ≤ f_y/γ_a1. O τ da torção é o de Saint-Venant,
+     T·t/J, na parede mais grossa (empenamento livre). Torque que dá τ até 20 % de 0,6·f_y/γ_a1 fica
+     como informação, para não reprovar barra por ruído do modelo;
+   - nos perfis I, U e T com as pontas impedidas de empenar, a tensão do empenamento soma, e a linha
+     avisa que a barra pede análise própria. Perfil sem J no catálogo recebe um alerta.
 
 Sem perfil, sem comprimentos ou com aço desconhecido a barra fica **sem dados** (pendente). O
 resultado de cada barra traz a combinação e o ponto que governam e a tabela completa da

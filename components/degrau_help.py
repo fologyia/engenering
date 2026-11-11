@@ -1,4 +1,4 @@
-"""Textos dos “?” (dicas) da página Degrau de escada em grade, em linguagem simples.
+"""Textos dos “?” (dicas) da página Escada em grade, em linguagem simples.
 
 Ficam num módulo só para a página e os testes falarem do mesmo jeito e para um teste garantir que
 nenhum campo fique sem explicação. Aceitam Markdown (negrito e listas). Cada texto diz, na ordem:
@@ -340,7 +340,7 @@ AJUDA: dict[str, str] = {
     ),
     "reg_registrar": (
         "Grava este cálculo no projeto ativo, com as 38 verificações e as tabelas, para entrar "
-        "no memorial da Central de relatórios."
+        "no memorial (página Memorial de cálculo)."
     ),
     # ------------------------------------------------------------------ colunas das tabelas
     "col_verificacao": "Nome da verificação, com o número do item (1 a 38).",

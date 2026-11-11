@@ -80,7 +80,7 @@ Ficam em **ALERTA**, nunca em OK:
 
 ## Diferenças deliberadas em relação a `core/nbr8800.py`
 
-O módulo de barras de Estruturas de aço e este concordam, para compressão, em todo o catálogo
+O módulo de barras de Barras, treliças e pórticos e este concordam, para compressão, em todo o catálogo
 (I, W, HP, U, T, barras e tubos circulares), com diferença relativa menor que 1e-9 — o teste
 `tests/test_column_buckling.py::TestConcordaComNbr8800` cobre dois valores de f_y, três conjuntos de
 comprimentos e perfil soldado e laminado. As diferenças que sobram são intencionais:
@@ -127,7 +127,7 @@ conferidos na norma antes de emitir documentos**:
 
 Cantoneira simples (NBR 5.3.5.4), barras compostas (NBR 5.3.6), cisalhamento (5.4.3), o `B₂` de
 um andar com várias colunas (ΣN_Sd, ΣH_Sd e Δh, Anexo D) — que pertence à análise da estrutura,
-em Estruturas de aço —, fadiga, cargas dinâmicas e perfis formados a frio.
+em Barras, treliças e pórticos —, fadiga, cargas dinâmicas e perfis formados a frio.
 
 ## Coluna deslocável (31/10/2026)
 
@@ -186,10 +186,10 @@ em `core/travamentos_da_coluna.py`, sem Streamlit:
 
 O travamento é suposto rígido e resistente; o programa não o dimensiona (AISC 360-16, Appendix 6).
 
-## Travamentos lidos do modelo: página Colunas do modelo (10/11/2026)
+## Travamentos lidos do modelo: página Pilares do modelo (10/11/2026)
 
 A tabela de travamentos desta página é para digitar à mão um pilar com travamento especial. Para
-todos os pilares do modelo do SolidWorks de uma vez, a página **Colunas do modelo** (grupo Modelo
+todos os pilares do modelo do SolidWorks de uma vez, a página **Pilares do modelo** (grupo Modelo
 SolidWorks, `core/colunas_do_modelo.py`) lê os travamentos do esqueleto da macro:
 
 - `ler_pilar`: cada barra que encosta no pilar (`core.travamentos.ligacoes`) entra na altura dela,

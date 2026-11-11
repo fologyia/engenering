@@ -1708,7 +1708,7 @@ def registro_ligacao(
     """Registro técnico do módulo Projeto de parafusos para uma ligação estrutural.
 
     ``resultados["verificacoes"]`` é a tabela de oito colunas; o memorial a imprime como tabela.
-    ``utilizacao_maxima`` é a chave que a Central de validação lê (acima de 1,0, bloqueia).
+    ``utilizacao_maxima`` é a chave que a Validação do projeto lê (acima de 1,0, bloqueia).
     """
     pior = resultado.aproveitamento_max
     resultados: dict[str, Any] = {

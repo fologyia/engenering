@@ -1,4 +1,4 @@
-"""Colunas do modelo: todos os pilares do SolidWorks verificados com os travamentos do esqueleto.
+"""Pilares do modelo: todos os pilares do SolidWorks verificados com os travamentos do esqueleto.
 
 O esqueleto da macro (:mod:`core.leitura_do_modelo`) diz onde cada barra encosta no pilar. Cada
 barra que chega trava o pilar na direção dela (:data:`core.travamentos.COS_TRAVA`): a viga que
@@ -51,7 +51,7 @@ from core.verificacao import (
 )
 
 MODULO_ID = "colunas_do_modelo"
-MODULO_TITULO = "Colunas do modelo"
+MODULO_TITULO = "Pilares do modelo"
 STATUS_PENDENTE = vb.STATUS_PENDENTE
 BASE_ROTULADA = "Rotulada (pino)"
 BASE_ENGASTADA = "Engastada"

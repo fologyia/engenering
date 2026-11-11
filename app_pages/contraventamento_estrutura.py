@@ -3,15 +3,15 @@ import streamlit as st
 from components.contraventamento_estrutura_ui import mostrar_contraventamento_de_estrutura
 from components.ui import cabecalho_pagina, configurar_pagina
 
-configurar_pagina("Contraventamento de estruturas abertas", ":material/grid_on:")
+configurar_pagina("Contraventamento", ":material/grid_on:")
 cabecalho_pagina(
-    "Contraventamento de estruturas abertas",
+    "Contraventamento",
     "Plataformas, mezaninos e pipe racks • vento por reticulados (NBR 6123:2023, cap. 8) • "
     "combinações, forças nocionais e B₂ (NBR 8800:2025) • diagonais e ligações",
     categoria="Dimensionamento",
     icone=":material/grid_on:",
     cor="blue",
-    ajuda_modulo="Contraventamento de estruturas abertas",
+    ajuda_modulo="Contraventamento",
     acoes=(
         ("app_pages/ligacao_contraventamento.py", "Ligação de contraventamento", ":material/hub:"),
     ),

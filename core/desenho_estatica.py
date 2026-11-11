@@ -1,4 +1,4 @@
-"""Desenhos dos casos de estática do Assistente de cargas, na escala dos dados, sem Streamlit.
+"""Desenhos dos casos de estática do Cálculo de peças, na escala dos dados, sem Streamlit.
 
 Cada função devolve um PNG (:class:`core.beam_charts.ImagemDiagrama`), que serve para a tela e para
 o Word. O desenho é feito no dobro do tamanho, e o PNG guarda esse dobro para sair nítido.

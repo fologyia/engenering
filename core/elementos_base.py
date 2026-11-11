@@ -1,4 +1,4 @@
-"""Base dos casos do Assistente de cargas: campos, resultado e verificações, sem Streamlit.
+"""Base dos casos do Cálculo de peças: campos, resultado e verificações, sem Streamlit.
 
 Um caso é uma tabela (os campos que o usuário preenche) e uma função pura (``calcular``) que devolve
 um :class:`Resultado`. A página monta o formulário e mostra o resultado sem saber nada do caso, e
@@ -208,7 +208,7 @@ class Resultado:
 
 @dataclass(frozen=True)
 class Caso:
-    """Um caso de análise do Assistente de cargas."""
+    """Um caso de análise do Cálculo de peças."""
 
     id: str
     titulo: str

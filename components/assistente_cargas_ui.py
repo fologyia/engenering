@@ -1,4 +1,4 @@
-"""Tela do Assistente de cargas: o painel de entrada e a tela de cada caso.
+"""Tela do Cálculo de peças: o painel de entrada e a tela de cada caso.
 
 A tela não conhece nenhum caso: tudo sai de :mod:`core.elementos_catalogo`. O campo já vem com a
 ajuda, e o resultado já vem com as verificações, os pontos de tensão e os envios para outros casos.
@@ -56,7 +56,7 @@ from core.elementos_word import gerar_word_do_caso
 from core.project_store import obter_projeto_ativo
 from core.verificacao import tabela_verificacoes
 
-MODULO = "Assistente de cargas"
+MODULO = "Cálculo de peças"
 MODULO_ID = "assistente_cargas"
 _SEM_MATERIAL = "— preencher à mão —"
 #: Campos que o material do catálogo preenche, e de qual propriedade.
@@ -79,7 +79,7 @@ OUTRAS_PAGINAS = (
     ("app_pages/analise_fadiga.py", "Fadiga, com curva S-N", ":material/cycle:"),
     ("app_pages/vigas_eixos.py", "Vigas e eixos sem limite de apoios", ":material/linear_scale:"),
     ("app_pages/flambagem_colunas.py", "Flambagem de colunas", ":material/architecture:"),
-    ("app_pages/estruturas_aco.py", "Estruturas de aço", ":material/domain:"),
+    ("app_pages/estruturas_aco.py", "Barras, treliças e pórticos", ":material/domain:"),
 )
 RECENTES = 6
 #: Onde a página Desenhar seção guarda a seção aberta.

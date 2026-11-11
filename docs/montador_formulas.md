@@ -192,7 +192,7 @@ comparação. A vale para a sessão, e cada parte do Montador tem a sua.
 
 Com a conta fechada, o Montador leva o estado de tensão de um ponto da seção para a **Análise estática**
 e para o **Círculo de Mohr**, e a fadiga para a **Análise de fadiga**, pelas mesmas chaves que o
-Assistente de cargas e Vigas e eixos já usam (`core/montador_repasse.py` faz a conta;
+Cálculo de peças e Vigas e eixos já usam (`core/montador_repasse.py` faz a conta;
 `components/repasse_do_montador.py`, o envio e o aviso).
 
 - **Ponto:** a lista traz os pontos da seção que chega ao critério de quem manda, depois de todos os
@@ -214,7 +214,7 @@ Assistente de cargas e Vigas e eixos já usam (`core/montador_repasse.py` faz a 
 
 Para montar um eixo inteiro na prancheta: a engrenagem ou a polia dão as forças, as vigas dão o
 momento de cada plano, e as peças que ficam no eixo entram com as condições delas. As contas são as do
-Assistente de cargas, escritas em letra, e a Central de validação confere os dois caminhos.
+Cálculo de peças, escritas em letra, e a Validação do projeto confere os dois caminhos.
 
 - **Engrenagem:** da potência e da rotação (ou do torque T) e do diâmetro primitivo saem F_t = 2·T/d,
   F_r = F_t·tg φ_n/cos ψ e F_a = F_t·tg ψ. A radial e a tangencial ficam a 90°: cada uma vai para um
@@ -227,7 +227,7 @@ Assistente de cargas, escritas em letra, e a Central de validação confere os d
   bolinha de entrada da força e as saídas R (reação) e θ·EI (inclinação vezes E·I).
 - **Par de engrenagens:** o par inteiro num bloco: as forças no eixo, como o bloco Engrenagem, e o
   dente, por flexão de Lewis no pinhão e na coroa (com o número virtual de dentes z/cos³ψ) e por
-  contato de Hertz no flanco, com K_o, K_v pela fabricação e K_m, como no Assistente de cargas. Isola o
+  contato de Hertz no flanco, com K_o, K_v pela fabricação e K_m, como no Cálculo de peças. Isola o
   módulo, a largura ou a dureza; o diâmetro primitivo sai do módulo e dos dentes, e por isso a força e
   o dente nunca usam diâmetros diferentes. A potência e a rotação podem ser do eixo do pinhão ou da
   coroa. Fora de 8 a 16 módulos de largura, com poucos dentes ou acima de 25 m/s, a página avisa.
@@ -245,7 +245,7 @@ Assistente de cargas, escritas em letra, e a Central de validação confere os d
 - **Inclinação:** θ = θ·EI/(E·I) no mancal ou na engrenagem, com os limites da Tabela 7-2 de Shigley.
 - **Rotação crítica:** Dunkerley com o eixo biapoiado e uma peça entre os mancais ou em balanço. Fica
   abaixo da real, a favor da segurança.
-- **Fuso (parafuso de potência):** a conta do fuso do Assistente de cargas (Shigley, cap. 8) em
+- **Fuso (parafuso de potência):** a conta do fuso do Cálculo de peças (Shigley, cap. 8) em
   letra: torque para subir T = F·d_m/2·(ℓ + π·μ·d_m·sec α)/(π·d_m − μ·ℓ·sec α), mais o colar; von Mises
   no corpo pela raiz d − p; pressão, flexão (38 % da carga no primeiro filete) e corte nos filetes do
   fuso e da porca; flambagem pela raiz, com Johnson na coluna curta e Euler na longa
@@ -286,7 +286,7 @@ eixo todo, a rotação crítica por Dunkerley, com a massa do eixo e das peças.
 as reações para o rolamento.
 
 Com um diâmetro só, o d por DE-Goodman e a inclinação no mancal batem com o Eixo de transmissão do
-Assistente de cargas (casos de aceite na Central).
+Cálculo de peças (casos de aceite na Central).
 
 ## O que mais pesa
 
@@ -330,7 +330,7 @@ pede para escolher a peça no bloco.
 
 ## Fadiga completa
 
-Três blocos fazem a fadiga de eixo com as mesmas contas do Assistente de cargas
+Três blocos fazem a fadiga de eixo com as mesmas contas do Cálculo de peças
 (`core/elementos_eixos.py` e `core/fatigue.py`), e há caso de aceite que confere os dois caminhos:
 
 - **Limite de fadiga:** S_e = k_a·k_b·k_c·k_d·k_e·k_div·S_e', com acabamento, fator de tamanho pelo

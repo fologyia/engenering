@@ -28,7 +28,7 @@ cabecalho_pagina(
     "Desenhe a rede: reservatórios, nós de consumo e os tubos entre eles, com ramais e malhas. "
     "A página dá a vazão de cada tubo e a pressão de cada nó, com a rede inteira resolvida de "
     "uma vez.",
-    categoria="Mecânica dos fluidos",
+    categoria="Mecânica",
     icone=":material/lan:",
     modulo_id=rt.MODULO_ID,
 )

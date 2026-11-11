@@ -29,9 +29,9 @@ EXEMPLOS_2D = {
     "compressao": ("Compressão com cisalhamento", (-90.0, -30.0, -40.0)),
 }
 _estado_assistente = st.session_state.get("mohr_assistente_2d")
-# Quem mandou o estado: o Assistente de cargas, Vigas e eixos, ou o Montador de fórmulas.
+# Quem mandou o estado: o Cálculo de peças, Vigas e eixos, ou o Montador de fórmulas.
 _ORIGEM_DO_ESTADO = (_estado_assistente or {}).get("origem") or "Assistente"
-_NOME_DA_ORIGEM = "Assistente de cargas" if _ORIGEM_DO_ESTADO == "Assistente" else _ORIGEM_DO_ESTADO
+_NOME_DA_ORIGEM = "Cálculo de peças" if _ORIGEM_DO_ESTADO == "Assistente" else _ORIGEM_DO_ESTADO
 if _estado_assistente:
     EXEMPLOS_2D["assistente"] = (
         f"{_ORIGEM_DO_ESTADO} — {_estado_assistente['descricao']}",
@@ -747,7 +747,7 @@ if modo == "Estado plano (2D)":
         rotulo="Registrar análise de Mohr no projeto",
         tipo="secondary",
     )
-    # A origem a repassar adiante é a que já vinha do Assistente de cargas
+    # A origem a repassar adiante é a que já vinha do Cálculo de peças
     # (Mohr só transforma o mesmo estado, não cria um novo); na ausência
     # dela, usa o próprio registro de Mohr, se ele já tiver sido salvo.
     origem_para_repasse = origem_assistente or id_registro_existente(registro_mohr_2d)

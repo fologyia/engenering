@@ -264,7 +264,14 @@ def abrir() -> AppTest:
 def test_pagina_abre_com_o_ajuste_padrao():
     t = abrir()
     assert any("Ø50 H7/s6: ajuste com interferência, de 18 a 59 µm." in i.value for i in t.info)
-    assert [tab.label for tab in t.tabs] == ["Ajuste", "Aperto e montagem", "Escolher o ajuste"]
+    rotulos = [tab.label for tab in t.tabs]
+    assert {
+        "Furo e eixo",
+        "Cadeia de cotas",
+        "Ajuste",
+        "Aperto e montagem",
+        "Escolher o ajuste",
+    } <= set(rotulos)
     for widget in (*t.number_input, *t.selectbox, *t.radio, *t.toggle):
         assert widget.help and widget.help.strip()[-1] in ".!:", widget.label
 

@@ -611,7 +611,7 @@ PARTE_SOLIDOS = Parte(
     g.SISTEMA_SOLIDOS,
     MODELOS,
     "app_pages/montador_fluidos.py",
-    "Mecânica dos fluidos",
+    "o Montador de fluidos",
 )
 PARTE_FLUIDOS = Parte(
     "mfl",
@@ -622,7 +622,7 @@ PARTE_FLUIDOS = Parte(
     g.SISTEMA_FLUIDOS,
     MODELOS_FLUIDOS,
     "app_pages/montador_formulas.py",
-    "Materiais, estática e fadiga",
+    "o Montador de fórmulas",
 )
 
 POR_NOME = {modelo.nome: modelo for modelo in MODELOS}

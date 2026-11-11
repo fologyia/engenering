@@ -58,15 +58,15 @@ def _linha_material(material: dict) -> dict:
     }
 
 
-configurar_pagina("Materiais técnicos", ":material/science:")
+configurar_pagina("Materiais do projeto", ":material/science:")
 
 cabecalho_pagina(
-    "Materiais técnicos",
+    "Materiais do projeto",
     "Separe valores preliminares de propriedades efetivamente rastreadas ao lote, produto e condição de serviço.",
     categoria="DADOS DE ENGENHARIA",
     icone=":material/science:",
     cor="green",
-    ajuda_modulo="Materiais técnicos",
+    ajuda_modulo="Materiais do projeto",
     acoes=(("app_pages/central_validacao.py", "Validação", ":material/fact_check:"),),
 )
 

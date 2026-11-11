@@ -205,6 +205,6 @@ def test_memorial_word_e_pdf_no_vento_viga_a_viga(calculo):
         for p in PdfReader(BytesIO(gerar_relatorio_industrial_pdf(projeto))).pages
     )
     for texto in (word, pdf):
-        assert "Contraventamento de estruturas abertas" in texto
+        assert "Contraventamento" in texto
         for proibido in ("Não informado", "bloqueio", "Snapshot", "Apêndice"):
             assert proibido not in texto

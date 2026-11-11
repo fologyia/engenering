@@ -25,7 +25,7 @@ cabecalho_pagina(
 projeto = obter_projeto_ativo()
 if projeto is None:
     st.info(
-        "Nenhum projeto ativo. Abra ou crie um em **Projetos permanentes**: o modelo em 3D é o "
+        "Nenhum projeto ativo. Abra ou crie um em **Projetos**: o modelo em 3D é o "
         "esqueleto gravado no projeto.",
         icon=":material/folder_off:",
     )

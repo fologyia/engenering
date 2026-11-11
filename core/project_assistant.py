@@ -16,7 +16,7 @@ class RotaProjeto:
 ROTAS: dict[str, RotaProjeto] = {
     "cargas": RotaProjeto(
         "cargas",
-        "Assistente de cargas",
+        "Cálculo de peças",
         "app_pages/assistente_cargas.py",
         ":material/manufacturing:",
         "potência, forças, momentos, torque, pressão e geometria",
@@ -56,7 +56,7 @@ ROTAS: dict[str, RotaProjeto] = {
     ),
     "aco": RotaProjeto(
         "aco",
-        "Estruturas de aço",
+        "Barras, treliças e pórticos",
         "app_pages/estruturas_aco.py",
         ":material/domain:",
         "geometria, apoios, ações, combinações e material",
@@ -72,7 +72,7 @@ ROTAS: dict[str, RotaProjeto] = {
     ),
     "vento": RotaProjeto(
         "vento",
-        "Vento nas estruturas",
+        "Vento em edificações",
         "app_pages/vento_nbr6123.py",
         ":material/air:",
         "dimensões da edificação, local, terreno e aberturas",
@@ -80,7 +80,7 @@ ROTAS: dict[str, RotaProjeto] = {
     ),
     "degrau": RotaProjeto(
         "degrau",
-        "Degrau de escada em grade",
+        "Escada em grade",
         "app_pages/degrau_escada.py",
         ":material/stairs:",
         "desnível, comprimento do degrau e enquadramento (NR-12 ou NR-22)",
@@ -96,7 +96,7 @@ ROTAS: dict[str, RotaProjeto] = {
     ),
     "estrutura_aberta": RotaProjeto(
         "estrutura_aberta",
-        "Contraventamento de estruturas abertas",
+        "Contraventamento",
         "app_pages/contraventamento_estrutura.py",
         ":material/grid_on:",
         "planta, pisos, cargas por m², vento do local e o tipo de contraventamento",

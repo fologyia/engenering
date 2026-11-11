@@ -57,13 +57,13 @@ Os demais módulos sem tabela continuam com o capítulo de sempre (`core/memoria
 
 ## Juntar o projeto num documento (`core/memorial_do_projeto.py`)
 
-Na Central de relatórios, o quadro **Juntar o projeto num documento** mostra, etapa por etapa
+No Memorial de cálculo, o quadro **Juntar o projeto num documento** mostra, etapa por etapa
 (cargas, vento, contraventamento, barras, sensores, pilares, vigas, escadas, ligações, placas de
 base, fundações, modelo em 3D), o que cada página registrou e o que falta (num projeto com o modelo
 do SolidWorks, as etapas do modelo sem registro aparecem com o link da página). O botão **Juntar**:
 
 * deixa **um de cada** cálculo: nas páginas do modelo inteiro (Esforços do modelo — barras, placas,
-  quadro das fundações —, Colunas do modelo, Reações nas bases, Cargas do esqueleto, Sensores), o
+  quadro das fundações —, Pilares do modelo, Reações nas bases, Cargas do esqueleto, Sensores), o
   registro novo do mesmo tipo substitui o anterior; nas outras, só a cópia idêntica (mesmo título,
   peça, entradas e resultados) — duas colunas diferentes com o mesmo título continuam as duas;
 * marca os repetidos como **Superado** (ficam no histórico, saem do memorial);
@@ -72,7 +72,7 @@ do SolidWorks, as etapas do modelo sem registro aparecem com o link da página).
 
 ## Para incluir em outro documento
 
-O perfil **Para incluir em outro documento** (Central de relatórios) gera só os capítulos
+O perfil **Para incluir em outro documento** (Memorial de cálculo) gera só os capítulos
 numerados a partir de 1 — quadro-resumo, memória de cálculo, vigas, sensibilidade e conclusão —, sem
 capa, resumo executivo, controle de revisões nem aprovações, com uma linha de identificação no topo.
 No Word os títulos são `Título 1/2/3` e as tabelas são tabelas comuns: ao copiar para o documento de

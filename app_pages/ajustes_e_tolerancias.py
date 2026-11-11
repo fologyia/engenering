@@ -9,10 +9,12 @@ import pandas as pd
 import streamlit as st
 
 from components.assistente_cargas_ui import resposta, tabela_de_verificacoes
+from components.edicao_de_tabela import com_edicoes
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina, fronteira_modelo
 from core import ajustes_e_tolerancias as at
+from core import cadeia_de_cotas as cc
 from core.elementos_base import Campo, Resultado
 from core.memorial_verificacoes import decimal_ptbr
 
@@ -21,7 +23,7 @@ cabecalho_pagina(
     at.MODULO_TITULO,
     "Furo e eixo pela NBR 6158: os limites de cada um, a folga ou a interferência, o aperto de "
     "um ajuste prensado e qual ajuste escolher para o torque.",
-    categoria="Mecânica geral",
+    categoria="Mecânica",
     icone=":material/settings_input_component:",
     modulo_id=at.MODULO_ID,
 )
@@ -389,35 +391,202 @@ def _aba_escolher(a: at.Ajuste) -> None:
     )
 
 
-with secao_protegida(at.MODULO_TITULO):
-    ajuste_escolhido = _entrada()
-    if ajuste_escolhido is not None:
-        aba_ajuste, aba_aperto, aba_escolher = st.tabs(
-            ["Ajuste", "Aperto e montagem", "Escolher o ajuste"]
-        )
-        aperto_calculado: Resultado | None = None
-        with aba_ajuste:
-            _aba_ajuste(ajuste_escolhido)
-        with aba_aperto:
-            aperto_calculado = _aba_aperto(ajuste_escolhido)
-        with aba_escolher:
-            _aba_escolher(ajuste_escolhido)
-        st.divider()
-        botao_registrar_calculo(
-            at.registro(
-                ajuste_escolhido,
-                aperto_calculado,
-                _valores_do_aperto() if aperto_calculado is not None else None,
+# ---------------------------------------------------------------------------------------------
+# Cadeia de cotas
+# ---------------------------------------------------------------------------------------------
+
+CADEIA = "aj_cadeia"
+CADEIA_REV = "aj_cadeia_rev"
+FOLGA_MIN, FOLGA_MAX = "aj_cadeia_min", "aj_cadeia_max"
+estado.setdefault(CADEIA, [dict(linha) for linha in cc.EXEMPLO])
+estado.setdefault(FOLGA_MIN, 0.05)
+estado.setdefault(FOLGA_MAX, None)
+
+
+def _ao_editar_cadeia(chave: str) -> None:
+    estado[CADEIA] = cc.da_tela(
+        com_edicoes(cc.para_a_tela(estado[CADEIA]), estado.get(chave) or {})
+    )
+    estado[CADEIA_REV] = estado.get(CADEIA_REV, 0) + 1
+
+
+def _voltar_ao_exemplo_da_cadeia() -> None:
+    estado[CADEIA] = [dict(linha) for linha in cc.EXEMPLO]
+    estado[CADEIA_REV] = estado.get(CADEIA_REV, 0) + 1
+
+
+def _mm(valor: float) -> str:
+    return f"{at.numero(valor, 3)} mm"
+
+
+def _aba_cadeia() -> cc.Cadeia | None:
+    st.markdown(
+        "Ponha as medidas em fila. A que **aumenta** a folga (a largura do alojamento) e as que a "
+        "**diminuem** (rolamentos, espaçadores, anéis). Com uma **classe ISO** (h11, js9…), os "
+        "afastamentos saem da NBR 6158; sem ela, valem os afastamentos da linha."
+    )
+    chave = f"aj_cadeia_tabela_{estado.get(CADEIA_REV, 0)}"
+    st.data_editor(
+        pd.DataFrame(cc.para_a_tela(estado[CADEIA]), columns=list(cc.COLUNAS_DA_TELA.values())),
+        key=chave,
+        on_change=_ao_editar_cadeia,
+        args=(chave,),
+        num_rows="dynamic",
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Elo": st.column_config.TextColumn(width="medium"),
+            "Sentido": st.column_config.SelectboxColumn(
+                options=list(cc.SENTIDOS), required=True, width="medium"
             ),
-            key="aj_registrar",
+            "Nominal (mm)": st.column_config.NumberColumn(format="%.3f", min_value=0.0),
+            "Classe ISO": st.column_config.TextColumn(
+                help="Opcional: a classe da NBR 6158 (h11, H8, js9…). Vazia, valem os afastamentos."
+            ),
+            "Afast. superior (mm)": st.column_config.NumberColumn(format="%.3f"),
+            "Afast. inferior (mm)": st.column_config.NumberColumn(format="%.3f"),
+        },
+    )
+    colunas = st.columns([1, 1, 1])
+    colunas[0].number_input(
+        "Folga mínima exigida (mm)",
+        value=None,
+        step=0.01,
+        format="%.3f",
+        key=FOLGA_MIN,
+        help="A menor folga que a montagem aceita. Negativa quer dizer aperto. Vazio: sem limite.",
+    )
+    colunas[1].number_input(
+        "Folga máxima aceita (mm)",
+        value=None,
+        step=0.01,
+        format="%.3f",
+        key=FOLGA_MAX,
+        help="A maior folga que a montagem aceita (folga axial do eixo, por exemplo). Vazio: sem limite.",
+    )
+    colunas[2].button(
+        "Voltar ao exemplo",
+        on_click=_voltar_ao_exemplo_da_cadeia,
+        key="aj_cadeia_exemplo",
+        help="Volta a tabela ao exemplo da caixa com dois rolamentos e um espaçador.",
+    )
+    try:
+        cadeia = cc.montar(estado[CADEIA], estado.get(FOLGA_MIN), estado.get(FOLGA_MAX))
+    except cc.ErroDaCadeia as erro:
+        st.warning(str(erro), icon=":material/warning:")
+        return None
+    metricas = st.columns(3)
+    metricas[0].metric(
+        "Folga nominal",
+        _mm(cadeia.nominal),
+        help="Só as medidas nominais, com o sentido de cada uma.",
+    )
+    metricas[1].metric(
+        "Pior caso",
+        f"{at.numero(cadeia.pior_minima, 3)} a {at.numero(cadeia.pior_maxima, 3)} mm",
+        help="Todas as peças no limite que mais atrapalha ao mesmo tempo. Sempre fica dentro.",
+    )
+    metricas[2].metric(
+        "Estatístico (±3σ)",
+        f"{at.numero(cadeia.estatistica_minima, 3)} a {at.numero(cadeia.estatistica_maxima, 3)} mm",
+        help="99,73 % das montagens, com cada tolerância = ±3σ. Vale para fabricação em série.",
+    )
+    _resultado_da_cadeia(cadeia)
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Elo": c.elo.nome,
+                    "Sentido": "+" if c.elo.sinal > 0 else "−",
+                    "Medida (mm)": f"{at.numero(c.elo.nominal, 3)} "
+                    f"({at.numero(c.elo.superior, 3)} / {at.numero(c.elo.inferior, 3)})"
+                    + (f" {c.elo.classe}" if c.elo.classe else ""),
+                    "Tolerância (mm)": at.numero(c.elo.tolerancia, 3),
+                    "Peso no pior caso": f"{at.numero(100 * c.no_pior_caso, 1)} %",
+                    "Peso na variação": f"{at.numero(100 * c.na_variancia, 1)} %",
+                }
+                for c in cadeia.contribuicoes
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+    )
+    primeiro = cadeia.contribuicoes[0]
+    if primeiro.na_variancia > 0:
+        st.caption(
+            f"Quem mais pesa é **{primeiro.elo.nome}**, com {at.numero(100 * primeiro.na_variancia, 0)} % "
+            "da variação: apertar a tolerância dela é o que mais estreita a folga."
         )
+    return cadeia
+
+
+def _resultado_da_cadeia(cadeia: cc.Cadeia) -> None:
+    if cadeia.pior_caso_atende is None:
+        st.info(
+            "Informe a folga mínima ou a máxima para o programa dizer se a cadeia atende.",
+            icon=":material/info:",
+        )
+        return
+    abaixo, acima = cadeia.fora_abaixo(), cadeia.fora_acima()
+    fora = (abaixo or 0.0) + (acima or 0.0)
+    if cadeia.pior_caso_atende:
+        st.success(
+            "Atende no pior caso: toda montagem fica dentro da folga exigida.",
+            icon=":material/check_circle:",
+        )
+    elif cadeia.estatistico_atende:
+        st.warning(
+            "Não atende no pior caso, mas atende no estatístico: em série, cerca de "
+            f"{at.numero(100 * fora, 3)} % das montagens sairiam da folga exigida. Para poucas "
+            "peças, aperte as tolerâncias.",
+            icon=":material/warning:",
+        )
+    else:
+        st.error(
+            f"Não atende: cerca de {at.numero(100 * fora, 2)} % das montagens sairiam da folga "
+            "exigida. Aperte a tolerância de quem mais pesa, ou mude uma medida nominal.",
+            icon=":material/error:",
+        )
+
+
+with secao_protegida(at.MODULO_TITULO):
+    aba_furo_eixo, aba_cadeia = st.tabs(["Furo e eixo", "Cadeia de cotas"])
+    with aba_furo_eixo:
+        ajuste_escolhido = _entrada()
+        if ajuste_escolhido is not None:
+            aba_ajuste, aba_aperto, aba_escolher = st.tabs(
+                ["Ajuste", "Aperto e montagem", "Escolher o ajuste"]
+            )
+            aperto_calculado: Resultado | None = None
+            with aba_ajuste:
+                _aba_ajuste(ajuste_escolhido)
+            with aba_aperto:
+                aperto_calculado = _aba_aperto(ajuste_escolhido)
+            with aba_escolher:
+                _aba_escolher(ajuste_escolhido)
+            st.divider()
+            botao_registrar_calculo(
+                at.registro(
+                    ajuste_escolhido,
+                    aperto_calculado,
+                    _valores_do_aperto() if aperto_calculado is not None else None,
+                ),
+                key="aj_registrar",
+            )
+    with aba_cadeia:
+        cadeia_montada = _aba_cadeia()
+        if cadeia_montada is not None:
+            st.divider()
+            botao_registrar_calculo(cc.registro(cadeia_montada), key="aj_cadeia_registrar")
 
 fronteira_modelo(
     [
         "Tolerâncias e afastamentos da NBR 6158 (ISO 286-1), de 0 a 500 mm, com as peças a 20 °C.",
         "Letras de uso raro (cd, ef, fg, j, v a zc) ficaram de fora.",
-        "O aperto é o cálculo de Lamé do Assistente de cargas: cilindros longos, regime elástico, "
+        "O aperto é o mesmo cálculo de Lamé da página Cálculo de peças: cilindros longos, regime elástico, "
         "sem força centrífuga.",
+        "Cadeia de cotas estatística: medidas independentes, cada tolerância = ±3σ de um processo "
+        "centrado. Para poucas peças, vale o pior caso.",
     ],
     titulo="Hipóteses desta página",
 )

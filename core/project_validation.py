@@ -293,7 +293,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             "Materiais",
             "Materiais do escopo não foram qualificados",
             "Há designações nos componentes, mas a biblioteca do projeto não contém origem, condição e propriedades rastreadas.",
-            "Cadastre os materiais em Materiais técnicos e vincule-os aos itens do escopo.",
+            "Cadastre os materiais em Materiais do projeto e vincule-os aos itens do escopo.",
         )
     ids_materiais = {_texto(item.get("id")) for item in materiais}
     for material in materiais:
@@ -328,7 +328,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 "Materiais",
                 f"{_texto(componente.get('tag')) or _texto(componente.get('descricao'))}: vínculo de material inválido",
                 "O componente aponta para um cadastro que não existe mais na biblioteca do projeto.",
-                "Refaça o vínculo em Materiais técnicos e confira a fonte registrada.",
+                "Refaça o vínculo em Materiais do projeto e confira a fonte registrada.",
             )
 
     normas = [item for item in projeto.get("normas", []) if isinstance(item, Mapping)]

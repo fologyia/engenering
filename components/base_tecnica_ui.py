@@ -67,7 +67,7 @@ def gravar_campos_do_projeto(campos: Mapping[str, Any], motivo: str) -> bool:
     projeto = obter_projeto_ativo()
     if projeto is None:
         st.warning(
-            "Nenhum projeto ativo: abra ou crie um em **Projetos permanentes**.",
+            "Nenhum projeto ativo: abra ou crie um em **Projetos**.",
             icon=":material/folder_off:",
         )
         return False

@@ -88,6 +88,7 @@ def test_memorial_nao_traz_validacao_checklist_normas_cargas_nem_apendices():
     ):
         for proibido in (
             "Central de validação",
+            "Validação do projeto",
             "Pendências e checklist",
             "Matriz normativa",
             "Casos, combinações",

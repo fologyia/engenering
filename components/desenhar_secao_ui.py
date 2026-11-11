@@ -65,7 +65,7 @@ DESTINOS = (
 PAGINAS = (
     ("app_pages/flambagem_colunas.py", "Flambagem de colunas", ":material/vertical_align_center:"),
     ("app_pages/vigas_eixos.py", "Vigas e eixos", ":material/linear_scale:"),
-    ("app_pages/estruturas_aco.py", "Estruturas de aço", ":material/domain:"),
+    ("app_pages/estruturas_aco.py", "Barras, treliças e pórticos", ":material/domain:"),
     ("app_pages/catalogo_perfis.py", "Catálogo de perfis", ":material/view_in_ar:"),
 )
 
@@ -454,7 +454,7 @@ def _uso(analise: sd.Analise, forma: sd.Forma) -> None:
                     "A norma só tem rotina de M_Rd para I, U, T e tubos. Nesta forma, use as "
                     "tensões da aba abaixo ou a coluna."
                     if sem_rotina
-                    else "Salva no catálogo e abre o caso do Assistente de cargas com esta seção."
+                    else "Salva no catálogo e abre o caso do Cálculo de peças com esta seção."
                 ),
             )
         if em_dia:

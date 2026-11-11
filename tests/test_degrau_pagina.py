@@ -362,10 +362,10 @@ def test_guia_tem_o_capitulo_do_degrau_com_exemplo_calculado_pelo_nucleo(banco_i
     t = AppTest.from_file(APP, default_timeout=180)
     t.run()
     t.switch_page("app_pages/guia_geral.py")
-    t.session_state["guia_modulo"] = "Degrau de escada em grade"
+    t.session_state["guia_modulo"] = "Escada em grade"
     t.run()
     assert not t.exception, [str(e.value) for e in t.exception]
-    assert any(h.value == "Degrau de escada em grade" for h in t.header)
+    assert any(h.value == "Escada em grade" for h in t.header)
     exemplo = de.calcular_escada(de.EntradaDegrau())
     textos = " ".join(m.value for m in t.markdown) + " ".join(c.value for c in t.caption)
     assert f"{exemplo.geometria.n} espelhos de 180 mm e piso de 270 mm" in textos

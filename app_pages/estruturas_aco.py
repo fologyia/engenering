@@ -23,7 +23,7 @@ from core import structural_2d as estrutural
 from core.desenho_da_secao import figura_da_secao
 from core.project_store import obter_projeto_ativo
 
-configurar_pagina("Estruturas de aço", ":material/domain:")
+configurar_pagina("Barras, treliças e pórticos", ":material/domain:")
 
 
 def fator_texto(valor: float) -> str:
@@ -44,12 +44,12 @@ def mostrar_utilizacao(nome: str, utilizacao: float) -> None:
 
 
 cabecalho_pagina(
-    "Estruturas de aço",
+    "Barras, treliças e pórticos",
     "Perfis • barras • combinações ELU/ELS • ligações • treliças e pórticos 2D",
     categoria="Projetos",
     icone=":material/domain:",
     cor="violet",
-    ajuda_modulo="Estruturas de aço",
+    ajuda_modulo="Barras, treliças e pórticos",
     acoes=(("app_pages/projeto_parafusos.py", "Projeto de parafusos", ":material/build:"),),
     modulo_id="estruturas_aco",
 )
@@ -873,7 +873,7 @@ elif modulo == "2. Barras":
     )
     status_barra = "Atende" if utilizacao_governante <= 1.0 else "Não atende"
     registro_barra = construir_registro_tecnico(
-        modulo="Estruturas de aço",
+        modulo="Barras, treliças e pórticos",
         modulo_id="estruturas_aco",
         titulo=f"Verificação da barra {nome_perfil} (NBR 8800)",
         status=status_barra,
@@ -1296,7 +1296,7 @@ elif modulo == "3. Combinações":
         "Não combine máximos independentes como se fossem simultâneos."
     )
     registro_combinacoes = construir_registro_tecnico(
-        modulo="Estruturas de aço",
+        modulo="Barras, treliças e pórticos",
         modulo_id="estruturas_aco",
         titulo="Combinações de ações ELU e ELS",
         status="Calculado",
@@ -1345,7 +1345,7 @@ elif modulo == "3. Combinações":
         st.caption(
             "V_k = V₀·S₁·S₂·S₃ e q = 0,613·V_k² (NBR 6123:2023, 4.2 e 5), com b, p, F_r e S₃ das "
             "Tabelas 1 a 4 da edição de 2023. Confira V₀ no mapa de isopletas. Para galpões e "
-            "edifícios (paredes, telhado, vedações, pórtico), use o módulo **Vento nas estruturas**."
+            "edifícios (paredes, telhado, vedações, pórtico), use o módulo **Vento em edificações**."
         )
         base_do_projeto = base_tec.base_do_projeto(projeto_ativo)
         vento_da_base = base_do_projeto.vento if base_do_projeto else base_tec.VentoDoLocal()
@@ -1546,7 +1546,7 @@ elif modulo == "3. Combinações":
                     "ações e no modelo 2D; a categoria 'vento' aplica γ_f = 1,40 e ψ₀ = 0,6."
                 )
             registro_vento = construir_registro_tecnico(
-                modulo="Estruturas de aço",
+                modulo="Barras, treliças e pórticos",
                 modulo_id="estruturas_aco",
                 titulo="Ação do vento — NBR 6123",
                 status="Calculado",
@@ -1689,7 +1689,7 @@ elif modulo == "3. Combinações":
             border=True,
         )
         registro_guarda = construir_registro_tecnico(
-            modulo="Estruturas de aço",
+            modulo="Barras, treliças e pórticos",
             modulo_id="estruturas_aco",
             titulo="Guarda-corpo e impacto — ações de plataforma",
             status="Calculado",
@@ -1849,7 +1849,7 @@ elif modulo == "3. Combinações":
                 "Geometria de acesso atende aos mínimos informados.", icon=":material/check_circle:"
             )
         registro_acesso = construir_registro_tecnico(
-            modulo="Estruturas de aço",
+            modulo="Barras, treliças e pórticos",
             modulo_id="estruturas_aco",
             titulo="Conformidade de acessos — NR-12",
             status="Não atende" if nao_atende else "Atende",
@@ -2291,7 +2291,7 @@ elif modulo == "4. Ligações":
                 for linha in resultado_base.memoria:
                     st.markdown(f"- {linha}")
             registro_placa = construir_registro_tecnico(
-                modulo="Estruturas de aço",
+                modulo="Barras, treliças e pórticos",
                 modulo_id="estruturas_aco",
                 titulo=f"Placa de base — {nome_perfil_base}",
                 status="Atende" if resultado_base.atende else "Não atende",
@@ -2968,7 +2968,7 @@ else:
         )
 
         registro_modelo_2d = construir_registro_tecnico(
-            modulo="Estruturas de aço",
+            modulo="Barras, treliças e pórticos",
             modulo_id="estruturas_aco",
             titulo=(
                 f"Análise {'de segunda ordem' if resultado.segunda_ordem else 'linear'} — {modelo}"

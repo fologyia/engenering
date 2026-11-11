@@ -49,7 +49,7 @@ PASSOS: tuple[Passo, ...] = (
         1,
         FASE_PREPARAR,
         "Escolher o projeto",
-        "Projetos permanentes",
+        "Projetos",
         "app_pages/gestao_projetos.py",
         "—",
         "o projeto ativo",
@@ -198,7 +198,7 @@ PASSOS: tuple[Passo, ...] = (
         (
             "Na tabela das barras: Aplicar as sugestões; confira tipo, perfil e Lx/Ly/Lb.",
             "Veja o pior caso de cada barra e a verificação; ajuste o modelo se algo não passa.",
-            "Na página Colunas do modelo, confira os pilares com os travamentos lidos do esqueleto "
+            "Na página Pilares do modelo, confira os pilares com os travamentos lidos do esqueleto "
             "(em x e em y) e diga como o pé está preso; registre no projeto.",
             "Registre a verificação, o quadro das fundações e as placas no projeto.",
             "Na página Reações nas bases, baixe o Excel com a força e o momento de cada pé, caso a "
@@ -243,7 +243,7 @@ PASSOS: tuple[Passo, ...] = (
         13,
         FASE_FECHAR,
         "Limpar os registros",
-        "Projetos permanentes",
+        "Projetos",
         "app_pages/gestao_projetos.py",
         "—",
         "só os cálculos válidos no memorial",
@@ -257,7 +257,7 @@ PASSOS: tuple[Passo, ...] = (
         14,
         FASE_FECHAR,
         "Gerar o memorial",
-        "Central de relatórios",
+        "Memorial de cálculo",
         "app_pages/central_relatorios.py",
         "—",
         "memorial em Word e PDF",

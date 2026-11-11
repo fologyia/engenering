@@ -4,7 +4,7 @@ A engrenagem e a polia dão as forças que dobram o eixo. A chaveta, o cubo pren
 são as peças que ficam nele, cada uma com as condições que a fazem passar. A inclinação e a rotação
 crítica dizem se o eixo, além de aguentar, fica rígido o bastante.
 
-As contas são as do Assistente de cargas (``core/elementos_eixos.py``, ``elementos_transmissao.py`` e
+As contas são as do Cálculo de peças (``core/elementos_eixos.py``, ``elementos_transmissao.py`` e
 ``elementos_mancais.py``), escritas em letras: o Montador e o Assistente têm de dar o mesmo número.
 Os blocos entram no catálogo por ``montador_blocos.registrar``, como os de fluidos.
 """
@@ -101,7 +101,7 @@ def _engrenagem(c: Contexto) -> dict[str, Any]:
     helice = c.letra(g.PSI)
     tangencial = 2 * torque / diametro
     c.hipoteses.append(
-        "Forças de engrenamento no diâmetro primitivo, como no Assistente de cargas: F_t = 2·T/d, "
+        "Forças de engrenamento no diâmetro primitivo, como no Cálculo de peças: F_t = 2·T/d, "
         "F_r = F_t·tg φ_n/cos ψ e F_a = F_t·tg ψ."
     )
     c.hipoteses.append(
@@ -248,7 +248,7 @@ def _par_de_engrenagens(c: Contexto) -> dict[str, Any]:
     )
     c.hipoteses.append(
         "Dente de perfil evolvente e altura normal. Pré-dimensionamento por Lewis e por contato de "
-        "Hertz, como no Assistente de cargas: não é o cálculo AGMA 2001 nem o ISO 6336."
+        "Hertz, como no Cálculo de peças: não é o cálculo AGMA 2001 nem o ISO 6336."
     )
     c.hipoteses.append(
         "Pinhão e coroa do mesmo aço beneficiado: S_t e S_c das Figuras 14-2 e 14-5 de Shigley "
@@ -327,7 +327,7 @@ def _conica(c: Contexto) -> dict[str, Any]:
     )
     c.hipoteses.append(
         "Engrenagem cônica de dente reto com os eixos a 90°: as forças agem no meio da largura do "
-        "dente, no primitivo médio (Shigley, cap. 13), como no Assistente de cargas."
+        "dente, no primitivo médio (Shigley, cap. 13), como no Cálculo de peças."
     )
     c.hipoteses.append(
         "No eixo da coroa, a radial é a axial do pinhão, e a axial é a radial dele. O binário da "
@@ -610,7 +610,7 @@ def _rolamento(c: Contexto) -> dict[str, Any]:
     )
     c.hipoteses.append(
         "Carga constante. Em equipamento de içamento, a NBR 8400 troca a carga máxima por uma média: "
-        "use o rolamento do Assistente de cargas."
+        "use o rolamento do Cálculo de peças."
     )
     minimo = sp.Rational(1, 100) if tipo != ROLOS_INFORMADOS else sp.Rational(2, 100)
     validade = (
@@ -817,7 +817,7 @@ def _fuso(c: Contexto) -> dict[str, Any]:
         )
         c.hipoteses.append(
             "Flambagem do fuso pela raiz da rosca (r = d_r/4): Johnson na coluna curta e Euler na "
-            "longa, como no Assistente de cargas."
+            "longa, como no Cálculo de peças."
         )
     c.hipoteses.append(
         "Fuso pelo Shigley, cap. 8: diâmetro médio d − p/2, raiz d − p e altura de contato p/2, "

@@ -263,7 +263,7 @@ def proximos_passos(
     if situacao == EM_VERIFICACAO and not bloqueios:
         passo(
             "Emitir o memorial",
-            "Gere Word e PDF na Central de relatórios e mude a situação para Emitido.",
+            "Gere Word e PDF no Memorial de cálculo e mude a situação para Emitido.",
             "app_pages/central_relatorios.py",
         )
     if not passos:

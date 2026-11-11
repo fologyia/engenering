@@ -178,7 +178,7 @@ def id_registro_existente(registro: Mapping[str, Any]) -> str | None:
     """Encontra, no projeto ativo, um registro já salvo com este mesmo conteúdo.
 
     Usado para levar a *origem* de um cálculo ao repassá-lo entre módulos
-    (Assistente de cargas → Mohr, Mohr → Estática etc.) sem inventar um
+    (Cálculo de peças → Mohr, Mohr → Estática etc.) sem inventar um
     vínculo: só aponta para um registro que o usuário de fato registrou no
     projeto. Se o cálculo ainda não foi salvo, retorna ``None`` — a origem
     fica em aberto, em vez de apontar para algo que não existe.

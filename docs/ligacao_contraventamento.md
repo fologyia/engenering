@@ -99,6 +99,6 @@ que passou e, no fim, o que não passou; os campos vazios ficam como `[a preench
 
 ## Pendências
 
-* Ler a força do contraventamento direto do registro do módulo **Vento nas estruturas**
+* Ler a força do contraventamento direto do registro do módulo **Vento em edificações**
   (`P = H / sen θ`; hoje é um atalho de cálculo na página).
 * Chapa de topo parafusada (Exemplo 5.1 completo) e as demais configurações do Capítulo 5.

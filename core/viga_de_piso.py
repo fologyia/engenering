@@ -14,6 +14,10 @@ linear extra (guarda-corpo, tubulação) e, se houver, uma carga concentrada no 
 * **Flecha** sob as cargas de serviço (combinação rara: todas as cargas características) contra o
   critério Anglo (Tabela 3: vigas de piso principais L/350, secundárias L/300) e a NBR 8800 (Anexo
   C, vigas de piso L/350).
+* **Vibração** pelo Anexo L da NBR 8800:2008: frequência natural nunca abaixo de 3 Hz (L.1.2) e a
+  avaliação simplificada de L.3: flecha total do piso na combinação frequente (G + ψ₁·Q, vigas
+  biapoiadas, a viga mais a flecha do apoio) até 20 mm onde se caminha (4 Hz), 9 mm onde se pula
+  ou dança (6 Hz) e 5 mm em atividade rítmica muito repetitiva (8 Hz). f ≈ 18/√δ, com δ em mm.
 * **Informativos**: reação de apoio, a capacidade mínima da ligação do critério Anglo (9.1: 75 % da
   carga uniforme que a viga resiste) e a frequência natural (para comparar com equipamentos, 5.7).
 
@@ -56,6 +60,19 @@ CATEGORIA_PE = "Elementos construtivos industrializados (grades, pisos, guarda-c
 CATEGORIA_SC = "Sobrecarga de uso — predominância de equipamentos fixos ou concentração de pessoas"
 CATEGORIA_EQ = "Peso próprio de equipamentos (NBR 8800:2025)"
 
+# Vibração: NBR 8800:2008 Anexo L. Uso → (frequência mínima em Hz, flecha total máxima em mm, item).
+USO_CAMINHAR = "Pessoas caminham (plataforma, passarela, escritório)"
+USO_PULAR = "Pessoas pulam ou dançam (academia, salão)"
+USO_REPETITIVO = "Atividade rítmica muito repetitiva (aeróbica)"
+USO_MANUTENCAO = "Só acesso eventual de manutenção"
+USOS_VIBRACAO: dict[str, tuple[float, float | None, str]] = {
+    USO_CAMINHAR: (4.0, 20.0, "L.3.2"),
+    USO_PULAR: (6.0, 9.0, "L.3.3"),
+    USO_REPETITIVO: (8.0, 5.0, "L.3.3"),
+    USO_MANUTENCAO: (3.0, None, "L.1.2"),
+}
+FREQUENCIA_MINIMA_HZ = 3.0  # L.1.2: em nenhum caso abaixo disso
+
 
 class VigaInvalida(ValueError):
     """Dado que o cálculo não aceita; a mensagem diz o que corrigir."""
@@ -75,6 +92,8 @@ class EntradaVigaDePiso:
     tipo: str = TIPO_PRINCIPAL
     norma: str = "NBR8800_2024"
     anglo: bool = False
+    uso_vibracao: str = USO_CAMINHAR
+    flecha_apoio_mm: float = 0.0  # da viga ou do pilar que apoia esta, na mesma combinação
 
 
 @dataclass(frozen=True)
@@ -97,6 +116,8 @@ class ResultadoVigaDePiso:
     reacao_minima_ligacao_kN: float | None
     frequencia_Hz: float
     verificacoes: tuple[Verificacao, ...]
+    flecha_vibracao_mm: float = 0.0  # viga + apoio, combinação frequente
+    frequencia_piso_Hz: float = math.inf
 
     @property
     def status(self) -> str:
@@ -136,6 +157,10 @@ def validar(e: EntradaVigaDePiso) -> list[str]:
     ):
         if not (math.isfinite(valor) and valor >= 0):
             erros.append(f"{nome} não pode ser negativa.")
+    if e.uso_vibracao not in USOS_VIBRACAO:
+        erros.append(f"Uso do piso desconhecido: {e.uso_vibracao!r}.")
+    if not (math.isfinite(e.flecha_apoio_mm) and 0 <= e.flecha_apoio_mm <= 500):
+        erros.append("A flecha do apoio precisa estar entre 0 e 500 mm.")
     return erros
 
 
@@ -327,6 +352,42 @@ def calcular(e: EntradaVigaDePiso) -> ResultadoVigaDePiso:
             tipo="informativo",
         )
     )
+    psi1 = comb.categoria_nbr(CATEGORIA_SC).psi1
+    flecha_frequente = flecha_q(cargas["PP"] + cargas["PE"] + psi1 * cargas["SC"]) + (
+        e.concentrada_kN * 1e3 * l_mm**3 / (48 * ei)
+    )
+    flecha_piso = flecha_frequente + e.flecha_apoio_mm
+    frequencia_piso = 18.0 / math.sqrt(flecha_piso) if flecha_piso > 0 else math.inf
+    frequencia_do_uso, limite, item = USOS_VIBRACAO[e.uso_vibracao]
+    composicao = (
+        f"viga {_n(flecha_frequente, 1)} mm + apoio {_n(e.flecha_apoio_mm, 1)} mm = "
+        f"{_n(flecha_piso, 1)} mm"
+        if e.flecha_apoio_mm
+        else f"só a viga, {_n(flecha_frequente, 1)} mm (informe a flecha do apoio, se ele ceder)"
+    )
+    linhas.append(
+        Verificacao(
+            "Vibração: frequência natural do piso ≥ 3 Hz",
+            FREQUENCIA_MINIMA_HZ,
+            frequencia_piso,
+            "Hz",
+            "NBR 8800:2008 Anexo L.1.2",
+            f"f ≈ 18/√δ = 18/√{_n(flecha_piso, 1)} = {_n(frequencia_piso, 1)} Hz; δ na combinação "
+            f"frequente G + ψ₁·Q (ψ₁ = {_n(psi1, 1)}): {composicao}",
+        )
+    )
+    if limite is not None:
+        linhas.append(
+            Verificacao(
+                f"Vibração: flecha total do piso ≤ {limite:g} mm (f ≥ {frequencia_do_uso:g} Hz)",
+                flecha_piso,
+                limite,
+                "mm",
+                f"NBR 8800:2008 Anexo {item}",
+                f"{e.uso_vibracao.split(' (')[0].lower()}: {composicao}; vigas biapoiadas, "
+                "combinação frequente; avaliação simplificada do Anexo L",
+            )
+        )
     return ResultadoVigaDePiso(
         entrada=e,
         peso_proprio_kN_m=pp,
@@ -346,6 +407,8 @@ def calcular(e: EntradaVigaDePiso) -> ResultadoVigaDePiso:
         reacao_minima_ligacao_kN=minima,
         frequencia_Hz=frequencia,
         verificacoes=tuple(linhas),
+        flecha_vibracao_mm=flecha_piso,
+        frequencia_piso_Hz=frequencia_piso,
     )
 
 
@@ -379,6 +442,8 @@ def registro_viga(
         "carga_concentrada_kN": e.concentrada_kN or None,
         "norma": cbk.NORMAS_ROTULOS.get(e.norma, e.norma),
         "criterio_do_cliente": f"Anglo American {ca.CODIGO} Rev. {ca.REVISAO}" if e.anglo else None,
+        "uso_do_piso_vibracao": e.uso_vibracao,
+        "flecha_do_apoio_mm": e.flecha_apoio_mm or None,
     }
     entradas.update(contexto or {})
     entradas = {k: v for k, v in entradas.items() if v is not None}
@@ -408,8 +473,10 @@ def registro_viga(
             "Viga biapoiada; cargas do piso pela largura de influência.",
             "Carga concentrada no meio do vão (pior posição para momento e flecha).",
             "Flecha elástica sem contraflecha.",
+            "Vibração pela avaliação simplificada do Anexo L da NBR 8800:2008 (f ≈ 18/√δ); pisos "
+            "com vão grande e pouco amortecimento pedem a análise dinâmica de L.2.",
         ],
-        referencias=["ABNT NBR 8800 (edições de 2025 e 2008): 5.4 e Anexo C."]
+        referencias=["ABNT NBR 8800 (edições de 2025 e 2008): 5.4 e Anexos C e L."]
         + ([f"{ca.REFERENCIA}: 5.7, 7 (Tabela 3), 8.8 e 9.1."] if e.anglo else []),
         conclusao=destaque,
         responsavel=responsavel,

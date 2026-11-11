@@ -1,4 +1,4 @@
-"""Interface da página Vento nas estruturas.
+"""Interface da página Vento em edificações.
 
 Só desenha a interface: todo cálculo está em ``core.vento_edificio`` (a edificação), em
 ``core.vento_portico`` (cargas e solução do pórtico) e em ``core.vento_registro`` (o registro do
@@ -1081,7 +1081,7 @@ def _aba_verificacoes(
             "Vizinhança só pelo fator f_v da norma para duas edificações altas; túnel de vento "
             "e estudos de topografia complexa não são cobertos.",
             "O pórtico é plano e linear; cargas de peso próprio, sobrecarga e as combinações da "
-            "NBR 8800 ficam em Casos e combinações de carga e em Estruturas de aço.",
+            "NBR 8800 ficam em Casos e combinações de carga e em Barras, treliças e pórticos.",
         ]
     )
     contexto: dict[str, Any] = {

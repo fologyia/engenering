@@ -1,4 +1,4 @@
-"""O que o esqueleto do modelo diz para a página Contraventamento de estruturas abertas.
+"""O que o esqueleto do modelo diz para a página Contraventamento.
 
 Em vez de digitar a planta, as cotas, os vãos e o contraventamento, o programa lê o esqueleto da
 macro do SolidWorks:

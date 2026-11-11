@@ -48,8 +48,9 @@ def test_todo_texto_de_ajuda_e_usado_e_simples():
 
 def test_no_menu_e_registrada_em_ligacoes_e_bases():
     modulo = next(m for m in listar_modulos() if m.id == bp.MODULO_ID)
-    assert modulo.pagina == PAGINA and modulo.grupo_navegacao == "Ligações e bases"
-    assert nv.grupo_da_pagina(PAGINA).nome == "Ligações e bases"
+    assert modulo.pagina == PAGINA and modulo.grupo_navegacao == "Estrutura metálica"
+    assert nv.grupo_da_pagina(PAGINA).nome == "Estrutura metálica"
+    assert nv.item_da_pagina(PAGINA).secao == nv.LIGACOES
 
 
 def test_pagina_padrao_tem_ajuda_em_tudo_e_os_numeros_do_nucleo(banco_isolado):

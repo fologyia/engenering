@@ -1,4 +1,4 @@
-"""Croquis dos casos de máquinas do Assistente de cargas, nas mesmas letras dos campos.
+"""Croquis dos casos de máquinas do Cálculo de peças, nas mesmas letras dos campos.
 
 Reaproveita as primitivas de :mod:`components.load_models`. O desenho é fixo e sem escala: ele serve
 para mostrar o que cada letra do formulário significa, e o resultado do cálculo vai nas tabelas.

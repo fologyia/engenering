@@ -87,7 +87,7 @@ from core.project_workflow import (
 )
 
 st.set_page_config(
-    page_title="Projetos permanentes",
+    page_title="Projetos",
     page_icon=":material/folder_managed:",
     layout="wide",
 )
@@ -98,7 +98,7 @@ cabecalho_pagina(
     categoria="GESTÃO INDUSTRIAL",
     icone=":material/folder_managed:",
     cor="blue",
-    ajuda_modulo="Projetos permanentes",
+    ajuda_modulo="Projetos",
     acoes=(("app_pages/painel_industrial.py", "Painel da carteira", ":material/dashboard:"),),
 )
 
@@ -406,7 +406,7 @@ if not ativo_contexto:
     )
     st.page_link(
         "app_pages/painel_industrial.py",
-        label="Ver a carteira inteira no Painel industrial",
+        label="Ver a carteira inteira no Painel dos projetos",
         icon=":material/dashboard:",
     )
     arquivo = st.file_uploader("Ou importe um projeto exportado pelo aplicativo", type=["json"])
@@ -439,16 +439,16 @@ c5.metric(
 
 with st.container(horizontal=True):
     st.page_link(
-        "app_pages/central_validacao.py", label="Central de validação", icon=":material/fact_check:"
+        "app_pages/central_validacao.py", label="Validação do projeto", icon=":material/fact_check:"
     )
     st.page_link(
         "app_pages/central_relatorios.py",
-        label="Central de relatórios",
+        label="Memorial de cálculo",
         icon=":material/description:",
     )
     st.page_link("app_pages/casos_carga.py", label="Casos de carga", icon=":material/layers:")
     st.page_link(
-        "app_pages/materiais_tecnicos.py", label="Materiais técnicos", icon=":material/science:"
+        "app_pages/materiais_tecnicos.py", label="Materiais do projeto", icon=":material/science:"
     )
     pacote = exportar_projeto(projeto["id"])
     st.download_button(
@@ -642,7 +642,7 @@ with abas[1], secao_protegida("aba 2"):
             )
             st.page_link(
                 "app_pages/central_relatorios.py",
-                label="Ir para a Central de relatórios",
+                label="Ir para o Memorial de cálculo",
                 icon=":material/description:",
             )
 
@@ -1906,7 +1906,7 @@ with abas[9], secao_protegida("aba 10"):
     st.subheader("Importar outro projeto")
     st.page_link(
         "app_pages/painel_industrial.py",
-        label="Backup do banco e exportação ou restauração da carteira inteira: Painel industrial",
+        label="Backup do banco e exportação ou restauração da carteira inteira: Painel dos projetos",
         icon=":material/database:",
     )
     novo_arquivo = st.file_uploader(

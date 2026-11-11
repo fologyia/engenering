@@ -54,4 +54,20 @@ AJUDA: dict[str, str] = {
     "btn_adotar": "Troca o perfil da viga pelo mais leve que atende.",
     "btn_csv": "As verificações em CSV (abre no Excel).",
     "reg_registrar": "Grava a verificação da viga no projeto ativo: o memorial ganha o capítulo.",
+    "sec_vibracao": (
+        "Se o piso balança quando alguém anda, pela NBR 8800 Anexo L: frequência natural nunca "
+        "abaixo de 3 Hz e o limite do uso do piso."
+    ),
+    "uso_vibracao": (
+        "Onde se caminha, a frequência precisa passar de 4 Hz (flecha total até 20 mm). Onde se "
+        "pula ou dança, 6 Hz (9 mm); em aeróbica, 8 Hz (5 mm). Só manutenção: vale o mínimo de 3 Hz."
+    ),
+    "flecha_apoio": (
+        "Quanto desce, no meio do vão dela, a viga que apoia esta (combinação frequente, em mm). O "
+        "piso balança com as duas juntas. Zero quando a viga apoia direto no pilar."
+    ),
+    "res_frequencia": (
+        "Frequência natural do piso, f ≈ 18/√δ, com a flecha total na combinação frequente. Abaixo "
+        "de 3 Hz nunca; o mínimo do uso está nas verificações."
+    ),
 }

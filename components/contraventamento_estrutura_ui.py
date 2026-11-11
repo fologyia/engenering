@@ -1,4 +1,4 @@
-"""Interface da página Contraventamento de estruturas abertas.
+"""Interface da página Contraventamento.
 
 Só desenha: o cálculo está em :mod:`core.contraventamento_plataforma` (vento em
 :mod:`core.vento_estrutura_aberta` ou, viga a viga, em :mod:`core.contraventamento_vento_barras`,
@@ -1406,7 +1406,7 @@ def _aba_vento(r: cp.ResultadoContraventamento) -> None:
         help=AJUDA["btn_plano"],
     ) and gravar_acoes_no_plano(
         var.acoes_para_o_plano(r.vento, forma=forma),
-        origem="Contraventamento de estruturas abertas",
+        origem="Contraventamento",
     ):
         st.success("Vento gravado no plano de cargas do projeto.", icon=":material/check_circle:")
     st.caption(" · ".join(r.vento.vento_no_topo.memoria))

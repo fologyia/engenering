@@ -1,13 +1,13 @@
 """Guardar uma montagem e ligar cálculos entre si.
 
-Uma montagem salva vira um registro técnico do projeto: entra no memorial e na Central de validação
+Uma montagem salva vira um registro técnico do projeto: entra no memorial e na Validação do projeto
 como qualquer outro cálculo, e leva junto o desenho, para reabrir depois. O arquivo JSON faz o mesmo
 papel fora do projeto.
 
 A referência é o caminho inverso. Um bloco aponta para o resultado de um registro pelo id e pela
 assinatura do registro, e guarda o valor que usou. Se o registro mudar, some ou deixar de ter aquele
 resultado, ``conferir_referencias`` diz. O vínculo também vai em ``dependencias_ids``: é ele que faz
-a Central de validação marcar o cálculo como desatualizado.
+a Validação do projeto marcar o cálculo como desatualizado.
 """
 
 from __future__ import annotations

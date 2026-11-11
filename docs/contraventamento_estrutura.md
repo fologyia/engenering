@@ -1,6 +1,6 @@
-# Contraventamento de estruturas abertas — escopo, fórmulas e conferências
+# Contraventamento — escopo, fórmulas e conferências
 
-A página **Contraventamento de estruturas abertas** dimensiona o contraventamento vertical de
+A página **Contraventamento** dimensiona o contraventamento vertical de
 plataformas, mezaninos, pipe racks e outras estruturas **sem fechamento**, da planta à diagonal
 verificada, sem montar o modelo estrutural. O núcleo não depende do Streamlit.
 

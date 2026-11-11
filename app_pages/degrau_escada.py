@@ -3,15 +3,15 @@ import streamlit as st
 from components.degrau_ui import mostrar_degrau_de_escada
 from components.ui import cabecalho_pagina, configurar_pagina
 
-configurar_pagina("Degrau de escada em grade", ":material/stairs:")
+configurar_pagina("Escada em grade", ":material/stairs:")
 cabecalho_pagina(
-    "Degrau de escada em grade",
+    "Escada em grade",
     "Degrau industrial em grade de piso eletrofundida (Selmec DS) • NR-12 • NR-22 • Critério "
     "Anglo • NBR 8800 • ISO 14122-3",
     categoria="Dimensionamento",
     icone=":material/stairs:",
     cor="green",
-    ajuda_modulo="Degrau de escada em grade",
+    ajuda_modulo="Escada em grade",
     acoes=(("app_pages/casos_carga.py", "Casos de carga", ":material/layers:"),),
     modulo_id="degrau_escada",
 )

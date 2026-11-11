@@ -23,7 +23,7 @@ cabecalho_pagina(
     cor="violet",
     acoes=(
         ("app_pages/vigas_eixos.py", "Vigas e eixos", ":material/linear_scale:"),
-        ("app_pages/estruturas_aco.py", "Estruturas de aço", ":material/domain:"),
+        ("app_pages/estruturas_aco.py", "Barras, treliças e pórticos", ":material/domain:"),
     ),
 )
 st.caption(

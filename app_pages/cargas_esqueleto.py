@@ -38,7 +38,7 @@ mapa_do_projeto(AJUDA_BASE["sec_mapa"])
 projeto = obter_projeto_ativo()
 if projeto is None:
     st.info(
-        "Nenhum projeto ativo. Abra ou crie um em **Projetos permanentes**: as cargas ficam "
+        "Nenhum projeto ativo. Abra ou crie um em **Projetos**: as cargas ficam "
         "guardadas no projeto e vão para o plano de cargas dele.",
         icon=":material/folder_off:",
     )

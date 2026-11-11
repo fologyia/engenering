@@ -19,18 +19,18 @@ from core.project_validation import SEVERIDADES, validar_projeto
 from core.project_workflow import avaliar_todas_transicoes
 
 st.set_page_config(
-    page_title="Central de validação",
+    page_title="Validação do projeto",
     page_icon=":material/fact_check:",
     layout="wide",
 )
 
 cabecalho_pagina(
-    "Central de validação",
+    "Validação do projeto",
     "Uma fila única para bloqueios técnicos, lacunas documentais, normas e pendências de emissão.",
     categoria="CONTROLE INDUSTRIAL",
     icone=":material/fact_check:",
     cor="orange",
-    ajuda_modulo="Central de validação",
+    ajuda_modulo="Validação do projeto",
     acoes=(
         ("app_pages/painel_industrial.py", "Painel", ":material/dashboard:"),
         ("app_pages/central_relatorios.py", "Relatórios", ":material/description:"),

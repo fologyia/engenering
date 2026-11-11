@@ -802,7 +802,7 @@ def _limite_fadiga(c: Contexto) -> dict[str, Any]:
         f"Tabela: confiabilidade de {confianca}",
     )
     c.hipoteses.append(
-        "S_e pelos fatores de Marin de Shigley, os mesmos do Assistente de cargas. O k_b pelo "
+        "S_e pelos fatores de Marin de Shigley, os mesmos do Cálculo de peças. O k_b pelo "
         "diâmetro vale para eixo girando, de 2,79 a 254 mm."
     )
     base = LimiteBase(sut, MATERIAIS_DE_FADIGA.index(categoria))
@@ -1397,7 +1397,7 @@ BLOCOS: tuple[Bloco, ...] = (
             Opcao(
                 "entalhe",
                 "Tipo de entalhe",
-                "Os mesmos do Assistente de cargas. Sem raio definido, q fica em 1, a favor.",
+                "Os mesmos do Cálculo de peças. Sem raio definido, q fica em 1, a favor.",
                 ee.ENTALHES,
                 ee.ENTALHE_LISO,
             ),

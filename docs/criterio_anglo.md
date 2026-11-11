@@ -29,7 +29,7 @@ abas, com o número do item.
 
 ## Verificações acrescentadas com o critério ligado
 
-**Contraventamento de estruturas abertas** (`contraventamento_barras.verificacoes_anglo`): espessura
+**Contraventamento** (`contraventamento_barras.verificacoes_anglo`): espessura
 mínima da cantoneira, redução do comprimento (INFO), diâmetro mínimo do tirante, diâmetro mínimo do
 parafuso, parafuso acima de 1" (ALERTA), A307 numa diagonal (NÃO OK) e capacidade mínima da ligação.
 O tipo de estrutura troca o limite do deslocamento pelo da Tabela 4.

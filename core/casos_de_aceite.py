@@ -1,7 +1,7 @@
-"""Casos de aceite dos cálculos, conferidos ao vivo na Central de validação.
+"""Casos de aceite dos cálculos, conferidos ao vivo na Validação do projeto.
 
 Cada caso é um número que o cálculo tem de reproduzir (conta à mão, exemplo de norma ou pedido do
-usuário), com a tolerância e a fonte. A Central de validação roda todos a cada abertura — a versão
+usuário), com a tolerância e a fonte. A Validação do projeto roda todos a cada abertura — a versão
 web não roda pytest —, e ``tests/test_casos_de_aceite.py`` roda os mesmos no CI.
 
 Sem Streamlit.

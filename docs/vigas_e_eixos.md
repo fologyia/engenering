@@ -471,7 +471,7 @@ estimativa de mão, com o mesmo comprimento de flambagem nos dois planos —
 com aviso quando ele fica abaixo de 10 e a página, o registro e o memorial
 (tabela de estabilidade) mostrando os dois fatores. Travamento lateral,
 comprimento de flambagem diferente fora do plano e flambagem lateral com
-torção continuam sendo assunto de Flambagem de colunas e Estruturas de aço.
+torção continuam sendo assunto de Flambagem de colunas e Barras, treliças e pórticos.
 
 ### Torção por excentricidade do centro de cisalhamento
 

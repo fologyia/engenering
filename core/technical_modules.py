@@ -116,7 +116,7 @@ def _registrar_padrao() -> None:
         ),
         ModuloTecnico(
             id="colunas_do_modelo",
-            titulo="Colunas do modelo",
+            titulo="Pilares do modelo",
             versao="1.0",
             pagina="app_pages/colunas_do_modelo.py",
             grupo_navegacao="Modelo SolidWorks",
@@ -126,7 +126,7 @@ def _registrar_padrao() -> None:
                 "Todos os pilares do modelo do SolidWorks com os travamentos lidos do esqueleto, "
                 "em x e em y: o K de cada trecho pela Tabela E.1 e a verificação pela NBR 8800."
             ),
-            aliases=("Pilares do modelo", "Travamentos dos pilares"),
+            aliases=("Colunas do modelo", "Pilares do modelo", "Travamentos dos pilares"),
         ),
         ModuloTecnico(
             id="reacoes_nas_bases",
@@ -178,14 +178,14 @@ def _registrar_padrao() -> None:
             titulo="Análise estática",
             versao="1.1",
             pagina="app_pages/analise_estatica.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=10,
             icone=":material/analytics:",
             descricao="Estado plano de tensões, equivalentes e margens estáticas.",
         ),
         ModuloTecnico(
             id="vento_nbr6123",
-            titulo="Vento nas estruturas",
+            titulo="Vento em edificações",
             versao="1.0",
             pagina="app_pages/vento_nbr6123.py",
             grupo_navegacao="Cargas e vento",
@@ -197,6 +197,7 @@ def _registrar_padrao() -> None:
                 "cargas do pórtico transversal."
             ),
             aliases=(
+                "Vento nas estruturas",
                 "Vento",
                 "NBR 6123",
                 "Ação do vento",
@@ -232,7 +233,7 @@ def _registrar_padrao() -> None:
             titulo="Flambagem de colunas",
             versao="3.0",
             pagina="app_pages/flambagem_colunas.py",
-            grupo_navegacao="Barras e vigas",
+            grupo_navegacao="Estrutura metálica",
             ordem=20,
             icone=":material/architecture:",
             descricao=(
@@ -254,7 +255,7 @@ def _registrar_padrao() -> None:
             titulo="Vigas e eixos",
             versao="1.0",
             pagina="app_pages/vigas_eixos.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=20,
             icone=":material/linear_scale:",
             descricao=(
@@ -276,20 +277,21 @@ def _registrar_padrao() -> None:
             titulo="Análise de fadiga",
             versao="1.2",
             pagina="app_pages/analise_fadiga.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=30,
             icone=":material/cycle:",
             descricao="Resistência à fadiga, critérios de tensão média e vida estimada.",
         ),
         ModuloTecnico(
             id="assistente_cargas",
-            titulo="Assistente de cargas",
+            titulo="Cálculo de peças",
             versao="2.1",
             pagina="app_pages/assistente_cargas.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=60,
             icone=":material/manufacturing:",
             descricao="Parafusos, vigas, barras, perfis e elementos de máquinas.",
+            aliases=("Assistente de cargas",),
         ),
         ModuloTecnico(
             id="desenhar_secao",
@@ -306,7 +308,7 @@ def _registrar_padrao() -> None:
             titulo="Círculo de Mohr",
             versao="1.1",
             pagina="app_pages/circulo_mohr.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=40,
             icone=":material/donut_large:",
             descricao="Transformações, tensões principais e estados 2D/3D.",
@@ -316,7 +318,7 @@ def _registrar_padrao() -> None:
             titulo="Ajustes e tolerâncias",
             versao="1.0",
             pagina="app_pages/ajustes_e_tolerancias.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=42,
             icone=":material/settings_input_component:",
             descricao=(
@@ -330,7 +332,7 @@ def _registrar_padrao() -> None:
             titulo="Montador de fórmulas",
             versao="1.0",
             pagina="app_pages/montador_formulas.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=45,
             icone=":material/function:",
             descricao="Blocos de seção, esforços e critério, com a fórmula isolada na grandeza.",
@@ -340,7 +342,7 @@ def _registrar_padrao() -> None:
             titulo="Montador de fluidos",
             versao="1.0",
             pagina="app_pages/montador_fluidos.py",
-            grupo_navegacao="Mecânica dos fluidos",
+            grupo_navegacao="Mecânica",
             ordem=70,
             icone=":material/water_drop:",
             descricao="Blocos de fluido, tubulação e verificação, com a fórmula isolada.",
@@ -350,7 +352,7 @@ def _registrar_padrao() -> None:
             titulo="Rede de tubos",
             versao="1.0",
             pagina="app_pages/rede_de_tubos.py",
-            grupo_navegacao="Mecânica dos fluidos",
+            grupo_navegacao="Mecânica",
             ordem=71,
             icone=":material/lan:",
             descricao=(
@@ -364,7 +366,7 @@ def _registrar_padrao() -> None:
             titulo="Análise de sensibilidade",
             versao="1.0",
             pagina="app_pages/analise_sensibilidade.py",
-            grupo_navegacao="Mecânica geral",
+            grupo_navegacao="Mecânica",
             ordem=50,
             icone=":material/tune:",
             descricao="Influência local, Monte Carlo e risco de não atendimento.",
@@ -374,17 +376,17 @@ def _registrar_padrao() -> None:
             titulo="Projeto de parafusos",
             versao="1.0",
             pagina="app_pages/projeto_parafusos.py",
-            grupo_navegacao="Ligações e bases",
+            grupo_navegacao="Estrutura metálica",
             ordem=20,
             icone=":material/build:",
             descricao="Verificação orientativa de juntas e grupos parafusados.",
         ),
         ModuloTecnico(
             id="degrau_escada",
-            titulo="Degrau de escada em grade",
+            titulo="Escada em grade",
             versao="1.0",
             pagina="app_pages/degrau_escada.py",
-            grupo_navegacao="Barras e vigas",
+            grupo_navegacao="Estrutura metálica",
             ordem=10,
             icone=":material/stairs:",
             descricao=(
@@ -393,6 +395,7 @@ def _registrar_padrao() -> None:
                 "NR-22, Critério Anglo, NBR 8800 e ISO 14122-3."
             ),
             aliases=(
+                "Degrau de escada em grade",
                 "Degrau de escada",
                 "Escada industrial",
                 "Grade de piso",
@@ -405,7 +408,7 @@ def _registrar_padrao() -> None:
             titulo="Vigas de piso",
             versao="1.0",
             pagina="app_pages/viga_de_piso.py",
-            grupo_navegacao="Barras e vigas",
+            grupo_navegacao="Estrutura metálica",
             ordem=10,
             icone=":material/view_week:",
             descricao=(
@@ -420,7 +423,7 @@ def _registrar_padrao() -> None:
             titulo="Ligações estruturais",
             versao="1.0",
             pagina="app_pages/ligacoes_estruturais.py",
-            grupo_navegacao="Ligações e bases",
+            grupo_navegacao="Estrutura metálica",
             ordem=10,
             icone=":material/link:",
             descricao=(
@@ -441,10 +444,10 @@ def _registrar_padrao() -> None:
         ),
         ModuloTecnico(
             id="contraventamento_estrutura",
-            titulo="Contraventamento de estruturas abertas",
+            titulo="Contraventamento",
             versao="1.0",
             pagina="app_pages/contraventamento_estrutura.py",
-            grupo_navegacao="Barras e vigas",
+            grupo_navegacao="Estrutura metálica",
             ordem=30,
             icone=":material/grid_on:",
             descricao=(
@@ -453,6 +456,7 @@ def _registrar_padrao() -> None:
                 "B₂, diagonais (cantoneira, tubo ou tirante), ligações e deslocamentos."
             ),
             aliases=(
+                "Contraventamento de estruturas abertas",
                 "Contraventamento de plataforma",
                 "Estrutura aberta",
                 "Plataforma aberta",
@@ -467,7 +471,7 @@ def _registrar_padrao() -> None:
             titulo="Ligação de contraventamento",
             versao="1.0",
             pagina="app_pages/ligacao_contraventamento.py",
-            grupo_navegacao="Ligações e bases",
+            grupo_navegacao="Estrutura metálica",
             ordem=30,
             icone=":material/hub:",
             descricao=(
@@ -489,7 +493,7 @@ def _registrar_padrao() -> None:
             titulo="Placas de base",
             versao="1.0",
             pagina="app_pages/placa_de_base.py",
-            grupo_navegacao="Ligações e bases",
+            grupo_navegacao="Estrutura metálica",
             ordem=40,
             icone=":material/anchor:",
             descricao=(
@@ -507,13 +511,14 @@ def _registrar_padrao() -> None:
         ),
         ModuloTecnico(
             id="estruturas_aco",
-            titulo="Estruturas de aço",
+            titulo="Barras, treliças e pórticos",
             versao="1.1",
             pagina="app_pages/estruturas_aco.py",
-            grupo_navegacao="Barras e vigas",
+            grupo_navegacao="Estrutura metálica",
             ordem=40,
             icone=":material/domain:",
             descricao="Barras, ligações, combinações e modelos estruturais 2D.",
+            aliases=("Estruturas de aço",),
         ),
     )
     for modulo in modulos:

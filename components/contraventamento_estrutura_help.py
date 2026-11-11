@@ -1,4 +1,4 @@
-"""Textos dos “?” da página Contraventamento de estruturas abertas, em linguagem simples.
+"""Textos dos “?” da página Contraventamento, em linguagem simples.
 
 Cada texto diz o que é o campo, como preencher e, quando houver, a simplificação adotada. Um teste
 garante que todo texto é usado por algum campo e que todo campo tem o seu.

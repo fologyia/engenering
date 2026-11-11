@@ -1,4 +1,4 @@
-"""Desenhos em planta (SVG) da página Vento nas estruturas: as zonas de pressão de um caso e as
+"""Desenhos em planta (SVG) da página Vento em edificações: as zonas de pressão de um caso e as
 faixas de altas sucções das vedações.
 
 * :func:`svg_planta` — para um caso de vento (direção e ``c_pi``), como a norma divide o telhado

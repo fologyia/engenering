@@ -58,7 +58,7 @@ cabecalho_pagina(
     icone=":material/build:",
     cor="orange",
     ajuda_modulo="Projeto de parafusos",
-    acoes=(("app_pages/assistente_cargas.py", "Assistente de cargas", ":material/manufacturing:"),),
+    acoes=(("app_pages/assistente_cargas.py", "Cálculo de peças", ":material/manufacturing:"),),
     modulo_id="projeto_parafusos",
 )
 st.session_state.setdefault("parafuso_rosca", "M10")

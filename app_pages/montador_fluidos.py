@@ -14,7 +14,7 @@ configurar_pagina(PARTE.titulo, ":material/water_drop:")
 cabecalho_pagina(
     PARTE.titulo,
     PARTE.subtitulo,
-    categoria="Mecânica dos fluidos",
+    categoria="Mecânica",
     icone=":material/water_drop:",
     modulo_id=PARTE.modulo_id,
 )

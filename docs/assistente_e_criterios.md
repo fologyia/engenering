@@ -1,4 +1,4 @@
-# Assistente de cargas e critérios de falha
+# Cálculo de peças e critérios de falha
 
 Este documento registra as equações, unidades, hipóteses e critérios usados
 para converter carregamentos em tensões e avaliar materiais. Os casos de

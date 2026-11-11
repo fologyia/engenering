@@ -1,6 +1,6 @@
 """Documento Word (editável) do degrau de escada em grade, com tudo o que a página mostra.
 
-O botão no fim da página "Degrau de escada em grade" baixa este arquivo para reaproveitar os
+O botão no fim da página "Escada em grade" baixa este arquivo para reaproveitar os
 dados em outro documento: identificação, todos os dados de entrada, o quadro-resumo, as 38
 verificações, a geometria, os lances e patamares (com o esquemático e a escada em 3D), o memorial
 do modelo adotado, a longarina (cargas, trechos, reações, verificações e diagramas), os 64 modelos,

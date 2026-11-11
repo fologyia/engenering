@@ -1,4 +1,4 @@
-"""Textos de ajuda ("?") da página Colunas do modelo, em linguagem simples."""
+"""Textos de ajuda ("?") da página Pilares do modelo, em linguagem simples."""
 
 from __future__ import annotations
 

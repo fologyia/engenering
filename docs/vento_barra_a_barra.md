@@ -15,7 +15,7 @@ Arquivos: `core/vento_por_barras.py` (cálculo, plano de cargas, CSV),
 
 - **Esqueleto do modelo**: o `…_esqueleto.csv` da macro do SolidWorks (página Cargas do esqueleto),
   com as pontas de cada barra, as duas medidas da seção e a direção da maior (a alma, macro v5).
-  O mesmo cálculo alimenta o **Contraventamento de estruturas abertas** (seletor "Viga a viga, pilar
+  O mesmo cálculo alimenta o **Contraventamento** (seletor "Viga a viga, pilar
   a pilar"), levado aos pisos por faixas (`core/contraventamento_vento_barras.py`).
   As chapas ficam de fora: piso deitado não pega vento e chapa em pé pode ser só apoio de carga do
   modelo — a página lista as chapas em pé para o engenheiro decidir.
@@ -142,7 +142,7 @@ Efeitos dinâmicos (capítulo 9); muros, placas e coberturas isoladas (Tabelas 2
 nas estruturas); chapas do esqueleto como superfície (entram como painel); as combinações (saem do
 plano de cargas). A estabilidade de uma estrutura sem contraventamento numa direção (duas colunas
 numa linha, por exemplo) vem do engaste na base ou do pórtico — verificar pelo modelo (Esforços do
-modelo), não pelo Contraventamento de estruturas abertas, que supõe linhas contraventadas.
+modelo), não pelo Contraventamento, que supõe linhas contraventadas.
 
 ## Testes
 

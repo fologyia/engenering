@@ -1,6 +1,6 @@
 """Interface da página Vento em estruturas abertas (só o vento, para anotar e lançar no modelo).
 
-Usa os mesmos campos da página Contraventamento de estruturas abertas (mesmas chaves de sessão): o
+Usa os mesmos campos da página Contraventamento (mesmas chaves de sessão): o
 que se digita numa aparece na outra. O cálculo está em :mod:`core.vento_estrutura_aberta` e o
 registro, as ações do plano e os CSV em :mod:`core.vento_aberto_registro`.
 """
@@ -84,7 +84,7 @@ FORA_DO_ESCOPO = (
     "Estrutura que não é uma grade regular de pórticos (duas colunas, balanço, escada ao lado) e "
     "vento diagonal: use “Viga a viga, pilar a pilar”, acima.",
     "Efeitos dinâmicos do vento (capítulo 9 da NBR 6123).",
-    "Coberturas isoladas e placas (Tabelas 24 e 25 e 7.1): use o módulo Vento nas estruturas.",
+    "Coberturas isoladas e placas (Tabelas 24 e 25 e 7.1): use o módulo Vento em edificações.",
     "Barras de seção circular com o C_a menor da Figura 13: o programa usa a Figura 12 (a favor da "
     "segurança).",
     "As combinações: estas são forças características — as combinações saem do plano de cargas.",

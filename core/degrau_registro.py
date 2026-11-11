@@ -31,7 +31,7 @@ from core.verificacao import (
 )
 
 MODULO_ID = "degrau_escada"
-MODULO_TITULO = "Degrau de escada em grade"
+MODULO_TITULO = "Escada em grade"
 LARGURA_UTIL_DXA = 9360  # largura útil do memorial, em vinte avos de ponto
 
 REFERENCIAS = [

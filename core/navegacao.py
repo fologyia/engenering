@@ -20,6 +20,8 @@ class ItemMenu:
     titulo: str
     icone: str
     tarefa: str  # o que a pessoa quer fazer, na voz dela (rota rápida da Visão geral)
+    secao: str = ""  # o submenu dentro do grupo; vazio = direto no grupo
+    outros_nomes: tuple[str, ...] = ()  # nomes antigos e apelidos: a busca acha por eles também
 
 
 @dataclass(frozen=True)
@@ -29,10 +31,25 @@ class GrupoMenu:
     descricao: str
     itens: tuple[ItemMenu, ...]
 
+    def secoes(self) -> list[tuple[str, list[ItemMenu]]]:
+        """Os submenus na ordem em que aparecem; itens sem seção ficam num bloco de nome vazio."""
+        saida: list[tuple[str, list[ItemMenu]]] = []
+        for item in self.itens:
+            if not saida or saida[-1][0] != item.secao:
+                saida.append((item.secao, []))
+            saida[-1][1].append(item)
+        return saida
+
 
 VISAO_GERAL = ItemMenu(
     "app_pages/inicio.py", "Visão geral", ":material/home:", "Ver tudo o que o programa faz"
 )
+
+BARRAS = "Barras e vigas"
+LIGACOES = "Ligações e bases"
+PECAS = "Peças de máquinas"
+TENSOES = "Tensões e fadiga"
+FLUIDOS = "Fluidos"
 
 MENU: tuple[GrupoMenu, ...] = (
     GrupoMenu(
@@ -48,15 +65,17 @@ MENU: tuple[GrupoMenu, ...] = (
             ),
             ItemMenu(
                 "app_pages/gestao_projetos.py",
-                "Projetos permanentes",
+                "Projetos",
                 ":material/folder_managed:",
                 "Criar, abrir ou revisar um projeto e os cálculos registrados nele",
+                outros_nomes=("Projetos permanentes", "Gestão de projetos industriais"),
             ),
             ItemMenu(
                 "app_pages/painel_industrial.py",
-                "Painel industrial",
+                "Painel dos projetos",
                 ":material/dashboard:",
                 "Ver a carteira: o que está travado, vencido ou desatualizado",
+                outros_nomes=("Painel industrial",),
             ),
             ItemMenu(
                 "app_pages/base_tecnica.py",
@@ -85,9 +104,10 @@ MENU: tuple[GrupoMenu, ...] = (
             ),
             ItemMenu(
                 "app_pages/vento_nbr6123.py",
-                "Vento nas estruturas",
+                "Vento em edificações",
                 ":material/storm:",
                 "Calcular o vento de edificação fechada ou galpão (NBR 6123)",
+                outros_nomes=("Vento nas estruturas",),
             ),
             ItemMenu(
                 "app_pages/plano_cargas.py",
@@ -106,8 +126,8 @@ MENU: tuple[GrupoMenu, ...] = (
     GrupoMenu(
         "Modelo SolidWorks",
         ":material/view_in_ar:",
-        "Ler os esforços do modelo e verificar todas as barras, fundações e placas de base; "
-        "sensores do gerenciador; reações nas bases para o projeto civil; lista de material.",
+        "Ler os esforços do modelo e verificar barras, pilares, fundações e placas de base; "
+        "reações para o projeto civil, sensores, modelo em 3D e lista de material.",
         (
             ItemMenu(
                 "app_pages/esforcos_modelo.py",
@@ -117,15 +137,10 @@ MENU: tuple[GrupoMenu, ...] = (
             ),
             ItemMenu(
                 "app_pages/colunas_do_modelo.py",
-                "Colunas do modelo",
+                "Pilares do modelo",
                 ":material/view_column:",
                 "Verificar todos os pilares com os travamentos lidos do esqueleto, em x e em y",
-            ),
-            ItemMenu(
-                "app_pages/sensores_do_modelo.py",
-                "Sensores do modelo",
-                ":material/sensors:",
-                "Levar ao memorial a tensão, o deslocamento e o FS dos sensores do SolidWorks",
+                outros_nomes=("Colunas do modelo",),
             ),
             ItemMenu(
                 "app_pages/reacoes_nas_bases.py",
@@ -134,10 +149,10 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Mandar ao engenheiro civil as forças e momentos de cada pé, caso a caso (Excel)",
             ),
             ItemMenu(
-                "app_pages/lista_de_material.py",
-                "Lista de material",
-                ":material/inventory_2:",
-                "Gerar a lista de material e a lista de corte do modelo",
+                "app_pages/sensores_do_modelo.py",
+                "Sensores do modelo",
+                ":material/sensors:",
+                "Levar ao memorial a tensão, o deslocamento e o FS dos sensores do SolidWorks",
             ),
             ItemMenu(
                 "app_pages/modelo_3d.py",
@@ -145,74 +160,86 @@ MENU: tuple[GrupoMenu, ...] = (
                 ":material/deployed_code:",
                 "Ver o modelo em 3D com o perfil real, as cargas, as reações e os resultados",
             ),
+            ItemMenu(
+                "app_pages/lista_de_material.py",
+                "Lista de material",
+                ":material/inventory_2:",
+                "Gerar a lista de material e a lista de corte do modelo",
+            ),
         ),
     ),
     GrupoMenu(
-        "Barras e vigas",
-        ":material/view_week:",
-        "Dimensionar uma barra isolada: viga de piso, coluna, contraventamento, degrau e longarina.",
+        "Estrutura metálica",
+        ":material/domain:",
+        "Uma peça de cada vez: vigas, colunas, contraventamento, escada, treliças e pórticos; "
+        "ligações, parafusos e placas de base pela NBR 8800:2025.",
         (
             ItemMenu(
                 "app_pages/viga_de_piso.py",
                 "Vigas de piso",
                 ":material/view_week:",
-                "Dimensionar a viga que apoia o piso da plataforma",
+                "Dimensionar a viga que apoia o piso da plataforma, com a vibração do piso",
+                secao=BARRAS,
             ),
             ItemMenu(
                 "app_pages/flambagem_colunas.py",
                 "Flambagem de colunas",
                 ":material/vertical_align_center:",
                 "Verificar coluna ou barra com compressão, flexão e esforços combinados",
+                secao=BARRAS,
             ),
             ItemMenu(
                 "app_pages/contraventamento_estrutura.py",
-                "Contraventamento de estruturas abertas",
+                "Contraventamento",
                 ":material/grid_on:",
                 "Dimensionar o contraventamento de uma estrutura aberta",
-            ),
-            ItemMenu(
-                "app_pages/estruturas_aco.py",
-                "Estruturas de aço",
-                ":material/domain:",
-                "Verificar barra, treliça ou pórtico de aço com várias normas",
+                secao=BARRAS,
+                outros_nomes=("Contraventamento de estruturas abertas",),
             ),
             ItemMenu(
                 "app_pages/degrau_escada.py",
-                "Degrau de escada em grade",
+                "Escada em grade",
                 ":material/stairs:",
                 "Calcular o degrau de escada, os lances, os patamares e a longarina",
+                secao=BARRAS,
+                outros_nomes=("Degrau de escada em grade",),
             ),
-        ),
-    ),
-    GrupoMenu(
-        "Ligações e bases",
-        ":material/link:",
-        "Ligações viga–viga e viga–pilar, perfis formados a frio, soldas, parafusos, "
-        "contraventamento e placas de base pela NBR 8800:2025.",
-        (
+            ItemMenu(
+                "app_pages/estruturas_aco.py",
+                "Barras, treliças e pórticos",
+                ":material/architecture:",
+                "Verificar barra, treliça ou pórtico de aço com várias normas",
+                secao=BARRAS,
+                outros_nomes=("Estruturas de aço",),
+            ),
             ItemMenu(
                 "app_pages/ligacoes_estruturais.py",
                 "Ligações estruturais",
                 ":material/link:",
                 "Verificar ligação de viga, de perfil formado a frio ou uma solda",
+                secao=LIGACOES,
             ),
             ItemMenu(
                 "app_pages/projeto_parafusos.py",
                 "Projeto de parafusos",
                 ":material/build:",
                 "Dimensionar ou conferir uma junta parafusada",
+                secao=LIGACOES,
+                outros_nomes=("Juntas parafusadas",),
             ),
             ItemMenu(
                 "app_pages/ligacao_contraventamento.py",
                 "Ligação de contraventamento",
                 ":material/hub:",
                 "Dimensionar a ligação de contraventamento (chapa de nó, UFM)",
+                secao=LIGACOES,
             ),
             ItemMenu(
                 "app_pages/placa_de_base.py",
                 "Placas de base",
                 ":material/anchor:",
                 "Dimensionar a placa de base e os chumbadores de um pilar",
+                secao=LIGACOES,
             ),
         ),
     ),
@@ -223,89 +250,96 @@ MENU: tuple[GrupoMenu, ...] = (
         (
             ItemMenu(
                 "app_pages/central_validacao.py",
-                "Central de validação",
+                "Validação do projeto",
                 ":material/fact_check:",
                 "Conferir pendências e preparar a liberação do projeto",
+                outros_nomes=("Central de validação",),
             ),
             ItemMenu(
                 "app_pages/central_relatorios.py",
-                "Central de relatórios",
+                "Memorial de cálculo",
                 ":material/description:",
                 "Gerar o memorial de cálculo em Word ou PDF",
+                outros_nomes=("Central de relatórios", "Relatórios"),
             ),
         ),
     ),
     GrupoMenu(
-        "Mecânica geral",
+        "Mecânica",
         ":material/precision_manufacturing:",
-        "Parafusos, roscas, vigas, eixos, engrenagens, fadiga e outros cálculos de peças.",
+        "Peças de máquinas (parafusos, molas, eixos, engrenagens, ajustes), tensões e fadiga, "
+        "tubulação e redes de fluidos.",
         (
             ItemMenu(
                 "app_pages/assistente_cargas.py",
-                "Assistente de cargas",
+                "Cálculo de peças",
                 ":material/calculate:",
-                "Parafusos, roscas, vigas, barras, perfis e elementos de máquinas",
+                "Parafusos, roscas, molas, eixos, engrenagens, vigas e outras peças, caso a caso",
+                secao=PECAS,
+                outros_nomes=("Assistente de cargas", "Elementos de máquinas"),
             ),
             ItemMenu(
                 "app_pages/montador_formulas.py",
                 "Montador de fórmulas",
                 ":material/function:",
                 "Ligar seção, esforços e critério e isolar a medida, a carga ou o material",
-            ),
-            ItemMenu(
-                "app_pages/analise_estatica.py",
-                "Análise estática",
-                ":material/functions:",
-                "Calcular tensões numa peça com força, momento, torque ou pressão",
+                secao=PECAS,
             ),
             ItemMenu(
                 "app_pages/vigas_eixos.py",
                 "Vigas e eixos",
                 ":material/linear_scale:",
                 "Calcular reações, diagramas e flecha de viga ou eixo",
-            ),
-            ItemMenu(
-                "app_pages/analise_fadiga.py",
-                "Análise de fadiga",
-                ":material/timeline:",
-                "Verificar fadiga de carga que varia com o tempo",
+                secao=PECAS,
             ),
             ItemMenu(
                 "app_pages/ajustes_e_tolerancias.py",
                 "Ajustes e tolerâncias",
                 ":material/settings_input_component:",
-                "Furo e eixo pela NBR 6158: folga, interferência e aperto do ajuste prensado",
+                "Furo e eixo pela NBR 6158, aperto do ajuste prensado e cadeia de cotas",
+                secao=PECAS,
+            ),
+            ItemMenu(
+                "app_pages/analise_estatica.py",
+                "Análise estática",
+                ":material/functions:",
+                "Calcular tensões numa peça com força, momento, torque ou pressão",
+                secao=TENSOES,
             ),
             ItemMenu(
                 "app_pages/circulo_mohr.py",
                 "Círculo de Mohr",
                 ":material/radio_button_unchecked:",
                 "Achar tensões principais a partir das componentes num ponto",
+                secao=TENSOES,
+            ),
+            ItemMenu(
+                "app_pages/analise_fadiga.py",
+                "Análise de fadiga",
+                ":material/timeline:",
+                "Verificar fadiga de carga que varia com o tempo",
+                secao=TENSOES,
             ),
             ItemMenu(
                 "app_pages/analise_sensibilidade.py",
                 "Análise de sensibilidade",
-                ":material/tune:",
+                ":material/query_stats:",
                 "Ver quais dados mais mexem no resultado",
+                secao=TENSOES,
             ),
-        ),
-    ),
-    GrupoMenu(
-        "Mecânica dos fluidos",
-        ":material/water_drop:",
-        "Tubulação, bombas, NPSH, hidrostática, medidores e canais.",
-        (
             ItemMenu(
                 "app_pages/montador_fluidos.py",
                 "Montador de fluidos",
                 ":material/water_drop:",
                 "Ligar fluido, tubo e verificação e isolar a vazão, o diâmetro ou a potência",
+                secao=FLUIDOS,
             ),
             ItemMenu(
                 "app_pages/rede_de_tubos.py",
                 "Rede de tubos",
                 ":material/lan:",
                 "Rede com ramais e malhas: a vazão de cada trecho e a pressão de cada nó",
+                secao=FLUIDOS,
             ),
         ),
     ),
@@ -334,22 +368,29 @@ MENU: tuple[GrupoMenu, ...] = (
             ),
             ItemMenu(
                 "app_pages/materiais_tecnicos.py",
-                "Materiais técnicos",
+                "Materiais do projeto",
                 ":material/science:",
-                "Cadastrar propriedades de material com origem confiável",
+                "Cadastrar no projeto propriedades de material com origem rastreável",
+                outros_nomes=("Materiais técnicos",),
             ),
         ),
     ),
     GrupoMenu(
         "Referências e ajuda",
         ":material/menu_book:",
-        "Guia, normas técnicas, conversor de unidades e assistente de projeto.",
+        "Guia, escolha do cálculo, normas técnicas e conversor de unidades.",
         (
             ItemMenu(
                 "app_pages/guia_geral.py",
                 "Guia geral",
                 ":material/help:",
                 "Aprender a usar cada página, com exemplos",
+            ),
+            ItemMenu(
+                "app_pages/assistente_projeto.py",
+                "Assistente de projeto",
+                ":material/route:",
+                "Montar um roteiro quando ainda não sei qual análise usar",
             ),
             ItemMenu(
                 "app_pages/normas_tecnicas.py",
@@ -362,12 +403,6 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Conversor de unidades",
                 ":material/swap_horiz:",
                 "Converter dados para as unidades do programa",
-            ),
-            ItemMenu(
-                "app_pages/assistente_projeto.py",
-                "Assistente de projeto",
-                ":material/route:",
-                "Montar um roteiro quando ainda não sei qual análise usar",
             ),
         ),
     ),

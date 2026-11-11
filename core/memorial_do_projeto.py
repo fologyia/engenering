@@ -1,7 +1,7 @@
 """Juntar num documento só o resultado das várias páginas do mesmo projeto.
 
 Cada página grava o seu cálculo no projeto ("Registrar no projeto"): a verificação das barras, os
-pilares, as ligações, as placas de base, as reações nas bases… O memorial (Central de relatórios)
+pilares, as ligações, as placas de base, as reações nas bases… O memorial (página Memorial de cálculo)
 junta esses registros. Este módulo arruma o que entra:
 
 * **um de cada** — o mesmo cálculo registrado de novo fica só com o mais novo (nas páginas do
@@ -274,7 +274,7 @@ def juntar(
         documento = superar_registro(
             documento,
             antigo,
-            motivo="Registrado de novo: vale o mais novo (Juntar o projeto, Central de relatórios).",
+            motivo="Registrado de novo: vale o mais novo (Juntar o projeto, Memorial de cálculo).",
             substituto_id=novo,
         )
     ordem = ordem_do_projeto(documento.get("registros_tecnicos", []) or [], fora=fora)

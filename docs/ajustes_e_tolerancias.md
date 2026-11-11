@@ -1,6 +1,6 @@
 # Ajustes e tolerâncias
 
-Página do grupo **Mecânica geral**. Dá os limites de um furo e de um eixo pela NBR 6158:1995 (a
+Página do grupo **Mecânica** (submenu Peças de máquinas). Dá os limites de um furo e de um eixo pela NBR 6158:1995 (a
 ISO 286-1), a folga ou a interferência do ajuste, o aperto de um ajuste prensado e qual ajuste
 escolher para segurar um torque.
 
@@ -43,9 +43,30 @@ na Tabela 18, U na 22, js na 32, s na 37), e nos dois exemplos da nota C da Tabe
 18 a 30 mm). Os testes guardam essas conferências. Os quatro ajustes H7 que o Assistente de
 cargas já usava dão exatamente os mesmos números.
 
-O aperto é o mesmo cálculo do caso *Ajuste prensado* do Assistente de cargas: Lamé (Shigley, cap. 3),
+O aperto é o mesmo cálculo do caso *Ajuste prensado* do Cálculo de peças: Lamé (Shigley, cap. 3),
 com a interferência útil descontada de 0,8·(Rz do eixo + Rz do furo), transmissão com a menor
 interferência e tensões com a maior.
+
+## Cadeia de cotas
+
+Na aba **Cadeia de cotas**, as medidas vão em fila, cada uma com o sentido:
+
+- a que **aumenta** a folga (a largura do alojamento) entra com +;
+- as que a **diminuem** (rolamentos, espaçadores, anéis) entram com −.
+
+A tolerância de cada elo vem dos afastamentos da linha ou de uma **classe ISO** (h11, js9…), que sai da
+NBR 6158 na própria medida. Linhas vazias não contam.
+
+- **Pior caso:** todos os elos no limite que mais atrapalha ao mesmo tempo. A folga nunca sai daqui.
+- **Estatístico (±3σ):** cada tolerância é ±3σ de um processo centrado; a folga tem média = soma das
+  médias e σ = √Σσᵢ². Cobre 99,73 % das montagens em série. Para poucas peças, vale o pior caso.
+- **Peso de cada elo:** no pior caso (a tolerância dele na soma) e na variação (σᵢ² na soma). Apertar
+  a tolerância de quem mais pesa é o que mais estreita a folga.
+- Com a **folga mínima** e a **máxima** exigidas, a página diz se atende no pior caso, só no
+  estatístico (e a fração das montagens que sairia) ou se não atende.
+
+Exemplo da tela: caixa de 60 (+0,10/0), dois rolamentos de 20 (0/−0,12) e espaçador de 19,8 h11 (0/−0,13).
+Folga nominal 0,20 mm; pior caso de 0,20 a 0,67 mm.
 
 ## Limites
 

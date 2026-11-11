@@ -1,4 +1,4 @@
-"""Interface da página Degrau de escada em grade.
+"""Interface da página Escada em grade.
 
 Só desenha a interface: todo cálculo está em :mod:`core.degrau_escada`, o registro e as tabelas
 em :mod:`core.degrau_registro` e o PDF em :mod:`core.degrau_relatorio`. A página recalcula a cada

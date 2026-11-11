@@ -391,7 +391,7 @@ def gerar_word_coluna(
     doc.paragrafo(
         "Verificação de barra isolada pela NBR 8800:2008, pela NBR 8800:2025 ou pelo "
         "AISC 360-16, com o critério da Anglo. Para a estrutura completa (pórtico, B₂, cargas "
-        "nocionais, ligações e placa de base), use Estruturas de aço.",
+        "nocionais, ligações e placa de base), use Barras, treliças e pórticos.",
         legenda=True,
     )
     return doc.bytes()

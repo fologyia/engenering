@@ -4,16 +4,16 @@ import streamlit as st
 from components.assistente_cargas_ui import caso_aberto, painel, tela_do_caso
 from components.ui import cabecalho_pagina, configurar_pagina
 
-configurar_pagina("Assistente de cargas", ":material/manufacturing:")
+configurar_pagina("Cálculo de peças", ":material/manufacturing:")
 
 cabecalho_pagina(
-    "Assistente de cargas",
+    "Cálculo de peças",
     "Parafusos, roscas, vigas, barras, perfis e elementos de máquinas: as forças que chegam em "
     "cada peça e se ela aguenta.",
     categoria="Preparação de dados",
     icone=":material/manufacturing:",
     cor="violet",
-    ajuda_modulo="Assistente de cargas",
+    ajuda_modulo="Cálculo de peças",
     acoes=(("app_pages/circulo_mohr.py", "Círculo de Mohr", ":material/donut_large:"),),
     modulo_id="assistente_cargas",
 )

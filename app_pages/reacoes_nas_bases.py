@@ -36,7 +36,7 @@ cabecalho_pagina(
 projeto = obter_projeto_ativo()
 if projeto is None:
     st.info(
-        "Nenhum projeto ativo. Abra ou crie um em **Projetos permanentes**: as reações saem dos "
+        "Nenhum projeto ativo. Abra ou crie um em **Projetos**: as reações saem dos "
         "resultados do SolidWorks gravados no projeto.",
         icon=":material/folder_off:",
     )

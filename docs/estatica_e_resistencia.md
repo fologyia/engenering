@@ -1,7 +1,7 @@
-# Estática e resistência no Assistente de cargas
+# Estática e resistência no Cálculo de peças
 
 São 15 casos para a pergunta do dia a dia: as forças que chegam, e se a peça aguenta. O painel do
-Assistente de cargas abre nesta área. Os módulos estão em `core/elementos_parafusos.py`,
+Cálculo de peças abre nesta área. Os módulos estão em `core/elementos_parafusos.py`,
 `core/elementos_vigas.py`, `core/elementos_barras.py` e `core/elementos_estatica.py`, e os desenhos
 feitos com os números do cálculo em `core/desenho_estatica.py`.
 

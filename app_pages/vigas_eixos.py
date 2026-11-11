@@ -117,8 +117,8 @@ cabecalho_pagina(
     cor="blue",
     ajuda_modulo="Vigas e eixos",
     acoes=(
-        ("app_pages/assistente_cargas.py", "Assistente de cargas", ":material/manufacturing:"),
-        ("app_pages/estruturas_aco.py", "Estruturas de aço", ":material/domain:"),
+        ("app_pages/assistente_cargas.py", "Cálculo de peças", ":material/manufacturing:"),
+        ("app_pages/estruturas_aco.py", "Barras, treliças e pórticos", ":material/domain:"),
     ),
     modulo_id="vigas_eixos",
 )
@@ -677,7 +677,7 @@ with st.container(border=True), secao_protegida("1. Modelo da barra"):
                 st.caption(
                     "Este projeto ainda não tem materiais qualificados. Use "
                     "`material catalogo <nome>` para a base do programa, ou "
-                    "cadastre em Materiais técnicos para o cálculo ficar "
+                    "cadastre em Materiais do projeto para o cálculo ficar "
                     "vinculado ao certificado."
                 )
         combinacoes_projeto = list((projeto_ativo or {}).get("combinacoes_carga", []))
@@ -1256,7 +1256,7 @@ fronteira_modelo(
     [
         "Efeitos de segunda ordem só entram se você escrever `segunda_ordem` no modelo; sem isso a compressão não amplifica a flecha.",
         "Imperfeições geométricas iniciais e desaprumo — a segunda ordem parte da barra perfeitamente reta.",
-        "Flambagem global, local ou lateral com torção — verifique em Flambagem de colunas e Estruturas de aço.",
+        "Flambagem global, local ou lateral com torção — verifique em Flambagem de colunas e Barras, treliças e pórticos.",
         "Deformação por cisalhamento (viga de Timoshenko): em vigas curtas (L/h < 10) a flecha real é maior.",
         "Empenamento restringido na torção — só a torção uniforme de Saint-Venant é considerada.",
         "Concentração de tensão em furos, entalhes, mudanças de seção e rasgos de chaveta.",
@@ -1597,6 +1597,6 @@ with st.container(border=True), secao_protegida("Precisa de ajuda para montar o 
 
 st.caption(
     "Modelo linear de Euler-Bernoulli. Para dimensionamento normativo de perfis "
-    "de aço use Estruturas de aço; para verificação de fadiga leve os esforços "
+    "de aço use Barras, treliças e pórticos; para verificação de fadiga leve os esforços "
     "desta página ao módulo de fadiga."
 )

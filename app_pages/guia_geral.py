@@ -71,39 +71,39 @@ st.info(
 
 opcoes = [
     "Comece aqui",
-    "Painel industrial",
-    "Projetos permanentes",
+    "Painel dos projetos",
+    "Projetos",
     "Base técnica do projeto",
     "Cargas do esqueleto",
     "Plano de cargas",
     "Esforços do modelo",
-    "Colunas do modelo",
+    "Pilares do modelo",
     "Lista de material",
     "Casos de carga",
-    "Central de validação",
-    "Central de relatórios",
-    "Materiais técnicos",
+    "Validação do projeto",
+    "Memorial de cálculo",
+    "Materiais do projeto",
     "Assistente de projeto",
     "Conversor de unidades",
     "Análise estática",
     "Vigas e eixos",
-    "Vento nas estruturas",
+    "Vento em edificações",
     "Flambagem de colunas",
     "Análise de fadiga",
-    "Assistente de cargas",
+    "Cálculo de peças",
     "Desenhar seção",
     "Círculo de Mohr",
     "Análise de sensibilidade",
     "Projeto de parafusos",
-    "Degrau de escada em grade",
+    "Escada em grade",
     "Vigas de piso",
     "Ligações estruturais",
     "Vento em estruturas abertas",
-    "Contraventamento de estruturas abertas",
+    "Contraventamento",
     "Ligação de contraventamento",
     "Placas de base",
     "Normas técnicas",
-    "Estruturas de aço",
+    "Barras, treliças e pórticos",
 ]
 solicitado = st.query_params.get("modulo", "Comece aqui")
 if solicitado not in opcoes:
@@ -133,7 +133,7 @@ if modulo == "Comece aqui":
             4. **Verificações** — os **Esforços do modelo** importados do SolidWorks (o pior
                caso de cada barra), contraventamento, ligação, barras, parafusos, degraus; cada
                cálculo registrado no projeto.
-            5. **Memorial** — a Central de relatórios monta o Word e o PDF com o que foi
+            5. **Memorial** — o Memorial de cálculo monta o Word e o PDF com o que foi
                registrado.
             """
         )
@@ -146,12 +146,12 @@ if modulo == "Comece aqui":
         [
             [
                 "Tenho vários projetos e quero saber o que está travado ou vencido",
-                "Painel industrial",
+                "Painel dos projetos",
                 "Ler a carteira inteira e escolher por onde atacar",
             ],
             [
                 "Quero guardar dados, cálculos e revisões entre sessões",
-                "Projetos permanentes",
+                "Projetos",
                 "Criar a base rastreável do trabalho",
             ],
             [
@@ -171,12 +171,12 @@ if modulo == "Comece aqui":
             ],
             [
                 "Preciso localizar bloqueios e pendências de emissão",
-                "Central de validação",
+                "Validação do projeto",
                 "Tratar a fila consolidada do projeto",
             ],
             [
                 "Preciso emitir um memorial Word ou PDF",
-                "Central de relatórios",
+                "Memorial de cálculo",
                 "Selecionar seções e registros da revisão ativa",
             ],
             [
@@ -191,7 +191,7 @@ if modulo == "Comece aqui":
             ],
             [
                 "Forças, momentos, torque, pressão e dimensões",
-                "Assistente de cargas",
+                "Cálculo de peças",
                 "Obter σx, σy e τxy",
             ],
             [
@@ -206,7 +206,7 @@ if modulo == "Comece aqui":
             ],
             [
                 "Galpão ou edifício: preciso das forças do vento (paredes, telhado, pórtico)",
-                "Vento nas estruturas",
+                "Vento em edificações",
                 "Obter pressões por zona, vedações, forças globais e cargas do pórtico (NBR 6123:2023)",
             ],
             [
@@ -226,7 +226,7 @@ if modulo == "Comece aqui":
             ],
             [
                 "Escada industrial em grade de piso eletrofundida (degrau Selmec)",
-                "Degrau de escada em grade",
+                "Escada em grade",
                 "Espelho, piso, lances, modelo do catálogo e 38 verificações NR-12, NR-22 e Anglo",
             ],
             [
@@ -236,7 +236,7 @@ if modulo == "Comece aqui":
             ],
             [
                 "Plataforma, mezanino ou pipe rack sem fechamento a contraventar",
-                "Contraventamento de estruturas abertas",
+                "Contraventamento",
                 "Vento nos reticulados, combinações, B₂, diagonais e deslocamentos",
             ],
             [
@@ -246,7 +246,7 @@ if modulo == "Comece aqui":
             ],
             [
                 "Geometria, apoios e ações de uma estrutura",
-                "Estruturas de aço",
+                "Barras, treliças e pórticos",
                 "Verificar barras, ligações e análise 2D",
             ],
             [
@@ -326,7 +326,7 @@ if modulo == "Comece aqui":
     )
 
 
-elif modulo == "Painel industrial":
+elif modulo == "Painel dos projetos":
     st.header("Painel da carteira de projetos")
     st.write(
         "O painel lê todos os projetos do banco local e resume cada um numa linha comparável: "
@@ -339,7 +339,7 @@ elif modulo == "Painel industrial":
             [
                 "Com bloqueio",
                 "Projetos com ao menos um bloqueio na validação",
-                "Regras da Central de validação",
+                "Regras da Validação do projeto",
             ],
             [
                 "Prazos vencidos",
@@ -371,13 +371,13 @@ elif modulo == "Painel industrial":
     link_modulo("app_pages/painel_industrial.py", "Abrir painel industrial")
 
 
-elif modulo == "Projetos permanentes":
+elif modulo == "Projetos":
     st.header("Sistema permanente de projetos industriais")
     st.write(
         "Use esta área como a pasta-mestre do trabalho. O projeto fica salvo em banco local "
         "mesmo depois de fechar o navegador, e cada cálculo pode ser registrado nele. Na versão web "
         "(Streamlit Cloud) o disco do servidor é apagado quando o aplicativo reinicia: baixe a "
-        "carteira ao terminar ou ligue o espelho no GitHub (Painel industrial → Dados e backup)."
+        "carteira ao terminar ou ligue o espelho no GitHub (Painel dos projetos → Dados e backup)."
     )
     mostrar_tabela_campos(
         [
@@ -453,7 +453,7 @@ elif modulo == "Projetos permanentes":
             ["Base dos carregamentos", "Peso próprio + material + partida + bloqueio do chute"],
             ["Critério", "Utilização ≤ 1,0 e flecha conforme especificação do cliente"],
         ],
-        "Depois de salvar, abra Estruturas de aço ou outro módulo aplicável e registre cada resultado no mesmo projeto.",
+        "Depois de salvar, abra Barras, treliças e pórticos ou outro módulo aplicável e registre cada resultado no mesmo projeto.",
     )
     st.warning(
         "Salvamentos comuns atualizam os dados atuais e ficam na linha do tempo. A revisão controlada cria um marco histórico. "
@@ -573,8 +573,8 @@ elif modulo == "Casos de carga":
     link_modulo("app_pages/casos_carga.py", "Abrir casos e combinações de carga")
 
 
-elif modulo == "Central de validação":
-    st.header("Central de validação e prontidão documental")
+elif modulo == "Validação do projeto":
+    st.header("Validação do projeto e prontidão documental")
     st.write(
         "A central reúne o que está incompleto ou incompatível. Ela lê o projeto inteiro, "
         "não apenas o módulo aberto, e transforma os problemas em uma fila priorizada."
@@ -631,8 +631,8 @@ elif modulo == "Central de validação":
     link_modulo("app_pages/central_validacao.py", "Abrir central de validação")
 
 
-elif modulo == "Central de relatórios":
-    st.header("Central de relatórios: o memorial de cálculo")
+elif modulo == "Memorial de cálculo":
+    st.header("Memorial de cálculo: Word e PDF do projeto")
     st.write(
         "A central gera Word e PDF a partir da mesma revisão do projeto. Os cálculos "
         "registrados entram completos — entradas, equações, resultados, figuras, premissas "
@@ -705,7 +705,7 @@ elif modulo == "Central de relatórios":
     link_modulo("app_pages/central_relatorios.py", "Abrir central de relatórios")
 
 
-elif modulo == "Materiais técnicos":
+elif modulo == "Materiais do projeto":
     st.header("Materiais com confiança e proveniência")
     st.write(
         "A página separa o catálogo orientativo da biblioteca do projeto. O primeiro ajuda a estimar; "
@@ -838,7 +838,7 @@ elif modulo == "Assistente de projeto":
             ["Regime", "Estático"],
             ["Modelo inicial", "Viga de seção retangular"],
         ],
-        "A rota será Assistente de cargas → Análise estática. Primeiro obtenha "
+        "A rota será Cálculo de peças → Análise estática. Primeiro obtenha "
         "σx, σy e τxy; depois compare von Mises com a resistência do material.",
     )
     st.info(
@@ -1172,11 +1172,11 @@ elif modulo == "Vigas e eixos":
     link_modulo("app_pages/vigas_eixos.py", "Abrir vigas e eixos")
 
 
-elif modulo == "Vento nas estruturas":
+elif modulo == "Vento em edificações":
     from core import vento_edificio as _ve
     from core import vento_portico as _vp
 
-    st.header("Vento nas estruturas")
+    st.header("Vento em edificações")
     st.markdown(
         "Use para o vento numa **edificação de planta retangular** — galpão, edifício, "
         "plataforma fechada — pela **NBR 6123:2023**: a pressão dinâmica do local, o "
@@ -1184,7 +1184,7 @@ elif modulo == "Vento nas estruturas":
         "interna, as pressões de projeto das **telhas e fixações**, a força de arrasto, a "
         "torção e as **cargas por metro de um pórtico transversal**, com a solução do pórtico. "
         "Para uma peça isolada (barra, perfil, painel de plataforma), use a calculadora de "
-        "vento de Estruturas de aço."
+        "vento de Barras, treliças e pórticos."
     )
     mostrar_tabela_campos(
         [
@@ -1329,7 +1329,7 @@ elif modulo == "Vento nas estruturas":
         "NBR 6123 e não estão aqui. Confira V₀ no mapa de isopletas.",
         icon=":material/warning:",
     )
-    link_modulo("app_pages/vento_nbr6123.py", "Abrir Vento nas estruturas")
+    link_modulo("app_pages/vento_nbr6123.py", "Abrir Vento em edificações")
 
 
 elif modulo == "Flambagem de colunas":
@@ -1373,7 +1373,7 @@ elif modulo == "Flambagem de colunas":
             [
                 "N_g, N_q ou N_Sd",
                 "Cargas características permanente e variável (majoradas por γ_g e γ_q da Tabela 1) ou N_Sd já de cálculo, em kN",
-                "Casos de carga / Assistente de cargas",
+                "Casos de carga / Cálculo de peças",
             ],
             [
                 "M_x,Sd, M_y,Sd, e_x, e_y",
@@ -1501,7 +1501,7 @@ elif modulo == "Flambagem de colunas":
         "Verificação de barra isolada: na coluna em balanço ou com uma ponta que se "
         "desloca, o programa soma o desaprumo e amplia o momento pelo B₂ da coluna "
         "isolada; o B₂ de um andar com várias colunas e as ligações pertencem à análise "
-        "da estrutura — módulo Estruturas de aço (pórtico 2D, placa de base). "
+        "da estrutura — módulo Barras, treliças e pórticos (pórtico 2D, placa de base). "
         "Cantoneira simples, perfis formados a frio, fadiga e cisalhamento também ficam "
         "de fora. Barras compostas de dois perfis iguais (2 cantoneiras, 2 perfis U) entram "
         "pelo tipo de seção Perfil composto, com a distância entre os espaçadores.",
@@ -1619,8 +1619,8 @@ elif modulo == "Desenhar seção":
         "há classe de flambagem local para ela.",
         icon=":material/verified:",
     )
-elif modulo == "Assistente de cargas":
-    st.header("Assistente de cargas")
+elif modulo == "Cálculo de peças":
+    st.header("Cálculo de peças")
     st.markdown(
         "Use quando você tem **forças, momentos, torque, potência ou pressão** e quer saber o que "
         "chega em cada peça e se ela aguenta. A página abre num painel com três áreas: **Estática "
@@ -1942,10 +1942,10 @@ elif modulo == "Projeto de parafusos":
     link_modulo("app_pages/projeto_parafusos.py", "Abrir o projeto de parafusos")
 
 
-elif modulo == "Degrau de escada em grade":
+elif modulo == "Escada em grade":
     from core import degrau_escada as _de
 
-    st.header("Degrau de escada em grade")
+    st.header("Escada em grade")
     st.markdown(
         "Use para o **degrau de uma escada industrial em grade de piso eletrofundida** do "
         "catálogo Selmec “Degraus” (DS): o programa define o espelho, o piso e a profundidade, "
@@ -2076,7 +2076,7 @@ elif modulo == "Degrau de escada em grade":
         "(Tabela 10, nota t), e o inox está fora do escopo da NBR 8800.",
         icon=":material/warning:",
     )
-    link_modulo("app_pages/degrau_escada.py", "Abrir Degrau de escada em grade")
+    link_modulo("app_pages/degrau_escada.py", "Abrir Escada em grade")
 
 
 elif modulo == "Base técnica do projeto":
@@ -2141,7 +2141,7 @@ elif modulo == "Base técnica do projeto":
             - **Consulta do critério:** a página traz as tabelas do critério Anglo (sobrecargas,
               deslocamentos, mínimos, chumbadores, ligações, combinações, vibração, escadas e
               materiais) com o número do item.
-            - **Sem projeto ativo** nada é gravado: abra ou crie um em Projetos permanentes.
+            - **Sem projeto ativo** nada é gravado: abra ou crie um em Projetos.
             """
         )
     link_modulo("app_pages/base_tecnica.py", "Abrir Base técnica do projeto")
@@ -2338,8 +2338,8 @@ elif modulo == "Esforços do modelo":
     link_modulo("app_pages/esforcos_modelo.py", "Abrir Esforços do modelo")
 
 
-elif modulo == "Colunas do modelo":
-    st.header("Colunas do modelo")
+elif modulo == "Pilares do modelo":
+    st.header("Pilares do modelo")
     st.markdown(
         "Todos os pilares do modelo do SolidWorks verificados de uma vez, cada um com os "
         "**travamentos lidos do esqueleto**: a barra que encosta no pilar o trava na direção dela. "
@@ -2351,7 +2351,7 @@ elif modulo == "Colunas do modelo":
         st.markdown(
             """
             1. Em **Esforços do modelo**, envie os resultados de cada caso e o esqueleto da macro.
-            2. Abra **Colunas do modelo** e diga como o pé dos pilares está preso no apoio:
+            2. Abra **Pilares do modelo** e diga como o pé dos pilares está preso no apoio:
                rotulado (a favor da segurança) ou engastado.
             3. Veja a tabela dos pilares: onde cada um é travado, o K·L que governa em cada eixo
                e o aproveitamento. Escolha um pilar para ver os trechos e a verificação completa.
@@ -2371,7 +2371,7 @@ elif modulo == "Colunas do modelo":
             - O travamento é suposto rígido; as barras que travam são verificadas à parte.
             """
         )
-    link_modulo("app_pages/colunas_do_modelo.py", "Abrir Colunas do modelo")
+    link_modulo("app_pages/colunas_do_modelo.py", "Abrir Pilares do modelo")
 
 
 elif modulo == "Cargas do esqueleto":
@@ -2707,7 +2707,7 @@ elif modulo == "Ligações estruturais":
               I ou H, a flexão local da mesa, o escoamento local e o enrugamento da alma (5.7).
             - **Casos de aceite:** quatro exercícios de solda (talas sobrepostas, filete
               intermitente, penetração total e a cantoneira de contraventamento no pilar) são
-              conferidos na Central de validação.
+              conferidos na Validação do projeto.
             - **Memorial desta ligação:** Word e PDF só da ligação, no padrão do memorial.
             - **Fora do programa:** ligação rígida (com momento), chapa de extremidade,
               enrijecedores, efeito de alavanca e o apoio como um todo — o caso específico é do
@@ -2733,7 +2733,7 @@ elif modulo == "Vento em estruturas abertas":
         "(Figura 12), proteção η dos pórticos de trás (Figura 14), mais guarda-corpos e "
         "equipamentos. Saem a força **por nível**, **por pórtico**, **em cada nó** pilar–viga e a "
         "**carga por metro** nas barras, com desenho e CSV. Os campos são os mesmos da página "
-        "Contraventamento de estruturas abertas: o que se digita numa aparece na outra."
+        "Contraventamento: o que se digita numa aparece na outra."
     )
     mostrar_tabela_campos(
         [
@@ -2792,7 +2792,7 @@ elif modulo == "Vento em estruturas abertas":
         )
     st.warning(
         "Fora do escopo: efeitos dinâmicos (capítulo 9) e coberturas isoladas — use o módulo "
-        "Vento nas estruturas para edificações fechadas e coberturas. Estrutura sem "
+        "Vento em edificações para edificações fechadas e coberturas. Estrutura sem "
         "contraventamento numa direção (duas colunas numa linha): a estabilidade vem do engaste "
         "ou do pórtico — confira pelo modelo.",
         icon=":material/warning:",
@@ -2800,10 +2800,10 @@ elif modulo == "Vento em estruturas abertas":
     link_modulo("app_pages/vento_estrutura_aberta.py", "Abrir Vento em estruturas abertas")
 
 
-elif modulo == "Contraventamento de estruturas abertas":
+elif modulo == "Contraventamento":
     from core import contraventamento_plataforma as _cp
 
-    st.header("Contraventamento de estruturas abertas")
+    st.header("Contraventamento")
     st.markdown(
         "Use para o **contraventamento vertical** de plataformas, mezaninos, pipe racks e outras "
         "estruturas **sem fechamento**. Com a planta, os pisos, as cargas e o vento do local, o "
@@ -2895,9 +2895,7 @@ elif modulo == "Contraventamento de estruturas abertas":
         "dinâmicos e sismo. As barras circulares usam o C_a de faces planas (a favor da segurança).",
         icon=":material/warning:",
     )
-    link_modulo(
-        "app_pages/contraventamento_estrutura.py", "Abrir Contraventamento de estruturas abertas"
-    )
+    link_modulo("app_pages/contraventamento_estrutura.py", "Abrir Contraventamento")
 
 
 elif modulo == "Ligação de contraventamento":
@@ -2921,7 +2919,7 @@ elif modulo == "Ligação de contraventamento":
                 "Força P e ângulo θ",
                 "Tração e/ou compressão da barra (kN, de cálculo) e o ângulo dela com a vertical; "
                 "o atalho H / sen θ converte a força horizontal do vento em força na barra",
-                "Módulo Vento nas estruturas e análise do pórtico",
+                "Módulo Vento em edificações e análise do pórtico",
             ],
             [
                 "Viga e coluna",
@@ -3232,7 +3230,7 @@ elif modulo == "Normas técnicas":
 
 
 else:
-    st.header("Estruturas de aço")
+    st.header("Barras, treliças e pórticos")
     st.markdown(
         "A página reúne cinco ferramentas. Escolha abaixo a parte que deseja "
         "aprender; todas são de análise ou pré-dimensionamento."

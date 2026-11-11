@@ -1,4 +1,4 @@
-"""Catálogo de todos os casos do Assistente de cargas, por área e por grupo."""
+"""Catálogo de todos os casos do Cálculo de peças, por área e por grupo."""
 
 from __future__ import annotations
 

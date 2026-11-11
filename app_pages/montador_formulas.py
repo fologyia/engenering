@@ -14,7 +14,7 @@ configurar_pagina(PARTE.titulo, ":material/function:")
 cabecalho_pagina(
     PARTE.titulo,
     PARTE.subtitulo,
-    categoria="Mecânica geral",
+    categoria="Mecânica",
     icone=":material/function:",
     modulo_id=PARTE.modulo_id,
 )

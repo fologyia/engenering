@@ -26,7 +26,7 @@ cabecalho_pagina(
     "internos, base rotulada ou internos e externos; o caso pela força normal e pelo momento, a "
     "espessura da placa, os chumbadores (reto com porca, guarda-chuva, químico ou parabolt, com a "
     "ancoragem no concreto pela ACI 318-19), a cortante, a Tabela 18, o desenho e o memorial.",
-    categoria="Ligações e bases",
+    categoria="Estrutura metálica",
     icone=":material/anchor:",
     cor="blue",
     ajuda_modulo="Placas de base",

@@ -68,10 +68,10 @@ def test_pagina_inicial_traz_os_tres_cartoes_e_as_tres_rotas_rapidas(banco_isola
         ]
     )
     for titulo in (
-        "Vento nas estruturas",
-        "Degrau de escada em grade",
+        "Vento em edificações",
+        "Escada em grade",
         "Ligação de contraventamento",
-        "Contraventamento de estruturas abertas",
+        "Contraventamento",
     ):
         assert titulo in corpo, titulo
     opcoes = t.selectbox[0].options

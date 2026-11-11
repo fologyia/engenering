@@ -100,6 +100,6 @@ Regras do memorial (correções de 28/10/2026, caso M22 do usuário em
 
 `tests/test_parafusos_tracao_e_furos.py` (casos de aceite A a E, 0,5 %; tração, interação,
 alavanca, furos das duas versões, deslizamento, chapa de ligação, entradas, memorial Word e PDF),
-`tests/test_casos_de_aceite.py` (os mesmos casos que a Central de validação mostra ao vivo),
+`tests/test_casos_de_aceite.py` (os mesmos casos que a Validação do projeto mostra ao vivo),
 `tests/test_bolted_connection.py`, `tests/test_bolted_joint_check.py`, `tests/test_bolted_help.py`
 e `tests/test_projeto_parafusos_pagina.py` (a página; o caso real da emenda de U pela 2008).

@@ -3,14 +3,14 @@ import streamlit as st
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.wind_ui import mostrar_vento_nas_estruturas
 
-configurar_pagina("Vento nas estruturas", ":material/air:")
+configurar_pagina("Vento em edificações", ":material/air:")
 cabecalho_pagina(
-    "Vento nas estruturas",
+    "Vento em edificações",
     "NBR 6123:2023 • pressões em paredes e telhado • vedações e fixações • forças globais • pórtico",
     categoria="Análises",
     icone=":material/air:",
     cor="blue",
-    ajuda_modulo="Vento nas estruturas",
+    ajuda_modulo="Vento em edificações",
     acoes=(("app_pages/casos_carga.py", "Casos de carga", ":material/layers:"),),
     modulo_id="vento_nbr6123",
 )

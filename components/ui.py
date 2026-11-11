@@ -136,9 +136,18 @@ def comparador_cenarios(
         st.dataframe(tabela, hide_index=True, width="stretch")
 
 
+def _titulo_do_menu(titulo: str) -> str:
+    """O nome da página no menu (:mod:`core.navegacao`), para o menu, o topo e a aba do navegador
+    dizerem a mesma coisa. Fora do menu (página aberta sozinha, nos testes), vale o que veio."""
+    from core import navegacao
+
+    item = navegacao.item_da_pagina(str(st.session_state.get("_pagina_atual") or ""))
+    return item.titulo if item is not None else titulo
+
+
 def configurar_pagina(titulo: str, icone: str) -> None:
     """Aplica a configuração padrão (layout largo) usada por todas as páginas."""
-    st.set_page_config(page_title=titulo, page_icon=icone, layout="wide")
+    st.set_page_config(page_title=_titulo_do_menu(titulo), page_icon=icone, layout="wide")
 
 
 def cabecalho_pagina(
@@ -155,14 +164,16 @@ def cabecalho_pagina(
 ) -> None:
     """Exibe um cabeçalho consistente com ações e acesso ao guia.
 
-    O selo mostra o grupo do menu da página aberta (:mod:`core.navegacao`), para o topo da página
-    e a barra lateral dizerem a mesma coisa; ``categoria`` só vale fora do menu.
+    O selo mostra o grupo do menu da página aberta (:mod:`core.navegacao`) e o título é o nome dela
+    no menu, para o topo da página e a barra lateral dizerem a mesma coisa; ``categoria`` e
+    ``titulo`` só valem fora do menu.
     """
     from core import navegacao
 
     grupo = navegacao.grupo_da_pagina(str(st.session_state.get("_pagina_atual") or ""))
     if grupo is not None:
         categoria = grupo.nome
+    titulo = _titulo_do_menu(titulo)
     with st.container(border=True):
         with st.container(horizontal=True):
             st.badge(categoria, icon=icone, color=cor)

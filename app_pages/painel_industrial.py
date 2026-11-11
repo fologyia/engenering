@@ -35,18 +35,18 @@ from core.project_store import (
 from core.project_workflow import SITUACOES
 
 st.set_page_config(
-    page_title="Painel industrial",
+    page_title="Painel dos projetos",
     page_icon=":material/dashboard:",
     layout="wide",
 )
 
 cabecalho_pagina(
-    "Painel industrial",
+    "Painel dos projetos",
     "A carteira inteira: situação, prontidão, bloqueios, prazos vencidos e cálculos desatualizados de cada projeto.",
     categoria="GESTÃO INDUSTRIAL",
     icone=":material/dashboard:",
     cor="blue",
-    ajuda_modulo="Painel industrial",
+    ajuda_modulo="Painel dos projetos",
     acoes=(
         ("app_pages/gestao_projetos.py", "Projetos", ":material/folder_managed:"),
         ("app_pages/central_validacao.py", "Validação", ":material/fact_check:"),
@@ -81,7 +81,7 @@ def _tamanho(bytes_: int) -> str:
 def _secao_dados_e_backup(*, expandida: bool) -> None:
     """Onde o banco está, backup íntegro e exportação/restauração da carteira.
 
-    Fica no painel — e não em Projetos permanentes — porque trata da carteira
+    Fica no painel — e não em Projetos — porque trata da carteira
     inteira e precisa existir mesmo sem nenhum projeto no banco: restaurar
     uma carteira exportada é justamente o que se faz num banco vazio.
     """
@@ -178,10 +178,10 @@ ativo = st.session_state.get("projeto_ativo") or {}
 incluir_arquivados = st.toggle("Incluir projetos arquivados", value=False)
 projetos = carregar_projetos(incluir_arquivados=incluir_arquivados)
 if not projetos:
-    st.info("Nenhum projeto no banco. Crie o primeiro em Projetos permanentes.")
+    st.info("Nenhum projeto no banco. Crie o primeiro em Projetos.")
     st.page_link(
         "app_pages/gestao_projetos.py",
-        label="Abrir Projetos permanentes",
+        label="Abrir Projetos",
         icon=":material/folder_managed:",
     )
     _secao_dados_e_backup(expandida=True)

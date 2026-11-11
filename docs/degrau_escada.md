@@ -1,6 +1,6 @@
-# Degrau de escada em grade — escopo, fórmulas e conferências
+# Escada em grade — escopo, fórmulas e conferências
 
-A página **Degrau de escada em grade** dimensiona o degrau de uma escada industrial em **grade de
+A página **Escada em grade** dimensiona o degrau de uma escada industrial em **grade de
 piso eletrofundida** e escolhe o modelo do catálogo **Selmec "Degraus" (DS)**. Verifica a NR-12
 (Anexo III), a NR-22, o Critério de Projeto Anglo American AA-BR-DPST-DR-0001 Rev.1 (22/12/2025), a
 NBR 8800:2008, a NBR 6120 e a ISO 14122-3. A fonte dos valores e das fórmulas é a planilha validada
@@ -132,7 +132,7 @@ patamar); 17 a 29, o degrau e o material; 30 a 33, a fixação; 34 a 38, a confe
 
 ## Memorial e exportações
 
-O registro entra no memorial da Central de relatórios como as demais análises com tabela de
+O registro entra no memorial (página Memorial de cálculo) como as demais análises com tabela de
 verificações: **Resultado**, dados de entrada, método e premissas, **O que passou**, valores de apoio,
 as quatro tabelas (geometria, dimensionamento do modelo adotado, modelos que atendem e texto da
 requisição) e, no fim, **o que não passou** e o que conferir antes de emitir. A página ainda exporta as

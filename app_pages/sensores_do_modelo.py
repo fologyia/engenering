@@ -133,7 +133,7 @@ with st.container(border=True), secao_protegida("1. O quadro dos sensores"):
         st.info(
             "Nenhum projeto ativo: o quadro é lido e verificado, mas sem o plano de cargas (as "
             "combinações não são conferidas) e sem registrar no memorial. Abra um projeto em "
-            "**Projetos permanentes**.",
+            "**Projetos**.",
             icon=":material/folder_off:",
         )
     enviado = st.file_uploader(

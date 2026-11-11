@@ -97,7 +97,7 @@ def test_registro_tecnico_resolve_modulo_assina_e_detecta_alteracao():
 
 
 def test_catalogo_de_modulos_governa_grupos_de_navegacao():
-    mecanica = listar_modulos(grupo="Mecânica geral")
+    mecanica = listar_modulos(grupo="Mecânica")
     assert [item.id for item in mecanica] == [
         "analise_estatica",
         "vigas_eixos",
@@ -107,9 +107,9 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "montador_formulas",
         "analise_sensibilidade",
         "assistente_cargas",
+        "montador_fluidos",
+        "rede_de_tubos",
     ]
-    fluidos = [item.id for item in listar_modulos(grupo="Mecânica dos fluidos")]
-    assert fluidos == ["montador_fluidos", "rede_de_tubos"]
     cargas = [item.id for item in listar_modulos(grupo="Cargas e vento")]
     assert cargas == [
         "cargas_esqueleto",

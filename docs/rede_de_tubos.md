@@ -1,6 +1,6 @@
 # Rede de tubos
 
-Página do grupo Mecânica dos fluidos (`app_pages/rede_de_tubos.py`), com o núcleo em
+Página do grupo Mecânica, submenu Fluidos (`app_pages/rede_de_tubos.py`), com o núcleo em
 `core/rede_de_tubos.py`, sem Streamlit. A linha do Montador de fluidos é em série, com a mesma vazão
 em todos os trechos; aqui a água se divide nos ramais e as malhas se fecham.
 

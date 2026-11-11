@@ -13,9 +13,11 @@ streamlit run app.py
 ```
 
 O aplicativo abre em `http://localhost:8501`. O menu lateral segue a ordem do trabalho
-(`core/navegacao.py`, a mesma fonte da Visão geral e do selo de cada página): **Projeto**,
-**Cargas e vento**, **Modelo SolidWorks**, **Barras e vigas**, **Ligações e bases**, **Escadas**,
-**Entrega**, **Mecânica geral** (ferramentas de máquinas) e **Referências e ajuda**.
+(`core/navegacao.py`, a mesma fonte da Visão geral, do título e do selo de cada página):
+**Projeto**, **Cargas e vento**, **Modelo SolidWorks**, **Estrutura metálica** (submenus Barras e
+vigas; Ligações e bases), **Entrega**, **Mecânica** (submenus Peças de máquinas; Tensões e fadiga;
+Fluidos), **Seções e materiais** e **Referências e ajuda**. A busca do menu acha as páginas também
+pelos nomes antigos (Assistente de cargas, Central de relatórios, Estruturas de aço…).
 
 ### Onde ficam os dados
 
@@ -36,7 +38,7 @@ set MECANICA_TOOLKIT_DB=D:\engenharia\projetos.sqlite3
 ```
 
 Um banco antigo em `data/` é copiado para o novo lugar na primeira abertura e
-renomeado para `.migrado`. O **Painel industrial** gera backups íntegros do
+renomeado para `.migrado`. O **Painel dos projetos** gera backups íntegros do
 banco (`VACUUM INTO`, na pasta `backups/` ao lado do arquivo), exporta a
 carteira inteira em JSON — com revisões e linha do tempo — e restaura esse
 pacote num banco vazio ou parcial, sem sobrescrever projetos existentes.
@@ -71,7 +73,7 @@ computador.
 - navegação explícita e uma única página de tutoriais;
 - indicação do projeto ativo nos cabeçalhos dos módulos.
 
-### Painel industrial
+### Painel dos projetos
 
 - a carteira inteira numa tela: situação, revisão, prontidão, índice documental,
   bloqueios, pendências, avanço do checklist, prazos vencidos, registros vigentes
@@ -86,7 +88,7 @@ computador.
 - **dados e backup**: caminho do banco em uso, backup íntegro com um clique,
   exportação da carteira inteira em JSON e restauração desse pacote.
 
-### Projetos permanentes
+### Projetos
 
 - persistência local em SQLite na pasta de dados do usuário (ver *Onde
   ficam os dados*), configurável pela variável `MECANICA_TOOLKIT_DB`;
@@ -132,7 +134,7 @@ computador.
   exportação/importação JSON (com histórico e eventos);
 - integração com o Assistente de projeto e com os módulos técnicos.
 
-### Central de validação
+### Validação do projeto
 
 - consolida bloqueios, pendências, atenções e informações do projeto inteiro;
 - verifica identificação, responsabilidades, base de projeto, escopo físico e materiais;
@@ -146,7 +148,7 @@ computador.
   e o que trava cada passagem), resume achados por categoria e exporta a fila em CSV;
 - calcula um índice de completude documental, explicitamente separado de conformidade ou aprovação.
 
-### Central de relatórios
+### Memorial de cálculo
 
 - **juntar o projeto num documento**: o quadro das etapas (o que cada página registrou e o que
   falta) e o botão que deixa um de cada cálculo, na ordem do projeto, tirando os repetidos;
@@ -224,7 +226,7 @@ na página inicial e nas páginas de cada etapa com o que o projeto ativo já te
 ### Assistente de projeto
 
 - organiza o problema em quatro etapas: definição, objetivo, dados e plano, com rotas para os
-  módulos de cálculo, entre eles Vento nas estruturas, Degrau de escada em grade e Ligação de
+  módulos de cálculo, entre eles Vento em edificações, Escada em grade e Ligação de
   contraventamento (esses três só abrem o módulo: os dados se preenchem na página);
 - valida nome e coerência dos dados antes de avançar;
 - recomenda a primeira análise e a sequência completa de módulos;
@@ -314,7 +316,7 @@ Prancheta para desenhar qualquer seção: chapas, círculos, polígonos e furos,
 
 Prancheta de blocos: seção, esforços, critério e "Em função de". Devolve a equação isolada na medida, na carga ou no material, ponto a ponto da seção, e diz qual condição manda. Letra sem valor fica na fórmula. Com até três incógnitas, a busca testa as faixas e refina até convergir, pela menor área, pelo maior ou menor valor de uma letra, ou com todas as condições no limite. O momento entra em XX e em YY, pelo valor ou por força vezes distância, para achar a força ou a distância máxima. Blocos de viga e de potência trocam M, V e T pelas fórmulas deles, e von Mises, Tresca, DE-Goodman, flecha, Euler e giro podem ser ligados juntos. Detalhes e como acrescentar um bloco em `docs/montador_formulas.md`.
 
-A prancheta tem biblioteca, inspetor e cartões com os valores de cada bloco. O bloco Fórmula própria recebe uma conta digitada, sem eval, e confere as unidades. "Escolher do catálogo" testa perfis, barras e tubos comerciais e devolve o mais leve que passa. A fadiga de eixo tem limite de fadiga por Marin, entalhe, quatro critérios e vida finita, com as contas do Assistente de cargas. A montagem sai em Word, com equação editável, e em Excel, com fórmulas vivas. Selecionar uma ligação mostra o que passa nela e os blocos que cabem no meio, com prévia. A biblioteca esconde o que não cabe na seção e no tipo de peça da montagem: com perfil I e Euler somem a pressão interna e as peças do eixo, e "Mostrar todos" traz tudo de volta. Para peças de eixo há engrenagem, polia, chaveta, cubo prensado, rolamento, fuso (parafuso de potência: torque, corpo, filetes, porca, flambagem e autotravamento, igual ao do Assistente), inclinação, rotação crítica e o eixo com trechos (ombros, rasgos, mancais e engrenagens numa conta só), e a página diz o que mais pesa na resposta. Blocos viram conjuntos reutilizáveis, a montagem é salva em arquivo ou registrada no projeto, e o bloco Cálculo registrado lê o resultado de outro cálculo por identidade e versão: se o registro mudar, o Montador avisa e a Central de validação marca como desatualizado.
+A prancheta tem biblioteca, inspetor e cartões com os valores de cada bloco. O bloco Fórmula própria recebe uma conta digitada, sem eval, e confere as unidades. "Escolher do catálogo" testa perfis, barras e tubos comerciais e devolve o mais leve que passa. A fadiga de eixo tem limite de fadiga por Marin, entalhe, quatro critérios e vida finita, com as contas do Cálculo de peças. A montagem sai em Word, com equação editável, e em Excel, com fórmulas vivas. Selecionar uma ligação mostra o que passa nela e os blocos que cabem no meio, com prévia. A biblioteca esconde o que não cabe na seção e no tipo de peça da montagem: com perfil I e Euler somem a pressão interna e as peças do eixo, e "Mostrar todos" traz tudo de volta. Para peças de eixo há engrenagem, polia, chaveta, cubo prensado, rolamento, fuso (parafuso de potência: torque, corpo, filetes, porca, flambagem e autotravamento, igual ao do Assistente), inclinação, rotação crítica e o eixo com trechos (ombros, rasgos, mancais e engrenagens numa conta só), e a página diz o que mais pesa na resposta. Blocos viram conjuntos reutilizáveis, a montagem é salva em arquivo ou registrada no projeto, e o bloco Cálculo registrado lê o resultado de outro cálculo por identidade e versão: se o registro mudar, o Montador avisa e a Validação do projeto marca como desatualizado.
 
 Com **Casos de carga**, a mesma montagem roda com cargas diferentes (partida e regime, por exemplo): cada caso entra com as condições dele e a resposta sai do pior.
 
@@ -322,15 +324,17 @@ Com **Casos de carga**, a mesma montagem roda com cargas diferentes (partida e r
 
 Furo e eixo pela NBR 6158 (ISO 286-1), de 0 a 500 mm: qualquer classe de A a U e de a a u, de IT1 a IT18, montada pelas Tabelas 1, 2 e 3 da norma. Dá os limites, a folga ou a interferência, a indicação para o desenho e o gráfico das zonas. Com interferência, calcula o aperto (pressão, torque que o atrito segura, tensões, prensagem e aquecimento para montar). A aba Escolher o ajuste testa os ajustes recomendados e aponta o mais leve que segura o torque sem escoar.
 
+A aba **Cadeia de cotas** soma peças em fila (caixa, rolamentos, espaçador, anel), com afastamentos informados ou com a classe ISO de cada uma, e dá a folga final no pior caso e no estatístico (±3σ), o peso de cada peça na variação e a fração das montagens fora da folga exigida.
+
 ### Mecânica dos fluidos
 
-O mesmo montador, com blocos de fluidos e unidades próprias: fluido, trechos com Darcy-Weisbach (Colebrook no turbulento e 64/Re no laminar), perdas localizadas, altura e potência de bomba, NPSH, velocidade máxima, pressão na profundidade, força em superfície plana, empuxo, arrasto, orifício ou venturi, canal (Manning) e golpe de aríete. Também tem curva da bomba com ponto de operação, tabela de peças que soma o K e tubos comerciais (aço Sch 40 e PVC soldável). A linha é em série, com a mesma vazão em todos os trechos. Exemplos de livro são refeitos na Central de validação. Detalhes em `docs/montador_fluidos.md`.
+O mesmo montador, com blocos de fluidos e unidades próprias: fluido, trechos com Darcy-Weisbach (Colebrook no turbulento e 64/Re no laminar), perdas localizadas, altura e potência de bomba, NPSH, velocidade máxima, pressão na profundidade, força em superfície plana, empuxo, arrasto, orifício ou venturi, canal (Manning) e golpe de aríete. Também tem curva da bomba com ponto de operação, tabela de peças que soma o K e tubos comerciais (aço Sch 40 e PVC soldável). A linha é em série, com a mesma vazão em todos os trechos. Exemplos de livro são refeitos na Validação do projeto. Detalhes em `docs/montador_fluidos.md`.
 
 ### Rede de tubos
 
 Rede com ramais e malhas, um ou mais reservatórios e bombas, **desenhada numa prancheta** (reservatório, nó, tubo, dividir o tubo, mover, apagar, desfazer); o comprimento sai do desenho e as tabelas só completam cotas, vazões, diâmetros e materiais. A rede inteira é resolvida de uma vez (energia em cada trecho por Darcy-Weisbach e Colebrook, continuidade em cada nó, Newton nas vazões e nas cargas, o método do EPANET); a soma das perdas em cada malha fecha em zero, como em Hardy Cross. Sai a vazão, a velocidade e a perda de cada trecho, a pressão de cada nó, as verificações de pressão mínima e máxima e de velocidade, com o resultado no próprio desenho (o que não passa em vermelho), e o registro no projeto. Detalhes em `docs/rede_de_tubos.md`.
 
-### Assistente de cargas e elementos de máquinas
+### Cálculo de peças e elementos de máquinas
 
 67 casos, cada um com formulário próprio, verificações, avisos, hipóteses, referências, Word e
 registro no memorial. A página abre num painel por pergunta, área e grupo, e cada caso mostra a
@@ -371,7 +375,7 @@ resposta ao lado dos dados (`docs/estatica_e_resistencia.md` e `docs/elementos_d
 - três círculos de Mohr, invariantes e tabelas de transformação.
 - registro 2D ou 3D no projeto permanente.
 
-### Vento nas estruturas
+### Vento em edificações
 
 Calcula a ação do vento numa edificação de planta retangular pela **ABNT NBR 6123:2023**
 (`core/vento_*.py`; detalhes em `docs/vento_nbr6123.md`):
@@ -401,7 +405,9 @@ Importa os resultados do **SolidWorks Simulation** (`core/esforcos_modelo.py`; d
 milhar), converte para esforço interno com tração positiva, **confere as reações** contra o Plano de
 cargas (caso vertical sem reação horizontal, forças concentradas equilibradas, área carregada) e
 combina os casos **ponto a ponto** para achar o pior de cada barra (compressão, tração, momento
-forte com o N junto, momento fraco, cortante, torque). Perfil lido do nome da viga quando o
+forte com o N junto, momento fraco, cortante, torque). A **torção** de cada barra é verificada pela
+NBR 8800:2008 5.5.2: T_Rd e interação nos tubos, tensões elásticas (Saint-Venant) nos perfis abertos.
+Perfil lido do nome da viga quando o
 SolidWorks diz qual é; tabela das barras com perfil, tipo e eixo forte gravada no projeto.
 
 A **leitura do modelo** (`core/leitura_do_modelo.py`) diz o que o programa entendeu: com o
@@ -440,7 +446,7 @@ verificada em cada pilar pelo AISC Design Guide 1 com os esforços da base combi
 espessura da placa, tração e cisalhamento nos chumbadores — e, com o critério Anglo, placa ≥ 16 mm,
 chumbador ≥ 5/8" e o furo, a arruela e o graute do item 8.7; desenho da placa em planta, CSV e registro.
 
-### Colunas do modelo
+### Pilares do modelo
 
 Todos os pilares do modelo do SolidWorks verificados de uma vez (`core/colunas_do_modelo.py`): os travamentos de cada pilar saem do esqueleto da macro, em x (barras que chegam na direção da alma) e em y (na direção da mesa); cada trecho entre travamentos recebe o K da Tabela E.1 pelas pontas, o trecho de maior K·L governa, o B₁ usa o maior trecho e o L_b o maior trecho entre os travamentos de L_y. A base no apoio é rotulada ou engastada (escolha do usuário); topo sem nada é balanço, com o K da coluna inteira. Tabela dos pilares, o cálculo de cada um, o desenho em pé, CSV e registro no memorial. Para um pilar digitado à mão, a tabela de travamentos da Flambagem de colunas.
 
@@ -462,7 +468,9 @@ A viga biapoiada que apoia a grade da plataforma (`core/viga_de_piso.py`; detalh
 ou mesa travada pela grade), FLM e FLA, cortante, flecha (L/350 da NBR; L/350 ou L/300 do critério
 Anglo), espessura mínima Anglo, reação para a ligação com o mínimo de 75 % do item 9.1, frequência
 natural, o **perfil mais leve** da família com o botão para adotá-lo, desenho da viga e registro no
-memorial.
+memorial. A **vibração do piso** segue o Anexo L da NBR 8800:2008: frequência nunca abaixo de 3 Hz
+e a flecha total na combinação frequente (viga mais o apoio) até 20 mm onde se caminha, 9 mm onde
+se pula ou dança e 5 mm em aeróbica.
 
 ### Ligações estruturais
 
@@ -483,7 +491,7 @@ reticulados (NBR 6123:2023, capítulo 8), guarda-corpos e equipamentos; **força
 pórtico**, **em cada nó** pilar–viga e **carga por metro** em pilares, vigas e guarda-corpos; desenho
 dos pórticos com as forças; CSV (ponto e vírgula, vírgula decimal); envio de W0, W90, W180 e W270 ao
 **plano de cargas**; registro com capítulo próprio no memorial (resultado, entradas, método e as
-tabelas). Usa os mesmos campos do Contraventamento de estruturas abertas.
+tabelas). Usa os mesmos campos do Contraventamento.
 
 **Viga a viga, pilar a pilar** (`core/vento_por_barras.py`, `docs/vento_barra_a_barra.md`): para
 estruturas que não são uma grade de pórticos iguais (duas colunas com balanço, escada ao lado,
@@ -532,11 +540,11 @@ ação pode ser editada e a matriz de fatores das combinações sai colorida (ma
 **Exportar para o modelo** (`core/exportacao_cargas.py`): escolha as unidades (N e mm, N e m, kN e m)
 e o eixo vertical (Y no SolidWorks, Z no Robot) e baixe a planilha Excel (Leia-me, Ações, Cargas com
 F_x, F_y e F_z já com sinal e o comando equivalente em cada programa, Combinações em matriz e em
-lista) ou os CSV; o PP vira a gravidade do modelo. Na página **Estruturas de aço → Combinações**, o
+lista) ou os CSV; o PP vira a gravidade do modelo. Na página **Barras, treliças e pórticos → Combinações**, o
 botão **Trazer as ações do plano de cargas** monta a tabela com as ações do plano para receber os
 esforços da barra tirados do modelo.
 
-### Degrau de escada em grade
+### Escada em grade
 
 Dimensiona o degrau de uma escada industrial em **grade de piso eletrofundida** e escolhe o modelo do
 catálogo **Selmec "Degraus" (DS)**, verificando a NR-12 (Anexo III), a NR-22, o Critério Anglo
@@ -564,7 +572,7 @@ Entrada impossível (desnível ou comprimento nulo, altura por lance menor que u
 erro claro: nada é corrigido em silêncio. Não dimensiona as ligações da longarina, a estrutura do
 patamar nem o guarda-corpo.
 
-### Contraventamento de estruturas abertas
+### Contraventamento
 
 Contraventamento vertical de **plataformas, mezaninos e pipe racks sem fechamento**, da planta à
 diagonal verificada (`core/contraventamento_plataforma.py`; detalhes em
@@ -621,7 +629,7 @@ comercial) com o botão para adotá-la, CSV, memorial desta base em Word ou PDF 
 
 Verifica a **barra inteira numa só rodada** (`core/column_buckling.py`, com as fórmulas em
 `core/column_design.py`, validado contra o AISC Design Guide 29 e contra o módulo de barras de
-Estruturas de aço em todo o catálogo de perfis):
+Barras, treliças e pórticos em todo o catálogo de perfis):
 
 - os **dois eixos** e **todos os modos de flambagem elástica** — flexão em x, flexão em y, torção,
   flexo-torção das seções monossimétricas e a raiz da cúbica nas assimétricas; adota-se o menor
@@ -701,7 +709,7 @@ conferido contra os exemplos do AISC Design Guide 29 e um caso real de planilha)
 Valores da NBR 8800:2008 marcados “CONFERIR” no código (μ = 0,35 nas classes A e C, f_ub do
 A325 e C_t ≤ 0,90) precisam ser confirmados na norma antes de emitir documentos.
 
-### Estruturas de aço
+### Barras, treliças e pórticos
 
 - catálogo geométrico de perfis e propriedades de seção;
 - barras pela **NBR 8800:2008**: tração (5.2), compressão

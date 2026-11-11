@@ -175,7 +175,7 @@ if calcular:
         # não foi reenviado e "calcular" voltaria a ser False.
         #
         # "origem_registro_id" é consumido (pop) aqui: só existe quando este
-        # cálculo acabou de chegar de um repasse (Assistente de cargas ou
+        # cálculo acabou de chegar de um repasse (Cálculo de peças ou
         # Mohr). Um recálculo manual posterior, sem repasse novo, não herda
         # mais essa origem.
         st.session_state["estatica_resultado"] = {

@@ -175,6 +175,28 @@ with st.container(border=True), secao_protegida("4. Critério"):
         help=AJUDA["norma"],
     )
 
+with st.container(border=True), secao_protegida("5. Vibração do piso"):
+    st.subheader("5. Vibração do piso", help=AJUDA["sec_vibracao"])
+    colunas = st.columns(2)
+    uso = colunas[0].selectbox(
+        "Uso do piso",
+        list(vp.USOS_VIBRACAO),
+        key="vp_uso_vibracao",
+        persist_state="session",
+        help=AJUDA["uso_vibracao"],
+    )
+    flecha_apoio = colunas[1].number_input(
+        "Flecha do apoio (mm)",
+        0.0,
+        500.0,
+        0.0,
+        0.5,
+        format="%.1f",
+        key="vp_flecha_apoio",
+        persist_state="session",
+        help=AJUDA["flecha_apoio"],
+    )
+
 entrada = vp.EntradaVigaDePiso(
     perfil=perfil,
     aco=aco,
@@ -188,6 +210,8 @@ entrada = vp.EntradaVigaDePiso(
     tipo=tipo,
     norma=norma,
     anglo=anglo,
+    uso_vibracao=uso,
+    flecha_apoio_mm=float(flecha_apoio),
 )
 erros = vp.validar(entrada)
 if erros:
@@ -197,7 +221,7 @@ if erros:
 resultado = vp.calcular(entrada)
 
 st.header("Resultados")
-colunas = st.columns(4)
+colunas = st.columns(5)
 colunas[0].metric("Status", resultado.status, help=AJUDA["res_status"])
 colunas[1].metric(
     "Aproveitamento",
@@ -213,6 +237,11 @@ colunas[3].metric(
     "Flecha",
     f"{resultado.flecha_mm:.1f} mm (L/{vao * 1000 / resultado.flecha_mm:.0f})".replace(".", ","),
     help=AJUDA["res_flecha"],
+)
+colunas[4].metric(
+    "Frequência do piso",
+    f"{resultado.frequencia_piso_Hz:.1f} Hz".replace(".", ","),
+    help=AJUDA["res_frequencia"],
 )
 st.subheader("A viga", help=AJUDA["res_desenho"])
 mostrar_figura(
