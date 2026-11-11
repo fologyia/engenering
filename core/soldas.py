@@ -32,6 +32,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from core import centro_instantaneo as ci
 from core.verificacao import Verificacao
 
 NBR_2025 = "NBR8800_2024"  # o código interno da NBR 8800:2025
@@ -491,46 +492,16 @@ def centro_instantaneo(
     else:
         x_el, y_el = 0.0, 0.0
 
-    def residuo(xi: float, eta: float) -> tuple[float, float, float]:
-        x0, y0 = xi * escala, eta * escala
-        m_ci = m_kNmm - x0 * py_kN + y0 * px_kN
-        if abs(m_ci) < 1e-12:
-            return 1e6, 1e6, 0.0
-        sentido = 1.0 if m_ci > 0 else -1.0
-        sx, sy, sm, st = _forcas_no_centro(elementos, x0, y0, sentido, perna_mm, q_por_mm)
-        lam = sm / abs(m_ci)
-        norma = max(st, 1e-12)  # a soma das forças dos elementos: vale também sem P
-        return (sx - lam * px_kN) / norma, (sy - lam * py_kN) / norma, lam
-
-    xi, eta = x_el / escala, y_el / escala
-    r1, r2, lam = residuo(xi, eta)
-    convergiu = False
-    for _ in range(80):
-        erro = math.hypot(r1, r2)
-        if erro < 1e-7:
-            convergiu = True
-            break
-        h = 1e-6
-        a1, a2, _ = residuo(xi + h, eta)
-        b1, b2, _ = residuo(xi, eta + h)
-        j11, j21 = (a1 - r1) / h, (a2 - r2) / h
-        j12, j22 = (b1 - r1) / h, (b2 - r2) / h
-        det = j11 * j22 - j12 * j21
-        if abs(det) < 1e-14:
-            break
-        dxi = -(r1 * j22 - r2 * j12) / det
-        deta = -(j11 * r2 - j21 * r1) / det
-        passo = 1.0
-        for _ in range(30):  # Newton amortecido: só aceita o passo que reduz o resíduo
-            n1, n2, nlam = residuo(xi + passo * dxi, eta + passo * deta)
-            if math.hypot(n1, n2) < erro:
-                xi, eta, r1, r2, lam = xi + passo * dxi, eta + passo * deta, n1, n2, nlam
-                break
-            passo /= 2
-        else:
-            break
-    capacidade = lam * p if p > 0 else lam * abs(m_kNmm) / 1000.0
-    return ResultadoCentroInstantaneo(lam, xi * escala, eta * escala, convergiu, capacidade)
+    eq = ci.resolver(
+        lambda x0, y0, sentido: _forcas_no_centro(elementos, x0, y0, sentido, perna_mm, q_por_mm),
+        px_kN,
+        py_kN,
+        m_kNmm,
+        escala=escala,
+        inicio=(x_el, y_el),
+    )
+    capacidade = eq.fator * p if p > 0 else eq.fator * abs(m_kNmm) / 1000.0
+    return ResultadoCentroInstantaneo(eq.fator, eq.x, eq.y, eq.convergiu, capacidade)
 
 
 # =============================================================================================

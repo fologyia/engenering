@@ -205,6 +205,14 @@ MENU: tuple[GrupoMenu, ...] = (
                 outros_nomes=("Degrau de escada em grade",),
             ),
             ItemMenu(
+                "app_pages/escada_marinheiro.py",
+                "Escada marinheiro",
+                ":material/stairs:",
+                "Conferir a escada fixa vertical e a gaiola pela NR-12 e dimensionar degrau e montante",
+                secao=BARRAS,
+                outros_nomes=("Escada vertical", "Escada tipo marinheiro"),
+            ),
+            ItemMenu(
                 "app_pages/estruturas_aco.py",
                 "Barras, treliças e pórticos",
                 ":material/architecture:",

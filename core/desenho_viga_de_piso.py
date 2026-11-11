@@ -10,25 +10,14 @@ from __future__ import annotations
 import math
 
 from core import cena_3d as c3
+from core import desenho_2d as d2
+from core.desenho_2d import Item
 
 COR_TEXTO = "#1f2328"
 COR_ESTRUTURA = "#5b6470"
 COR_DEFORMADA = "#1f6feb"
 COR_CARGA = "#cf222e"
 COR_CONCENTRADA = "#d4760a"
-
-Item = c3.Poligono2D | c3.Linha2D | c3.Seta2D | c3.Etiqueta2D
-
-
-def _n(valor: float, casas: int = 1) -> str:
-    if not math.isfinite(valor):
-        return "∞"
-    return f"{valor:.{casas}f}".replace(".", ",")
-
-
-def _texto(x: float, y: float, conteudo: str, *, tamanho: float = 11.0, cor: str = COR_TEXTO,
-           peso: str = "normal", ancora: str = "middle") -> c3.Etiqueta2D:  # fmt: skip
-    return c3.Etiqueta2D(x, y, conteudo, cor, tamanho, peso, False, ancora)
 
 
 def _deformada(x0: float, x1: float, y: float, flecha_px: float) -> list[Item]:
@@ -65,7 +54,7 @@ def esquema(
         *_deformada(x0, x1, y, 24.0),
         c3.Linha2D((x0, y), (x1, y), COR_ESTRUTURA, 5.0),
         c3.Linha2D((x0, topo_q), (x1, topo_q), COR_CARGA, 1.2),
-        _texto(x0, topo_q - 14, f"q = {_n(q_kN_m, 2)} kN/m (total)", cor=COR_CARGA,
+        d2.texto(x0, topo_q - 14, f"q = {d2.n(q_kN_m, 2)} kN/m (total)", cor=COR_CARGA,
                ancora="start"),
     ]  # fmt: skip
     passo = (x1 - x0) / 10
@@ -77,22 +66,22 @@ def esquema(
     if p_kN > 0:
         itens.append(c3.Seta2D((meio, topo_q - 48), (meio, y - 4), COR_CONCENTRADA, 2.6, 10.0))
         itens.append(
-            _texto(meio + 10, topo_q - 40, f"P = {_n(p_kN, 1)} kN", tamanho=12,
+            d2.texto(meio + 10, topo_q - 40, f"P = {d2.n(p_kN, 1)} kN", tamanho=12,
                    cor=COR_CONCENTRADA, peso="bold", ancora="start")
         )  # fmt: skip
     esbeltez = vao_m * 1000 / flecha_mm if flecha_mm > 0 else math.inf
     relacao = f" (L/{esbeltez:.0f})" if math.isfinite(esbeltez) else ""
     itens += [
-        _texto(meio, y + 40, f"δ = {_n(flecha_mm, 1)} mm{relacao}", cor=COR_DEFORMADA,
+        d2.texto(meio, y + 40, f"δ = {d2.n(flecha_mm, 1)} mm{relacao}", cor=COR_DEFORMADA,
                peso="bold"),
         c3.Seta2D((x0, y + 72), (x0, y + 32), COR_ESTRUTURA, 1.8, 9.0),
         c3.Seta2D((x1, y + 72), (x1, y + 32), COR_ESTRUTURA, 1.8, 9.0),
-        _texto(x0 + 8, y + 64, f"R = {_n(reacao_kN, 1)} kN", ancora="start"),
-        _texto(x1 - 8, y + 64, f"R = {_n(reacao_kN, 1)} kN", ancora="end"),
+        d2.texto(x0 + 8, y + 64, f"R = {d2.n(reacao_kN, 1)} kN", ancora="start"),
+        d2.texto(x1 - 8, y + 64, f"R = {d2.n(reacao_kN, 1)} kN", ancora="end"),
         c3.Linha2D((x0, y + 92), (x1, y + 92), COR_TEXTO, 1.0),
         c3.Linha2D((x0, y + 86), (x0, y + 98), COR_TEXTO, 1.0),
         c3.Linha2D((x1, y + 86), (x1, y + 98), COR_TEXTO, 1.0),
-        _texto(meio, y + 108, f"L = {_n(vao_m, 2)} m", tamanho=12, peso="bold"),
+        d2.texto(meio, y + 108, f"L = {d2.n(vao_m, 2)} m", tamanho=12, peso="bold"),
     ]  # fmt: skip
     return c3.Desenho2D(
         640.0,

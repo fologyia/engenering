@@ -212,6 +212,19 @@ AJUDA: dict[str, str] = {
         "Momento **total** (kN·m) no centro do grupo. Use quando já conhece o valor. Positivo = "
         "anti-horário."
     ),
+    "res_centro_instantaneo": (
+        "Quantos parafusos o grupo vale pelo centro instantâneo: a força que o grupo aguenta é "
+        "C × a resistência de um parafuso. Com a carga pelo centro, C é o número de parafusos; "
+        "com momento, menos. O ponto CI aparece na planta da ligação."
+    ),
+    "metodo_grupo": (
+        "Como dividir a força entre os parafusos quando há momento. **Elástico**: o grupo gira em "
+        "torno do centro e o parafuso mais afastado manda; é o mais simples e fica a favor da "
+        "segurança. **Centro instantâneo**: o grupo gira em torno de outro ponto e cada parafuso "
+        "trabalha conforme deforma, como nas tabelas da Parte 7 do AISC Manual; aguenta mais (no "
+        "exemplo da Tabela 7-8, 2 × 6 parafusos com a carga a 16 in, 25 % a mais). O deslizamento "
+        "e a interação tração–corte continuam pelo elástico."
+    ),
     # ------------------------------------------------------------------ 4. atrito, instalação e escopo
     "superficie": (
         "Estado da superfície de contato entre as chapas. Ele define o coeficiente de atrito μ "

@@ -476,6 +476,16 @@ def _formulario() -> chk.EntradaLigacao | None:
                 persist_state="session",
                 help=AJUDA["momento_valor"],
             )
+        metodo_grupo = chk.METODO_ELASTICO
+        if modo_momento != _MOM_NENHUM:
+            metodo_grupo = st.radio(
+                "Método do grupo com momento",
+                list(chk.METODOS_DO_GRUPO),
+                horizontal=True,
+                key="ligest_metodo_grupo",
+                persist_state="session",
+                help=AJUDA["metodo_grupo"],
+            )
         N_t = M_t = 0.0
         interacao_tabela = False
         if com_tracao:
@@ -727,6 +737,7 @@ def _formulario() -> chk.EntradaLigacao | None:
         chapa_largura=chapa_largura,
         chapa_t=chapa_t,
         chapa_furos=chapa_furos,
+        metodo_grupo=metodo_grupo,
         **alavanca,
     )
 
@@ -910,6 +921,13 @@ def _painel_resumo(entrada: chk.EntradaLigacao, resultado: chk.ResultadoLigacao)
                     f"{resultado.forcas['F_t_Sd_kN']:.2f} kN",
                     border=True,
                     help=AJUDA["res_tracao"],
+                )
+            if "C_centro_instantaneo" in resultado.forcas:
+                st.metric(
+                    "C pelo centro instantâneo",
+                    f"{resultado.forcas['C_centro_instantaneo']:.3f}".replace(".", ","),
+                    border=True,
+                    help=AJUDA["res_centro_instantaneo"],
                 )
         st.markdown(f"**Verificação que governa:** {resultado.governante}")
         if resultado.forcas:

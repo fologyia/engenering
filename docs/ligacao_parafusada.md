@@ -21,7 +21,8 @@ validade da norma, que o usuário mandou retirar, não volta (um teste trava).
 
 1. **Corte e contato/rasgamento** do parafuso crítico (grupo excêntrico, método elástico), com
    ℓ_f medido a partir do furo e o teto 2,4·d_b·t·f_u/γ_a2 (ou 3,0 sem limite de deformação; 1,0
-   e 2,0 no furo muito alongado transversal).
+   e 2,0 no furo muito alongado transversal). Com momento no plano, o usuário pode escolher o
+   **centro instantâneo de rotação** (AISC Manual, Parte 7) — ver abaixo.
 2. **Tração no parafuso** (NBR 6.3.3.1): F_t,Rd = A_be·f_ub/γ_a2, A_be = 0,75·A_b. A tração do
    **grupo** (N_t, e o momento fora do plano M_t com o eixo neutro no centro do grupo) vira a
    força **por parafuso**; parafuso comprimido fica com zero.
@@ -62,6 +63,31 @@ validade da norma, que o usuário mandou retirar, não volta (um teste trava).
    memorial mesmo desligado.
 
 Aço digitado (f_y e f_u): f_u ≤ f_y é erro, com a sugestão do aço do catálogo.
+
+## Grupo excêntrico pelo centro instantâneo de rotação
+
+Com momento no plano, o campo **Método do grupo com momento** escolhe entre o **elástico** (o
+padrão, a favor da segurança) e o **centro instantâneo** (`bc.grupo_pelo_centro_instantaneo`):
+
+* a curva das Tabelas 7-6 a 7-13 do AISC Manual (Crawford e Kulak): R_i = r·(1 − e^(−10·Δ_i))^0,55,
+  com Δ_máx = 0,34 in (8,64 mm) no parafuso mais afastado e Δ_i proporcional à distância — como
+  μ·Δ_i = 3,4·ρ_i/ρ_máx, a lei não depende da unidade;
+* r = mín(F_v,Rd; F_c,Rd) do parafuso, da norma escolhida, igual para todos (como nas tabelas);
+* o centro sai do equilíbrio (ΣR_i = λ·P e ΣR_i·ρ_i = λ·M) pelo mesmo resolvedor das soldas
+  (`core/centro_instantaneo.py`); C = λ·P/r é o coeficiente das tabelas e a linha da tabela é
+  P_Sd ≤ C·r (só momento: |M_Sd| ≤ ΣR_i·ρ_i);
+* o elástico continua na tabela como valor de apoio, e o **deslizamento** e a **interação
+  tração–corte** seguem pelo elástico (a favor da segurança);
+* carga quase pelo centro (excentricidade até 5 % do raio do grupo): o centro vai para o infinito e
+  vale o elástico, que é exato no limite; se a busca não fechar com mais excentricidade, fica o
+  elástico com um alerta;
+* na planta da ligação, o centro aparece como **CI**, com o C na legenda.
+
+Conferido com o exemplo da Tabela 7-8 do AISC Manual (2 linhas de 6 parafusos, gabarito 5,5 in,
+passo 3 in, carga a 16 in: C = 3,55) e com a verificação da IDEA StatiCa "Bracket plate connections
+(AISC)" (2 × 3,55 × 24,3 kips = 172,6 kips). Com todos os parafusos à mesma distância do centro
+(2 parafusos, carga perto do centro), o centro instantâneo fica até 1,8 % abaixo do elástico: na
+curva, o parafuso mais afastado chega a 0,98·R_ult. Testes em `tests/test_centro_instantaneo_parafusos.py`.
 
 ## Memorial na página
 

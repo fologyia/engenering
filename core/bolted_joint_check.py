@@ -81,8 +81,15 @@ ACO_INFORMADO = "Informado (f_y e f_u)"
 AVISOS_FIXOS = (
     "O torque de aperto é só uma estimativa (T ≈ K·F_Tb·d). A instalação deve ser por rotação "
     "da porca, chave calibrada ou indicador direto de tração.",
-    "O grupo excêntrico usa o método elástico, que é conservador frente ao centro instantâneo de rotação.",
+    "Grupo excêntrico: o método elástico fica a favor da segurança; o centro instantâneo de "
+    "rotação (AISC Manual, Parte 7) aproveita mais o grupo. O deslizamento e a interação "
+    "tração–corte seguem sempre pelo elástico.",
 )
+
+#: Como o grupo excêntrico (com momento no plano) é verificado.
+METODO_ELASTICO = "Elástico (a favor da segurança)"
+METODO_CENTRO_INSTANTANEO = "Centro instantâneo (AISC Manual, Parte 7)"
+METODOS_DO_GRUPO = (METODO_ELASTICO, METODO_CENTRO_INSTANTANEO)
 
 
 @dataclass(frozen=True)
@@ -155,6 +162,8 @@ class EntradaLigacao:
     # Aço digitado (aco = ACO_INFORMADO)
     f_y: float | None = None
     f_u: float | None = None
+    # Grupo excêntrico: método elástico ou centro instantâneo de rotação
+    metodo_grupo: str = METODO_ELASTICO
 
 
 @dataclass(frozen=True)
@@ -226,6 +235,8 @@ def _validar(entrada: EntradaLigacao) -> None:
         raise ValueError(f"Aço desconhecido: {entrada.aco}.")
     if entrada.tipo_furo not in bc.TIPOS_DE_FURO:
         raise ValueError(f"Tipo de furo desconhecido: {entrada.tipo_furo}.")
+    if entrada.metodo_grupo not in METODOS_DO_GRUPO:
+        raise ValueError(f"Método do grupo desconhecido: {entrada.metodo_grupo}.")
     for nome, valor in (("N_t", entrada.N_t), ("M_t", entrada.M_t)):
         if not math.isfinite(valor):
             raise ValueError(f"{nome} deve ser um número finito.")
@@ -281,6 +292,92 @@ def _linha(
     status: str = "",
 ) -> Verificacao:
     return Verificacao(nome, solicitante, resistente, unidade, referencia, formula, status)
+
+
+def _grupo_pelo_centro_instantaneo(
+    coords: Sequence[tuple[float, float]],
+    N_Sd: float,
+    V_Sd: float,
+    M_Sd: float,
+    R_bolt: float,
+    Fv: float,
+    Fc_min: float,
+    elastica: Verificacao,
+    forcas: dict[str, float],
+    equacoes: list[str],
+) -> list[Verificacao]:
+    """A linha do grupo pelo centro instantâneo e a do elástico como referência; sem convergir,
+    fica o elástico com o aviso."""
+    grupo = bc.grupo_pelo_centro_instantaneo(coords, V=V_Sd, N=N_Sd, M=M_Sd, r_parafuso=R_bolt)
+    if grupo.pelo_elastico:
+        return [elastica]  # carga quase centrada: os dois métodos dão o mesmo
+    if not grupo.convergiu or not grupo.fator > 0:
+        return [
+            elastica,
+            _linha(
+                "Centro instantâneo de rotação",
+                None,
+                None,
+                "—",
+                "AISC Manual, Parte 7",
+                "O cálculo pelo centro instantâneo não convergiu para esta carga: ficou o método "
+                "elástico, a favor da segurança.",
+                "ALERTA",
+            ),
+        ]
+    P_Sd = math.hypot(N_Sd, V_Sd)
+    forcas["CI_x_mm"] = grupo.x_mm
+    forcas["CI_y_mm"] = grupo.y_mm
+    forcas["fator_centro_instantaneo"] = grupo.fator
+    curva = (
+        "R_i = r·(1 − e^(−10·Δ_i))^0,55, Δ_i = 0,34 in·ρ_i/ρ_máx (8,64 mm no parafuso mais "
+        "afastado do centro)"
+    )
+    resistencia = f"r = mín(F_v,Rd = {Fv:.2f}; F_c,Rd = {Fc_min:.2f}) = {R_bolt:.2f} kN"
+    centro = (
+        f"centro instantâneo a ({grupo.x_mm:.1f}; {grupo.y_mm:.1f}) mm do centro do grupo"
+    ).replace(".", ",")
+    if grupo.C is not None:
+        forcas["C_centro_instantaneo"] = grupo.C
+        linha = _linha(
+            "Grupo pelo centro instantâneo — min(corte; contato/rasgamento)",
+            P_Sd,
+            grupo.C * R_bolt,
+            "kN",
+            "AISC Manual, Parte 7 (Tabelas 7-6 a 7-13), com r da NBR 6.3.3.2 e 6.3.3.3 / "
+            "AISC J3.6 e J3.10",
+            f"P_Sd = √(N² + V²) = {P_Sd:.2f} kN ≤ C·r = {grupo.C:.3f} × {R_bolt:.2f} = "
+            f"{grupo.C * R_bolt:.2f} kN; {resistencia}; {centro}",
+        )
+        equacoes.append(
+            f"Grupo excêntrico pelo centro instantâneo (AISC Manual, Parte 7): {curva}; o centro "
+            f"sai do equilíbrio ΣR_i = λ·P e ΣR_i·ρ_i = λ·M em torno do centro; C = λ·P/r = "
+            f"{grupo.C:.3f} parafusos efetivos (no método elástico, r/R_max = "
+            f"{R_bolt / elastica.solicitante if elastica.solicitante else 0.0:.3f})"
+        )
+    else:  # só momento no plano
+        M_Rd = grupo.fator * abs(M_Sd)
+        linha = _linha(
+            "Grupo pelo centro instantâneo — momento no plano",
+            abs(M_Sd),
+            M_Rd,
+            "kN·m",
+            "AISC Manual, Parte 7, com r da NBR 6.3.3.2 e 6.3.3.3 / AISC J3.6 e J3.10",
+            f"|M_Sd| = {abs(M_Sd):.3f} kN·m ≤ ΣR_i·ρ_i = {M_Rd:.3f} kN·m; {resistencia}; {centro}",
+        )
+        equacoes.append(
+            f"Grupo sob momento pelo centro instantâneo (AISC Manual, Parte 7): {curva}; "
+            "M_Rd = ΣR_i·ρ_i em torno do centro"
+        )
+    # O elástico fica como valor de apoio: sem aproveitamento, não governa a ligação.
+    referencia = replace(
+        elastica,
+        nome="Parafuso crítico pelo método elástico (referência)",
+        status="INFO",
+        tipo="informativo",
+        aproveitamento=None,
+    )
+    return [linha, referencia]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -519,18 +616,24 @@ def verificar_ligacao(entrada: EntradaLigacao) -> ResultadoLigacao:
             )
         )
     else:
-        linhas.append(
-            _linha(
-                "Parafuso crítico — min(corte; contato/rasgamento)",
-                elu["R_max"],
-                R_bolt,
-                "kN",
-                "NBR 6.3.3.2 e 6.3.3.3 / AISC J3.6 e J3.10",
-                f"R_max (ELU, elástico) ≤ mín(F_v,Rd = {Fv:.2f}; F_c,Rd = {Fc_min:.2f}) = "
-                f"{R_bolt:.2f} kN; F_c,Rd com {_motivo_do_contato(entrada)}: {contato_txt}; "
-                f"J = {elu['J']:.0f} mm²",
-            )
+        elastica = _linha(
+            "Parafuso crítico — min(corte; contato/rasgamento)",
+            elu["R_max"],
+            R_bolt,
+            "kN",
+            "NBR 6.3.3.2 e 6.3.3.3 / AISC J3.6 e J3.10",
+            f"R_max (ELU, elástico) ≤ mín(F_v,Rd = {Fv:.2f}; F_c,Rd = {Fc_min:.2f}) = "
+            f"{R_bolt:.2f} kN; F_c,Rd com {_motivo_do_contato(entrada)}: {contato_txt}; "
+            f"J = {elu['J']:.0f} mm²",
         )
+        if entrada.metodo_grupo == METODO_CENTRO_INSTANTANEO and M_Sd != 0:
+            linhas.extend(
+                _grupo_pelo_centro_instantaneo(
+                    coords, N_Sd, V_Sd, M_Sd, R_bolt, Fv, Fc_min, elastica, forcas, equacoes
+                )
+            )
+        else:
+            linhas.append(elastica)
 
     # --- 5. Deslizamento ---
     F_Tb: float | None = None
@@ -1689,6 +1792,12 @@ def _premissas(entrada: EntradaLigacao, resultado: ResultadoLigacao) -> list[str
         "indicador de tração.",
         "t = espessura da parte ligada mais fina (nunca a soma).",
     ]
+    if "fator_centro_instantaneo" in resultado.forcas:
+        premissas.append(
+            "Grupo excêntrico pelo centro instantâneo: todos os parafusos com a mesma resistência "
+            "r, a menor entre corte e contato (como nas tabelas do AISC Manual); deslizamento e "
+            "interação tração–corte pelo método elástico, a favor da segurança."
+        )
     if resultado.forcas.get("V_Sd_kN", 0.0) != 0:
         if entrada.chapa_largura is None:
             premissas.append(
@@ -1812,6 +1921,9 @@ def registro_ligacao(
         else None,
         "f_y_MPa": entrada.f_y if entrada.aco == ACO_INFORMADO else None,
         "f_u_MPa": entrada.f_u if entrada.aco == ACO_INFORMADO else None,
+        "metodo_do_grupo": entrada.metodo_grupo
+        if entrada.metodo_grupo != METODO_ELASTICO
+        else None,
     }
     entradas = {chave: valor for chave, valor in entradas.items() if valor is not None}
 
@@ -1831,11 +1943,18 @@ def registro_ligacao(
         entradas=entradas,
         resultados=resultados,
         metodo=(
-            "Grupo de parafusos pelo método elástico (Kulak, Fisher & Struik, cap. 13), "
-            "conservador frente ao centro instantâneo de rotação; resistências pela "
-            f"{NORMAS_ROTULOS[entrada.norma]}, com o item em cada linha da tabela de "
-            "verificações. O cálculo é conferido por testes automáticos com os exemplos do AISC "
-            "Design Guide 29 (págs. 157–159 e 185–186) e por casos conferidos à mão."
+            (
+                "Grupo de parafusos pelo centro instantâneo de rotação (AISC Manual, Parte 7: "
+                "curva de Crawford e Kulak, Δ_máx = 0,34 in), com o método elástico (Kulak, "
+                "Fisher & Struik, cap. 13) no deslizamento e na interação tração–corte; "
+                if "fator_centro_instantaneo" in resultado.forcas
+                else "Grupo de parafusos pelo método elástico (Kulak, Fisher & Struik, cap. 13), "
+                "conservador frente ao centro instantâneo de rotação; "
+            )
+            + f"resistências pela {NORMAS_ROTULOS[entrada.norma]}, com o item em cada linha da "
+            "tabela de verificações. O cálculo é conferido por testes automáticos com os exemplos "
+            "do AISC Design Guide 29 (págs. 157–159 e 185–186), do AISC Manual (Tabela 7-8) e "
+            "por casos conferidos à mão."
         ),
         equacoes=list(resultado.equacoes),
         criterios=[
@@ -1850,6 +1969,13 @@ def registro_ligacao(
             REFERENCIAS_NORMA[entrada.norma],
             "Anglo American — Critério de Projeto Estruturas Metálicas AA-BR-DPST-DR-0001, item 9.1.",
             "Kulak, Fisher & Struik — Guide to Design Criteria for Bolted and Riveted Joints, cap. 13.",
+            *(
+                [
+                    "AISC Steel Construction Manual, Parte 7 — grupos excêntricos (Tabelas 7-6 a 7-13)."
+                ]
+                if "fator_centro_instantaneo" in resultado.forcas
+                else []
+            ),
         ],
         conclusao=(
             f"Status geral {resultado.status_geral}; aproveitamento máximo "

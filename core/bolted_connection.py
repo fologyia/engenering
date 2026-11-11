@@ -27,6 +27,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from core import centro_instantaneo as ci
 from core.verificacao import Verificacao
 
 KIP_KN = 4.448222  # 1 kip em kN
@@ -407,6 +408,112 @@ def grupo_excentrico_elastico(
         forcas.append((fx, fy, math.hypot(fx, fy)))
     Rmax = max(f[2] for f in forcas)
     return dict(J=J, forcas=forcas, R_max=Rmax, R0=math.hypot(N / n, V / n))
+
+
+# ---------------------------------------------------------------------------------------------
+# GRUPO EXCÊNTRICO — centro instantâneo de rotação (AISC Manual, Parte 7; Crawford e Kulak)
+# ---------------------------------------------------------------------------------------------
+#: R/R_ult = (1 − e^(−μ·Δ))^λ com μ = 10/in, λ = 0,55 e Δ_máx = 0,34 in (8,64 mm) no parafuso mais
+#: afastado do centro. Como Δ_i = Δ_máx·ρ_i/ρ_máx, μ·Δ_i = 3,4·ρ_i/ρ_máx: a lei não depende da
+#: unidade. É a curva das Tabelas 7-6 a 7-13 do AISC Manual.
+MU_DELTA_MAX = 10.0 * 0.34
+EXPOENTE_DA_CURVA = 0.55
+DELTA_MAX_MM = 0.34 * 25.4
+#: Até onde a busca do centro vai (em vezes a maior entre o raio do grupo e a distância do centro
+#: elástico): além disso a carga é praticamente centrada e a busca recomeça de outro ponto.
+LIMITE_DA_BUSCA = 20.0
+#: Excentricidade (em vezes o raio do grupo, √(J/n)) até a qual a carga conta como quase centrada.
+QUASE_CENTRADA = 0.05
+
+
+def forca_relativa_no_parafuso(rho_relativo: float) -> float:
+    """R/R_ult do parafuso a ρ/ρ_máx do centro instantâneo."""
+    return (1.0 - math.exp(-MU_DELTA_MAX * rho_relativo)) ** EXPOENTE_DA_CURVA
+
+
+@dataclass(frozen=True)
+class GrupoPeloCentroInstantaneo:
+    """O grupo pelo centro instantâneo.
+
+    ``fator``: quantas vezes a carga de cálculo cabe no grupo (aproveitamento = 1/fator);
+    ``C``: a capacidade em parafusos — P_Rd = C·r (o coeficiente das tabelas do AISC Manual);
+    ``None`` sem força no plano (só momento); (``x_mm``, ``y_mm``): o centro, medido do centro
+    geométrico do grupo; ``concentrico``: a carga passa pelo centro (todos os parafusos iguais);
+    ``pelo_elastico``: carga quase centrada, em que a busca do centro não fecha — vale o elástico.
+    """
+
+    fator: float
+    C: float | None
+    x_mm: float
+    y_mm: float
+    convergiu: bool
+    concentrico: bool = False
+    pelo_elastico: bool = False
+
+
+def grupo_pelo_centro_instantaneo(
+    coords: Sequence[tuple[float, float]], V: float, N: float, M: float, r_parafuso: float
+) -> GrupoPeloCentroInstantaneo:
+    """Capacidade do grupo de parafusos no plano pelo centro instantâneo de rotação.
+
+    Mesma convenção do método elástico: V em +y e N em +x (kN) pelo centro do grupo, M no plano
+    (kN·m, anti-horário +). ``r_parafuso`` é a resistência de cálculo de um parafuso (kN), a
+    menor entre corte e contato; todos os parafusos têm a mesma, como nas tabelas do AISC.
+    """
+    n = len(coords)
+    if n == 0 or not r_parafuso > 0:
+        raise ValueError("O grupo precisa de parafusos com resistência maior que zero.")
+    xc = sum(x for x, _ in coords) / n
+    yc = sum(y for _, y in coords) / n
+    rel = [(x - xc, y - yc) for x, y in coords]
+    j = sum(x * x + y * y for x, y in rel)
+    p = math.hypot(N, V)
+    m = M * 1000.0  # kN·m → kN·mm
+    tamanho = max(math.sqrt(j / n), 1.0)
+    if abs(m) <= 1e-9 * max(p, 1.0) * tamanho:
+        # A carga passa pelo centro: todos os parafusos levam o mesmo, C = n.
+        fator = n * r_parafuso / p if p > 0 else math.inf
+        return GrupoPeloCentroInstantaneo(fator, float(n), 0.0, 0.0, True, concentrico=True)
+    if j <= 0:
+        return GrupoPeloCentroInstantaneo(0.0, 0.0, 0.0, 0.0, True)  # um parafuso não gira
+
+    def forcas(x0: float, y0: float, sentido: float) -> tuple[float, float, float, float]:
+        rhos = [(math.hypot(x - x0, y - y0), x - x0, y - y0) for x, y in rel]
+        rho_max = max(rho for rho, _, _ in rhos)
+        sx = sy = sm = st = 0.0
+        for rho, rx, ry in rhos:
+            if rho < 1e-9:
+                continue
+            r = r_parafuso * forca_relativa_no_parafuso(rho / rho_max)
+            sx += r * (-sentido * ry / rho)
+            sy += r * (sentido * rx / rho)
+            sm += r * rho
+            st += r
+        return sx, sy, sm, st
+
+    x_el, y_el = (-V * j / (m * n), N * j / (m * n)) if p > 0 else (0.0, 0.0)  # CI elástico
+    escala = max(tamanho, math.hypot(x_el, y_el))
+    # Partindo do centro elástico; se a busca não fecha (com pouca excentricidade ela pode correr
+    # para longe, onde o resíduo some sem haver equilíbrio), parte de outros pontos da mesma
+    # reta, mais perto e mais longe do grupo.
+    eq = None
+    for k in (1.0, 0.5, 0.75, 0.25, 1.5, 2.0, 3.0):
+        eq = ci.resolver(
+            forcas, N, V, m, escala=escala, inicio=(k * x_el, k * y_el), limite=LIMITE_DA_BUSCA
+        )
+        if eq.convergiu:
+            break
+    assert eq is not None
+    if not eq.convergiu and p > 0 and abs(m) / p <= QUASE_CENTRADA * tamanho:
+        # Carga quase pelo centro: o centro instantâneo vai para o infinito e o elástico, exato
+        # no limite (todos os parafusos iguais), fica no lugar.
+        elastico = grupo_excentrico_elastico(list(coords), V=V, N=N, M=M)
+        fator = r_parafuso / elastico["R_max"]
+        return GrupoPeloCentroInstantaneo(
+            fator, fator * p / r_parafuso, x_el, y_el, True, pelo_elastico=True
+        )
+    c = eq.fator * p / r_parafuso if p > 0 else None
+    return GrupoPeloCentroInstantaneo(eq.fator, c, eq.x, eq.y, eq.convergiu)
 
 
 def raio_circulo_equivalente(s: float, g: float) -> float:

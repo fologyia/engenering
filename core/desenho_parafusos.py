@@ -29,6 +29,7 @@ _PORCA = "#94a3b8"
 _FORCA = "#b45309"
 _CRITICO = "#b91c1c"
 _CORTE = "#b91c1c"  # plano de corte
+_CI = "#7c3aed"  # centro instantâneo de rotação
 _LARGURA_PX, _ALTURA_PX = 1000, 580
 
 Ponto = tuple[float, float]
@@ -182,6 +183,15 @@ def _planta(
             ponta_px=11 * ESC,
         )
         dg.rotulo(dr, g, (-1.0, -1.0), 28 * ESC, "M", _FORCA, grande, fundo=True)
+    # ------------------------------------------------------------------ centro instantâneo
+    if "CI_x_mm" in r.forcas and "CI_y_mm" in r.forcas:
+        cx, cy = r.forcas["CI_x_mm"], r.forcas["CI_y_mm"]
+        if x0 - sobra <= cx <= x_fim and y0 - sobra <= cy <= y1 + sobra:
+            c = p(cx, cy)
+            braco = 9 * ESC
+            dr.line([(c[0] - braco, c[1] - braco), (c[0] + braco, c[1] + braco)], fill=_CI, width=2 * ESC)  # fmt: skip
+            dr.line([(c[0] - braco, c[1] + braco), (c[0] + braco, c[1] - braco)], fill=_CI, width=2 * ESC)  # fmt: skip
+            dg.rotulo(dr, c, (1.0, -1.0), 10 * ESC, "CI", _CI, fonte, fundo=True)
     canto = p(x0, y1)
     dr.text((canto[0], canto[1] - 8 * ESC), "Planta", fill=dg.COR_COTA, font=fonte, anchor="lb")
     return critico, (forcas[critico][2] if critico >= 0 else 0.0)
@@ -260,7 +270,13 @@ def figura_parafusos(r: chk.ResultadoLigacao) -> ImagemDiagrama | None:
     itens: list[tuple[str, str, str]] = [
         ("area", _CHAPA, f"Chapa ligada (t = {_n(e.t, 2)} mm, {e.aco})"),
         ("area", _PARAFUSO, f"{n} × {e.designacao} {e.grau}, furo {_n(d_h, 1)} mm"),
-        ("seta", _FORCA, "Força de cálculo em cada parafuso (ELU)"),
+        (
+            "seta",
+            _FORCA,
+            "Força de cálculo em cada parafuso (ELU, método elástico)"
+            if "CI_x_mm" in r.forcas
+            else "Força de cálculo em cada parafuso (ELU)",
+        ),
     ]
     if critico >= 0:
         itens.append(
@@ -271,6 +287,17 @@ def figura_parafusos(r: chk.ResultadoLigacao) -> ImagemDiagrama | None:
         ("", _FORCA, f"   N = {_n(n_sd, 2)} kN · V = {_n(v_sd, 2)} kN · M = {_n(m_sd, 2)} kN·m"),
         ("tracejado", _CORTE, "Plano de corte do parafuso"),
     ]
+    if "CI_x_mm" in r.forcas and "CI_y_mm" in r.forcas:
+        ci_x, ci_y = r.forcas["CI_x_mm"], r.forcas["CI_y_mm"]
+        c_texto = (
+            f", C = {_n(r.forcas['C_centro_instantaneo'], 2)}"
+            if "C_centro_instantaneo" in r.forcas
+            else ""
+        )
+        itens += [
+            ("", _CI, f"CI: centro instantâneo de rotação{c_texto}"),
+            ("", _CI, f"   a ({_n(ci_x, 0)}; {_n(ci_y, 0)}) mm do centro do grupo"),
+        ]
     dg.legenda(dr, 668 * ESC, 96 * ESC, itens)
     titulo = f"Ligação parafusada — {n} × {e.designacao} {e.grau}"
     dr.text((18 * ESC, 14 * ESC), titulo, fill=dg.COR_TEXTO, font=_fonte(16 * ESC))

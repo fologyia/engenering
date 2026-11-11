@@ -550,6 +550,17 @@ lista) ou os CSV; o PP vira a gravidade do modelo. Na página **Barras, treliça
 botão **Trazer as ações do plano de cargas** monta a tabela com as ações do plano para receber os
 esforços da barra tirados do modelo.
 
+### Escada marinheiro
+
+Escada fixa vertical (75° a 90°), com ou sem gaiola (`core/escada_marinheiro.py`; detalhes em
+`docs/escada_marinheiro.md`): as medidas da **NR-12, Anexo III, item 13** (largura, espaçamento,
+diâmetro e primeira barra, distância à estrutura, lance único até 10 m ou lances de até 6 m
+afastados 0,70 m, montantes e gaiola passando 1,10–1,20 m do piso de chegada, gaiola acima de
+3,50 m a partir de 2,0 m, Ø 650–800 mm, barras verticais e arcos), o **degrau** com os 2,5 kN do
+degrau isolado da NBR 6120, os **montantes** à compressão pela NBR 8800 (largura entre suportes,
+espessura entre barras) e as forças nos **suportes**; desenhos de frente e em planta, na página e
+no memorial. Lembra a NR-12 1.3 (só na impossibilidade de escada de degraus) e a NR-35 acima de 2 m.
+
 ### Escada em grade
 
 Dimensiona o degrau de uma escada industrial em **grade de piso eletrofundida** e escolhe o modelo do
@@ -698,8 +709,9 @@ conferido contra os exemplos do AISC Design Guide 29 e um caso real de planilha)
   RCSC 2004, com **Comparar normas** lado a lado;
 - parafusos ASTM A325, A490 e A307 (rosca no plano ou fora, n planos de corte), com
   **Testar todos** para achar o menor que atende;
-- esforços característicos × de cálculo (γ_f), grupo excêntrico elástico (emenda por
-  sobreposição a = e + (n_col − 1)·s/2), grade ou coordenadas livres;
+- esforços característicos × de cálculo (γ_f), grupo excêntrico pelo método elástico ou pelo
+  **centro instantâneo de rotação** (AISC Manual, Parte 7: C = 3,55 no exemplo da Tabela 7-8;
+  emenda por sobreposição a = e + (n_col − 1)·s/2), grade ou coordenadas livres;
 - corte, contato e rasgamento por furo (ℓ_f medido a partir do furo), soma por furo no grupo,
   deslizamento em serviço (F_Tb das tabelas da NBR/RCSC), tração da peça com C_t e colapso
   por rasgamento;

@@ -404,6 +404,25 @@ def _registrar_padrao() -> None:
             ),
         ),
         ModuloTecnico(
+            id="escada_marinheiro",
+            titulo="Escada marinheiro",
+            versao="1.0",
+            pagina="app_pages/escada_marinheiro.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=10,
+            icone=":material/stairs:",
+            descricao=(
+                "Escada fixa vertical, com ou sem gaiola: medidas da NR-12 (Anexo III, item 13), "
+                "degrau e montantes pela NBR 8800 e forças nos suportes."
+            ),
+            aliases=(
+                "Escada vertical",
+                "Escada tipo marinheiro",
+                "Escada fixa vertical",
+                "Gaiola de proteção",
+            ),
+        ),
+        ModuloTecnico(
             id="viga_de_piso",
             titulo="Vigas de piso",
             versao="1.0",

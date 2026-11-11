@@ -96,6 +96,7 @@ opcoes = [
     "Análise de sensibilidade",
     "Projeto de parafusos",
     "Escada em grade",
+    "Escada marinheiro",
     "Vigas de piso",
     "Ligações estruturais",
     "Vento em estruturas abertas",
@@ -2656,6 +2657,46 @@ elif modulo == "Vigas de piso":
             """
         )
     link_modulo("app_pages/viga_de_piso.py", "Abrir Vigas de piso")
+
+
+elif modulo == "Escada marinheiro":
+    from core import escada_marinheiro as _em
+
+    st.header("Escada marinheiro")
+    st.markdown(
+        "Escada fixa **vertical** (75° a 90°), com ou sem **gaiola**. A página confere as medidas "
+        "da **NR-12, Anexo III, item 13** (largura, espaçamento e diâmetro das barras, distância à "
+        "estrutura, lances, gaiola) e calcula o **degrau** e os **montantes** pela NBR 8800, com "
+        "as forças nos **suportes**. A marinheiro só vale quando não cabe rampa, passarela ou "
+        "escada de degraus (item 1.3); acima de 2 m vale também a **NR-35**."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Altura e lances", "Do piso ao piso de chegada; lance único até 10 m, senão "
+             "lances de até 6 m com plataforma de descanso", "Arranjo / corte"],
+            ["Barras", "Largura 400–600 mm, espaçamento 250–300 mm, primeira até 550 mm, "
+             "Ø 25–38 mm, antiderrapantes, ≥ 150 mm da estrutura", "Desenho da escada"],
+            ["Gaiola", "Acima de 3,50 m; começa a 2,0 m, passa 1,10–1,20 m do piso de chegada, "
+             "Ø 650–800 mm", "Desenho da escada"],
+            ["Montante e suportes", "Barra chata (b × t) e a distância entre suportes",
+             "Desenho / lista de material"],
+            ["Cargas", "2,5 kN no degrau (NBR 6120); pessoas por lance (critério do programa)",
+             "NBR 6120 / cliente"],
+        ]
+    )  # fmt: skip
+    _r = _em.calcular(_em.EntradaMarinheiro())
+    mostrar_exemplo(
+        [
+            ["Escada", '6,00 m em um lance, largura 450 mm, barras de 1" a cada 300 mm'],
+            ["Gaiola", "Ø 700 mm a partir de 2,0 m, barras verticais a cada 300 mm"],
+            ["Montante", 'chata 2" × 3/8" em ASTM A36, suportes a cada 2,0 m'],
+        ],
+        f"Resultado esperado: {_r.barras_por_lance} barras, degrau com "
+        f"{100 * _r.momento_degrau_kNm / _r.momento_resistente_degrau_kNm:.0f} % e montante com "
+        f"{100 * _r.normal_montante_kN / _r.resistencia_montante_kN:.0f} %; peso de "
+        f"{_r.peso_total_kg:.0f} kg.",
+    )
+    link_modulo("app_pages/escada_marinheiro.py", "Abrir Escada marinheiro")
 
 
 elif modulo == "Ligações estruturais":

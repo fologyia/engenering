@@ -70,7 +70,7 @@ ETAPAS: tuple[Etapa, ...] = (
     Etapa(
         "Escadas e acessos",
         "app_pages/degrau_escada.py",
-        (("degrau_escada", ""), ("estruturas_aco", "")),
+        (("degrau_escada", ""), ("escada_marinheiro", ""), ("estruturas_aco", "")),
     ),
     Etapa(
         "Ligações",
