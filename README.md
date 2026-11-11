@@ -179,6 +179,12 @@ computador.
   só os capítulos numerados — sem capa, resumo executivo, controle de revisões nem
   aprovações —, em títulos e tabelas padrão do Word, que assumem o estilo do
   documento que os receber;
+- **as figuras da página entram no memorial**: a seção e a coluna em pé (Flambagem de colunas),
+  o pilar mais carregado em pé (Pilares do modelo), a planta e o corte da ligação (Projeto de
+  parafusos), a planta e as elevações do contraventamento, a viga de piso, o esquema de Vigas e
+  eixos e as figuras dos casos do Cálculo de peças e da Desenhar seção, além do 3D, do vento, da
+  escada, das ligações, das placas de base, das reações e dos sensores; o registro guarda o que é
+  preciso e o memorial desenha de novo, conferindo que os números batem com os registrados;
 - registros de Círculo de Mohr e de casos de carga não entram no memorial;
   registros superados ficam fora da seleção padrão;
 - listas de resultados (reações de apoio, envoltória, esbeltez de paredes,

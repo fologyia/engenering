@@ -16,9 +16,11 @@ demais para ler — aí ela é aumentada e a legenda diz isso.
 
 from __future__ import annotations
 
+import json
 import math
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass, fields
+from typing import Any
 
 from PIL import Image, ImageDraw
 
@@ -519,3 +521,81 @@ def figura_da_coluna(c: ColunaEmPe) -> ImagemDiagrama:
         + "."
     )
     return figura_final(imagem, titulo, legenda)
+
+
+# ---------------------------------------------------------------------------------------------
+# A coluna gravada no registro (o memorial a desenha de novo)
+# ---------------------------------------------------------------------------------------------
+def _em_tuplas(valor: Any) -> Any:
+    """Listas do JSON de volta a tuplas (os contornos da seção composta são tuplas)."""
+    if isinstance(valor, list):
+        return tuple(_em_tuplas(v) for v in valor)
+    return valor
+
+
+def _alturas(valor: Any) -> tuple[float, ...] | None:
+    if valor is None:
+        return None
+    return tuple(float(v) for v in valor)
+
+
+def coluna_para_o_registro(
+    c: ColunaEmPe, *, giro_da_secao: float = 0.0, com_secao: bool = True
+) -> dict[str, Any] | None:
+    """A coluna em pé (e a seção, se ``com_secao``) em dicionário JSON para o registro;
+    ``None`` se a seção tiver algo que o JSON não guarda (infinito, NaN): o registro sai sem a
+    figura, nunca deixa de sair por causa dela."""
+    try:
+        secao = json.loads(json.dumps(asdict(c.secao), allow_nan=False))
+    except (TypeError, ValueError):
+        return None
+    mf = c.mao_francesa
+    return {
+        "secao": secao,
+        "comprimento_mm": c.comprimento_mm,
+        "lx_mm": c.lx_mm,
+        "ly_mm": c.ly_mm,
+        "kx": c.kx,
+        "ky": c.ky,
+        "apoio_x": c.apoio_x,
+        "apoio_y": c.apoio_y,
+        "mao_francesa": None if mf is None else asdict(mf),
+        "espacadores_mm": list(c.espacadores_mm),
+        "travas_x_mm": None if c.travas_x_mm is None else list(c.travas_x_mm),
+        "travas_y_mm": None if c.travas_y_mm is None else list(c.travas_y_mm),
+        "giro_da_secao": giro_da_secao,
+        "com_secao": com_secao,
+    }
+
+
+def coluna_do_registro(dados: Mapping[str, Any]) -> tuple[ColunaEmPe, float, bool]:
+    """O inverso de :func:`coluna_para_o_registro`: a coluna, o giro da seção e se ela vai junto.
+
+    Levanta ``KeyError``/``TypeError``/``ValueError`` com dado estragado (o memorial omite a
+    figura e diz por quê)."""
+    bruta = dict(dados["secao"])
+    conhecidos = {f.name for f in fields(Secao)}
+    bruta = {k: v for k, v in bruta.items() if k in conhecidos}
+    bruta["dims"] = {k: _em_tuplas(v) for k, v in dict(bruta.get("dims") or {}).items()}
+    bruta["elementos"] = [dict(e) for e in bruta.get("elementos") or []]
+    secao = Secao(**bruta)
+    mf_bruta = dados.get("mao_francesa")
+    mf = None
+    if isinstance(mf_bruta, Mapping):
+        campos = {f.name for f in fields(MaoFrancesaNoDesenho)}
+        mf = MaoFrancesaNoDesenho(**{k: v for k, v in mf_bruta.items() if k in campos})
+    coluna = ColunaEmPe(
+        secao,
+        float(dados["comprimento_mm"]),
+        float(dados["lx_mm"]),
+        float(dados["ly_mm"]),
+        float(dados["kx"]),
+        float(dados["ky"]),
+        str(dados["apoio_x"]),
+        str(dados["apoio_y"]),
+        mf,
+        tuple(float(v) for v in dados.get("espacadores_mm") or ()),
+        _alturas(dados.get("travas_x_mm")),
+        _alturas(dados.get("travas_y_mm")),
+    )
+    return coluna, float(dados.get("giro_da_secao") or 0.0), bool(dados.get("com_secao", True))

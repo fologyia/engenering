@@ -146,6 +146,17 @@ def _diagramas_do_registro(
             )
 
     imagens = desenho.imagens_do_resultado(resultado, envoltoria=envoltoria)
+    try:
+        from core.desenho_da_viga import figura_da_viga
+
+        # O esquema do modelo (apoios, cargas e cotas) antes dos diagramas, como na página.
+        imagens = [figura_da_viga(modelo), *imagens]
+    except Exception as erro:  # noqa: BLE001 - sem o esquema, os diagramas continuam
+        from core import diagnostico as dg
+
+        if dg.levantar_erros():
+            raise
+        dg.gravar(dg.ocorrencia_de_falha("Memorial: esquema da viga", erro))
     return [
         {
             "titulo": imagem.titulo,

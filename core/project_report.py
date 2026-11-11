@@ -32,7 +32,7 @@ from core.memorial_verificacoes import (
 from core.memorial_word import gerar_memorial_word_padrao
 from core.pdf_fonts import fonte_pdf, texto_para_fonte
 from core.project_criteria import normalizar_criterios_projeto, resumo_criterios_projeto
-from core.record_charts import imagens_do_registro
+from core.record_charts import CHAVES_DE_FIGURA, imagens_do_registro
 from core.report_plugins import listar_provedores, titulos_secoes_extensao
 from core.technical_records import (
     SEPARADOR_PECA,
@@ -175,9 +175,12 @@ def _campo_legivel(chave: Any) -> str:
 
 
 def _chave_interna(chave: Any) -> bool:
-    """Chaves de vínculo (UUIDs) que não dizem nada impressas."""
+    """Chaves de vínculo (UUIDs) e dados gravados só para redesenhar as figuras: não dizem nada
+    impressas."""
     texto = _texto(chave, "")
-    return texto.endswith(("_id", "_ids")) or texto == "registro_origem"
+    return (
+        texto.endswith(("_id", "_ids")) or texto == "registro_origem" or texto in CHAVES_DE_FIGURA
+    )
 
 
 def _lista_de_mapas(valor: Any) -> bool:

@@ -11,15 +11,13 @@ from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
-from core import column_buckling as cbk
 from core import colunas_do_modelo as cdm
 from core import esforcos_modelo as em
 from core import leitura_do_modelo as ld
 from core import load_combinations as comb
 from core import plano_de_cargas as pc
-from core import section_catalog as sc
 from core import tratamento_do_modelo as tm
-from core.desenho_da_coluna import APOIOS_NAS_PONTAS, ColunaEmPe, figura_da_coluna
+from core.desenho_da_coluna import figura_da_coluna
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Pilares do modelo", ":material/view_column:")
@@ -241,35 +239,14 @@ with st.container(border=True), secao_protegida("O cálculo de um pilar"):
             help=AJUDA["ver_desenho"],
         )
     ):
-        nomes_dos_apoios = {pontas: nome for nome, pontas in APOIOS_NAS_PONTAS.items()}
-        apoio_x = nomes_dos_apoios.get((pilar.base, pilar.topo_x), "")
-        apoio_y = nomes_dos_apoios.get((pilar.base, pilar.topo_y), "")
-        try:
-            secao = cbk.secao_de_perfil(sc.obter_perfil(coluna.perfil))
-        except KeyError:
-            secao = None
-        if secao is None or not apoio_x or not apoio_y:
+        em_pe = cdm.coluna_em_pe(coluna)
+        if em_pe is None:
             st.caption(
                 "Este pilar não tem desenho: a base rotulada com o topo livre não está entre os "
                 "casos da Tabela E.1."
             )
         else:
-            mostrar_figura(
-                figura_da_coluna(
-                    ColunaEmPe(
-                        secao,
-                        pilar.comprimento_mm,
-                        coluna.eixo_x.governa.comprimento_mm,
-                        coluna.eixo_y.governa.comprimento_mm,
-                        coluna.eixo_x.governa.k,
-                        coluna.eixo_y.governa.k,
-                        apoio_x,
-                        apoio_y,
-                        travas_x_mm=coluna.eixo_x.alturas_mm,
-                        travas_y_mm=coluna.eixo_y.alturas_mm,
-                    )
-                )
-            )
+            mostrar_figura(figura_da_coluna(em_pe))
 
 with st.container(border=True), secao_protegida("Registrar no projeto"):
     st.subheader("Registrar no projeto", help=AJUDA["registrar"])

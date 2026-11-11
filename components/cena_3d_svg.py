@@ -37,7 +37,7 @@ def svg_da_cena(desenho: c3.Desenho2D) -> str:
             corpo.append(d.seta(*item.a, *item.b, cor=item.cor, largura=item.largura,
                                 cabeca=item.cabeca))  # fmt: skip
         elif isinstance(item, c3.Etiqueta2D):
-            if item.fundo:
+            if item.fundo and not item.giro:
                 corpo.append(
                     d.etiqueta(
                         item.x,
@@ -46,11 +46,13 @@ def svg_da_cena(desenho: c3.Desenho2D) -> str:
                         tamanho=item.tamanho,
                         cor=item.cor,
                         peso=item.peso,
+                        ancora=item.ancora,
                     )  # fmt: skip
                 )
             else:
                 corpo.append(d.texto(item.x, item.y, item.texto, tamanho=item.tamanho,
-                                     cor=item.cor, peso=item.peso))  # fmt: skip
+                                     cor=item.cor, peso=item.peso, ancora=item.ancora,
+                                     giro=item.giro))  # fmt: skip
     # triedro com os eixos do SolidWorks
     origem = (58.0, altura - 58.0)
     for nome, (ux, uy) in desenho.eixos:

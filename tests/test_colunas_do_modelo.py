@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from core import plano_de_cargas as pc
 from core import travamentos_da_coluna as tc
 from core import verificacao_barras as vb
 from core.project_store import obter_projeto_ativo, salvar_projeto
+from core.record_charts import imagens_do_registro
 from tests import portico_3d_teste01 as t
 from tests.test_esforcos_modelo_pagina import TIPOS_COM_AJUDA, _ajuda, _rotulo
 from tests.test_nucleo_esforcos_ponta_a_ponta import montar
@@ -255,6 +257,23 @@ def test_tabela_csv_e_registro(portico):
     json.dumps(registro)
     assert registro["modulo_id"] == cdm.MODULO_ID
     assert "4 pilares do modelo" in registro["resultados"]["destaque_memorial"]
+    # O pilar de maior aproveitamento em pé vai ao memorial (sem a seção, como na página).
+    pior = cdm.resumo(colunas)["pior"]
+    imagens, aviso = imagens_do_registro(json.loads(json.dumps(registro)), {})
+    assert aviso == "" and [i["titulo"] for i in imagens] == [f"Coluna em pé — {pior.perfil}"]
+    assert f"Pilar {pior.barra} ({pior.perfil}), o de maior aproveitamento" in imagens[0]["legenda"]
+
+
+def test_pilar_sem_desenho_registra_sem_a_figura(portico):
+    dados, geometria, plano = portico
+    colunas, _ = cdm.verificar_colunas(dados, geometria, plano, [comb.ELU_NORMAL])
+    sem_eixos = [replace(c, eixo_x=None) if c.status != cdm.STATUS_PENDENTE else c for c in colunas]
+    assert all(cdm.coluna_em_pe(c) is None for c in sem_eixos)
+    registro = cdm.registro_das_colunas(
+        sem_eixos, dados, [comb.ELU_NORMAL], base=cdm.BASE_ROTULADA, recomendado=True
+    )
+    assert registro["resultados"].get("figura_coluna") is None
+    assert imagens_do_registro(json.loads(json.dumps(registro)), {}) == ([], "")
 
 
 # ------------------------------------------------------------------ a página

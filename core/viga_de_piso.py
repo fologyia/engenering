@@ -30,8 +30,10 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from core import cena_3d as c3
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
+from core import desenho_viga_de_piso as dvp
 from core import load_combinations as comb
 from core import section_catalog as sc
 from core.contraventamento_barras import ACOS
@@ -418,6 +420,17 @@ def decimal(texto: str) -> str:
     return decimal_ptbr(texto)
 
 
+def esquema_da_viga(r: ResultadoVigaDePiso) -> c3.Desenho2D:
+    """O desenho da viga (o mesmo na página e no memorial), com as cargas características."""
+    return dvp.esquema(
+        r.entrada.vao_m,
+        sum(r.cargas_kN_m.values()),
+        r.entrada.concentrada_kN,
+        r.flecha_mm,
+        r.reacao_caracteristica_kN,
+    )
+
+
 def registro_viga(
     r: ResultadoVigaDePiso, *, contexto: dict[str, Any] | None = None, responsavel: str = ""
 ) -> dict[str, Any]:
@@ -463,6 +476,14 @@ def registro_viga(
             "reacao_minima_da_ligacao_kN": numero_json(r.reacao_minima_ligacao_kN, 3)
             if r.reacao_minima_ligacao_kN
             else None,
+            # O desenho da página, que o memorial desenha de novo.
+            "figuras_2d": [
+                c3.desenho_para_dicionario(
+                    esquema_da_viga(r),
+                    legenda="Viga biapoiada com as cargas características, a deformada e as "
+                    "reações.",
+                )
+            ],
         },
         metodo=(
             "Viga biapoiada. Combinações ELU da NBR 8800 (Tabelas 1 e 2) com o peso próprio do aço, "

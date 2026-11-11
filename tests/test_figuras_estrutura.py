@@ -1,15 +1,14 @@
-"""Desenhos em SVG: vento nos pórticos, planta e elevação do contraventamento, chapa de nó."""
+"""Desenhos em SVG: vento nos pórticos e chapa de nó (a planta e a elevação do contraventamento
+estão em tests/test_figuras_no_memorial.py, com o núcleo que as desenha)."""
 
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from dataclasses import replace
 
 import pytest
 
 from components import figuras_estrutura as fig
 from core import contraventamento_ligacao as lig
-from core import contraventamento_plataforma as cp
 from core import contraventamento_ufm as ufm
 from core import vento_estrutura_aberta as va
 from tests.test_contraventamento_ligacao import exemplo_5_1
@@ -37,19 +36,6 @@ def test_vento_nos_porticos_mostra_um_valor_por_nivel(cotas, direcao):
     escrito = textos(fig.svg_vento_elevacao(g, r))
     for nivel in r.niveis:
         assert f"{nivel.total_kN:.1f}".replace(".", ",") in escrito
-
-
-@pytest.fixture(scope="module")
-def contraventamento() -> tuple[cp.EntradaContraventamento, cp.ResultadoContraventamento]:
-    e = replace(cp.EntradaContraventamento(), cotas_m=(3.0, 6.0))
-    return e, cp.calcular(e)
-
-
-def test_planta_e_elevacao_sao_svg_valido(contraventamento):
-    e, r = contraventamento
-    raiz(fig.svg_planta(e))
-    for direcao in ("X", "Y"):
-        raiz(fig.svg_elevacao_linha(e, r.andares_da_direcao(direcao), direcao))
 
 
 @pytest.mark.parametrize(

@@ -13,6 +13,8 @@ from core.beam_charts import _fonte
 
 FUNDO = (251, 251, 253)
 COR_TEXTO = (31, 35, 40)
+#: ``Etiqueta2D.ancora`` (como o ``text-anchor`` do SVG) → âncora do Pillow, no meio da altura.
+_ANCORAS = {"middle": "mm", "start": "lm", "end": "rm"}
 
 
 def _rgba(cor: str, opacidade: float = 1.0) -> tuple[int, int, int, int]:
@@ -73,6 +75,32 @@ def png_da_cena(desenho: c3.Desenho2D, *, escala: float = 2.0) -> bytes:
             )
         caneta.text((x * k, y * k), conteudo, font=fonte, fill=_rgba(cor), anchor=ancora)
 
+    def texto_girado(x: float, y: float, conteudo: str, tamanho: float, cor: str, giro: float,
+                     ancora: str) -> None:  # fmt: skip
+        """Texto girado em torno de (x, y), como o ``rotate`` do SVG (positivo = horário)."""
+        fonte = _fonte(max(8, round(tamanho * k)))
+        caixa = caneta.textbbox((0, 0), conteudo, font=fonte, anchor=ancora)
+        folga = 4
+        w, h = caixa[2] - caixa[0] + 2 * folga, caixa[3] - caixa[1] + 2 * folga
+        if w <= 0 or h <= 0:
+            return
+        quadro = Image.new("RGBA", (round(w), round(h)), (0, 0, 0, 0))
+        ImageDraw.Draw(quadro).text(
+            (folga - caixa[0], folga - caixa[1]), conteudo, font=fonte, fill=_rgba(cor),
+            anchor=ancora,
+        )  # fmt: skip
+        # (x, y) é o ponto de âncora; no quadro ele fica em (folga − caixa[0], folga − caixa[1]).
+        ax, ay = folga - caixa[0], folga - caixa[1]
+        girado = quadro.rotate(-giro, resample=Image.Resampling.BICUBIC, expand=True)
+        # O giro é em torno do centro do quadro; a âncora gira junto (horário na tela, y para
+        # baixo) e vai para o meio do quadro novo mais o deslocamento girado.
+        cx, cy = quadro.width / 2, quadro.height / 2
+        ang = math.radians(giro)
+        dx, dy = ax - cx, ay - cy
+        rx = dx * math.cos(ang) - dy * math.sin(ang) + girado.width / 2
+        ry = dx * math.sin(ang) + dy * math.cos(ang) + girado.height / 2
+        imagem.paste(girado, (round(x * k - rx), round(y * k - ry)), girado)
+
     def seta(a: tuple[float, float], b: tuple[float, float], cor: str, largura_px: float,
              cabeca: float) -> None:  # fmt: skip
         comprimento = math.dist(a, b)
@@ -102,8 +130,13 @@ def png_da_cena(desenho: c3.Desenho2D, *, escala: float = 2.0) -> bytes:
             seta(item.a, item.b, item.cor, 6.0 if item.larga else item.largura,
                  26.0 if item.larga else item.cabeca)  # fmt: skip
         elif isinstance(item, c3.Etiqueta2D):
-            texto(item.x, item.y, item.texto, item.tamanho, item.cor, item.peso == "bold",
-                  item.fundo)  # fmt: skip
+            ancora = _ANCORAS.get(item.ancora, "mm")
+            if item.giro:
+                texto_girado(item.x, item.y, item.texto, item.tamanho, item.cor, item.giro,
+                             ancora)  # fmt: skip
+            else:
+                texto(item.x, item.y, item.texto, item.tamanho, item.cor, item.peso == "bold",
+                      item.fundo, ancora)  # fmt: skip
     origem = (58.0, desenho.altura - 58.0)
     for nome, (ux, uy) in desenho.eixos:
         fim = (origem[0] + 28 * ux, origem[1] + 28 * uy)

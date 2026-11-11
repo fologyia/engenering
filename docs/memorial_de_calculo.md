@@ -15,7 +15,7 @@ Vale para a **flambagem de colunas** e as **ligações parafusadas** (qualquer r
 | 2 | Identificação | Módulo, peça, situação registrada e quando foi registrado. |
 | 3 | **Dados de entrada** | Os dados que importam, em quatro colunas e com rótulos e unidades legíveis; o que não foi preenchido (excentricidade zero, mão-francesa ausente…) não aparece. Um dado que o módulo passe a registrar e o mapa ainda não conheça aparece mesmo assim, com rótulo automático. |
 | 4 | Método, premissas e critérios | Uma vez só: as análises seguintes com a mesma base dizem "os mesmos do item 8.1.1". |
-| 5 | Figura | A curva de flambagem, quando existe. |
+| 5 | Figuras | Os desenhos que a página mostra (ver "Figuras das páginas no memorial"). |
 | 6 | **O que passou** | Uma linha por verificação aprovada: solicitante, resistente, aproveitamento e, sob o nome, o cálculo com a referência. |
 | 7 | Valores de apoio | Grandezas informativas (N_e de cada modo, λ, χ, B₁…), sem critério de aceitação; esbeltez local das paredes; outros resultados que o módulo registre. |
 | 8 | **Não passou** — sempre o fim | As verificações reprovadas, com o cálculo que explica o motivo; as que pedem **atenção** (passaram com ressalva); as **não avaliadas**; e o que o módulo manda **conferir antes de emitir**. Se nada reprovou, a declaração "Não passou: nenhuma." |
@@ -43,6 +43,39 @@ capítulo segue o mesmo roteiro, sem as seções de passou e não passou:
 
 Os demais módulos sem tabela continuam com o capítulo de sempre (`core/memorial_verificacoes.py`,
 `capitulo_de_calculo`).
+
+## Figuras das páginas no memorial
+
+O registro guarda o que é preciso para desenhar de novo, e o memorial (Word e PDF) desenha na hora
+de emitir (`core/record_charts.py`, `imagens_gravadas`). As figuras entram no capítulo do cálculo,
+depois do método:
+
+| Página | Figuras no memorial | Como o registro guarda |
+| --- | --- | --- |
+| Flambagem de colunas | Curva de flambagem, a seção (com o giro escolhido) e a coluna em pé | `figura_coluna`: a seção e a coluna (`core/desenho_da_coluna.py`) |
+| Pilares do modelo | O pilar de maior aproveitamento em pé, com os travamentos do esqueleto | `figura_coluna`, sem a seção |
+| Projeto de parafusos | Planta e corte da ligação, com a força em cada parafuso | `figura_parafusos`: a entrada; a ligação é refeita |
+| Contraventamento | Planta das linhas contraventadas e a elevação da linha mais carregada em X e em Y | `figuras_2d`: o desenho pronto (`core/desenho_contraventamento.py`) |
+| Vigas de piso | A viga com as cargas, a deformada e as reações | `figuras_2d` (`core/desenho_viga_de_piso.py`) |
+| Vigas e eixos | O esquema do modelo antes dos diagramas | O texto do modelo (já era assim) |
+| Cálculo de peças e Desenhar seção | As figuras do caso (seção, viga, grupo de parafusos, pino…) | `figuras_do_caso`: o caso e os valores; a conta é refeita |
+| Modelo em 3D, vento, escada, ligações, placas de base, reações, sensores | Como antes | `figura_3d`, `figuras_3d`, `figuras_portico`… |
+
+* Página e memorial usam o **mesmo desenho**: a planta do contraventamento e a viga de piso saem de
+  um `Desenho2D` do núcleo, que a página mostra em SVG e o memorial em PNG.
+* Quando a figura depende de **refazer a conta** (parafusos e casos do Cálculo de peças), o memorial
+  confere o resultado de agora com o registrado (o aproveitamento na ligação, o resumo no caso). Se não
+  bater, a figura sai e o capítulo diz por quê: o cálculo mudou desde o registro e precisa ser
+  registrado de novo. A figura nunca mostra números diferentes da tabela ao lado.
+* Dado estragado ou que o JSON não guarda (infinito) deixa o registro **sem a figura**; o registro e o
+  memorial continuam saindo.
+* As chaves que só guardam dados para desenhar (`record_charts.CHAVES_DE_FIGURA`) nunca aparecem como
+  texto, nem no capítulo de sempre.
+* Registros feitos antes desta versão não têm os dados: registre de novo na página para a figura
+  entrar.
+
+Ainda sem figura no memorial: a Ligação de contraventamento (o desenho da chapa de nó é só da página) e
+a planta das reações por caso (o memorial já leva os eixos e o 3D com as reações).
 
 ## Vários cálculos no mesmo projeto
 

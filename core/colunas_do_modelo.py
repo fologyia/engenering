@@ -35,9 +35,11 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from core import column_buckling as cbk
+from core import desenho_da_coluna as dc
 from core import esforcos_modelo as em
 from core import leitura_do_modelo as ld
 from core import plano_de_cargas as pc
+from core import section_catalog as sc
 from core import travamentos as tv
 from core import travamentos_da_coluna as tc
 from core import verificacao_barras as vb
@@ -269,6 +271,37 @@ class ColunaVerificada:
 
 def _pendente(barra: str, perfil: str, motivo: str, **outros: Any) -> ColunaVerificada:
     return ColunaVerificada(barra, perfil, STATUS_PENDENTE, motivo=motivo, **outros)
+
+
+def coluna_em_pe(c: ColunaVerificada) -> dc.ColunaEmPe | None:
+    """O pilar em pé para o desenho (página e memorial): o perfil do catálogo, o trecho que
+    governa em cada eixo e os travamentos do esqueleto. ``None`` quando não há desenho: sem os
+    eixos, perfil fora do catálogo ou pontas que não estão na Tabela E.1 (base rotulada com o
+    topo livre)."""
+    pilar = c.pilar
+    if pilar is None or c.eixo_x is None or c.eixo_y is None:
+        return None
+    nomes_dos_apoios = {pontas: nome for nome, pontas in dc.APOIOS_NAS_PONTAS.items()}
+    apoio_x = nomes_dos_apoios.get((pilar.base, pilar.topo_x), "")
+    apoio_y = nomes_dos_apoios.get((pilar.base, pilar.topo_y), "")
+    if not apoio_x or not apoio_y:
+        return None
+    try:
+        secao = cbk.secao_de_perfil(sc.obter_perfil(c.perfil))
+    except KeyError:
+        return None
+    return dc.ColunaEmPe(
+        secao,
+        pilar.comprimento_mm,
+        c.eixo_x.governa.comprimento_mm,
+        c.eixo_y.governa.comprimento_mm,
+        c.eixo_x.governa.k,
+        c.eixo_y.governa.k,
+        apoio_x,
+        apoio_y,
+        travas_x_mm=c.eixo_x.alturas_mm,
+        travas_y_mm=c.eixo_y.alturas_mm,
+    )
 
 
 def pilares_do_modelo(
@@ -537,6 +570,14 @@ def registro_das_colunas(
         "linhas": [linha[:-1] for linha in linhas_da_tabela(colunas)],
         "fonte": 7.0,
     }
+    # O pilar de maior aproveitamento em pé, com os travamentos: o memorial o desenha de novo.
+    em_pe = coluna_em_pe(pior) if pior is not None else None
+    figura = None if em_pe is None else dc.coluna_para_o_registro(em_pe, com_secao=False)
+    if figura is not None and pior is not None:
+        figura["legenda"] = (
+            f"Pilar {pior.barra} ({pior.perfil}), o de maior aproveitamento, em pé: os "
+            "travamentos lidos do esqueleto e o trecho que governa em cada eixo."
+        )
     return criar_registro_tecnico(
         modulo=MODULO_TITULO,
         modulo_id=MODULO_ID,
@@ -560,6 +601,7 @@ def registro_das_colunas(
             else numero_json(pior.aproveitamento or 0.0, 4),
             "destaque_memorial": destaque,
             "tabelas_memorial": [tabela],
+            "figura_coluna": figura,
         },
         metodo=(
             "Travamentos de cada pilar lidos do esqueleto do SolidWorks: a barra que encosta no "

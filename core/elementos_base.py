@@ -11,6 +11,7 @@ função do caso faz a conversão.
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -457,6 +458,33 @@ def tabelas_de_entrada(caso: Caso, valores: Valores) -> dict[str, tuple[Campo, t
     }
 
 
+#: Chave do registro com o caso e os valores, para o memorial refazer as figuras do caso.
+CHAVE_FIGURAS_DO_CASO = "figuras_do_caso"
+
+
+def valores_para_o_registro(caso: Caso, valores: Valores) -> dict[str, Any] | None:
+    """Os valores do caso em JSON (com os padrões dos campos que faltarem); ``None`` se houver
+    algo que o JSON não guarda — aí o registro sai sem as figuras, nunca deixa de sair."""
+    try:
+        return dict(json.loads(json.dumps({**caso.padroes(), **valores}, allow_nan=False)))
+    except (TypeError, ValueError):
+        return None
+
+
+def figuras_de_novo(caso: Caso, dados: Mapping[str, Any]) -> tuple[Figura, ...]:
+    """Refaz o caso com os valores gravados e devolve as figuras. Se o resumo de agora não bater
+    com o registrado, o cálculo mudou desde o registro: levanta ``ValueError`` (o memorial omite
+    as figuras em vez de mostrar outro resultado)."""
+    resultado = caso.calcular(dict(dados["valores"]))
+    registrado = str(dados.get("resumo") or "")
+    if registrado and decimal_ptbr(resultado.resumo) != registrado:
+        raise ValueError(
+            "as figuras do caso não foram refeitas porque o cálculo de agora dá outro resultado "
+            "que o registrado; registre o cálculo de novo antes de emitir"
+        )
+    return resultado.figuras
+
+
 def dados_do_registro(
     caso: Caso, valores: Valores, resultado: Resultado, *, modulo: str, modulo_id: str
 ) -> dict[str, Any]:
@@ -492,6 +520,15 @@ def dados_do_registro(
         ]
     for tabela in resultado.tabelas:
         resultados[tabela.titulo] = [_linha_json(linha) for linha in tabela.linhas]
+    if resultado.figuras:
+        gravados = valores_para_o_registro(caso, valores)
+        if gravados is not None:
+            # As figuras do caso: o memorial refaz a conta com estes valores e as desenha.
+            resultados[CHAVE_FIGURAS_DO_CASO] = {
+                "caso": caso.id,
+                "valores": gravados,
+                "resumo": decimal_ptbr(resultado.resumo),
+            }
     status = STATUS_REGISTRO.get(resultado.status, "Pendente")
     return {
         "modulo": modulo,

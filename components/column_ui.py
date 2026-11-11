@@ -31,7 +31,12 @@ from core import section_catalog as catalogo_perfis
 from core import travamentos_da_coluna as tc
 from core.column_design import E_ACO, ESPESSURA_MIN_ANGLO, G_ACO, Secao
 from core.coluna_word import gerar_word_coluna
-from core.desenho_da_coluna import ColunaEmPe, MaoFrancesaNoDesenho, figura_da_coluna
+from core.desenho_da_coluna import (
+    ColunaEmPe,
+    MaoFrancesaNoDesenho,
+    coluna_para_o_registro,
+    figura_da_coluna,
+)
 from core.desenho_da_secao import figura_da_secao
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.project_store import obter_projeto_ativo
@@ -2018,6 +2023,8 @@ def _registro(
     contexto: Mapping[str, Any],
     material_id: str | None,
     equacoes: list[str],
+    coluna_em_pe: ColunaEmPe | None = None,
+    giro: float = 0.0,
 ) -> None:
     comp = resultado.compressao
     registro = cb.registro_coluna(
@@ -2026,6 +2033,9 @@ def _registro(
         contexto=contexto,
         materiais_ids=[material_id] if material_id else [],
         equacoes_de_carga=equacoes,
+        figura_da_coluna=None
+        if coluna_em_pe is None
+        else coluna_para_o_registro(coluna_em_pe, giro_da_secao=giro),
     )
     with st.container(border=True):
         st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
@@ -2163,7 +2173,7 @@ def mostrar_flambagem_colunas() -> None:
     fronteira_modelo(list(cb.FORA_DO_ESCOPO))
     contexto = _contexto_do_registro(secao, comprimentos, cargas, flexao, mao_francesa)
     equacoes = _equacoes_de_carga(cargas, mao_francesa)
-    _registro(entrada, resultado, contexto, material.material_id, equacoes)
+    _registro(entrada, resultado, contexto, material.material_id, equacoes, coluna_em_pe, giro)
 
     with st.container(border=True):
         st.subheader("Precisa de ajuda para preencher ou interpretar?")

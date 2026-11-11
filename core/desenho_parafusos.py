@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
+from typing import Any
 
 from PIL import Image, ImageDraw
 
@@ -284,3 +286,25 @@ def figura_parafusos(r: chk.ResultadoLigacao) -> ImagemDiagrama | None:
         f"nº {critico + 1}, com {_n(forca_critica, 2)} kN (ELU)."
     )
     return figura_final(imagem, titulo, legenda)
+
+
+# ---------------------------------------------------------------------------------------------
+# A ligação gravada no registro (o memorial refaz o cálculo e desenha de novo)
+# ---------------------------------------------------------------------------------------------
+def figura_do_registro(
+    dados: Mapping[str, Any], utilizacao_registrada: float | None = None
+) -> ImagemDiagrama | None:
+    """Refaz a ligação gravada e a desenha. Se o aproveitamento de agora não bater com o
+    registrado, o cálculo mudou desde o registro: levanta ``ValueError`` (o memorial omite a
+    figura em vez de mostrar forças que não são as da tabela)."""
+    r = chk.verificar_ligacao(chk.entrada_de_dicionario(dados["entrada"]))
+    agora = r.aproveitamento_max
+    if utilizacao_registrada is not None and agora is not None and math.isfinite(agora):
+        referencia = max(abs(utilizacao_registrada), 1e-9)
+        if abs(agora - utilizacao_registrada) > 1e-6 * referencia:
+            raise ValueError(
+                "o desenho da ligação não foi refeito porque o cálculo de agora dá aproveitamento "
+                f"{agora:.4f} e o registro, {utilizacao_registrada:.4f}; registre a ligação de novo "
+                "antes de emitir"
+            )
+    return figura_parafusos(r)

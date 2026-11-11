@@ -768,7 +768,122 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
                 apenas=[str(c) for c in escolhidas] if isinstance(escolhidas, list) else None,
             )
         )
+    figuras.extend(_figuras_2d(resultados))
+    figuras.extend(_figura_da_coluna(resultados))
+    figuras.extend(_figura_dos_parafusos(resultados))
+    figuras.extend(_figuras_do_caso(resultados))
     return figuras
+
+
+def _figuras_2d(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
+    """``figuras_2d``: desenhos 2D prontos (:func:`core.cena_3d.desenho_para_dicionario`)."""
+    from core import cena_3d as c3
+    from core import cena_3d_png
+
+    figuras: list[tuple[Any, float]] = []
+    brutas = resultados.get("figuras_2d")
+    for item in brutas if isinstance(brutas, list) else []:
+        desenho = c3.desenho_de_dicionario(item)
+        if desenho is None or not desenho.itens:
+            continue
+        legenda = str(item.get("legenda") or desenho.subtitulo or desenho.titulo)
+        imagem = ImagemDiagrama(
+            desenho.titulo or "Desenho",
+            legenda,
+            cena_3d_png.png_da_cena(desenho, escala=2.0),
+            round(desenho.largura * 2),
+            round(desenho.altura * 2),
+        )
+        figuras.append((imagem, LARGURA_DESENHO_MM))
+    return figuras
+
+
+def _figura_da_coluna(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
+    """``figura_coluna``: a seção (se gravada com ela) e a coluna em pé
+    (:func:`core.desenho_da_coluna.coluna_para_o_registro`)."""
+    dados = resultados.get("figura_coluna")
+    if not isinstance(dados, Mapping):
+        return []
+    from core import desenho_da_coluna as dc
+    from core.desenho_da_secao import figura_da_secao
+
+    coluna, giro, com_secao = dc.coluna_do_registro(dados)
+    figuras: list[tuple[Any, float]] = []
+    if com_secao:
+        figuras.append((figura_da_secao(coluna.secao, giro_graus=giro), LARGURA_DIAGRAMA_MM))
+    em_pe = dc.figura_da_coluna(coluna)
+    legenda = str(dados.get("legenda") or "")
+    if legenda:
+        em_pe = ImagemDiagrama(em_pe.titulo, legenda, em_pe.png, em_pe.largura_px,
+                               em_pe.altura_px)  # fmt: skip
+    figuras.append((em_pe, LARGURA_DESENHO_MM))
+    return figuras
+
+
+def _figura_dos_parafusos(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
+    """``figura_parafusos``: a ligação é refeita pela entrada gravada e desenhada (planta e
+    corte); se o aproveitamento não bater com o registrado, a figura é omitida com o motivo."""
+    dados = resultados.get("figura_parafusos")
+    if not isinstance(dados, Mapping):
+        return []
+    from core import desenho_parafusos as dp
+
+    figura = dp.figura_do_registro(dados, _numero(resultados.get("utilizacao_maxima")))
+    return [] if figura is None else [(figura, LARGURA_DESENHO_MM)]
+
+
+def _figuras_do_caso(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
+    """``figuras_do_caso`` (Cálculo de peças e Desenhar seção): o caso é refeito com os valores
+    gravados e as figuras dele entram no memorial."""
+    from core import elementos_base as eb
+
+    dados = resultados.get(eb.CHAVE_FIGURAS_DO_CASO)
+    if not isinstance(dados, Mapping):
+        return []
+    caso = _caso_do_registro(str(dados.get("caso") or ""))
+    if caso is None:
+        return []
+    figuras: list[tuple[Any, float]] = []
+    for figura in eb.figuras_de_novo(caso, dados):
+        with Image.open(io.BytesIO(figura.png)) as aberta:
+            largura, altura = aberta.size
+        imagem = ImagemDiagrama(figura.titulo, figura.legenda or figura.titulo, figura.png,
+                                largura, altura)  # fmt: skip
+        figuras.append((imagem, LARGURA_DIAGRAMA_MM))
+    return figuras
+
+
+def _caso_do_registro(caso_id: str) -> Any:
+    """O caso do Cálculo de peças (ou a seção desenhada) pelo id gravado; ``None`` se não existe
+    mais."""
+    from core import elementos_catalogo as cat
+    from core import secao_relatorio as sr
+
+    if caso_id == sr.CASO.id:
+        return sr.CASO
+    return cat.CASOS.get(caso_id)
+
+
+#: Chaves de ``resultados`` que só guardam dados para redesenhar figuras: não são resultado e não
+#: aparecem como texto em nenhum capítulo do memorial.
+CHAVES_DE_FIGURA = frozenset(
+    {
+        "figura_eixos_fundacao",
+        "figura_3d",
+        "figuras_3d",
+        "escada_3d",
+        "figura_ligacao",
+        "figura_base_de_pilar",
+        "figura_forcas_por_nivel",
+        "figura_sensores",
+        "esquematico_escada",
+        "figuras_portico",
+        "figuras_2d",
+        "figura_coluna",
+        "figura_parafusos",
+        "figuras_do_caso",
+    }
+)
 
 
 def imagens_do_registro(

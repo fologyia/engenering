@@ -15,6 +15,7 @@ from typing import Any
 
 from core import contraventamento_plataforma as cp
 from core import contraventamento_vento_barras as cvb
+from core import desenho_contraventamento as dcv
 from core import load_combinations as comb
 from core.technical_records import criar_registro_tecnico
 from core.verificacao import (
@@ -374,6 +375,8 @@ def registro_contraventamento(
             "compressao_kN": numero_json(lig.compressao_kN),
             "theta_vertical_graus": numero_json(lig.theta_vertical_graus, 2),
         },
+        # A planta e as elevações da página, que o memorial desenha de novo.
+        "figuras_2d": dcv.figuras_para_o_registro(r),
     }
     alertas = [f"{v.nome}: {v.formula}" for v in verificacoes if v.status in ("NÃO OK", "ALERTA")]
     alertas.extend(r.avisos)

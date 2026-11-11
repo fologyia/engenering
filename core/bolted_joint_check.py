@@ -24,9 +24,10 @@ Unidades: comprimento em mm, tensão em MPa, força em kN, momento em kN·m.
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Any
 
 from core import bolted_connection as bc
@@ -1702,6 +1703,26 @@ def _premissas(entrada: EntradaLigacao, resultado: ResultadoLigacao) -> list[str
     return premissas
 
 
+def entrada_para_dicionario(entrada: EntradaLigacao) -> dict[str, Any] | None:
+    """A entrada em JSON, para o memorial refazer a ligação e desenhá-la; ``None`` se houver algo
+    que o JSON não guarda (o registro sai sem a figura, nunca deixa de sair por causa dela)."""
+    try:
+        return dict(json.loads(json.dumps(asdict(entrada), allow_nan=False)))
+    except (TypeError, ValueError):
+        return None
+
+
+def entrada_de_dicionario(dados: Mapping[str, Any]) -> EntradaLigacao:
+    """A entrada gravada no registro (``dataclasses.asdict``): só os campos conhecidos, o resto
+    fica no padrão; as listas do JSON voltam a tuplas."""
+    conhecidos = {f.name for f in fields(EntradaLigacao)}
+    valores = {k: v for k, v in dados.items() if k in conhecidos}
+    if valores.get("coordenadas") is not None:
+        valores["coordenadas"] = tuple((float(x), float(y)) for x, y in valores["coordenadas"])
+    valores["fora_do_escopo"] = tuple(str(c) for c in valores.get("fora_do_escopo") or ())
+    return EntradaLigacao(**valores)
+
+
 def registro_ligacao(
     entrada: EntradaLigacao, resultado: ResultadoLigacao, menor_parafuso: str | None
 ) -> dict[str, Any]:
@@ -1729,6 +1750,10 @@ def registro_ligacao(
         resultados["tabelas_memorial"] = [tracao]
     if pior is not None and math.isfinite(pior):
         resultados["utilizacao_maxima"] = pior
+    gravada = entrada_para_dicionario(entrada)
+    if gravada is not None and resultado.coordenadas:
+        # A planta e o corte da página: o memorial refaz a ligação e os desenha de novo.
+        resultados["figura_parafusos"] = {"entrada": gravada}
     resultados = {chave: valor for chave, valor in resultados.items() if valor is not None}
 
     alertas = [

@@ -461,6 +461,9 @@ class Seta2D:
 
 @dataclass(frozen=True)
 class Etiqueta2D:
+    """Texto na tela. ``ancora``: "middle" (centrado em x), "start" (começa em x) ou "end"
+    (termina em x); ``giro`` em graus, no sentido do SVG (positivo = horário na tela)."""
+
     x: float
     y: float
     texto: str
@@ -468,6 +471,8 @@ class Etiqueta2D:
     tamanho: float = 10.0
     peso: str = "normal"
     fundo: bool = True
+    ancora: str = "middle"
+    giro: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -1067,3 +1072,127 @@ def cena_de_dicionario(dados: object) -> Cena:
         tuple(textos), str(dados.get("titulo") or ""), str(dados.get("subtitulo") or ""),
         legenda, escala, eixo if isinstance(eixo, str) else "Y",
     )  # fmt: skip
+
+
+# ---------------------------------------------------------------------------------------------
+# Desenho 2D pronto, gravado no registro (desenhos de planta e elevação, sem cena 3D)
+# ---------------------------------------------------------------------------------------------
+def circulo(
+    centro: Ponto2,
+    raio: float,
+    *,
+    preenchimento: str = "#ffffff",
+    contorno: str = COR_CONTORNO,
+    largura: float = 1.0,
+    lados: int = 28,
+) -> Poligono2D:
+    """Círculo como polígono (o SVG e o PNG desenham polígonos iguais)."""
+    pontos = tuple(
+        (
+            centro[0] + raio * math.cos(2 * math.pi * k / lados),
+            centro[1] + raio * math.sin(2 * math.pi * k / lados),
+        )
+        for k in range(lados)
+    )
+    return Poligono2D(pontos, preenchimento, contorno, largura)
+
+
+def _p2(p: Sequence[float]) -> list[float]:
+    return [round(float(p[0]), 2), round(float(p[1]), 2)]
+
+
+def desenho_para_dicionario(desenho: Desenho2D, *, legenda: str = "") -> dict[str, object]:
+    """O desenho 2D já pronto em dicionário (JSON) para o registro: o memorial o desenha em PNG
+    sem precisar refazer o cálculo. ``legenda`` é o texto que vai embaixo da figura."""
+    itens: list[list[object]] = []
+    for item in desenho.itens:
+        if isinstance(item, Poligono2D):
+            itens.append(["p", [_p2(q) for q in item.pontos], item.preenchimento, item.contorno,
+                          round(item.largura, 2), round(item.opacidade, 2)])  # fmt: skip
+        elif isinstance(item, Linha2D):
+            itens.append(["l", _p2(item.a), _p2(item.b), item.cor, round(item.largura, 2),
+                          item.tracejado, round(item.opacidade, 2)])  # fmt: skip
+        elif isinstance(item, Seta2D):
+            itens.append(["s", _p2(item.a), _p2(item.b), item.cor, round(item.largura, 2),
+                          round(item.cabeca, 2), item.larga])  # fmt: skip
+        elif isinstance(item, Etiqueta2D):
+            itens.append(["e", round(item.x, 2), round(item.y, 2), item.texto, item.cor,
+                          round(item.tamanho, 2), item.peso, item.fundo, item.ancora,
+                          round(item.giro, 2)])  # fmt: skip
+    return {
+        "largura": round(desenho.largura, 2),
+        "altura": round(desenho.altura, 2),
+        "itens": itens,
+        "titulo": desenho.titulo,
+        "subtitulo": desenho.subtitulo,
+        "legenda_das_cores": [list(item) for item in desenho.legenda],
+        "legenda": legenda,
+    }
+
+
+def _ponto2_lido(valor: object) -> Ponto2 | None:
+    if not isinstance(valor, (list, tuple)) or len(valor) != 2:
+        return None
+    try:
+        p = (float(valor[0]), float(valor[1]))
+    except (TypeError, ValueError):
+        return None
+    return p if finito(*p) else None
+
+
+def desenho_de_dicionario(dados: object) -> Desenho2D | None:
+    """O inverso de :func:`desenho_para_dicionario`; o item estragado fica de fora e o desenho
+    sem tamanho volta ``None`` (não levanta)."""
+    if not isinstance(dados, dict):
+        return None
+    try:
+        largura, altura = float(dados["largura"]), float(dados["altura"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not finito(largura, altura) or largura <= 0 or altura <= 0:
+        return None
+    brutos = dados.get("itens")
+    itens: list[Poligono2D | Linha2D | Seta2D | Etiqueta2D] = []
+    for item in brutos if isinstance(brutos, list) else []:
+        try:
+            tipo, *resto = item
+            if tipo == "p":
+                pontos, cor, contorno, espessura, opacidade = resto
+                lidos = [q for q in (_ponto2_lido(q) for q in pontos) if q is not None]
+                if len(lidos) >= 3:
+                    itens.append(Poligono2D(tuple(lidos), str(cor), str(contorno),
+                                            float(espessura), float(opacidade)))  # fmt: skip
+            elif tipo == "l":
+                a, b, cor, espessura, tracejado, opacidade = resto
+                pa, pb = _ponto2_lido(a), _ponto2_lido(b)
+                if pa is not None and pb is not None:
+                    itens.append(Linha2D(pa, pb, str(cor), float(espessura), str(tracejado),
+                                         float(opacidade)))  # fmt: skip
+            elif tipo == "s":
+                a, b, cor, espessura, cabeca, larga = resto
+                pa, pb = _ponto2_lido(a), _ponto2_lido(b)
+                if pa is not None and pb is not None:
+                    itens.append(Seta2D(pa, pb, str(cor), float(espessura), float(cabeca),
+                                        bool(larga)))  # fmt: skip
+            elif tipo == "e":
+                x, y, texto, cor, tamanho, peso, fundo, ancora, giro = resto
+                if finito(float(x), float(y)):
+                    itens.append(Etiqueta2D(float(x), float(y), str(texto), str(cor),
+                                            float(tamanho), str(peso), bool(fundo), str(ancora),
+                                            float(giro)))  # fmt: skip
+        except (TypeError, ValueError):
+            continue
+    cores = dados.get("legenda_das_cores")
+    legenda = tuple(
+        (str(item[0]), str(item[1]))
+        for item in (cores if isinstance(cores, list) else [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    )
+    return Desenho2D(
+        largura,
+        altura,
+        tuple(itens),
+        str(dados.get("titulo") or ""),
+        str(dados.get("subtitulo") or ""),
+        legenda=legenda,
+    )

@@ -293,6 +293,8 @@ class DiagramasNoMemorialTests(unittest.TestCase):
         secao = self.secao(projeto_minimo(registro_de_viga(SCRIPT_SIMPLES)))
         imagens = secao["imagens"]
         titulos = [imagem["titulo"] for imagem in imagens]
+        # O esquema do modelo (apoios, cargas, cotas) vem antes dos diagramas, como na página.
+        self.assertTrue(titulos[0].startswith("Esquema do modelo"), titulos[0])
         self.assertIn("Esforço cortante V (kN)", titulos)
         self.assertIn("Momento fletor M (kN·m)", titulos)
         self.assertIn("Linha elástica — flecha (mm)", titulos)

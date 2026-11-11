@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from components.figuras_estrutura import svg_viga_de_piso
+from core import cena_3d as c3
 from core import section_catalog as sc
 from core import viga_de_piso as vp
 from core.project_report import montar_modelo_relatorio
@@ -80,8 +80,11 @@ def test_carga_concentrada_entra_no_momento_na_flecha_e_no_desenho():
     assert com.flecha_mm - sem.flecha_mm == pytest.approx(
         10e3 * 4000**3 / (48 * 200_000 * perfil.ix_mm4)
     )
-    assert "P = 10,0 kN" in svg_viga_de_piso(4.0, 5.6, 10.0, com.flecha_mm, 16.0)
-    assert "P = " not in svg_viga_de_piso(4.0, 5.6, 0.0, sem.flecha_mm, 11.0)
+    textos = [
+        " ".join(i.texto for i in vp.esquema_da_viga(r).itens if isinstance(i, c3.Etiqueta2D))
+        for r in (com, sem)
+    ]
+    assert "P = 10,0 kN" in textos[0] and "P = " not in textos[1]
 
 
 def test_perfil_mais_leve_da_mesma_familia():
@@ -112,6 +115,10 @@ def test_registro_e_capitulo_do_memorial():
     assert registro["modulo_id"] == vp.MODULO_ID
     projeto = novo_projeto_documento("Plataforma", codigo="MC-01")
     projeto["registros_tecnicos"] = [registro]
-    modelo = json.dumps(montar_modelo_relatorio(projeto), ensure_ascii=False)
+    # O esquema da viga entra como imagem (PNG em bytes, fora do texto).
+    modelo = json.dumps(
+        montar_modelo_relatorio(projeto), ensure_ascii=False, default=lambda _: "<imagem>"
+    )
     assert "Largura de influência" in modelo or "largura" in modelo.lower()
     assert "W 250 x 17,9" in modelo
+    assert '"titulo": "Viga de piso biapoiada"' in modelo

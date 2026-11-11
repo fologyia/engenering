@@ -27,9 +27,10 @@ from components.base_tecnica_ui import (
     legenda_da_base,
     plano_ativo,
 )
+from components.cena_3d_svg import svg_da_cena
 from components.contraventamento_estrutura_help import AJUDA
 from components.figuras import mostrar_figura
-from components.figuras_estrutura import svg_elevacao_linha, svg_planta, svg_vento_elevacao
+from components.figuras_estrutura import svg_vento_elevacao
 from components.figuras_vento import svg_vento_3d
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
@@ -42,6 +43,7 @@ from core import contraventamento_do_esqueleto as cesq
 from core import contraventamento_estrutura_registro as reg
 from core import contraventamento_plataforma as cp
 from core import contraventamento_vento_barras as cvb
+from core import desenho_contraventamento as dcv
 from core import guarda_corpo_do_modelo as gm
 from core import leitura_do_modelo as ld
 from core import load_combinations as comb
@@ -1230,7 +1232,7 @@ def grafico_do_cortante(andares: list[cp.AndarNaDirecao]) -> alt.Chart:
 def _aba_desenhos(r: cp.ResultadoContraventamento) -> None:
     e = r.entrada
     st.subheader("Planta", help=AJUDA["res_desenhos"])
-    mostrar_figura(svg_planta(e))
+    mostrar_figura(svg_da_cena(dcv.planta(e)))
     direcao = st.radio(
         "Direção",
         list(cp.DIRECOES),
@@ -1239,7 +1241,7 @@ def _aba_desenhos(r: cp.ResultadoContraventamento) -> None:
         help=AJUDA["desenho_direcao"],
     )
     st.subheader(f"Elevação da linha contraventada — {direcao}", help=AJUDA["res_desenhos"])
-    mostrar_figura(svg_elevacao_linha(e, r.andares_da_direcao(direcao), direcao))
+    mostrar_figura(svg_da_cena(dcv.elevacao_da_linha(e, r.andares_da_direcao(direcao), direcao)))
     ve = e.vento_do_esqueleto
     if ve is not None:
         angulo = 0 if direcao == "X" else 90

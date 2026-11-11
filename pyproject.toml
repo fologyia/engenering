@@ -160,6 +160,8 @@ files = [
     "core/guarda_corpo_do_modelo.py",
     "core/cena_3d.py",
     "core/cena_3d_png.py",
+    "core/desenho_contraventamento.py",
+    "core/desenho_viga_de_piso.py",
     "core/cena_do_modelo.py",
     "core/cena_escada.py",
     "core/direcoes_da_secao.py",

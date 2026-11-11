@@ -1888,13 +1888,15 @@ def registro_coluna(
     contexto: Mapping[str, Any] | None = None,
     materiais_ids: Sequence[str] = (),
     equacoes_de_carga: Sequence[str] = (),
+    figura_da_coluna: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Registro técnico de Flambagem de colunas: a barra inteira, com a tabela de verificações.
 
     Mantém as chaves que o gráfico da curva de flambagem e a sensibilidade já liam
     (``esbeltez_governante``, ``chi``, ``fator_q``, ``resistencia_kN``…) e acrescenta as novas.
     ``contexto`` leva o que só a interface sabe (condição de apoio, ações características,
-    mão-francesa).
+    mão-francesa). ``figura_da_coluna`` (:func:`core.desenho_da_coluna.coluna_para_o_registro`)
+    leva a seção e a coluna em pé da página, que o memorial desenha de novo.
     """
     sec, norma = entrada.secao, entrada.norma
     comp = resultado.compressao
@@ -2039,6 +2041,8 @@ def registro_coluna(
     if aprov_finito is not None:
         # A Validação do projeto lê esta chave: acima de 1,0 bloqueia a emissão.
         resultados["utilizacao_maxima"] = aprov_finito
+    if figura_da_coluna is not None:
+        resultados["figura_coluna"] = dict(figura_da_coluna)
     resultados = {chave: valor for chave, valor in resultados.items() if valor is not None}
 
     alertas = [
