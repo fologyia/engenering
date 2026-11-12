@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import CoolProp.CoolProp as CP
 import pytest
@@ -14,7 +15,8 @@ from core import montador_grandezas as g
 from core import montador_modelos as mm
 from core import montador_termico as mte
 
-APP = "app.py"
+#: Caminho inteiro: no Linux, o AppTest procura um caminho solto ao lado deste arquivo.
+APP = str(Path(__file__).resolve().parents[1] / "app.py")
 AGUA, R134A, AR = "Água", "R134a", "Ar seco"
 
 
