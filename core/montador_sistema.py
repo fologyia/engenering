@@ -51,12 +51,18 @@ class DoMeio:
 # ---------------------------------------------------------------------------
 
 
-def _emparelhar(ligacoes: Sequence[set[int]], quantas: int) -> dict[int, int] | None:
-    """Cada letra (índice da lista) ganha uma equação só sua. None se alguma ficar sem."""
+def _emparelhar(
+    ligacoes: Sequence[set[int]], quantas: int, com_alvo: frozenset[int] = frozenset()
+) -> dict[int, int] | None:
+    """Cada letra (índice da lista) ganha uma equação só sua. None se alguma ficar sem.
+
+    As equações com a letra pedida (``com_alvo``) ficam por último: elas são dela. Dar a equação do
+    rendimento a uma letra do meio deixava a pedida sem a sua, e a conta ficava lenta ou sem saída.
+    """
     dono: dict[int, int] = {}  # equação → letra
 
     def tentar(letra: int, vistas: set[int]) -> bool:
-        for equacao in sorted(ligacoes[letra]):
+        for equacao in sorted(ligacoes[letra], key=lambda e: (e in com_alvo, e)):
             if equacao in vistas:
                 continue
             vistas.add(equacao)
@@ -124,7 +130,8 @@ def analisar(
     if not desconhecidas:
         return None
     ligacoes = [{i for i, c in enumerate(iguais) if letra in c.letras} for letra in desconhecidas]
-    par = _emparelhar(ligacoes, len(desconhecidas))
+    da_pedida = frozenset(i for i, c in enumerate(iguais) if alvo in c.letras)
+    par = _emparelhar(ligacoes, len(desconhecidas), da_pedida)
     if par is None:
         return None
     usadas = set(par.values())

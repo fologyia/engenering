@@ -50,6 +50,7 @@ LIGACOES = "Ligações e bases"
 PECAS = "Peças de máquinas"
 TENSOES = "Tensões e fadiga"
 FLUIDOS = "Fluidos"
+TERMICA = "Térmica"
 
 MENU: tuple[GrupoMenu, ...] = (
     GrupoMenu(
@@ -348,6 +349,13 @@ MENU: tuple[GrupoMenu, ...] = (
                 ":material/lan:",
                 "Rede com ramais e malhas: a vazão de cada trecho e a pressão de cada nó",
                 secao=FLUIDOS,
+            ),
+            ItemMenu(
+                "app_pages/montador_termico.py",
+                "Montador térmico",
+                ":material/thermostat:",
+                "Estado do fluido, bombas, compressores, turbinas, trocas de calor e ciclos",
+                secao=TERMICA,
             ),
         ),
     ),

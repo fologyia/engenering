@@ -37,6 +37,10 @@ _REFERENCIAS_DA_PARTE = {
         "Hibbeler, Resistência dos Materiais.",
     ),
     mb.FLUIDOS: ("White, Mecânica dos Fluidos.", "Çengel e Cimbala, Mecânica dos Fluidos."),
+    mb.TERMICO: (
+        "Çengel e Boles, Termodinâmica.",
+        "Bell, Wronski, Quoilin e Lemort, CoolProp, Ind. Eng. Chem. Res., 2014.",
+    ),
 }
 
 

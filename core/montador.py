@@ -32,6 +32,7 @@ from core import (
 from core import montador_fluidos as mfl
 from core import montador_grandezas as g
 from core import montador_sistema as sm
+from core import montador_termico as mte
 from core.montador_blocos import Condicao, Contexto, ErroDeBloco
 from core.montador_funcoes import FUNCOES, NUMERICAS
 from core.montador_grandezas import Grandeza
@@ -249,7 +250,9 @@ def _fios_que_voltam(grafo: Grafo) -> list[int]:
         saem[fio.de].append((i, fio.para))
     estado: dict[str, int] = {}  # 1 aberto na pilha, 2 fechado
     voltam: list[int] = []
-    for inicio in (no.id for no in grafo.nos):
+    # Começa pelos blocos de início de laço, como o Circuito: o fio que volta é o que chega nele.
+    primeiros = [no.id for no in grafo.nos if no.tipo in mb.INICIO_DE_LACO]
+    for inicio in (*primeiros, *(no.id for no in grafo.nos)):
         if inicio in estado:
             continue
         pilha = [(inicio, iter(saem[inicio]))]
@@ -271,20 +274,39 @@ def _fios_que_voltam(grafo: Grafo) -> list[int]:
 
 
 def e_corte(chave: str) -> bool:
-    """A letra do fio que volta num laço: ninguém digita, a conta acha."""
-    prefixo, _, numero = chave.partition("_")
-    return prefixo == "lc" and numero.isdigit()
+    """A letra do fio que volta num laço (lc_1, ou p_lc1 numa corrente): ninguém digita, a conta
+    acha."""
+    partes = chave.split("_")
+    if len(partes) == 2 and partes[0] == "lc" and partes[1].isdigit():
+        return True
+    return len(partes) == 2 and partes[1].startswith("lc") and partes[1][2:].isdigit()
 
 
-#: Só o fio de valor leva um número que dá para supor e conferir na volta. Seção, material e linha
-#: de fluido num laço não fazem sentido: continuam dando o aviso de laço.
-_PODE_FECHAR_LACO = frozenset({mb.VALOR})
+@dataclass(frozen=True)
+class _Corte:
+    """O fio que volta: o que entra no lugar dele, e cada letra suposta com o valor de verdade."""
+
+    objeto: Any
+    letras: tuple[tuple[Grandeza, Callable[[Any], sp.Expr]], ...]
 
 
-def _cortes(grafo: Grafo) -> dict[int, Grandeza] | None:
-    """A letra de cada fio que volta: o valor suposto, que a conta fecha com o valor que sai."""
+def _corte_de_valor(numero: int, dimensao: str) -> _Corte:
+    letra = Grandeza(
+        f"lc_{numero}",
+        f"laço {numero}",
+        f"Valor que volta pelo laço {numero}",
+        dimensao,
+        "Calculado: o valor que sai do fim do laço e volta para o começo dele.",
+        sinal_livre=True,
+    )
+    return _Corte(letra.simbolo, ((letra, lambda volta: volta),))
+
+
+def _cortes(grafo: Grafo) -> dict[int, _Corte] | None:
+    """O corte de cada fio que volta. Fio de seção, material ou linha de fluido não se corta:
+    num laço eles não fazem sentido, e continuam dando o aviso de laço."""
     por_id = {no.id: no for no in grafo.nos}
-    cortes: dict[int, Grandeza] = {}
+    cortes: dict[int, _Corte] = {}
     for numero, i in enumerate(_fios_que_voltam(grafo), start=1):
         fio = grafo.fios[i]
         origem = por_id[fio.de]
@@ -292,16 +314,15 @@ def _cortes(grafo: Grafo) -> dict[int, Grandeza] | None:
             (p for p in mb.portas_de(origem.tipo, dict(origem.opcoes))[1] if p.chave == fio.saida),
             None,
         )
-        if porta is None or porta.tipo not in _PODE_FECHAR_LACO:
+        if porta is None:
             return None
-        cortes[i] = Grandeza(
-            f"lc_{numero}",
-            f"laço {numero}",
-            f"Valor que volta pelo laço {numero}",
-            _dimensao_da_saida(origem, porta) or g.PURO,
-            "Calculado: o valor que sai do fim do laço e volta para o começo dele.",
-            sinal_livre=True,
-        )
+        if porta.tipo == mb.VALOR:
+            cortes[i] = _corte_de_valor(numero, _dimensao_da_saida(origem, porta) or g.PURO)
+        elif porta.tipo in mb.RASGAR and por_id[fio.para].tipo in mb.INICIO_DE_LACO:
+            objeto, letras = mb.RASGAR[porta.tipo](numero)
+            cortes[i] = _Corte(objeto, tuple(letras))
+        else:
+            return None
     return cortes
 
 
@@ -346,7 +367,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
     número são as letras do meio, em :mod:`core.montador_sistema`.
     """
     ordem, laco = _ordem(grafo)
-    cortes: dict[int, Grandeza] = {}
+    cortes: dict[int, _Corte] = {}
     if laco:
         achados = _cortes(grafo)
         if achados:
@@ -355,7 +376,6 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
                 grafo.nos, tuple(f for i, f in enumerate(grafo.fios) if i not in cortes)
             )
             ordem, laco = _ordem(sem_volta)
-    cortados = {(grafo.fios[i].para, grafo.fios[i].entrada, i): t for i, t in cortes.items()}
     erros = {no.id: "Este bloco está num laço: desfaça um dos fios." for no in laco}
     grandezas: dict[str, Grandeza] = {}
     padroes: dict[str, float] = {}
@@ -381,17 +401,18 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
         for i, fio in enumerate(grafo.fios):
             if fio.para != no.id:
                 continue
-            if i in cortes:  # o fio que volta: entra a letra suposta, e não o valor
-                corte = cortes[i]
-                grandezas.setdefault(corte.chave, corte)
-                valor = corte.simbolo
+            if i in cortes:  # o fio que volta: entra o suposto, e não o valor
+                for letra, _ in cortes[i].letras:
+                    grandezas.setdefault(letra.chave, letra)
+                valor = cortes[i].objeto
             else:
                 valor = saidas.get(fio.de, {}).get(fio.saida)
             if valor is None:
                 continue
             porta = next(p for p in entradas if p.chave == fio.entrada)
-            if porta.varias:
-                ligados.setdefault(fio.entrada, []).extend(valor)
+            if porta.varias:  # condições vêm em lista; vários fios de valor se somam lá
+                lista = ligados.setdefault(fio.entrada, [])
+                lista.extend(valor) if isinstance(valor, list) else lista.append(valor)
             else:
                 ligados[fio.entrada] = valor
         contexto = Contexto(
@@ -436,23 +457,24 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
             condicoes = list(ligados.get("condicoes") or ())
             if not condicoes:
                 erros[no.id] = "Ligue aqui ao menos um critério."
-    for (para, _, i), corte in cortados.items():
+    for i, corte in cortes.items():
         fio = grafo.fios[i]
         volta = saidas.get(fio.de, {}).get(fio.saida)
         if volta is None:
-            erros.setdefault(para, "O laço não fecha: o bloco do fim dele ainda não tem conta.")
+            erros.setdefault(fio.para, "O laço não fecha: o bloco do fim dele ainda não tem conta.")
             continue
         if tem_resultado:
-            condicoes.append(
+            condicoes.extend(
                 Condicao(
-                    f"Fechamento do {corte.texto}",
+                    f"Fechamento do {letra.texto}",
                     "Laço",
-                    corte.simbolo,
-                    volta,
-                    sp.latex(corte.simbolo),
+                    letra.simbolo,
+                    ler(volta),
+                    sp.latex(letra.simbolo),
                     igualdade=True,
-                    no=para,
+                    no=fio.para,
                 )
+                for letra, ler in corte.letras
             )
     if "fragil" in marcas and "ductil" in marcas:
         alertas.append(
@@ -485,7 +507,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
         saidas,
         tuple(indices.items()),
         tuple(proprias_da_conta),
-        cortes=tuple(corte.chave for corte in cortes.values()),
+        cortes=tuple(letra.chave for corte in cortes.values() for letra, _ in corte.letras),
     )
 
 
@@ -1436,6 +1458,25 @@ def transportado(
                 )
                 for t in valor.trechos
             ),
+        )
+    if isinstance(valor, mte.Corrente):
+        if valor.fluido < 0:
+            return None  # o corte de um laço: o estado de verdade está no fio que volta
+        colunas = [
+            ("p", g.PRESSAO),
+            ("T", g.TEMPERATURA),
+            ("h", g.ENERGIA_ESPECIFICA),
+            ("s", g.ENTROPIA_ESPECIFICA),
+            ("ṁ", g.VAZAO_MASSICA),
+        ]
+        expressoes = [valor.p, valor.temperatura(), valor.h, valor.entropia(), valor.m]
+        if valor.do_fluido.saturacao:
+            colunas.append(("x", g.PURO))
+            expressoes.append(valor.titulo())
+        return Transportado(
+            "Corrente",
+            tuple(colunas),
+            ((valor.do_fluido.rotulo, tuple(numero_de(e, numeros) for e in expressoes)),),
         )
     if isinstance(valor, mb.Material):
         return Transportado(

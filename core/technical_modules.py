@@ -348,6 +348,20 @@ def _registrar_padrao() -> None:
             descricao="Blocos de fluido, tubulação e verificação, com a fórmula isolada.",
         ),
         ModuloTecnico(
+            id="montador_termico",
+            titulo="Montador térmico",
+            versao="1.0",
+            pagina="app_pages/montador_termico.py",
+            grupo_navegacao="Mecânica",
+            ordem=72,
+            icone=":material/thermostat:",
+            descricao=(
+                "Blocos de estado do fluido, equipamentos e ciclos, com as propriedades da "
+                "CoolProp e a fórmula isolada."
+            ),
+            aliases=("Termodinâmica", "Ciclo Rankine", "Refrigeração", "Compressor", "Turbina"),
+        ),
+        ModuloTecnico(
             id="rede_de_tubos",
             titulo="Rede de tubos",
             versao="1.0",

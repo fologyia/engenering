@@ -109,6 +109,19 @@ _SUGESTOES: dict[str, dict[str, str]] = {
         "z": g.ALTURA,
         "F": g.FORCA,
     },
+    g.SISTEMA_TERMICO.chave: {
+        "c_p": g.CALOR_ESPECIFICO,
+        "c_v": g.CALOR_ESPECIFICO,
+        "c": g.CALOR_ESPECIFICO,
+        "dT": g.DIF_TEMPERATURA,
+        "DT": g.DIF_TEMPERATURA,
+        "Q": g.POTENCIA,
+        "W": g.POTENCIA,
+        "P": g.POTENCIA,
+        "h": g.ENERGIA_ESPECIFICA,
+        "s": g.ENTROPIA_ESPECIFICA,
+        "rho": g.MASSA_ESPECIFICA,
+    },
 }
 
 

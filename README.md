@@ -336,7 +336,11 @@ A aba **Cadeia de cotas** soma peças em fila (caixa, rolamentos, espaçador, an
 
 O mesmo montador, com blocos de fluidos e unidades próprias: fluido, trechos com Darcy-Weisbach (Colebrook no turbulento e 64/Re no laminar), perdas localizadas, altura e potência de bomba, NPSH, velocidade máxima, pressão na profundidade, força em superfície plana, empuxo, arrasto, orifício ou venturi, canal (Manning) e golpe de aríete. Também tem curva da bomba com ponto de operação, tabela de peças que soma o K e tubos comerciais (aço Sch 40 e PVC soldável). A linha é em série, com a mesma vazão em todos os trechos. O fluido pode vir pela temperatura: a CoolProp dá ρ, μ e a pressão de vapor de água, etanol, glicóis, óleos térmicos e ar, e a temperatura (em °C, K ou °F) pode ser a letra pedida. Exemplos de livro são refeitos na Validação do projeto. Detalhes em `docs/montador_fluidos.md`.
 
-O núcleo das duas partes resolve antes as letras do meio, que nenhum campo dá mas uma igualdade da montagem fecha, e fecha laços de fios de valor. Aceita letras com sinal (calor que sai, trabalho, diferença de temperatura), e um resultado registrado de uma parte entra na outra já convertido pelo SI. Detalhes em `docs/montador_formulas.md`.
+### Montador térmico
+
+A terceira parte do Montador, com as propriedades da CoolProp: estado do fluido (água e vapor, ar, refrigerantes, CO₂, amônia, glicóis, óleos térmicos), bomba, compressor, turbina, válvula, troca de calor, misturador e divisor, e as verificações de temperatura, título, superaquecimento, potência, calor, rendimento do ciclo e COP. Ciclos fecham em laço pelo bloco Circuito, e a tabela de estados mostra cada ponto. O Rankine e a refrigeração com R134a de Çengel e Boles (Exemplos 10-1 e 11-1) são refeitos nos testes. Detalhes em `docs/montador_termico.md`.
+
+O núcleo das partes resolve antes as letras do meio, que nenhum campo dá mas uma igualdade da montagem fecha, e fecha laços de fios de valor. Aceita letras com sinal (calor que sai, trabalho, diferença de temperatura), e um resultado registrado de uma parte entra na outra já convertido pelo SI. Detalhes em `docs/montador_formulas.md`.
 
 ### Rede de tubos
 

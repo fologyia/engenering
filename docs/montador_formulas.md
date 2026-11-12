@@ -135,7 +135,9 @@ Um laço de fios de valor (o fim de uma conta volta para o começo, como num cic
 que volta é cortado, o bloco recebe uma letra suposta (`lc_1`), e uma igualdade a mais fecha essa letra
 com o valor que de fato sai. A letra do corte não vira campo e não pode ser a pedida. Laço de seção, de
 material ou de linha de fluido continua com o aviso de laço, porque não faz sentido. Na prancheta de
-sólidos e de fluidos o laço continua sem poder ser desenhado: ele chega com o Montador térmico.
+sólidos e de fluidos o laço continua sem poder ser desenhado. No Montador térmico, a corrente fecha
+laço pelo bloco Circuito (`docs/montador_termico.md`): o corte cai no fio que chega nele, com a
+pressão e a entalpia supostas (p_lc1 e h_lc1).
 
 **Letras com sinal.** Uma letra marcada com sinal (`Grandeza.sinal_livre`) aceita negativo e zero, a
 busca da raiz anda dos dois lados do zero, e o módulo de uma conta com ela não é tirado. Serve para calor

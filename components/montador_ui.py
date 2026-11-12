@@ -95,6 +95,37 @@ _SAIDA_NO_CARTAO = {
     "polia": ("F", "F", g.FORCA),
     "par_engrenagens": ("F_t", "F_t", g.FORCA),
     "engrenagem_conica": ("F_t", "F_t", g.FORCA),
+    "bomba_termica": ("potencia", "Ẇ", g.POTENCIA),
+    "compressor": ("potencia", "Ẇ", g.POTENCIA),
+    "turbina": ("potencia", "Ẇ", g.POTENCIA),
+    "troca_de_calor": ("calor", "Q̇", g.POTENCIA),
+}
+#: Por onde começa a montagem, no Como usar de cada parte.
+_COMECO = {
+    mb.SOLIDOS: "uma seção",
+    mb.FLUIDOS: "um fluido e um trecho de tubo",
+    mb.TERMICO: "o estado do fluido, ou o bloco Circuito, que fecha um ciclo",
+}
+_EXEMPLO_DE_COMPARACAO = {
+    mb.SOLIDOS: "aço ou alumínio, uma seção ou outra, com cortante ou sem.",
+    mb.FLUIDOS: "um diâmetro ou outro, água ou óleo, com as perdas localizadas ou sem.",
+    mb.TERMICO: "uma pressão ou outra, R134a ou amônia, compressor ideal ou real.",
+}
+_HIPOTESE_DA_PARTE = {
+    mb.SOLIDOS: (
+        "O critério roda em cada ponto da seção, com os esforços que existem ali: fibra, linha "
+        "neutra e junção. Material elástico e linear, sem plasticidade nem tensão residual."
+    ),
+    mb.FLUIDOS: (
+        "Escoamento permanente e incompressível, com a linha em série e a mesma vazão em todos "
+        "os trechos. Propriedades dos fluidos de tabela ou da CoolProp, e rugosidades típicas de "
+        "tubo novo."
+    ),
+    mb.TERMICO: (
+        "Regime permanente, sem variação de energia cinética e potencial, e equipamentos "
+        "adiabáticos, menos a troca de calor. Propriedades pela CoolProp, pela pressão e pela "
+        "entalpia de cada ponto."
+    ),
 }
 _AJUDA_DA_FORMULA = (
     "Três formas: q*L^2/8 dá um valor; M = q*L^2/8 dá um valor com nome e também uma equação; "
@@ -111,6 +142,11 @@ _PORQUE_DO_FIO = {
     mb.LINHA: (
         "Este fio leva a linha inteira: o fluido, a vazão e os trechos. Cada bloco da fila "
         "acrescenta o dele, e a perda de carga sai da soma de todos."
+    ),
+    mb.CORRENTE: (
+        "Este fio leva o fluido num ponto: a pressão absoluta, a entalpia e a vazão em massa. "
+        "Temperatura, entropia e título saem delas. Cada equipamento recebe a corrente, muda o "
+        "estado e passa adiante. Num ciclo, o último fio volta para o bloco Circuito."
     ),
     mb.VALOR: (
         "Este fio troca a letra do bloco de destino pela fórmula do bloco de origem. Só liga "
@@ -901,7 +937,8 @@ def _faces(
         texto = " · ".join(x[0] for x in pedacos)
         if texto:
             faces[no.id] = {"a": texto, "p": pedacos}
-        faltam = any(valores.get(c) is None and c != alvo for c in letras)
+        achadas = dict(resposta.do_meio) if resposta is not None else {}
+        faltam = any(valores.get(c) is None and c != alvo and c not in achadas for c in letras)
         luzes[no.id] = "falta" if faltam else "ok"
         destaque = _SAIDA_NO_CARTAO.get(no.tipo)
         if destaque is not None and numeros is not None:
@@ -1183,10 +1220,12 @@ def _campos(p: Parte, letras: Sequence[Grandeza], alvo: str | None, u: Unidades)
 def _numeros_de(
     valores: Mapping[str, float | None], resposta: mt.Resposta | None
 ) -> dict[sp.Symbol, sp.Float]:
-    """Os números da conta: os valores, e a resposta (ou o adotado) no lugar da letra pedida."""
+    """Os números da conta: os valores, as letras do meio e a resposta (ou o adotado) no lugar da
+    letra pedida."""
     usados = {k: v for k, v in valores.items() if v is not None}
     if resposta is not None:
-        usados = mt.valores_do_caso(resposta)  # com casos de carga, os do caso que manda
+        # Com casos de carga, os do caso que manda; as letras do meio vêm com o número achado.
+        usados = {**dict(resposta.do_meio), **mt.valores_do_caso(resposta)}
         valor = resposta.adotado or resposta.valor
         if valor is not None:
             usados[resposta.alvo.chave] = valor
@@ -1272,7 +1311,7 @@ def _resposta_no_inspetor(
 
 
 def _como_usar(p: Parte) -> None:
-    primeiro = "uma seção" if p.dominio == mb.SOLIDOS else "um fluido e um trecho de tubo"
+    primeiro = _COMECO.get(p.dominio, "o primeiro bloco da fila")
     with st.expander("Como usar esta página", icon=":material/help:"):
         st.markdown(
             f"""
@@ -2173,6 +2212,43 @@ def _letras_do_meio(resposta: mt.Resposta, u: Unidades) -> None:
         )
 
 
+def _tabela_de_estados(base: mt.Montagem, resposta: mt.Resposta, u: Unidades) -> None:
+    """Cada ponto do ciclo com pressão, temperatura, entalpia, entropia, título e vazão."""
+    _titulo_da_pagina("Tabela de estados")
+    numeros = _numeros_de(resposta.valores_usados, resposta)
+    # A montagem da resposta: nela, a letra que vale zero (perda de pressão nula) já saiu da conta.
+    conta = resposta.montagem or base
+    linhas = []
+    contagem: dict[str, int] = {}
+    for no in conta.grafo.nos:
+        bloco = mb.POR_CHAVE[no.tipo]
+        contagem[no.tipo] = contagem.get(no.tipo, 0) + 1
+        nome = bloco.nome if contagem[no.tipo] == 1 else f"{bloco.nome} {contagem[no.tipo]}"
+        for porta in mb.portas_de(no.tipo, dict(no.opcoes))[1]:
+            if porta.tipo != mb.CORRENTE:
+                continue
+            dados = mt.transportado(conta.saidas.get(no.id, {}).get(porta.chave), numeros)
+            if dados is None or not dados.linhas:
+                continue
+            fluido, valores = dados.linhas[0]
+            onde = nome if porta.chave == "saida" else f"{nome}, {porta.rotulo.lower()}"
+            linha: dict[str, Any] = {"Ponto": f"{len(linhas) + 1}. {onde}", "Fluido": fluido}
+            for (titulo, dimensao), valor in zip(dados.colunas, valores, strict=True):
+                rotulo = u.rotulo(dimensao)
+                cabeca = f"{titulo} ({rotulo})" if rotulo else titulo
+                linha[cabeca] = None if valor is None else round(u.da_base(dimensao, valor), 4)
+            linhas.append(linha)
+    if not linhas:
+        st.caption("Ligue um estado do fluido para ver os pontos da montagem.")
+        return
+    st.dataframe(pd.DataFrame(linhas), hide_index=True, width="stretch")
+    st.caption(
+        "Um ponto por saída de bloco, na ordem do desenho. O título passa de 1 no vapor "
+        "superaquecido e fica abaixo de 0 no líquido sub-resfriado; sem número, o estado não fecha "
+        "com os valores de agora."
+    )
+
+
 def _resposta(p: Parte, grafo: mt.Grafo, resposta: mt.Resposta, u: Unidades) -> None:
     letra = _letra(resposta.alvo)
     if resposta.valor is not None and resposta.manda is not None:
@@ -2373,9 +2449,13 @@ def _o_que_mais_pesa(p: Parte, resposta: mt.Resposta, u: Unidades) -> None:
     _titulo_da_pagina("O que mais pesa")
     if pesam:
         primeiro = pesam[0]
+        # Rendimento já em 1 não sobe: aí a frase fala dos 10 % a menos.
+        lado, variacao = (
+            ("mais", primeiro.sobe) if primeiro.sobe is not None else ("menos", primeiro.desce)
+        )
         st.markdown(
             f"Pesa mais **{primeiro.grandeza.texto}** ({primeiro.grandeza.nome.lower()}): 10 % a "
-            f"mais muda {alvo} em **{_variacao_em_texto(primeiro.sobe)}**."
+            f"{lado} muda {alvo} em **{_variacao_em_texto(variacao)}**."
         )
         linhas = [
             {
@@ -3026,12 +3106,7 @@ def _comparar(p: Parte, base: mt.Montagem, resposta: mt.Resposta | None, u: Unid
     if not a:
         st.caption(
             "Guarde a montagem de agora como A, mude o que quiser na prancheta, e veja as duas "
-            "lado a lado: "
-            + (
-                "aço ou alumínio, uma seção ou outra, com cortante ou sem."
-                if p.dominio == mb.SOLIDOS
-                else "um diâmetro ou outro, água ou óleo, com as perdas localizadas ou sem."
-            )
+            "lado a lado: " + _EXEMPLO_DE_COMPARACAO.get(p.dominio, "um valor ou outro.")
         )
         st.button(
             "Guardar como A",
@@ -3785,6 +3860,8 @@ def tela_do_montador(p: Parte) -> None:
                     "aviso": estado.get(p.k("aviso_historia")),
                 },
                 "recebido": estado.get(p.k("comandos"), 0),
+                "lacos": list(p.lacos),
+                "inicios": sorted(mb.INICIO_DE_LACO),
                 "colagens": list(estado.get(p.k("colagens")) or ()),
             },
             key=p.k("prancheta"),
@@ -3837,6 +3914,9 @@ def tela_do_montador(p: Parte) -> None:
     _titulo_da_pagina("Condições")
     with _parte(p, "Condições"):
         _quadro(resposta, u)
+    if p.dominio == mb.TERMICO:
+        with _parte(p, "Tabela de estados"):
+            _tabela_de_estados(base, resposta, u)
     valores = {k: v for k, v in estado[p.k("valores")].items() if v is not None}
     with _parte(p, "Ponto de operação"):
         _grafico_da_bomba(resposta, valores, u)
@@ -3866,19 +3946,8 @@ def tela_do_montador(p: Parte) -> None:
         "Pré-dimensionamento: não substitui a verificação por norma.",
         *base.hipoteses,
     ]
-    if p.dominio == mb.SOLIDOS:
-        hipoteses.insert(
-            1,
-            "O critério roda em cada ponto da seção, com os esforços que existem ali: fibra, linha "
-            "neutra e junção. Material elástico e linear, sem plasticidade nem tensão residual.",
-        )
-    else:
-        hipoteses.insert(
-            1,
-            "Escoamento permanente e incompressível, com a linha em série e a mesma vazão em todos "
-            "os trechos. Propriedades dos fluidos de tabela ou da CoolProp, e rugosidades típicas de "
-            "tubo novo.",
-        )
+    if p.dominio in _HIPOTESE_DA_PARTE:
+        hipoteses.insert(1, _HIPOTESE_DA_PARTE[p.dominio])
     with (
         st.expander("Salvar, abrir e registrar", icon=":material/save:"),
         _parte(p, "Salvar, abrir e registrar"),

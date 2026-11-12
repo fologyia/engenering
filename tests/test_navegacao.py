@@ -56,7 +56,7 @@ def test_submenus_ficam_juntos_e_nao_se_repetem():
     estrutura = next(g for g in nv.MENU if g.nome == "Estrutura metálica")
     assert [s for s, _ in estrutura.secoes()] == [nv.BARRAS, nv.LIGACOES]
     mecanica = next(g for g in nv.MENU if g.nome == "Mecânica")
-    assert [s for s, _ in mecanica.secoes()] == [nv.PECAS, nv.TENSOES, nv.FLUIDOS]
+    assert [s for s, _ in mecanica.secoes()] == [nv.PECAS, nv.TENSOES, nv.FLUIDOS, nv.TERMICA]
 
 
 def test_nomes_antigos_nao_sao_nome_de_outra_pagina():

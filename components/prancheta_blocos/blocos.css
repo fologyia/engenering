@@ -524,6 +524,9 @@ svg.ligando .rotulo {
 .porta.t-condicao {
   fill: #39404d;
 }
+.porta.t-corrente {
+  fill: #be123c;
+}
 .porta.apagada {
   opacity: 0.2;
 }
@@ -550,6 +553,9 @@ svg.ligando .rotulo {
 .fio.t-condicao {
   stroke: #39404d;
 }
+.fio.t-corrente {
+  stroke: #be123c;
+}
 .fio.ativo {
   stroke-width: 3.2;
 }
@@ -573,6 +579,9 @@ svg.ligando .rotulo {
 }
 .seta.t-condicao {
   fill: #39404d;
+}
+.seta.t-corrente {
+  fill: #be123c;
 }
 .toque {
   fill: none;

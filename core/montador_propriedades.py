@@ -205,6 +205,13 @@ def _f(fluido: Fluido, saida: int, par: int, a: sp.Expr, b: sp.Expr) -> sp.Expr:
     return Propriedade(sp.Integer(FLUIDOS.index(fluido)), sp.Integer(saida), sp.Integer(par), a, b)
 
 
+def de(fluido: int, saida: int, par: int, a: Any, b: Any) -> sp.Expr:
+    """A propriedade pelo número do fluido na lista: é o que a corrente do térmico guarda."""
+    return Propriedade(
+        sp.Integer(fluido), sp.Integer(saida), sp.Integer(par), sp.sympify(a), sp.sympify(b)
+    )
+
+
 def massa_especifica(fluido: Fluido, t: sp.Expr, p: sp.Expr) -> sp.Expr:
     return _f(fluido, RHO, TP, t, p)
 
@@ -231,6 +238,7 @@ __all__ = [
     "POR_ROTULO",
     "Propriedade",
     "SAIDAS",
+    "de",
     "faixa_de_temperatura",
     "massa_especifica",
     "pressao_de_vapor",

@@ -462,6 +462,76 @@ SISTEMA_FLUIDOS = Sistema(
 )
 
 
+def _dif_temperatura(u: Unidades) -> tuple[str, float]:
+    """A diferença na mesma escala da temperatura da tela, sem o deslocamento."""
+    rotulo = u.rotulo(TEMPERATURA)
+    return rotulo, DIF_TEMPERATURAS.get(rotulo, 1.0)
+
+
+SISTEMA_TERMICO = Sistema(
+    "termico",
+    (
+        Seletor(
+            TEMPERATURA,
+            "Temperatura",
+            "Unidade das temperaturas. A conta usa kelvin: 20 °C são 293,15 K.",
+            TEMPERATURAS,
+            "°C",
+            DESLOCAMENTO_DA_TEMPERATURA,
+        ),
+        Seletor(
+            PRESSAO,
+            "Pressão",
+            "Unidade das pressões. No térmico a pressão é sempre absoluta: ao nível do mar, a "
+            "atmosfera tem 101,3 kPa.",
+            {"kPa": 1e3, "bar": 1e5, "MPa": 1e6, "Pa": 1.0},
+            "kPa",
+        ),
+        Seletor(
+            ENERGIA_ESPECIFICA,
+            "Entalpia",
+            "Unidade da entalpia e da energia por massa. Trocar converte os números.",
+            {"kJ/kg": 1e3, "J/kg": 1.0},
+            "kJ/kg",
+        ),
+        Seletor(
+            VAZAO_MASSICA,
+            "Vazão mássica",
+            "Unidade da vazão em massa. Trocar converte os números.",
+            {"kg/s": 1.0, "kg/h": 1.0 / 3600.0, "t/h": 1000.0 / 3600.0},
+            "kg/s",
+        ),
+        Seletor(
+            POTENCIA,
+            "Potência",
+            "Unidade das potências e dos calores trocados. Trocar converte os números.",
+            {"kW": 1e3, "W": 1.0, "MW": 1e6, "cv": 735.49875},
+            "kW",
+        ),
+    ),
+    {
+        ENTROPIA_ESPECIFICA: ("kJ/(kg·K)", 1e3),
+        CALOR_ESPECIFICO: ("kJ/(kg·K)", 1e3),
+        MASSA_ESPECIFICA: ("kg/m³", 1.0),
+        PURO: ("", 1.0),
+    },
+    {DIF_TEMPERATURA: _dif_temperatura},
+    "Com números, a fórmula está no SI: kelvin, pascal absoluto, J/kg, kg/s e watts.",
+    (
+        PURO,
+        TEMPERATURA,
+        DIF_TEMPERATURA,
+        PRESSAO,
+        ENERGIA_ESPECIFICA,
+        ENTROPIA_ESPECIFICA,
+        CALOR_ESPECIFICO,
+        VAZAO_MASSICA,
+        POTENCIA,
+        MASSA_ESPECIFICA,
+    ),
+)
+
+
 #: As letras que podem ser negativas: entalpia, calor que sai, trabalho, diferença de temperatura.
 #: A chave delas não pode ser a de uma letra positiva de outra parte, porque o símbolo muda.
 _COM_SINAL: set[str] = set()
@@ -1268,16 +1338,190 @@ P_FLUIDO = _g(
     101325.0,
 )
 
+# Térmico. As chaves não repetem as dos fluidos: no Montador que liga os dois, elas se encontram.
+T_ESTADO = _g("T", "T", "Temperatura", TEMPERATURA, "A temperatura do fluido neste ponto.", 293.15)
+P_ESTADO = _g(
+    "p",
+    "p",
+    "Pressão absoluta",
+    PRESSAO,
+    "Absoluta, neste ponto. Ao nível do mar, a atmosfera tem 101,3 kPa.",
+    101325.0,
+)
+X_ESTADO = Grandeza(
+    "x",
+    "x",
+    "Título",
+    PURO,
+    "Fração de vapor na mistura: 0 é líquido saturado, 1 é vapor saturado.",
+    0.5,
+    zero_ok=True,
+    teto=1.0,
+)
+DT_SUPER = Grandeza(
+    "DT_sup",
+    "ΔT_sup",
+    "Superaquecimento",
+    DIF_TEMPERATURA,
+    "Quantos graus acima da saturação, na mesma pressão. Na entrada de compressor: de 5 a 10.",
+    5.0,
+    zero_ok=True,
+)
+DT_SUB = Grandeza(
+    "DT_sub",
+    "ΔT_sub",
+    "Sub-resfriamento",
+    DIF_TEMPERATURA,
+    "Quantos graus abaixo da saturação, na mesma pressão. Na saída de condensador: de 2 a 5.",
+    3.0,
+    zero_ok=True,
+)
+M_DOT = _g("m_dot", "ṁ", "Vazão mássica", VAZAO_MASSICA, "A massa que passa por segundo.", 1.0)
+P_BOMBA = _g("p_b", "p_b", "Pressão na saída da bomba", PRESSAO, "Absoluta, depois da bomba.")
+ETA_BOMBA = Grandeza(
+    "eta_b",
+    "η_b",
+    "Rendimento isentrópico da bomba",
+    PURO,
+    "1 é a bomba ideal, sem perdas. Bomba centrífuga: de 0,6 a 0,85.",
+    0.75,
+    teto=1.0,
+)
+P_COMPRESSOR = _g(
+    "p_c", "p_c", "Pressão na saída do compressor", PRESSAO, "Absoluta, depois do compressor."
+)
+ETA_COMPRESSOR = Grandeza(
+    "eta_c",
+    "η_c",
+    "Rendimento isentrópico do compressor",
+    PURO,
+    "1 é o compressor ideal. Compressor real: de 0,7 a 0,85.",
+    0.8,
+    teto=1.0,
+)
+P_TURBINA = _g(
+    "p_tb", "p_tb", "Pressão na saída da turbina", PRESSAO, "Absoluta, depois da turbina."
+)
+ETA_TURBINA = Grandeza(
+    "eta_tb",
+    "η_tb",
+    "Rendimento isentrópico da turbina",
+    PURO,
+    "1 é a turbina ideal. Turbina a vapor: de 0,75 a 0,9.",
+    0.85,
+    teto=1.0,
+)
+P_VALVULA = _g(
+    "p_vl", "p_vl", "Pressão depois da válvula", PRESSAO, "Absoluta, do lado de baixa pressão."
+)
+T_SAIDA = _g(
+    "T_s",
+    "T_s",
+    "Temperatura de saída",
+    TEMPERATURA,
+    "A temperatura do fluido quando ele sai da troca de calor.",
+)
+X_SAIDA = Grandeza(
+    "x_s",
+    "x_s",
+    "Título de saída",
+    PURO,
+    "Fração de vapor na saída: 0 é líquido saturado, 1 é vapor saturado.",
+    zero_ok=True,
+    teto=1.0,
+)
+DP_TROCA = Grandeza(
+    "Dp_tc",
+    "Δp_tc",
+    "Perda de pressão na troca",
+    PRESSAO,
+    "Quanto a pressão cai de uma ponta à outra. Zero é a troca ideal.",
+    0.0,
+    zero_ok=True,
+)
+Q_DOT = Grandeza(
+    "Q_dot",
+    "Q̇",
+    "Calor trocado",
+    POTENCIA,
+    "Positivo entra no fluido, como numa caldeira; negativo sai, como num condensador.",
+    sinal_livre=True,
+)
+Y_DIVISOR = Grandeza(
+    "y_div",
+    "y",
+    "Fração para a saída A",
+    PURO,
+    "A parte da vazão que vai pela saída A: de 0 a 1. O resto vai pela B.",
+    0.5,
+    zero_ok=True,
+    teto=1.0,
+)
+T_MAXIMA = _g("T_max", "T_máx", "Temperatura máxima", TEMPERATURA, "O limite de cima.")
+T_MINIMA = _g("T_min", "T_mín", "Temperatura mínima", TEMPERATURA, "O limite de baixo.")
+X_MINIMO = Grandeza(
+    "x_min",
+    "x_mín",
+    "Título mínimo",
+    PURO,
+    "Na saída de turbina a vapor, abaixo de 0,88 a umidade gasta as palhetas.",
+    0.88,
+    zero_ok=True,
+    teto=1.0,
+)
+DT_MINIMO = Grandeza(
+    "DT_min",
+    "ΔT_mín",
+    "Folga mínima da saturação",
+    DIF_TEMPERATURA,
+    "Quantos graus, no mínimo, longe da saturação.",
+    5.0,
+    zero_ok=True,
+)
+P_MAXIMA = _g(
+    "P_max", "P_máx", "Potência disponível", POTENCIA, "A potência do motor ou o limite pedido."
+)
+Q_PEDIDO = _g(
+    "Q_ped",
+    "Q_ped",
+    "Calor pedido",
+    POTENCIA,
+    "Quanto calor a troca precisa passar, sem o sinal: aquecer ou resfriar.",
+)
+ETA_CICLO = Grandeza(
+    "eta_t",
+    "η_t",
+    "Rendimento térmico do ciclo",
+    PURO,
+    "Trabalho líquido dividido pelo calor recebido.",
+    zero_ok=True,
+)
+COP = _g("COP", "COP", "Coeficiente de desempenho", PURO, "Efeito útil dividido pelo trabalho.")
+M_CIRCUITO = _g(
+    "m_c",
+    "ṁ_c",
+    "Vazão do circuito",
+    VAZAO_MASSICA,
+    "Num circuito fechado, a vazão não sai do desenho: ela é um dado, ou a letra pedida.",
+    1.0,
+)
+
 _TODAS: tuple[Grandeza, ...] = tuple(
     v for v in tuple(globals().values()) if isinstance(v, Grandeza)
 )
 _INICIO_DE_FLUIDOS = _TODAS.index(RHO)
+_INICIO_DO_TERMICO = _TODAS.index(T_ESTADO)
 #: A mesma letra muda de sentido entre as partes: h é a altura da seção, ou a profundidade.
 _LETRAS = {
     SISTEMA_SOLIDOS.chave: _TODAS[:_INICIO_DE_FLUIDOS],
-    SISTEMA_FLUIDOS.chave: _TODAS[_INICIO_DE_FLUIDOS:],
+    SISTEMA_FLUIDOS.chave: _TODAS[_INICIO_DE_FLUIDOS:_INICIO_DO_TERMICO],
+    SISTEMA_TERMICO.chave: _TODAS[_INICIO_DO_TERMICO:],
 }
-_SISTEMAS = {SISTEMA_SOLIDOS.chave: SISTEMA_SOLIDOS, SISTEMA_FLUIDOS.chave: SISTEMA_FLUIDOS}
+_SISTEMAS = {
+    SISTEMA_SOLIDOS.chave: SISTEMA_SOLIDOS,
+    SISTEMA_FLUIDOS.chave: SISTEMA_FLUIDOS,
+    SISTEMA_TERMICO.chave: SISTEMA_TERMICO,
+}
 
 
 def sistema(chave: str) -> Sistema | None:

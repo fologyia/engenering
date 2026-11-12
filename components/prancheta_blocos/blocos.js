@@ -22,7 +22,7 @@ const ESCALA_LEGIVEL = 0.85 // abaixo disso o texto dos blocos fica difícil de 
 const CONJUNTO = "conjunto"
 const RESULTADO = "resultado"
 const REFERENCIA = "referencia"
-const FILA = ["secao", "linha"] // o fio que passa de bloco em bloco
+const FILA = ["secao", "linha", "corrente"] // o fio que passa de bloco em bloco
 const VALOR = "valor"
 const CONDICAO = "condicao"
 const MATERIAL = "material"
@@ -352,10 +352,12 @@ function criar(raiz) {
   }
   function ligar(de, saida, para, entrada) {
     const n = nivel()
-    if (de === para || alcanca(para, de)) return false
+    if (de === para) return false
     const s = portas(noPorId(de)).saidas.find((p) => p.chave === saida)
     const ent = portas(noPorId(para)).entradas.find((p) => p.chave === entrada)
     if (!s || !ent || !liga(s, ent)) return false
+    // Laço só no fio que a parte deixa fechar, como a corrente de um ciclo: o motor corta e fecha.
+    if (alcanca(para, de) && !(e.lacos ?? []).includes(s.tipo)) return false
     if (!ent.varias) n.fios = n.fios.filter((f) => !(f.para === para && f.entrada === entrada))
     if (!n.fios.some((f) => f.de === de && f.saida === saida && f.para === para && f.entrada === entrada)) {
       n.fios.push({ de, saida, para, entrada })
@@ -596,8 +598,12 @@ function criar(raiz) {
   function organizar() {
     const n = nivel()
     const coluna = Object.fromEntries(n.nos.map((x) => [x.id, 0]))
+    // O fio que volta para o começo de um laço (o Circuito) não conta: senão a coluna cresce a cada volta.
+    const inicios = new Set(n.nos.filter((x) => (e.inicios ?? []).includes(x.tipo)).map((x) => x.id))
     for (let k = 0; k < n.nos.length; k += 1) {
-      for (const f of n.fios) coluna[f.para] = Math.max(coluna[f.para], coluna[f.de] + 1)
+      for (const f of n.fios) {
+        if (!inicios.has(f.para)) coluna[f.para] = Math.max(coluna[f.para], coluna[f.de] + 1)
+      }
     }
     // Fila comprida quebra em linhas, para o texto dos blocos não encolher até sumir.
     const largura = svg.getBoundingClientRect().width || 800
@@ -1672,6 +1678,8 @@ function criar(raiz) {
       e.versao = dados.versao
     }
     e.marcas = dados.marcas ?? {}
+    e.lacos = dados.lacos ?? []
+    e.inicios = dados.inicios ?? []
     mostrarSituacao()
     if (receberConfirmacoes(dados) && !algumVisivel()) ajustarVista() // o Ctrl+Z trouxe blocos de fora da vista
     const pedido = dados.selecionar

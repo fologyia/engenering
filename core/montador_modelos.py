@@ -12,6 +12,7 @@ from core import montador_conjuntos as mc
 from core import (
     montador_eixo,  # noqa: F401  (registra o eixo com trechos)
     montador_pecas,  # noqa: F401  (registra os blocos de peça)
+    montador_termico,  # noqa: F401  (registra os blocos do térmico)
 )
 from core import montador_grandezas as g
 
@@ -20,10 +21,17 @@ _ALTURA = 124
 
 
 def organizar(nos: list[dict[str, Any]], fios: list[dict[str, Any]]) -> None:
-    """Põe cada bloco na coluna da sua distância até o começo. O mesmo que a prancheta faz."""
+    """Põe cada bloco na coluna da sua distância até o começo. O mesmo que a prancheta faz.
+
+    O fio que volta para o começo de um laço (o Circuito do térmico) não conta: com ele, as colunas
+    cresceriam a cada volta.
+    """
     coluna = {no["id"]: 0 for no in nos}
+    inicios = {no["id"] for no in nos if no["tipo"] in mb.INICIO_DE_LACO}
     for _ in nos:
         for fio in fios:
+            if fio["para"] in inicios:
+                continue
             if fio["de"] in coluna and fio["para"] in coluna:
                 coluna[fio["para"]] = max(coluna[fio["para"]], coluna[fio["de"]] + 1)
     linhas: dict[int, int] = {}
@@ -580,6 +588,159 @@ MODELOS_FLUIDOS: tuple[Modelo, ...] = (
 )
 
 
+_LIQUIDO_NO_CONDENSADOR = "Sai líquido saturado (condensador)"
+_VAPOR_NO_EVAPORADOR = "Sai vapor saturado (evaporador)"
+#: Ciclo Rankine ideal de Çengel e Boles, Exemplo 10-1: 3 MPa e 350 °C na turbina, 75 kPa no
+#: condensador. O livro dá 26,0 % de rendimento.
+_RANKINE = {
+    "m_c": 1.0,
+    "p_b": 3e6,
+    "eta_b": 1.0,
+    "T_s": 623.15,
+    "Dp_tc": 0.0,
+    "p_tb": 75e3,
+    "eta_tb": 1.0,
+    "Dp_tc_2": 0.0,
+}
+#: Refrigeração ideal com R134a de Çengel e Boles, Exemplo 11-1: 0,14 e 0,8 MPa, 0,05 kg/s. O livro
+#: dá COP de 3,97.
+_REFRIGERACAO = {"m_c": 0.05, "p_c": 8e5, "eta_c": 1.0, "Dp_tc": 0.0, "p_vl": 1.4e5, "Dp_tc_2": 0.0}
+MODELOS_TERMICOS: tuple[Modelo, ...] = (
+    Modelo(
+        "Aquecer água: vazão pelo calor",
+        "Quanta água um aquecedor de 200 kW leva de 20 °C a 60 °C.",
+        "m_dot",
+        {"T": 293.15, "p": 3e5, "T_s": 333.15, "Dp_tc": 0.0, "Q_ped": 200e3},
+        (),
+        (("e1", "estado"), ("q1", "troca_de_calor"), ("c1", "calor_pedido"), ("r1", _R)),
+        (
+            ("e1", "saida", "q1", "entrada"),
+            ("q1", "calor", "c1", "calores"),
+            ("c1", "condicao", "r1", "condicoes"),
+        ),
+        {"e1": {"fluido": "Água"}},
+    ),
+    Modelo(
+        "Compressor de ar: pressão máxima",
+        "Até que pressão o ar sai do compressor abaixo de 200 °C.",
+        "p_c",
+        {"T": 298.15, "p": 1e5, "m_dot": 1.0, "eta_c": 0.8, "T_max": 473.15},
+        (),
+        (("e1", "estado"), ("k1", "compressor"), ("t1", "temperatura_maxima"), ("r1", _R)),
+        (
+            ("e1", "saida", "k1", "entrada"),
+            ("k1", "saida", "t1", "entrada"),
+            ("t1", "condicao", "r1", "condicoes"),
+        ),
+        {"e1": {"fluido": "Ar seco"}},
+    ),
+    Modelo(
+        "Turbina a vapor: pressão de saída",
+        "A menor pressão de saída com o vapor ainda seco o bastante para as palhetas.",
+        "p_tb",
+        {"T": 623.15, "p": 3e6, "m_dot": 1.0, "eta_tb": 0.85, "x_min": 0.88},
+        (),
+        (("e1", "estado"), ("t1", "turbina"), ("x1", "titulo_minimo"), ("r1", _R)),
+        (
+            ("e1", "saida", "t1", "entrada"),
+            ("t1", "saida", "x1", "entrada"),
+            ("x1", "condicao", "r1", "condicoes"),
+        ),
+        {"e1": {"fluido": "Água"}},
+    ),
+    Modelo(
+        "Misturar água quente e fria",
+        "Quanta água fria baixa 1 kg/s de água a 80 °C para no máximo 45 °C.",
+        "m_dot_2",
+        {"T": 353.15, "p": 3e5, "m_dot": 1.0, "T_2": 288.15, "p_2": 3e5, "T_max": 318.15},
+        (),
+        (
+            ("e1", "estado"),
+            ("e2", "estado"),
+            ("m1", "misturador"),
+            ("t1", "temperatura_maxima"),
+            ("r1", _R),
+        ),
+        (
+            ("e1", "saida", "m1", "a"),
+            ("e2", "saida", "m1", "b"),
+            ("m1", "saida", "t1", "entrada"),
+            ("t1", "condicao", "r1", "condicoes"),
+        ),
+        {"e1": {"fluido": "Água"}, "e2": {"fluido": "Água"}},
+    ),
+    Modelo(
+        "Ciclo Rankine simples",
+        "Bomba, caldeira, turbina e condensador em laço: o rendimento térmico do ciclo.",
+        "eta_t",
+        _RANKINE,
+        (),
+        (
+            ("c1", "circuito"),
+            ("b1", "bomba_termica"),
+            ("q1", "troca_de_calor"),
+            ("t1", "turbina"),
+            ("q2", "troca_de_calor"),
+            ("n1", "rendimento_ciclo"),
+            ("r1", _R),
+        ),
+        (
+            ("c1", "saida", "b1", "entrada"),
+            ("b1", "saida", "q1", "entrada"),
+            ("q1", "saida", "t1", "entrada"),
+            ("t1", "saida", "q2", "entrada"),
+            ("q2", "saida", "c1", "entrada"),
+            ("t1", "potencia", "n1", "produzidos"),
+            ("b1", "potencia", "n1", "consumidos"),
+            ("q1", "calor", "n1", "recebidos"),
+            ("n1", "condicao", "r1", "condicoes"),
+        ),
+        {"c1": {"fluido": "Água"}, "q2": {"saida": _LIQUIDO_NO_CONDENSADOR}},
+    ),
+    Modelo(
+        "Refrigeração por compressão (R134a)",
+        "Compressor, condensador, válvula e evaporador em laço: o COP do ciclo.",
+        "COP",
+        _REFRIGERACAO,
+        (),
+        (
+            ("c1", "circuito"),
+            ("k1", "compressor"),
+            ("q1", "troca_de_calor"),
+            ("v1", "valvula"),
+            ("q2", "troca_de_calor"),
+            ("n1", "cop"),
+            ("r1", _R),
+        ),
+        (
+            ("c1", "saida", "k1", "entrada"),
+            ("k1", "saida", "q1", "entrada"),
+            ("q1", "saida", "v1", "entrada"),
+            ("v1", "saida", "q2", "entrada"),
+            ("q2", "saida", "c1", "entrada"),
+            ("q2", "calor", "n1", "uteis"),
+            ("k1", "potencia", "n1", "consumidos"),
+            ("n1", "condicao", "r1", "condicoes"),
+        ),
+        {
+            "c1": {"fluido": "R134a"},
+            "q1": {"saida": _LIQUIDO_NO_CONDENSADOR},
+            "q2": {"saida": _VAPOR_NO_EVAPORADOR},
+        },
+    ),
+    Modelo(
+        "Fórmula própria",
+        _DICA_DA_FORMULA,
+        "Q_c",
+        {"m_dot": 2.0, "c_p": 4180.0, "dT": 15.0},
+        (_R,),
+        (("n2", mb.FORMULA),),
+        (("n2", "condicao", "n1", "condicoes"),),
+        {"n2": {"texto": "Q_c = m_dot*c_p*dT", "sistema": g.SISTEMA_TERMICO.chave}},
+    ),
+)
+
+
 @dataclass(frozen=True)
 class Parte:
     """Uma parte do Montador: mesmo motor, com seus blocos, unidades e modelos."""
@@ -593,6 +754,8 @@ class Parte:
     modelos: tuple[Modelo, ...]
     pagina_da_outra: str
     nome_da_outra: str
+    #: Os tipos de fio que podem fechar um laço na prancheta, como a corrente de um ciclo.
+    lacos: tuple[str, ...] = ()
 
     def k(self, nome: str) -> str:
         return f"{self.prefixo}_{nome}"
@@ -623,6 +786,20 @@ PARTE_FLUIDOS = Parte(
     MODELOS_FLUIDOS,
     "app_pages/montador_formulas.py",
     "o Montador de fórmulas",
+)
+
+PARTE_TERMICA = Parte(
+    "mte",
+    mb.TERMICO,
+    "Montador térmico",
+    "Ligue o estado do fluido, os equipamentos e a verificação, e escolha em função do que a "
+    "equação deve ficar.",
+    "montador_termico",
+    g.SISTEMA_TERMICO,
+    MODELOS_TERMICOS,
+    "app_pages/montador_fluidos.py",
+    "o Montador de fluidos",
+    lacos=(mb.CORRENTE,),
 )
 
 POR_NOME = {modelo.nome: modelo for modelo in MODELOS}

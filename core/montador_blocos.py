@@ -44,9 +44,11 @@ VALOR = "valor"
 CONDICAO = "condicao"
 MATERIAL = "material"
 LINHA = "linha"
+CORRENTE = "corrente"  # o fluido com o estado dele (pressão, entalpia) e a vazão, no térmico
 
 SOLIDOS = "solidos"
 FLUIDOS = "fluidos"
+TERMICO = "termico"
 COMUM = "comum"
 
 GRUPO_SECAO = "Seção"
@@ -57,6 +59,8 @@ GRUPO_CRITERIO = "Critério"
 GRUPO_PECAS = "Peças do eixo"
 GRUPO_FLUIDO = "Fluido"
 GRUPO_TUBULACAO = "Tubulação"
+GRUPO_ESTADO = "Estado do fluido"
+GRUPO_EQUIPAMENTO = "Equipamentos"
 GRUPO_VERIFICACAO = "Verificações"
 GRUPO_EQUACOES = "Equações"
 GRUPO_RESULTADO = "Resultado"
@@ -70,6 +74,8 @@ GRUPOS = (
     GRUPO_PECAS,
     GRUPO_FLUIDO,
     GRUPO_TUBULACAO,
+    GRUPO_ESTADO,
+    GRUPO_EQUIPAMENTO,
     GRUPO_VERIFICACAO,
     GRUPO_EQUACOES,
     GRUPO_RESULTADO,
@@ -86,6 +92,8 @@ ORDEM_DOS_GRUPOS = (
     GRUPO_PECAS,
     GRUPO_FLUIDO,
     GRUPO_TUBULACAO,
+    GRUPO_ESTADO,
+    GRUPO_EQUIPAMENTO,
     GRUPO_VERIFICACAO,
     GRUPO_EQUACOES,
     GRUPO_RESULTADO,
@@ -101,6 +109,8 @@ CATEGORIA_DO_GRUPO = {
     GRUPO_PECAS: "PEÇA DO EIXO",
     GRUPO_FLUIDO: "FLUIDO",
     GRUPO_TUBULACAO: "TUBULAÇÃO",
+    GRUPO_ESTADO: "ESTADO",
+    GRUPO_EQUIPAMENTO: "EQUIPAMENTO",
     GRUPO_VERIFICACAO: "VERIFICAÇÃO",
     GRUPO_EQUACOES: "EQUAÇÃO",
     GRUPO_RESULTADO: "DECISÃO",
@@ -115,6 +125,8 @@ CLASSE_DO_GRUPO = {
     GRUPO_PECAS: "g-criterio",
     GRUPO_FLUIDO: "g-secao",
     GRUPO_TUBULACAO: "g-esforco",
+    GRUPO_ESTADO: "g-secao",
+    GRUPO_EQUIPAMENTO: "g-esforco",
     GRUPO_VERIFICACAO: "g-criterio",
     GRUPO_EQUACOES: "g-origem",
     GRUPO_RESULTADO: "g-resultado",
@@ -1477,6 +1489,12 @@ POR_CHAVE: dict[str, Bloco] = {b.chave: b for b in BLOCOS}
 PORTAS_VARIAVEIS: dict[
     str, Callable[[Mapping[str, Any]], tuple[tuple[Porta, ...], tuple[Porta, ...]]]
 ] = {}
+#: Como cortar um fio que volta num laço, pelo tipo do fio: com o número do corte, devolve o objeto
+#: com as letras supostas e, para cada letra, como ler o mesmo valor no que de fato volta. O fio de
+#: valor é cortado pelo próprio motor.
+RASGAR: dict[str, Callable[[int], tuple[Any, list[tuple[Grandeza, Callable[[Any], sp.Expr]]]]]] = {}
+#: Os blocos onde um laço começa, como o Circuito do térmico: o corte cai no fio que chega neles.
+INICIO_DE_LACO: set[str] = set()
 
 
 @lru_cache(maxsize=256)
