@@ -28,13 +28,14 @@ from core import montador_blocos as mb
 from core import (
     montador_eixo,  # noqa: F401  (registra o eixo com trechos)
     montador_pecas,  # noqa: F401  (registra os blocos de peça)
+    montador_processos,  # noqa: F401  (registra a ponte entre térmico e fluidos)
 )
 from core import montador_fluidos as mfl
 from core import montador_grandezas as g
 from core import montador_sistema as sm
 from core import montador_termico as mte
 from core.montador_blocos import Condicao, Contexto, ErroDeBloco
-from core.montador_funcoes import FUNCOES, NUMERICAS
+from core.montador_funcoes import DA_BIBLIOTECA, FUNCOES, NUMERICAS
 from core.montador_grandezas import Grandeza
 from core.montador_secoes import Estado, Validade
 
@@ -673,8 +674,14 @@ def _real(expressao: sp.Expr) -> float | None:
 
 @lru_cache(maxsize=4096)
 def _compilada(expressao: sp.Expr, simbolos: tuple[sp.Symbol, ...], modulo: str) -> Any:
-    """Gerar o código da conta custa mais do que rodar: a mesma condição volta a cada rodada."""
-    return sp.lambdify(simbolos, expressao, [FUNCOES, modulo])
+    """Gerar o código da conta custa mais do que rodar: a mesma condição volta a cada rodada.
+
+    Com propriedades da CoolProp, a mesma ρ(p, h) aparece várias vezes na fórmula (na velocidade,
+    no Reynolds, na pressão), e cada uma custa uma conta de estado: as partes repetidas são
+    calculadas uma vez só. Sem elas, a conta fica como sempre foi.
+    """
+    repetidas = expressao.has(*DA_BIBLIOTECA)
+    return sp.lambdify(simbolos, expressao, [FUNCOES, modulo], cse=repetidas)
 
 
 def _argumentos(
@@ -727,7 +734,10 @@ def _na_grade(
                 return np.array([escalar(v) for v in valores.tolist()])
             if np.iscomplexobj(resultado):
                 resultado = np.where(resultado.imag == 0.0, resultado.real, np.nan)
-            resultado = np.broadcast_to(resultado.astype(float), valores.shape)
+            try:
+                resultado = np.broadcast_to(resultado.astype(float), valores.shape)
+            except TypeError:  # sobrou uma letra sem número: a conta não tem valor aqui
+                return np.full(valores.shape, np.nan)
             return np.where(np.isfinite(resultado), resultado, np.nan)
 
     return chamar
@@ -920,7 +930,13 @@ def _isolar_uma(
         # A forma fechada escolheu um sinal pela amostra, e com estes números ele não vale: a conta
         # numérica acha a raiz certa, e a fórmula em letras sai da tela para não enganar.
         forma, com_numeros = None, ""
-    raizes = _raizes(f, _na_grade(diferenca, x, numeros), dominio, _grade(x))
+    # Com propriedades da CoolProp, cada ponto da grade é uma conta de estado: a grade rala (10
+    # pontos por década) acha a troca de sinal do mesmo jeito, e a bisseção refina igual.
+    if diferenca.has(*DA_BIBLIOTECA):
+        grade = _GRADE_RALA if x.is_positive else _GRADE_RALA_COM_SINAL
+    else:
+        grade = _grade(x)
+    raizes = _raizes(f, _na_grade(diferenca, x, numeros), dominio, grade)
     if not raizes:
         return Isolada(condicao, None, equacao, tensao, "", None, None, False, None)
     lados = [_lado(f, r) for r in raizes]
@@ -1020,6 +1036,25 @@ def _alertas_da_validade(
     todas = [v for item in isoladas for v in item.condicao.validade] + list(dos_blocos)
     for v in dict.fromkeys(todas):
         numero = _no_valor(v.expressao, x, numeros, final)
+        if numero is not None and numero < -_FOLGA and v.mensagem not in alertas:
+            alertas.append(v.mensagem)
+    return alertas
+
+
+def _alertas_sem_a_pedida(
+    isoladas: Sequence[Isolada],
+    valores: Mapping[str, float],
+    x: sp.Symbol,
+    dos_blocos: Sequence[Validade] = (),
+) -> list[str]:
+    """As hipóteses que só dependem dos dados: valem mesmo quando a conta não achou resposta."""
+    numeros = _numeros(valores, x)
+    alertas: list[str] = []
+    todas = [v for item in isoladas for v in item.condicao.validade] + list(dos_blocos)
+    for v in dict.fromkeys(todas):
+        if x in v.expressao.free_symbols or not v.expressao.free_symbols <= set(numeros):
+            continue
+        numero = _real(v.expressao.subs(numeros))
         if numero is not None and numero < -_FOLGA and v.mensagem not in alertas:
             alertas.append(v.mensagem)
     return alertas
@@ -1285,6 +1320,10 @@ def isolar(
     conferencia: tuple[LinhaConferida, ...] = ()
     materiais: tuple[str, ...] = ()
     do_meio: dict[str, float] = {}
+    if valor is None and not faltam:
+        # Sem resposta, o aviso que não depende da letra pedida costuma ser o motivo: a corrente
+        # com líquido e vapor misturados não tem viscosidade, e a conta da linha não fecha.
+        alertas += _alertas_sem_a_pedida(isoladas, usados, x, conta.validades)
     if valor is not None:
         do_meio = _meio_em(valor, fixas, acompanhar)
         com_meio = {**usados, **do_meio}
@@ -1355,7 +1394,8 @@ def curvas(
     if not resposta.valor:
         return []  # sem resposta, ou resposta no zero: de metade ao dobro não tem tamanho
     x = resposta.alvo.simbolo
-    numeros = _numeros(resposta.valores_usados or valores, x)
+    # As letras do meio entram com o número que tinham na resposta: a curva é o uso em volta dela.
+    numeros = _numeros({**dict(resposta.do_meio), **(resposta.valores_usados or valores)}, x)
     linhas: list[tuple[str, float, float]] = []
     for item in resposta.isoladas:
         c = item.condicao
@@ -1376,7 +1416,7 @@ def curvas_da_bomba(
     x = resposta.alvo.simbolo
     if resposta.valor is None or x.name != g.VAZAO_Q.chave:
         return []
-    numeros = _numeros(resposta.valores_usados or valores, x)
+    numeros = _numeros({**dict(resposta.do_meio), **(resposta.valores_usados or valores)}, x)
     item = next(
         (i for i in resposta.isoladas if i.condicao.criterio == mfl.PONTO_DE_OPERACAO), None
     )

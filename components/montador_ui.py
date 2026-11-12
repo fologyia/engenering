@@ -59,7 +59,7 @@ from core import montador_sensibilidade as ms
 from core import montador_uso as mus
 from core import montador_word as mw
 from core.montador_grandezas import Grandeza, Unidades
-from core.montador_modelos import Modelo, Parte
+from core.montador_modelos import PARTE_PROCESSOS, Modelo, Parte
 from core.montador_secoes import Estado
 
 _NAO_VARRE = "Nenhuma"
@@ -105,11 +105,13 @@ _COMECO = {
     mb.SOLIDOS: "uma seção",
     mb.FLUIDOS: "um fluido e um trecho de tubo",
     mb.TERMICO: "o estado do fluido, ou o bloco Circuito, que fecha um ciclo",
+    mb.PROCESSOS: "o estado do fluido; a Linha da corrente leva dele para os blocos de tubulação",
 }
 _EXEMPLO_DE_COMPARACAO = {
     mb.SOLIDOS: "aço ou alumínio, uma seção ou outra, com cortante ou sem.",
     mb.FLUIDOS: "um diâmetro ou outro, água ou óleo, com as perdas localizadas ou sem.",
     mb.TERMICO: "uma pressão ou outra, R134a ou amônia, compressor ideal ou real.",
+    mb.PROCESSOS: "um diâmetro ou outro, água a 30 °C ou a 80 °C, bomba ideal ou real.",
 }
 _HIPOTESE_DA_PARTE = {
     mb.SOLIDOS: (
@@ -126,7 +128,17 @@ _HIPOTESE_DA_PARTE = {
         "adiabáticos, menos a troca de calor. Propriedades pela CoolProp, pela pressão e pela "
         "entalpia de cada ponto."
     ),
+    mb.PROCESSOS: (
+        "Regime permanente. Na parte térmica, equipamentos adiabáticos, menos a troca de calor; na "
+        "tubulação, escoamento incompressível, com a linha em série e a mesma vazão em todos os "
+        "trechos. Propriedades pela CoolProp no estado onde a linha começa."
+    ),
 }
+#: As partes que têm corrente: nelas a página mostra a tabela de estados.
+_COM_CORRENTE = (mb.TERMICO, mb.PROCESSOS)
+#: De onde uma montagem pode seguir para a página que liga fluidos e térmico.
+_SEGUEM_PARA_PROCESSOS = (mb.FLUIDOS, mb.TERMICO)
+_PAGINA_DE_PROCESSOS = "app_pages/montador_processos.py"
 _AJUDA_DA_FORMULA = (
     "Três formas: q*L^2/8 dá um valor; M = q*L^2/8 dá um valor com nome e também uma equação; "
     "M*c/I <= S_y/n dá uma condição. Use * para vezes e ^ para potência. Funções: sqrt, sin, cos, "
@@ -218,6 +230,8 @@ _ESTILO = """
 .mi-ok, .mi-nao { display: flex; gap: .4rem; font-size: .78rem; line-height: 1.55; }
 .mi-ok b { color: #0B5F45; }
 .mi-nao b { color: #C2415D; }
+/* Fórmula mais larga que a página rola para o lado, em vez de ser cortada na borda. */
+.katex-display { overflow-x: auto; overflow-y: hidden; padding-bottom: .35rem; }
 </style>
 """
 
@@ -2116,9 +2130,17 @@ def _inspetor(
 # ---------------------------------------------------------------------------
 
 
-def _ao_escolher_alvo(p: Parte) -> None:
+def _campo_do_alvo(p: Parte) -> str:
+    """A revisão vai no nome, como nos campos de valor: a escolha de antes de trocar o modelo, que
+    o navegador ainda manda junto com o desenho novo, não troca a letra pedida do modelo novo."""
+    return f"{p.prefixo}_alvo_escolha_{st.session_state[p.k('revisao')]}"
+
+
+def _ao_escolher_alvo(p: Parte, campo: str) -> None:
     estado = st.session_state
-    estado[p.k("alvo")] = estado[p.k("alvo_escolha")]
+    if campo != _campo_do_alvo(p) or campo not in estado:
+        return
+    estado[p.k("alvo")] = estado[campo]
     estado[p.k("adotado")] = None
     estado[p.k("revisao")] += 1
 
@@ -2134,14 +2156,15 @@ def _ao_digitar_adotado(p: Parte, campo: str, fator: float, deslocamento: float 
 def _escolher_alvo(p: Parte, montagem: mt.Montagem, alvo: str, u: Unidades) -> None:
     estado = st.session_state
     por_chave = {item.chave: item for item in _opcoes_de_alvo(montagem)}
-    estado[p.k("alvo_escolha")] = alvo
+    campo_do_alvo = _campo_do_alvo(p)
+    estado[campo_do_alvo] = alvo
     esquerda, direita = st.columns([2, 1])
     esquerda.selectbox(
         "Deixar em função de",
         list(por_chave),
-        key=p.k("alvo_escolha"),
+        key=campo_do_alvo,
         on_change=_ao_escolher_alvo,
-        args=(p,),
+        args=(p, campo_do_alvo),
         format_func=lambda c: f"{por_chave[c].texto}: {por_chave[c].nome}",
         help="A letra que vai ficar sozinha de um lado da equação: a medida, a carga ou o material.",
     )
@@ -3312,6 +3335,33 @@ def _levar_para_outras_analises(
         )
 
 
+def _continuar_em_processos(p: Parte, doc: Mapping[str, Any]) -> None:
+    """A montagem de fluidos ou do térmico vai inteira para a página que liga os dois."""
+    if p.dominio not in _SEGUEM_PARA_PROCESSOS:
+        return
+    _titulo_da_pagina("Continuar no Montador de processos")
+    st.caption(
+        "Lá os blocos de fluidos e os térmicos ficam na mesma prancheta: o estado do fluido vira a "
+        "linha de tubulação, e a perda do tubo volta para a corrente. Esta montagem vai inteira, com "
+        "os números, e a daqui continua como está."
+    )
+    vai = st.button(
+        "Abrir esta montagem no Montador de processos",
+        icon=":material/hub:",
+        key=p.k("abrir_em_processos"),
+        help="Leva os blocos, os fios e os valores. Lá, o botão Voltar traz de volta o que estava "
+        "na prancheta de processos.",
+    )
+    if vai:
+        destino = PARTE_PROCESSOS
+        _iniciar(destino)
+        _abrir_documento(
+            destino, rg.ler_documento(rg.em_json(doc), destino.dominio, destino.sistema)
+        )
+        st.session_state[destino.k("titulo")] = st.session_state.get(p.k("titulo"), "")
+        st.switch_page(_PAGINA_DE_PROCESSOS)
+
+
 def _passo_a_passo(resposta: mt.Resposta) -> None:
     letra = _letra(resposta.alvo)
     for item in resposta.isoladas:
@@ -3914,7 +3964,7 @@ def tela_do_montador(p: Parte) -> None:
     _titulo_da_pagina("Condições")
     with _parte(p, "Condições"):
         _quadro(resposta, u)
-    if p.dominio == mb.TERMICO:
+    if p.dominio in _COM_CORRENTE:
         with _parte(p, "Tabela de estados"):
             _tabela_de_estados(base, resposta, u)
     valores = {k: v for k, v in estado[p.k("valores")].items() if v is not None}
@@ -3935,6 +3985,8 @@ def tela_do_montador(p: Parte) -> None:
         _comparar(p, base, resposta, u)
     with _parte(p, "Levar para outras análises"):
         _levar_para_outras_analises(p, base, resposta, registro)
+    with _parte(p, "Continuar no Montador de processos"):
+        _continuar_em_processos(p, doc)
     with st.expander("Passo a passo", icon=":material/list_alt:"), _parte(p, "Passo a passo"):
         _passo_a_passo(resposta)
     with (

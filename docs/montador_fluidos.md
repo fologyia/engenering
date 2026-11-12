@@ -36,6 +36,10 @@ K ou °F (botão Unidades) e pode ser a letra pedida: até quantos graus a bomba
 sai da faixa do fluido, a página avisa. Detalhes e a lista dos fluidos em `docs/montador_formulas.md`,
 "Propriedades pela CoolProp".
 
+**Ligar com o térmico.** O botão **Abrir esta montagem no Montador de processos** leva a linha inteira
+para a página que liga os dois, onde ela recebe o estado de um bloco térmico e devolve a perda de carga
+para a corrente (`docs/montador_processos.md`).
+
 ## Blocos
 
 - **Linha:** fluido, trecho de tubo, perdas localizadas.

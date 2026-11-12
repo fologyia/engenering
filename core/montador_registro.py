@@ -41,6 +41,11 @@ _REFERENCIAS_DA_PARTE = {
         "Çengel e Boles, Termodinâmica.",
         "Bell, Wronski, Quoilin e Lemort, CoolProp, Ind. Eng. Chem. Res., 2014.",
     ),
+    mb.PROCESSOS: (
+        "Çengel e Boles, Termodinâmica.",
+        "White, Mecânica dos Fluidos.",
+        "Bell, Wronski, Quoilin e Lemort, CoolProp, Ind. Eng. Chem. Res., 2014.",
+    ),
 }
 
 
@@ -103,6 +108,18 @@ def em_json(doc: Mapping[str, Any]) -> bytes:
     return json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8")
 
 
+#: Letras que mudaram de nome: a montagem salva com o nome antigo abre com o de agora. A vazão em
+#: massa e o calor passaram a m com ponto e Q com ponto, que é como a fórmula os escreve.
+_NOMES_ANTIGOS = {"m_dot": "mdot", "Q_dot": "Qdot"}
+
+
+def _chave_de_agora(chave: str) -> str:
+    for antigo, novo in _NOMES_ANTIGOS.items():
+        if chave == antigo or chave.startswith(f"{antigo}_"):
+            return novo + chave[len(antigo) :]
+    return chave
+
+
 def ler_documento(conteudo: bytes | str, dominio: str, sistema: Sistema) -> dict[str, Any]:
     """Confere o arquivo antes de abrir: o que veio de fora não entra sem olhar."""
     try:
@@ -111,7 +128,10 @@ def ler_documento(conteudo: bytes | str, dominio: str, sistema: Sistema) -> dict
         raise ErroDeArquivo("Este arquivo não é um JSON válido.") from erro
     if not isinstance(doc, Mapping) or doc.get("formato") != FORMATO:
         raise ErroDeArquivo("Este arquivo não é uma montagem do programa.")
-    if doc.get("dominio") != dominio:
+    # A página que liga fluidos e térmico abre também as montagens de cada uma das duas: os blocos
+    # delas existem lá, e os números já estão no SI nas três.
+    de_outra = doc.get("dominio") != dominio
+    if doc.get("dominio") not in mb.dominios_de(dominio):
         raise ErroDeArquivo("Esta montagem é da outra parte do Montador.")
     grafo = doc.get("grafo")
     if not isinstance(grafo, Mapping) or not isinstance(grafo.get("nos"), list):
@@ -121,17 +141,18 @@ def ler_documento(conteudo: bytes | str, dominio: str, sistema: Sistema) -> dict
     valores = {}
     for chave, valor in (doc.get("valores") or {}).items():
         if isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor):
-            valores[str(chave)] = float(valor)
+            valores[_chave_de_agora(str(chave))] = float(valor)
     # Arquivo de antes de um seletor novo: as unidades que ele tinha ficam, e a nova vem no padrão.
-    unidades = g.unidades_lidas(sistema, doc.get("unidades"))
+    # De outra parte, os seletores são outros: valem os padrões desta.
+    unidades = g.unidades_lidas(sistema, None if de_outra else doc.get("unidades"))
     adotado = doc.get("adotado")
     return {
         "formato": FORMATO,
         "dominio": dominio,
         "grafo": dict(grafo),
         "valores": valores,
-        "origens": {str(k): str(v) for k, v in (doc.get("origens") or {}).items()},
-        "alvo": doc.get("alvo") if isinstance(doc.get("alvo"), str) else None,
+        "origens": {_chave_de_agora(str(k)): str(v) for k, v in (doc.get("origens") or {}).items()},
+        "alvo": _chave_de_agora(doc["alvo"]) if isinstance(doc.get("alvo"), str) else None,
         "adotado": (
             float(adotado)
             if isinstance(adotado, (int, float))
@@ -182,19 +203,26 @@ def saidas_publicas(
         )
     montagem = resposta.montagem
     if montagem is not None:
+        achadas = _letras_achadas(resposta)
         for item in montagem.grandezas:
-            valor = valores.get(item.chave)
+            valor = valores.get(item.chave, achadas.get(item.chave))
             if valor is not None and item.chave != resposta.alvo.chave:
+                sufixo = " (achada pela conta)" if item.chave in achadas else ""
                 publicas.append(
                     {
                         "chave": item.chave,
-                        "rotulo": f"{item.texto}: {item.nome}",
+                        "rotulo": f"{item.texto}: {item.nome}{sufixo}",
                         "dimensao": item.dimensao,
                         "valor": valor,
                         "dominio": dominio,
                     }
                 )
     return publicas
+
+
+def _letras_achadas(resposta: mt.Resposta) -> dict[str, float]:
+    """As letras do meio que valem como resultado: o corte de um laço é só da conta."""
+    return {k: v for k, v in resposta.do_meio if not mt.e_corte(k)}
 
 
 def _dimensao_da_letra(montagem: mt.Montagem, chave: str) -> str:
@@ -237,6 +265,10 @@ def registro_tecnico(
     if resposta.valor is not None:
         chave = f"{alvo.texto} ({rotulo_alvo})" if rotulo_alvo else alvo.texto
         resultados[chave] = u.da_base(alvo.dimensao, resposta.valor)
+    for letra, valor in _letras_achadas(resposta).items():  # o que as igualdades acharam
+        grandeza = montagem.grandeza(letra)
+        if grandeza is not None:
+            resultados[_rotulo_da_letra(montagem, letra, u)] = u.da_base(grandeza.dimensao, valor)
     conferidas = resposta.conferencia_adotada or resposta.conferencia
     medidas = [linha.uso for linha in conferidas if not linha.igualdade]
     if medidas:

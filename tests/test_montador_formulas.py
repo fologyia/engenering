@@ -625,7 +625,9 @@ def test_apagar_um_valor_deixa_a_letra_na_formula():
 
 def test_trocar_o_alvo_isola_outra_letra():
     at = abrir()
-    at.selectbox(key="mf_alvo_escolha").set_value("b").run()
+    # A chave leva a revisão no fim: acha pelo começo.
+    alvo = next(s for s in at.selectbox if str(s.key).startswith("mf_alvo_escolha_"))
+    alvo.set_value("b").run()
     assert not at.exception
     assert any("preencha h" in i.value for i in at.info)  # a altura agora é dado
     campo = next(n for n in at.number_input if n.label.startswith("h:"))

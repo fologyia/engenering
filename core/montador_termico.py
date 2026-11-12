@@ -411,6 +411,18 @@ def _temperatura_minima(c: Contexto) -> dict[str, Any]:
     )
 
 
+def _pressao_minima(c: Contexto) -> dict[str, Any]:
+    entrada = _entrada(c)
+    return _condicao(
+        "Pressão mínima", c.letra(g.P_INFERIOR), entrada.p, "p_{mín}", entrada.validade
+    )
+
+
+def _pressao_maxima(c: Contexto) -> dict[str, Any]:
+    entrada = _entrada(c)
+    return _condicao("Pressão máxima", entrada.p, c.letra(g.P_SUPERIOR), "p", entrada.validade)
+
+
 def _titulo_minimo(c: Contexto) -> dict[str, Any]:
     entrada = _entrada(c)
     if not entrada.do_fluido.saturacao:
@@ -664,6 +676,22 @@ BLOCOS_TERMICOS: tuple[Bloco, ...] = (
         "A temperatura da corrente não pode ficar abaixo do limite.",
         "T ≥ T_mín",
         _temperatura_minima,
+        (_ENTRADA,),
+    ),
+    _verificacao(
+        "pressao_minima",
+        "Pressão mínima",
+        "A pressão da corrente precisa chegar pelo menos a este valor, como na entrada da caldeira.",
+        "p ≥ p_mín",
+        _pressao_minima,
+        (_ENTRADA,),
+    ),
+    _verificacao(
+        "pressao_maxima",
+        "Pressão máxima",
+        "A pressão da corrente não pode passar do que o equipamento ou o tubo aguenta.",
+        "p ≤ p_máx",
+        _pressao_maxima,
         (_ENTRADA,),
     ),
     _verificacao(

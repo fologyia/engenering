@@ -357,6 +357,13 @@ MENU: tuple[GrupoMenu, ...] = (
                 "Estado do fluido, bombas, compressores, turbinas, trocas de calor e ciclos",
                 secao=TERMICA,
             ),
+            ItemMenu(
+                "app_pages/montador_processos.py",
+                "Montador de processos",
+                ":material/hub:",
+                "Fluidos e térmico no mesmo desenho: do calor à vazão, ao tubo e à bomba",
+                secao=TERMICA,
+            ),
         ),
     ),
     GrupoMenu(

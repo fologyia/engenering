@@ -340,6 +340,10 @@ O mesmo montador, com blocos de fluidos e unidades próprias: fluido, trechos co
 
 A terceira parte do Montador, com as propriedades da CoolProp: estado do fluido (água e vapor, ar, refrigerantes, CO₂, amônia, glicóis, óleos térmicos), bomba, compressor, turbina, válvula, troca de calor, misturador e divisor, e as verificações de temperatura, título, superaquecimento, potência, calor, rendimento do ciclo e COP. Ciclos fecham em laço pelo bloco Circuito, e a tabela de estados mostra cada ponto. O Rankine e a refrigeração com R134a de Çengel e Boles (Exemplos 10-1 e 11-1) são refeitos nos testes. Detalhes em `docs/montador_termico.md`.
 
+### Montador de processos
+
+Liga o térmico e os fluidos na mesma prancheta. O bloco Linha da corrente leva o estado do fluido para os blocos de tubulação (ρ, μ e pressão de vapor do estado, vazão ṁ/ρ), e o bloco Corrente depois da linha devolve à corrente a perda de carga e o desnível do tubo. Assim, o calor pedido acha a vazão, a velocidade dá o tubo, e a bomba térmica vence a caldeira, o tubo e a altura. As páginas de fluidos e do térmico têm um botão que leva a montagem inteira para lá. Detalhes em `docs/montador_processos.md`.
+
 O núcleo das partes resolve antes as letras do meio, que nenhum campo dá mas uma igualdade da montagem fecha, e fecha laços de fios de valor. Aceita letras com sinal (calor que sai, trabalho, diferença de temperatura), e um resultado registrado de uma parte entra na outra já convertido pelo SI. Detalhes em `docs/montador_formulas.md`.
 
 ### Rede de tubos

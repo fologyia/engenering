@@ -12,6 +12,7 @@ from core import montador_conjuntos as mc
 from core import (
     montador_eixo,  # noqa: F401  (registra o eixo com trechos)
     montador_pecas,  # noqa: F401  (registra os blocos de peça)
+    montador_processos,  # noqa: F401  (registra a ponte entre térmico e fluidos)
     montador_termico,  # noqa: F401  (registra os blocos do térmico)
 )
 from core import montador_grandezas as g
@@ -609,7 +610,7 @@ MODELOS_TERMICOS: tuple[Modelo, ...] = (
     Modelo(
         "Aquecer água: vazão pelo calor",
         "Quanta água um aquecedor de 200 kW leva de 20 °C a 60 °C.",
-        "m_dot",
+        "mdot",
         {"T": 293.15, "p": 3e5, "T_s": 333.15, "Dp_tc": 0.0, "Q_ped": 200e3},
         (),
         (("e1", "estado"), ("q1", "troca_de_calor"), ("c1", "calor_pedido"), ("r1", _R)),
@@ -624,7 +625,7 @@ MODELOS_TERMICOS: tuple[Modelo, ...] = (
         "Compressor de ar: pressão máxima",
         "Até que pressão o ar sai do compressor abaixo de 200 °C.",
         "p_c",
-        {"T": 298.15, "p": 1e5, "m_dot": 1.0, "eta_c": 0.8, "T_max": 473.15},
+        {"T": 298.15, "p": 1e5, "mdot": 1.0, "eta_c": 0.8, "T_max": 473.15},
         (),
         (("e1", "estado"), ("k1", "compressor"), ("t1", "temperatura_maxima"), ("r1", _R)),
         (
@@ -638,7 +639,7 @@ MODELOS_TERMICOS: tuple[Modelo, ...] = (
         "Turbina a vapor: pressão de saída",
         "A menor pressão de saída com o vapor ainda seco o bastante para as palhetas.",
         "p_tb",
-        {"T": 623.15, "p": 3e6, "m_dot": 1.0, "eta_tb": 0.85, "x_min": 0.88},
+        {"T": 623.15, "p": 3e6, "mdot": 1.0, "eta_tb": 0.85, "x_min": 0.88},
         (),
         (("e1", "estado"), ("t1", "turbina"), ("x1", "titulo_minimo"), ("r1", _R)),
         (
@@ -651,8 +652,8 @@ MODELOS_TERMICOS: tuple[Modelo, ...] = (
     Modelo(
         "Misturar água quente e fria",
         "Quanta água fria baixa 1 kg/s de água a 80 °C para no máximo 45 °C.",
-        "m_dot_2",
-        {"T": 353.15, "p": 3e5, "m_dot": 1.0, "T_2": 288.15, "p_2": 3e5, "T_max": 318.15},
+        "mdot_2",
+        {"T": 353.15, "p": 3e5, "mdot": 1.0, "T_2": 288.15, "p_2": 3e5, "T_max": 318.15},
         (),
         (
             ("e1", "estado"),
@@ -732,11 +733,117 @@ MODELOS_TERMICOS: tuple[Modelo, ...] = (
         "Fórmula própria",
         _DICA_DA_FORMULA,
         "Q_c",
-        {"m_dot": 2.0, "c_p": 4180.0, "dT": 15.0},
+        {"mdot": 2.0, "c_p": 4180.0, "dT": 15.0},
         (_R,),
         (("n2", mb.FORMULA),),
         (("n2", "condicao", "n1", "condicoes"),),
-        {"n2": {"texto": "Q_c = m_dot*c_p*dT", "sistema": g.SISTEMA_TERMICO.chave}},
+        {"n2": {"texto": "Q_c = mdot*c_p*dT", "sistema": g.SISTEMA_TERMICO.chave}},
+    ),
+)
+
+
+MODELOS_DE_PROCESSOS: tuple[Modelo, ...] = (
+    Modelo(
+        "Resfriar com água: vazão e diâmetro do tubo",
+        "200 kW tirados com água de 30 °C a 40 °C: o calor dá a vazão, e a velocidade dá o tubo.",
+        "D",
+        {
+            "T": 303.15,
+            "p": 3e5,
+            "T_s": 313.15,
+            "Dp_tc": 0.0,
+            "Q_ped": 200e3,
+            "L": 150.0,
+            "V_adm": 2.0,
+        },
+        (),
+        (
+            ("e1", "estado"),
+            ("q1", "troca_de_calor"),
+            ("c1", "calor_pedido"),
+            ("l1", "linha_da_corrente"),
+            ("t1", "trecho"),
+            ("v1", "velocidade"),
+            ("r1", _R),
+        ),
+        (
+            ("e1", "saida", "q1", "entrada"),
+            ("q1", "calor", "c1", "calores"),
+            ("e1", "saida", "l1", "entrada"),
+            ("l1", "saida", "t1", "entrada"),
+            ("t1", "saida", "v1", "entrada"),
+            ("c1", "condicao", "r1", "condicoes"),
+            ("v1", "condicao", "r1", "condicoes"),
+        ),
+        {"e1": {"fluido": "Água"}},
+    ),
+    Modelo(
+        "Bomba de água quente: altura de sucção",
+        "Até que altura a bomba aspira água a 80 °C sem cavitar, com a pressão de vapor do estado.",
+        "z_s",
+        {
+            "T": 353.15,
+            "p": 101325.0,
+            "mdot": 5.0,
+            "D": 0.08,
+            "L": 6.0,
+            "K_L": 3.0,
+            "NPSH_r": 3.0,
+        },
+        (),
+        (
+            ("e1", "estado"),
+            ("l1", "linha_da_corrente"),
+            ("t1", "trecho"),
+            ("k1", "perda_local"),
+            ("n1", "npsh"),
+            ("r1", _R),
+        ),
+        (
+            ("e1", "saida", "l1", "entrada"),
+            ("l1", "saida", "t1", "entrada"),
+            ("t1", "saida", "k1", "entrada"),
+            ("k1", "saida", "n1", "entrada"),
+            ("n1", "condicao", "r1", "condicoes"),
+        ),
+        {"e1": {"fluido": "Água"}},
+    ),
+    Modelo(
+        "Da bomba à caldeira: pressão que a bomba precisa",
+        "A pressão na saída da bomba para a água chegar à caldeira com 3 MPa, depois do tubo.",
+        "p_b",
+        {
+            "p": 75e3,
+            "mdot": 2.0,
+            "eta_b": 0.75,
+            "D": 0.04,
+            "L": 80.0,
+            "K_L": 6.0,
+            "Delta_z": 15.0,
+            "p_inf": 3e6,
+        },
+        (),
+        (
+            ("e1", "estado"),
+            ("b1", "bomba_termica"),
+            ("l1", "linha_da_corrente"),
+            ("t1", "trecho"),
+            ("k1", "perda_local"),
+            ("d1", "corrente_depois_da_linha"),
+            ("p1", "pressao_minima"),
+            ("r1", _R),
+        ),
+        (
+            ("e1", "saida", "b1", "entrada"),
+            ("b1", "saida", "l1", "entrada"),
+            ("l1", "saida", "t1", "entrada"),
+            ("t1", "saida", "k1", "entrada"),
+            ("b1", "saida", "d1", "entrada"),
+            ("k1", "saida", "d1", "linha"),
+            ("d1", "saida", "p1", "entrada"),
+            ("p1", "condicao", "r1", "condicoes"),
+        ),
+        {"e1": {"fluido": "Água", "como": "Líquido saturado, pela pressão"}},
     ),
 )
 
@@ -799,6 +906,20 @@ PARTE_TERMICA = Parte(
     MODELOS_TERMICOS,
     "app_pages/montador_fluidos.py",
     "o Montador de fluidos",
+    lacos=(mb.CORRENTE,),
+)
+
+PARTE_PROCESSOS = Parte(
+    "mpr",
+    mb.PROCESSOS,
+    "Montador de processos",
+    "Fluidos e térmico no mesmo desenho: o estado do fluido vira a linha, e a perda do tubo volta "
+    "para a corrente.",
+    "montador_processos",
+    g.SISTEMA_PROCESSOS,
+    MODELOS_DE_PROCESSOS,
+    "app_pages/montador_termico.py",
+    "o Montador térmico",
     lacos=(mb.CORRENTE,),
 )
 

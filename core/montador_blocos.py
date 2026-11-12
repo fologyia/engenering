@@ -49,7 +49,16 @@ CORRENTE = "corrente"  # o fluido com o estado dele (pressão, entalpia) e a vaz
 SOLIDOS = "solidos"
 FLUIDOS = "fluidos"
 TERMICO = "termico"
+PROCESSOS = "processos"  # a página que liga fluidos e térmico
 COMUM = "comum"
+#: Os blocos que cada parte mostra, além dos comuns. A de processos junta as duas e a ponte.
+_DOMINIOS_DA_PARTE: dict[str, tuple[str, ...]] = {PROCESSOS: (PROCESSOS, TERMICO, FLUIDOS)}
+
+
+def dominios_de(parte: str) -> tuple[str, ...]:
+    """As partes de que esta aceita blocos, conjuntos salvos e arquivos de montagem."""
+    return _DOMINIOS_DA_PARTE.get(parte, (parte,))
+
 
 GRUPO_SECAO = "Seção"
 GRUPO_ORIGEM = "De onde vem o esforço"
@@ -61,6 +70,7 @@ GRUPO_FLUIDO = "Fluido"
 GRUPO_TUBULACAO = "Tubulação"
 GRUPO_ESTADO = "Estado do fluido"
 GRUPO_EQUIPAMENTO = "Equipamentos"
+GRUPO_PONTE = "Ponte entre térmico e fluidos"
 GRUPO_VERIFICACAO = "Verificações"
 GRUPO_EQUACOES = "Equações"
 GRUPO_RESULTADO = "Resultado"
@@ -76,6 +86,7 @@ GRUPOS = (
     GRUPO_TUBULACAO,
     GRUPO_ESTADO,
     GRUPO_EQUIPAMENTO,
+    GRUPO_PONTE,
     GRUPO_VERIFICACAO,
     GRUPO_EQUACOES,
     GRUPO_RESULTADO,
@@ -94,6 +105,7 @@ ORDEM_DOS_GRUPOS = (
     GRUPO_TUBULACAO,
     GRUPO_ESTADO,
     GRUPO_EQUIPAMENTO,
+    GRUPO_PONTE,
     GRUPO_VERIFICACAO,
     GRUPO_EQUACOES,
     GRUPO_RESULTADO,
@@ -111,6 +123,7 @@ CATEGORIA_DO_GRUPO = {
     GRUPO_TUBULACAO: "TUBULAÇÃO",
     GRUPO_ESTADO: "ESTADO",
     GRUPO_EQUIPAMENTO: "EQUIPAMENTO",
+    GRUPO_PONTE: "PONTE",
     GRUPO_VERIFICACAO: "VERIFICAÇÃO",
     GRUPO_EQUACOES: "EQUAÇÃO",
     GRUPO_RESULTADO: "DECISÃO",
@@ -127,6 +140,7 @@ CLASSE_DO_GRUPO = {
     GRUPO_TUBULACAO: "g-esforco",
     GRUPO_ESTADO: "g-secao",
     GRUPO_EQUIPAMENTO: "g-esforco",
+    GRUPO_PONTE: "g-origem",
     GRUPO_VERIFICACAO: "g-criterio",
     GRUPO_EQUACOES: "g-origem",
     GRUPO_RESULTADO: "g-resultado",
@@ -1576,5 +1590,5 @@ def catalogo_para_tela(dominio: str = SOLIDOS) -> list[dict[str, Any]]:
             "saidas": [porta_para_tela(p) for p in b.saidas],
         }
         for b in sorted(POR_CHAVE.values(), key=lambda x: ORDEM_DOS_GRUPOS.index(x.grupo))
-        if b.dominio in (dominio, COMUM)
+        if b.dominio in (*dominios_de(dominio), COMUM)
     ]

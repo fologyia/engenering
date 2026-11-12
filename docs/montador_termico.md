@@ -36,8 +36,13 @@ MPa ou Pa; entalpia em kJ/kg; vazão em kg/s, kg/h ou t/h; potência em kW, W, M
   pressão cai a perda informada. Entrega Q̇ = ṁ·(h₂ − h₁), positivo quando o fluido recebe calor.
 - **Misturador e Divisor:** mistura adiabática de duas correntes do mesmo fluido; divisão da vazão
   com a fração y.
-- **Verificações:** temperatura máxima e mínima, título mínimo, superaquecimento e sub-resfriamento
-  mínimos, potência disponível, calor pedido, rendimento do ciclo e COP.
+- **Verificações:** temperatura máxima e mínima, pressão mínima e máxima, título mínimo,
+  superaquecimento e sub-resfriamento mínimos, potência disponível, calor pedido, rendimento do ciclo
+  e COP.
+
+A vazão em massa do Estado pode ficar em branco: se uma igualdade a determina, como o calor pedido, a
+conta acha o número dela. Para ligar a corrente à tubulação (trecho, perdas, bomba, NPSH), use o botão
+**Abrir esta montagem no Montador de processos**, ou monte direto lá (`docs/montador_processos.md`).
 
 ## O que a conta faz
 

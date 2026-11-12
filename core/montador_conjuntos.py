@@ -161,7 +161,7 @@ def compativeis(
     _, _, saida, entrada = _pontas_do_fio(nivel(dados, caminho), fio)
     boas = []
     for bloco in mb.POR_CHAVE.values():
-        if bloco.dominio not in (dominio, mb.COMUM):
+        if bloco.dominio not in (*mb.dominios_de(dominio), mb.COMUM):
             continue
         entradas, saidas = portas_do_no({"tipo": bloco.chave})
         if any(_liga(saida, p) for p in entradas) and any(_liga(p, entrada) for p in saidas):
@@ -521,12 +521,14 @@ def listar(dominio: str) -> list[ConjuntoSalvo]:
     except ErroDeConjunto:
         return []
     salvos = []
+    # A página que liga fluidos e térmico mostra também os conjuntos salvos em cada uma das duas.
+    aceitos = mb.dominios_de(dominio)
     for item in documento["conjuntos"]:
-        if isinstance(item, Mapping) and item.get("dominio") == dominio:
+        if isinstance(item, Mapping) and item.get("dominio") in aceitos:
             salvos.append(
                 ConjuntoSalvo(
                     str(item.get("nome")),
-                    dominio,
+                    str(item.get("dominio")),
                     item.get("grafo") or {},
                     item.get("portas") or {},
                     item.get("valores") or {},

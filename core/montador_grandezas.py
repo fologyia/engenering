@@ -532,6 +532,30 @@ SISTEMA_TERMICO = Sistema(
 )
 
 
+#: A página que liga fluidos e térmico: as duas bases são o SI, e por isso as letras das duas
+#: convivem na mesma conta. Os seletores são os das duas partes juntos.
+SISTEMA_PROCESSOS = Sistema(
+    "processos",
+    (
+        *SISTEMA_TERMICO.seletores[:1],
+        Seletor(
+            PRESSAO,
+            "Pressão",
+            "Unidade das pressões. No estado do fluido a pressão é absoluta. mca é metro de coluna "
+            "d'água.",
+            {"kPa": 1e3, "bar": 1e5, "MPa": 1e6, "Pa": 1.0, "mca": 9806.65},
+            "kPa",
+        ),
+        *SISTEMA_TERMICO.seletores[2:],
+        *(s for s in SISTEMA_FLUIDOS.seletores if s.dimensao in (DIAMETRO, COMPRIMENTO, VAZAO)),
+    ),
+    {**SISTEMA_FLUIDOS.fixas, **SISTEMA_TERMICO.fixas},
+    {DIF_TEMPERATURA: _dif_temperatura},
+    "Com números, a fórmula está no SI: metros, segundos, quilogramas, kelvin, pascals e watts.",
+    tuple(dict.fromkeys((*SISTEMA_TERMICO.dimensoes, *SISTEMA_FLUIDOS.dimensoes))),
+)
+
+
 #: As letras que podem ser negativas: entalpia, calor que sai, trabalho, diferença de temperatura.
 #: A chave delas não pode ser a de uma letra positiva de outra parte, porque o símbolo muda.
 _COM_SINAL: set[str] = set()
@@ -1376,7 +1400,14 @@ DT_SUB = Grandeza(
     3.0,
     zero_ok=True,
 )
-M_DOT = _g("m_dot", "ṁ", "Vazão mássica", VAZAO_MASSICA, "A massa que passa por segundo.", 1.0)
+M_DOT = _g(
+    "mdot",
+    "ṁ",
+    "Vazão mássica",
+    VAZAO_MASSICA,
+    "A massa que passa por segundo. Em branco, a conta acha, se uma igualdade como o calor pedido "
+    "a fechar.",
+)
 P_BOMBA = _g("p_b", "p_b", "Pressão na saída da bomba", PRESSAO, "Absoluta, depois da bomba.")
 ETA_BOMBA = Grandeza(
     "eta_b",
@@ -1440,7 +1471,7 @@ DP_TROCA = Grandeza(
     zero_ok=True,
 )
 Q_DOT = Grandeza(
-    "Q_dot",
+    "Qdot",
     "Q̇",
     "Calor trocado",
     POTENCIA,
@@ -1505,22 +1536,43 @@ M_CIRCUITO = _g(
     "Num circuito fechado, a vazão não sai do desenho: ela é um dado, ou a letra pedida.",
     1.0,
 )
+P_INFERIOR = _g(
+    "p_inf", "p_mín", "Pressão mínima", PRESSAO, "Absoluta. O menor valor que serve neste ponto."
+)
+P_SUPERIOR = _g(
+    "p_sup", "p_máx", "Pressão máxima", PRESSAO, "Absoluta. O maior valor que este ponto aguenta."
+)
+
+# Ponte entre fluidos e térmico
+DZ_LINHA = Grandeza(
+    "Delta_z",
+    "Δz",
+    "Desnível da linha",
+    ALTURA,
+    "Quanto o fim da linha fica acima do começo. Negativo quando a linha desce.",
+    0.0,
+    sinal_livre=True,
+)
 
 _TODAS: tuple[Grandeza, ...] = tuple(
     v for v in tuple(globals().values()) if isinstance(v, Grandeza)
 )
 _INICIO_DE_FLUIDOS = _TODAS.index(RHO)
 _INICIO_DO_TERMICO = _TODAS.index(T_ESTADO)
-#: A mesma letra muda de sentido entre as partes: h é a altura da seção, ou a profundidade.
+_INICIO_DA_PONTE = _TODAS.index(DZ_LINHA)
+#: A mesma letra muda de sentido entre as partes: h é a altura da seção, ou a profundidade. Fluidos e
+#: térmico não repetem chave nenhuma, e a página que liga os dois conhece as letras das duas.
 _LETRAS = {
     SISTEMA_SOLIDOS.chave: _TODAS[:_INICIO_DE_FLUIDOS],
     SISTEMA_FLUIDOS.chave: _TODAS[_INICIO_DE_FLUIDOS:_INICIO_DO_TERMICO],
-    SISTEMA_TERMICO.chave: _TODAS[_INICIO_DO_TERMICO:],
+    SISTEMA_TERMICO.chave: _TODAS[_INICIO_DO_TERMICO:_INICIO_DA_PONTE],
+    SISTEMA_PROCESSOS.chave: _TODAS[_INICIO_DE_FLUIDOS:],
 }
 _SISTEMAS = {
     SISTEMA_SOLIDOS.chave: SISTEMA_SOLIDOS,
     SISTEMA_FLUIDOS.chave: SISTEMA_FLUIDOS,
     SISTEMA_TERMICO.chave: SISTEMA_TERMICO,
+    SISTEMA_PROCESSOS.chave: SISTEMA_PROCESSOS,
 }
 
 

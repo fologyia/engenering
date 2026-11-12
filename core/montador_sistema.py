@@ -22,7 +22,7 @@ import numpy as np
 import sympy as sp
 
 from core.montador_blocos import Condicao
-from core.montador_funcoes import FUNCOES
+from core.montador_funcoes import DA_BIBLIOTECA, FUNCOES
 
 #: Resíduo relativo que conta como equação fechada.
 FOLGA = 1e-9
@@ -168,7 +168,8 @@ def analisar(
 
 @lru_cache(maxsize=2048)
 def _compilada(expressao: sp.Expr, simbolos: tuple[sp.Symbol, ...]) -> Any:
-    return sp.lambdify(simbolos, expressao, [FUNCOES, "numpy"])
+    # Com propriedades da CoolProp, as partes repetidas da fórmula se calculam uma vez só.
+    return sp.lambdify(simbolos, expressao, [FUNCOES, "numpy"], cse=expressao.has(*DA_BIBLIOTECA))
 
 
 def _residuo(condicao: Condicao) -> sp.Expr:

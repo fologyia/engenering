@@ -123,6 +123,10 @@ _SUGESTOES: dict[str, dict[str, str]] = {
         "rho": g.MASSA_ESPECIFICA,
     },
 }
+_SUGESTOES[g.SISTEMA_PROCESSOS.chave] = {
+    **_SUGESTOES[g.SISTEMA_FLUIDOS.chave],
+    **_SUGESTOES[g.SISTEMA_TERMICO.chave],
+}
 
 
 class ErroDeFormula(ValueError):

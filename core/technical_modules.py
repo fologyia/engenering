@@ -362,6 +362,20 @@ def _registrar_padrao() -> None:
             aliases=("Termodinâmica", "Ciclo Rankine", "Refrigeração", "Compressor", "Turbina"),
         ),
         ModuloTecnico(
+            id="montador_processos",
+            titulo="Montador de processos",
+            versao="1.0",
+            pagina="app_pages/montador_processos.py",
+            grupo_navegacao="Mecânica",
+            ordem=73,
+            icone=":material/hub:",
+            descricao=(
+                "Blocos de fluidos e térmicos na mesma prancheta: a corrente vira a linha de "
+                "tubulação, e a perda do tubo volta para a corrente."
+            ),
+            aliases=("Fluidos e térmica", "Termofluidos"),
+        ),
+        ModuloTecnico(
             id="rede_de_tubos",
             titulo="Rede de tubos",
             versao="1.0",

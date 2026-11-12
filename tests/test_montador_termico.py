@@ -58,7 +58,7 @@ def _estado_e(tipo: str, fluido: str, **opcoes: str) -> tuple[list[dict], list[d
 
 def test_estado_por_temperatura_e_pressao_e_o_da_coolprop():
     m = montar(*_estado_e("valvula", AGUA))
-    valores = {"T": 333.15, "p": 3e5, "m_dot": 2.0, "p_vl": 2e5, "T_max": 400.0}
+    valores = {"T": 333.15, "p": 3e5, "mdot": 2.0, "p_vl": 2e5, "T_max": 400.0}
     h = numero(m, "e", "saida", valores, lambda c: c.h)
     assert h == pytest.approx(CP.PropsSI("H", "T", 333.15, "P", 3e5, "Water"), rel=1e-9)
 
@@ -76,7 +76,7 @@ def test_estado_por_temperatura_e_pressao_e_o_da_coolprop():
 def test_cada_jeito_de_dar_o_estado(como, letras, esperado):
     nos = [no("e", "estado", fluido=AGUA, como=como), no("t", "temperatura_maxima")]
     m = montar(nos, [fio("e", "saida", "t", "entrada"), ao_resultado("t")])
-    h = numero(m, "e", "saida", {**letras, "m_dot": 1.0}, lambda c: c.h)
+    h = numero(m, "e", "saida", {**letras, "mdot": 1.0}, lambda c: c.h)
     a, va, b, vb = esperado
     assert h == pytest.approx(CP.PropsSI("H", a, va, b, vb, "Water"), rel=1e-9)
 
@@ -86,14 +86,14 @@ def test_superaquecido_e_sub_resfriado_contam_da_saturacao():
     for como, letra, sinal in ((mte.SUPERAQUECIDO, "DT_sup", 1), (mte.SUB_RESFRIADO, "DT_sub", -1)):
         nos = [no("e", "estado", fluido=AGUA, como=como), no("t", "temperatura_maxima")]
         m = montar(nos, [fio("e", "saida", "t", "entrada"), ao_resultado("t")])
-        valores = {"p": 2e5, letra: 10.0, "m_dot": 1.0}
+        valores = {"p": 2e5, letra: 10.0, "mdot": 1.0}
         t = numero(m, "e", "saida", valores, lambda c: c.temperatura())
         assert t == pytest.approx(tsat + sinal * 10.0, abs=1e-6)
 
 
 def test_compressor_com_rendimento_e_a_potencia_que_consome():
     m = montar(*_estado_e("compressor", AR))
-    valores = {"T": 298.15, "p": 1e5, "m_dot": 2.0, "p_c": 6e5, "eta_c": 0.8, "T_max": 900.0}
+    valores = {"T": 298.15, "p": 1e5, "mdot": 2.0, "p_c": 6e5, "eta_c": 0.8, "T_max": 900.0}
     h1 = CP.PropsSI("H", "T", 298.15, "P", 1e5, "Air")
     s1 = CP.PropsSI("S", "T", 298.15, "P", 1e5, "Air")
     h2 = h1 + (CP.PropsSI("H", "P", 6e5, "S", s1, "Air") - h1) / 0.8
@@ -103,7 +103,7 @@ def test_compressor_com_rendimento_e_a_potencia_que_consome():
 
 def test_turbina_e_a_potencia_que_produz():
     m = montar(*_estado_e("turbina", AGUA))
-    valores = {"T": 723.15, "p": 4e6, "m_dot": 1.0, "p_tb": 1e4, "eta_tb": 0.85, "T_max": 900.0}
+    valores = {"T": 723.15, "p": 4e6, "mdot": 1.0, "p_tb": 1e4, "eta_tb": 0.85, "T_max": 900.0}
     h1 = CP.PropsSI("H", "T", 723.15, "P", 4e6, "Water")
     s1 = CP.PropsSI("S", "T", 723.15, "P", 4e6, "Water")
     h2 = h1 - 0.85 * (h1 - CP.PropsSI("H", "P", 1e4, "S", s1, "Water"))
@@ -119,7 +119,7 @@ def test_valvula_mantem_a_entalpia_e_da_o_titulo_depois():
     ]
     fios = [fio("e", "saida", "v", "entrada"), fio("v", "saida", "t", "entrada"), ao_resultado("t")]
     m = montar(nos, fios)
-    valores = {"p": 8e5, "m_dot": 1.0, "p_vl": 1.4e5, "T_max": 400.0}
+    valores = {"p": 8e5, "mdot": 1.0, "p_vl": 1.4e5, "T_max": 400.0}
     h = CP.PropsSI("H", "P", 8e5, "Q", 0, "R134a")
     titulo = numero(m, "v", "saida", valores, lambda c: c.titulo())
     assert titulo == pytest.approx(CP.PropsSI("Q", "P", 1.4e5, "H", h, "R134a"), rel=1e-6)
@@ -128,7 +128,7 @@ def test_valvula_mantem_a_entalpia_e_da_o_titulo_depois():
 def test_troca_de_calor_da_o_calor_com_sinal():
     nos, fios = _estado_e("troca_de_calor", AGUA)
     m = montar(nos, fios)
-    valores = {"T": 353.15, "p": 3e5, "m_dot": 1.5, "T_s": 313.15, "Dp_tc": 0.0, "T_max": 400.0}
+    valores = {"T": 353.15, "p": 3e5, "mdot": 1.5, "T_s": 313.15, "Dp_tc": 0.0, "T_max": 400.0}
     h1 = CP.PropsSI("H", "T", 353.15, "P", 3e5, "Water")
     h2 = CP.PropsSI("H", "T", 313.15, "P", 3e5, "Water")
     calor = numero(m, "x", "calor", valores)
@@ -139,7 +139,7 @@ def test_troca_de_calor_da_o_calor_com_sinal():
 def test_troca_pelo_calor_e_com_perda_de_pressao():
     nos, fios = _estado_e("troca_de_calor", AGUA, saida=mte.CALOR_TROCADO)
     m = montar(nos, fios)
-    valores = {"T": 293.15, "p": 3e5, "m_dot": 2.0, "Q_dot": 1e5, "Dp_tc": 2e4, "T_max": 400.0}
+    valores = {"T": 293.15, "p": 3e5, "mdot": 2.0, "Qdot": 1e5, "Dp_tc": 2e4, "T_max": 400.0}
     h1 = CP.PropsSI("H", "T", 293.15, "P", 3e5, "Water")
     assert numero(m, "x", "saida", valores, lambda c: c.h) == pytest.approx(h1 + 5e4, rel=1e-12)
     assert numero(m, "x", "saida", valores, lambda c: c.p) == pytest.approx(2.8e5)
@@ -164,10 +164,10 @@ def test_misturador_e_divisor_conservam_massa_e_energia():
     valores = {
         "T": 353.15,
         "p": 3e5,
-        "m_dot": 1.0,
+        "mdot": 1.0,
         "T_2": 293.15,
         "p_2": 3e5,
-        "m_dot_2": 3.0,
+        "mdot_2": 3.0,
         "y_div": 0.25,
         "T_max": 400.0,
     }
@@ -193,7 +193,7 @@ def test_compressor_que_recebe_liquido_avisa():
     ]
     fios = [fio("e", "saida", "k", "entrada"), fio("k", "saida", "t", "entrada"), ao_resultado("t")]
     m = montar(nos, fios)
-    r = mt.isolar(m, "T_max", {"p": 2e5, "m_dot": 1.0, "p_c": 8e5, "eta_c": 0.8})
+    r = mt.isolar(m, "T_max", {"p": 2e5, "mdot": 1.0, "p_c": 8e5, "eta_c": 0.8})
     assert any("recebe líquido" in a for a in r.alertas)
 
 
