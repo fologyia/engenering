@@ -29,6 +29,13 @@ e acha a raiz por número, como no Montador de materiais.
 **Fluidos e rugosidades.** Vêm de tabelas de valores típicos, e o valor aparece como "Tabela: ...". Dá
 para digitar por cima.
 
+**Fluido pela temperatura.** As opções "pela temperatura (CoolProp)" do bloco Fluido tiram ρ, μ e a
+pressão de vapor da CoolProp, na temperatura T_f e na pressão absoluta p_f. A temperatura entra em °C,
+K ou °F (botão Unidades) e pode ser a letra pedida: até quantos graus a bomba não cavita, por exemplo. A
+água a 20 °C dá o mesmo da tabela até a 4ª casa. Se o líquido ferve na pressão da linha, ou a temperatura
+sai da faixa do fluido, a página avisa. Detalhes e a lista dos fluidos em `docs/montador_formulas.md`,
+"Propriedades pela CoolProp".
+
 ## Blocos
 
 - **Linha:** fluido, trecho de tubo, perdas localizadas.

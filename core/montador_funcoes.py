@@ -23,6 +23,8 @@ from core import elementos_mancais as em
 from core import elementos_molas_atrito as ema
 from core import elementos_transmissao as et
 from core import fatigue as ft
+from core.montador_propriedades import FUNCOES as FUNCOES_DAS_PROPRIEDADES
+from core.montador_propriedades import Propriedade
 
 RE_LAMINAR = 2300.0
 RE_TURBULENTO = 4000.0
@@ -70,7 +72,11 @@ class AtritoDarcy(sp.Function):
     def _eval_evalf(self, prec: int) -> sp.Float | None:
         re, relativa = self.args
         if re.is_number and relativa.is_number:
-            return sp.Float(float(fator_de_atrito(float(re), float(relativa))), prec)
+            try:  # um número de dentro sem valor (a água abaixo de 0 °C) deixa o f sem valor
+                valor = float(fator_de_atrito(float(re), float(relativa)))
+            except (TypeError, ValueError):
+                return None
+            return sp.Float(valor, prec) if math.isfinite(valor) else None
         return None
 
     def _latex(self, printer: Any, exp: Any = None) -> str:
@@ -188,8 +194,11 @@ class _Numerica(sp.Function):
 
     def _eval_evalf(self, prec: int) -> sp.Float | None:
         if all(a.is_number for a in self.args):
-            valor = type(self).funcao(*(float(a) for a in self.args))
-            return sp.Float(float(valor), prec)
+            try:  # um número de dentro que ficou sem valor deixa esta sem valor também
+                valor = float(type(self).funcao(*(float(a) for a in self.args)))
+            except (TypeError, ValueError):
+                return None
+            return sp.Float(valor, prec)
         return None
 
     def _latex(self, printer: Any, exp: Any = None) -> str:
@@ -295,6 +304,7 @@ class TensaoCritica(_Numerica):
 
 #: Elas não têm forma fechada: simplificar não adianta e custa caro.
 NUMERICAS: tuple[type[sp.Function], ...] = (
+    Propriedade,
     AtritoDarcy,
     LimiteBase,
     FatorSuperficie,
@@ -324,8 +334,12 @@ TABELADAS: tuple[type[sp.Function], ...] = (
     CargaEquivalenteEsferas,
     FatorLewis,
 )
+#: As que vêm de uma biblioteca de fora, como as propriedades dos fluidos pela CoolProp: a planilha
+#: leva o valor calculado, porque o Excel não tem a biblioteca.
+DA_BIBLIOTECA: tuple[type[sp.Function], ...] = (Propriedade,)
 #: O que o ``lambdify`` precisa para calcular estas funções em número.
 FUNCOES: dict[str, Any] = {
+    **FUNCOES_DAS_PROPRIEDADES,
     "AtritoDarcy": fator_de_atrito,
     "LimiteBase": limite_base,
     "FatorSuperficie": fator_de_superficie,

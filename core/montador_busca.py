@@ -18,6 +18,7 @@ from functools import lru_cache
 import numpy as np
 import sympy as sp
 
+from core import montador_grandezas as g
 from core.montador import Montagem, conferir_valores, letras_zeradas, remontar
 from core.montador_funcoes import FUNCOES
 
@@ -106,7 +107,7 @@ def objetivos(montagem: Montagem, chaves: Sequence[str]) -> tuple[Objetivo, ...]
         # Equação não tem folga: uma combinação fecha ou não fecha, e não dá para escolher a melhor.
         return (Objetivo("Todas as condições no limite", NO_LIMITE),)
     lista = []
-    simbolos = {sp.Symbol(c, positive=True) for c in chaves}
+    simbolos = {g.simbolo_de(c) for c in chaves}
     if montagem.area is not None and montagem.area.free_symbols & simbolos:
         lista.append(Objetivo("Menor área da seção", MENOR_AREA))
     lista.append(Objetivo("Todas as condições no limite", NO_LIMITE))
@@ -131,8 +132,8 @@ class _Conta:
 def _preparar(
     montagem: Montagem, chaves: tuple[str, ...], valores: tuple[tuple[str, float], ...]
 ) -> _Conta:
-    simbolos = [sp.Symbol(c, positive=True) for c in chaves]
-    numeros = {sp.Symbol(k, positive=True): sp.Float(v) for k, v in valores}
+    simbolos = [g.simbolo_de(c) for c in chaves]
+    numeros = {g.simbolo_de(k): sp.Float(v) for k, v in valores}
     conhecidos = set(simbolos)
 
     def funcao(expressao: sp.Expr) -> Callable[..., np.ndarray]:

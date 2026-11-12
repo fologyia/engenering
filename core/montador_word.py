@@ -193,6 +193,10 @@ def _funcao(e: sp.Expr) -> str:
     for classe, letra, indice in _FUNCOES_DO_MONTADOR:
         if isinstance(e, classe):
             return _indice(_texto(letra), _texto(indice)) if indice else _texto(letra)
+    rotulo_word = getattr(e, "rotulo_word", None)
+    if callable(rotulo_word):  # a propriedade de um fluido: ρ com o nome do fluido embaixo
+        letra, indice = rotulo_word()
+        return _indice(_texto(letra), _texto(indice)) if indice else _texto(letra)
     if isinstance(e, sp.Abs):
         return _texto("|") + em_omml(e.args[0]) + _texto("|")
     for classe, nome in _NOMES_DE_FUNCAO.items():
@@ -238,7 +242,7 @@ def _numero(valor: float | None, casas: int = 4) -> str:
 
 
 def _com_unidade(valor: float, dimensao: str, u: Unidades) -> str:
-    return f"{_numero(valor / u.fator(dimensao))} {u.rotulo(dimensao)}".strip()
+    return f"{_numero(u.da_base(dimensao, valor))} {u.rotulo(dimensao)}".strip()
 
 
 def _nome_do_no(no: Mapping[str, Any]) -> tuple[str, str, str]:

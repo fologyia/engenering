@@ -24,6 +24,7 @@ from core import montador as mt
 from core import montador_blocos as mb
 from core import montador_eixo as me
 from core import montador_fluidos as fl
+from core import montador_grandezas as g
 from core.casos_de_aceite import CasoDeAceite
 from core.montador_modelos import Modelo
 
@@ -263,7 +264,7 @@ def _forca_radial_no_montador() -> float:
     )
     primitivo = 3.0 * 20 / math.cos(math.radians(15.0))
     numeros = {
-        sp.Symbol(k, positive=True): sp.Float(v)
+        g.simbolo_de(k): sp.Float(v)
         for k, v in {
             "P": 15e6,
             "n_rot": 1450.0,
@@ -339,7 +340,7 @@ def _conica_no_montador() -> float:
         )
     )
     numeros = {
-        sp.Symbol(k, positive=True): sp.Float(v)
+        g.simbolo_de(k): sp.Float(v)
         for k, v in {
             "T": 200e3,
             "m_c": 4.0,

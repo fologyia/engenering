@@ -322,7 +322,7 @@ class _Leitor:
         letra = _sem_grega(nome)
         if letra not in self.letras:
             self.letras.append(letra)
-        return sp.Symbol(letra, positive=True)
+        return g.simbolo_de(letra)
 
 
 @lru_cache(maxsize=256)
@@ -401,13 +401,13 @@ def e_letra_nova(nome: str, sistema: str) -> bool:
 # Unidades
 # ---------------------------------------------------------------------------
 
-Expoentes = tuple[Fraction, Fraction, Fraction]
-_PURO: Expoentes = (Fraction(0), Fraction(0), Fraction(0))
+Expoentes = tuple[Fraction, Fraction, Fraction, Fraction]
+_PURO: Expoentes = (Fraction(0), Fraction(0), Fraction(0), Fraction(0))
 
 
 def _expoentes(dimensao: str) -> Expoentes:
-    a, b, c = g.EXPOENTES.get(dimensao, g.EXPOENTES[g.PURO])
-    return Fraction(a), Fraction(b), Fraction(c)
+    a, b, c, d = g.EXPOENTES.get(dimensao, g.EXPOENTES[g.PURO])
+    return Fraction(a), Fraction(b), Fraction(c), Fraction(d)
 
 
 def texto_da_unidade(expoentes: Expoentes, sistema: str) -> str:
@@ -417,7 +417,7 @@ def texto_da_unidade(expoentes: Expoentes, sistema: str) -> str:
             return g.ROTULOS_DAS_DIMENSOES[dimensao]
     partes = [
         f"{letra}^{e}" if e != 1 else letra
-        for letra, e in zip("FLT", expoentes, strict=True)
+        for letra, e in zip("FLTΘ", expoentes, strict=True)
         if e != 0
     ]
     return "·".join(partes) if partes else "sem unidade"
@@ -443,7 +443,12 @@ def medir(expressao: sp.Expr, medidas: Mapping[str, Expoentes], sistema: str) ->
         total = _PURO
         for a in expressao.args:
             parte = medir(a, medidas, sistema)
-            total = (total[0] + parte[0], total[1] + parte[1], total[2] + parte[2])
+            total = (
+                total[0] + parte[0],
+                total[1] + parte[1],
+                total[2] + parte[2],
+                total[3] + parte[3],
+            )
         return total
     if expressao.is_Pow:
         base = medir(expressao.base, medidas, sistema)
@@ -454,7 +459,7 @@ def medir(expressao: sp.Expr, medidas: Mapping[str, Expoentes], sistema: str) ->
         if not expressao.exp.is_number:
             raise ErroDeUnidade("Base com unidade pede expoente numérico.")
         expoente = Fraction(float(expressao.exp)).limit_denominator(1000)
-        return (base[0] * expoente, base[1] * expoente, base[2] * expoente)
+        return (base[0] * expoente, base[1] * expoente, base[2] * expoente, base[3] * expoente)
     if isinstance(expressao, sp.Abs):
         return medir(expressao.args[0], medidas, sistema)
     if isinstance(expressao, sp.Function):

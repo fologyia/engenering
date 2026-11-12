@@ -858,9 +858,7 @@ def _formula(c: Contexto) -> dict[str, Any]:
     sistema = c.opcoes.get("sistema", g.SISTEMA_SOLIDOS.chave)
     dimensoes = mf.dimensoes_das_letras(c.opcoes.get("dimensoes"))
     trocas = {
-        sp.Symbol(letra, positive=True): c.letra(
-            mf.grandeza_da_letra(letra, sistema, dimensoes), letra
-        )
+        g.simbolo_de(letra): c.letra(mf.grandeza_da_letra(letra, sistema, dimensoes), letra)
         for letra in formula.letras
     }
     c.alertas.extend(mf.problemas_de_unidade(formula, sistema, dimensoes))

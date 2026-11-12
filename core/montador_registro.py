@@ -118,13 +118,8 @@ def ler_documento(conteudo: bytes | str, dominio: str, sistema: Sistema) -> dict
     for chave, valor in (doc.get("valores") or {}).items():
         if isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor):
             valores[str(chave)] = float(valor)
-    unidades = list(doc.get("unidades") or ())
-    certas = len(unidades) == len(sistema.seletores) and all(
-        escolha in seletor.opcoes
-        for escolha, seletor in zip(unidades, sistema.seletores, strict=True)
-    )
-    if not certas:
-        unidades = [s.padrao for s in sistema.seletores]
+    # Arquivo de antes de um seletor novo: as unidades que ele tinha ficam, e a nova vem no padrão.
+    unidades = g.unidades_lidas(sistema, doc.get("unidades"))
     adotado = doc.get("adotado")
     return {
         "formato": FORMATO,
@@ -162,7 +157,7 @@ def texto_da_resposta(resposta: mt.Resposta, u: Unidades) -> str:
         return f"{resposta.alvo.texto} sem número: faltam valores."
     rotulo = u.rotulo(resposta.alvo.dimensao)
     sinal = {mt.MINIMO: "≥", mt.MAXIMO: "≤"}.get(resposta.sentido or "", "=")
-    numero = _numero(resposta.valor / u.fator(resposta.alvo.dimensao))
+    numero = _numero(u.da_base(resposta.alvo.dimensao, resposta.valor))
     return f"{resposta.alvo.texto} {sinal} {numero} {rotulo}".strip()
 
 
@@ -231,13 +226,13 @@ def registro_tecnico(
             continue
         rotulo = u.rotulo(item.dimensao)
         titulo_campo = f"{item.texto} ({rotulo})" if rotulo else item.texto
-        entradas[titulo_campo] = valor / u.fator(item.dimensao)
+        entradas[titulo_campo] = u.da_base(item.dimensao, valor)
     resultados: dict[str, Any] = {}
     alvo = resposta.alvo
     rotulo_alvo = u.rotulo(alvo.dimensao)
     if resposta.valor is not None:
         chave = f"{alvo.texto} ({rotulo_alvo})" if rotulo_alvo else alvo.texto
-        resultados[chave] = resposta.valor / u.fator(alvo.dimensao)
+        resultados[chave] = u.da_base(alvo.dimensao, resposta.valor)
     conferidas = resposta.conferencia_adotada or resposta.conferencia
     medidas = [linha.uso for linha in conferidas if not linha.igualdade]
     if medidas:
@@ -250,8 +245,9 @@ def registro_tecnico(
         ) or montagem.caso_base
         entradas["casos_de_carga"] = {
             nome: {
-                _rotulo_da_letra(montagem, chave, u): valor
-                / u.fator(_dimensao_da_letra(montagem, chave))
+                _rotulo_da_letra(montagem, chave, u): u.da_base(
+                    _dimensao_da_letra(montagem, chave), valor
+                )
                 for chave, valor in proprios
                 if montagem.grandeza(chave) is not None
             }
@@ -259,7 +255,7 @@ def registro_tecnico(
         }
     if resposta.adotado is not None:
         chave = f"{alvo.texto} adotado ({rotulo_alvo})" if rotulo_alvo else f"{alvo.texto} adotado"
-        resultados[chave] = resposta.adotado / u.fator(alvo.dimensao)
+        resultados[chave] = u.da_base(alvo.dimensao, resposta.adotado)
     equacoes = [
         f"{alvo.texto} = {_formula_em_texto(i.formula.expressao)} ({i.condicao.nome})"
         for i in resposta.isoladas
@@ -351,6 +347,35 @@ def _unidade_pelo_nome(campo: str) -> str:
     return {"kNm": "kN·m", "Nm": "N·m", "Nmm": "N·mm"}.get(final, final)
 
 
+def _fonte_publica(
+    saida: Mapping[str, Any], dominio: str, u: Unidades, id_: str, titulo: str, marca: str
+) -> Fonte | None:
+    """Uma saída de outro cálculo do Montador. De outra parte, ela chega convertida pelo SI.
+
+    O diâmetro de um tubo nos fluidos está em metros na base, e nos sólidos a base é o milímetro:
+    o fator da fonte faz a conta, e a bolinha do bloco fica com a grandeza que faz o mesmo papel
+    aqui. Sem uma grandeza equivalente, o resultado não aparece: ligar uma vazão numa seção não
+    faria sentido.
+    """
+    try:
+        valor = float(saida["valor"])
+        dimensao = str(saida["dimensao"])
+        chave, rotulo = str(saida["chave"]), str(saida["rotulo"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not math.isfinite(valor):
+        return None
+    origem = str(saida.get("dominio") or "")
+    if origem == dominio:
+        return Fonte(id_, titulo, marca, chave, rotulo, valor, dimensao, 1.0)
+    de = g.sistema(origem)
+    aqui = g.equivalente(dimensao, u.sistema)
+    if de is None or aqui is None:
+        return None
+    fator = g.converter(1.0, de, dimensao, u.sistema, aqui)
+    return Fonte(id_, titulo, marca, chave, rotulo, valor, aqui, fator)
+
+
 def fontes_do_projeto(projeto: Mapping[str, Any] | None, dominio: str, u: Unidades) -> list[Fonte]:
     """Só resultados com número: texto e situação não entram numa fórmula."""
     if not projeto:
@@ -363,20 +388,11 @@ def fontes_do_projeto(projeto: Mapping[str, Any] | None, dominio: str, u: Unidad
         id_ = str(registro.get("id"))
         titulo = f"{registro.get('modulo')}: {registro.get('titulo')}"
         marca = str(registro.get("hash_calculo") or "")
-        publicas = [s for s in registro.get("saidas_publicas") or () if s.get("dominio") == dominio]
+        publicas = [s for s in registro.get("saidas_publicas") or () if isinstance(s, Mapping)]
         for saida in publicas:
-            fontes.append(
-                Fonte(
-                    id_,
-                    titulo,
-                    marca,
-                    str(saida["chave"]),
-                    str(saida["rotulo"]),
-                    float(saida["valor"]),
-                    str(saida["dimensao"]),
-                    1.0,
-                )
-            )
+            fonte = _fonte_publica(saida, dominio, u, id_, titulo, marca)
+            if fonte is not None:
+                fontes.append(fonte)
         if publicas:
             continue
         for campo, valor in (registro.get("resultados") or {}).items():

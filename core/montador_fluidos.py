@@ -18,6 +18,7 @@ import sympy as sp
 
 from core import montador_blocos as mb
 from core import montador_grandezas as g
+from core import montador_propriedades as mp
 from core.montador_blocos import (
     CONDICAO,
     FLUIDOS,
@@ -53,6 +54,12 @@ FLUIDOS_TIPICOS: dict[str, tuple[float, float, float | None]] = {
     "Glicerina a 20 °C": (1261.0, 1.519, None),
     "Óleo de motor a 40 °C": (876.0, 0.2177, None),
     "Óleo hidráulico ISO VG 46 a 40 °C": (870.0, 0.040, None),
+}
+#: Os fluidos que a CoolProp calcula em qualquer temperatura da faixa deles.
+POR_TEMPERATURA: dict[str, mp.Fluido] = {
+    f"{f.rotulo} pela temperatura (CoolProp)": f
+    for f in mp.FLUIDOS
+    if f.liquido or f.rotulo == "Ar seco"
 }
 #: Rugosidade absoluta em metros, de tubo novo: com o tempo, ela cresce. Concreto varia de 0,3 a
 #: 3 mm conforme o acabamento: 1,5 mm é o meio dessa faixa.
@@ -211,6 +218,10 @@ class Linha:
     trechos: tuple[Trecho, ...] = ()
     perda: sp.Expr = ZERO
     validade: tuple[Validade, ...] = ()
+    #: O estado do fluido, quando as propriedades saem dele (CoolProp): temperatura e pressão
+    #: absoluta. Com valores de tabela, fica vazio.
+    temperatura: sp.Expr | None = None
+    pressao: sp.Expr | None = None
 
 
 def _linha(c: Contexto) -> Linha:
@@ -220,8 +231,55 @@ def _linha(c: Contexto) -> Linha:
     return linha
 
 
+def _pela_temperatura(c: Contexto, fluido: mp.Fluido) -> dict[str, Any]:
+    """ρ, μ e p_v saem do estado: temperatura e pressão viram letras, e podem até ser a pedida."""
+    t, p = c.letra(g.T_FLUIDO), c.letra(g.P_FLUIDO)
+    rho, mu = mp.massa_especifica(fluido, t, p), mp.viscosidade(fluido, t, p)
+    validades: list[Validade] = []
+    if fluido.saturacao:
+        pv = mp.pressao_de_vapor(fluido, t)
+        validades.append(
+            Validade(
+                p - pv,
+                f"Com essa temperatura e essa pressão, {fluido.rotulo.lower()} ferve: a linha deixa "
+                "de ser só de líquido. Suba a pressão ou baixe a temperatura.",
+                restringe=False,
+            )
+        )
+    else:
+        pv = c.letra(g.P_VAPOR)
+    minimo, maximo = mp.faixa_de_temperatura(mp.FLUIDOS.index(fluido))
+    faixa = (
+        f"de {minimo - 273.15:.0f} °C a {maximo - 273.15:.0f} °C".replace(".", ",")
+        if maximo < 1500.0
+        else f"acima de {minimo - 273.15:.0f} °C".replace(".", ",")
+    )
+    validades.append(
+        Validade(
+            (t - minimo) * (maximo - t),
+            f"A temperatura saiu da faixa da tabela de {fluido.rotulo.lower()}, que vai {faixa}.",
+            restringe=False,
+        )
+    )
+    c.hipoteses.append(
+        f"Propriedades de {fluido.rotulo.lower()} pela CoolProp, na temperatura T_f e na pressão "
+        "absoluta p_f do fluido. A linha continua de escoamento incompressível e na mesma "
+        "temperatura do começo ao fim."
+    )
+    if not fluido.liquido:
+        c.hipoteses.append(
+            "Gás tratado como incompressível: vale enquanto a perda de pressão fica pequena perto da "
+            "pressão absoluta, até uns 10 %."
+        )
+    linha = Linha(rho, mu, pv, c.letra(g.GRAVIDADE), temperatura=t, pressao=p)
+    return {"saida": replace(linha, validade=tuple(validades))}
+
+
 def _fluido(c: Contexto) -> dict[str, Any]:
     nome = c.opcoes.get("fluido", "Água a 20 °C")
+    pela_temperatura = POR_TEMPERATURA.get(nome)
+    if pela_temperatura is not None:
+        return _pela_temperatura(c, pela_temperatura)
     if nome in FLUIDOS_TIPICOS:
         rho, mu, pv = FLUIDOS_TIPICOS[nome]
         fonte = f"Tabela: {nome}"
@@ -553,8 +611,9 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
             Opcao(
                 "fluido",
                 "Fluido",
-                "Valores típicos de tabela. Para outra condição, escolha informar as propriedades.",
-                (INFORMAR, *FLUIDOS_TIPICOS),
+                "Valores típicos de tabela, ou pela temperatura: aí a CoolProp dá ρ, μ e p_v na "
+                "temperatura e na pressão do fluido. Para outro fluido, informe as propriedades.",
+                (INFORMAR, *FLUIDOS_TIPICOS, *POR_TEMPERATURA),
                 "Água a 20 °C",
             ),
         ),

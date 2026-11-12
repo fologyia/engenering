@@ -72,6 +72,8 @@ files = [
     "core/montador_registro.py",
     "core/montador_repasse.py",
     "core/montador_casos.py",
+    "core/montador_sistema.py",
+    "core/montador_propriedades.py",
     "core/ajustes_e_tolerancias.py",
     "core/cadeia_de_cotas.py",
     "core/montador_pecas.py",

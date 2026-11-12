@@ -196,7 +196,7 @@ def _numero(valor: float) -> str:
 
 def _com_unidade(valor: float, grandeza: Grandeza, u: Unidades) -> str:
     rotulo = u.rotulo(grandeza.dimensao)
-    numero = _numero(valor / u.fator(grandeza.dimensao))
+    numero = _numero(u.da_base(grandeza.dimensao, valor))
     return f"{numero} {rotulo}".strip()
 
 
@@ -204,9 +204,9 @@ def _letra(grandeza: Grandeza) -> str:
     return sp.latex(grandeza.simbolo)
 
 
-def _para_o_campo(valor: float | None, fator: float) -> float | None:
+def _para_o_campo(valor: float | None, fator: float, deslocamento: float = 0.0) -> float | None:
     """Sem o ruído da conversão: 4,5e-5 m aparece 0,045 mm, e não 0.045000000000000005."""
-    return None if valor is None else float(f"{valor / fator:.12g}")
+    return None if valor is None else float(f"{(valor - deslocamento) / fator:.12g}")
 
 
 def _titulo_do_campo(grandeza: Grandeza, u: Unidades) -> str:
@@ -284,6 +284,11 @@ def _outra_montagem(p: Parte) -> None:
 def _iniciar(p: Parte) -> None:
     estado = st.session_state
     if p.k("grafo") in estado:
+        # Foto ou arquivo de antes de um seletor novo, como a temperatura nos fluidos: o que falta
+        # volta ao padrão, e o resto fica como estava.
+        unidades = tuple(g.unidades_lidas(p.sistema, estado.get(p.k("unidades"))))
+        if unidades != tuple(estado.get(p.k("unidades")) or ()):
+            estado[p.k("unidades")] = unidades
         return
     estado[p.k("unidades")] = tuple(s.padrao for s in p.sistema.seletores)
     _aplicar(p, p.modelos[0])
@@ -415,7 +420,7 @@ def _valor_do_cartao(p: Parte, item: Mapping[str, Any]) -> None:
         isinstance(valor, bool) or not isinstance(valor, (int, float)) or not math.isfinite(valor)
     ):
         return
-    estado[p.k("valores")][chave] = None if valor is None else float(valor) * u.fator(dimensao)
+    estado[p.k("valores")][chave] = None if valor is None else u.para_base(dimensao, float(valor))
     origens[chave] = _DIGITADO
     estado[p.k("revisao")] += 1
 
@@ -590,7 +595,12 @@ def _sincronizar_valores(p: Parte, montagem: mt.Montagem) -> None:
 
 
 def _opcoes_de_alvo(montagem: mt.Montagem) -> list[Grandeza]:
-    return [item for item in montagem.grandezas if item.chave in montagem.essenciais]
+    # O corte de um laço é achado pela conta: não é letra para pedir nem para digitar.
+    return [
+        item
+        for item in montagem.grandezas
+        if item.chave in montagem.essenciais and item.chave not in montagem.cortes
+    ]
 
 
 def _alvo(p: Parte, montagem: mt.Montagem) -> str | None:
@@ -795,7 +805,7 @@ def _campos_do_cartao(
         campos[item.chave] = {
             "t": item.texto,
             "n": item.nome,
-            "v": _para_o_campo(valor, u.fator(item.dimensao)),
+            "v": _para_o_campo(valor, u.fator(item.dimensao), u.deslocamento(item.dimensao)),
             "u": u.rotulo(item.dimensao),
             "alvo": item.chave == alvo,
             "copia": mh.copiada(origens.get(item.chave)) if valor is not None else "",
@@ -1009,7 +1019,7 @@ def _saida_em_numero(
     numero = mt.numero_de(valor, numeros)
     if numero is None:
         return ""
-    return f"{_numero(numero / u.fator(dimensao))} {u.rotulo(dimensao)}".strip()
+    return f"{_numero(u.da_base(dimensao, numero))} {u.rotulo(dimensao)}".strip()
 
 
 #: A opção do bloco Seção desenhada com o nome da seção salva em Desenhar seção.
@@ -1087,22 +1097,23 @@ def _no_do_tipo(p: Parte, no_id: str, tipo: str) -> Any:
     return no
 
 
-def _ao_digitar(p: Parte, chave: str, fator: float, campo: str) -> None:
+def _ao_digitar(p: Parte, chave: str, fator: float, campo: str, deslocamento: float = 0.0) -> None:
     estado = st.session_state
     if not _da_rodada_atual(p, campo):
         return
     valor = estado.get(campo)
-    estado[p.k("valores")][chave] = None if valor is None else float(valor) * fator
+    estado[p.k("valores")][chave] = None if valor is None else float(valor) * fator + deslocamento
     estado[p.k("origens")][chave] = _DIGITADO
 
 
 def _campo_de_valor(p: Parte, grandeza: Grandeza, u: Unidades) -> None:
     estado = st.session_state
     fator = u.fator(grandeza.dimensao)
+    deslocamento = u.deslocamento(grandeza.dimensao)
     guardado = estado[p.k("valores")].get(grandeza.chave)
     campo = f"{p.prefixo}_v_{estado[p.k('revisao')]}_{grandeza.chave}"
     if campo not in estado:
-        estado[campo] = _para_o_campo(guardado, fator)
+        estado[campo] = _para_o_campo(guardado, fator, deslocamento)
     # value=None é o que deixa o campo ser esvaziado: o número entra pelo session_state.
     st.number_input(
         _titulo_do_campo(grandeza, u),
@@ -1111,7 +1122,7 @@ def _campo_de_valor(p: Parte, grandeza: Grandeza, u: Unidades) -> None:
         step=None,
         key=campo,
         on_change=_ao_digitar,
-        args=(p, grandeza.chave, fator, campo),
+        args=(p, grandeza.chave, fator, campo, deslocamento),
         placeholder="fica como letra",
         help=grandeza.ajuda,
     )
@@ -1159,6 +1170,7 @@ def _conferir_copias(p: Parte, chaves: Sequence[str]) -> None:
 
 
 def _campos(p: Parte, letras: Sequence[Grandeza], alvo: str | None, u: Unidades) -> None:
+    letras = [item for item in letras if not mt.e_corte(item.chave)]  # o laço é a conta que fecha
     for grandeza in letras:
         if grandeza.chave != alvo:
             _campo_de_valor(p, grandeza, u)
@@ -1178,7 +1190,7 @@ def _numeros_de(
         valor = resposta.adotado or resposta.valor
         if valor is not None:
             usados[resposta.alvo.chave] = valor
-    return {sp.Symbol(k, positive=True): sp.Float(v) for k, v in usados.items()}
+    return {g.simbolo_de(k): sp.Float(v) for k, v in usados.items()}
 
 
 def _numeros_da_conta(p: Parte, resposta: mt.Resposta | None) -> dict[sp.Symbol, sp.Float]:
@@ -1799,7 +1811,7 @@ def _dados_do_fio(dados_fio: mt.Transportado, u: Unidades) -> str:
     def com_unidade(numero: float | None, dimensao: str) -> str:
         if numero is None:
             return "—"
-        return f"{_numero(numero / u.fator(dimensao))} {u.rotulo(dimensao)}".strip()
+        return f"{_numero(u.da_base(dimensao, numero))} {u.rotulo(dimensao)}".strip()
 
     texto = _linhas([(r, com_unidade(n, d)) for r, n, d in dados_fio.esforcos])
     if len(dados_fio.colunas) == 1:
@@ -1817,7 +1829,7 @@ def _dados_do_fio(dados_fio: mt.Transportado, u: Unidades) -> str:
     for rotulo, numeros in dados_fio.linhas:
         corpo += f"<tr><td>{_e(rotulo)}</td>"
         for (_, dimensao), numero in zip(dados_fio.colunas, numeros, strict=True):
-            valor = "—" if numero is None else _numero(numero / u.fator(dimensao))
+            valor = "—" if numero is None else _numero(u.da_base(dimensao, numero))
             corpo += f"<td>{_e(valor)}</td>"
         corpo += "</tr>"
     return f'{texto}<table class="mi-tabela"><tr>{cabeca}</tr>{corpo}</table>'
@@ -2072,12 +2084,12 @@ def _ao_escolher_alvo(p: Parte) -> None:
     estado[p.k("revisao")] += 1
 
 
-def _ao_digitar_adotado(p: Parte, campo: str, fator: float) -> None:
+def _ao_digitar_adotado(p: Parte, campo: str, fator: float, deslocamento: float = 0.0) -> None:
     estado = st.session_state
     if not _da_rodada_atual(p, campo):
         return
     valor = estado.get(campo)
-    estado[p.k("adotado")] = None if valor is None else float(valor) * fator
+    estado[p.k("adotado")] = None if valor is None else float(valor) * fator + deslocamento
 
 
 def _escolher_alvo(p: Parte, montagem: mt.Montagem, alvo: str, u: Unidades) -> None:
@@ -2096,11 +2108,12 @@ def _escolher_alvo(p: Parte, montagem: mt.Montagem, alvo: str, u: Unidades) -> N
     )
     grandeza = por_chave[alvo]
     fator = u.fator(grandeza.dimensao)
+    deslocamento = u.deslocamento(grandeza.dimensao)
     rotulo = u.rotulo(grandeza.dimensao)
     campo = f"{p.prefixo}_adotado_{estado[p.k('revisao')]}"
     guardado = estado.get(p.k("adotado"))
     if campo not in estado:
-        estado[campo] = _para_o_campo(guardado, fator)
+        estado[campo] = _para_o_campo(guardado, fator, deslocamento)
     direita.number_input(
         f"Valor adotado ({rotulo})" if rotulo else "Valor adotado",
         value=None,
@@ -2108,7 +2121,7 @@ def _escolher_alvo(p: Parte, montagem: mt.Montagem, alvo: str, u: Unidades) -> N
         step=None,
         key=campo,
         on_change=_ao_digitar_adotado,
-        args=(p, campo, fator),
+        args=(p, campo, fator, deslocamento),
         placeholder="opcional",
         help="A medida que você vai usar de verdade: mostra o uso de cada condição com ela.",
     )
@@ -2144,6 +2157,22 @@ def _numeros_do_caso_na_formula(resposta: mt.Resposta, u: Unidades) -> None:
     st.caption(f"Na fórmula já entraram os números de {caso}: {', '.join(textos)}.")
 
 
+def _letras_do_meio(resposta: mt.Resposta, u: Unidades) -> None:
+    """As letras que ninguém digitou e que as igualdades fecharam, com o número na resposta."""
+    conta = resposta.montagem
+    if not resposta.do_meio or conta is None:
+        return
+    partes = []
+    for chave, valor in resposta.do_meio:
+        grandeza = conta.grandeza(chave)
+        if grandeza is not None:
+            partes.append(f"{grandeza.texto} = {_com_unidade(valor, grandeza, u)}")
+    if partes:
+        st.caption(
+            "Achadas pelas igualdades da montagem, sem ninguém digitar: " + "; ".join(partes) + "."
+        )
+
+
 def _resposta(p: Parte, grafo: mt.Grafo, resposta: mt.Resposta, u: Unidades) -> None:
     letra = _letra(resposta.alvo)
     if resposta.valor is not None and resposta.manda is not None:
@@ -2160,6 +2189,7 @@ def _resposta(p: Parte, grafo: mt.Grafo, resposta: mt.Resposta, u: Unidades) -> 
                 "Esta equação não tem forma fechada simples: o número veio da conta numérica."
             )
             st.latex(item.equacao)
+        _letras_do_meio(resposta, u)
         _botao_rastrear(p, grafo)
         return
     nomes = ", ".join(item.texto for item in resposta.faltam)
@@ -2387,10 +2417,12 @@ def _grafico_de_uso(resposta: mt.Resposta, valores: Mapping[str, float], u: Unid
             f"O gráfico mostra as {_CURVAS_NO_GRAFICO} condições mais perto do limite. As outras "
             "estão no quadro de condições."
         )
-    fator = u.fator(resposta.alvo.dimensao)
-    rotulo = u.rotulo(resposta.alvo.dimensao)
+    dimensao = resposta.alvo.dimensao
+    rotulo = u.rotulo(dimensao)
     eixo = f"{resposta.alvo.texto} ({rotulo})" if rotulo else resposta.alvo.texto
-    quadro = pd.DataFrame([{"Condição": n, eixo: x / fator, "Uso": uso} for n, x, uso in linhas])
+    quadro = pd.DataFrame(
+        [{"Condição": n, eixo: u.da_base(dimensao, x), "Uso": uso} for n, x, uso in linhas]
+    )
     grafico = (
         alt.Chart(quadro)
         .mark_line(strokeWidth=2)
@@ -2441,11 +2473,12 @@ def _grafico_de_varredura(
         st.info("Não saiu resposta nessa faixa.", icon=":material/info:")
         return
     outra = por_chave[escolha]
-    fator_x = u.fator(outra.dimensao)
-    fator_y = u.fator(resposta.alvo.dimensao)
-    titulo_x = f"{outra.texto} ({u.rotulo(outra.dimensao)})"
-    titulo_y = f"{resposta.alvo.texto} ({u.rotulo(resposta.alvo.dimensao)})"
-    quadro = pd.DataFrame([{titulo_x: x / fator_x, titulo_y: y / fator_y} for x, y in linhas])
+    dx, dy = outra.dimensao, resposta.alvo.dimensao
+    titulo_x = f"{outra.texto} ({u.rotulo(dx)})"
+    titulo_y = f"{resposta.alvo.texto} ({u.rotulo(dy)})"
+    quadro = pd.DataFrame(
+        [{titulo_x: u.da_base(dx, x), titulo_y: u.da_base(dy, y)} for x, y in linhas]
+    )
     st.altair_chart(
         alt.Chart(quadro)
         .mark_line(strokeWidth=2)
@@ -2465,11 +2498,12 @@ def _arredondar(valor: float) -> float:
 def _campos_da_faixa(p: Parte, grandeza: Grandeza, centro: float, u: Unidades) -> bs.Faixa:
     """De, até e passo de uma incógnita, na unidade da tela. A busca recebe na base."""
     estado = st.session_state
-    fator = u.fator(grandeza.dimensao)
-    rotulo = u.rotulo(grandeza.dimensao)
+    dimensao = grandeza.dimensao
+    fator = u.fator(dimensao)
+    rotulo = u.rotulo(dimensao)
     sufixo = f" ({rotulo})" if rotulo else ""
-    de_padrao = _arredondar(centro / 4.0 / fator)
-    ate_padrao = _arredondar(centro * 3.0 / fator)
+    de_padrao = _arredondar(u.da_base(dimensao, centro / 4.0))
+    ate_padrao = _arredondar(u.da_base(dimensao, centro * 3.0))
     passo_padrao = _arredondar((ate_padrao - de_padrao) / _DIVISOES)
     revisao = estado[p.k("revisao")]
     colunas = st.columns(3)
@@ -2497,7 +2531,10 @@ def _campos_da_faixa(p: Parte, grandeza: Grandeza, centro: float, u: Unidades) -
         key=f"{p.prefixo}_passo_{revisao}_{grandeza.chave}",
         help="A distância entre dois valores da grade. Use a medida comercial, como 5 mm.",
     )
-    return bs.Faixa(grandeza.chave, de * fator, ate * fator, passo * fator)
+    # O passo é uma diferença: sem o deslocamento do °C.
+    return bs.Faixa(
+        grandeza.chave, u.para_base(dimensao, de), u.para_base(dimensao, ate), passo * fator
+    )
 
 
 def _texto_do_candidato(candidato: bs.Candidato, montagem: mt.Montagem, u: Unidades) -> str:
@@ -2516,12 +2553,13 @@ def _mapa_da_busca(busca: bs.Busca, montagem: mt.Montagem, u: Unidades) -> None:
     primeira = montagem.grandeza(busca.faixas[0].chave)
     if primeira is None:
         return
-    fator_x = u.fator(primeira.dimensao)
-    rotulo_x = u.rotulo(primeira.dimensao)
+    dim_x = primeira.dimensao
+    fator_x = u.fator(dim_x)
+    rotulo_x = u.rotulo(dim_x)
     titulo_x = f"{primeira.texto} ({rotulo_x})" if rotulo_x else primeira.texto
     if len(busca.faixas) == 1:
         quadro = pd.DataFrame(
-            [{titulo_x: x / fator_x, "Uso": min(uso, 3.0)} for x, uso in busca.mapa]
+            [{titulo_x: u.da_base(dim_x, x), "Uso": min(uso, 3.0)} for x, uso in busca.mapa]
         )
         grafico = (
             alt.Chart(quadro)
@@ -2537,8 +2575,9 @@ def _mapa_da_busca(busca: bs.Busca, montagem: mt.Montagem, u: Unidades) -> None:
     segunda = montagem.grandeza(busca.faixas[1].chave)
     if segunda is None:
         return
-    fator_y = u.fator(segunda.dimensao)
-    rotulo_y = u.rotulo(segunda.dimensao)
+    dim_y = segunda.dimensao
+    fator_y = u.fator(dim_y)
+    rotulo_y = u.rotulo(dim_y)
     titulo_y = f"{segunda.texto} ({rotulo_y})" if rotulo_y else segunda.texto
     xs = sorted({linha[0] for linha in busca.mapa})
     ys = sorted({linha[1] for linha in busca.mapa})
@@ -2547,10 +2586,10 @@ def _mapa_da_busca(busca: bs.Busca, montagem: mt.Montagem, u: Unidades) -> None:
     quadro = pd.DataFrame(
         [
             {
-                "x": x / fator_x - dx / 2.0,
-                "x2": x / fator_x + dx / 2.0,
-                "y": y / fator_y - dy / 2.0,
-                "y2": y / fator_y + dy / 2.0,
+                "x": u.da_base(dim_x, x) - dx / 2.0,
+                "x2": u.da_base(dim_x, x) + dx / 2.0,
+                "y": u.da_base(dim_y, y) - dy / 2.0,
+                "y2": u.da_base(dim_y, y) + dy / 2.0,
                 "Uso": uso,
             }
             for x, y, uso in busca.mapa
@@ -2582,8 +2621,8 @@ def _mapa_da_busca(busca: bs.Busca, montagem: mt.Montagem, u: Unidades) -> None:
             pd.DataFrame(
                 [
                     {
-                        "x": final.valor(busca.faixas[0].chave) / fator_x,
-                        "y": final.valor(busca.faixas[1].chave) / fator_y,
+                        "x": u.da_base(dim_x, final.valor(busca.faixas[0].chave)),
+                        "y": u.da_base(dim_y, final.valor(busca.faixas[1].chave)),
                     }
                 ]
             )
@@ -2608,7 +2647,7 @@ def _quadro_da_grade(busca: bs.Busca, montagem: mt.Montagem, u: Unidades) -> Non
             if grandeza is not None:
                 rotulo = u.rotulo(grandeza.dimensao)
                 titulo = f"{grandeza.texto} ({rotulo})" if rotulo else grandeza.texto
-                linha[titulo] = round(valor / u.fator(grandeza.dimensao), 4)
+                linha[titulo] = round(u.da_base(grandeza.dimensao, valor), 4)
         linha["Uso (%)"] = round(candidato.uso * 100.0, 1)
         if candidato.area is not None:
             linha["Área (mm²)"] = round(candidato.area, 1)
@@ -3837,7 +3876,8 @@ def tela_do_montador(p: Parte) -> None:
         hipoteses.insert(
             1,
             "Escoamento permanente e incompressível, com a linha em série e a mesma vazão em todos "
-            "os trechos. Propriedades dos fluidos e rugosidades são valores típicos de tabela.",
+            "os trechos. Propriedades dos fluidos de tabela ou da CoolProp, e rugosidades típicas de "
+            "tubo novo.",
         )
     with (
         st.expander("Salvar, abrir e registrar", icon=":material/save:"),

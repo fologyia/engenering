@@ -3,13 +3,22 @@
 A conta simbólica não conhece unidade. Os números entram nela sempre na base do sistema, e a tela só
 converte na entrada e na saída. Cada parte do Montador tem o seu sistema: materiais, estática e fadiga
 usam N, mm e MPa, que fecha sozinho (1 MPa = 1 N/mm²); fluidos usam o SI, com m, kg, s, Pa e W.
+
+Cada sistema sabe quanto vale, no SI, a sua unidade de força, de comprimento, de tempo e de
+temperatura (``Sistema.base_si``). É por aí que um número passa de uma parte para a outra: o diâmetro
+de um tubo, em metros nos fluidos, chega em milímetros nos sólidos sem ninguém digitar de novo.
+
+Temperatura e pressão manométrica não se convertem só multiplicando: °C → K soma 273,15. Por isso o
+seletor guarda também um deslocamento, e quem converte um valor usa ``Unidades.para_base`` e
+``Unidades.da_base``. Uma diferença de temperatura é outra grandeza, sem deslocamento: 10 °C de
+diferença são 10 K.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import sympy as sp
 
@@ -45,38 +54,73 @@ ACELERACAO = "aceleracao"
 INERCIA = "inercia"
 CURVA_BOMBA = "curva_bomba"  # a da parábola H = H_0 − a·Q²
 
-#: Potências de força, comprimento e tempo de cada dimensão. Como cada sistema fecha sozinho na base,
-#: é por aqui que se confere se uma fórmula tem os dois lados na mesma unidade.
-EXPOENTES: dict[str, tuple[int, int, int]] = {
-    MEDIDA: (0, 1, 0),
-    COMPRIMENTO: (0, 1, 0),
-    FORCA: (1, 0, 0),
-    MOMENTO: (1, 1, 0),
-    DISTRIBUIDA: (1, -1, 0),
-    TENSAO: (1, -2, 0),
-    MODULO: (1, -2, 0),
-    POTENCIA: (1, 1, -1),
-    ROTACAO: (0, 0, -1),
-    ANGULO: (0, 0, 0),
-    PURO: (0, 0, 0),
-    FLECHA_EI: (1, 3, 0),
-    GIRO_EI: (1, 2, 0),
-    MASSA: (1, -1, 2),
-    MICRO: (0, 1, 0),
-    TEMPO: (0, 0, 1),
-    DIAMETRO: (0, 1, 0),
-    VAZAO: (0, 3, -1),
-    VELOCIDADE: (0, 1, -1),
-    PRESSAO: (1, -2, 0),
-    ALTURA: (0, 1, 0),
-    MASSA_ESPECIFICA: (1, -4, 2),
-    VISCOSIDADE: (1, -2, 1),
-    RUGOSIDADE: (0, 1, 0),
-    AREA: (0, 2, 0),
-    VOLUME: (0, 3, 0),
-    ACELERACAO: (0, 1, -2),
-    INERCIA: (0, 4, 0),
-    CURVA_BOMBA: (0, -5, 2),
+# Térmicas
+TEMPERATURA = "temperatura"  # absoluta: K na base, °C e °F com deslocamento
+DIF_TEMPERATURA = "dif_temperatura"  # diferença: 10 °C de diferença são 10 K
+VAZAO_MASSICA = "vazao_massica"
+ENERGIA = "energia"  # mesmas potências do momento, mas não se ligam: J não é N·m de torque
+ENERGIA_ESPECIFICA = "energia_especifica"  # entalpia, energia interna, trabalho por massa
+ENTROPIA_ESPECIFICA = "entropia_especifica"
+CALOR_ESPECIFICO = "calor_especifico"
+CONDUTIVIDADE = "condutividade"
+COEF_PELICULA = "coef_pelicula"
+FLUXO_DE_CALOR = "fluxo_de_calor"
+
+#: Potências de força, comprimento, tempo e temperatura de cada dimensão. Como cada sistema fecha
+#: sozinho na base, é por aqui que se confere se uma fórmula tem os dois lados na mesma unidade, e
+#: quanto vale no SI a unidade de base de cada sistema.
+EXPOENTES: dict[str, tuple[int, int, int, int]] = {
+    MEDIDA: (0, 1, 0, 0),
+    COMPRIMENTO: (0, 1, 0, 0),
+    FORCA: (1, 0, 0, 0),
+    MOMENTO: (1, 1, 0, 0),
+    DISTRIBUIDA: (1, -1, 0, 0),
+    TENSAO: (1, -2, 0, 0),
+    MODULO: (1, -2, 0, 0),
+    POTENCIA: (1, 1, -1, 0),
+    ROTACAO: (0, 0, -1, 0),
+    ANGULO: (0, 0, 0, 0),
+    PURO: (0, 0, 0, 0),
+    FLECHA_EI: (1, 3, 0, 0),
+    GIRO_EI: (1, 2, 0, 0),
+    MASSA: (1, -1, 2, 0),
+    MICRO: (0, 1, 0, 0),
+    TEMPO: (0, 0, 1, 0),
+    DIAMETRO: (0, 1, 0, 0),
+    VAZAO: (0, 3, -1, 0),
+    VELOCIDADE: (0, 1, -1, 0),
+    PRESSAO: (1, -2, 0, 0),
+    ALTURA: (0, 1, 0, 0),
+    MASSA_ESPECIFICA: (1, -4, 2, 0),
+    VISCOSIDADE: (1, -2, 1, 0),
+    RUGOSIDADE: (0, 1, 0, 0),
+    AREA: (0, 2, 0, 0),
+    VOLUME: (0, 3, 0, 0),
+    ACELERACAO: (0, 1, -2, 0),
+    INERCIA: (0, 4, 0, 0),
+    CURVA_BOMBA: (0, -5, 2, 0),
+    TEMPERATURA: (0, 0, 0, 1),
+    DIF_TEMPERATURA: (0, 0, 0, 1),
+    VAZAO_MASSICA: (1, -1, 1, 0),
+    ENERGIA: (1, 1, 0, 0),
+    ENERGIA_ESPECIFICA: (0, 2, -2, 0),
+    ENTROPIA_ESPECIFICA: (0, 2, -2, -1),
+    CALOR_ESPECIFICO: (0, 2, -2, -1),
+    CONDUTIVIDADE: (1, 0, -1, -1),
+    COEF_PELICULA: (1, -1, -1, -1),
+    FLUXO_DE_CALOR: (1, -1, -1, 0),
+}
+#: Para trazer um número de outra parte: a grandeza que faz o mesmo papel lá, em ordem de preferência.
+#: Mesmas potências não bastam: momento e energia têm as mesmas, e um torque não é um calor.
+EQUIVALENTES: dict[str, tuple[str, ...]] = {
+    DIAMETRO: (MEDIDA, COMPRIMENTO),
+    MEDIDA: (DIAMETRO, COMPRIMENTO),
+    COMPRIMENTO: (ALTURA, MEDIDA, DIAMETRO),
+    ALTURA: (COMPRIMENTO, MEDIDA),
+    RUGOSIDADE: (MICRO, MEDIDA),
+    MICRO: (RUGOSIDADE, MEDIDA),
+    TENSAO: (PRESSAO,),
+    PRESSAO: (TENSAO,),
 }
 ROTULOS_DAS_DIMENSOES = {
     PURO: "Número puro",
@@ -108,11 +152,25 @@ ROTULOS_DAS_DIMENSOES = {
     ACELERACAO: "Aceleração",
     INERCIA: "Momento de inércia",
     CURVA_BOMBA: "Queda da curva da bomba",
+    TEMPERATURA: "Temperatura",
+    DIF_TEMPERATURA: "Diferença de temperatura",
+    VAZAO_MASSICA: "Vazão mássica",
+    ENERGIA: "Energia",
+    ENERGIA_ESPECIFICA: "Energia por massa",
+    ENTROPIA_ESPECIFICA: "Entropia por massa",
+    CALOR_ESPECIFICO: "Calor específico",
+    CONDUTIVIDADE: "Condutividade térmica",
+    COEF_PELICULA: "Coeficiente de película",
+    FLUXO_DE_CALOR: "Fluxo de calor",
 }
 
 MEDIDAS = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 FORCAS = {"N": 1.0, "kN": 1000.0}
 MOMENTOS = {"N·mm": 1.0, "N·m": 1000.0, "kN·m": 1e6}
+#: Temperatura absoluta na base em K: °C e °F somam um deslocamento depois de multiplicar.
+TEMPERATURAS = {"°C": 1.0, "K": 1.0, "°F": 5.0 / 9.0}
+DESLOCAMENTO_DA_TEMPERATURA = {"°C": 273.15, "K": 0.0, "°F": 273.15 - 32.0 * 5.0 / 9.0}
+DIF_TEMPERATURAS = {"°C": 1.0, "K": 1.0, "°F": 5.0 / 9.0}
 
 
 @dataclass(frozen=True, eq=False)
@@ -124,6 +182,8 @@ class Seletor:
     ajuda: str
     opcoes: Mapping[str, float]  # multiplica o número da tela para chegar na base
     padrao: str
+    #: Somado depois de multiplicar: °C → K soma 273,15. Unidade sem deslocamento não aparece aqui.
+    deslocamentos: Mapping[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, eq=False)
@@ -134,6 +194,22 @@ class Sistema:
     derivadas: Mapping[str, Callable[[Unidades], tuple[str, float]]]
     aviso_da_base: str
     dimensoes: tuple[str, ...] = ()  # o que uma letra nova pode ser, nesta ordem
+    #: Quanto vale no SI a unidade de base de força, comprimento, tempo e temperatura.
+    base_si: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
+    #: Grandeza cuja base não sai das potências, como a rotação em rpm: o valor no SI direto.
+    si_proprio: Mapping[str, float] = field(default_factory=dict)
+    #: O deslocamento das unidades fixas, como a temperatura em °C sem seletor.
+    deslocamentos_fixos: Mapping[str, float] = field(default_factory=dict)
+
+    def fator_si(self, dimensao: str) -> float:
+        """Multiplica um número na base deste sistema para chegar no SI."""
+        if dimensao in self.si_proprio:
+            return self.si_proprio[dimensao]
+        potencias = EXPOENTES.get(dimensao, EXPOENTES[PURO])
+        valor = 1.0
+        for base, potencia in zip(self.base_si, potencias, strict=True):
+            valor *= base**potencia
+        return valor
 
 
 @dataclass(frozen=True, eq=False)
@@ -153,8 +229,23 @@ class Unidades:
         return derivada(self) if derivada else ("", 1.0)
 
     def fator(self, dimensao: str) -> float:
-        """Multiplica o número da tela para chegar na base."""
+        """Multiplica o número da tela para chegar na base. Para diferenças e passos, sem o
+        deslocamento: para um valor, use ``para_base`` e ``da_base``."""
         return self.par(dimensao)[1]
+
+    def deslocamento(self, dimensao: str) -> float:
+        for seletor, escolha in zip(self.sistema.seletores, self.escolhas, strict=True):
+            if seletor.dimensao == dimensao:
+                return seletor.deslocamentos.get(escolha, 0.0)
+        return self.sistema.deslocamentos_fixos.get(dimensao, 0.0)
+
+    def para_base(self, dimensao: str, valor: float) -> float:
+        """O número da tela na base do sistema: 20 °C viram 293,15 K."""
+        return valor * self.fator(dimensao) + self.deslocamento(dimensao)
+
+    def da_base(self, dimensao: str, valor: float) -> float:
+        """O número da base na unidade da tela: 293,15 K viram 20 °C."""
+        return (valor - self.deslocamento(dimensao)) / self.fator(dimensao)
 
     def rotulo(self, dimensao: str) -> str:
         return self.par(dimensao)[0]
@@ -162,6 +253,36 @@ class Unidades:
 
 def unidades_padrao(sistema: Sistema) -> Unidades:
     return Unidades(sistema, tuple(s.padrao for s in sistema.seletores))
+
+
+def unidades_lidas(sistema: Sistema, escolhas: object) -> list[str]:
+    """As unidades de um arquivo ou do estado da tela. O que não serve volta ao padrão, um a um:
+    um arquivo de antes de um seletor novo continua com as unidades que tinha."""
+    lista = list(escolhas) if isinstance(escolhas, (list, tuple)) else []
+    lidas = []
+    for i, seletor in enumerate(sistema.seletores):
+        escolha = lista[i] if i < len(lista) else None
+        lidas.append(
+            escolha if isinstance(escolha, str) and escolha in seletor.opcoes else seletor.padrao
+        )
+    return lidas
+
+
+def converter(
+    valor: float, de: Sistema, dimensao_de: str, para: Sistema, dimensao_para: str
+) -> float:
+    """Um número na base de um sistema, na base do outro. A temperatura é K em todas as bases."""
+    return valor * de.fator_si(dimensao_de) / para.fator_si(dimensao_para)
+
+
+def equivalente(dimensao: str, sistema: Sistema) -> str | None:
+    """A grandeza deste sistema que recebe um número de outra parte com esta dimensão."""
+    if dimensao in sistema.dimensoes:
+        return dimensao
+    for candidata in EQUIVALENTES.get(dimensao, ()):
+        if candidata in sistema.dimensoes and EXPOENTES[candidata] == EXPOENTES[dimensao]:
+            return candidata
+    return None
 
 
 def _distribuida(u: Unidades) -> tuple[str, float]:
@@ -251,6 +372,10 @@ SISTEMA_SOLIDOS = Sistema(
         MICRO,
         TEMPO,
     ),
+    # N, mm, s e K: a tensão sai em N/mm² = MPa, e a massa em t, porque N = t·mm/s².
+    base_si=(1.0, 1e-3, 1.0, 1.0),
+    # A rotação fica em rpm na base: T = 30·P/(π·n) já leva o 30/π.
+    si_proprio={ROTACAO: 2.0 * math.pi / 60.0},
 )
 
 SISTEMA_FLUIDOS = Sistema(
@@ -291,6 +416,14 @@ SISTEMA_FLUIDOS = Sistema(
             {"kW": 1e3, "W": 1.0, "cv": 735.49875},
             "kW",
         ),
+        Seletor(
+            TEMPERATURA,
+            "Temperatura",
+            "Unidade da temperatura do fluido. A conta usa kelvin: 20 °C são 293,15 K.",
+            TEMPERATURAS,
+            "°C",
+            DESLOCAMENTO_DA_TEMPERATURA,
+        ),
     ),
     {
         ALTURA: ("m", 1.0),
@@ -324,8 +457,21 @@ SISTEMA_FLUIDOS = Sistema(
         VOLUME,
         ACELERACAO,
         CURVA_BOMBA,
+        TEMPERATURA,
     ),
 )
+
+
+#: As letras que podem ser negativas: entalpia, calor que sai, trabalho, diferença de temperatura.
+#: A chave delas não pode ser a de uma letra positiva de outra parte, porque o símbolo muda.
+_COM_SINAL: set[str] = set()
+
+
+def simbolo_de(chave: str) -> sp.Symbol:
+    """O símbolo de uma letra pelo nome: positivo, menos as letras com sinal."""
+    if chave in _COM_SINAL:
+        return sp.Symbol(chave, real=True)
+    return sp.Symbol(chave, positive=True)
 
 
 @dataclass(frozen=True)
@@ -342,11 +488,18 @@ class Grandeza:
     maximo: float | None = None  # valor que não pode ser alcançado, como k = 1
     minimo: float | None = None  # o menor valor que faz sentido, como K_t = 1
     teto: float | None = None  # o maior valor que faz sentido, como q = 1
+    #: Pode ser negativo ou zero: calor que sai, trabalho, ΔT, entalpia abaixo da referência.
+    sinal_livre: bool = False
+
+    def __post_init__(self) -> None:
+        if self.sinal_livre:
+            _COM_SINAL.add(self.chave)
 
     @property
     def simbolo(self) -> sp.Symbol:
-        # Tudo positivo: esforço entra pelo módulo, e assim √(M²) simplifica para M.
-        return sp.Symbol(self.chave, positive=True)
+        # Positivo, menos as letras com sinal: esforço entra pelo módulo, e assim √(M²) simplifica
+        # para M. Quem tem sinal fica real, e o módulo continua onde a conta pede.
+        return simbolo_de(self.chave)
 
     def com_indice(self, indice: int) -> Grandeza:
         """A segunda flexão da mesma seção é outra letra: M₂, e não o mesmo M somado duas vezes."""
@@ -363,12 +516,17 @@ class Grandeza:
         """O que está errado com este número, em palavras de quem preencheu."""
         if not math.isfinite(valor):
             return f"{self.texto}: o valor não é um número."
+        if self.sinal_livre:
+            return self._fora_dos_limites(valor)
         if valor < 0.0:
             if self.zero_ok:
                 return f"{self.texto} entra pelo módulo: digite o valor sem o sinal."
             return f"{self.texto} precisa ser maior que zero."
         if valor == 0.0 and not self.zero_ok:
             return f"{self.texto} precisa ser maior que zero."
+        return self._fora_dos_limites(valor)
+
+    def _fora_dos_limites(self, valor: float) -> str | None:
         if self.maximo is not None and valor >= self.maximo:
             limite = f"{self.maximo:g}".replace(".", ",")
             return f"{self.texto} precisa ficar abaixo de {limite}."
@@ -1093,6 +1251,22 @@ A_BOMBA = _esforco(
     CURVA_BOMBA,
     "O a de H = H_0 − a·Q². Os pontos do catálogo da bomba dão este valor sozinhos.",
 )
+T_FLUIDO = _g(
+    "T_f",
+    "T_f",
+    "Temperatura do fluido",
+    TEMPERATURA,
+    "As propriedades do fluido saem da CoolProp nesta temperatura.",
+    293.15,
+)
+P_FLUIDO = _g(
+    "p_f",
+    "p_f",
+    "Pressão absoluta do fluido",
+    PRESSAO,
+    "Absoluta. No gás, a massa específica muda com ela; no líquido, quase nada.",
+    101325.0,
+)
 
 _TODAS: tuple[Grandeza, ...] = tuple(
     v for v in tuple(globals().values()) if isinstance(v, Grandeza)
@@ -1104,6 +1278,11 @@ _LETRAS = {
     SISTEMA_FLUIDOS.chave: _TODAS[_INICIO_DE_FLUIDOS:],
 }
 _SISTEMAS = {SISTEMA_SOLIDOS.chave: SISTEMA_SOLIDOS, SISTEMA_FLUIDOS.chave: SISTEMA_FLUIDOS}
+
+
+def sistema(chave: str) -> Sistema | None:
+    """O sistema de unidades de uma parte, pela chave guardada no arquivo ou no registro."""
+    return _SISTEMAS.get(chave)
 
 
 def letras_conhecidas(sistema: str) -> dict[str, Grandeza]:

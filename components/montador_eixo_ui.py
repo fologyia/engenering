@@ -289,7 +289,7 @@ def _chave_do_d(base: mt.Montagem, no: mt.No) -> str:
 
 
 def _numeros(valores: Mapping[str, float | None]) -> dict[sp.Symbol, sp.Float]:
-    return {sp.Symbol(k, positive=True): sp.Float(v) for k, v in valores.items() if v is not None}
+    return {g.simbolo_de(k): sp.Float(v) for k, v in valores.items() if v is not None}
 
 
 def _secoes_na_tela(

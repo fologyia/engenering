@@ -31,6 +31,7 @@ from core import (
 )
 from core import montador_fluidos as mfl
 from core import montador_grandezas as g
+from core import montador_sistema as sm
 from core.montador_blocos import Condicao, Contexto, ErroDeBloco
 from core.montador_funcoes import FUNCOES, NUMERICAS
 from core.montador_grandezas import Grandeza
@@ -42,6 +43,8 @@ IGUAL = "igual"
 CONJUNTO = "conjunto"
 _PROFUNDIDADE_MAXIMA = 8  # conjunto dentro de conjunto: além disso é dado corrompido
 _GRADE_LOG = np.logspace(-9.0, 15.0, 961)  # cobre de um tubo em metros a um momento em N·mm
+#: Para a letra com sinal, como o calor que sai: a mesma grade dos dois lados do zero.
+_GRADE_COM_SINAL = np.concatenate([-_GRADE_LOG[::-1], [0.0], _GRADE_LOG])
 _LIMITE_DE_OPERACOES = 400  # acima disso, simplificar custa mais do que ajuda
 _FOLGA = 1e-9
 _FOLGA_DA_IGUALDADE = 1e-6
@@ -235,6 +238,73 @@ def _ordem(grafo: Grafo) -> tuple[list[No], list[No]]:
     return ordem, [no for no in grafo.nos if no.id not in feitos]
 
 
+def _fios_que_voltam(grafo: Grafo) -> list[int]:
+    """Os fios que fecham um laço: tirando eles, a montagem volta a ter uma ordem.
+
+    Busca em profundidade na ordem dos blocos: o fio que chega num bloco ainda aberto na pilha é o
+    que volta. É o mesmo corte que um simulador de processo faz numa corrente de reciclo.
+    """
+    saem: dict[str, list[tuple[int, str]]] = {no.id: [] for no in grafo.nos}
+    for i, fio in enumerate(grafo.fios):
+        saem[fio.de].append((i, fio.para))
+    estado: dict[str, int] = {}  # 1 aberto na pilha, 2 fechado
+    voltam: list[int] = []
+    for inicio in (no.id for no in grafo.nos):
+        if inicio in estado:
+            continue
+        pilha = [(inicio, iter(saem[inicio]))]
+        estado[inicio] = 1
+        while pilha:
+            atual, seguintes = pilha[-1]
+            proximo = next(seguintes, None)
+            if proximo is None:
+                estado[atual] = 2
+                pilha.pop()
+                continue
+            i, destino = proximo
+            if estado.get(destino) == 1:
+                voltam.append(i)
+            elif destino not in estado:
+                estado[destino] = 1
+                pilha.append((destino, iter(saem[destino])))
+    return voltam
+
+
+def e_corte(chave: str) -> bool:
+    """A letra do fio que volta num laço: ninguém digita, a conta acha."""
+    prefixo, _, numero = chave.partition("_")
+    return prefixo == "lc" and numero.isdigit()
+
+
+#: Só o fio de valor leva um número que dá para supor e conferir na volta. Seção, material e linha
+#: de fluido num laço não fazem sentido: continuam dando o aviso de laço.
+_PODE_FECHAR_LACO = frozenset({mb.VALOR})
+
+
+def _cortes(grafo: Grafo) -> dict[int, Grandeza] | None:
+    """A letra de cada fio que volta: o valor suposto, que a conta fecha com o valor que sai."""
+    por_id = {no.id: no for no in grafo.nos}
+    cortes: dict[int, Grandeza] = {}
+    for numero, i in enumerate(_fios_que_voltam(grafo), start=1):
+        fio = grafo.fios[i]
+        origem = por_id[fio.de]
+        porta = next(
+            (p for p in mb.portas_de(origem.tipo, dict(origem.opcoes))[1] if p.chave == fio.saida),
+            None,
+        )
+        if porta is None or porta.tipo not in _PODE_FECHAR_LACO:
+            return None
+        cortes[i] = Grandeza(
+            f"lc_{numero}",
+            f"laço {numero}",
+            f"Valor que volta pelo laço {numero}",
+            _dimensao_da_saida(origem, porta) or g.PURO,
+            "Calculado: o valor que sai do fim do laço e volta para o começo dele.",
+            sinal_livre=True,
+        )
+    return cortes
+
+
 @dataclass(frozen=True)
 class Montagem:
     condicoes: tuple[Condicao, ...]
@@ -260,6 +330,8 @@ class Montagem:
     caso_base: str = ""
     casos: tuple[tuple[str, tuple[tuple[str, float], ...]], ...] = ()
     extras: tuple[Condicao, ...] = ()
+    #: As letras dos fios que voltam num laço: a conta acha, e ninguém digita.
+    cortes: tuple[str, ...] = ()
 
     def grandeza(self, chave: str) -> Grandeza | None:
         return next((item for item in self.grandezas if item.chave == chave), None)
@@ -267,8 +339,23 @@ class Montagem:
 
 @lru_cache(maxsize=256)
 def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
-    """``zeros``: letras com valor zero, que somem da conta em vez de virar 0/0 depois."""
+    """``zeros``: letras com valor zero, que somem da conta em vez de virar 0/0 depois.
+
+    Num laço de fios de valor, o fio que volta é cortado: o bloco de depois recebe uma letra no
+    lugar do valor, e uma igualdade a mais fecha a letra com o valor que de fato sai. Quem acha o
+    número são as letras do meio, em :mod:`core.montador_sistema`.
+    """
     ordem, laco = _ordem(grafo)
+    cortes: dict[int, Grandeza] = {}
+    if laco:
+        achados = _cortes(grafo)
+        if achados:
+            cortes = achados
+            sem_volta = Grafo(
+                grafo.nos, tuple(f for i, f in enumerate(grafo.fios) if i not in cortes)
+            )
+            ordem, laco = _ordem(sem_volta)
+    cortados = {(grafo.fios[i].para, grafo.fios[i].entrada, i): t for i, t in cortes.items()}
     erros = {no.id: "Este bloco está num laço: desfaça um dos fios." for no in laco}
     grandezas: dict[str, Grandeza] = {}
     padroes: dict[str, float] = {}
@@ -291,10 +378,15 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
         if bloco.numerar:
             indices[no.id] = contagem[no.tipo]
         ligados: dict[str, Any] = {}
-        for fio in grafo.fios:
+        for i, fio in enumerate(grafo.fios):
             if fio.para != no.id:
                 continue
-            valor = saidas.get(fio.de, {}).get(fio.saida)
+            if i in cortes:  # o fio que volta: entra a letra suposta, e não o valor
+                corte = cortes[i]
+                grandezas.setdefault(corte.chave, corte)
+                valor = corte.simbolo
+            else:
+                valor = saidas.get(fio.de, {}).get(fio.saida)
             if valor is None:
                 continue
             porta = next(p for p in entradas if p.chave == fio.entrada)
@@ -344,6 +436,24 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
             condicoes = list(ligados.get("condicoes") or ())
             if not condicoes:
                 erros[no.id] = "Ligue aqui ao menos um critério."
+    for (para, _, i), corte in cortados.items():
+        fio = grafo.fios[i]
+        volta = saidas.get(fio.de, {}).get(fio.saida)
+        if volta is None:
+            erros.setdefault(para, "O laço não fecha: o bloco do fim dele ainda não tem conta.")
+            continue
+        if tem_resultado:
+            condicoes.append(
+                Condicao(
+                    f"Fechamento do {corte.texto}",
+                    "Laço",
+                    corte.simbolo,
+                    volta,
+                    sp.latex(corte.simbolo),
+                    igualdade=True,
+                    no=para,
+                )
+            )
     if "fragil" in marcas and "ductil" in marcas:
         alertas.append(
             "O material escolhido não tem escoamento: von Mises e Tresca são para material dúctil. "
@@ -375,6 +485,7 @@ def montar(grafo: Grafo, zeros: frozenset[str] = frozenset()) -> Montagem:
         saidas,
         tuple(indices.items()),
         tuple(proprias_da_conta),
+        cortes=tuple(corte.chave for corte in cortes.values()),
     )
 
 
@@ -434,6 +545,10 @@ def _amostra(simbolos: Iterable[sp.Symbol]) -> dict[sp.Symbol, float]:
 
 def _sem_modulo(expressao: sp.Expr) -> sp.Expr:
     def trocar(dentro: sp.Expr) -> sp.Expr:
+        if any(s.is_positive is not True for s in dentro.free_symbols):
+            return sp.Abs(
+                dentro
+            )  # com uma letra que pode ser negativa, o sinal não é sempre o mesmo
         return dentro if float(dentro.subs(_amostra(dentro.free_symbols))) >= 0.0 else -dentro
 
     return expressao.replace(sp.Abs, trocar)
@@ -477,6 +592,8 @@ def _do_polinomio(expressao: sp.Expr, x: sp.Symbol) -> FormaFechada | None:
     coeficientes = {e // passo: c for e, (_, c) in zip(relativos, termos, strict=True)}
     if any(c.has(x) for c in coeficientes.values()):
         return None
+    if grau == 2 and x.is_positive is not True:
+        return None  # com sinal, as duas raízes podem valer: quem escolhe é a conta numérica
     if grau == 1:
         y = sp.factor(-coeficientes.get(0, sp.S.Zero) / coeficientes[1])
     elif grau == 2:
@@ -610,18 +727,23 @@ def _latex(expressao: sp.Expr) -> str:
     return sp.latex(expressao)
 
 
+def _grade(x: sp.Symbol) -> np.ndarray:
+    return _GRADE_LOG if x.is_positive else _GRADE_COM_SINAL
+
+
 def _raizes(
     f: Callable[[float], float],
     na_grade: Callable[[np.ndarray], np.ndarray],
     dominio: Sequence[Callable[[np.ndarray], np.ndarray]],
+    grade: np.ndarray = _GRADE_LOG,
 ) -> list[float]:
     """Toda troca de sinal na grade, refinada por bisseção."""
-    valores = na_grade(_GRADE_LOG)
+    valores = na_grade(grade)
     for condicao in dominio:
-        valores = np.where(condicao(_GRADE_LOG) >= 0, valores, np.nan)
+        valores = np.where(condicao(grade) >= 0, valores, np.nan)
     achadas = []
     anterior: tuple[float, float] | None = None
-    for atual, valor in zip(_GRADE_LOG.tolist(), valores.tolist(), strict=True):
+    for atual, valor in zip(grade.tolist(), valores.tolist(), strict=True):
         if not math.isfinite(valor):
             anterior = None
             continue
@@ -636,17 +758,24 @@ def _raizes(
                     b = meio
                 else:
                     a, fa = meio, fm
-                if abs(b - a) <= 1e-12 * abs(b):
+                if abs(b - a) <= 1e-12 * max(abs(a), abs(b)) or b == a:
                     break
             achadas.append((a + b) / 2.0)
+        elif (
+            valor == 0.0 and anterior is not None and anterior[1] != 0.0 and grade is not _GRADE_LOG
+        ):
+            achadas.append(atual)  # com sinal, a raiz pode cair em cima do zero da grade
         anterior = (atual, valor)
     return achadas
 
 
 def _lado(f: Callable[[float], float], raiz: float) -> str:
     """Quem passa da raiz para cima pede mínimo: é o caso da medida da seção."""
-    depois = f(raiz * (1.0 + 1e-4))
-    antes = f(raiz * (1.0 - 1e-4))
+    if raiz > 0.0:
+        depois, antes = f(raiz * (1.0 + 1e-4)), f(raiz * (1.0 - 1e-4))
+    else:  # letra com sinal: o passo é para cima de verdade, mesmo abaixo de zero
+        passo = 1e-4 * abs(raiz) if raiz else 1e-9
+        depois, antes = f(raiz + passo), f(raiz - passo)
     if math.isfinite(depois) and math.isfinite(antes):
         return MINIMO if depois < antes else MAXIMO
     return MINIMO if math.isfinite(depois) and depois < 0.0 else MAXIMO
@@ -698,11 +827,13 @@ class Resposta:
     conferencia_adotada: tuple[LinhaConferida, ...] = ()
     montagem: Montagem | None = None
     valores_usados: Mapping[str, float] = field(default_factory=dict, compare=False, hash=False)
+    #: As letras que as igualdades acharam, com o número delas na resposta (na base).
+    do_meio: tuple[tuple[str, float], ...] = ()
 
 
 def _numeros(valores: Mapping[str, float], x: sp.Symbol | None) -> dict[sp.Symbol, sp.Float]:
     return {
-        sp.Symbol(chave, positive=True): sp.Float(valor)
+        g.simbolo_de(chave): sp.Float(valor)
         for chave, valor in valores.items()
         if x is None or chave != x.name
     }
@@ -760,13 +891,14 @@ def _isolar_uma(
     dominio = _dentro(condicao.validade, x, numeros)
     if forma is not None:
         valor = _real(forma.expressao.subs(numeros))
-        if valor is not None and valor > 0.0 and _fecha(condicao, x, numeros, valor):
+        serve = valor is not None and (valor > 0.0 or x.is_positive is not True)
+        if serve and valor is not None and _fecha(condicao, x, numeros, valor):
             lado = IGUAL if condicao.igualdade else _lado(f, valor)
             return Isolada(condicao, forma, equacao, tensao, com_numeros, valor, lado, False, None)
         # A forma fechada escolheu um sinal pela amostra, e com estes números ele não vale: a conta
         # numérica acha a raiz certa, e a fórmula em letras sai da tela para não enganar.
         forma, com_numeros = None, ""
-    raizes = _raizes(f, _na_grade(diferenca, x, numeros), dominio)
+    raizes = _raizes(f, _na_grade(diferenca, x, numeros), dominio, _grade(x))
     if not raizes:
         return Isolada(condicao, None, equacao, tensao, "", None, None, False, None)
     lados = [_lado(f, r) for r in raizes]
@@ -776,6 +908,56 @@ def _isolar_uma(
     valor = max(minimos) if minimos else min(raizes)
     lado = MINIMO if minimos else MAXIMO
     return Isolada(condicao, None, equacao, tensao, "", valor, lado, False, None)
+
+
+#: Na conta com letras do meio, cada ponto da grade resolve as letras de novo: a grade é mais rala,
+#: e a bisseção refina do mesmo jeito.
+_GRADE_RALA = _GRADE_LOG[::4]
+_GRADE_RALA_COM_SINAL = np.concatenate([-_GRADE_RALA[::-1], [0.0], _GRADE_RALA])
+
+
+def _isolar_com_meio(condicao: Condicao, x: sp.Symbol, acompanhar: sm.Acompanhar) -> Isolada:
+    """A condição como função da letra pedida, com as letras do meio resolvidas a cada valor."""
+    esquerda, direita = condicao.esquerda, condicao.direita
+    tensao = _latex(limpar(esquerda, condicao.positiva))
+    equacao = f"{tensao} = {_latex(direita)}"
+    f = acompanhar.diferenca(condicao)
+
+    def na_grade(valores: np.ndarray) -> np.ndarray:
+        return np.array([f(v) for v in valores.tolist()], dtype=float)
+
+    grade = _GRADE_RALA if x.is_positive else _GRADE_RALA_COM_SINAL
+    raizes = _raizes(f, na_grade, (), grade)
+    if not raizes:
+        return Isolada(condicao, None, equacao, tensao, "", None, None, False, None)
+    if condicao.igualdade:
+        return Isolada(condicao, None, equacao, tensao, "", raizes[0], IGUAL, False, None)
+    lados = [_lado(f, r) for r in raizes]
+    minimos = [r for r, lado in zip(raizes, lados, strict=True) if lado == MINIMO]
+    valor = max(minimos) if minimos else min(raizes)
+    return Isolada(
+        condicao, None, equacao, tensao, "", valor, MINIMO if minimos else MAXIMO, False, None
+    )
+
+
+def _gasta(condicao: Condicao) -> Isolada:
+    """A igualdade que deu uma letra do meio: ela fecha por construção, e não decide a resposta."""
+    tensao = _latex(condicao.esquerda)
+    return Isolada(
+        condicao, None, f"{tensao} = {_latex(condicao.direita)}", tensao, "", None, None, True, True
+    )
+
+
+def _chutes(conta: Montagem, meio: sm.DoMeio) -> dict[sp.Symbol, float]:
+    """Por onde começar cada letra do meio: o padrão do bloco ou o da letra, quando há."""
+    padroes = dict(conta.padroes)
+    chutes: dict[sp.Symbol, float] = {}
+    for letra in meio.letras:
+        grandeza = conta.grandeza(letra.name)
+        valor = padroes.get(letra.name, grandeza.padrao if grandeza is not None else None)
+        if valor is not None and math.isfinite(valor) and (valor > 0.0 or not letra.is_positive):
+            chutes[letra] = float(valor)
+    return chutes
 
 
 def _no_valor(
@@ -945,6 +1127,64 @@ def valores_do_caso(resposta: Resposta) -> dict[str, float]:
     return {**usados, **dict(proprios)} if proprios else usados
 
 
+def _letras_do_meio(
+    conta: Montagem,
+    x: sp.Symbol,
+    numeros: Mapping[sp.Symbol, sp.Float],
+    faltam: Sequence[Grandeza],
+    alertas: list[str],
+) -> tuple[sm.DoMeio | None, sm.Acompanhar | None, dict[sp.Symbol, float]]:
+    """As letras que faltam e que as igualdades fecham, e como achar o número delas.
+
+    Sem a letra pedida dentro, elas se resolvem uma vez, e a conta segue como sempre, com os números
+    delas no lugar. Com a letra pedida dentro, cada condição vira uma função dela.
+    """
+    if not faltam:
+        return None, None, {}
+    meio = sm.analisar(conta.condicoes, x, frozenset(numeros))
+    if meio is None:
+        return None, None, {}
+    chutes = _chutes(conta, meio)
+    conhecidos = {s: float(v) for s, v in numeros.items()}
+    if meio.depende_do_alvo:
+        return meio, sm.Acompanhar(meio, x, conhecidos, chutes), {}
+    achadas = sm.resolver(meio, conhecidos, chutes)
+    if achadas is None:
+        nomes = ", ".join(s.name for s in meio.letras)
+        alertas.append(
+            f"As igualdades não fecharam {nomes} com estes números: confira os valores, ou "
+            "preencha uma dessas letras."
+        )
+        return None, None, {}
+    return meio, None, achadas
+
+
+def _isolar(
+    condicao: Condicao,
+    x: sp.Symbol,
+    numeros: Mapping[sp.Symbol, sp.Float],
+    meio: sm.DoMeio | None,
+    acompanhar: sm.Acompanhar | None,
+) -> Isolada:
+    if meio is not None and condicao in meio.equacoes:
+        return _gasta(condicao)
+    if acompanhar is not None and (
+        x in condicao.letras or condicao.letras & set(acompanhar.meio.letras)
+    ):
+        return _isolar_com_meio(condicao, x, acompanhar)
+    return _isolar_uma(condicao, x, numeros)
+
+
+def _meio_em(
+    valor: float, fixas: Mapping[sp.Symbol, float], acompanhar: sm.Acompanhar | None
+) -> dict[str, float]:
+    """O número de cada letra do meio com a letra pedida neste valor."""
+    if acompanhar is not None:
+        achadas = acompanhar.letras(valor) or {}
+        return {s.name: v for s, v in achadas.items()}
+    return {s.name: v for s, v in fixas.items()}
+
+
 def isolar(
     montagem: Montagem,
     alvo: str,
@@ -964,18 +1204,27 @@ def isolar(
             "Preencha ao menos um esforço."
         )
     x = grandeza.simbolo
-    usados = {k: v for k, v in limpos.items() if conta.grandeza(k) is not None}
+    usados = {
+        k: v
+        for k, v in limpos.items()
+        if conta.grandeza(k) is not None and k not in conta.cortes  # o corte de um laço é achado
+    }
     numeros = _numeros(usados, x)
     faltam = tuple(
         item
         for item in conta.grandezas
         if item.chave in conta.essenciais and item.chave != alvo and item.chave not in usados
     )
-    isoladas = tuple(_isolar_uma(c, x, numeros) for c in conta.condicoes)
+    alertas: list[str] = []
+    meio, acompanhar, fixas = _letras_do_meio(conta, x, numeros, faltam, alertas)
+    if meio is not None:
+        nomes_do_meio = {s.name for s in meio.letras}
+        faltam = tuple(item for item in faltam if item.chave not in nomes_do_meio)
+        numeros = {**numeros, **{s: sp.Float(v) for s, v in fixas.items()}}
+    isoladas = tuple(_isolar(c, x, numeros, meio, acompanhar) for c in conta.condicoes)
     iguais = [i for i in isoladas if i.lado == IGUAL and i.valor is not None]
     minimos = [i for i in isoladas if i.lado == MINIMO and i.valor is not None]
     maximos = [i for i in isoladas if i.lado == MAXIMO and i.valor is not None]
-    alertas: list[str] = []
     manda: Isolada | None = None
     valor: float | None = None
     sentido: str | None = None
@@ -1007,24 +1256,28 @@ def isolar(
                     "condição não depende dela."
                 )
             if not item.independente and item.valor is None:
+                qual = "nenhum valor" if grandeza.sinal_livre else "nenhum valor positivo"
                 alertas.append(
-                    f"{item.condicao.nome}: nenhum valor positivo de {grandeza.texto} fecha essa "
-                    "equação."
+                    f"{item.condicao.nome}: {qual} de {grandeza.texto} fecha essa equação."
                 )
     conferencia: tuple[LinhaConferida, ...] = ()
     materiais: tuple[str, ...] = ()
+    do_meio: dict[str, float] = {}
     if valor is not None:
-        conferencia = _conferir(isoladas, usados, x, valor)
-        alertas += _alertas_da_validade(isoladas, usados, x, valor, conta.validades)
+        do_meio = _meio_em(valor, fixas, acompanhar)
+        com_meio = {**usados, **do_meio}
+        conferencia = _conferir(isoladas, com_meio, x, valor)
+        alertas += _alertas_da_validade(isoladas, com_meio, x, valor, conta.validades)
         materiais = _materiais_que_servem(grandeza, valor, sentido)
     medida: float | None = None
     conferencia_adotada: tuple[LinhaConferida, ...] = ()
-    if adotado is not None and adotado > 0.0 and not faltam:
+    if adotado is not None and (adotado > 0.0 or grandeza.sinal_livre) and not faltam:
         medida = float(adotado)
-        conferencia_adotada = _conferir(isoladas, usados, x, medida)
+        com_meio = {**usados, **_meio_em(medida, fixas, acompanhar)}
+        conferencia_adotada = _conferir(isoladas, com_meio, x, medida)
         alertas += [
             a
-            for a in _alertas_da_validade(isoladas, usados, x, medida, conta.validades)
+            for a in _alertas_da_validade(isoladas, com_meio, x, medida, conta.validades)
             if a not in alertas
         ]
     return Resposta(
@@ -1042,6 +1295,7 @@ def isolar(
         conferencia_adotada,
         conta,
         usados,
+        tuple(do_meio.items()),
     )
 
 
@@ -1062,8 +1316,8 @@ def varrer(
 ) -> list[tuple[float, float]]:
     """Como a resposta anda com outra letra, de metade ao dobro do valor dela."""
     centro = valores.get(letra)
-    if not centro or centro <= 0.0:
-        return []
+    if not centro:
+        return []  # de metade ao dobro também vale abaixo de zero; no zero, não há escala
     linhas = []
     for fator in np.geomspace(0.5, 2.0, pontos).tolist():
         valor = valor_final(montagem, alvo, {**valores, letra: centro * fator})
@@ -1076,8 +1330,8 @@ def curvas(
     resposta: Resposta, valores: Mapping[str, float], pontos: int = 61
 ) -> list[tuple[str, float, float]]:
     """Uso de cada condição em volta da resposta: 1 é o limite."""
-    if resposta.valor is None:
-        return []
+    if not resposta.valor:
+        return []  # sem resposta, ou resposta no zero: de metade ao dobro não tem tamanho
     x = resposta.alvo.simbolo
     numeros = _numeros(resposta.valores_usados or valores, x)
     linhas: list[tuple[str, float, float]] = []
@@ -1234,6 +1488,7 @@ __all__ = [
     "conferir_valores",
     "curvas",
     "curvas_da_bomba",
+    "e_corte",
     "forma_fechada",
     "grafo_de_dados",
     "ids_ate_o_inicio",

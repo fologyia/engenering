@@ -21,7 +21,9 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.workbook.defined_name import DefinedName
 
 from core import montador as mt
+from core import montador_grandezas as g
 from core.montador_funcoes import (
+    DA_BIBLIOTECA,
     MATERIAIS_DE_FADIGA,
     TABELADAS,
     AtritoDarcy,
@@ -45,6 +47,10 @@ _NEGRITO = Font(bold=True)
 _AVISO_DO_ATRITO = (
     "O fator de atrito na planilha vai por Swamee-Jain, a cerca de 1 % de Colebrook, que é o que o "
     "programa usa: a conta da planilha pode diferir um pouco do programa."
+)
+_AVISO_DA_COOLPROP = (
+    "As propriedades do fluido vêm da CoolProp, que o Excel não tem: na planilha ficam com o valor "
+    "calculado pelo programa, na temperatura e na pressão da conta."
 )
 _AVISO_DO_KT = (
     "K_t de ressalto, as medidas da chaveta da DIN 6885, a interferência da NBR 6158 e o X e Y do "
@@ -157,9 +163,10 @@ def _neuber(sut: str, raio: str, torcao: bool) -> str:
 
 
 def _com_numeros_no_que_falta(expressao: sp.Expr, numeros: Mapping[sp.Symbol, sp.Float]) -> sp.Expr:
-    """O que vem de curva ou de tabela não tem fórmula: entra o valor que o programa calculou."""
+    """O que vem de curva, de tabela ou da CoolProp não tem fórmula no Excel: entra o valor que o
+    programa calculou."""
     return expressao.replace(
-        lambda e: isinstance(e, TABELADAS),
+        lambda e: isinstance(e, (*TABELADAS, *DA_BIBLIOTECA)),
         lambda e: sp.Float(float(sp.N(e.subs(numeros)))),
     )
 
@@ -191,7 +198,8 @@ def gerar_planilha(
     linha = 4
     _titulos(aba, linha, ("Letra", "Grandeza", "Valor", "Unidade", "Na base", "De onde veio"))
     linha += 1
-    valores = dict(resposta.valores_usados)
+    # As letras do meio entram com o número que a conta achou: na planilha, são dados.
+    valores = {**dict(resposta.do_meio), **dict(resposta.valores_usados)}
     alvo = resposta.alvo
     adotado = resposta.adotado if resposta.adotado is not None else resposta.valor
     if adotado is not None:
@@ -202,12 +210,15 @@ def gerar_planilha(
         if item.chave not in usadas or item.chave not in valores:
             continue
         fator = u.fator(item.dimensao)
+        deslocamento = u.deslocamento(item.dimensao)
         aba.cell(linha, 1, item.texto)
         aba.cell(linha, 2, item.nome)
-        celula = aba.cell(linha, 3, valores[item.chave] / fator)
+        celula = aba.cell(linha, 3, u.da_base(item.dimensao, valores[item.chave]))
         celula.fill = _ENTRADA
         aba.cell(linha, 4, u.rotulo(item.dimensao))
-        aba.cell(linha, 5, f"=C{linha}*{fator!r}")
+        # °C para K soma depois de multiplicar: a planilha faz a mesma conta da tela.
+        soma = f"+{deslocamento!r}" if deslocamento else ""
+        aba.cell(linha, 5, f"=C{linha}*{fator!r}{soma}")
         origem = "Resposta do programa" if item.chave == alvo.chave else origens.get(item.chave, "")
         aba.cell(linha, 6, origem)
         nome = nome_da_celula(item.chave)
@@ -218,7 +229,7 @@ def gerar_planilha(
     linha += 1
     _titulos(aba, linha, ("Condição", "Esquerda", "Limite", "Uso", "Situação", ""))
     linha += 1
-    numeros = {sp.Symbol(k, positive=True): sp.Float(v) for k, v in valores.items()}
+    numeros = {g.simbolo_de(k): sp.Float(v) for k, v in valores.items()}
     avisos: list[str] = []
     for item_condicao in conta.condicoes:
         esquerda = item_condicao.esquerda
@@ -227,6 +238,8 @@ def gerar_planilha(
             avisos.append(_AVISO_DO_ATRITO)
         if esquerda.has(*TABELADAS) or direita.has(*TABELADAS):
             avisos.append(_AVISO_DO_KT)
+        if esquerda.has(*DA_BIBLIOTECA) or direita.has(*DA_BIBLIOTECA):
+            avisos.append(_AVISO_DA_COOLPROP)
         aba.cell(linha, 1, item_condicao.nome)
         aba.cell(linha, 2, "=" + em_excel(_com_numeros_no_que_falta(esquerda, numeros)))
         aba.cell(linha, 3, "=" + em_excel(_com_numeros_no_que_falta(direita, numeros)))

@@ -224,11 +224,11 @@ def test_eixo_girando_sem_esforco_explica():
 # ---------------------------------------------------------------------------
 
 
-def _escala(item: g.Grandeza, f: float, l_: float, t: float) -> float:
+def _escala(item: g.Grandeza, f: float, l_: float, t: float, k: float = 1.0) -> float:
     if item.chave == g.MANNING.chave:
         return t * l_ ** (-1.0 / 3.0)  # n de Manning não é adimensional: s/m^(1/3)
-    a, b, c = g.EXPOENTES[item.dimensao]
-    return f**a * l_**b * t**c
+    a, b, c, d = g.EXPOENTES[item.dimensao]
+    return f**a * l_**b * t**c * k**d
 
 
 @pytest.mark.parametrize(

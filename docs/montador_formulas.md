@@ -115,6 +115,67 @@ pode mesmo dar negativo.
 **Validade.** Cada seção diz o que precisa ser verdade (d > 2·t, lado maior, parede fina) e o programa
 confere com os números da resposta. Euler ligado ao material confere a esbeltez de transição.
 
+## Letras do meio e laços
+
+Quando uma letra fica sem valor, mas uma igualdade da montagem a determina, o programa acha o número dela
+antes de isolar a letra pedida (`core/montador_sistema.py`). É o jeito do EES:
+
+- cada letra do meio ganha uma igualdade só dela (um emparelhamento);
+- as que se amarram em ciclo viram um grupo e se resolvem juntas, pelo Newton do MINPACK (scipy);
+- os grupos se resolvem na ordem em que um depende do outro;
+- uma letra sozinha numa equação vai por varredura e bisseção, e fica a raiz mais perto do valor
+  padrão da letra, para a conta não fugir para uma raiz sem sentido.
+
+Se as letras do meio dependem da letra pedida, cada condição vira uma função dela, que resolve as letras
+do meio a cada valor, partindo da solução do valor vizinho. A resposta mostra as letras achadas com o
+número delas ("Achadas pelas igualdades da montagem"), e a conferência e o Excel usam esses números.
+Letra sem igualdade que a feche continua pedindo o valor, como antes.
+
+Um laço de fios de valor (o fim de uma conta volta para o começo, como num ciclo) não dá mais erro: o fio
+que volta é cortado, o bloco recebe uma letra suposta (`lc_1`), e uma igualdade a mais fecha essa letra
+com o valor que de fato sai. A letra do corte não vira campo e não pode ser a pedida. Laço de seção, de
+material ou de linha de fluido continua com o aviso de laço, porque não faz sentido. Na prancheta de
+sólidos e de fluidos o laço continua sem poder ser desenhado: ele chega com o Montador térmico.
+
+**Letras com sinal.** Uma letra marcada com sinal (`Grandeza.sinal_livre`) aceita negativo e zero, a
+busca da raiz anda dos dois lados do zero, e o módulo de uma conta com ela não é tirado. Serve para calor
+que sai, trabalho, diferença de temperatura e o corte de um laço. A chave dela não pode ser a de uma letra
+positiva de outra parte (um teste confere).
+
+## Unidades e a passagem entre as partes
+
+Cada sistema sabe quanto valem no SI as suas unidades de base de força, comprimento, tempo e temperatura
+(`Sistema.base_si`): nos sólidos, N, mm, s e K; nos fluidos, o SI. A rotação dos sólidos fica em rpm, e
+por isso tem o valor no SI à parte (`si_proprio`). Um teste confere cada unidade da tela contra uma tabela
+independente de valores no SI.
+
+Temperatura e diferença de temperatura são grandezas diferentes: 20 °C são 293,15 K (o seletor soma o
+deslocamento), e 10 °C de diferença são 10 K. Quem converte um valor usa `Unidades.para_base` e
+`Unidades.da_base`; passo e diferença usam só o fator.
+
+O bloco **Cálculo registrado** traz também o resultado da outra parte, já convertido: o D de um tubo dos
+fluidos (m na base) chega nos sólidos como medida da seção, em mm. A grandeza que recebe é a que faz o
+mesmo papel aqui (`EQUIVALENTES`): diâmetro vira medida, altura vira comprimento, pressão vira tensão.
+Sem uma equivalente, o resultado não aparece: uma vazão não liga numa seção, e um momento não vira
+energia, mesmo com as mesmas potências. Um arquivo de antes de um seletor novo abre com as unidades que
+tinha, e a nova vem no padrão.
+
+## Propriedades pela CoolProp
+
+No bloco Fluido, as opções "pela temperatura (CoolProp)" tiram ρ, μ e a pressão de vapor do estado do
+fluido, na temperatura T_f e na pressão absoluta p_f (`core/montador_propriedades.py`, CoolProp 8). Na
+fórmula, ρ da água fica ρ_água(T_f, p_f); o número vem da CoolProp na hora da conta, e por isso a
+temperatura pode ser a letra pedida ("até quantos graus a bomba não cavita").
+
+- Água a 20 °C dá o mesmo que a tabela de antes até a 4ª casa (teste).
+- Fora da faixa do fluido, ou num estado que não existe, a conta fica sem número ali.
+- Se o líquido ferve na pressão da linha, ou a temperatura sai da faixa da tabela, aparece um aviso.
+- Os fluidos: água e etanol (com pressão de vapor), etilenoglicol e propilenoglicol a 30 %, os óleos
+  térmicos Therminol 66, Therminol VP-1, Syltherm 800 e Dowtherm Q, e ar seco (como gás
+  incompressível, com aviso). A CoolProp não tem ácidos: eles entram com as propriedades informadas.
+- No Excel, a propriedade entra com o valor calculado, porque o Excel não tem a CoolProp, e a planilha
+  avisa.
+
 ## Momento em XX e YY, por valor ou por força vezes distância
 
 Há um bloco de flexão para cada eixo. XX flete no plano de h, com M_x, e YY no plano de b, com M_y. Em
@@ -423,4 +484,7 @@ No alto da página, **Como usar esta página** tem os passos e os atalhos da pra
 - A fadiga é de eixo, com as fórmulas de Shigley: peça soldada, carga variável com espectro e dano
   acumulado pedem a Análise de fadiga.
 - As unidades da tela valem dentro do Montador. Os envios entre páginas seguem copiando valores: só o
-  bloco Cálculo registrado acompanha o registro.
+  bloco Cálculo registrado acompanha o registro, inclusive entre a parte de sólidos e a de fluidos.
+- A linha de fluidos continua incompressível e na mesma temperatura do começo ao fim, mesmo com as
+  propriedades da CoolProp: aquecer ou esfriar ao longo do tubo chega com o Montador térmico.
+- Na sensibilidade ("O que mais pesa"), a temperatura sobe e desce 10 % em kelvin, como os outros números.
