@@ -65,6 +65,7 @@ CALOR_ESPECIFICO = "calor_especifico"
 CONDUTIVIDADE = "condutividade"
 COEF_PELICULA = "coef_pelicula"
 FLUXO_DE_CALOR = "fluxo_de_calor"
+CONDUTANCIA = "condutancia"  # UA de um trocador: W/K
 
 #: Potências de força, comprimento, tempo e temperatura de cada dimensão. Como cada sistema fecha
 #: sozinho na base, é por aqui que se confere se uma fórmula tem os dois lados na mesma unidade, e
@@ -109,6 +110,7 @@ EXPOENTES: dict[str, tuple[int, int, int, int]] = {
     CONDUTIVIDADE: (1, 0, -1, -1),
     COEF_PELICULA: (1, -1, -1, -1),
     FLUXO_DE_CALOR: (1, -1, -1, 0),
+    CONDUTANCIA: (1, 1, -1, -1),
 }
 #: Para trazer um número de outra parte: a grandeza que faz o mesmo papel lá, em ordem de preferência.
 #: Mesmas potências não bastam: momento e energia têm as mesmas, e um torque não é um calor.
@@ -162,6 +164,7 @@ ROTULOS_DAS_DIMENSOES = {
     CONDUTIVIDADE: "Condutividade térmica",
     COEF_PELICULA: "Coeficiente de película",
     FLUXO_DE_CALOR: "Fluxo de calor",
+    CONDUTANCIA: "Condutância térmica (UA)",
 }
 
 MEDIDAS = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
@@ -514,6 +517,12 @@ SISTEMA_TERMICO = Sistema(
         CALOR_ESPECIFICO: ("kJ/(kg·K)", 1e3),
         MASSA_ESPECIFICA: ("kg/m³", 1.0),
         PURO: ("", 1.0),
+        DIAMETRO: ("mm", 1e-3),
+        MEDIDA: ("mm", 1e-3),
+        COMPRIMENTO: ("m", 1.0),
+        CONDUTIVIDADE: ("W/(m·K)", 1.0),
+        COEF_PELICULA: ("W/(m²·K)", 1.0),
+        CONDUTANCIA: ("kW/K", 1e3),
     },
     {DIF_TEMPERATURA: _dif_temperatura},
     "Com números, a fórmula está no SI: kelvin, pascal absoluto, J/kg, kg/s e watts.",
@@ -528,6 +537,12 @@ SISTEMA_TERMICO = Sistema(
         VAZAO_MASSICA,
         POTENCIA,
         MASSA_ESPECIFICA,
+        DIAMETRO,
+        MEDIDA,
+        COMPRIMENTO,
+        CONDUTIVIDADE,
+        COEF_PELICULA,
+        CONDUTANCIA,
     ),
 )
 
@@ -1541,6 +1556,49 @@ P_INFERIOR = _g(
 )
 P_SUPERIOR = _g(
     "p_sup", "p_máx", "Pressão máxima", PRESSAO, "Absoluta. O maior valor que este ponto aguenta."
+)
+
+# Transferência de calor
+D_EXTERNO = _g(
+    "D_e", "D_e", "Diâmetro externo do tubo", DIAMETRO, "Por fora do tubo, sem o isolamento."
+)
+L_ISOLADO = _g(
+    "L_t", "L_t", "Comprimento do tubo", COMPRIMENTO, "O trecho que troca calor com o ar."
+)
+E_ISOLAMENTO = Grandeza(
+    "e_iso",
+    "e_iso",
+    "Espessura do isolamento",
+    MEDIDA,
+    "Zero é o tubo nu. Calhas comerciais: 25, 38, 50, 63 e 75 mm.",
+    50e-3,
+    zero_ok=True,
+)
+K_ISOLAMENTO = _g(
+    "k_iso",
+    "k_iso",
+    "Condutividade do isolante",
+    CONDUTIVIDADE,
+    "Lã de rocha ou de vidro: de 0,035 a 0,05 W/(m·K) na temperatura média. Use a do fabricante.",
+    0.04,
+)
+H_EXTERNO = _g(
+    "h_ext",
+    "h_ext",
+    "Coeficiente de película externo",
+    COEF_PELICULA,
+    "Convecção e radiação juntas por fora. Ar parado, dentro de galpão: de 8 a 12. Com vento: mais.",
+    10.0,
+)
+T_AMBIENTE = _g(
+    "T_amb", "T_amb", "Temperatura do ar", TEMPERATURA, "O ar em volta do tubo.", 293.15
+)
+UA_TROCADOR = _g(
+    "UA",
+    "UA",
+    "Condutância do trocador",
+    CONDUTANCIA,
+    "Coeficiente global vezes a área de troca: U·A. Diz o tamanho do trocador.",
 )
 
 # Ponte entre fluidos e térmico

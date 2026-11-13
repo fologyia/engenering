@@ -311,6 +311,73 @@ def _troca(c: Contexto) -> dict[str, Any]:
     return {"saida": saida, "calor": entrada.m * (h2 - entrada.h)}
 
 
+def _calor_especifico(corrente: Corrente) -> sp.Expr:
+    return mp.de(corrente.fluido, mp.CP, mp.PH, corrente.p, corrente.h)
+
+
+def _tubo_isolado(c: Contexto) -> dict[str, Any]:
+    """Tubo com isolamento perdendo calor para o ar (Incropera, cap. 3 e 8).
+
+    Resistência por metro: R' = ln(r_iso/r_e)/(2π·k) + 1/(2π·r_iso·h). Com a temperatura do ar
+    fixa, o fluido esfria em exponencial ao longo do tubo: T_s = T_amb + (T_e − T_amb)·e^(−L/(R'·ṁ·c_p)).
+    A resistência de dentro (película interna e parede de aço) é pequena perto da do isolamento e
+    fica de fora, a favor da segurança na temperatura da superfície.
+    """
+    entrada = _entrada(c)
+    d_e, comprimento = c.letra(g.D_EXTERNO), c.letra(g.L_ISOLADO)
+    espessura, k = c.letra(g.E_ISOLAMENTO), c.letra(g.K_ISOLAMENTO)
+    h_ext, t_amb = c.letra(g.H_EXTERNO), c.letra(g.T_AMBIENTE)
+    r_e = d_e / 2
+    r_iso = r_e + espessura
+    resistencia = sp.log(r_iso / r_e) / (2 * sp.pi * k) + 1 / (2 * sp.pi * r_iso * h_ext)
+    t_entrada = entrada.temperatura()
+    capacidade = entrada.m * _calor_especifico(entrada)
+    queda = (t_entrada - t_amb) * (1 - sp.exp(-comprimento / (resistencia * capacidade)))
+    calor = -capacidade * queda  # sai do fluido: negativo, como na troca de calor
+    superficie = t_amb + (t_entrada - t_amb) / (resistencia * 2 * sp.pi * r_iso * h_ext)
+    c.hipoteses.append(
+        "Tubo isolado em regime permanente: resistência do isolamento e da película de fora, com "
+        "o ar em temperatura fixa; a película de dentro e a parede do tubo ficam de fora. A "
+        "temperatura da superfície é a da entrada do tubo, a mais quente."
+    )
+    saida = replace(entrada, h=entrada.h + calor / entrada.m)
+    return {"saida": saida, "calor": calor, "superficie": superficie}
+
+
+CONTRACORRENTE = "Contracorrente"
+PARALELO = "Correntes paralelas"
+ARRANJOS = (CONTRACORRENTE, PARALELO)
+
+
+def _trocador(c: Contexto) -> dict[str, Any]:
+    """Trocador de duas correntes pelo método ε-NTU (Incropera, cap. 11)."""
+    quente, fria = _entrada(c, "quente"), _entrada(c, "fria")
+    ua = c.letra(g.UA_TROCADOR)
+    c_q = quente.m * _calor_especifico(quente)
+    c_f = fria.m * _calor_especifico(fria)
+    c_min, c_max = sp.Min(c_q, c_f), sp.Max(c_q, c_f)
+    razao = c_min / c_max
+    ntu = ua / c_min
+    if c.opcoes.get("arranjo", CONTRACORRENTE) == PARALELO:
+        eficacia = (1 - sp.exp(-ntu * (1 + razao))) / (1 + razao)
+    else:
+        e = sp.exp(-ntu * (1 - razao))
+        eficacia = (1 - e) / (1 - razao * e)
+    calor = eficacia * c_min * (quente.temperatura() - fria.temperatura())
+    c.hipoteses.append(
+        "Trocador pelo ε-NTU, com c_p de cada corrente na entrada e sem perda para fora. Em "
+        "contracorrente com as duas capacidades iguais a fórmula fica 0/0: mude uma vazão um pouco."
+    )
+    validade = Validade(
+        quente.temperatura() - fria.temperatura(),
+        "A corrente quente entra mais fria que a fria: troque as entradas do trocador.",
+        restringe=False,
+    )
+    saida_quente = _com_validade(replace(quente, h=quente.h - calor / quente.m), validade)
+    saida_fria = replace(fria, h=fria.h + calor / fria.m)
+    return {"quente": saida_quente, "fria": saida_fria, "calor": calor}
+
+
 def _misturador(c: Contexto) -> dict[str, Any]:
     a, b = _entrada(c, "a"), _entrada(c, "b")
     if a.fluido != b.fluido:
@@ -457,6 +524,13 @@ def _soma(c: Contexto, porta: str) -> sp.Expr:
     if not isinstance(valores, list):
         valores = [valores]
     return sp.Add(*valores) if valores else sp.S.Zero
+
+
+def _superficie_maxima(c: Contexto) -> dict[str, Any]:
+    temperatura = c.ligados.get("temperatura")
+    if temperatura is None:
+        raise ErroDeBloco("Ligue aqui a temperatura da superfície de um tubo isolado.")
+    return _condicao("Temperatura da superfície", temperatura, c.letra(g.T_MAXIMA), "T_{sup}")
 
 
 def _potencia_maxima(c: Contexto) -> dict[str, Any]:
@@ -647,6 +721,37 @@ BLOCOS_TERMICOS: tuple[Bloco, ...] = (
         ),
     ),
     _equipamento(
+        "tubo_isolado",
+        "Tubo isolado",
+        "Quanto o fluido esfria num tubo com isolamento, e a temperatura por fora do isolamento.",
+        "T₂ = T_amb + (T₁ − T_amb)·e^(−L/(R'·ṁ·c_p))",
+        _tubo_isolado,
+        (_SAIDA, _CALOR, Porta("superficie", "T_sup", VALOR, g.TEMPERATURA)),
+    ),
+    _equipamento(
+        "trocador",
+        "Trocador de calor",
+        "Duas correntes trocam calor: o UA diz o tamanho do trocador, pelo método ε-NTU.",
+        "Q̇ = ε·C_mín·(T_q − T_f)",
+        _trocador,
+        (
+            Porta("quente", "Saída quente", CORRENTE),
+            Porta("fria", "Saída fria", CORRENTE),
+            _CALOR,
+        ),
+        entradas=(Porta("quente", "Entra quente", CORRENTE), Porta("fria", "Entra fria", CORRENTE)),
+        opcoes=(
+            Opcao(
+                "arranjo",
+                "Arranjo",
+                "Contracorrente troca mais calor com o mesmo UA. Casco e tubo com várias passagens "
+                "fica entre os dois.",
+                ARRANJOS,
+                CONTRACORRENTE,
+            ),
+        ),
+    ),
+    _equipamento(
         "misturador",
         "Misturador",
         "Junta duas correntes do mesmo fluido, sem trocar calor.",
@@ -717,6 +822,14 @@ BLOCOS_TERMICOS: tuple[Bloco, ...] = (
         "T_sat − T ≥ ΔT_mín",
         _subresfriamento,
         (_ENTRADA,),
+    ),
+    _verificacao(
+        "superficie_maxima",
+        "Temperatura da superfície",
+        "Por fora do isolamento: o limite para não queimar quem encosta, ou o que a norma pedir.",
+        "T_sup ≤ T_máx",
+        _superficie_maxima,
+        (Porta("temperatura", "T_sup", VALOR, g.TEMPERATURA),),
     ),
     _verificacao(
         "potencia_maxima",

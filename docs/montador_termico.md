@@ -75,3 +75,19 @@ resposta mostra os números delas, e a tabela de estados mostra cada ponto do ci
   avisam.
 - Ácidos não estão na CoolProp.
 - O Circuito precisa estar no laço: laço de corrente sem ele dá o aviso de laço.
+
+## Transferência de calor
+
+- **Tubo isolado:** quanto o fluido esfria num tubo com isolamento e a temperatura por fora dele.
+  Resistência por metro R' = ln(r_iso/r_e)/(2π·k) + 1/(2π·r_iso·h), com o ar em temperatura fixa;
+  o fluido esfria em exponencial ao longo do tubo. A película de dentro e a parede de aço ficam de
+  fora (pequenas perto do isolamento). Entrega o calor perdido e a temperatura da superfície, que vai
+  para a verificação **Temperatura da superfície**.
+- **Trocador de calor:** duas correntes, pelo método ε-NTU (Incropera, cap. 11), em contracorrente
+  ou em correntes paralelas. O UA diz o tamanho do trocador e pode ser a letra pedida. O c_p de cada
+  corrente é o da entrada, e a saída sai pela entalpia.
+- Modelos: **Tubo de água quente: isolamento mínimo** (300 m de 2 pol a 80 °C: 4,9 mm para cair no
+  máximo 2 °C) e **Trocador: tamanho para resfriar óleo** (Therminol 66 de 150 °C para 80 °C com
+  água a 20 °C: UA = 1563 W/K). Os dois batem com a conta de mão; o do trocador também com a
+  biblioteca `ht` (`tests/test_montador_calor.py`).
+- O h externo é um dado (convecção e radiação juntas): o programa não calcula a película externa.
