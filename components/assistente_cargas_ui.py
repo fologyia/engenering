@@ -135,6 +135,11 @@ def caso_aberto() -> Caso | None:
     Sem caso, ou com um rótulo que não existe mais, a página mostra o painel.
     """
     bruto = st.session_state.get("assistente_geometria")
+    if bruto in cat.MUDARAM_DE_PAGINA:
+        # Atalho ou registro antigo do Equilíbrio de uma peça: hoje ele mora em Vigas e eixos.
+        st.session_state["assistente_geometria"] = None
+        st.session_state["vigas_abrir_peca"] = True
+        st.switch_page(cat.MUDARAM_DE_PAGINA[bruto])
     if not cat.existe(bruto):
         st.session_state["assistente_geometria"] = None
         return None
@@ -1060,15 +1065,17 @@ def resposta(resultado: Resultado, *, por_linha: int = 2) -> None:
         st.warning(mv.decimal_ptbr(texto), icon=":material/warning:")
 
 
-def detalhes(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None:
-    """O resto do resultado, na largura toda da página."""
+def detalhes(
+    caso: Caso, valores: dict[str, Any], resultado: Resultado, *, figuras: bool = True
+) -> None:
+    """O resto do resultado, na largura toda da página. ``figuras``: a tela já as mostrou."""
     tabela_de_verificacoes(resultado)
     for grafico in resultado.graficos:
         with secao_protegida(f"Gráfico: {grafico.titulo}"):
             _grafico(grafico)
     for tabela in resultado.tabelas:
         _tabela_de_resultado(tabela)
-    if len(resultado.figuras) > 1:
+    if figuras and len(resultado.figuras) > 1:
         colunas = st.columns(2)
         for coluna, figura in zip(colunas, resultado.figuras[1:], strict=False):
             mostrar_figura(figura, alvo=coluna)
@@ -1102,12 +1109,6 @@ def detalhes(caso: Caso, valores: dict[str, Any], resultado: Resultado) -> None:
 
 def tela_do_caso(caso: Caso) -> None:
     """Dados à esquerda e resposta à direita. Dado inválido vira mensagem no lugar da resposta."""
-    if caso.id == "equilibrio_peca":
-        # Este caso se preenche desenhando. A tela dele reaproveita as peças desta aqui.
-        from components.equilibrio_ui import tela_do_equilibrio
-
-        tela_do_equilibrio(caso)
-        return
     barra_de_navegacao(caso)
     esquerda, direita = st.columns(2, gap="large")
     with esquerda:

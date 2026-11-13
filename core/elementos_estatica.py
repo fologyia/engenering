@@ -21,7 +21,7 @@ from core.elementos_base import (
     informativo,
     limite,
 )
-from core.elementos_equilibrio import CASO_EQUILIBRIO, GRUPO
+from core.elementos_equilibrio import GRUPO
 from core.elementos_vigas import INFORMAR
 
 HIBBELER_RM = "Hibbeler, Resistência dos Materiais"
@@ -411,7 +411,6 @@ CAMPOS_CHAPA: tuple[Campo, ...] = (
 )
 
 CASOS: tuple[Caso, ...] = (
-    CASO_EQUILIBRIO,
     Caso(
         "secao_montada",
         "Seção montada",

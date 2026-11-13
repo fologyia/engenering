@@ -80,12 +80,17 @@ class Barra:
 
 @dataclass(frozen=True)
 class Apoio:
-    """Restrições do nó: ``ux``, ``uy`` (translações) e ``rz`` (rotação)."""
+    """Restrições do nó: ``ux``, ``uy`` (translações) e ``rz`` (rotação).
+
+    Com ``giro_graus`` diferente de zero, ``ux`` e ``uy`` valem nos eixos girados desse ângulo
+    (anti-horário): um rolete que só empurra a 60° é ``ux`` com giro de 60°.
+    """
 
     no: str
     ux: bool = True
     uy: bool = True
     rz: bool = False
+    giro_graus: float = 0.0
 
     @property
     def tipo(self) -> str:
@@ -444,6 +449,25 @@ def resolver(p: Portico, pontos_por_barra: int = 41) -> ResultadoPortico:
             (b, comprimento, cos_a, sen_a, k, f0, liberados, t, dofs, distribuidas, pontuais)
         )
 
+    # Apoio inclinado: as duas translações do nó passam para os eixos do apoio.
+    giro = np.eye(total)
+    inclinados: dict[str, float] = {}
+    for a in p.apoios:
+        if a.giro_graus % 360.0 == 0.0:
+            continue
+        if inclinados.setdefault(a.no, a.giro_graus) != a.giro_graus:
+            raise PorticoInvalido(f"O nó {a.no} tem dois apoios inclinados em ângulos diferentes.")
+    for a in p.apoios:
+        if a.no in inclinados and a.giro_graus != inclinados[a.no]:
+            raise PorticoInvalido(f"O nó {a.no} tem um apoio inclinado e outro reto: use um só.")
+    for nome, graus in inclinados.items():
+        base = 3 * indice[nome]
+        cg, sg = math.cos(math.radians(graus)), math.sin(math.radians(graus))
+        giro[base : base + 2, base : base + 2] = ((cg, -sg), (sg, cg))
+    if inclinados:
+        k_global = giro.T @ k_global @ giro
+        f_global = giro.T @ f_global
+
     restritos = np.zeros(total, dtype=bool)
     for a in p.apoios:
         base = 3 * indice[a.no]
@@ -475,14 +499,18 @@ def resolver(p: Portico, pontos_por_barra: int = 41) -> ResultadoPortico:
                 "rótulas."
             ) from erro
     reacoes_vetor = k_global @ u - f_global
+    u = giro @ u  # de volta aos eixos globais
     reacoes = []
     for a in p.apoios:
         base = 3 * indice[a.no]
+        r1 = float(reacoes_vetor[base]) if a.ux else 0.0
+        r2 = float(reacoes_vetor[base + 1]) if a.uy else 0.0
+        cg, sg = math.cos(math.radians(a.giro_graus)), math.sin(math.radians(a.giro_graus))
         reacoes.append(
             Reacao(
                 a.no,
-                float(reacoes_vetor[base]) if a.ux else 0.0,
-                float(reacoes_vetor[base + 1]) if a.uy else 0.0,
+                r1 * cg - r2 * sg,
+                r1 * sg + r2 * cg,
                 float(reacoes_vetor[base + 2]) if a.rz else 0.0,
             )
         )
@@ -680,7 +708,7 @@ def para_dicionario(p: Portico) -> dict[str, Any]:
         "barras": [
             [b.nome, b.no_i, b.no_j, b.secao.nome, b.rotula_i, b.rotula_j] for b in p.barras
         ],
-        "apoios": [[a.no, a.ux, a.uy, a.rz] for a in p.apoios],
+        "apoios": [[a.no, a.ux, a.uy, a.rz, a.giro_graus] for a in p.apoios],
         "cargas_nodais": [[c.no, c.fx, c.fy, c.mz] for c in p.cargas_nodais],
         "cargas_distribuidas": [
             [c.barra, c.qi, c.qj, c.direcao, c.nome] for c in p.cargas_distribuidas
@@ -713,7 +741,14 @@ def de_dicionario(dados: Mapping[str, Any]) -> Portico:
                 for b in dados["barras"]
             ),
             apoios=tuple(
-                Apoio(str(a[0]), bool(a[1]), bool(a[2]), bool(a[3])) for a in dados["apoios"]
+                Apoio(
+                    str(a[0]),
+                    bool(a[1]),
+                    bool(a[2]),
+                    bool(a[3]),
+                    float(a[4]) if len(a) > 4 else 0.0,
+                )
+                for a in dados["apoios"]
             ),
             cargas_nodais=tuple(
                 CargaNodal(str(c[0]), float(c[1]), float(c[2]), float(c[3]))

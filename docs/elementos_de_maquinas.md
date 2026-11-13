@@ -1,6 +1,6 @@
 # Elementos de máquinas no Cálculo de peças
 
-O Cálculo de peças cobre 67 casos: 15 de estática e resistência, 34 de elementos de máquinas e
+O Cálculo de peças cobre 66 casos: 14 de estática e resistência, 34 de elementos de máquinas e
 18 de seção e tensão no ponto. Este documento registra as equações, as fontes, as hipóteses e o que
 **não** é feito nos elementos de máquinas. A estática está em `docs/estatica_e_resistencia.md`.
 

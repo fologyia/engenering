@@ -104,7 +104,7 @@ GRUPOS_INFO = {
         ":material/architecture:", "Força axial, torção, flambagem, treliças e pórticos."
     ),
     elementos_estatica.GRUPO: InfoDoGrupo(
-        ":material/category:", "Equilíbrio, propriedades de seção e chapas furadas."
+        ":material/category:", "Propriedades de seção e chapas furadas."
     ),
     elementos_transmissao.GRUPO: InfoDoGrupo(
         ":material/settings_input_component:",
@@ -194,6 +194,10 @@ CASO_PADRAO = elementos_parafusos.CASOS[0].id
 
 #: Rótulos usados em versões antigas continuam valendo como entrada.
 ALIASES = {"Seção I sob força axial e flexão": elementos_secoes.MODELO_SECAO_I}
+
+
+#: Casos que saíram do painel e hoje moram em outra página: caso antigo → página.
+MUDARAM_DE_PAGINA = {"equilibrio_peca": "app_pages/vigas_eixos.py"}
 
 
 def existe(valor: object) -> bool:

@@ -202,6 +202,7 @@ files = [
     "core/perfis_gerdau_k.py",
     "core/plano_de_cargas.py",
     "core/portico_plano.py",
+    "core/portico_desenhado.py",
     "core/portico_figuras.py",
     "core/escada_lances.py",
     "core/longarina_escada.py",

@@ -92,7 +92,9 @@ ou R negativo, ela tomba. Presa ao longo, a reta segue inteira e pode trocar de 
 corta o trecho soma só a parte da pressão que fica de um lado. Base ou peça flexível concentra a
 pressão de outro jeito, e isso pede a rigidez do apoio: o resultado aqui é o da peça rígida.
 
-**Equilíbrio de uma peça.** `core/equilibrio_corpo.py`. Preenche desenhando: a prancheta recebe a
+**Equilíbrio de uma peça** (hoje dentro de Vigas e eixos, no modo "Peça ou pórtico desenhado";
+os esforços nas barras estão em `docs/vigas_e_eixos.md`). `core/equilibrio_corpo.py`. Preenche
+desenhando: a prancheta recebe a
 peça, os apoios e as cargas, e as reações voltam na hora. Cada apoio entra com as forças que consegue
 fazer, e as três equações viram uma matriz 3 × n, lida por valores singulares:
 

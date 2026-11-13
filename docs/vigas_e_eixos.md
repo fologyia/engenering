@@ -3,6 +3,14 @@
 Este documento registra as convenções, equações e limites do módulo
 `Vigas e eixos` (`core/beam_analysis.py` e `core/beam_script.py`).
 
+A página tem dois modos, escolhidos no topo ("O que você vai calcular?"):
+
+- **Viga ou eixo reto**: uma barra só, com flecha, torção, tensões na seção e segunda ordem. É o
+  que este documento descreve até a seção "Peça ou pórtico desenhado".
+- **Peça ou pórtico desenhado**: barras em qualquer direção (colunas, vigas, suportes), apoios e
+  cargas inclinados, cabo, biela, atrito e apoio ao longo de um trecho. É o antigo "Equilíbrio de
+  uma peça" do Cálculo de peças, agora com os esforços nas barras. Descrito no fim.
+
 ## Convenções
 
 - `x` cresce da esquerda para a direita; `y` é positivo para cima;
@@ -18,7 +26,7 @@ Este documento registra as convenções, equações e limites do módulo
 
 ## A prancheta (`components/prancheta_viga`, `core/viga_desenhada.py`)
 
-O modelo se **desenha**, como no Equilíbrio de uma peça: a barra de 0 a L, os apoios (Pino, Rolete,
+O modelo se **desenha**: a barra de 0 a L, os apoios (Pino, Rolete,
 Engaste, Deslizante = engaste deslizante, Trava axial, Mola com kv e kr), as rótulas e as cargas
 (Força, Momento, Distribuída trapezoidal, Axial com excentricidade, Axial distribuída e Torque), cada
 uma com o seu caso para as combinações. Clique para pôr, arraste para mover, o painel do item para
@@ -546,3 +554,56 @@ campo.
   torção combinadas.
 - Roark, R. J. *Formulas for Stress and Strain* — constante e módulo de
   torção de seções não circulares.
+
+## Peça ou pórtico desenhado
+
+`components/equilibrio_ui.py`, `core/elementos_equilibrio.py`, `core/equilibrio_corpo.py` e
+`core/portico_desenhado.py`. O desenho é um só e serve a duas contas:
+
+1. **Corpo rígido** (`equilibrio_corpo`): as três equações da estática, lidas por valores
+   singulares. Diz se a peça para, para onde foge, quem descola e o que a estática não separa. Está
+   descrito em `docs/estatica_e_resistencia.md`.
+2. **Pórtico plano** (`portico_desenhado` sobre `portico_plano`): os trechos viram barras de
+   Euler-Bernoulli e saem N, V e M ao longo de cada uma, a deformada e as reações da peça com apoio
+   de sobra. As figuras são as do `portico_figuras`, no jeito do Ftool, na unidade de força da tela.
+
+### Como o desenho vira pórtico
+
+- Cada ponta de trecho, apoio e carga é um nó. Um trecho com apoio, carga ou a ponta de outra barra
+  no meio é partido ali (barras B1a, B1b, ...). Nós a menos de 10⁻⁶ do tamanho da peça são o mesmo.
+- As barras se ligam de forma **rígida** onde uma ponta toca outra barra. Dois trechos que só se
+  cruzam pelo meio **não** se ligam. Rótula na ponta de um trecho se marca em "Seção e rótulas das
+  barras".
+- Pino, engaste, rolete, guia e biela viram restrições do nó; rolete, guia e biela valem na direção
+  do apoio (apoio inclinado: `Apoio.giro_graus` no `portico_plano`). Dois apoios de uma direção no
+  mesmo ponto, em direções diferentes, fazem um pino, e a reação é repartida entre eles.
+- Apoio simples, cabo e apoio com atrito só trabalham de um lado. A conta roda, tira o apoio que
+  precisaria trabalhar ao contrário, e roda de novo até fechar. O apoio que saiu aparece como "não
+  trabalha". No atrito, o programa confere T ≤ μ·N e avisa se escorrega.
+- Com **apoio distribuído**, a pressão só vale para a peça rígida. Se a estática deu as reações,
+  elas entram como cargas e a estrutura fica presa em três movimentos só para não correr (essas
+  três reações dão zero). Com apoio distribuído e apoio de sobra, não há diagrama: a divisão
+  depende de quanto a base cede.
+- Carga distribuída precisa correr em cima de um trecho; carga ou apoio fora dos trechos, ou
+  trechos que formam mais de uma parte, tiram os diagramas e a tela diz o que falta. As reações do
+  corpo rígido continuam aparecendo.
+
+### Seção das barras
+
+Sem perfil, todas as barras têm a mesma rigidez (E = 200 GPa, A = 20 cm², I = 800 cm⁴). Isso não
+muda nada na peça isostática. Na peça com apoio de sobra, a divisão das reações e dos momentos
+depende da razão entre as rigidezes: escolha o perfil das barras e, se for o caso, um perfil por
+trecho. A deformada só vale com o perfil certo.
+
+### Conferências (`tests/test_portico_desenhado.py`)
+
+- viga contínua de dois vãos: R_A = 3qL/8, R_B = 10qL/8, M_B = −qL²/8;
+- pórtico biengastado com carga uniforme: H = wL²/(4h(k+2)) e M_base = wL²/(12(k+2)), k = h/L;
+- biengastada com rótula numa ponta: R = 5P/16;
+- todo modelo isostático dá as mesmas reações da estática;
+- o esforço numa seção, pelo corpo rígido, é o do pórtico no mesmo ponto.
+
+### O que não entra
+
+Flambagem, segunda ordem, ligações semirrígidas, apoios que cedem (molas), temperatura e recalque.
+Para verificar as barras pela norma, use Flambagem de colunas e Barras, treliças e pórticos.

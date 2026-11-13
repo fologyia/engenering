@@ -269,7 +269,11 @@ na página inicial e nas páginas de cada etapa com o que o projeto ativo já te
 
 ### Vigas e eixos
 
-- **desenhada numa prancheta** como no Equilíbrio de uma peça (apoios, rótulas e cargas com clique e
+- dois modos na mesma página: **viga ou eixo reto** e **peça ou pórtico desenhado** (o antigo
+  Equilíbrio de uma peça): barras em qualquer direção, colunas e vigas, apoios e cargas inclinados,
+  cabo, biela, atrito e apoio ao longo de um trecho, com as reações, se a peça para ou descola e os
+  diagramas de N, V e M nas barras no jeito do Ftool, mesmo com apoio de sobra;
+- viga **desenhada numa prancheta** (apoios, rótulas e cargas com clique e
   arraste, painel do item, medidas editáveis, Ctrl+Z), com a seção e o material nos campos de cima,
   a conta refeita a cada mudança e as reações no próprio desenho; o modo texto continua;
 - barra reta com apoios de rolete, pino, engaste, engaste deslizante e trava axial;
@@ -352,7 +356,7 @@ Rede com ramais e malhas, um ou mais reservatórios e bombas, **desenhada numa p
 
 ### Cálculo de peças e elementos de máquinas
 
-67 casos, cada um com formulário próprio, verificações, avisos, hipóteses, referências, Word e
+66 casos, cada um com formulário próprio, verificações, avisos, hipóteses, referências, Word e
 registro no memorial. A página abre num painel por pergunta, área e grupo, e cada caso mostra a
 resposta ao lado dos dados (`docs/estatica_e_resistencia.md` e `docs/elementos_de_maquinas.md`):
 

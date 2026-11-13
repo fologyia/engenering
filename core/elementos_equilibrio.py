@@ -1,7 +1,8 @@
-"""Caso Equilíbrio de uma peça: as tabelas da tela viram problema e a solução vira resultado.
+"""Caso Peça ou pórtico desenhado: as tabelas da tela viram problema e a solução vira resultado.
 
-A conta mora em :mod:`core.equilibrio_corpo`. Aqui ficam só a leitura do resultado (quem empurra,
-quem puxa, quem descola, o que a estática não separa) e o que vai para o desenho da tela.
+A conta do corpo rígido mora em :mod:`core.equilibrio_corpo`, e a das barras (N, V, M e as reações
+da peça hiperestática) em :mod:`core.portico_desenhado`. Aqui ficam só a leitura do resultado
+(quem empurra, quem puxa, quem descola, o que a estática não separa) e o que vai para o desenho.
 """
 
 from __future__ import annotations
@@ -11,6 +12,10 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from core import equilibrio_corpo as eq
+from core import portico_desenhado as pdes
+from core import portico_figuras as pf
+from core import portico_plano as pp
+from core import section_catalog as sc
 from core.desenho_estatica import figura_do_equilibrio
 from core.elementos_base import (
     Campo,
@@ -44,6 +49,17 @@ HIPOTESES = (
     "A carga distribuída vale por unidade de comprimento da peça, ao longo do trecho desenhado.",
     "Peso usa g = 9,80665 m/s².",
 )
+HIPOTESES_DAS_BARRAS = (
+    "Esforços nas barras: os trechos são barras de pórtico plano (Euler-Bernoulli), ligadas de "
+    "forma rígida onde se tocam, salvo rótula marcada. Trechos que só se cruzam não se ligam.",
+    "Cabo, biela e apoios são rígidos. Apoio simples, cabo e apoio com atrito só trabalham de um "
+    "lado: o que descola sai da conta.",
+    "Na peça com apoio de sobra, as reações e os esforços dependem da seção das barras. Sem "
+    "perfil escolhido, todas as barras têm a mesma rigidez.",
+)
+SEM_PERFIL = "Sem perfil (barras todas iguais)"
+ROTULAS = ("Nenhuma", "No início", "No fim", "Nas duas pontas")
+ANALISE_MATRICIAL = "Análise matricial de estruturas (método da rigidez direta)"
 
 
 def _numero(valor: float) -> str:
@@ -268,6 +284,125 @@ def _resultado_sem_equilibrio(solucao: eq.Solucao, u: eq.Unidades) -> Resultado:
     )
 
 
+def perfis_das_barras() -> tuple[str, ...]:
+    return (SEM_PERFIL, *sc.listar_perfis())
+
+
+def _rigidez(perfil: str, rotulas: str) -> pdes.Rigidez:
+    inicio = rotulas in (ROTULAS[1], ROTULAS[3])
+    fim = rotulas in (ROTULAS[2], ROTULAS[3])
+    if perfil == SEM_PERFIL:
+        return pdes.Rigidez(rotula_inicio=inicio, rotula_fim=fim)
+    try:
+        s = pp.secao_de_perfil(perfil)
+    except (KeyError, ValueError) as erro:
+        raise ValueError(f"O perfil {perfil} não está no catálogo.") from erro
+    return pdes.Rigidez(perfil, s.area_m2, s.inercia_m4, s.e_kN_m2 * 1000.0, inicio, fim)
+
+
+def analise_das_barras(
+    v: Valores, problema: eq.Problema, solucao: eq.Solucao | None, u: eq.Unidades
+) -> pdes.Analise:
+    """Os trechos como pórtico. Levanta :class:`pdes.SemDiagramas` com o que falta no desenho."""
+    perfil = str(v.get("perfil_das_barras") or SEM_PERFIL)
+    padrao = _rigidez(perfil, ROTULAS[0])
+    rigidezes: list[pdes.Rigidez | None] = [None] * len(problema.trechos)
+    for linha in v.get("barras") or ():
+        k = int(linha["trecho"]) - 1
+        if 0 <= k < len(rigidezes):
+            rigidezes[k] = _rigidez(
+                str(linha.get("perfil") or perfil), str(linha.get("rotulas") or ROTULAS[0])
+            )
+    return pdes.analisar(problema, solucao, rigidezes=rigidezes, padrao=padrao, newton=u.newton)
+
+
+def _analise_ou_motivo(
+    v: Valores, problema: eq.Problema, solucao: eq.Solucao | None, u: eq.Unidades
+) -> tuple[pdes.Analise | None, str]:
+    if not problema.trechos:
+        return None, ""
+    try:
+        return analise_das_barras(v, problema, solucao, u), ""
+    except pdes.SemDiagramas as falta:
+        return None, str(falta)
+
+
+def _ponto_do_no(analise: pdes.Analise, nome: str, u: eq.Unidades) -> str:
+    no = next(n for n in analise.nos if n.nome == nome)
+    return f"({_posicao(no.x / u.metro)}; {_posicao(no.y / u.metro)})"
+
+
+def _tabelas_das_barras(analise: pdes.Analise, u: eq.Unidades, sobra: bool) -> list[Tabela]:
+    tabelas = []
+    if sobra or any(r.solto for r in analise.reacoes):
+        tabelas.append(
+            Tabela(
+                "Reações com a rigidez das barras",
+                tuple(
+                    {
+                        "Apoio": r.apoio.nome,
+                        "Tipo": r.apoio.tipo,
+                        f"Rx ({u.forca})": r.fx / u.newton,
+                        f"Ry ({u.forca})": r.fy / u.newton,
+                        f"Momento ({u.momento})": r.m / u.newton,
+                        f"Resultante ({u.forca})": r.modulo / u.newton,
+                        "Como trabalha": "Não trabalha: a peça se afasta" if r.solto else "Segura",
+                    }
+                    for r in analise.reacoes
+                ),
+                "Com apoio de sobra, a divisão das reações sai da deformação das barras. Vale "
+                "para as seções escolhidas e para apoios que não cedem.",
+            )
+        )
+    linhas = []
+    for rb in analise.resultado.barras:
+        b = rb.barra
+        linhas.append(
+            {
+                "Barra": b.nome,
+                "Trecho": analise.trecho_da_barra[b.nome],
+                f"De ({u.comprimento})": _ponto_do_no(analise, b.no_i, u),
+                f"Até ({u.comprimento})": _ponto_do_no(analise, b.no_j, u),
+                f"Comprimento ({u.comprimento})": rb.comprimento_m / u.metro,
+                f"N maior ({u.forca})": rb.n_max.n,
+                f"V maior ({u.forca})": rb.v_max.v,
+                f"M maior ({u.momento})": rb.m_max.m,
+                f"M no início ({u.momento})": rb.pontos[0].m,
+                f"M no fim ({u.momento})": rb.pontos[-1].m,
+            }
+        )
+    tabelas.append(
+        Tabela(
+            "Esforços nas barras",
+            tuple(linhas),
+            "Maior valor em módulo ao longo de cada barra, com o sinal. N positivo é tração. M "
+            "positivo traciona a fibra de baixo na barra deitada. Um trecho com apoio, carga ou "
+            "outra barra no meio vira duas ou mais barras (a, b, c).",
+        )
+    )
+    return tabelas
+
+
+def figuras_das_barras(analise: pdes.Analise, u: eq.Unidades) -> list[Figura]:
+    """Momento, cortante, normal, reações e deformada, no jeito do Ftool."""
+    chaves = ["M", "V", "N", "reacoes"]
+    if analise.caminho == pdes.PELOS_APOIOS:
+        chaves.append("deformada")
+    with pf.unidade_de_forca(u.forca):
+        prontas = pf.figuras_do_portico(analise.resultado, tensao=False, apenas=chaves)
+    por_titulo = {
+        "M": "Momento fletor",
+        "V": "Esforço cortante",
+        "N": "Esforço normal",
+        "reacoes": "Reações",
+        "deformada": "Deformada",
+    }
+    ordem = [c for c in ("reacoes", "N", "V", "M", "deformada") if c in chaves]
+    figuras: dict[str, Any] = dict(zip(ordem, prontas, strict=True))
+    nota = " Posições em metros."
+    return [Figura(por_titulo[c], figuras[c].png, figuras[c].legenda + nota) for c in chaves]
+
+
 def _situacao(solucao: eq.Solucao) -> str:
     if solucao.livres:
         return "Parada só com esta carga"
@@ -276,7 +411,12 @@ def _situacao(solucao: eq.Solucao) -> str:
     return "Isostática"
 
 
-def _alertas(solucao: eq.Solucao, esforcos: Sequence[eq.Esforco], u: eq.Unidades) -> list[str]:
+def _alertas(
+    solucao: eq.Solucao,
+    esforcos: Sequence[eq.Esforco],
+    u: eq.Unidades,
+    analise: pdes.Analise | None = None,
+) -> list[str]:
     alertas: list[str] = []
     if solucao.livres and solucao.movimento:
         alertas.append(
@@ -285,12 +425,19 @@ def _alertas(solucao: eq.Solucao, esforcos: Sequence[eq.Esforco], u: eq.Unidades
         )
     if solucao.grau_hiperestatico:
         soltas = sorted({r.apoio.nome for r in solucao.reacoes if not r.determinada})
-        alertas.append(
-            f"A estática não separa as reações de {', '.join(soltas)}: há mais apoios que o "
-            "necessário. O valor mostrado é uma divisão possível, e a soma é certa. A divisão real "
-            "depende da rigidez e das folgas. Dimensione para o pior caso ou modele em Vigas e "
-            "eixos ou em Barras, treliças e pórticos."
-        )
+        if analise is not None:
+            alertas.append(
+                f"A estática sozinha não separa as reações de {', '.join(soltas)}: há mais apoios "
+                "que o necessário. As reações mostradas saem da rigidez das barras: valem para as "
+                "seções escolhidas e para apoios sem folga e que não cedem."
+            )
+        else:
+            alertas.append(
+                f"A estática não separa as reações de {', '.join(soltas)}: há mais apoios que o "
+                "necessário. O valor mostrado é uma divisão possível, e a soma é certa. A divisão "
+                "real depende da rigidez e das folgas. Desenhe a peça com trechos para o programa "
+                "dividir pela rigidez das barras, ou dimensione para o pior caso."
+            )
     if not solucao.divisao_viavel:
         alertas.append(
             "Nenhuma divisão das reações respeita cabo, contato e atrito ao mesmo tempo: a peça "
@@ -375,6 +522,22 @@ def _envios(solucao: eq.Solucao, esforcos: Sequence[eq.Esforco], u: eq.Unidades)
     return envios
 
 
+def problema_do_caso(v: Valores) -> tuple[eq.Problema, eq.Unidades]:
+    return _problema(v)
+
+
+def motivo_sem_barras(v: Valores) -> str:
+    """Por que os esforços nas barras não saíram; vazio quando saíram ou não há trechos."""
+    problema, u = _problema(v)
+    try:
+        solucao = eq.resolver(problema)
+    except eq.ErroDeEquilibrio:
+        return ""
+    if not solucao.para:
+        return ""
+    return _analise_ou_motivo(v, problema, solucao, u)[1]
+
+
 def _problema(v: Valores) -> tuple[eq.Problema, eq.Unidades]:
     unidades = eq.Unidades(str(v["comprimento"]), str(v["forca"]))
     problema = eq.problema_das_tabelas(
@@ -432,19 +595,29 @@ def calcular_equilibrio(v: Valores) -> Resultado:
             )
         )
 
+    analise, _motivo = _analise_ou_motivo(v, problema, solucao, u)
+    # Com apoio de sobra, as reações que valem são as do pórtico.
+    pelas_barras = analise is not None and (
+        solucao.grau_hiperestatico > 0 or any(r.solto for r in analise.reacoes)
+    )
+    finais: Sequence[Any] = analise.reacoes if analise and pelas_barras else solucao.reacoes
     forca_total = math.hypot(sum(a.fx for a in solucao.acoes), sum(a.fy for a in solucao.acoes))
-    maior = max(solucao.reacoes, key=lambda r: r.modulo)
+    maior = max(finais, key=lambda r: r.modulo)
     metricas = [Metrica("Situação", _situacao(solucao))]
     metricas += [
-        Metrica(f"Reação em {r.apoio.nome}", r.modulo / u.newton, u.forca)
-        for r in solucao.reacoes[:5]
+        Metrica(f"Reação em {r.apoio.nome}", r.modulo / u.newton, u.forca) for r in finais[:5]
     ]
     metricas += [
         Metrica(f"Momento em {r.apoio.nome}", r.m / u.newton, u.momento)
-        for r in solucao.reacoes
+        for r in finais
         if r.apoio.tipo in (eq.ENGASTE, eq.GUIA)
     ]
     metricas.append(Metrica("Resultante das cargas", forca_total / u.newton, u.forca))
+    if analise is not None:
+        pior = max(analise.resultado.barras, key=lambda rb: abs(rb.m_max.m))
+        metricas.append(
+            Metrica(f"Maior momento, barra {pior.barra.nome}", abs(pior.m_max.m), u.momento)
+        )
 
     tabelas = [
         Tabela(
@@ -472,6 +645,19 @@ def calcular_equilibrio(v: Valores) -> Resultado:
             )
         )
     figura = figura_do_equilibrio(solucao, u)
+    figuras = [Figura("Peça", figura.png, "Cargas em laranja e reações em verde.")]
+    alertas = _alertas(solucao, esforcos, u, analise if pelas_barras else None)
+    hipoteses: tuple[str, ...] = HIPOTESES
+    referencias: tuple[str, ...] = (HIBBELER, HIBBELER_RM) if esforcos else (HIBBELER,)
+    if analise is not None:
+        if pelas_barras:
+            tabelas = [t for t in tabelas if t.titulo != "Reações nos apoios"]
+        das_barras = _tabelas_das_barras(analise, u, pelas_barras)
+        tabelas = [*das_barras[:-1], *tabelas[:1], das_barras[-1], *tabelas[1:]]
+        figuras += figuras_das_barras(analise, u)
+        alertas += list(analise.avisos)
+        hipoteses = (*HIPOTESES, *HIPOTESES_DAS_BARRAS)
+        referencias = (*referencias, ANALISE_MATRICIAL)
     return Resultado(
         resumo=(
             f"Maior reação de {maior.modulo / u.newton:.2f} {u.forca} no apoio {maior.apoio.nome}. "
@@ -480,10 +666,10 @@ def calcular_equilibrio(v: Valores) -> Resultado:
         metricas=tuple(metricas),
         verificacoes=tuple(verificacoes),
         tabelas=tuple(tabelas),
-        figuras=(Figura("Peça", figura.png, "Cargas em laranja e reações em verde."),),
-        alertas=tuple(_alertas(solucao, esforcos, u)),
-        hipoteses=HIPOTESES,
-        referencias=(HIBBELER, HIBBELER_RM) if esforcos else (HIBBELER,),
+        figuras=tuple(figuras),
+        alertas=tuple(alertas),
+        hipoteses=hipoteses,
+        referencias=referencias,
         envios=tuple(_envios(solucao, esforcos, u)),
     )
 
@@ -529,6 +715,28 @@ def marcas_para_a_tela(v: Valores) -> dict[str, Any]:
             "pressao": pressao(r) if r.apoio.tipo == eq.DISTRIBUIDO else None,
         }
 
+    marcas_das_reacoes = [reacao(r) for r in solucao.reacoes] if solucao.para else []
+    if solucao.para and solucao.grau_hiperestatico:
+        analise, _motivo = _analise_ou_motivo(v, problema, solucao, u)
+        if analise is not None:
+            # Peça com apoio de sobra: o desenho mostra as reações que saem da rigidez das barras.
+            marcas_das_reacoes = [
+                {
+                    "nome": r.apoio.nome,
+                    "x": r.apoio.ponto[0] / u.metro,
+                    "y": r.apoio.ponto[1] / u.metro,
+                    "fx": r.fx / u.newton,
+                    "fy": r.fy / u.newton,
+                    "m": r.m / u.newton,
+                    "texto": f"{r.apoio.nome} = {_numero(r.modulo / u.newton)} {u.forca}",
+                    "texto_m": f"M{r.apoio.nome} = {_numero(abs(r.m) / u.newton)} {u.momento}",
+                    "puxa": r.apoio.tipo == eq.CABO,
+                    "ruim": r.solto,
+                    "pressao": None,
+                }
+                for r in analise.reacoes
+            ]
+
     movimento = solucao.movimento
     cortes = []
     if solucao.para:
@@ -540,7 +748,7 @@ def marcas_para_a_tela(v: Valores) -> dict[str, Any]:
             )
     return {
         "para": solucao.para,
-        "reacoes": [reacao(r) for r in solucao.reacoes] if solucao.para else [],
+        "reacoes": marcas_das_reacoes,
         "cortes": cortes,
         "movimento": (
             None
@@ -728,14 +936,50 @@ CAMPOS_EQUILIBRIO: tuple[Campo, ...] = (
     ),
 )
 
+CAMPOS_DAS_BARRAS = (
+    Campo(
+        "perfil_das_barras",
+        "Perfil das barras",
+        "Só muda o resultado quando há apoio de sobra, e a deformada. Sem perfil, todas as barras "
+        "têm a mesma rigidez.",
+        SEM_PERFIL,
+        opcoes_de=perfis_das_barras,
+    ),
+    Campo(
+        "barras",
+        "Seção e rótulas dos trechos",
+        "Para o trecho que tem perfil diferente dos outros ou rótula na ponta. O número do trecho "
+        "é o da tabela Trechos da peça.",
+        (),
+        colunas=(
+            Coluna("trecho", "Trecho", "Número do trecho, na ordem da tabela.", 1, minimo=1.0),
+            Coluna(
+                "perfil",
+                "Perfil",
+                "Em branco, vale o perfil das barras.",
+                "",
+                opcional=True,
+            ),
+            Coluna(
+                "rotulas",
+                "Rótulas",
+                "Rótula na ponta: a barra não passa momento ali. Início e fim seguem o sentido "
+                "em que o trecho foi desenhado.",
+                ROTULAS[0],
+                opcoes=ROTULAS,
+            ),
+        ),
+    ),
+)
+
 CASO_EQUILIBRIO = Caso(
     "equilibrio_peca",
-    "Equilíbrio de uma peça",
+    "Peça ou pórtico desenhado",
     GRUPO,
-    "Desenhe a peça, ponha apoios e cargas e veja as reações na hora.",
-    "Peça, suporte, alavanca ou máquina com qualquer número de apoios: pino, rolete, cabo, biela, "
-    "engaste, atrito. Diz se a peça para, se descola e se a estática basta.",
-    CAMPOS_EQUILIBRIO,
+    "Desenhe a peça, ponha apoios e cargas e veja as reações e os esforços na hora.",
+    "Peça, suporte, alavanca, máquina ou pórtico com qualquer número de apoios: pino, rolete, "
+    "cabo, biela, engaste, atrito. Diz se a peça para, se descola e dá N, V e M nas barras.",
+    (*CAMPOS_EQUILIBRIO, *CAMPOS_DAS_BARRAS),
     calcular_equilibrio,
     r"\sum F_x=0,\quad \sum F_y=0,\quad \sum M=0",
 )

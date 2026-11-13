@@ -1,4 +1,7 @@
-"""Tela do Equilíbrio de uma peça: modelo, prancheta, resposta e os mesmos dados em tabela.
+"""Tela da peça ou pórtico desenhado: modelo, prancheta, resposta, esforços nas barras e tabelas.
+
+Mora dentro de Vigas e eixos. O corpo rígido dá as reações que a estática define; os trechos, lidos
+como barras de pórtico, dão N, V e M e as reações da peça com apoio de sobra.
 
 Os dados moram em ``st.session_state`` e três lugares os alteram: a prancheta, os modelos e as
 tabelas. Os três entram por callback, antes de o script rodar, e por isso a prancheta recebe as
@@ -12,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 from components.assistente_cargas_ui import (
@@ -21,10 +25,18 @@ from components.assistente_cargas_ui import (
     quadro_da_tabela,
     resposta,
 )
+from components.figuras import mostrar_figura
 from components.prancheta_equilibrio_ui import prancheta_do_equilibrio
+from components.robustez import secao_protegida
 from core import equilibrio_corpo as eq
 from core.elementos_base import Caso, Resultado, calcular_caso, conferir_tabela
-from core.elementos_equilibrio import marcas_para_a_tela
+from core.elementos_equilibrio import (
+    ROTULAS,
+    SEM_PERFIL,
+    marcas_para_a_tela,
+    motivo_sem_barras,
+    perfis_das_barras,
+)
 from core.equilibrio_modelos import MODELO_INICIAL, MODELOS, POR_NOME
 
 DADOS = "eq_dados"
@@ -39,6 +51,12 @@ REVISAO = "eq_tabela_rev"
 BASES = "eq_tabela_base"
 ERRO_TABELA = "eq_erro_tabela"
 CHAVE_PRANCHETA = "eq_prancheta"
+BARRAS = "eq_barras"  # só os trechos que fogem do padrão: trecho, perfil e rótulas
+BARRAS_BASE = "eq_barras_base"
+BARRAS_REV = "eq_barras_rev"
+PERFIL = "eq_perfil"
+PERFIL_ATUAL = "eq_perfil_atual"
+DIAGRAMA = "eq_diagrama"
 TABELAS = (
     ("apoios", "Apoios"),
     ("cargas", "Cargas"),
@@ -68,6 +86,9 @@ def _trocar_dados(
 
 def _iniciar() -> None:
     estado = st.session_state
+    estado.setdefault(BARRAS, [])
+    estado.setdefault(BARRAS_REV, 0)
+    estado.setdefault(PERFIL_ATUAL, SEM_PERFIL)
     if DADOS in estado:
         return
     estado[VERSAO] = 0
@@ -87,6 +108,7 @@ def _aplicar_modelo() -> None:
         return
     st.session_state[UNIDADES_ATUAIS] = (modelo.comprimento, modelo.forca)
     st.session_state[ERRO_TABELA] = ""
+    _esquecer_barras()
     _trocar_dados(modelo.dados(), ajustar=True)
 
 
@@ -133,9 +155,16 @@ def _ao_editar_tabela(caso: Caso, nome: str) -> None:
     _trocar_dados(dados, tabela=False)
 
 
+def _esquecer_barras() -> None:
+    """Peça nova: perfil e rótulas de cada trecho valiam para a peça de antes."""
+    st.session_state[BARRAS] = []
+    st.session_state[BARRAS_REV] = st.session_state.get(BARRAS_REV, 0) + 1
+
+
 def _limpar() -> None:
     st.session_state[MODELO_ATUAL] = None
     st.session_state[ERRO_TABELA] = ""
+    _esquecer_barras()
     _trocar_dados({nome: [] for nome, _ in TABELAS}, ajustar=True)
 
 
@@ -222,8 +251,132 @@ def valores_conferidos(caso: Caso, valores: Mapping[str, Any]) -> dict[str, Any]
     return conferidos
 
 
-def tela_do_equilibrio(caso: Caso) -> None:
-    barra_de_navegacao(caso)
+def _linhas_das_barras() -> list[dict[str, Any]]:
+    """Uma linha por trecho desenhado, com o que já foi escolhido para ele."""
+    estado = st.session_state
+    escolhidas = {int(linha["trecho"]): linha for linha in estado[BARRAS]}
+    linhas = []
+    for numero, t in enumerate(estado[DADOS]["trechos"], start=1):
+        escolha = escolhidas.get(numero, {})
+        linhas.append(
+            {
+                "trecho": numero,
+                "de": f"({t['x1']:g}; {t['y1']:g})",
+                "ate": f"({t['x2']:g}; {t['y2']:g})",
+                "perfil": escolha.get("perfil") or None,
+                "rotulas": escolha.get("rotulas") or ROTULAS[0],
+            }
+        )
+    return linhas
+
+
+def _ao_editar_barras(chave: str) -> None:
+    estado = st.session_state
+    linhas = [dict(linha) for linha in estado[BARRAS_BASE]]
+    for indice, campos in (estado.get(chave) or {}).get("edited_rows", {}).items():
+        if int(indice) < len(linhas):
+            linhas[int(indice)].update(campos)
+    estado[BARRAS] = [
+        {"trecho": l["trecho"], "perfil": l["perfil"] or "", "rotulas": l["rotulas"] or ROTULAS[0]}
+        for l in linhas
+        if l["perfil"] or (l["rotulas"] or ROTULAS[0]) != ROTULAS[0]
+    ]
+
+
+def _ao_escolher_perfil() -> None:
+    st.session_state[PERFIL_ATUAL] = st.session_state[PERFIL]
+
+
+def _secao_das_barras() -> None:
+    estado = st.session_state
+    perfis = perfis_das_barras()
+    if estado[PERFIL_ATUAL] not in perfis:  # perfil apagado do catálogo
+        estado[PERFIL_ATUAL] = SEM_PERFIL
+    estado[BARRAS] = [l for l in estado[BARRAS] if not l["perfil"] or l["perfil"] in perfis]
+    estado[PERFIL] = estado[PERFIL_ATUAL]
+    with st.expander("Seção e rótulas das barras", icon=":material/view_column:"):
+        st.selectbox(
+            "Perfil das barras",
+            perfis,
+            key=PERFIL,
+            on_change=_ao_escolher_perfil,
+            help="Só muda o resultado quando há apoio de sobra, e a deformada. Sem perfil, todas "
+            "as barras têm a mesma rigidez.",
+        )
+        chave = f"eq_barras_editor_{len(estado[DADOS]['trechos'])}_{estado[BARRAS_REV]}"
+        if chave not in estado or BARRAS_BASE not in estado:
+            estado[BARRAS_BASE] = _linhas_das_barras()
+        base = estado[BARRAS_BASE]
+        for linha, atual in zip(base, _linhas_das_barras(), strict=False):
+            linha["de"], linha["ate"] = atual["de"], atual["ate"]
+        if len(base) != len(estado[DADOS]["trechos"]):
+            estado[BARRAS_BASE] = base = _linhas_das_barras()
+        st.data_editor(
+            pd.DataFrame(base, columns=["trecho", "de", "ate", "perfil", "rotulas"]),
+            key=chave,
+            hide_index=True,
+            width="stretch",
+            num_rows="fixed",
+            disabled=["trecho", "de", "ate"],
+            column_config={
+                "trecho": st.column_config.NumberColumn(
+                    "Trecho", help="Número do trecho: a barra B1 é o trecho 1."
+                ),
+                "de": st.column_config.TextColumn("Início", help="Onde o trecho começa."),
+                "ate": st.column_config.TextColumn("Fim", help="Onde o trecho termina."),
+                "perfil": st.column_config.SelectboxColumn(
+                    "Perfil",
+                    options=[p for p in perfis if p != SEM_PERFIL],
+                    help="Em branco, vale o perfil das barras, escolhido acima.",
+                ),
+                "rotulas": st.column_config.SelectboxColumn(
+                    "Rótulas",
+                    options=list(ROTULAS),
+                    required=True,
+                    help="Rótula na ponta: a barra não passa momento ali, como numa ligação "
+                    "por um parafuso só.",
+                ),
+            },
+            on_change=_ao_editar_barras,
+            args=(chave,),
+        )
+        st.caption(
+            "As barras se ligam de forma rígida onde uma ponta toca outra barra. Trechos que só "
+            "se cruzam pelo meio não se ligam."
+        )
+
+
+def _esforcos_nas_barras(caso: Caso, valores: Mapping[str, Any], resultado: Resultado) -> None:
+    """N, V, M, reações e deformada das barras, uma figura por vez, no jeito do Ftool."""
+    if not st.session_state[DADOS]["trechos"]:
+        return
+    st.markdown("##### Esforços nas barras")
+    figuras = {figura.titulo: figura for figura in resultado.figuras[1:]}
+    if not figuras:
+        try:
+            motivo = motivo_sem_barras(valores_conferidos(caso, {**caso.padroes(), **valores}))
+        except ValueError as erro:
+            motivo = str(erro)
+        if motivo:
+            st.info(motivo, icon=":material/info:")
+        return
+    nomes = list(figuras)
+    if st.session_state.get(DIAGRAMA) not in nomes:
+        st.session_state[DIAGRAMA] = nomes[0]
+    escolhido = st.segmented_control(
+        "Diagrama",
+        nomes,
+        key=DIAGRAMA,
+        required=True,
+        label_visibility="collapsed",
+        help="Momento desenhado do lado tracionado da barra. Normal positivo é tração.",
+    )
+    mostrar_figura(figuras[escolhido or nomes[0]])
+
+
+def tela_do_equilibrio(caso: Caso, *, navegacao: bool = True) -> None:
+    if navegacao:
+        barra_de_navegacao(caso)
     _iniciar()
     _cabecalho()
 
@@ -233,6 +386,8 @@ def tela_do_equilibrio(caso: Caso) -> None:
         "comprimento": unidades.comprimento,
         "forca": unidades.forca,
         **estado[DADOS],
+        "perfil_das_barras": estado[PERFIL_ATUAL],
+        "barras": estado[BARRAS],
     }
     resultado: Resultado | None = None
     erro = ""
@@ -262,6 +417,10 @@ def tela_do_equilibrio(caso: Caso) -> None:
         (st.info if vazio else st.error)(erro, icon=":material/info:")
     if resultado is not None:
         resposta(resultado, por_linha=4)
+        with secao_protegida("Esforços nas barras"):
+            _esforcos_nas_barras(caso, valores, resultado)
+    if estado[DADOS]["trechos"]:
+        _secao_das_barras()
     _tabelas(caso)
     if resultado is not None:
-        detalhes(caso, valores, resultado)
+        detalhes(caso, valores, resultado, figuras=False)

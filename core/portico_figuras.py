@@ -17,7 +17,9 @@ o formato de imagem (:class:`ImagemDiagrama`) de :mod:`core.beam_charts`. Sem St
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 
 from PIL import Image, ImageDraw, ImageFont
@@ -47,6 +49,25 @@ _APOIO = "#334155"
 _APOIO_FUNDO = "#e2e8f0"
 
 Ponto = tuple[float, float]
+
+_FORCA: ContextVar[str] = ContextVar("unidade_de_forca_do_portico", default="kN")
+
+
+@contextmanager
+def unidade_de_forca(forca: str) -> Iterator[None]:
+    """As figuras feitas aqui dentro escrevem esta unidade de força no lugar de kN.
+
+    Os números não mudam: serve para o pórtico montado em outra unidade (N, kgf).
+    """
+    ficha = _FORCA.set(forca)
+    try:
+        yield
+    finally:
+        _FORCA.reset(ficha)
+
+
+def _un(texto: str) -> str:
+    return texto.replace("kN", _FORCA.get())
 
 
 @dataclass(frozen=True)
@@ -343,6 +364,9 @@ def _sentido_do_apoio(a: pp.Apoio, media: Ponto) -> Ponto:
                 math.copysign(1.0, fora[1]),
             )
         )
+    if tipo == "rolete" and a.giro_graus % 360.0 != 0.0:  # inclinado: o chão fica atrás
+        angulo = math.radians(a.giro_graus + (0.0 if a.ux else 90.0))
+        return (-math.cos(angulo), math.sin(angulo))
     if tipo == "rolete" and a.ux and not a.uy:  # só segura na horizontal: símbolo de lado
         return (-1.0, 0.0) if media[0] >= 0 else (1.0, 0.0)
     return (0.0, 1.0)
@@ -442,9 +466,9 @@ def _direcao_da_distribuida(carga: pp.CargaDistribuida, g: _GeoBarra) -> Ponto:
 def _texto_da_distribuida(carga: pp.CargaDistribuida) -> str:
     qj = carga.qi if carga.qj is None else carga.qj
     valor = (
-        f"{numero(abs(carga.qi))} kN/m"
+        f"{numero(abs(carga.qi))} {_FORCA.get()}/m"
         if math.isclose(carga.qi, qj)
-        else f"{numero(abs(carga.qi))} a {numero(abs(qj))} kN/m"
+        else f"{numero(abs(carga.qi))} a {numero(abs(qj))} {_FORCA.get()}/m"
     )
     if carga.direcao in (pp.GLOBAL_Y_PROJETADA, pp.GLOBAL_X_PROJETADA):
         valor += " proj."
@@ -549,7 +573,7 @@ def figura_estrutura(
     for c in r.portico.cargas_pontuais:
         g = geos[c.barra]
         fx, fy = (c.fx * g.c - c.fy * g.s, c.fx * g.s + c.fy * g.c) if c.local else (c.fx, c.fy)
-        texto = f"{numero(math.hypot(fx, fy))} kN"
+        texto = f"{numero(math.hypot(fx, fy))} {_FORCA.get()}"
         _forca_concentrada(
             d,
             rotulos,
@@ -563,16 +587,16 @@ def figura_estrutura(
     for nodal in r.portico.cargas_nodais:
         centro = tela.p(nos[nodal.no].x, nos[nodal.no].y)
         if abs(nodal.fx) > 1e-12 or abs(nodal.fy) > 1e-12:
-            texto = f"{numero(math.hypot(nodal.fx, nodal.fy))} kN"
+            texto = f"{numero(math.hypot(nodal.fx, nodal.fy))} {_FORCA.get()}"
             _forca_concentrada(d, rotulos, centro, nodal.fx, nodal.fy, _CARGA, texto)
         if abs(nodal.mz) > 1e-12:
             _seta_curva(d, centro, nodal.mz, _CARGA)
             rotulos.escrever(
                 (centro[0] + 34 * _ESC, centro[1] - 30 * _ESC),
-                f"{numero(abs(nodal.mz))} kN·m",
+                f"{numero(abs(nodal.mz))} {_FORCA.get()}·m",
                 _CARGA,
             )
-    nota = 'Cargas em kN e kN/m; "proj." = por metro da projeção (horizontal ou vertical).'
+    nota = _un('Cargas em kN e kN/m; "proj." = por metro da projeção (horizontal ou vertical).')
     if r.portico.peso_proprio:
         nota += " Peso próprio das barras incluído (não desenhado)."
     _cabecalho(d, tela, titulo, nota)
@@ -622,7 +646,7 @@ def figura_reacoes(
             _seta(d, cauda, ponta, _REACAO, 3, 11)
             rotulos.escrever(
                 (c[0] + 46 * _ESC, c[1] + 70 * _ESC),
-                f"{numero(abs(reacao.ry))} kN",
+                f"{numero(abs(reacao.ry))} {_FORCA.get()}",
                 _REACAO,
                 (1.0, 0.0),
             )
@@ -638,7 +662,7 @@ def figura_reacoes(
             _seta(d, cauda, ponta, _REACAO, 3, 11)
             rotulos.escrever(
                 ((perto + longe) / 2, y - 16 * _ESC),
-                f"{numero(abs(reacao.rx))} kN",
+                f"{numero(abs(reacao.rx))} {_FORCA.get()}",
                 _REACAO,
                 (0.0, -1.0),
             )
@@ -646,7 +670,7 @@ def figura_reacoes(
             _seta_curva(d, c, reacao.mz, _REACAO, 32)
             rotulos.escrever(
                 (c[0] + 30 * _ESC, c[1] - 44 * _ESC),
-                f"{numero(abs(reacao.mz))} kN·m",
+                f"{numero(abs(reacao.mz))} {_FORCA.get()}·m",
                 _REACAO,
                 (0.0, -1.0),
             )
@@ -660,9 +684,9 @@ def legenda_das_reacoes(r: pp.ResultadoPortico) -> str:
         itens = [
             f"{rotulo} = {numero(valor)} {unidade}"
             for rotulo, valor, unidade, existe in (
-                ("Rx", reacao.rx, "kN", True),
-                ("Ry", reacao.ry, "kN", True),
-                ("Mz", reacao.mz, "kN·m", abs(reacao.mz) > 1e-9),
+                ("Rx", reacao.rx, _FORCA.get(), True),
+                ("Ry", reacao.ry, _FORCA.get(), True),
+                ("Mz", reacao.mz, _un("kN·m"), abs(reacao.mz) > 1e-9),
             )
             if existe
         ]
@@ -759,7 +783,7 @@ def figura_diagrama(
 ) -> ImagemDiagrama:
     """Diagrama de N, V, M ou tensão desenhado sobre as barras, com os valores (como no Ftool)."""
     tipo = DIAGRAMAS[esforco]
-    titulo = titulo or f"{tipo.titulo} ({tipo.unidade})"
+    titulo = titulo or f"{tipo.titulo} ({_un(tipo.unidade)})"
     curvas = curvas_do_diagrama(r, esforco)
     pontos = [p for _nome, eixo, curva in curvas for p in (*eixo, *curva)]
     imagem, tela = _nova_tela(pontos, largura_px, altura_max_px)
@@ -804,7 +828,7 @@ def legenda_do_diagrama(r: pp.ResultadoPortico, esforco: str) -> str:
             p = max(rb.pontos, key=lambda q: abs(_valor(q, tipo.atributo)))
         valor = _valor(p, tipo.atributo)
         partes.append(
-            f"{rb.barra.nome}: {numero(valor)} {tipo.unidade} a {numero(p.x)} m da ponta "
+            f"{rb.barra.nome}: {numero(valor)} {_un(tipo.unidade)} a {numero(p.x)} m da ponta "
             f"{rb.barra.no_i}"
         )
     rotulo = "máximo" if esforco == "tensao" else "maior valor absoluto"
@@ -958,7 +982,9 @@ def figuras_do_portico(
 
     def diagrama(chave: str) -> ImagemDiagrama:
         tipo = DIAGRAMAS[chave]
-        return figura_diagrama(r, chave, titulo=titulo(f"{tipo.titulo} ({tipo.unidade})", caso))
+        return figura_diagrama(
+            r, chave, titulo=titulo(f"{tipo.titulo} ({_un(tipo.unidade)})", caso)
+        )
 
     chaves = ["estrutura", "reacoes", "N", "V", "M"]
     if tensao and any(rb.tensao_max is not None for rb in r.barras):

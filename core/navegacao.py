@@ -298,8 +298,9 @@ MENU: tuple[GrupoMenu, ...] = (
                 "app_pages/vigas_eixos.py",
                 "Vigas e eixos",
                 ":material/linear_scale:",
-                "Calcular reações, diagramas e flecha de viga ou eixo",
+                "Reações, diagramas e flecha de viga ou eixo, e peça ou pórtico desenhado",
                 secao=PECAS,
+                outros_nomes=("Equilíbrio de uma peça", "Pórtico plano"),
             ),
             ItemMenu(
                 "app_pages/ajustes_e_tolerancias.py",

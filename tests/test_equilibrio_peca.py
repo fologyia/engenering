@@ -671,9 +671,31 @@ def test_nomes_em_branco_seguem_a_sequencia():
 def _abrir_tela() -> AppTest:
     at = AppTest.from_file(APP, default_timeout=120)
     at.run()
+    at.session_state["vigas_abrir_peca"] = True
+    at.switch_page("app_pages/vigas_eixos.py")
+    return at.run()
+
+
+def test_atalho_antigo_do_calculo_de_pecas_leva_para_vigas_e_eixos():
+    at = AppTest.from_file(APP, default_timeout=120)
+    at.run()
     at.session_state["assistente_geometria"] = "equilibrio_peca"
     at.switch_page("app_pages/assistente_cargas.py")
-    return at.run()
+    at.run()
+    assert not at.exception
+    assert at.session_state["vigas_tipo"] == "Peça ou pórtico desenhado"
+    assert at.session_state["eq_modelo"] == MODELOS[0].nome
+    assert at.session_state["assistente_geometria"] is None
+
+
+def test_viga_reta_continua_sendo_o_que_abre_primeiro():
+    at = AppTest.from_file(APP, default_timeout=120)
+    at.run()
+    at.switch_page("app_pages/vigas_eixos.py")
+    at.run()
+    assert not at.exception
+    assert at.session_state["vigas_tipo"] == "Viga ou eixo reto"
+    assert "eq_dados" not in at.session_state
 
 
 def test_tela_abre_com_o_modelo_e_mostra_a_resposta():
@@ -705,9 +727,9 @@ def test_sair_para_outro_caso_e_voltar_nao_troca_a_unidade():
     at = _abrir_tela()
     assert at.session_state["eq_comprimento"] == "m"
     reacoes = [m.value for m in at.markdown if "Maior reação" in m.value]
-    at.session_state["assistente_geometria"] = "chapa_furo"
+    at.switch_page("app_pages/assistente_cargas.py")
     at.run()
-    at.session_state["assistente_geometria"] = "equilibrio_peca"
+    at.switch_page("app_pages/vigas_eixos.py")
     at.run()
     assert not at.exception
     assert at.selectbox(key="eq_comprimento").value == "m"
@@ -720,9 +742,9 @@ def test_sair_para_outro_caso_e_voltar_nao_troca_a_unidade():
 def test_unidade_trocada_continua_valendo_na_volta():
     at = _abrir_tela()
     at.selectbox(key="eq_comprimento").set_value("mm").run()
-    at.session_state["assistente_geometria"] = "chapa_furo"
+    at.switch_page("app_pages/assistente_cargas.py")
     at.run()
-    at.session_state["assistente_geometria"] = "equilibrio_peca"
+    at.switch_page("app_pages/vigas_eixos.py")
     at.run()
     assert at.selectbox(key="eq_comprimento").value == "mm"
     assert at.session_state["eq_dados"]["apoios"][1]["x"] == pytest.approx(4000.0)

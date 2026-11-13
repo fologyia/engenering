@@ -27,7 +27,7 @@ valores prontos para usar, e "Ver gráfico" abre o estudo da medida logo abaixo.
 para os números que a geraram: mudou um dado, ela sai. A Desenhar seção sugere chapas comerciais no
 lado menor da chapa selecionada, porque ninguém compra chapa pela largura.
 
-No Equilíbrio de uma peça, as cotas da prancheta funcionam do mesmo jeito: mudar uma distância empurra
+Na peça desenhada de Vigas e eixos, as cotas da prancheta funcionam do mesmo jeito: mudar uma distância empurra
 tudo o que está depois dela, e a peça estica sem soltar nada.
 
 ## Estudar uma medida

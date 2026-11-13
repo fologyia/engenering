@@ -86,7 +86,8 @@ def _frequencia_propria(rigidez: float, d: float, diametro: float, espiras: floa
 
 def faixa_da_tensao_inicial(c: float) -> tuple[float, float]:
     """Faixa preferida de τ_i, sem correção, em MPa: eq. 10-41 de Shigley, de psi para MPa."""
-    meio = 231.0 / math.exp(0.105 * c)
+    # Índice absurdo (D mil vezes o arame) estourava o exp: a faixa já é zero muito antes.
+    meio = 231.0 / math.exp(min(0.105 * c, 700.0))
     largura = 6.9 * (4.0 - (c - 3.0) / 6.5)
     return meio - largura, meio + largura
 

@@ -232,5 +232,50 @@ MODELOS: tuple[ModeloDePeca, ...] = (
     ),
 )
 
+MODELOS += (
+    ModeloDePeca(
+        "Pórtico com as bases engastadas",
+        "Duas colunas e uma viga: a carga do piso e o empurrão de lado.",
+        "m",
+        "kN",
+        (trecho(0, 0, 0, 3), trecho(0, 3, 5, 3), trecho(5, 3, 5, 0)),
+        (apoio("A", eq.ENGASTE, 0, 0), apoio("B", eq.ENGASTE, 5, 0)),
+        (
+            carga("q1", eq.DISTRIBUIDA, 0, 3, 8, ate=(5, 3), valor2=8),
+            carga("F1", eq.FORCA, 0, 3, 12, 0),
+        ),
+    ),
+    ModeloDePeca(
+        "Pórtico com as bases em pino",
+        "As colunas giram na base: o canto de cima leva o momento.",
+        "m",
+        "kN",
+        (trecho(0, 0, 0, 3), trecho(0, 3, 5, 3), trecho(5, 3, 5, 0)),
+        (apoio("A", eq.PINO, 0, 0), apoio("B", eq.PINO, 5, 0)),
+        (
+            carga("q1", eq.DISTRIBUIDA, 0, 3, 8, ate=(5, 3), valor2=8),
+            carga("F1", eq.FORCA, 0, 3, 12, 0),
+        ),
+    ),
+    ModeloDePeca(
+        "Coluna com viga em balanço",
+        "Poste engastado no chão com um braço: carga na ponta do braço.",
+        "m",
+        "kN",
+        (trecho(0, 0, 0, 3), trecho(0, 3, 1.5, 3)),
+        (apoio("A", eq.ENGASTE, 0, 0),),
+        (carga("F1", eq.FORCA, 1.5, 3, 6), carga("F2", eq.FORCA, 0, 3, 2, 0)),
+    ),
+    ModeloDePeca(
+        "Viga contínua em três apoios",
+        "Um apoio a mais que o necessário: a divisão sai da rigidez da viga.",
+        "m",
+        "kN",
+        (trecho(0, 0, 6, 0),),
+        (apoio("A", eq.PINO, 0, 0), apoio("B", eq.ROLETE, 3, 0), apoio("C", eq.ROLETE, 6, 0)),
+        (carga("q1", eq.DISTRIBUIDA, 0, 0, 5, ate=(6, 0), valor2=5),),
+    ),
+)
+
 MODELO_INICIAL = MODELOS[0]
 POR_NOME = {modelo.nome: modelo for modelo in MODELOS}

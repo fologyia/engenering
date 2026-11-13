@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from components import volta_da_secao as vs
+from components.equilibrio_ui import tela_do_equilibrio
 from components.figuras import mostrar_figura
 from components.prancheta_viga_ui import prancheta_da_viga
 from components.project_tools import (
@@ -20,6 +21,7 @@ from core import materials as materiais_base
 from core import section_catalog as catalogo_perfis
 from core import viga_desenhada as vd
 from core.desenho_da_viga import figura_da_viga
+from core.elementos_equilibrio import CASO_EQUILIBRIO
 from core.materials_registry import avaliar_material
 from core.project_criteria import normalizar_criterios_projeto
 from core.project_store import obter_projeto_ativo
@@ -33,6 +35,10 @@ configurar_pagina("Vigas e eixos", ":material/linear_scale:")
 alt.data_transformers.disable_max_rows()
 
 CHAVE_SCRIPT = "vigas_script"
+CHAVE_TIPO = "vigas_tipo"
+ABRIR_PECA = "vigas_abrir_peca"  # quem chega de outra página pedindo a peça desenhada
+BARRA_RETA = "Viga ou eixo reto"
+PECA_DESENHADA = "Peça ou pórtico desenhado"
 CHAVE_RESULTADO = "vigas_resultado"
 
 CORES = {
@@ -111,7 +117,7 @@ def enviar_para_fadiga(amplitudes: dict) -> None:
 
 cabecalho_pagina(
     "Vigas e eixos",
-    "Cortante • momento fletor • linha elástica • torção • cargas combinadas",
+    "Reações • cortante • momento fletor • linha elástica • torção • peças e pórticos",
     categoria="Análises",
     icone=":material/linear_scale:",
     cor="blue",
@@ -122,6 +128,36 @@ cabecalho_pagina(
     ),
     modulo_id="vigas_eixos",
 )
+if st.session_state.pop(ABRIR_PECA, False):
+    st.session_state[CHAVE_TIPO] = PECA_DESENHADA
+st.session_state.setdefault(CHAVE_TIPO, BARRA_RETA)
+tipo_de_modelo = st.segmented_control(
+    "O que você vai calcular?",
+    [BARRA_RETA, PECA_DESENHADA],
+    required=True,
+    width="stretch",
+    key=CHAVE_TIPO,
+    persist_state="session",
+    help=(
+        "Viga ou eixo reto: uma barra só, com flecha, torção e tensões na seção. Peça ou pórtico "
+        "desenhado: barras em qualquer direção (colunas, vigas, suportes), apoios e cargas "
+        "inclinados, cabo, atrito e apoio ao longo de um trecho."
+    ),
+)
+if tipo_de_modelo == PECA_DESENHADA:
+    st.caption(
+        "Desenhe a peça em trechos, ponha os apoios e as cargas em qualquer direção. O programa "
+        "diz se ela fica parada, dá as reações e, lendo os trechos como barras de um pórtico, os "
+        "diagramas de N, V e M, mesmo com apoio de sobra (peça hiperestática)."
+    )
+    with secao_protegida("Peça ou pórtico desenhado"):
+        tela_do_equilibrio(CASO_EQUILIBRIO, navegacao=False)
+    st.caption(
+        "Modelo de pré-dimensionamento: apoios ideais, barras retas e material elástico. Não "
+        "confere flambagem nem a resistência das ligações."
+    )
+    st.stop()
+
 st.caption(
     "Barra reta com qualquer combinação de apoios, rótulas internas e cargas — "
     "inclusive isostática e hiperestática. O modelo é **desenhado** na prancheta (ou "
@@ -633,7 +669,7 @@ with st.container(border=True), secao_protegida("1. Modelo da barra"):
         key="vigas_modo",
         persist_state="session",
         help=(
-            "Desenho: a barra, os apoios e as cargas na prancheta, como no Equilíbrio de uma peça. "
+            "Desenho: a barra, os apoios e as cargas na prancheta. "
             "Texto: o modelo escrito, uma instrução por linha."
         ),
     )
