@@ -134,7 +134,7 @@ def _pecas_do_trecho(base: mt.Montagem, id_: str) -> tuple[Peca, ...]:
     if chave is None:
         return ()
     return tuple(
-        Peca(t.rotulo, t.familia, ((chave, t.interno_m),), None)
+        Peca(t.rotulo, t.serie or t.familia, ((chave, t.interno_m),), None)
         for t in fl.TUBOS_COMERCIAIS.values()
     )
 

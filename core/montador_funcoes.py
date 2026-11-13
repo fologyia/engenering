@@ -17,6 +17,8 @@ from typing import Any
 
 import numpy as np
 import sympy as sp
+from fluids import fittings as ff
+from fluids import flow_meter as fm
 
 from core import elementos_eixos as ee
 from core import elementos_mancais as em
@@ -302,6 +304,82 @@ class TensaoCritica(_Numerica):
     texto = "S_{cr}"
 
 
+#: As peças pelo método do Crane (Flow of Fluids, TP-410), com o f_T de escoamento todo turbulento em
+#: tubo de aço novo, que depende do diâmetro. As contas são as da biblioteca ``fluids``: válvula de
+#: passagem plena, sem redução. As curvas e os tês vão pelo múltiplo de f_T da tabela do Crane.
+def _vezes_ft(n: float) -> Callable[[float], float]:
+    return lambda d: n * ff.ft_Crane(d)
+
+
+PECAS_CRANE: tuple[tuple[str, Callable[[float], float]], ...] = (
+    ("Cotovelo 90° padrão (30·f_T)", _vezes_ft(30.0)),
+    ("Curva 90°, r/D = 1 (20·f_T)", lambda d: ff.bend_rounded_Crane(d, 90.0, bend_diameters=1.0)),
+    ("Curva 90°, r/D = 1,5", lambda d: ff.bend_rounded_Crane(d, 90.0, bend_diameters=1.5)),
+    ("Curva 90°, r/D = 3", lambda d: ff.bend_rounded_Crane(d, 90.0, bend_diameters=3.0)),
+    ("Cotovelo 45° padrão (16·f_T)", _vezes_ft(16.0)),
+    ("Curva de retorno 180° (50·f_T)", _vezes_ft(50.0)),
+    ("Tê, passagem direta (20·f_T)", _vezes_ft(20.0)),
+    ("Tê, saída lateral (60·f_T)", _vezes_ft(60.0)),
+    ("Registro de gaveta aberto (8·f_T)", lambda d: ff.K_gate_valve_Crane(d, d, 0.0)),
+    ("Válvula de globo aberta (340·f_T)", lambda d: ff.K_globe_valve_Crane(d, d)),
+    ("Válvula angular aberta (150·f_T)", lambda d: ff.K_angle_valve_Crane(d, d, style=1)),
+    ("Válvula de esfera aberta (3·f_T)", lambda d: ff.K_ball_valve_Crane(d, d, 0.0)),
+    ("Válvula macho, passagem reta (18·f_T)", lambda d: ff.K_plug_valve_Crane(d, d, 0.0)),
+    ("Válvula borboleta centrada (45, 35 ou 25·f_T)", lambda d: ff.K_butterfly_valve_Crane(d)),
+    ("Retenção de portinhola (100·f_T)", lambda d: ff.K_swing_check_valve_Crane(D=d)),
+    (
+        "Retenção de portinhola, passagem livre (50·f_T)",
+        lambda d: ff.K_swing_check_valve_Crane(D=d, angled=False),
+    ),
+    (
+        "Retenção de levantamento (600·f_T)",
+        lambda d: ff.K_lift_check_valve_Crane(d, d, angled=False),
+    ),
+    ("Entrada de canto vivo (K = 0,5)", lambda d: 0.5),
+    ("Saída para reservatório (K = 1)", lambda d: 1.0),
+)
+#: As tomadas da placa de orifício da ISO 5167-2, na ordem do número que entra na fórmula.
+TOMADAS_DO_ORIFICIO = ("corner", "flange", "D")
+
+
+def _k_crane(d: float, indice: float) -> float:
+    return PECAS_CRANE[int(indice)][1](d) if d > 0.0 else math.nan
+
+
+def _c_do_orificio(d: float, garganta: float, re: float, tomada: float) -> float:
+    """C de Reader-Harris/Gallagher (ISO 5167-2:2003, eq. 4). Com μ = 1, a vazão em massa dá Re."""
+    if d <= 0.0 or garganta <= 0.0 or garganta >= d or re <= 0.0:
+        return math.nan
+    return fm.C_Reader_Harris_Gallagher(
+        d, garganta, 1.0, 1.0, re * math.pi * d / 4.0, TOMADAS_DO_ORIFICIO[int(tomada)]
+    )
+
+
+k_do_crane = _em_vetor(_k_crane)
+coeficiente_do_orificio = _em_vetor(_c_do_orificio)
+
+
+class KCrane(_Numerica):
+    nargs = 2
+    funcao = staticmethod(k_do_crane)
+    texto = "K_{Crane}"
+
+    def _latex(self, printer: Any, exp: Any = None) -> str:
+        texto = f"K_{{Crane}}\\left({printer.doprint(self.args[0])}\\right)"
+        return f"{texto}^{{{printer.doprint(exp)}}}" if exp is not None else texto
+
+
+class CoeficienteOrificio(_Numerica):
+    nargs = 4
+    funcao = staticmethod(coeficiente_do_orificio)
+    texto = "C"
+
+    def _latex(self, printer: Any, exp: Any = None) -> str:
+        d, garganta, re, _ = (printer.doprint(a) for a in self.args)
+        texto = f"C\\left({garganta}/{d},\\,{re}\\right)"
+        return f"{texto}^{{{printer.doprint(exp)}}}" if exp is not None else texto
+
+
 #: Elas não têm forma fechada: simplificar não adianta e custa caro.
 NUMERICAS: tuple[type[sp.Function], ...] = (
     Propriedade,
@@ -322,6 +400,8 @@ NUMERICAS: tuple[type[sp.Function], ...] = (
     CargaEstatica,
     FatorLewis,
     TensaoCritica,
+    KCrane,
+    CoeficienteOrificio,
 )
 #: As que vêm de tabela ou de escolha: a planilha leva o valor calculado, e não uma fórmula.
 TABELADAS: tuple[type[sp.Function], ...] = (
@@ -336,7 +416,7 @@ TABELADAS: tuple[type[sp.Function], ...] = (
 )
 #: As que vêm de uma biblioteca de fora, como as propriedades dos fluidos pela CoolProp: a planilha
 #: leva o valor calculado, porque o Excel não tem a biblioteca.
-DA_BIBLIOTECA: tuple[type[sp.Function], ...] = (Propriedade,)
+DA_BIBLIOTECA: tuple[type[sp.Function], ...] = (Propriedade, KCrane, CoeficienteOrificio)
 #: O que o ``lambdify`` precisa para calcular estas funções em número.
 FUNCOES: dict[str, Any] = {
     **FUNCOES_DAS_PROPRIEDADES,
@@ -357,4 +437,6 @@ FUNCOES: dict[str, Any] = {
     "CargaEstatica": carga_estatica,
     "FatorLewis": fator_de_lewis,
     "TensaoCritica": tensao_critica_coluna,
+    "KCrane": k_do_crane,
+    "CoeficienteOrificio": coeficiente_do_orificio,
 }

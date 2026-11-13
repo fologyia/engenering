@@ -9,7 +9,7 @@ salvar, registrar e referências vale igual aqui.
 
 A fila é **Fluido → trechos → perdas → verificação → Em função de**. O fio ciano leva a linha: o fluido,
 a vazão e os trechos somados. Cada bloco acrescenta o dele, e por isso a ordem dos trechos não muda a
-perda total. Os 13 modelos prontos abrem com números de exemplo.
+perda total. Os 17 modelos prontos abrem com números de exemplo.
 
 Para um segundo trecho parecido, selecione o trecho e use Ctrl+C e Ctrl+V: ele entra antes da
 verificação com D₂, L₂ e ε₂ iguais aos do primeiro, marcados como cópia, e é só mudar o que for
@@ -42,10 +42,14 @@ para a corrente (`docs/montador_processos.md`).
 
 ## Blocos
 
-- **Linha:** fluido, trecho de tubo, perdas localizadas.
-- **Verificações:** carga disponível, altura da bomba, potência da bomba, NPSH, velocidade máxima.
+- **Linha:** fluido, trecho de tubo, perdas localizadas, peças pelo Crane.
+- **Verificações:** carga disponível, altura da bomba, potência da bomba, NPSH, gás no tubo, válvula
+  de controle, velocidade máxima.
 - **Equações:** pressão na profundidade, força em superfície plana, empuxo, arrasto, orifício ou
-  venturi, canal (Manning) e golpe de aríete.
+  venturi (C informado ou pela ISO 5167), canal (Manning) e golpe de aríete.
+
+Com o fluido escolhido, a biblioteca esconde o que não serve para ele: com gás, a bomba, o NPSH, o
+golpe e a válvula de controle; com líquido, o gás no tubo (`core/montador_uso.py`).
 
 ## Bomba, peças e tubos comerciais
 
@@ -54,9 +58,35 @@ para a corrente (`docs/montador_processos.md`).
   mais). Abaixo da resposta sai o gráfico das duas curvas, com o ponto marcado.
 - **Peças:** no inspetor das perdas localizadas, a tabela soma o K das curvas, tês, registros,
   válvulas, entrada e saída. São valores típicos de peça aberta: variam com o diâmetro e o fabricante.
-- **Tubo comercial:** no trecho, preenche D com o diâmetro interno do aço Sch 40 (ASME B36.10M) ou do
-  PVC soldável (ficha técnica da linha soldável, NBR 5648). Tubo de PVC com rugosidade de aço recebe
-  aviso. "Escolher do catálogo" testa todos e devolve o menor que passa.
+- **Tubo comercial:** no trecho, preenche D com o diâmetro interno do tubo. Aço carbono pela ASME
+  B36.10M (Sch 10, 40, 80 e 160, STD, XS e XXS), inox pela ASME B36.19M (Sch 10S, 40S e 80S), de 1/2
+  a 24 pol, com as tabelas da biblioteca `fluids`, e PVC soldável (ficha técnica da linha soldável,
+  NBR 5648). Tubo de PVC com rugosidade de aço recebe aviso. "Escolher do catálogo" testa os tubos das
+  séries marcadas e devolve o menor que passa.
+
+## Peças pelo Crane, gás, válvula de controle e medidores
+
+- **Peças pelo Crane:** o bloco soma K·V²/(2·g) como as perdas localizadas, mas o K de cada peça é o do
+  Crane (Flow of Fluids, TP-410): K = n·f_T, com f_T do escoamento todo turbulento em tubo de aço novo
+  do diâmetro do trecho de antes. Por isso o K muda quando o diâmetro muda, e o diâmetro pode ser a
+  letra pedida. Cotovelos, curvas de r/D 1, 1,5 e 3, tês, registro de gaveta, válvulas de globo,
+  angular, de esfera, macho e borboleta, retenções de portinhola e de levantamento, entrada e saída. As
+  contas são as da biblioteca `fluids`; abaixo de Reynolds 4000 a página avisa.
+- **Gás no tubo:** gás em tubo longo, em temperatura constante (Crane TP-410; Menon). A pressão que
+  chega no fim precisa ser pelo menos p_s:
+  p_s² + G²·(p₁/ρ₁)·(f·L/D + 2·ln(p₁/p_s)) ≤ p₁², com G = ṁ/A e a vazão Q medida na entrada. Pede um
+  gás pela temperatura no Fluido (ar, nitrogênio ou metano, que faz as vezes do gás natural). Avisa
+  quando a saída chega ao limite do escoamento isotérmico (Mach 1/√κ).
+- **Válvula de controle:** o K_v que a válvula precisa ter pela IEC 60534-2-1, para líquido em
+  escoamento turbulento e válvula do tamanho do tubo: K_v = Q·√((ρ/ρ₀)/Δp), Q em m³/h, Δp em bar e
+  ρ₀ da água a 15 °C. Acima de Δp_máx = F_L²·(p₁ − F_F·p_v), com F_F = 0,96 − 0,28·√(p_v/p_c), o
+  líquido cavita dentro da válvula e a vazão para de subir: a conta usa Δp_máx e a página avisa. A
+  pressão crítica sai da CoolProp quando o fluido vem pela temperatura.
+- **Orifício ou venturi:** a opção Medidor escolhe o C. Informado, como antes; placa de orifício pela
+  ISO 5167-2, com o C de Reader-Harris/Gallagher (tomadas de canto, de flange ou a D e D/2), que muda
+  com β e com Reynolds, e por isso a vazão sai por iteração; ou venturi clássico pela ISO 5167-4, com o
+  C fixo da norma (0,995 usinado, 0,984 fundido, 0,985 de chapa soldada). Com gás, entra a
+  expansibilidade ε da norma, com κ. Fora dos limites da norma (β, D, d e Re_D), a página avisa.
 
 ## Exemplos conferidos
 
@@ -73,6 +103,11 @@ A Validação do projeto refaz estes exemplos com os blocos, a cada abertura:
 | NPSH disponível | Omni Calculator | 7,41 m |
 | Golpe de aríete | Joukowsky | 2,4 MPa |
 
+Os blocos que vêm de norma batem com a biblioteca `fluids` chamada direto, até a 6ª casa
+(`tests/test_montador_fluidos_biblioteca.py`): K de cada peça pelo Crane, tubos da ASME, vazão de gás
+isotérmico (`isothermal_gas`), K_v da IEC 60534 com e sem cavitação (`size_control_valve_l`) e vazão
+dos medidores da ISO 5167, com líquido e com gás (`differential_pressure_meter_solver`).
+
 O livro aberto de Maurer (Hydraulics and Water Resources: Examples Using R) congela o atrito na curva do
 sistema do exemplo da bomba. O caso de aceite faz o mesmo; na prancheta, Colebrook é refeito a cada
 vazão, e a vazão sai cerca de 6 % maior. As propriedades da água foram conferidas em duas tabelas
@@ -87,7 +122,9 @@ partes: multiplica cada grandeza por um fator de escala e confere se a resposta 
 ## Limites
 
 - A linha é em série. Redes com ramais e malhas não estão no modelo.
-- Escoamento permanente, incompressível e monofásico.
+- Escoamento permanente, incompressível e monofásico, menos o bloco Gás no tubo e a
+  expansibilidade dos medidores.
+- A válvula de controle é só para líquido; gás pela IEC 60534 ainda não está.
 - Golpe de aríete pela fórmula de Joukowsky, com fechamento rápido.
 - Manning em canal retangular, com regime uniforme.
 - Resultado de pré-dimensionamento: não substitui o projeto da instalação nem a curva do fabricante.

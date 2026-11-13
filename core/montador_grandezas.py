@@ -1376,6 +1376,59 @@ P_FLUIDO = _g(
     "Absoluta. No gás, a massa específica muda com ela; no líquido, quase nada.",
     101325.0,
 )
+P_SAIDA_GAS = _g(
+    "p_s",
+    "p_s",
+    "Pressão mínima na saída",
+    PRESSAO,
+    "Absoluta, no fim do tubo de gás: a pressão que o consumidor precisa receber.",
+)
+KAPPA = Grandeza(
+    "kappa",
+    "κ",
+    "Expoente isentrópico",
+    PURO,
+    "c_p/c_v do gás. Ar e nitrogênio: 1,4. Gás natural: cerca de 1,3.",
+    1.4,
+    minimo=1.0,
+)
+P_MONTANTE = _g(
+    "p_1",
+    "p_1",
+    "Pressão antes da válvula",
+    PRESSAO,
+    "Absoluta, logo antes da válvula de controle.",
+)
+DP_VALVULA = _g(
+    "Delta_p_v",
+    "Δp_v",
+    "Queda de pressão na válvula",
+    PRESSAO,
+    "Pressão antes menos pressão depois da válvula, na vazão de projeto.",
+)
+F_L_VALVULA = Grandeza(
+    "F_L",
+    "F_L",
+    "Fator de recuperação de pressão",
+    PURO,
+    "Do catálogo da válvula. Globo: cerca de 0,9. Esfera e borboleta: de 0,55 a 0,7.",
+    0.9,
+    maximo=1.0,
+)
+P_CRITICA = _g(
+    "p_crit",
+    "p_crit",
+    "Pressão crítica do líquido",
+    PRESSAO,
+    "Absoluta. Água: 22 064 kPa. Sai da CoolProp quando o fluido vem pela temperatura.",
+)
+KV_VALVULA = _g(
+    "K_v",
+    "K_v",
+    "K_v da válvula",
+    PURO,
+    "Do catálogo, na abertura de projeto: m³/h de água com 1 bar de queda. C_v = 1,156·K_v.",
+)
 
 # Térmico. As chaves não repetem as dos fluidos: no Montador que liga os dois, elas se encontram.
 T_ESTADO = _g("T", "T", "Temperatura", TEMPERATURA, "A temperatura do fluido neste ponto.", 293.15)

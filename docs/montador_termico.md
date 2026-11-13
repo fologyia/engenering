@@ -51,6 +51,21 @@ entalpia, que definem o ponto mesmo dentro da mistura de líquido e vapor. O tí
 (h − h_l)/(h_v − h_l): passa de 1 no vapor superaquecido e fica abaixo de 0 no líquido sub-resfriado,
 o que serve para uma condição (a CoolProp dá −1 fora da mistura).
 
+## Diagrama do ciclo
+
+Abaixo da tabela de estados, na aba Condições, sai o diagrama T-s ou p-h (pressão em escala log),
+com a curva de saturação do fluido em cinza. Cada ponto tem o número da tabela e a cor da fase:
+líquido, mistura, ou vapor e gás. Numa troca de calor e na válvula, o caminho entre dois pontos é
+calculado com a pressão e a entalpia andando em reta, pela CoolProp: é a isobárica de verdade, que
+entra e sai da curva. Na bomba, no compressor e na turbina, a figura só liga a entrada à saída.
+
+O diagrama mostra de relance o estado que não faz sentido. Se a bomba recebe vapor ou o compressor
+recebe líquido, a página avisa embaixo dele (`core/montador_diagrama.py`). Com dois fluidos, como num
+trocador, uma lista escolhe o fluido do diagrama. Glicóis, óleos térmicos e o ar seco não têm curva de
+saturação na CoolProp.
+
+## O laço
+
 O laço é cortado no fio que chega no Circuito. A pressão e a entalpia supostas (p_lc1 e h_lc1) viram
 letras do meio, e duas igualdades as fecham com as que de fato voltam (`core/montador_sistema.py`). A
 resposta mostra os números delas, e a tabela de estados mostra cada ponto do ciclo.
@@ -75,6 +90,9 @@ resposta mostra os números delas, e a tabela de estados mostra cada ponto do ci
   avisam.
 - Ácidos não estão na CoolProp.
 - O Circuito precisa estar no laço: laço de corrente sem ele dá o aviso de laço.
+- A biblioteca esconde o que não serve para o fluido do Estado e do Circuito: com ar ou nitrogênio, a
+  bomba, o título, o superaquecimento, o sub-resfriamento e o COP; com glicol ou óleo, o compressor e a
+  turbina. Com dois fluidos, basta um servir.
 
 ## Transferência de calor
 

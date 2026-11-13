@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -571,6 +572,47 @@ MODELOS_FLUIDOS: tuple[Modelo, ...] = (
         "Q",
         {"C_d": 0.6, "D_o": 0.05, "D": 0.1, "Delta_p": 20000.0},
         ("fluido", "medidor", _R),
+    ),
+    Modelo(
+        "Placa de orifício pela ISO 5167",
+        "Vazão pela queda na placa, com o C de Reader-Harris/Gallagher (tomadas de flange).",
+        "Q",
+        {"D_o": 0.05, "D": 0.1, "Delta_p": 20000.0},
+        ("fluido", "medidor", _R),
+        opcoes={"n2": {"tipo": "Placa de orifício ISO 5167-2, tomadas de flange"}},
+    ),
+    Modelo(
+        "Peças pelo Crane: vazão por gravidade",
+        "Tubo Sch 40 de 2 pol com 4 cotovelos e um registro, K de cada peça pelo Crane.",
+        "Q",
+        {"L": 50.0, "H_d": 10.0},
+        ("fluido", "trecho", "perdas_crane", "carga", _R),
+        opcoes={
+            "n2": {"comercial": "Aço Sch 40, DN 50 (2 pol)"},
+            "n3": {
+                "pecas": json.dumps(
+                    {"Cotovelo 90° padrão (30·f_T)": 4, "Registro de gaveta aberto (8·f_T)": 1},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            },
+        },
+    ),
+    Modelo(
+        "Gás natural: diâmetro do tubo",
+        "Metano a 10 bar por 5 km: o menor tubo que chega com 7 bar.",
+        "D",
+        {"T_f": 293.15, "p_f": 1e6, "L": 5000.0, "p_s": 7e5, "Q": 0.05},
+        ("fluido", "gas_no_tubo", _R),
+        opcoes={"n1": {"fluido": "Metano pela temperatura (CoolProp)"}},
+    ),
+    Modelo(
+        "Válvula de controle: K_v pedido",
+        "Água a 50 m³/h com 1,5 bar de queda: o K_v pela IEC 60534-2-1.",
+        "K_v",
+        {"T_f": 293.15, "p_f": 6e5, "Q": 50.0 / 3600.0, "p_1": 6e5, "Delta_p_v": 1.5e5},
+        ("fluido", "valvula_controle", _R),
+        opcoes={"n1": {"fluido": "Água pela temperatura (CoolProp)"}},
     ),
     Modelo(
         "Lâmina num canal",

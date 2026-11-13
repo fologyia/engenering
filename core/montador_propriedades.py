@@ -99,6 +99,11 @@ def faixa_de_temperatura(fluido: int) -> tuple[float, float]:
     return float(biblioteca.PropsSI("Tmin", nome)), float(biblioteca.PropsSI("Tmax", nome))
 
 
+def pressao_critica(fluido: Fluido) -> float:
+    """A pressão crítica do fluido, em Pa absolutos."""
+    return float(_coolprop().PropsSI("pcrit", fluido.coolprop))
+
+
 @lru_cache(maxsize=65536)
 def _um(fluido: int, saida: int, par: int, a: float, b: float) -> float:
     entrada_a, entrada_b = PARES[par]
@@ -241,6 +246,7 @@ __all__ = [
     "de",
     "faixa_de_temperatura",
     "massa_especifica",
+    "pressao_critica",
     "pressao_de_vapor",
     "propriedade",
     "temperatura_de_saturacao",

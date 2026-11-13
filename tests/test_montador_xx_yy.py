@@ -329,7 +329,7 @@ def test_modelo_da_forca_maxima_diz_quanto_aguenta():
 
 def test_trocar_para_valor_do_momento_na_tela():
     at = abrir("Força máxima num braço")
-    chave = "mf_op_n2_entrada"
+    chave = f"mf_op_n2_entrada_r{at.session_state['mf_revisao']}"
     assert at.selectbox(key=chave).value == mb.FORCA_COM_CORTANTE
     at.selectbox(key=chave).set_value(mb.MOMENTO_DIRETO).run()
     assert not at.exception

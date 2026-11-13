@@ -565,6 +565,12 @@ svg.ligando .rotulo {
 .fio.solto {
   stroke-dasharray: 5 4;
 }
+.ponta-solta {
+  fill: #ffffff;
+  stroke: #0b6bcb;
+  stroke-width: 2.4;
+  pointer-events: none;
+}
 .seta.t-secao {
   fill: #0b6bcb;
 }

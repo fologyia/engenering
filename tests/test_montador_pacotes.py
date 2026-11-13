@@ -778,7 +778,9 @@ def test_valor_padrao_aparece_como_padrao():
 def test_seta_o_fluido_e_muda_a_resposta():
     at = abrir("app_pages/montador_fluidos.py")
     antes = next(s.value for s in at.success)
-    at.selectbox(key="mfl_op_n1_fluido").set_value("Água a 80 °C").run()
+    at.selectbox(key=f"mfl_op_n1_fluido_r{at.session_state['mfl_revisao']}").set_value(
+        "Água a 80 °C"
+    ).run()
     assert not at.exception
     assert next(s.value for s in at.success) != antes
 

@@ -9,14 +9,16 @@ pedida é a que fecha a conta. A linha é em série, com a mesma vazão em todos
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
 import sympy as sp
+from fluids import piping as fpiping
 
 from core import montador_blocos as mb
+from core import montador_funcoes as fn
 from core import montador_grandezas as g
 from core import montador_propriedades as mp
 from core.montador_blocos import (
@@ -30,7 +32,13 @@ from core.montador_blocos import (
     Opcao,
     Porta,
 )
-from core.montador_funcoes import RE_LAMINAR, RE_TURBULENTO, AtritoDarcy
+from core.montador_funcoes import (
+    RE_LAMINAR,
+    RE_TURBULENTO,
+    AtritoDarcy,
+    CoeficienteOrificio,
+    KCrane,
+)
 from core.montador_secoes import Validade
 
 ZERO = sp.S.Zero
@@ -41,6 +49,21 @@ ABAIXO_DO_NIVEL = "Bomba abaixo do nível do líquido"
 SUCCOES = (ACIMA_DO_NIVEL, ABAIXO_DO_NIVEL)
 DIAMETRO_INFORMADO = "Informar o diâmetro"
 PONTO_DE_OPERACAO = "Ponto de operação"
+C_INFORMADO = "Coeficiente informado (C_d)"
+ORIFICIO_CANTO = "Placa de orifício ISO 5167-2, tomadas de canto"
+ORIFICIO_FLANGE = "Placa de orifício ISO 5167-2, tomadas de flange"
+ORIFICIO_D = "Placa de orifício ISO 5167-2, tomadas a D e D/2"
+VENTURI_USINADO = "Venturi clássico ISO 5167-4, convergente usinado"
+VENTURI_FUNDIDO = "Venturi clássico ISO 5167-4, convergente fundido"
+VENTURI_SOLDADO = "Venturi clássico ISO 5167-4, chapa soldada"
+#: A ordem das tomadas é a de ``TOMADAS_DO_ORIFICIO``. O C do venturi é o da ISO 5167-4, 5.5.
+ORIFICIOS = {ORIFICIO_CANTO: 0, ORIFICIO_FLANGE: 1, ORIFICIO_D: 2}
+VENTURIS = {VENTURI_USINADO: 0.995, VENTURI_FUNDIDO: 0.984, VENTURI_SOLDADO: 0.985}
+MEDIDORES = (C_INFORMADO, *ORIFICIOS, *VENTURIS)
+#: Pressão crítica da água pela IAPWS, para os fluidos de tabela que são água.
+P_CRITICA_DA_AGUA = 22.064e6
+#: ρ₀ da IEC 60534-2-1: a água a 15 °C, em kg/m³.
+RHO_0_IEC = 999.1
 
 #: ρ em kg/m³, μ em Pa·s e pressão de vapor absoluta em Pa. A água foi conferida em duas tabelas
 #: (roymech.org e engineeringtoolbox.com): saturação pela IAPWS. O resto são valores típicos.
@@ -56,11 +79,15 @@ FLUIDOS_TIPICOS: dict[str, tuple[float, float, float | None]] = {
     "Óleo hidráulico ISO VG 46 a 40 °C": (870.0, 0.040, None),
 }
 #: Os fluidos que a CoolProp calcula em qualquer temperatura da faixa deles.
+#: Dos gases, os que ficam gás em temperatura ambiente: o metano faz as vezes do gás natural.
+_GASES_DA_LINHA = ("Ar seco", "Nitrogênio", "Metano")
 POR_TEMPERATURA: dict[str, mp.Fluido] = {
     f"{f.rotulo} pela temperatura (CoolProp)": f
     for f in mp.FLUIDOS
-    if f.liquido or f.rotulo == "Ar seco"
+    if f.liquido or f.rotulo in _GASES_DA_LINHA
 }
+#: Os fluidos de tabela que são gás.
+GASES_DE_TABELA = frozenset({"Ar a 20 °C"})
 #: Rugosidade absoluta em metros, de tubo novo: com o tempo, ela cresce. Concreto varia de 0,3 a
 #: 3 mm conforme o acabamento: 1,5 mm é o meio dessa faixa.
 RUGOSIDADES: dict[str, float] = {
@@ -95,44 +122,83 @@ class TuboComercial:
     familia: str  # o material da tabela de rugosidade
     externo_mm: float
     parede_mm: float
+    serie: str = ""  # a linha do catálogo: Sch 40, Sch 80, PVC soldável
 
     @property
     def interno_m(self) -> float:
         return (self.externo_mm - 2.0 * self.parede_mm) / 1000.0
 
 
-def _sch40(dn: int, polegadas: str, externo: float, parede: float) -> TuboComercial:
-    return TuboComercial(f"Aço Sch 40, DN {dn} ({polegadas} pol)", "Aço comercial", externo, parede)
+#: Diâmetro nominal (DN) e polegadas de cada NPS da tabela.
+_NPS: tuple[tuple[float, int, str], ...] = (
+    (0.5, 15, "1/2"),
+    (0.75, 20, "3/4"),
+    (1.0, 25, "1"),
+    (1.25, 32, "1 1/4"),
+    (1.5, 40, "1 1/2"),
+    (2.0, 50, "2"),
+    (2.5, 65, "2 1/2"),
+    (3.0, 80, "3"),
+    (3.5, 90, "3 1/2"),
+    (4.0, 100, "4"),
+    (5.0, 125, "5"),
+    (6.0, 150, "6"),
+    (8.0, 200, "8"),
+    (10.0, 250, "10"),
+    (12.0, 300, "12"),
+    (14.0, 350, "14"),
+    (16.0, 400, "16"),
+    (18.0, 450, "18"),
+    (20.0, 500, "20"),
+    (24.0, 600, "24"),
+)
+#: Aço carbono pela ASME B36.10M e inox pela ASME B36.19M, com as tabelas da biblioteca ``fluids``.
+#: O Sch 40 vem primeiro: é o tubo de processo mais comum, e o nome dele é o de sempre.
+_SERIES_ASME: tuple[tuple[str, str], ...] = (
+    ("40", "Aço Sch 40"),
+    ("10", "Aço Sch 10"),
+    ("80", "Aço Sch 80"),
+    ("160", "Aço Sch 160"),
+    ("STD", "Aço STD"),
+    ("XS", "Aço XS"),
+    ("XXS", "Aço XXS"),
+    ("10S", "Aço inox Sch 10S"),
+    ("40S", "Aço inox Sch 40S"),
+    ("80S", "Aço inox Sch 80S"),
+)
+
+
+def _asme() -> list[TuboComercial]:
+    tubos: list[TuboComercial] = []
+    for schedule, serie in _SERIES_ASME:
+        nps, _, externos, paredes = fpiping.schedule_lookup[schedule]  # em mm
+        for polegada, dn, texto in _NPS:
+            if polegada not in nps:
+                continue
+            i = nps.index(polegada)
+            tubos.append(
+                TuboComercial(
+                    f"{serie}, DN {dn} ({texto} pol)",
+                    "Aço comercial",
+                    round(externos[i], 2),
+                    round(paredes[i], 2),
+                    serie,
+                )
+            )
+    return tubos
 
 
 def _pvc(dn: int, parede: float) -> TuboComercial:
-    return TuboComercial(f"PVC soldável, DN {dn}", "PVC ou plástico", float(dn), parede)
+    return TuboComercial(
+        f"PVC soldável, DN {dn}", "PVC ou plástico", float(dn), parede, "PVC soldável"
+    )
 
 
-#: Aço pela ASME B36.10M. PVC pela ficha técnica da linha soldável (NBR 5648, 750 kPa a 20 °C).
+#: PVC pela ficha técnica da linha soldável (NBR 5648, 750 kPa a 20 °C).
 TUBOS_COMERCIAIS: dict[str, TuboComercial] = {
     t.rotulo: t
     for t in (
-        _sch40(15, "1/2", 21.3, 2.77),
-        _sch40(20, "3/4", 26.7, 2.87),
-        _sch40(25, "1", 33.4, 3.38),
-        _sch40(32, "1 1/4", 42.2, 3.56),
-        _sch40(40, "1 1/2", 48.3, 3.68),
-        _sch40(50, "2", 60.3, 3.91),
-        _sch40(65, "2 1/2", 73.0, 5.16),
-        _sch40(80, "3", 88.9, 5.49),
-        _sch40(90, "3 1/2", 101.6, 5.74),
-        _sch40(100, "4", 114.3, 6.02),
-        _sch40(125, "5", 141.3, 6.55),
-        _sch40(150, "6", 168.3, 7.11),
-        _sch40(200, "8", 219.1, 8.18),
-        _sch40(250, "10", 273.0, 9.27),
-        _sch40(300, "12", 323.8, 10.31),
-        _sch40(350, "14", 355.6, 11.13),
-        _sch40(400, "16", 406.4, 12.70),
-        _sch40(450, "18", 457.0, 14.27),
-        _sch40(500, "20", 508.0, 15.09),
-        _sch40(600, "24", 610.0, 17.48),
+        *_asme(),
         _pvc(20, 1.5),
         _pvc(25, 1.7),
         _pvc(32, 2.1),
@@ -144,9 +210,11 @@ TUBOS_COMERCIAIS: dict[str, TuboComercial] = {
         _pvc(110, 6.1),
     )
 }
+#: As peças pelo Crane: K muda com o diâmetro do tubo, pelo f_T.
+PECAS_CRANE: tuple[str, ...] = tuple(nome for nome, _ in fn.PECAS_CRANE)
 
 
-def ler_pecas(texto: str | None) -> dict[str, int]:
+def ler_pecas(texto: str | None, nomes: Collection[str] = PECAS) -> dict[str, int]:
     """As peças de um bloco: guardadas como texto, porque as opções do bloco são texto."""
     try:
         dados = json.loads(texto or "{}")
@@ -156,7 +224,7 @@ def ler_pecas(texto: str | None) -> dict[str, int]:
         return {}
     pecas: dict[str, int] = {}
     for nome, quantos in dados.items():
-        if nome in PECAS and isinstance(quantos, (int, float)) and quantos > 0:
+        if nome in nomes and isinstance(quantos, (int, float)) and quantos > 0:
             pecas[str(nome)] = int(quantos)
     return pecas
 
@@ -222,6 +290,10 @@ class Linha:
     #: absoluta. Com valores de tabela, fica vazio.
     temperatura: sp.Expr | None = None
     pressao: sp.Expr | None = None
+    #: Gás ou líquido, quando o fluido diz; e o fluido da CoolProp, quando as propriedades vêm dela.
+    gas: bool = False
+    fluido: mp.Fluido | None = None
+    agua: bool = False  # água de tabela, para a pressão crítica
 
 
 def _linha(c: Contexto) -> Linha:
@@ -236,7 +308,7 @@ def _pela_temperatura(c: Contexto, fluido: mp.Fluido) -> dict[str, Any]:
     t, p = c.letra(g.T_FLUIDO), c.letra(g.P_FLUIDO)
     rho, mu = mp.massa_especifica(fluido, t, p), mp.viscosidade(fluido, t, p)
     validades: list[Validade] = []
-    if fluido.saturacao:
+    if fluido.saturacao and fluido.liquido:
         pv = mp.pressao_de_vapor(fluido, t)
         validades.append(
             Validade(
@@ -271,7 +343,16 @@ def _pela_temperatura(c: Contexto, fluido: mp.Fluido) -> dict[str, Any]:
             "Gás tratado como incompressível: vale enquanto a perda de pressão fica pequena perto da "
             "pressão absoluta, até uns 10 %."
         )
-    linha = Linha(rho, mu, pv, c.letra(g.GRAVIDADE), temperatura=t, pressao=p)
+    linha = Linha(
+        rho,
+        mu,
+        pv,
+        c.letra(g.GRAVIDADE),
+        temperatura=t,
+        pressao=p,
+        gas=not fluido.liquido,
+        fluido=fluido,
+    )
     return {"saida": replace(linha, validade=tuple(validades))}
 
 
@@ -287,11 +368,12 @@ def _fluido(c: Contexto) -> dict[str, Any]:
         c.padrao(g.MU, mu, fonte)
         if pv is not None:
             c.padrao(g.P_VAPOR, pv, fonte)
-    return {"saida": Linha(c.letra(g.RHO), c.letra(g.MU), c.letra(g.P_VAPOR), c.letra(g.GRAVIDADE))}
+    linha = Linha(c.letra(g.RHO), c.letra(g.MU), c.letra(g.P_VAPOR), c.letra(g.GRAVIDADE))
+    return {"saida": replace(linha, gas=nome in GASES_DE_TABELA, agua=nome.startswith("Água"))}
 
 
-def _trecho(c: Contexto) -> dict[str, Any]:
-    linha = _linha(c)
+def _tubo(c: Contexto) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
+    """D, L e ε do tubo, nesta ordem, com o tubo comercial e o material escolhidos no bloco."""
     comercial = TUBOS_COMERCIAIS.get(c.opcoes.get("comercial", DIAMETRO_INFORMADO))
     material = c.opcoes.get("tubo", "Aço comercial")
     if comercial is not None:
@@ -304,7 +386,12 @@ def _trecho(c: Contexto) -> dict[str, Any]:
     d, comprimento = c.letra(g.D_TUBO), c.letra(g.L_TUBO)
     if material in RUGOSIDADES:
         c.padrao(g.EPSILON, RUGOSIDADES[material], f"Tabela: {material}")
-    rugosidade = c.letra(g.EPSILON)
+    return d, comprimento, c.letra(g.EPSILON)
+
+
+def _trecho(c: Contexto) -> dict[str, Any]:
+    linha = _linha(c)
+    d, comprimento, rugosidade = _tubo(c)
     vazao = linha.vazao if linha.vazao is not None else c.letra(g.VAZAO_Q, fixa=True)
     velocidade = 4 * vazao / (sp.pi * d**2)
     reynolds = linha.rho * velocidade * d / linha.mu
@@ -346,6 +433,33 @@ def _perda_local(c: Contexto) -> dict[str, Any]:
         c.padrao(g.K_LOCAL, somar_pecas(pecas), f"Soma das peças: {lista}")
     perda = c.letra(g.K_LOCAL) * velocidade**2 / (2 * linha.gravidade)
     return {"saida": replace(linha, perda=linha.perda + perda)}
+
+
+def _perdas_crane(c: Contexto) -> dict[str, Any]:
+    linha = _linha(c)
+    if not linha.trechos:
+        raise ErroDeBloco("Ponha um trecho de tubo antes: o K do Crane usa o diâmetro dele.")
+    trecho = linha.trechos[-1]
+    pecas = ler_pecas(c.opcoes.get("pecas"), PECAS_CRANE)
+    if not pecas:
+        c.alertas.append("Diga as peças no inspetor do bloco do Crane: por enquanto ele soma zero.")
+    k = sum(
+        (quantos * KCrane(trecho.d, PECAS_CRANE.index(nome)) for nome, quantos in pecas.items()),
+        ZERO,
+    )
+    c.hipoteses.append(
+        "Peças pelo método do Crane (TP-410): K = n·f_T, com o f_T de escoamento todo turbulento em "
+        "tubo de aço novo do diâmetro do trecho. Válvulas de passagem plena, abertas."
+    )
+    turbulento = Validade(
+        trecho.reynolds - RE_TURBULENTO,
+        "O K do Crane é de escoamento turbulento: com Reynolds abaixo de 4000, a perda nas peças sai "
+        "menor que a real.",
+        restringe=False,
+    )
+    perda = k * trecho.velocidade**2 / (2 * linha.gravidade)
+    validade = (*linha.validade, turbulento)
+    return {"saida": replace(linha, perda=linha.perda + perda, validade=validade)}
 
 
 def _dados_da_linha(linha: Linha) -> tuple[tuple[str, sp.Expr], ...]:
@@ -486,6 +600,118 @@ def _velocidade(c: Contexto) -> dict[str, Any]:
     return {"condicao": condicoes}
 
 
+def _gas_no_tubo(c: Contexto) -> dict[str, Any]:
+    """Escoamento isotérmico de gás num tubo longo (Crane TP-410, eq. 1-6; Menon, cap. 2).
+
+    p₁² − p₂² = G²·(p₁/ρ₁)·[f·L/D + 2·ln(p₁/p₂)], com G = ṁ/A. Pedir p₂ ≥ p_s é pedir que essa
+    conta, feita com p_s no lugar de p₂, não passe de p₁²: o lado da esquerda sobe com a vazão.
+    """
+    linha = _linha(c)
+    if not linha.gas:
+        raise ErroDeBloco(
+            "Este bloco é de gás: escolha no Fluido o ar, o nitrogênio ou o metano pela "
+            "temperatura. Para líquido, use o Trecho de tubo."
+        )
+    d, comprimento, rugosidade = _tubo(c)
+    p1 = linha.pressao if linha.pressao is not None else c.letra(g.P_FLUIDO)
+    saida = c.letra(g.P_SAIDA_GAS)
+    vazao = c.letra(g.VAZAO_Q, fixa=True)
+    fluxo = 4 * linha.rho * vazao / (sp.pi * d**2)  # G, em kg/(m²·s)
+    reynolds = fluxo * d / linha.mu
+    atrito = AtritoDarcy(reynolds, rugosidade / d)
+    esquerda = saida**2 + fluxo**2 * p1 / linha.rho * (
+        atrito * comprimento / d + 2 * sp.log(p1 / saida)
+    )
+    c.hipoteses.append(
+        "Gás em tubo longo, em temperatura constante (isotérmico), com Q medida na entrada, na "
+        "pressão p_f e na temperatura T_f do Fluido. Sem desnível."
+    )
+    validades = (
+        Validade(p1 - saida, "A pressão na saída precisa ficar abaixo da de entrada, p_f."),
+        Validade(
+            sp.sqrt(p1 / linha.rho) - fluxo * p1 / (linha.rho * saida),
+            "Na saída, o gás chega ao limite do escoamento isotérmico (Mach 1/√κ): a vazão não "
+            "passa, a pressão de saída não cai até p_s. Aumente o diâmetro.",
+            restringe=False,
+        ),
+        Validade(
+            (reynolds - RE_LAMINAR) * (reynolds - RE_TURBULENTO),
+            "Reynolds caiu na transição, entre 2300 e 4000: a perda é só uma estimativa.",
+            restringe=False,
+        ),
+    )
+    velocidades = (
+        ("V_{1}", fluxo / linha.rho),
+        ("V_{s}", fluxo * p1 / (linha.rho * saida)),
+        ("Re", reynolds),
+    )
+    condicao = Condicao(
+        "Pressão na saída do gás",
+        "Gás no tubo",
+        esquerda,
+        p1**2,
+        "p_{s}^{2} + G^{2}\\,\\frac{p_{1}}{\\rho_{1}}\\left(f\\,\\frac{L}{D} + "
+        "2\\ln\\frac{p_{1}}{p_{s}}\\right)",
+        "",
+        velocidades,
+        validades,
+    )
+    return {"condicao": [condicao]}
+
+
+def _pressao_critica(c: Contexto, linha: Linha) -> sp.Expr:
+    fluido = linha.fluido
+    if fluido is not None and fluido.saturacao:
+        c.padrao(g.P_CRITICA, mp.pressao_critica(fluido), f"CoolProp: {fluido.rotulo}")
+    elif fluido is None and linha.agua:
+        c.padrao(g.P_CRITICA, P_CRITICA_DA_AGUA, "IAPWS: pressão crítica da água")
+    return c.letra(g.P_CRITICA)
+
+
+def _valvula_controle(c: Contexto) -> dict[str, Any]:
+    """K_v pedido pela IEC 60534-2-1 para líquido, em escoamento turbulento.
+
+    K_v = Q·√((ρ/ρ₀)/Δp), com Q em m³/h e Δp em bar. Quando a queda passa de
+    Δp_máx = F_L²·(p₁ − F_F·p_v), o líquido cavita na veia contraída e a vazão para de subir: a
+    conta usa Δp_máx. F_F = 0,96 − 0,28·√(p_v/p_c).
+    """
+    linha = _linha(c)
+    if linha.gas:
+        raise ErroDeBloco("Este bloco é de líquido (IEC 60534-2-1): escolha um líquido no Fluido.")
+    vazao = linha.vazao if linha.vazao is not None else c.letra(g.VAZAO_Q, fixa=True)
+    p1, queda = c.letra(g.P_MONTANTE), c.letra(g.DP_VALVULA)
+    recuperacao = c.letra(g.F_L_VALVULA)
+    fator_ff = sp.Float(0.96) - sp.Float(0.28) * sp.sqrt(linha.pv / _pressao_critica(c, linha))
+    maxima = recuperacao**2 * (p1 - fator_ff * linha.pv)
+    usada = sp.Min(queda, maxima)
+    pedido = 3600 * vazao * sp.sqrt(linha.rho / RHO_0_IEC / (usada / 100000))
+    c.hipoteses.append(
+        "Válvula de controle pela IEC 60534-2-1, líquido em escoamento turbulento, válvula do "
+        "tamanho do tubo (sem redução, F_P = 1). K_v em m³/h com 1 bar de queda."
+    )
+    validades = (
+        Validade(p1 - queda, "A queda na válvula precisa ser menor que a pressão antes dela."),
+        Validade(
+            maxima - queda,
+            "Com essa queda, o líquido cavita dentro da válvula (escoamento estrangulado): a vazão "
+            "não sobe mais com a queda, e o K_v saiu com Δp_máx. Confira com o fabricante se a "
+            "válvula aguenta a cavitação, ou suba a pressão antes dela.",
+            restringe=False,
+        ),
+    )
+    condicao = Condicao(
+        "K_v da válvula de controle",
+        "Válvula de controle",
+        pedido,
+        c.letra(g.KV_VALVULA),
+        "K_{v,ped}",
+        "",
+        (("\\Delta p_{máx}", maxima), ("F_{F}", fator_ff)),
+        validades,
+    )
+    return {"condicao": [condicao]}
+
+
 def _equacao(nome: str, esquerda: sp.Expr, direita: sp.Expr, letra: str) -> dict[str, Any]:
     return {"condicao": [Condicao(nome, nome, esquerda, direita, letra, "", igualdade=True)]}
 
@@ -514,28 +740,112 @@ def _arrasto(c: Contexto) -> dict[str, Any]:
     return _equacao("Arrasto", forca, c.letra(g.F_ARRASTO), "F_{D}")
 
 
+def _expansibilidade(tipo: str, beta: sp.Expr, tau: sp.Expr, kappa: sp.Expr) -> sp.Expr:
+    """ε do gás: ISO 5167-2, eq. 5 (orifício), e ISO 5167-4, eq. 2 (venturi)."""
+    if tipo in ORIFICIOS:
+        fator = sp.Float(0.351) + sp.Float(0.256) * beta**4 + sp.Float(0.93) * beta**8
+        return 1 - fator * (1 - tau ** (1 / kappa))
+    return sp.sqrt(
+        kappa
+        * tau ** (2 / kappa)
+        / (kappa - 1)
+        * (1 - beta**4)
+        / (1 - beta**4 * tau ** (2 / kappa))
+        * (1 - tau ** ((kappa - 1) / kappa))
+        / (1 - tau)
+    )
+
+
+def _faixa(valor: sp.Expr, minimo: float, maximo: float) -> sp.Expr:
+    return (valor - minimo) * (maximo - valor)
+
+
+def _validades_da_norma(
+    tipo: str, d: sp.Expr, garganta: sp.Expr, beta: sp.Expr, reynolds: sp.Expr
+) -> tuple[Validade, ...]:
+    """Os limites de uso da ISO 5167: fora deles, o C da norma não vale."""
+    if tipo in ORIFICIOS:
+        return (
+            Validade(
+                _faixa(beta, 0.1, 0.75), "β = D_o/D fora de 0,1 a 0,75 (ISO 5167-2, 5.3.1).", False
+            ),
+            Validade(_faixa(d, 0.05, 1.0), "D fora de 50 a 1000 mm (ISO 5167-2, 5.3.1).", False),
+            Validade(garganta - 0.0125, "D_o abaixo de 12,5 mm (ISO 5167-2, 5.3.1).", False),
+            Validade(
+                reynolds - sp.Max(5000, 16000 * beta**2),
+                "Re_D abaixo do mínimo da ISO 5167-2: 5000, e 16000·β² com β acima de 0,56.",
+                False,
+            ),
+        )
+    if tipo == VENTURI_USINADO:
+        faixas = ((50, 250), (0.4, 0.75), ("2·10⁵", "10⁶", 2e5, 1e6))
+    elif tipo == VENTURI_FUNDIDO:
+        faixas = ((100, 800), (0.3, 0.75), ("2·10⁵", "2·10⁶", 2e5, 2e6))
+    else:
+        faixas = ((200, 1200), (0.4, 0.7), ("2·10⁵", "2·10⁶", 2e5, 2e6))
+    (d1, d2), (b1, b2), (t1, t2, r1, r2) = faixas
+    b1_, b2_ = f"{b1:g}".replace(".", ","), f"{b2:g}".replace(".", ",")
+    texto = f"(ISO 5167-4: D de {d1} a {d2} mm, β de {b1_} a {b2_}, Re_D de {t1} a {t2})."
+    return (
+        Validade(_faixa(d, d1 / 1000, d2 / 1000), f"D fora da faixa do venturi {texto}", False),
+        Validade(_faixa(beta, b1, b2), f"β fora da faixa do venturi {texto}", False),
+        Validade(_faixa(reynolds, r1, r2), f"Re_D fora da faixa do venturi {texto}", False),
+    )
+
+
 def _medidor(c: Contexto) -> dict[str, Any]:
     linha = _linha(c)
+    tipo = c.opcoes.get("tipo", C_INFORMADO)
     d, garganta = c.letra(g.D_TUBO), c.letra(g.D_ORIFICIO)
     area = sp.pi * garganta**2 / 4
-    vazao = (
-        c.letra(g.C_DESCARGA)
-        * area
-        * sp.sqrt(2 * c.letra(g.DELTA_P) / linha.rho)
-        / sp.sqrt(1 - (garganta / d) ** 4)
-    )
-    c.hipoteses.append("No medidor, C_d já inclui as perdas: vale o da norma do medidor.")
-    resultado = _equacao("Vazão no medidor", vazao, c.letra(g.VAZAO_Q), "Q")
-    resultado["condicao"][0] = replace(
-        resultado["condicao"][0],
-        validade=(
+    queda = c.letra(g.DELTA_P)
+    vazao = c.letra(g.VAZAO_Q)
+    beta = garganta / d
+    menor = Validade(d - garganta, "O orifício precisa ser menor que o tubo.")
+    if tipo not in ORIFICIOS and tipo not in VENTURIS:
+        conta = c.letra(g.C_DESCARGA) * area * sp.sqrt(2 * queda / linha.rho) / sp.sqrt(1 - beta**4)
+        c.hipoteses.append("No medidor, C_d já inclui as perdas: vale o da norma do medidor.")
+        resultado = _equacao("Vazão no medidor", conta, vazao, "Q")
+        resultado["condicao"][0] = replace(resultado["condicao"][0], validade=(menor,))
+        return resultado
+    reynolds = 4 * linha.rho * vazao / (sp.pi * d * linha.mu)
+    if tipo in ORIFICIOS:
+        coeficiente: sp.Expr = CoeficienteOrificio(d, garganta, reynolds, ORIFICIOS[tipo])
+        c.hipoteses.append(
+            "Placa de orifício pela ISO 5167-2: C de Reader-Harris/Gallagher, que muda com β e "
+            "Re_D. Trechos retos antes e depois da placa nos comprimentos da norma."
+        )
+    else:
+        coeficiente = sp.Float(VENTURIS[tipo])
+        c.hipoteses.append(
+            "Venturi clássico pela ISO 5167-4, com o C fixo da norma para o tipo de convergente."
+        )
+    validades = [menor, *_validades_da_norma(tipo, d, garganta, beta, reynolds)]
+    expansao: sp.Expr = sp.S.One
+    if linha.gas:
+        p1 = linha.pressao if linha.pressao is not None else c.letra(g.P_FLUIDO)
+        tau = (p1 - queda) / p1
+        expansao = _expansibilidade(tipo, beta, tau, c.letra(g.KAPPA))
+        validades.append(
             Validade(
-                d - garganta,
-                "O orifício precisa ser menor que o tubo.",
-            ),
-        ),
+                tau - sp.Rational(3, 4),
+                "A queda no medidor passou de 25 % da pressão p_f: a ISO 5167 pede p₂/p₁ ≥ 0,75.",
+                restringe=False,
+            )
+        )
+    conta = coeficiente * expansao * area * sp.sqrt(2 * queda / linha.rho) / sp.sqrt(1 - beta**4)
+    condicao = Condicao(
+        "Vazão no medidor",
+        "Vazão no medidor",
+        conta,
+        vazao,
+        "Q",
+        "",
+        (("Re_{D}", reynolds), ("\\beta", beta)),
+        tuple(validades),
+        igualdade=True,
     )
-    return resultado
+    return {"condicao": [condicao]}
 
 
 def _manning(c: Contexto) -> dict[str, Any]:
@@ -612,7 +922,8 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
                 "fluido",
                 "Fluido",
                 "Valores típicos de tabela, ou pela temperatura: aí a CoolProp dá ρ, μ e p_v na "
-                "temperatura e na pressão do fluido. Para outro fluido, informe as propriedades.",
+                "temperatura e na pressão do fluido. O metano faz as vezes do gás natural. Para "
+                "outro fluido, informe as propriedades.",
                 (INFORMAR, *FLUIDOS_TIPICOS, *POR_TEMPERATURA),
                 "Água a 20 °C",
             ),
@@ -639,7 +950,8 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
             Opcao(
                 "comercial",
                 "Tubo comercial",
-                "Preenche D com o diâmetro interno da tabela: aço Sch 40 ou PVC soldável.",
+                "Preenche D com o diâmetro interno da tabela: aço pela ASME B36.10M, inox pela "
+                "B36.19M, ou PVC soldável.",
                 (DIAMETRO_INFORMADO, *TUBOS_COMERCIAIS),
                 DIAMETRO_INFORMADO,
             ),
@@ -656,6 +968,18 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
         (Porta("entrada", "Linha", LINHA),),
         (_SAIDA,),
         _perda_local,
+        numerar=True,
+        dominio=FLUIDOS,
+    ),
+    Bloco(
+        "perdas_crane",
+        "Peças pelo Crane",
+        mb.GRUPO_TUBULACAO,
+        "Soma K·V²/(2·g) das peças pelo método do Crane: K muda com o diâmetro do trecho anterior.",
+        "h_k = Σ n·f_T·V²/(2·g)",
+        (Porta("entrada", "Linha", LINHA),),
+        (_SAIDA,),
+        _perdas_crane,
         numerar=True,
         dominio=FLUIDOS,
     ),
@@ -703,6 +1027,40 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
             ),
         ),
     ),
+    Bloco(
+        "gas_no_tubo",
+        "Gás no tubo",
+        mb.GRUPO_VERIFICACAO,
+        "Gás em tubo longo, isotérmico: a pressão que chega no fim precisa ser pelo menos p_s.",
+        "p_s² + G²·(p₁/ρ₁)·(f·L/D + 2·ln(p₁/p_s)) ≤ p₁²",
+        (_ENTRADA,),
+        (_SAIDA_CONDICAO,),
+        _gas_no_tubo,
+        (
+            Opcao(
+                "tubo",
+                "Material do tubo",
+                "Dá a rugosidade de tubo novo.",
+                (*RUGOSIDADES, RUGOSIDADE_INFORMADA),
+                "Aço comercial",
+            ),
+            Opcao(
+                "comercial",
+                "Tubo comercial",
+                "Preenche D com o diâmetro interno da tabela: ASME B36.10M e B36.19M, ou PVC.",
+                (DIAMETRO_INFORMADO, *TUBOS_COMERCIAIS),
+                DIAMETRO_INFORMADO,
+            ),
+        ),
+        dominio=FLUIDOS,
+    ),
+    _verificacao(
+        "valvula_controle",
+        "Válvula de controle",
+        "K_v que a válvula precisa ter pela IEC 60534-2-1, com o aviso de cavitação.",
+        "Q·√((ρ/ρ₀)/Δp) ≤ K_v",
+        _valvula_controle,
+    ),
     _verificacao(
         "velocidade",
         "Velocidade máxima",
@@ -738,12 +1096,26 @@ BLOCOS_FLUIDOS: tuple[Bloco, ...] = (
         "F_D = C_D·ρ·V²·A/2",
         _arrasto,
     ),
-    _bloco_equacao(
+    Bloco(
         "medidor",
         "Orifício ou venturi",
-        "Vazão pela queda de pressão no medidor.",
-        "Q = C_d·A·√(2·Δp/ρ)/√(1−β⁴)",
+        mb.GRUPO_EQUACOES,
+        "Vazão pela queda de pressão no medidor: C informado ou pela ISO 5167.",
+        "Q = C·ε·A·√(2·Δp/ρ)/√(1−β⁴)",
+        (_ENTRADA,),
+        (_SAIDA_CONDICAO,),
         _medidor,
+        (
+            Opcao(
+                "tipo",
+                "Medidor",
+                "Pela ISO 5167, o C da placa sai de β e de Reynolds (Reader-Harris/Gallagher), e o "
+                "do venturi é o da norma. Com gás, entra a expansibilidade ε.",
+                MEDIDORES,
+                C_INFORMADO,
+            ),
+        ),
+        dominio=FLUIDOS,
     ),
     _bloco_equacao(
         "golpe",

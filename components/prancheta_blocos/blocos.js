@@ -27,8 +27,9 @@ const VALOR = "valor"
 const CONDICAO = "condicao"
 const MATERIAL = "material"
 const DICA = "Clique num bloco da biblioteca para pôr na fila. Arraste de uma bolinha a outra para ligar."
-const AJUDA = "Clique para pôr na fila. Selecione uma ligação para inserir no meio dela."
+const AJUDA = "Clique para pôr na fila. Selecione uma ligação para inserir no meio dela, ou solte um fio no vazio."
 const AJUDA_FIO = "Ligação selecionada. Passe o cursor sobre uma opção para ver como fica."
+const AJUDA_SOLTO = "Fio solto no vazio: clique num bloco e ele entra ali, já ligado."
 const SEPARADOR = " · "
 const DICA_DO_EDITOR = "Vale conta e unidade: 300/2, 1,5 m, +10. Vazio vira letra."
 const ESPERA_DO_REENVIO = 1500 // sem resposta nesse tempo, o pedido vai de novo
@@ -169,6 +170,7 @@ function criar(raiz) {
     topo: null,
     gesto: null,
     pendente: null,
+    solto: null, // o fio puxado de uma bolinha e solto no vazio: a biblioteca mostra o que cabe nela
     realce: null,
     fantasma: null,
     fila: [], // pedidos ao Python ainda sem confirmação
@@ -535,6 +537,59 @@ function criar(raiz) {
       const b = e.catalogo[chave]
       return b.entradas.some((p) => liga(s, p)) && b.saidas.some((p) => liga(p, ent))
     })
+  }
+  function portaDoSolto(solto) {
+    const no = noPorId(solto?.no)
+    if (!no) return null
+    const lista = solto.lado === "s" ? portas(no).saidas : portas(no).entradas
+    return lista.find((x) => x.chave === solto.chave) ?? null
+  }
+  // Os blocos com uma bolinha que liga com a do fio solto: entrada para uma saída, e vice-versa.
+  function cabemNaPorta(solto) {
+    const p = portaDoSolto(solto)
+    if (!p) return []
+    return e.ordem.filter((chave) => {
+      const b = e.catalogo[chave]
+      if (chave === RESULTADO && nivel().nos.some((n) => n.tipo === chave)) return false
+      return solto.lado === "s" ? b.entradas.some((x) => liga(p, x)) : b.saidas.some((x) => liga(x, p))
+    })
+  }
+  function ligarNoSolto(solto, chave) {
+    if (ocupado()) {
+      avisarOcupado()
+      return
+    }
+    const p = portaDoSolto(solto)
+    if (!p) return
+    const no = criarNo(chave)
+    const lado = solto.lado === "s" ? portas(no).entradas : portas(no).saidas
+    const i = lado.findIndex((x) => (solto.lado === "s" ? liga(p, x) : liga(x, p)))
+    if (i < 0) return
+    const [x, y] = solto.ponto
+    // A bolinha do bloco novo cai onde o fio foi solto.
+    no.x = Math.round(solto.lado === "s" ? x : x - LARGURA)
+    no.y = Math.round(y - PORTA_Y - PORTA_PASSO * (i + 0.5))
+    while (sobrepoe(no.x, no.y, altura(no))) no.y += 40
+    nivel().nos.push(no)
+    if (solto.lado === "s") ligar(solto.no, solto.chave, no.id, lado[i].chave)
+    else ligar(no.id, lado[i].chave, solto.no, solto.chave)
+    ligarOutros(no) // o resto do bloco liga como o que vem da biblioteca: a condição vai ao fim
+    e.solto = null
+    e.sel = { no: no.id }
+    dica.textContent = e.catalogo[chave].dica
+    enviar()
+  }
+  function soltarNoVazio(g) {
+    e.solto = { lado: g.lado, no: g.no, chave: g.chave, ponto: g.ponta }
+    e.sel = null
+    biblioteca.classList.remove("fechada")
+    const quantos = cabemNaPorta(e.solto).length
+    dica.textContent = quantos
+      ? "Escolha na biblioteca o bloco que entra aqui: ficaram só os que cabem nesta bolinha. Esc desiste."
+      : "Nenhum bloco da biblioteca cabe nesta bolinha."
+    avisarSelecao()
+    montarLista()
+    desenhar()
   }
   function inserirNoFio(fio, chave) {
     // A ligação vira origem → novo → destino, e o resto do desenho não anda.
@@ -1100,13 +1155,18 @@ function criar(raiz) {
     if (fio && e.fantasma) s += desenharFantasma(fio)
     const g = e.gesto
     svg.classList.toggle("ligando", g?.tipo === "fio" || Boolean(e.pendente))
-    if (g?.tipo === "fio" && g.ponta) {
-      const no = noPorId(g.no)
-      const lista = g.lado === "s" ? portas(no).saidas : portas(no).entradas
-      const i = lista.findIndex((p) => p.chave === g.chave)
-      const base = portaXY(no, g.lado, i)
-      const d = g.lado === "s" ? caminho(base, g.ponta) : caminho(g.ponta, base)
-      s += `<path class="fio solto t-${lista[i].tipo}" d="${d}"/>`
+    const puxado = g?.tipo === "fio" && g.ponta ? g : e.solto
+    if (puxado) {
+      const no = noPorId(puxado.no)
+      const lista = no ? (puxado.lado === "s" ? portas(no).saidas : portas(no).entradas) : []
+      const i = lista.findIndex((p) => p.chave === puxado.chave)
+      if (i >= 0) {
+        const ponta = puxado.ponta ?? puxado.ponto
+        const base = portaXY(no, puxado.lado, i)
+        const d = puxado.lado === "s" ? caminho(base, ponta) : caminho(ponta, base)
+        s += `<path class="fio solto t-${lista[i].tipo}" d="${d}"/>`
+        if (e.solto && puxado === e.solto) s += `<circle class="ponta-solta" cx="${ponta[0]}" cy="${ponta[1]}" r="6"/>`
+      }
     }
     svg.innerHTML = `<g transform="translate(${e.vista.x} ${e.vista.y}) scale(${e.vista.esc})">${s}</g>`
     const passo = 22 * e.vista.esc
@@ -1234,6 +1294,10 @@ function criar(raiz) {
       e.gesto = { tipo: "pan", inicio: [ev.clientX, ev.clientY], vista: { ...e.vista } }
       svg.classList.add("puxando")
       return
+    }
+    if (e.solto) {
+      e.solto = null
+      montarLista()
     }
     const duplo = segundoToque(ev)
     if (duplo?.chave) {
@@ -1394,6 +1458,10 @@ function criar(raiz) {
         enviar() // o fio puxado para o vazio fica apagado
         return
       }
+      if (g.ponta && !destino) {
+        soltarNoVazio(g)
+        return
+      }
       if (!g.ponta) {
         e.pendente = { lado: g.lado, no: g.no, chave: g.chave }
         dica.textContent = "Agora clique na outra bolinha."
@@ -1454,8 +1522,9 @@ function criar(raiz) {
         busca.focus()
       }
     } else if (ev.key === "Escape") {
-      if (e.pendente || e.sel || e.multi.size) {
+      if (e.pendente || e.sel || e.multi.size || e.solto) {
         e.pendente = null
+        e.solto = null
         e.multi.clear()
         selecionar(null)
       } else if (e.caminho.length) {
@@ -1494,7 +1563,7 @@ function criar(raiz) {
   })
 
   // ---- biblioteca
-  function itemDaLista(chave, aoClicar, previa) {
+  function itemDaLista(chave, aoClicar, previa, fantasma = true) {
     const b = e.catalogo[chave]
     const botao = document.createElement("button")
     botao.type = "button"
@@ -1513,6 +1582,8 @@ function criar(raiz) {
       const selo = document.createElement("em")
       selo.textContent = "✓ COMPATÍVEL"
       botao.append(selo)
+    }
+    if (previa && fantasma) {
       for (const [evento, valor] of [["mouseenter", chave], ["focus", chave], ["mouseleave", null], ["blur", null]]) {
         botao.addEventListener(evento, () => {
           e.fantasma = valor
@@ -1547,8 +1618,8 @@ function criar(raiz) {
     botao.type = "button"
     botao.textContent = e.mostrarTodos ? "Esconder de novo" : "Mostrar todos"
     botao.title = e.mostrarTodos
-      ? "Volta a esconder o que não cabe na seção ou no tipo de peça da montagem."
-      : "A forma da seção e o tipo de peça decidem: pressão interna pede tubo, e as peças do eixo pedem eixo redondo. Passe o cursor num bloco em cinza para ver o motivo."
+      ? "Volta a esconder o que não cabe na seção, no tipo de peça ou no fluido da montagem."
+      : "A forma da seção, o tipo de peça e o fluido decidem: pressão interna pede tubo, as peças do eixo pedem eixo redondo, e a bomba pede líquido. Passe o cursor num bloco em cinza para ver o motivo."
     botao.addEventListener("click", () => {
       e.mostrarTodos = !e.mostrarTodos
       montarLista()
@@ -1567,7 +1638,14 @@ function criar(raiz) {
     const serve = (chave) => e.mostrarTodos || !escondido(chave)
     const quantosFora = e.ordem.filter((c) => achou(c) && escondido(c)).length
     const partes = quantosFora ? [avisoDosEscondidos(quantosFora)] : []
-    if (fio) {
+    if (e.solto) {
+      const boas = cabemNaPorta(e.solto).filter((c) => achou(c) && serve(c))
+      conta.textContent = `${boas.length} compatíve${boas.length === 1 ? "l" : "is"}`
+      ajuda.textContent = boas.length ? AJUDA_SOLTO : "Nenhum bloco cabe nesta bolinha."
+      for (const chave of boas) {
+        partes.push(itemDaLista(chave, () => ligarNoSolto(e.solto, chave), true, false))
+      }
+    } else if (fio) {
       const boas = compativeis(fio).filter((c) => achou(c) && serve(c))
       conta.textContent = `${boas.length} compatíve${boas.length === 1 ? "l" : "is"}`
       ajuda.textContent = boas.length ? AJUDA_FIO : "Nenhum bloco cabe nesta ligação."

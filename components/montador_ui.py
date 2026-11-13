@@ -15,6 +15,7 @@ from __future__ import annotations
 import html
 import json
 import math
+import re
 import time
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
@@ -47,12 +48,14 @@ from core import montador_busca as bs
 from core import montador_casos as mcs
 from core import montador_catalogo as cat
 from core import montador_conjuntos as mc
+from core import montador_diagrama as dgm
 from core import montador_eixo as me
 from core import montador_fluidos as fl
 from core import montador_formula as mf
 from core import montador_grandezas as g
 from core import montador_historico as mh
 from core import montador_planilha as mp
+from core import montador_propriedades as mprop
 from core import montador_registro as rg
 from core import montador_repasse as rp
 from core import montador_sensibilidade as ms
@@ -360,9 +363,40 @@ def _selecionar(p: Parte, selecao: Mapping[str, Any] | None) -> None:
     estado[p.k("pedido")] = pedido
 
 
-def _ao_escolher_modelo(p: Parte) -> None:
+def _nome_da_pergunta(p: Parte, modelo: Modelo) -> str:
+    """A pergunta que o modelo responde: o nome da letra pedida, ou o do modelo sem letra conhecida."""
+    letras = g.letras_conhecidas(p.sistema.chave)
+    letra = letras.get(modelo.alvo) or letras.get(re.sub(r"_\d+$", "", modelo.alvo))
+    if letra is None:
+        return modelo.nome
+    return f"{letra.nome} ({letra.texto})"
+
+
+def _perguntas(p: Parte) -> dict[str, list[str]]:
+    """O que cada modelo da parte acha, com os modelos de cada pergunta, em ordem de nome."""
+    perguntas: dict[str, list[str]] = {}
+    for modelo in p.modelos:
+        perguntas.setdefault(_nome_da_pergunta(p, modelo), []).append(modelo.nome)
+    return dict(sorted(perguntas.items(), key=lambda item: item[0].casefold()))
+
+
+def _ao_escolher_pergunta(p: Parte) -> None:
+    """Pergunta com uma situação só já abre o modelo dela; com várias, a lista fica só com elas."""
     estado = st.session_state
-    modelo = p.por_nome.get(estado.get(p.k("modelo")) or "")
+    nomes = _perguntas(p).get(estado.get(p.k("pergunta")) or "", [])
+    if len(nomes) == 1 and estado.get(p.k("modelo_atual")) != nomes[0]:
+        estado[p.k("anterior")] = _instantaneo(p)
+        _aplicar(p, p.por_nome[nomes[0]])
+
+
+def _ao_escolher_modelo(p: Parte, chave: str | None = None) -> None:
+    estado = st.session_state
+    chave = chave or p.k("modelo")
+    if chave != estado.get(p.k("chave_do_modelo"), chave):
+        # A lista que sumiu da tela (a de antes da pergunta): o navegador ainda manda a escolha
+        # velha dela junto com a rodada seguinte, e ela abriria o modelo de antes por cima.
+        return
+    modelo = p.por_nome.get(estado.get(chave) or "")
     if modelo is not None:
         estado[p.k("anterior")] = _instantaneo(p)
         _aplicar(p, modelo)
@@ -373,7 +407,13 @@ def _ao_editar(p: Parte) -> None:
     evento = getattr(estado.get(p.k("prancheta")), "edicao", None)
     if not evento or not isinstance(evento.get("grafo"), Mapping):
         return
-    _trocar_grafo(p, mc.tirar_portas_mortas(evento["grafo"]), versao=int(evento.get("versao", 0)))
+    versao = int(evento.get("versao", 0))
+    if versao <= estado.get(p.k("versao"), 0):
+        # Desenho de antes do que já está aqui (um modelo aberto depois que a prancheta mandou):
+        # chegou atrasado, e trocaria a montagem nova pela velha.
+        _guardar_colagens(p, evento.get("colados"))
+        return
+    _trocar_grafo(p, mc.tirar_portas_mortas(evento["grafo"]), versao=versao)
     if not evento.get("so_posicao"):  # arrumar a prancheta não troca a conta
         estado[p.k("modelo_atual")] = None
     elif evento.get("automatico"):
@@ -564,23 +604,47 @@ def _cabecalho(p: Parte) -> None:
     # O Streamlit apaga o estado do seletor que não foi desenhado: quem manda são as chaves atuais.
     for seletor, escolha in zip(p.sistema.seletores, estado[p.k("unidades")], strict=True):
         estado[p.k(f"u_{seletor.dimensao}")] = escolha
-    estado[p.k("modelo")] = estado[p.k("modelo_atual")]
-    colunas = st.columns([3.0, 1.5, 1.0, 1.0], vertical_alignment="bottom")
+    perguntas = _perguntas(p)
+    pergunta = estado.get(p.k("pergunta"))
+    if pergunta not in perguntas:
+        pergunta = estado[p.k("pergunta")] = None
     por_nome = p.por_nome
+    nomes = perguntas[pergunta] if pergunta else list(por_nome)
+    atual = estado[p.k("modelo_atual")]
+    # Uma chave por pergunta: a lista muda de opções, e o navegador guardaria a escolha da lista velha.
+    chave = p.k("modelo") if not pergunta else p.k(f"modelo_{list(perguntas).index(pergunta)}")
+    estado[chave] = atual if atual in nomes else None
+    estado[p.k("chave_do_modelo")] = chave
+    colunas = st.columns([2.0, 2.6, 1.4, 1.0, 1.0], vertical_alignment="bottom")
     colunas[0].selectbox(
-        "Começar de um modelo",
-        list(por_nome),
+        "O que você quer descobrir?",
+        list(perguntas),
         index=None,
-        placeholder="Montagem minha, sem modelo",
-        key=p.k("modelo"),
-        on_change=_ao_escolher_modelo,
+        placeholder="Escolha o que achar",
+        key=p.k("pergunta"),
+        on_change=_ao_escolher_pergunta,
         args=(p,),
+        help="Comece pela grandeza que você quer achar: ficam só as situações que respondem a ela.",
+    )
+    quantos = len(nomes)
+    colunas[1].selectbox(
+        "Situação" if pergunta else "Começar de um modelo",
+        nomes,
+        index=None,
+        placeholder=(
+            ("Escolha a situação" if quantos == 1 else f"Escolha uma das {quantos} situações")
+            if pergunta
+            else "Montagem minha, sem modelo"
+        ),
+        key=chave,
+        on_change=_ao_escolher_modelo,
+        args=(p, chave),
         format_func=lambda nome: f"{nome}: {por_nome[nome].dica}",
         help="Abre os blocos prontos com números de exemplo. Depois é só mudar por cima.",
     )
     # Um botão só para as unidades: com um seletor por coluna, a linha não cabia em tela de
     # notebook (os rótulos e os botões quebravam no meio da palavra).
-    with colunas[1].popover(
+    with colunas[2].popover(
         "Unidades",
         icon=":material/straighten:",
         help="As unidades dos números da tela: " + " · ".join(estado[p.k("unidades")]) + ".",
@@ -596,7 +660,7 @@ def _cabecalho(p: Parte) -> None:
                 args=(p,),
                 help=seletor.ajuda,
             )
-    colunas[2].button(
+    colunas[3].button(
         "Limpar",
         key=p.k("limpar"),
         on_click=_limpar,
@@ -604,7 +668,7 @@ def _cabecalho(p: Parte) -> None:
         help="Apaga os blocos para começar do zero. Voltar, ou Ctrl+Z na prancheta, traz de volta.",
         width="stretch",
     )
-    colunas[3].button(
+    colunas[4].button(
         "Voltar",
         key=p.k("voltar"),
         on_click=_voltar,
@@ -1043,8 +1107,16 @@ def _rastro(grafo: mt.Grafo, resposta: mt.Resposta | None) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def chave_da_opcao(p: Parte, no_id: str, opcao: str) -> str:
+    """A revisão vai no nome, como nos campos de valor: ao abrir outro modelo, o navegador ainda
+    manda a escolha que guardava (o mesmo bloco q1, a mesma opção), e ela trocaria a do modelo novo."""
+    return f"{p.prefixo}_op_{no_id}_{opcao}_r{st.session_state.get(p.k('revisao'), 0)}"
+
+
 def _ao_mudar_opcao(p: Parte, no_id: str, opcao: str, chave: str) -> None:
     estado = st.session_state
+    if chave != chave_da_opcao(p, no_id, opcao):
+        return  # a lista de antes de abrir outro modelo
     no = rg.por_id(estado[p.k("grafo")]["nos"], no_id)
     bloco = mb.POR_CHAVE.get(str(no.get("tipo"))) if no is not None else None
     escolhas = next((o.lista() for o in bloco.opcoes if o.chave == opcao), ()) if bloco else ()
@@ -1107,7 +1179,7 @@ def _opcoes_dos_blocos(p: Parte, nos: Sequence[mt.No]) -> None:
         for opcao in bloco.opcoes:
             escolhas = opcao.lista()
             atual = dict(no.opcoes).get(opcao.chave, opcao.padrao)
-            chave = f"{p.prefixo}_op_{no.id}_{opcao.chave}"
+            chave = chave_da_opcao(p, no.id, opcao.chave)
             estado[chave] = atual if atual in escolhas else opcao.padrao
             st.selectbox(
                 f"{bloco.nome}: {opcao.rotulo.lower()}",
@@ -1239,7 +1311,8 @@ def _numeros_de(
     usados = {k: v for k, v in valores.items() if v is not None}
     if resposta is not None:
         # Com casos de carga, os do caso que manda; as letras do meio vêm com o número achado.
-        usados = {**dict(resposta.do_meio), **mt.valores_do_caso(resposta)}
+        # Os valores que a conta não usou (a vazão, num COP) ficam: a tabela e o cartão mostram.
+        usados = {**usados, **dict(resposta.do_meio), **mt.valores_do_caso(resposta)}
         valor = resposta.adotado or resposta.valor
         if valor is not None:
             usados[resposta.alvo.chave] = valor
@@ -1329,7 +1402,8 @@ def _como_usar(p: Parte) -> None:
     with st.expander("Como usar esta página", icon=":material/help:"):
         st.markdown(
             f"""
-1. **Comece de um modelo** parecido com a sua peça, ou clique em **Limpar** e monte do zero.
+1. **Diga o que quer descobrir** no primeiro campo: ficam só as situações que respondem a isso, e a
+   escolhida abre pronta. Ou clique em **Limpar** e monte do zero.
 2. **Monte na prancheta**: clique num bloco da biblioteca à esquerda e ele entra na fila. Comece por
    {primeiro}, depois os esforços, um critério e, no fim, o bloco **Em função de**.
 3. **Ponha os números** no inspetor à direita. Campo vazio fica como letra na fórmula.
@@ -1343,14 +1417,16 @@ def _como_usar(p: Parte) -> None:
 | Ver só um bloco ou uma ligação | Um clique nele |
 | Mudar um número no cartão | Dois cliques no número |
 | Ligar dois blocos | Arraste de uma bolinha até a outra |
+| Achar o bloco que cabe numa bolinha | Arraste o fio dela e solte no vazio |
 | Pôr um bloco no meio de uma ligação | Clique na ligação e depois no bloco da biblioteca |
 | Apagar o que está selecionado | Tecla Delete |
 | Desfazer e refazer | Ctrl+Z e Ctrl+Y |
 | Copiar e colar blocos | Ctrl+C e Ctrl+V |
 | Arrumar os blocos na tela | Botão Organizar |
 
-Abaixo da resposta ficam: as condições, a busca com várias incógnitas, a escolha no catálogo, o
-que mais pesa, a comparação de duas montagens e os documentos (Word, Excel e registro no projeto).
+Abaixo da resposta, em abas: **Condições** (com a tabela de estados e o diagrama do ciclo, quando
+há corrente), **Explorar** (a busca com várias incógnitas, o catálogo e o que mais pesa),
+**Comparar e levar**, **Passo a passo** e **Salvar e registrar** (Word, Excel e registro no projeto).
 """
         )
 
@@ -1522,18 +1598,26 @@ def _inspetor_da_formula(p: Parte, no: mt.No) -> None:
         st.caption(problema)
 
 
-def _rotulo_da_peca(nome: str) -> str:
-    return f"{nome} · K {_numero(fl.PECAS[nome])}"
+#: As peças de cada bloco: o K típico de tabela, ou o do Crane, que muda com o diâmetro.
+_TIPOS_COM_PECAS = ("perda_local", "perdas_crane")
 
 
-def _ao_editar_pecas(p: Parte, id_: str, chave: str) -> None:
+def _nomes_das_pecas(tipo: str) -> tuple[str, ...]:
+    return fl.PECAS_CRANE if tipo == "perdas_crane" else tuple(fl.PECAS)
+
+
+def _rotulo_da_peca(tipo: str, nome: str) -> str:
+    return nome if tipo == "perdas_crane" else f"{nome} · K {_numero(fl.PECAS[nome])}"
+
+
+def _ao_editar_pecas(p: Parte, id_: str, chave: str, tipo: str = "perda_local") -> None:
     estado = st.session_state
-    no = _no_do_tipo(p, id_, "perda_local")
+    no = _no_do_tipo(p, id_, tipo)
     if no is None:
         return
-    atuais = fl.ler_pecas((no.get("opcoes") or {}).get("pecas"))
-    nomes = list(fl.PECAS)
-    linhas = [{"Peça": _rotulo_da_peca(nome), "Qtd": atuais.get(nome, 0)} for nome in nomes]
+    nomes = _nomes_das_pecas(tipo)
+    atuais = fl.ler_pecas((no.get("opcoes") or {}).get("pecas"), nomes)
+    linhas = [{"Peça": _rotulo_da_peca(tipo, nome), "Qtd": atuais.get(nome, 0)} for nome in nomes]
     novas = _com_edicoes(linhas, estado[chave])[: len(nomes)]
     pecas = {
         nome: int(x.get("Qtd") or 0)
@@ -1546,9 +1630,10 @@ def _ao_editar_pecas(p: Parte, id_: str, chave: str) -> None:
 
 
 def _pecas_do_bloco(p: Parte, no: mt.No) -> None:
-    atuais = fl.ler_pecas(dict(no.opcoes).get("pecas"))
+    nomes = _nomes_das_pecas(no.tipo)
+    atuais = fl.ler_pecas(dict(no.opcoes).get("pecas"), nomes)
     quadro = pd.DataFrame(
-        [{"Peça": _rotulo_da_peca(nome), "Qtd": atuais.get(nome, 0)} for nome in fl.PECAS]
+        [{"Peça": _rotulo_da_peca(no.tipo, nome), "Qtd": atuais.get(nome, 0)} for nome in nomes]
     )
     chave = f"{p.prefixo}_pecas_{no.id}"
     _titulo_de_secao("Peças da linha")
@@ -1559,7 +1644,7 @@ def _pecas_do_bloco(p: Parte, no: mt.No) -> None:
         disabled=("Peça",),
         width="stretch",
         on_change=_ao_editar_pecas,
-        args=(p, no.id, chave),
+        args=(p, no.id, chave, no.tipo),
         column_config={
             "Peça": st.column_config.TextColumn(width=185),
             "Qtd": st.column_config.NumberColumn(
@@ -1571,7 +1656,13 @@ def _pecas_do_bloco(p: Parte, no: mt.No) -> None:
             ),
         },
     )
-    st.caption("A soma vai para K_L. K de peça aberta, valor típico: varia com o fabricante.")
+    if no.tipo == "perdas_crane":
+        st.caption(
+            "K = n·f_T pelo Crane (TP-410), com o f_T do diâmetro do trecho anterior: o número "
+            "muda quando o diâmetro muda."
+        )
+    else:
+        st.caption("A soma vai para K_L. K de peça aberta, valor típico: varia com o fabricante.")
 
 
 def _ao_editar_pontos(p: Parte, id_: str, chave: str, titulo: str, fator: float) -> None:
@@ -1683,7 +1774,7 @@ def _inspetor_bloco(
     if letras:
         _campos(p, letras, alvo, u)
     _opcoes_dos_blocos(p, [no] if bloco.opcoes else [])
-    if no.tipo == "perda_local":
+    if no.tipo in _TIPOS_COM_PECAS:
         _pecas_do_bloco(p, no)
     elif no.tipo == "curva_bomba":
         _pontos_da_bomba(p, no, u)
@@ -2235,10 +2326,10 @@ def _letras_do_meio(resposta: mt.Resposta, u: Unidades) -> None:
         )
 
 
-def _tabela_de_estados(base: mt.Montagem, resposta: mt.Resposta, u: Unidades) -> None:
+def _tabela_de_estados(p: Parte, base: mt.Montagem, resposta: mt.Resposta, u: Unidades) -> None:
     """Cada ponto do ciclo com pressão, temperatura, entalpia, entropia, título e vazão."""
     _titulo_da_pagina("Tabela de estados")
-    numeros = _numeros_de(resposta.valores_usados, resposta)
+    numeros = _numeros_de(st.session_state[p.k("valores")], resposta)
     # A montagem da resposta: nela, a letra que vale zero (perda de pressão nula) já saiu da conta.
     conta = resposta.montagem or base
     linhas = []
@@ -2270,6 +2361,186 @@ def _tabela_de_estados(base: mt.Montagem, resposta: mt.Resposta, u: Unidades) ->
         "superaquecido e fica abaixo de 0 no líquido sub-resfriado; sem número, o estado não fecha "
         "com os valores de agora."
     )
+
+
+#: As cores das fases (Okabe-Ito, que separa bem para quem não vê todas as cores).
+_FASES = (dgm.LIQUIDO, dgm.MISTURA, dgm.VAPOR)
+_CORES_DAS_FASES = ("#0072B2", "#009E73", "#D55E00")
+T_S = "T-s"
+#: As abas abaixo da resposta.
+ABAS = ("Condições", "Explorar", "Comparar e levar", "Passo a passo", "Salvar e registrar")
+P_H = "p-h"
+
+
+def _eixos_do_diagrama(tipo: str, u: Unidades) -> tuple[str, str]:
+    if tipo == T_S:
+        return (
+            f"s ({u.rotulo(g.ENTROPIA_ESPECIFICA)})",
+            f"T ({u.rotulo(g.TEMPERATURA)})",
+        )
+    return f"h ({u.rotulo(g.ENERGIA_ESPECIFICA)})", f"p ({u.rotulo(g.PRESSAO)})"
+
+
+def _xy(
+    tipo: str, u: Unidades, p: float, h: float, t: float | None, s: float | None
+) -> tuple[float, float] | None:
+    if tipo == T_S:
+        if t is None or s is None:
+            return None
+        return u.da_base(g.ENTROPIA_ESPECIFICA, s), u.da_base(g.TEMPERATURA, t)
+    return u.da_base(g.ENERGIA_ESPECIFICA, h), u.da_base(g.PRESSAO, p)
+
+
+def _diagrama_do_ciclo(p: Parte, base: mt.Montagem, resposta: mt.Resposta, u: Unidades) -> None:
+    """T-s ou p-h com a curva de saturação: o estado fora do lugar aparece de relance."""
+    conta = resposta.montagem or base
+    diagrama = dgm.montar(conta, _numeros_de(st.session_state[p.k("valores")], resposta))
+    if not diagrama.pontos:
+        return
+    _titulo_da_pagina("Diagrama do ciclo")
+    colunas = st.columns([1.2, 2.0], vertical_alignment="bottom")
+    tipo = (
+        colunas[0].segmented_control(
+            "Diagrama",
+            (T_S, P_H),
+            default=T_S,
+            required=True,
+            key=p.k("diagrama"),
+            help="T-s: temperatura por entropia. p-h: pressão (em escala log) por entalpia.",
+        )
+        or T_S
+    )
+    fluidos = diagrama.fluidos
+    fluido = fluidos[0]
+    if len(fluidos) > 1:
+        rotulos = {mprop.FLUIDOS[i].rotulo: i for i in fluidos}
+        escolhido = colunas[1].selectbox(
+            "Fluido do diagrama",
+            list(rotulos),
+            key=p.k("diagrama_fluido"),
+            help="A montagem tem mais de um fluido: cada um tem a sua curva de saturação.",
+        )
+        fluido = rotulos.get(escolhido, fluido)
+    eixo_x, eixo_y = _eixos_do_diagrama(tipo, u)
+    camadas = []
+    curva = dgm.saturacao(fluido)
+    do_fluido = [x for x in diagrama.pontos if x.fluido == fluido]
+    if curva is not None:
+        # Até o ponto triplo, a curva achata os pontos do ciclo: fica só a parte perto deles.
+        p_min = min((x.p for x in do_fluido), default=0.0) / 20.0
+        t_min = min((x.t for x in do_fluido if x.t is not None), default=0.0) - 60.0
+        sat = [
+            xy
+            for xy in (
+                _xy(tipo, u, pp, hh, tt, ss)
+                for pp, hh, tt, ss in zip(curva.p, curva.h, curva.t, curva.s, strict=True)
+                if (pp >= p_min if tipo == P_H else tt >= t_min)
+            )
+            if xy is not None
+        ]
+        quadro_sat = pd.DataFrame(
+            [{eixo_x: x, eixo_y: y, "ordem": i} for i, (x, y) in enumerate(sat)]
+        )
+        camadas.append(
+            alt.Chart(quadro_sat)
+            .mark_line(strokeWidth=1.5, color="#8A94A6")
+            .encode(
+                x=alt.X(f"{eixo_x}:Q", title=eixo_x, scale=alt.Scale(zero=False)),
+                y=alt.Y(
+                    f"{eixo_y}:Q",
+                    title=eixo_y,
+                    scale=alt.Scale(type="log") if tipo == P_H else alt.Scale(zero=False),
+                ),
+                order="ordem:Q",
+            )
+        )
+    linhas = []
+    for k, caminho in enumerate(c for c in diagrama.caminhos if c.fluido == fluido):
+        for i, (pp, hh, tt, ss) in enumerate(
+            zip(caminho.p, caminho.h, caminho.t, caminho.s, strict=True)
+        ):
+            xy = _xy(tipo, u, pp, hh, tt, ss)
+            if xy is not None:
+                linhas.append(
+                    {
+                        eixo_x: xy[0],
+                        eixo_y: xy[1],
+                        "caminho": k,
+                        "ordem": i,
+                        "Processo": f"{caminho.de} → {caminho.para}: {caminho.bloco}",
+                    }
+                )
+    if linhas:
+        camadas.append(
+            alt.Chart(pd.DataFrame(linhas))
+            .mark_line(strokeWidth=2, color="#172033")
+            .encode(
+                x=f"{eixo_x}:Q",
+                y=f"{eixo_y}:Q",
+                detail="caminho:N",
+                order="ordem:Q",
+                tooltip=["Processo:N"],
+            )
+        )
+    pontos = []
+    for ponto in diagrama.pontos:
+        if ponto.fluido != fluido:
+            continue
+        xy = _xy(tipo, u, ponto.p, ponto.h, ponto.t, ponto.s)
+        if xy is None:
+            continue
+        pontos.append(
+            {
+                eixo_x: xy[0],
+                eixo_y: xy[1],
+                "Ponto": str(ponto.numero),
+                "Onde": ponto.nome,
+                "Fase": ponto.fase,
+                "T": "" if ponto.t is None else _com_unidade(ponto.t, g.T_ESTADO, u),
+                "p": _com_unidade(ponto.p, g.P_ESTADO, u),
+            }
+        )
+    if pontos:
+        quadro = pd.DataFrame(pontos)
+        bolinhas = alt.Chart(quadro).encode(
+            x=f"{eixo_x}:Q",
+            y=f"{eixo_y}:Q",
+            tooltip=["Ponto:N", "Onde:N", "Fase:N", "T:N", "p:N"],
+        )
+        camadas.append(
+            bolinhas.mark_circle(size=110, opacity=1, stroke="white", strokeWidth=2).encode(
+                color=alt.Color(
+                    "Fase:N",
+                    scale=alt.Scale(domain=list(_FASES), range=list(_CORES_DAS_FASES)),
+                    legend=alt.Legend(orient="bottom", title=None),
+                )
+            )
+        )
+        camadas.append(
+            bolinhas.mark_text(dx=9, dy=-9, fontSize=12, fontWeight="bold", color="#172033").encode(
+                text="Ponto:N"
+            )
+        )
+    if not camadas:
+        return
+    st.altair_chart(
+        alt.layer(*camadas).properties(height=360, autosize=SO_NA_LARGURA), width="stretch"
+    )
+    explicacao = (
+        "Em cinza, a curva de saturação: à esquerda dela o fluido é líquido, dentro é mistura e à "
+        "direita é vapor. Os números são os da tabela de estados."
+        if curva is not None
+        else "Este fluido não muda de fase na tabela da CoolProp: não há curva de saturação."
+    )
+    st.caption(explicacao)
+    for aviso in dgm.estranhos(diagrama.pontos, conta):
+        st.warning(aviso, icon=":material/warning:")
+    if diagrama.sem_numero:
+        st.caption(
+            "Fora do diagrama, porque não fecham com os números de agora: "
+            + ", ".join(diagrama.sem_numero)
+            + "."
+        )
 
 
 def _resposta(p: Parte, grafo: mt.Grafo, resposta: mt.Resposta, u: Unidades) -> None:
@@ -3961,48 +4232,51 @@ def tela_do_montador(p: Parte) -> None:
     if p.dominio == mb.SOLIDOS:
         with _parte(p, "Casos de carga"):
             _casos_de_carga(p, base, alvo, resposta, u, avisos_dos_casos)
-    _titulo_da_pagina("Condições")
-    with _parte(p, "Condições"):
-        _quadro(resposta, u)
-    if p.dominio in _COM_CORRENTE:
-        with _parte(p, "Tabela de estados"):
-            _tabela_de_estados(base, resposta, u)
-    valores = {k: v for k, v in estado[p.k("valores")].items() if v is not None}
-    with _parte(p, "Ponto de operação"):
-        _grafico_da_bomba(resposta, valores, u)
-    with _parte(p, "Procurar em faixas"):
-        _busca_em_faixas(p, conta, alvo, resposta, u)
-    with _parte(p, "Escolher do catálogo"):
-        _escolher_do_catalogo(p, conta, alvo)
-    with _parte(p, "O que mais pesa"), st.spinner("Vendo o que mais pesa…"):
-        _o_que_mais_pesa(p, resposta, u)
-    if resposta.valor is not None and resposta.sentido != mt.IGUAL:
-        _titulo_da_pagina("Em volta da resposta")
-        with _parte(p, "Em volta da resposta"):
-            _grafico_de_uso(resposta, valores, u)
-            _grafico_de_varredura(p, resposta.montagem or base, resposta, valores, u)
-    with _parte(p, "Comparar duas montagens"):
-        _comparar(p, base, resposta, u)
-    with _parte(p, "Levar para outras análises"):
-        _levar_para_outras_analises(p, base, resposta, registro)
-    with _parte(p, "Continuar no Montador de processos"):
-        _continuar_em_processos(p, doc)
-    with st.expander("Passo a passo", icon=":material/list_alt:"), _parte(p, "Passo a passo"):
-        _passo_a_passo(resposta)
-    with (
-        st.expander("De onde veio cada valor", icon=":material/account_tree:"),
-        _parte(p, "De onde veio cada valor"),
-    ):
-        _de_onde_veio(p, base, u)
     hipoteses = [
         "Pré-dimensionamento: não substitui a verificação por norma.",
         *base.hipoteses,
     ]
     if p.dominio in _HIPOTESE_DA_PARTE:
         hipoteses.insert(1, _HIPOTESE_DA_PARTE[p.dominio])
-    with (
-        st.expander("Salvar, abrir e registrar", icon=":material/save:"),
-        _parte(p, "Salvar, abrir e registrar"),
-    ):
+    valores = {k: v for k, v in estado[p.k("valores")].items() if v is not None}
+    # Em abas, para a página não virar um rolo: a resposta fica em cima, e o resto a um clique.
+    condicoes, explorar, comparar, passos, salvar = st.tabs(list(ABAS), key=p.k("abas"))
+    with condicoes:
+        with _parte(p, "Condições"):
+            _quadro(resposta, u)
+        if p.dominio in _COM_CORRENTE:
+            with _parte(p, "Tabela de estados"):
+                _tabela_de_estados(p, base, resposta, u)
+            with _parte(p, "Diagrama do ciclo"):
+                _diagrama_do_ciclo(p, base, resposta, u)
+        with _parte(p, "Ponto de operação"):
+            _grafico_da_bomba(resposta, valores, u)
+    with explorar:
+        with _parte(p, "Procurar em faixas"):
+            _busca_em_faixas(p, conta, alvo, resposta, u)
+        with _parte(p, "Escolher do catálogo"):
+            _escolher_do_catalogo(p, conta, alvo)
+        with _parte(p, "O que mais pesa"), st.spinner("Vendo o que mais pesa…"):
+            _o_que_mais_pesa(p, resposta, u)
+        if resposta.valor is not None and resposta.sentido != mt.IGUAL:
+            _titulo_da_pagina("Em volta da resposta")
+            with _parte(p, "Em volta da resposta"):
+                _grafico_de_uso(resposta, valores, u)
+                _grafico_de_varredura(p, resposta.montagem or base, resposta, valores, u)
+    with comparar:
+        with _parte(p, "Comparar duas montagens"):
+            _comparar(p, base, resposta, u)
+        with _parte(p, "Levar para outras análises"):
+            _levar_para_outras_analises(p, base, resposta, registro)
+        with _parte(p, "Continuar no Montador de processos"):
+            _continuar_em_processos(p, doc)
+    with passos:
+        _titulo_da_pagina("Passo a passo")
+        with _parte(p, "Passo a passo"):
+            _passo_a_passo(resposta)
+        _titulo_da_pagina("De onde veio cada valor")
+        with _parte(p, "De onde veio cada valor"):
+            _de_onde_veio(p, base, u)
+    with salvar, _parte(p, "Salvar, abrir e registrar"):
         _salvar_e_abrir(p, doc, resposta, u, dados, faces, hipoteses, registro)
     fronteira_modelo(hipoteses, titulo="Hipóteses desta conta")

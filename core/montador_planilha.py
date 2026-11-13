@@ -109,6 +109,10 @@ def _funcao(e: sp.Expr) -> str:
     for classe, nome in simples.items():
         if isinstance(e, classe):
             return f"{nome}({a[0]})"
+    if isinstance(e, sp.Min):
+        return f"MIN({','.join(a)})"
+    if isinstance(e, sp.Max):
+        return f"MAX({','.join(a)})"
     if isinstance(e, AtritoDarcy):
         re, relativa = a
         turbulento = f"0.25/(LOG10({relativa}/3.7+5.74/({re})^0.9))^2"

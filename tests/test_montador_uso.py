@@ -1,4 +1,4 @@
-"""Montador: a biblioteca esconde o que não cabe na seção e no tipo de peça da montagem."""
+"""Montador: a biblioteca esconde o que não cabe na seção, no tipo de peça ou no fluido."""
 
 from __future__ import annotations
 
@@ -147,10 +147,52 @@ def test_blocos_escondidos_por_chave():
     }
 
 
-def test_fluidos_nao_escondem_nada():
+_DAS_CORRENTES = (*mm.MODELOS_FLUIDOS, *mm.MODELOS_TERMICOS, *mm.MODELOS_DE_PROCESSOS)
+
+
+@pytest.mark.parametrize("modelo", _DAS_CORRENTES, ids=lambda m: m.nome)
+def test_modelos_de_fluidos_e_termica_nao_tem_bloco_escondido(modelo):
+    """Os modelos são montagens certas: nenhum bloco deles fica fora pelo fluido da montagem."""
+    dados = modelo.grafo()
+    tipos = [no["tipo"] for no in dados["nos"]]
+    assert mu.blocos_escondidos(dados, tipos) == {}
+
+
+def test_gas_esconde_a_bomba_e_liquido_esconde_o_gas_no_tubo():
     catalogo = mb.catalogo_para_tela(mb.FLUIDOS)
-    for modelo in mm.MODELOS_FLUIDOS:
-        assert mu.escondidos(modelo.grafo(), catalogo) == {}, modelo.nome
+    gas = mm.PARTE_FLUIDOS.por_nome["Gás natural: diâmetro do tubo"].grafo()
+    fora = mu.escondidos(gas, catalogo)
+    assert {"npsh", "potencia_bomba", "valvula_controle", "golpe"} <= set(fora)
+    assert "gas_no_tubo" not in fora and "medidor" not in fora
+    agua = mm.PARTE_FLUIDOS.por_nome["Potência da bomba"].grafo()
+    assert set(mu.escondidos(agua, catalogo)) == {"gas_no_tubo"}
+
+
+def test_termico_pelo_fluido_do_estado():
+    catalogo = mb.catalogo_para_tela(mb.TERMICO)
+    ar = mm.PARTE_TERMICA.por_nome["Compressor de ar: pressão máxima"].grafo()
+    fora = mu.escondidos(ar, catalogo)
+    assert {"bomba_termica", "titulo_minimo", "cop"} <= set(fora)
+    assert "compressor" not in fora and "turbina" not in fora
+    rankine = mm.PARTE_TERMICA.por_nome["Ciclo Rankine simples"].grafo()
+    assert mu.escondidos(rankine, catalogo) == {}
+    # Óleo e água no trocador: basta um fluido servir.
+    trocador = mm.PARTE_TERMICA.por_nome["Trocador: tamanho para resfriar óleo"].grafo()
+    assert mu.escondidos(trocador, catalogo) == {}
+
+
+def test_fluido_informado_nao_esconde_nada():
+    catalogo = mb.catalogo_para_tela(mb.FLUIDOS)
+    dados = {
+        "nos": [{"id": "n1", "tipo": "fluido", "opcoes": {"fluido": "Informar as propriedades"}}]
+    }
+    assert mu.escondidos(dados, catalogo) == {}
+
+
+def test_motivo_do_fluido_em_frase_inteira():
+    gas = mm.PARTE_FLUIDOS.por_nome["Gás natural: diâmetro do tubo"].grafo()
+    for motivo in mu.escondidos(gas, mb.catalogo_para_tela(mb.FLUIDOS)).values():
+        assert motivo[0].isupper() and motivo.endswith("."), motivo
 
 
 @pytest.mark.parametrize("modelo", mm.MODELOS, ids=lambda m: m.nome)

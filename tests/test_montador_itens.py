@@ -291,10 +291,9 @@ def test_cada_secao_sabe_o_seu_catalogo():
     }
     i = cat.fontes(_base("perfil_i", "flexao", "von_mises", R))[0]
     assert "W (mesa larga)" in i.familias
-    assert cat.fontes(_base("fluido", "trecho", "carga", R))[0].familias == (
-        "Aço comercial",
-        "PVC ou plástico",
-    )
+    familias = cat.fontes(_base("fluido", "trecho", "carga", R))[0].familias
+    assert familias[0] == "Aço Sch 40" and familias[-1] == "PVC soldável"
+    assert {"Aço Sch 80", "Aço inox Sch 10S"} <= set(familias)
 
 
 def test_acha_o_perfil_mais_leve_que_passa():
@@ -348,9 +347,9 @@ def test_tubo_comercial_pelo_menor_diametro():
         "H_d": 5.0,
         "varepsilon": 4.5e-5,
     }
-    escolha = cat.testar(base, fonte, valores, ("Aço comercial",))
+    escolha = cat.testar(base, fonte, valores, ("Aço Sch 40",))
     melhor = escolha.melhor
-    assert melhor is not None and melhor.peca.familia == "Aço comercial"
+    assert melhor is not None and melhor.peca.familia == "Aço Sch 40"
     menores = [
         x for x in escolha.linhas if dict(x.peca.valores)["D"] < dict(melhor.peca.valores)["D"]
     ]
@@ -855,8 +854,9 @@ def _celulas(aba, livro) -> dict[str, float]:
         celula = definido.attr_text.split("!")[1].replace("$", "")
         formula = str(aba[celula].value)
         linha = aba[celula].row
-        fator = float(formula.split("*")[1])
-        celulas[nome] = float(aba.cell(linha, 3).value) * fator
+        # =C5*1000, ou =C5*1+273.15 nos campos em °C
+        fator, _, deslocamento = formula.split("*")[1].partition("+")
+        celulas[nome] = float(aba.cell(linha, 3).value) * float(fator) + float(deslocamento or 0)
     return celulas
 
 
@@ -970,11 +970,11 @@ def test_lista_velha_nao_muda_bloco_de_outro_tipo():
         "mf_grafo": grafo,
         "mf_versao": 1,
         "mf_modelo_atual": "x",
-        "mf_op_n2_criterio": mb.GERBER,
+        "mf_op_n2_criterio_r0": mb.GERBER,
         "mf_formula_n2": "a*b",
     }
     with mock.patch.object(ui.st, "session_state", estado):
-        ui._ao_mudar_opcao(mm.PARTE_SOLIDOS, "n2", "criterio", "mf_op_n2_criterio")
+        ui._ao_mudar_opcao(mm.PARTE_SOLIDOS, "n2", "criterio", "mf_op_n2_criterio_r0")
         ui._ao_digitar_formula(mm.PARTE_SOLIDOS, "n2", "mf_formula_n2")
     assert grafo["nos"][0]["opcoes"] == {}
     assert "portas" not in grafo["nos"][0]

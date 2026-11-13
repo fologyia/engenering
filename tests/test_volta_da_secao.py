@@ -41,7 +41,10 @@ def _montador_com_secao_desenhada() -> tuple[AppTest, str]:
 
 def test_desenhar_e_voltar_com_a_secao_no_bloco(catalogo_vazio):
     at, no = _montador_com_secao_desenhada()
-    assert at.selectbox(key=f"mf_op_{no}_desenho").value == ev.SEM_DESENHO
+    assert (
+        at.selectbox(key=f"mf_op_{no}_desenho_r{at.session_state['mf_revisao']}").value
+        == ev.SEM_DESENHO
+    )
     at.button(key=f"mf_desenhar_{no}").click().run()
     assert not at.exception, [str(e.value) for e in at.exception]
     volta = at.session_state[vs.VOLTA]
@@ -59,7 +62,10 @@ def test_desenhar_e_voltar_com_a_secao_no_bloco(catalogo_vazio):
     assert "Minha seção" in ev.nomes_dos_desenhos()
     bloco = next(n for n in at.session_state["mf_grafo"]["nos"] if n["id"] == no)
     assert bloco["opcoes"]["desenho"] == "Minha seção"
-    assert at.selectbox(key=f"mf_op_{no}_desenho").value == "Minha seção"
+    assert (
+        at.selectbox(key=f"mf_op_{no}_desenho_r{at.session_state['mf_revisao']}").value
+        == "Minha seção"
+    )
     assert vs.VOLTA not in at.session_state and vs.CHEGOU not in at.session_state
 
 
@@ -69,7 +75,10 @@ def test_voltar_sem_secao_nao_muda_o_bloco(catalogo_vazio):
     at.switch_page(vs.PAGINA_DESENHAR)
     at.button(key="secao_voltar_sem").click().run()
     assert not at.exception, [str(e.value) for e in at.exception]
-    assert at.selectbox(key=f"mf_op_{no}_desenho").value == ev.SEM_DESENHO
+    assert (
+        at.selectbox(key=f"mf_op_{no}_desenho_r{at.session_state['mf_revisao']}").value
+        == ev.SEM_DESENHO
+    )
     assert vs.VOLTA not in at.session_state
 
 

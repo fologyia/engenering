@@ -82,6 +82,7 @@ files = [
     "core/montador_eixo.py",
     "core/montador_sensibilidade.py",
     "core/montador_uso.py",
+    "core/montador_diagrama.py",
     "core/desenho_do_eixo.py",
     "core/montador_grandezas.py",
     "core/montador_modelos.py",

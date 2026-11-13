@@ -8,6 +8,10 @@ Esconder não proíbe. A biblioteca diz quantos blocos ficaram de fora e mostra 
 o bloco que já está na prancheta nunca some. As seções não escondem umas às outras, porque uma
 montagem pode ter duas, como a viga e o pino que a segura. Bloco sem linha em ``USOS`` serve em
 qualquer montagem, e por isso um bloco novo nunca fica escondido por engano.
+
+Nas partes de fluidos e de térmica quem decide é o fluido escolhido no bloco Fluido ou no Estado do
+fluido: a bomba e o NPSH são de líquido, o gás no tubo é de gás, e o título, o superaquecimento e o
+COP só existem em fluido que muda de fase. Com mais de um fluido na montagem, basta um servir.
 """
 
 from __future__ import annotations
@@ -17,6 +21,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from core import montador_blocos as mb
+from core import montador_fluidos as mfl
+from core import montador_propriedades as mp
 from core.montador import CONJUNTO
 
 REDONDA = "redonda"
@@ -44,6 +50,108 @@ _NOME_DA_FAMILIA = {
 #: hidráulico, que tem pressão por dentro e flamba.
 NAO_SE_MISTURAM = frozenset({frozenset({EIXO, VASO}), frozenset({EIXO, COLUNA})})
 _PROFUNDIDADE = 20
+
+#: O que o fluido da montagem faz: fica líquido, fica gás, ou muda de fase (água, refrigerantes).
+SO_LIQUIDO = "liquido"
+SO_GAS = "gas"
+MUDA_DE_FASE = "muda_de_fase"
+_DE_LIQUIDO = frozenset({SO_LIQUIDO, MUDA_DE_FASE})
+_DE_GAS = frozenset({SO_GAS, MUDA_DE_FASE})
+_DE_MUDANCA = frozenset({MUDA_DE_FASE})
+_PARA_QUE = {
+    _DE_LIQUIDO: "É de líquido",
+    _DE_GAS: "É de gás ou vapor",
+    _DE_MUDANCA: "Só existe em fluido que muda de fase, como a água e os refrigerantes",
+}
+#: Os blocos que só valem com um tipo de fluido.
+FLUIDOS_DO_BLOCO: dict[str, frozenset[str]] = {
+    # Fluidos
+    "altura_bomba": _DE_LIQUIDO,
+    "curva_bomba": _DE_LIQUIDO,
+    "potencia_bomba": _DE_LIQUIDO,
+    "npsh": _DE_LIQUIDO,
+    "golpe": _DE_LIQUIDO,
+    "valvula_controle": _DE_LIQUIDO,
+    "gas_no_tubo": _DE_GAS,
+    # Térmico
+    "bomba_termica": _DE_LIQUIDO,
+    "compressor": _DE_GAS,
+    "turbina": _DE_GAS,
+    "titulo_minimo": _DE_MUDANCA,
+    "superaquecimento_minimo": _DE_MUDANCA,
+    "subresfriamento_minimo": _DE_MUDANCA,
+    "cop": _DE_MUDANCA,
+}
+
+
+def _do_fluido_da_linha(nome: str) -> str | None:
+    """O fluido do bloco Fluido: de tabela ou pela temperatura. Informado não diz nada."""
+    pela_temperatura = mfl.POR_TEMPERATURA.get(nome)
+    if pela_temperatura is not None:
+        return SO_LIQUIDO if pela_temperatura.liquido else SO_GAS
+    if nome in mfl.FLUIDOS_TIPICOS:
+        return SO_GAS if nome in mfl.GASES_DE_TABELA else SO_LIQUIDO
+    return None
+
+
+def _do_estado(rotulo: str) -> str:
+    """O fluido do Estado do fluido e do Circuito, na lista da CoolProp. Sem escolha, é a água."""
+    fluido = mp.POR_ROTULO.get(rotulo, mp.POR_ROTULO["Água"])
+    if fluido.saturacao:
+        return MUDA_DE_FASE
+    return SO_LIQUIDO if fluido.liquido else SO_GAS
+
+
+def fluidos_da_montagem(dados: Mapping[str, Any], profundidade: int = 0) -> dict[str, str]:
+    """O que os fluidos escolhidos na montagem fazem, com o nome de cada um para a mensagem."""
+    achados: dict[str, str] = {}
+    if profundidade > _PROFUNDIDADE:
+        return achados
+    for no in dados.get("nos") or ():
+        if not isinstance(no, Mapping):
+            continue
+        tipo = str(no.get("tipo"))
+        escolhas = no.get("opcoes")
+        opcoes: Mapping[str, Any] = escolhas if isinstance(escolhas, Mapping) else {}
+        if tipo == CONJUNTO and isinstance(no.get("grafo"), Mapping):
+            for classe, nome in fluidos_da_montagem(no["grafo"], profundidade + 1).items():
+                achados.setdefault(classe, nome)
+        elif tipo == "fluido":
+            nome = str(opcoes.get("fluido", "Água a 20 °C"))
+            da_linha = _do_fluido_da_linha(nome)
+            if da_linha is not None:
+                achados.setdefault(da_linha, nome)
+        elif tipo in ("estado", "circuito"):
+            nome = str(opcoes.get("fluido", "Água"))
+            achados.setdefault(_do_estado(nome), nome)
+    return achados
+
+
+def _conflito_de_fluido(chaves: Iterable[str], fluidos: Mapping[str, str]) -> str | None:
+    if not fluidos:
+        return None
+    for chave in chaves:
+        servem = FLUIDOS_DO_BLOCO.get(chave)
+        if servem is None or servem & set(fluidos):
+            continue
+        nomes = sorted(set(fluidos.values()))
+        qual = "o fluido da montagem é" if len(nomes) == 1 else "os fluidos da montagem são"
+        return f"{_PARA_QUE[servem]}, e {qual} {_juntar(nomes)}."
+    return None
+
+
+def _tipos_de(grafo: Mapping[str, Any], profundidade: int = 0) -> list[str]:
+    tipos: list[str] = []
+    if profundidade > _PROFUNDIDADE:
+        return tipos
+    for no in grafo.get("nos") or ():
+        if not isinstance(no, Mapping):
+            continue
+        if no.get("tipo") == CONJUNTO and isinstance(no.get("grafo"), Mapping):
+            tipos += _tipos_de(no["grafo"], profundidade + 1)
+        else:
+            tipos.append(str(no.get("tipo")))
+    return tipos
 
 
 @dataclass(frozen=True)
@@ -177,7 +285,8 @@ def escondidos(dados: Mapping[str, Any], itens: Iterable[Mapping[str, Any]]) -> 
     grafo de dentro. Um conjunto fica de fora quando algum bloco dele não cabe.
     """
     montagem = _na_montagem(dados)
-    if not montagem:
+    fluidos = fluidos_da_montagem(dados)
+    if not montagem and not fluidos:
         return {}
     fora: dict[str, str] = {}
     for item in itens:
@@ -186,9 +295,11 @@ def escondidos(dados: Mapping[str, Any], itens: Iterable[Mapping[str, Any]]) -> 
         if isinstance(conjunto, Mapping):
             grafo = conjunto.get("grafo")
             candidato = _na_montagem(grafo) if isinstance(grafo, Mapping) else []
+            tipos = _tipos_de(grafo) if isinstance(grafo, Mapping) else []
         else:
             candidato = _do_tipo(chave)
-        motivo = _conflito(candidato, montagem)
+            tipos = [chave]
+        motivo = _conflito(candidato, montagem) or _conflito_de_fluido(tipos, fluidos)
         if motivo:
             fora[chave] = motivo
     return fora

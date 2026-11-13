@@ -6,6 +6,11 @@ Letra sem valor continua na fórmula, e assim sai `h = 1,6·√M` quando só o m
 
 ## Como se usa
 
+**Comece pela pergunta.** O primeiro campo, "O que você quer descobrir?", lista o que os modelos
+prontos acham: o diâmetro, a vazão, a potência, o K_v, a espessura do isolamento. Escolhida a
+pergunta, o campo ao lado fica só com as situações que respondem a ela, e quando há uma só ela já abre.
+Sem pergunta, o campo ao lado é a lista de todos os modelos, como antes.
+
 A tela tem três colunas: a biblioteca, a prancheta e o inspetor. Quem clica num bloco da biblioteca
 já recebe a fila ligada: **Seção → esforços → critério → Em função de**. Um esforço novo entra antes
 do critério, e apagar um esforço do meio não quebra a fila. As bolinhas ligam à mão também: arraste de
@@ -50,8 +55,14 @@ Selecionar uma ligação muda a biblioteca: ela passa a mostrar primeiro o que c
 cursor mostra a prévia na prancheta. Clicar insere o bloco no meio do fio, que vira origem → novo →
 destino. O resto do desenho não anda.
 
+**Soltar o fio no vazio.** Arrastar um fio de uma bolinha e soltar num lugar vazio da prancheta deixa
+na biblioteca só os blocos com uma bolinha que liga com aquela. Clicar num deles põe o bloco ali, onde
+o fio foi solto, já ligado; o resto dele liga como o bloco que vem da biblioteca (a condição vai para
+o Em função de). Esc, ou um clique na prancheta, desiste.
+
 **A biblioteca esconde o que não serve.** Com blocos na prancheta, a biblioteca tira o que não cabe
-na montagem (`core/montador_uso.py`). Duas coisas decidem:
+na montagem (`core/montador_uso.py`). Nos fluidos e no térmico, quem decide é o fluido (veja os
+documentos de cada parte). Aqui, duas coisas decidem:
 
 - **A forma da seção.** Pressão interna só vale em tubo. As peças do eixo, a potência, a engrenagem,
   a polia, a inclinação, a rotação crítica e o entalhe valem só em seção redonda, maciça ou tubo.
@@ -87,7 +98,13 @@ Abaixo dele, o inspetor mostra o que está selecionado, e cada coisa do seu jeit
 - **Conjunto:** os valores de dentro, sem precisar abrir, e as entradas e saídas públicas.
 - **Em função de:** a resposta, quem manda e o uso de cada condição.
 
-Abaixo dos resultados, "De onde veio cada valor" diz a procedência campo a campo (digitado, exemplo do
+**Abaixo da resposta, em abas.** Para a página não virar um rolo, o que vem depois da resposta fica em
+cinco abas: **Condições** (o quadro, e nos fluidos e no térmico a tabela de estados, o diagrama do
+ciclo e o ponto de operação), **Explorar** (procurar em faixas, escolher do catálogo, o que mais pesa
+e o gráfico em volta da resposta), **Comparar e levar**, **Passo a passo** (com a procedência de cada
+valor) e **Salvar e registrar**. Os casos de carga ficam acima das abas, porque mudam a resposta.
+
+Na aba Passo a passo, "De onde veio cada valor" diz a procedência campo a campo (digitado, exemplo do
 modelo, padrão do programa, tabela, copiado de outro bloco), e a página avisa o que mudou na resposta, e
 por causa de qual valor.
 Rastrear este resultado acende na prancheta o caminho de quem decide.
