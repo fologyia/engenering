@@ -57,10 +57,10 @@ MODULO_ID = "desenhar_secao"
 _ROTULOS = {modelo.nome: modelo for modelo in sd.MODELOS}
 
 DESTINOS = (
-    ("viga_reacoes", "Viga: reações e flecha", ":material/linear_scale:", False),
-    ("flexao_secao", "Flexão desta seção", ":material/compress:", False),
-    ("coluna_simples", "Coluna", ":material/vertical_align_center:", False),
-    ("perfil_nbr8800", "Perfil pela norma", ":material/verified:", True),
+    ("viga_reacoes", "Reações e diagramas de viga", ":material/linear_scale:", False),
+    ("flexao_secao", "Flexão e cisalhamento na seção", ":material/compress:", False),
+    ("coluna_simples", "Flambagem de coluna", ":material/vertical_align_center:", False),
+    ("perfil_nbr8800", "Momento resistente de perfil de aço", ":material/verified:", True),
 )
 PAGINAS = (
     ("app_pages/flambagem_colunas.py", "Flambagem de colunas", ":material/vertical_align_center:"),

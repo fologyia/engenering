@@ -123,7 +123,7 @@ def _linha_neutra(g: bp.Geometria, zona: tuple[Ponto, ...]) -> tuple[Ponto, Pont
 # ------------------------------------------------------------------ planta
 def _planta(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, int, int]) -> None:
     e, g = r.entrada, r.geometria
-    tab = bp.TABELA_18[e.chumbador]
+    tab = r.linha
     sobra = 0.28 * max(g.lx, g.ly)
     tela = dg.Tela(
         [(-g.lx / 2 - sobra, -(g.ly / 2 + sobra)), (g.lx / 2 + sobra, g.ly / 2 + sobra)], caixa
@@ -274,7 +274,7 @@ def _ponta_do_chumbador(
 
 def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, int, int]) -> None:
     e, g = r.entrada, r.geometria
-    tab = bp.TABELA_18[e.chumbador]
+    tab = r.linha
     t_p, e_n = e.t_placa_mm, g.e_n
     bloco = bp.bloco_para_o_cone(e, g, tab)[0]  # o mesmo bloco da verificação do cone
     h = bp.embutimento(e, tab)
@@ -304,9 +304,7 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
     tracionados_x = sorted(
         {x for (x, _), f in zip(g.posicoes, r.forcas_nos_chumbadores, strict=True) if f > 0}
     )
-    mostra_cone = bool(tracionados_x) and (
-        e.verificar_concreto or e.ancoragem != bp.ANCORAGEM_PORCA
-    )
+    mostra_cone = bool(tracionados_x) and bp.ancoragem_verificada(e)
     if mostra_cone:  # o prisma do cone (ACI 318-19 17.6.2): 1,5·h_ef para cada lado, até a face
         x_esq, x_dir = tracionados_x[0], tracionados_x[-1]
 
@@ -496,21 +494,24 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
     direita = (1.0, 0.0)
     dg.cota_alinhada(dr, p(g.lx / 2, e_n), p(g.lx / 2, topo_placa), direita, f"t_p = {_n(t_p, 1)}", 16 * ESC, fundo=True)  # fmt: skip
     dg.cota_alinhada(dr, p(g.lx / 2, 0.0), p(g.lx / 2, e_n), direita, f"e_n = {_n(e_n)}", 16 * ESC, posicao=0.5, fundo=True)  # fmt: skip
-    nome_h = "h₁" if e.ancoragem == bp.ANCORAGEM_PORCA and not e.h_ef_mm else "h_ef"
+    nome_h = (
+        "h₁" if e.ancoragem == bp.ANCORAGEM_PORCA and not (e.h_ef_mm or e.por_formula) else "h_ef"
+    )
     dg.cota_alinhada(dr, p(bloco / 2, -h), p(bloco / 2, 0.0), direita, f"{nome_h} = {_n(h)}", 14 * ESC, fundo=True)  # fmt: skip
     dr.text((caixa[0] * ESC, (caixa[1] - 14) * ESC), "Corte no plano do momento", fill=dg.COR_TEXTO, font=_fonte(13 * ESC), anchor="lb")  # fmt: skip
 
 
-def _texto_do_bloco(e: bp.EntradaBase, g: bp.Geometria) -> str:
-    bx, by, informado = bp.bloco_para_o_cone(e, g, bp.TABELA_18[e.chumbador])
-    origem = "" if informado else " (mín. da Tabela 18)"
+def _texto_do_bloco(e: bp.EntradaBase, g: bp.Geometria, tab: bp.LinhaTabela18 | None = None) -> str:
+    bx, by, informado = bp.bloco_para_o_cone(e, g, tab or bp.disposicoes(e))
+    minimo = " (mín. por fórmula)" if e.por_formula else " (mín. da Tabela 18)"
+    origem = "" if informado else minimo
     return f"Bloco {_n(bx)} × {_n(by)} mm{origem}, f_ck = {_n(e.fck_MPa)} MPa"
 
 
 def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
     """A planta, o corte e a legenda da base de pilar."""
     e, g = r.entrada, r.geometria
-    tab = bp.TABELA_18[e.chumbador]
+    tab = r.linha
     imagem = Image.new("RGB", (_LARGURA_PX * ESC, _ALTURA_PX * ESC), "#ffffff")
     dr = ImageDraw.Draw(imagem)
     _planta(dr, r, (40, 110, 470, 520))
@@ -529,7 +530,7 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
             f"{bp.ANCORAGENS_CURTAS[e.ancoragem]}",
         ),
         ("area", _ARGAMASSA, f"Argamassa expansiva (e_n = {_n(g.e_n)} mm)"),
-        ("area", _CONCRETO, _texto_do_bloco(e, g)),
+        ("area", _CONCRETO, _texto_do_bloco(e, g, tab)),
     ]
     itens2: list[tuple[str, str, str]] = [
         ("seta", _PRESSAO, "Pressão de contato no concreto"),
@@ -541,7 +542,7 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
     if e.ancoragem == bp.ANCORAGEM_QUIMICO:
         itens2.append(("area", _RESINA, "Resina no furo (químico; furo exagerado no desenho)"))
     tracionado = any(f > 0 for f in r.forcas_nos_chumbadores)
-    if tracionado and (e.verificar_concreto or e.ancoragem != bp.ANCORAGEM_PORCA):
+    if tracionado and bp.ancoragem_verificada(e):
         itens2.append(("tracejado", _CONE, "Cone de concreto dos tracionados (ACI 318-19)"))
     if e.armadura_de_ancoragem:
         itens2.append(("tracejado", _ARMADURA, "Armadura de ancoragem do bloco"))

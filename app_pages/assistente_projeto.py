@@ -4,6 +4,7 @@ import streamlit as st
 from components import load_models as catalogo
 from components.project_tools import contexto_sessao_projeto
 from components.ui import cabecalho_pagina, configurar_pagina
+from core import elementos_catalogo as casos_de_pecas
 from core import project_assistant as projetos
 from core import unit_converter as unidades
 from core.project_store import criar_item, criar_projeto, salvar_projeto
@@ -617,7 +618,7 @@ elif etapa == 3:
             st.selectbox(
                 "Modelo que mais se aproxima do componente",
                 list(catalogo.CATALOGO),
-                format_func=lambda chave: f"{catalogo.CATALOGO[chave].grupo} · {chave}",
+                format_func=casos_de_pecas.rotulo_do_modelo,
                 key="projeto_modelo_carga",
                 persist_state="session",
             )

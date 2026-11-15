@@ -185,6 +185,63 @@ def figura_do_grupo_de_parafusos(
     return _fechar(imagem, "Grupo de parafusos", "Tração de cada parafuso, em planta.")
 
 
+def figura_dos_cordoes(
+    trechos: Sequence[tuple[float, float, float, float]],
+    pontas: Sequence[tuple[float, float, float]],
+    centroide: Ponto,
+    critico: Ponto,
+) -> ImagemDiagrama:
+    """Cordões de solda em escala, cada ponta com a força por mm; o ponto crítico em destaque."""
+    largura, altura = 560, 440
+    imagem, d = _nova(largura, altura)
+    todos = [(x, y) for x1, y1, x2, y2 in trechos for x, y in ((x1, y1), (x2, y2))]
+    escala = _escala([*todos, centroide], largura, altura, 80, topo=20)
+    maior = max([q for _, _, q in pontas] + [1e-9])
+    forca = {(round(x, 6), round(y, 6)): q for x, y, q in pontas}
+    for x1, y1, x2, y2 in trechos:
+        media = (
+            forca.get((round(x1, 6), round(y1, 6)), 0.0)
+            + forca.get((round(x2, 6), round(y2, 6)), 0.0)
+        ) / 2.0
+        cor = _mistura("#fde7cf", _TRACAO, min(1.0, media / maior))
+        d.line([escala.px(x1, y1), escala.px(x2, y2)], fill=cor, width=9 * _ESC)
+    poucas = len(pontas) <= 12
+    for x, y, q in pontas:
+        cx, cy = escala.px(x, y)
+        e_critico = abs(x - critico[0]) < 1e-6 and abs(y - critico[1]) < 1e-6
+        raio = (8 if e_critico else 4) * _ESC
+        d.ellipse(
+            [cx - raio, cy - raio, cx + raio, cy + raio],
+            fill=_TRACAO if e_critico else _CONTORNO,
+            outline=_CONTORNO,
+        )
+        if poucas or e_critico:
+            # O texto vai para fora do desenho, do lado oposto ao centroide.
+            gx, gy = escala.px(*centroide)
+            dx, dy = cx - gx, cy - gy
+            norma = math.hypot(dx, dy) or 1.0
+            tx, ty = cx + dx / norma * 34 * _ESC, cy + dy / norma * 22 * _ESC
+            _texto(
+                d,
+                (tx, ty),
+                f"{_n(q, 0)} N/mm",
+                cor=_TRACAO if e_critico else _TEXTO,
+                tamanho=13 if e_critico else 12,
+            )
+    gx, gy = escala.px(*centroide)
+    tamanho = 10 * _ESC
+    d.line([(gx - tamanho, gy), (gx + tamanho, gy)], fill=_TEXTO_FRACO, width=2)
+    d.line([(gx, gy - tamanho), (gx, gy + tamanho)], fill=_TEXTO_FRACO, width=2)
+    _texto(d, (gx + 14 * _ESC, gy - 12 * _ESC), "G", cor=_TEXTO_FRACO, tamanho=12, ancora="lm")
+    _eixos(d, (28 * _ESC, (altura - 28) * _ESC))
+    return _fechar(
+        imagem,
+        "Cordões de solda",
+        "Força por mm nas pontas dos cordões; o ponto vermelho é o mais carregado e G é o "
+        "centroide, onde as cargas foram aplicadas.",
+    )
+
+
 def _mistura(a: str, b: str, fracao: float) -> str:
     fa = tuple(int(a[i : i + 2], 16) for i in (1, 3, 5))
     fb = tuple(int(b[i : i + 2], 16) for i in (1, 3, 5))

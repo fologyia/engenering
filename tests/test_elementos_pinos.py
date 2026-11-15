@@ -181,7 +181,7 @@ def test_quem_manda_muda_com_a_folga():
 
 def test_capacidade_leva_o_criterio_que_governa_a_100_por_cento():
     r = rodar()
-    capacidade = metrica(r, "Força que a ligação aguenta")
+    capacidade = metrica(r, "Força resistente da ligação")
     no_limite = rodar(forca_kN=capacidade)
     maior = max(v.aproveitamento for v in no_limite.verificacoes if v.aproveitamento is not None)
     assert maior == pytest.approx(1.0, rel=1e-2)

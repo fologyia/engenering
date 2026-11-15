@@ -1408,7 +1408,7 @@ CAMPOS_PAREDE_ESPESSA = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "Barra sob carga axial",
-        "Barra sob carga axial",
+        "Barra sob força axial",
         GRUPO_BARRAS,
         "Puxada ou empurrada no sentido do comprimento, carga no centro.",
         "Uma peça reta sendo puxada (tração) ou empurrada (compressão) no sentido do seu "
@@ -1419,7 +1419,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Barra sob carga axial excêntrica",
-        "Barra sob carga axial excêntrica",
+        "Barra sob força axial excêntrica",
         GRUPO_BARRAS,
         "Carga axial aplicada fora do centro: comprime de um lado, traciona do outro.",
         "A força está deslocada do centroide, como num pilar carregado na borda. A excentricidade "
@@ -1431,7 +1431,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Eixo circular maciço",
-        "Eixo circular maciço",
+        "Eixo maciço sob esforços combinados",
         GRUPO_EIXOS,
         "Eixo redondo cheio sob força axial, flexão, torção e cortante.",
         "Eixo redondo cheio, puxado, dobrado e torcido ao mesmo tempo. Os lados tracionado e "
@@ -1442,7 +1442,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Eixo circular vazado",
-        "Eixo circular vazado",
+        "Eixo vazado sob esforços combinados",
         GRUPO_EIXOS,
         "Tubo redondo sob os mesmos esforços do eixo maciço.",
         "Um tubo sob os mesmos esforços do eixo maciço. Costuma render mais rigidez por quilo, já "
@@ -1453,7 +1453,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Mola helicoidal de compressão",
-        "Mola helicoidal de compressão",
+        "Tensão no fio de mola helicoidal",
         GRUPO_EIXOS,
         "Fio enrolado em espiras: a carga vira torção no fio. Só a tensão.",
         "Só a tensão no fio. Para rigidez, bloco, flambagem e fadiga, use o caso completo no "
@@ -1464,7 +1464,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Viga de seção retangular",
-        "Viga de seção retangular",
+        "Seção retangular sob flexão e cortante",
         GRUPO_VIGAS,
         "Viga retangular que dobra e sofre corte transversal.",
         "A flexão é máxima nas fibras extremas e o cisalhamento é máximo no centroide. O programa "
@@ -1476,7 +1476,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Seção retangular com flexão biaxial",
-        "Seção retangular com flexão biaxial",
+        "Seção retangular sob flexão oblíqua",
         GRUPO_VIGAS,
         "Barra retangular que dobra nas duas direções ao mesmo tempo.",
         "A tensão crítica cai em um dos cantos da seção, onde as duas flexões se somam. Os quatro "
@@ -1487,7 +1487,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Torção de seção retangular",
-        "Torção de seção retangular",
+        "Seção retangular sob torção",
         GRUPO_VIGAS,
         "Barra retangular torcida: cisalhamento de Saint-Venant e giro.",
         "Em seção não circular, a fórmula de eixo redondo não vale: a tensão máxima fica no meio "
@@ -1498,7 +1498,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         MODELO_SECAO_I,
-        MODELO_SECAO_I,
+        "Perfil I sob esforços combinados",
         GRUPO_PERFIS,
         "Perfil I: flexão nas mesas e cisalhamento na alma.",
         "As mesas absorvem a flexão e a alma absorve o cortante. Além das fibras extremas e do "
@@ -1509,7 +1509,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Perfil U sob força axial, flexão e cortante",
-        "Perfil U sob força axial, flexão e cortante",
+        "Perfil U sob esforços combinados",
         GRUPO_PERFIS,
         "Canal laminado: como o I, mas com o centro de cisalhamento fora da alma.",
         "As contas de flexão e cortante são as do perfil I, mas um cortante aplicado no centroide "
@@ -1520,7 +1520,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Cantoneira de abas iguais",
-        "Cantoneira de abas iguais",
+        "Cantoneira sob esforços combinados",
         GRUPO_PERFIS,
         "Perfil L: os eixos das abas não são principais, então a flexão sai oblíqua.",
         "A fórmula σ = My/I sozinha engana aqui: o produto de inércia não é nulo e a linha neutra "
@@ -1531,7 +1531,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "Perfil tubular retangular (caixão)",
-        "Perfil tubular retangular (caixão)",
+        "Tubo retangular sob esforços combinados",
         GRUPO_PERFIS,
         "Tubo retangular fechado: flexão mais torção pela fórmula de Bredt.",
         "O tubo quadrado ou retangular usado em chassis e pórticos. Sendo fechado, resiste bem à "

@@ -192,6 +192,7 @@ SERIE_DO_CAMPO: dict[str, dict[str, Serie]] = {
     "cabo_tambor": {"d_cabo_mm": CABOS},
     "roda_ponte": {"d_mm": RODAS},
     "olhal": {"t_mm": CHAPAS, "d_pino_mm": BARRAS_REDONDAS, "solda_mm": PERNAS_DE_SOLDA},
+    "solda_filete": {"t_mm": CHAPAS, "perna_mm": PERNAS_DE_SOLDA},
     "disco_girante": {"t_mm": CHAPAS},
     "cilindro_hidraulico": {"d_camisa_mm": CAMISAS, "d_haste_mm": HASTES, "tampa_mm": CHAPAS},
     "placa_circular": {"t_mm": CHAPAS},

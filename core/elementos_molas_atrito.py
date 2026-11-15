@@ -470,7 +470,7 @@ CAMPOS_DISCO = (
     ),
     Campo(
         "fator_servico",
-        "Fator de serviço",
+        "Fator de serviço K_s",
         "Multiplica o torque. Freio de elevação: use pelo menos 1,5 sobre o torque da carga.",
         1.5,
         minimo=1.0,
@@ -701,7 +701,7 @@ CAMPOS_CINTA = (
     ),
     Campo(
         "fator_servico",
-        "Fator de serviço",
+        "Fator de serviço K_s",
         "Multiplica o torque. Freio de elevação: pelo menos 1,5.",
         1.5,
         minimo=1.0,
@@ -1076,7 +1076,7 @@ CAMPOS_FUSO = (
     ),
     Campo(
         "atrito",
-        "Atrito na rosca f",
+        "Atrito na rosca μ",
         "Aço com bronze lubrificado: de 0,10 a 0,15. Aço com aço: de 0,15 a 0,20.",
         0.15,
         minimo=0.01,
@@ -1086,7 +1086,7 @@ CAMPOS_FUSO = (
     ),
     Campo(
         "atrito_colar",
-        "Atrito no colar",
+        "Atrito no colar μ_c",
         "Atrito no apoio axial. Com rolamento axial: cerca de 0,01. Com colar deslizante: 0,10 a "
         "0,15.",
         0.01,
@@ -1191,7 +1191,7 @@ CAMPOS_FUSO = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "mola_compressao",
-        "Mola de compressão",
+        "Mola helicoidal de compressão",
         GRUPO_MOLAS,
         "Rigidez, tensões, bloco, flambagem, fadiga e frequência própria.",
         "Projeto completo de mola helicoidal de compressão: resistência do fio pelo diâmetro, "
@@ -1232,7 +1232,7 @@ CASOS: tuple[Caso, ...] = (
         "subir e descer, se o fuso trava sozinho e as tensões no corpo e nos filetes.",
         CAMPOS_FUSO,
         calcular_fuso,
-        r"T=\frac{Fd_m}{2}\,\frac{\ell+\pi f d_m\sec\alpha}{\pi d_m-f\ell\sec\alpha}"
-        r"+\frac{F f_c d_c}{2}",
+        r"T=\frac{Fd_m}{2}\,\frac{\ell+\pi\mu d_m\sec\alpha}{\pi d_m-\mu\ell\sec\alpha}"
+        r"+\frac{F\mu_c d_c}{2}",
     ),
 )

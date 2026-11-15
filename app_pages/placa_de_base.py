@@ -51,8 +51,19 @@ def _n(valor: float, casas: int = 1) -> str:
     return f"{valor:.{casas}f}".replace(".", ",")
 
 
+MODOS = {"tabela": "Da Tabela 18", "formula": "Por fórmula (fora da Tabela 18)"}
+
+
+def _rotulo_rosca(nome: str) -> str:
+    if nome == bp.CHUMBADOR_LIVRE:
+        return "Outro diâmetro (digitar)"
+    rosca = bp.ROSCAS[nome]
+    return f"Ø {nome} ({_n(rosca.d_b)} mm, passo {_n(rosca.passo, 2)} mm)"
+
+
 _sessao("pb_perfil", PADRAO.perfil)
 _sessao("pb_chumbador", PADRAO.chumbador)
+_sessao("pb_chumbador_f", PADRAO.chumbador)
 _sessao("pb_t", PADRAO.t_placa_mm)
 
 with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
@@ -81,6 +92,16 @@ with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
     quantidades = bp.QUANTIDADES[tipo]
     if st.session_state.get("pb_n") not in quantidades:
         st.session_state["pb_n"] = quantidades[0]
+    modo = st.radio(
+        "Medidas do chumbador",
+        list(MODOS),
+        format_func=MODOS.get,
+        horizontal=True,
+        key="pb_modo_ch",
+        persist_state="session",
+        help=AJUDA["modo_chumbador"],
+    )
+    por_formula = modo == "formula"
     colunas = st.columns(3)
     n_chumbadores = colunas[0].selectbox(
         "Número de chumbadores",
@@ -89,22 +110,84 @@ with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
         persist_state="session",
         help=AJUDA["n_chumbadores"],
     )
-    chumbador = colunas[1].selectbox(
-        "Diâmetro do chumbador",
-        list(bp.TABELA_18),
-        format_func=lambda p: f"Ø {p} ({bp.TABELA_18[p].d_b:.0f} mm)",
-        key="pb_chumbador",
-        persist_state="session",
-        help=AJUDA["chumbador"],
-    )
-    tabela = bp.TABELA_18[chumbador]
+    if por_formula:
+        chumbador = colunas[1].selectbox(
+            "Diâmetro do chumbador",
+            [*bp.ROSCAS, bp.CHUMBADOR_LIVRE],
+            format_func=_rotulo_rosca,
+            key="pb_chumbador_f",
+            persist_state="session",
+            help=AJUDA["chumbador_formula"],
+        )
+    else:
+        chumbador = colunas[1].selectbox(
+            "Diâmetro do chumbador",
+            list(bp.TABELA_18),
+            format_func=lambda p: f"Ø {p} ({bp.TABELA_18[p].d_b:.0f} mm)",
+            key="pb_chumbador",
+            persist_state="session",
+            help=AJUDA["chumbador"],
+        )
     da_tabela = colunas[2].toggle(
-        "a₁ e a₂ da Tabela 18",
+        "a₁ e a₂ mínimos",
         value=True,
         key="pb_tab18",
         persist_state="session",
         help=AJUDA["tabela_18"],
     )
+    d_b_livre = passo_livre = d_f = 0.0
+    if por_formula:
+        colunas = st.columns(3)
+        if chumbador == bp.CHUMBADOR_LIVRE:
+            d_b_livre = colunas[0].number_input(
+                "Diâmetro d_b (mm)",
+                6.0,
+                150.0,
+                24.0,
+                1.0,
+                format="%.1f",
+                key="pb_db_livre",
+                persist_state="session",
+                help=AJUDA["d_b_livre"],
+            )
+            passo_livre = colunas[1].number_input(
+                "Passo da rosca (mm) — 0 = métrica grossa",
+                0.0,
+                12.0,
+                0.0,
+                0.25,
+                format="%.2f",
+                key="pb_passo",
+                persist_state="session",
+                help=AJUDA["passo"],
+            )
+            d_b_atual = float(d_b_livre)
+        else:
+            d_b_atual = bp.ROSCAS[chumbador].d_b
+        _sessao("pb_df", 0.0)  # sem valor padrão no widget: o botão Adotar zera este campo
+        d_f = colunas[2].number_input(
+            f"Furo na placa d_f (mm) — 0 = {bp.furo_padrao(d_b_atual):.0f}",
+            0.0,
+            400.0,
+            step=1.0,
+            format="%.0f",
+            key="pb_df",
+            persist_state="session",
+            help=AJUDA["d_f"],
+        )
+    # as medidas dos rótulos abaixo (a ancoragem e a placa vêm das seções seguintes)
+    ancoragem_atual = st.session_state.get("pb_ancoragem", bp.ANCORAGEM_PORCA)
+    previa = bp.EntradaBase(
+        por_formula=por_formula,
+        chumbador=chumbador,
+        d_b_mm=float(d_b_livre),
+        passo_mm=float(passo_livre),
+        d_f_mm=float(d_f),
+        ancoragem=ancoragem_atual if ancoragem_atual in bp.ANCORAGENS else bp.ANCORAGEM_PORCA,
+        t_placa_mm=float(st.session_state.get("pb_t", PADRAO.t_placa_mm)),
+    )
+    tabela = bp.disposicoes(previa)
+    origem = "por fórmula" if por_formula else "da Tabela 18"
     a1 = a2 = a1_x = 0.0
     if not da_tabela:
         colunas = st.columns(3 if tipo == bp.TIPO_2 else 2)
@@ -162,7 +245,7 @@ with st.container(border=True), secao_protegida("2. Tipo de chumbador"):
         help=AJUDA["aco_chumbador"],
     )
     e_h = chapa_na_ponta = h_ef = n_rd_fabricante = 0.0
-    if ancoragem == bp.ANCORAGEM_PORCA:
+    if ancoragem == bp.ANCORAGEM_PORCA and not por_formula:
         verificar_concreto = st.toggle(
             "Verificar a ancoragem no concreto (ACI 318-19)",
             key="pb_aci",
@@ -172,7 +255,10 @@ with st.container(border=True), secao_protegida("2. Tipo de chumbador"):
     else:
         verificar_concreto = True
         st.caption(
-            ":material/info: A Tabela 18 não cobre este tipo: a ancoragem no concreto é sempre "
+            ":material/info: Fora da Tabela 18 (por fórmula), a ancoragem no concreto é sempre "
+            "verificada pela ACI 318-19, Capítulo 17."
+            if por_formula
+            else ":material/info: A Tabela 18 não cobre este tipo: a ancoragem no concreto é sempre "
             "verificada pela ACI 318-19, Capítulo 17."
         )
     colunas = st.columns(3)
@@ -203,7 +289,9 @@ with st.container(border=True), secao_protegida("2. Tipo de chumbador"):
     if verificar_concreto:
         padrao_h_ef = 12 * tabela.d_b if ancoragem in bp.POS_INSTALADOS else tabela.h1
         h_ef = colunas[1].number_input(
-            f"Embutimento h_ef (mm) — 0 = {padrao_h_ef:.0f}",
+            "Embutimento h_ef (mm) — 0 = pelo cone"
+            if por_formula
+            else f"Embutimento h_ef (mm) — 0 = {padrao_h_ef:.0f}",
             0.0,
             3000.0,
             0.0,
@@ -255,7 +343,7 @@ with st.container(border=True), secao_protegida("3. Placa"):
         help=AJUDA["aco_placa"],
     )
     e_n = colunas[2].number_input(
-        f"Argamassa e_n (mm) — 0 = {tabela.e_n:.0f} da Tabela 18",
+        f"Argamassa e_n (mm) — 0 = {tabela.e_n:.0f} {origem}",
         0.0,
         200.0,
         0.0,
@@ -441,9 +529,7 @@ with st.container(border=True), secao_protegida("6. Cortante"):
         )
     else:
         t_arruela = colunas[0].number_input(
-            f"Espessura da arruela (mm) — 0 = {tabela.t_arruela:.1f} da Tabela 18".replace(
-                ".", ","
-            ),
+            f"Espessura da arruela (mm) — 0 = {_n(tabela.t_arruela)} {origem}",
             0.0,
             50.0,
             0.0,
@@ -488,6 +574,10 @@ entrada = bp.EntradaBase(
     chapa_na_ponta_mm=float(chapa_na_ponta),
     h_ef_mm=float(h_ef),
     n_rd_fabricante_kN=float(n_rd_fabricante),
+    por_formula=por_formula,
+    d_b_mm=float(d_b_livre),
+    passo_mm=float(passo_livre),
+    d_f_mm=float(d_f),
 )
 try:
     resultado = bp.calcular(entrada)
@@ -528,7 +618,78 @@ with secao_protegida("Desenho da base"):
     mostrar_figura(desenho)
 st.subheader("Detalhamento adotado", help=AJUDA["res_adotado"])
 st.table(pd.DataFrame(resultado.detalhamento, columns=["Item", "Valor"]).set_index("Item"))
-st.caption(f":material/info: {bp.NOTA_TABELA_18}")
+st.caption(f":material/info: {bp.NOTA_POR_FORMULA if por_formula else bp.NOTA_TABELA_18}")
+
+medidas = resultado.por_formula
+if medidas is not None:
+    with st.container(border=True), secao_protegida("Chumbador por fórmula"):
+        st.subheader("Chumbador por fórmula", help=AJUDA["res_por_formula"])
+        st.table(
+            pd.DataFrame(
+                list(medidas.contas), columns=["Medida", "Valor", "Conta e fonte"]
+            ).set_index("Medida")
+        )
+        if resultado.diametros:
+            st.markdown("**Diâmetro que cada critério pede**", help=AJUDA["res_diametros"])
+            linhas_d = [
+                (nome, f"{_n(d)} mm" if d is not None else "nenhum até 160 mm", fonte)
+                for nome, d, fonte in resultado.diametros
+            ]
+            st.table(
+                pd.DataFrame(linhas_d, columns=["Critério", "d_b necessário", "Fonte"]).set_index(
+                    "Critério"
+                )
+            )
+        menor = bp.menor_diametro_que_atende(entrada)
+        familia = bp.NOMES_DAS_FAMILIAS[medidas.rosca.familia]
+        if menor is None:
+            st.warning(
+                f"Nenhum diâmetro comercial da série {familia} passa nos chumbadores: o que "
+                "reprova não depende do diâmetro — veja acima.",
+                icon=":material/warning:",
+            )
+        else:
+            nome_menor = bp.nome_do_chumbador(menor.entrada)
+            st.markdown(
+                f"**Menor diâmetro comercial que atende** (série {familia}): **Ø {nome_menor}**"
+                f" — d_b = {_n(menor.linha.d_b)} mm, placa {menor.geometria.lx:.0f} × "
+                f"{menor.geometria.ly:.0f} mm.",
+                help=AJUDA["res_menor_diametro"],
+            )
+            if nome_menor != bp.nome_do_chumbador(entrada):
+                st.button(
+                    f"Adotar Ø {nome_menor}",
+                    icon=":material/swap_horiz:",
+                    key="pb_adotar_d",
+                    help=AJUDA["btn_adotar_diametro"],
+                    on_click=st.session_state.update,
+                    kwargs={"pb_chumbador_f": menor.entrada.chumbador, "pb_df": 0.0},
+                )
+        d_atual = medidas.rosca.d_b
+        perto = min(bp.TABELA_18.values(), key=lambda linha: abs(linha.d_b - d_atual))
+        st.markdown(
+            f"**Conferência com a Tabela 18** (a linha mais perto, Ø {perto.polegada})",
+            help=AJUDA["res_comparacao"],
+        )
+        calculada = resultado.linha
+        comparacao = [
+            ("d_b (mm)", calculada.d_b, perto.d_b),
+            ("a₁ (mm)", calculada.a1, perto.a1),
+            ("a₂ (mm)", calculada.a2, perto.a2),
+            ("a₃ (mm)", calculada.a3, perto.a3),
+            ("Furo d_f (mm)", calculada.d_f, perto.d_f),
+            ("Arruela, lado (mm)", calculada.lado_da_arruela, perto.lado_da_arruela),
+            ("Arruela, espessura (mm)", calculada.t_arruela, perto.t_arruela),
+            ("Argamassa e_n (mm)", calculada.e_n, perto.e_n),
+            ("Embutimento h_ef ou h₁ (mm)", bp.embutimento(entrada, calculada), perto.h1),
+            ("f_ck mínimo (MPa)", calculada.fck_min, perto.fck_min),
+        ]
+        st.table(
+            pd.DataFrame(
+                [(nome, _n(a), _n(b)) for nome, a, b in comparacao],
+                columns=["Medida", "Por fórmula", f"Tabela 18, Ø {perto.polegada}"],
+            ).set_index("Medida")
+        )
 
 st.subheader("Verificações", help=AJUDA["res_verificacoes"])
 mostrar_verificacoes_resumidas(list(resultado.grupos))
@@ -553,20 +714,34 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
         )
     else:
         g = leve.geometria
+        nome_leve = bp.nome_do_chumbador(leve.entrada)
         st.write(
-            f"**Ø {leve.entrada.chumbador}** com placa **{g.lx:.0f} × {g.ly:.0f} × "
+            f"**Ø {nome_leve}** com placa **{g.lx:.0f} × {g.ly:.0f} × "
             f"{_n(leve.entrada.t_placa_mm)} mm** — {_n(leve.massa_da_placa_kg)} kg "
             f"(a atual: {_n(resultado.massa_da_placa_kg)} kg), aproveitamento "
             f"{100 * leve.aproveitamento_maximo:.0f} %."
         )
+        if por_formula:
+            st.caption(
+                ":material/info: Por fórmula, a busca troca entre os diâmetros comerciais da mesma "
+                "série e não olha o cone de concreto, que depende do bloco, do embutimento e da "
+                "armadura, não do diâmetro."
+            )
         if (leve.entrada.chumbador, leve.entrada.t_placa_mm) != (chumbador, entrada.t_placa_mm):
+            chave_d = "pb_chumbador_f" if por_formula else "pb_chumbador"
+            novo: dict[str, object] = {
+                chave_d: leve.entrada.chumbador,
+                "pb_t": leve.entrada.t_placa_mm,
+            }
+            if por_formula and leve.entrada.chumbador != chumbador:
+                novo["pb_df"] = 0.0  # o furo informado era do outro diâmetro
             st.button(
-                f"Adotar Ø {leve.entrada.chumbador} e t_p = {_n(leve.entrada.t_placa_mm)} mm",
+                f"Adotar Ø {nome_leve} e t_p = {_n(leve.entrada.t_placa_mm)} mm",
                 icon=":material/swap_horiz:",
                 key="pb_adotar",
                 help=AJUDA["btn_adotar"],
                 on_click=st.session_state.update,
-                kwargs={"pb_chumbador": leve.entrada.chumbador, "pb_t": leve.entrada.t_placa_mm},
+                kwargs=novo,
             )
 
 with st.container(border=True), secao_protegida("Memorial desta base"):

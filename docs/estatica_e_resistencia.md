@@ -11,8 +11,9 @@ entrada reduzida e a resposta ao lado dos dados.
 
 ## Painel
 
-- Sem caso aberto, a página mostra a busca, seis perguntas comuns com croqui e todos os casos em
-  abas por área, com os grupos em cartões.
+- Sem caso aberto, a página mostra a busca (por nome, grupo ou apelido, sem ligar para acento), os
+  últimos abertos, a fileira dos mais usados e, logo abaixo, todas as áreas com os grupos em
+  cartões. Os nomes são os técnicos; pergunta e apelido só entram como palavra de busca.
 - Com um caso aberto, os dados ficam à esquerda e a resposta à direita. Ao mudar um número, o
   desenho, a faixa de status e os números mudam na mesma altura da tela.
 - `Campo` aceita `colunas`: vira uma tabela em que o usuário acrescenta e tira linhas. A tabela
@@ -49,12 +50,12 @@ cortante e o torque no plano da junta.
 
 ## Vigas e flexão
 
-**Viga: reações e momentos.** Oito esquemas de apoio e cargas por tabela. A flecha é verificada por
+**Reações e diagramas de viga.** Oito esquemas de apoio e cargas por tabela. A flecha é verificada por
 trecho, e no balanço o L é o dobro do comprimento (NBR 8800, Tabela C.1, nota a). Os perfis mais
 leves da família saem por reescala: com EI constante, M e V não mudam com o perfil e a flecha cai com
 a inércia, então não é preciso resolver a viga de novo.
 
-**Flexão de uma seção.** `σ = N/A ± M/W` e o W necessário. A seção é cortada em faixas
+**Flexão e cisalhamento na seção.** `σ = N/A ± M/W` e o W necessário. A seção é cortada em faixas
 (`core/geometria_da_secao.py`): com b(y) saem Q(y), `τ = V·Q/(I·b)` ao longo da altura e von Mises em
 cada ponto, com σ e τ do mesmo ponto. Isso vale para I, U, T, tubos e círculo, e a integral de τ·b
 devolve V. Num perfil I, o ponto mais solicitado pode ser a junção da alma com a mesa, onde σ ainda é
@@ -66,19 +67,19 @@ forma (propriedades informadas), a conta volta a `V/A_v` e não há von Mises ao
 A mesma figura (`core/desenho_flexao.py`) aparece em Viga de seção retangular, Seção I, Perfil U e
 Perfil tubular; neste último, a torção entra como τ uniforme.
 
-**Perfil de aço pela norma.** O mesmo motor das barras do modelo, com a norma escolhida.
+**Momento resistente de perfil de aço.** O mesmo motor das barras do modelo, com a norma escolhida.
 
 ## Barras e estruturas
 
 **Barra sob força axial e barra em torção.** Trechos em série, com a ponta da direita livre ou presa,
 por rigidez direta. A temperatura entra como esforço inicial `E·A·α·ΔT`.
 
-**Coluna simples.** Euler e Johnson (Shigley, Eq. 4-43 e 4-48), com K da Tabela E.1 da NBR 8800.
+**Flambagem de coluna.** Euler e Johnson (Shigley, Eq. 4-43 e 4-48), com K da Tabela E.1 da NBR 8800.
 
 **Treliça plana.** Rigidez direta com dois graus de liberdade por nó. Testada contra o método dos nós
 e contra o trabalho virtual.
 
-**Pórtico simples ou console.** `core/portico_plano.py`. O deslocamento é procurado ao longo das
+**Pórtico simples e console.** `core/portico_plano.py`. O deslocamento é procurado ao longo das
 barras, não só nos nós: na viga de um pórtico, o maior fica no meio do vão.
 
 ## Peças, seções e chapas
@@ -120,6 +121,17 @@ sequência de carga; a distribuída vale por comprimento da peça, sem opção p
 
 **Seção montada.** Teorema dos eixos paralelos, com retângulos, círculos e furos, além dos eixos
 principais. O resultado segue para uma viga ou uma coluna.
+
+**Solda de filete sob carga excêntrica** (`core/elementos_soldas.py`). Cada cordão vira uma linha
+(Shigley, cap. 9): comprimento, centroide, `I_ux`, `I_uy`, `I_uxy` e `J_u` saem por integração exata
+de cada trecho reto, e batem com as Tabelas 9-1 e 9-2 nos desenhos prontos (um, dois verticais, dois
+horizontais, L, C, retângulo, anel; ou cordões livres). Força por mm num ponto: no plano,
+`V/L + T·r/J_u`; fora do plano, `N/L + a·y + b·x`, com a e b da flexão de seção sem eixos principais
+(o L precisa disso). As três somam como vetores. Como tudo varia em linha reta ao longo do cordão, o
+máximo fica numa ponta. Resistência pelas regras de `core/soldas.py`: NBR 8800 (0,60·f_w·0,707·perna
+/γ_w2; metal-base 6.5.5; perna mínima, perna máxima na borda e comprimento mínimo, com a perna L/4 do
+cordão curto) ou AISC 360 ASD (0,30·F_EXX na garganta; metal-base 0,40·S_y ou 0,30·S_ut). Sem o
+aumento pela direção da força: a favor da segurança.
 
 **Chapa tracionada com furo.** Seção bruta ao escoamento e seção líquida à ruptura. `K_t` do Chart 4.1
 de Peterson (Pilkey), na tensão líquida, mostrado sem reprovar: sob carga estática em material dúctil

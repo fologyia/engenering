@@ -44,11 +44,14 @@ def _botao(teste: AppTest, chave: str):
 
 def test_abre_no_painel_com_todas_as_areas_e_todos_os_casos(pagina: AppTest):
     assert not pagina.session_state["assistente_geometria"]
-    assert any("O que você precisa" in str(s.value) for s in pagina.subheader)
+    assert any("Todos os casos" in str(s.value) for s in pagina.subheader)
     chaves = {botao.key for botao in pagina.button}
     assert {f"abrir::{caso_id}" for caso_id in cat.CASOS} <= chaves
-    assert {f"atalho::{atalho.caso}" for atalho in cat.ATALHOS} <= chaves
-    assert len(pagina.tabs) == len(cat.AREAS)
+    assert {f"atalho::{caso_id}" for caso_id in cat.MAIS_USADOS} <= chaves
+    assert not pagina.tabs  # nada escondido em abas: todas as áreas à vista
+    titulos = " ".join(str(m.value) for m in pagina.markdown)
+    assert all(area in titulos for area in cat.AREAS)
+    assert "?" not in " ".join(str(b.label) for b in pagina.button if b.key.startswith("atalho::"))
 
 
 def test_todo_botao_de_caso_do_painel_explica_o_caso(pagina: AppTest):
@@ -65,7 +68,7 @@ def test_atalho_abre_o_caso_e_o_botao_volta_ao_painel(pagina: AppTest):
     _botao(pagina, "assistente_voltar").click().run()
     assert not pagina.exception
     assert not pagina.session_state["assistente_geometria"]
-    assert any("O que você precisa" in str(s.value) for s in pagina.subheader)
+    assert any("Todos os casos" in str(s.value) for s in pagina.subheader)
 
 
 def test_caso_aberto_fica_na_lista_de_recentes_do_painel(pagina: AppTest):
@@ -110,13 +113,13 @@ def test_todos_os_casos_abrem_e_todo_campo_tem_ajuda(pagina: AppTest):
 def test_rotulo_gravado_pelo_assistente_de_projeto_abre_o_caso_de_secao(pagina: AppTest):
     _abrir_caso(pagina, "Viga de seção retangular")
     assert pagina.session_state["assistente_geometria"] == "Viga de seção retangular"
-    assert any("Vigas de seção cheia" in str(c.value) for c in pagina.caption)
+    assert any("Seções e perfis" in str(c.value) for c in pagina.caption)
 
 
 def test_rotulo_desconhecido_cai_no_painel(pagina: AppTest):
     _abrir_caso(pagina, "um rótulo que não existe mais")
     assert not pagina.session_state["assistente_geometria"]
-    assert any("O que você precisa" in str(s.value) for s in pagina.subheader)
+    assert any("Todos os casos" in str(s.value) for s in pagina.subheader)
 
 
 def test_procurar_um_caso_abre_ele(pagina: AppTest):

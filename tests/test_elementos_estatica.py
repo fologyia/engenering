@@ -116,7 +116,9 @@ def test_sem_pre_carga_o_parafuso_recebe_a_carga_inteira():
     assert _metrica(resultado, "Carga por parafuso") == pytest.approx(10.0)
     assert _metrica(resultado, "Tensão na rosca") == pytest.approx(10000.0 / 84.3)
     # S_p = 580 MPa até M16, e dois parafusos.
-    assert _metrica(resultado, "O conjunto aguenta") == pytest.approx(2 * 580 * 84.3 / 1000)
+    assert _metrica(resultado, "Força resistente do conjunto") == pytest.approx(
+        2 * 580 * 84.3 / 1000
+    )
 
 
 def test_com_pre_carga_usa_as_duas_pontas_da_dispersao():
@@ -148,7 +150,7 @@ def test_torque_sai_de_k_f_d_e_o_conjunto_da_capacidade():
     capacidade, _ = ep.capacidade_com_pre_carga(
         prova, 0.6, 0.25, _metrica(resultado, "Rigidez C"), 1.5
     )
-    assert _metrica(resultado, "O conjunto aguenta") == pytest.approx(
+    assert _metrica(resultado, "Força resistente do conjunto") == pytest.approx(
         4 * capacidade / 1000.0, rel=1e-3
     )
 
@@ -890,7 +892,7 @@ def test_chapa_com_furo_confere_bruta_e_liquida():
     )
     assert _metrica(resultado, "Tensão na seção bruta") == pytest.approx(100.0)
     assert _metrica(resultado, "Tensão na seção do furo") == pytest.approx(100e3 / 600.0)
-    assert _metrica(resultado, "A chapa aguenta") == pytest.approx(240.0)
+    assert _metrica(resultado, "Força resistente da chapa") == pytest.approx(240.0)
 
 
 def test_furos_maiores_que_a_chapa_viram_mensagem():

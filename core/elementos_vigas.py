@@ -449,7 +449,7 @@ def campos_de_material(
     return (
         Campo(
             "sy_MPa",
-            "Escoamento do material",
+            "Limite de escoamento S_y",
             "Limite de escoamento. ASTM A36: 250 MPa. ASTM A572 Gr 50: 345 MPa.",
             250.0,
             "MPa",
@@ -984,7 +984,7 @@ CAMPOS_VIGA: tuple[Campo, ...] = (
     ),
     Campo(
         "densidade_kg_m3",
-        "Densidade do material",
+        "Massa específica ρ",
         "Aço: 7 850 kg/m³. Alumínio: 2 700 kg/m³.",
         7850.0,
         "kg/m³",
@@ -1547,7 +1547,7 @@ CAMPOS_PERFIL: tuple[Campo, ...] = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "viga_reacoes",
-        "Viga: reações e momentos",
+        "Reações e diagramas de viga",
         GRUPO,
         "Escolha os apoios, as cargas e a seção. Saem os diagramas e a verificação.",
         "Biapoiada, em balanço, engastada ou contínua, com quantas cargas quiser. Mostra as "
@@ -1558,7 +1558,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "flexao_secao",
-        "Flexão de uma seção",
+        "Flexão e cisalhamento na seção",
         GRUPO,
         "Com o momento na mão: σ, τ e von Mises na seção real, e os perfis que atendem.",
         "Quando o momento já é conhecido. Desenha a seção real com σ, τ e von Mises ao longo da "
@@ -1569,7 +1569,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "perfil_nbr8800",
-        "Perfil de aço pela norma",
+        "Momento resistente de perfil de aço",
         GRUPO,
         "Momento resistente com flambagem lateral e local, pela norma.",
         "Verificação completa de um perfil do catálogo com os esforços de cálculo: flexão nos "

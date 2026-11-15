@@ -165,6 +165,7 @@ GRUPO_CONCRETO_E_PLACA = "Concreto e placa de base"
 GRUPO_CHUMBADORES = "Chumbadores"
 GRUPO_CORTANTE = "Cortante"
 GRUPO_CONSTRUTIVAS = "Disposições construtivas (Tabela 18)"
+GRUPO_CONSTRUTIVAS_FORMULA = "Disposições construtivas (por fórmula)"
 
 
 class BaseInvalida(ValueError):
@@ -186,6 +187,9 @@ ACOS_CHUMBADOR: dict[str, AcoChumbador] = {
     "ASTM F1554 Gr 105": AcoChumbador(724.0, 862.0, False),
     "ASTM A193 B7": AcoChumbador(724.0, 862.0, False),
     "SAE 1020": AcoChumbador(210.0, 380.0, False),
+    # classes da ISO 898-1 que a NBR 8800 (6.3) admite, com os valores nominais
+    "ISO 898-1 classe 4.6": AcoChumbador(240.0, 400.0, False),
+    "ISO 898-1 classe 8.8": AcoChumbador(640.0, 800.0, False),
 }
 
 
@@ -270,6 +274,11 @@ class EntradaBase:
     h_ef_mm: float = 0.0  # embutimento efetivo (0 = h₁ da Tabela 18; pós-instalado: 12·d_b)
     n_rd_fabricante_kN: float = 0.0  # pós-instalado: tração resistente de cálculo de um chumbador
     a1_x_mm: float = 0.0  # tipo 2: a₁ na direção ℓx, de 10 mm ao da Tabela 18 (0 = o da tabela)
+    # chumbador fora da Tabela 18 (6.7.1.1): as medidas saem das fórmulas de MedidasPorFormula
+    por_formula: bool = False  # então ``chumbador`` é uma chave de ROSCAS ou CHUMBADOR_LIVRE
+    d_b_mm: float = 0.0  # CHUMBADOR_LIVRE: o diâmetro digitado
+    passo_mm: float = 0.0  # CHUMBADOR_LIVRE: o passo da rosca (0 = o da métrica grossa mais perto)
+    d_f_mm: float = 0.0  # por fórmula: o furo na placa (0 = o da regra)
 
 
 @dataclass(frozen=True)
@@ -313,6 +322,16 @@ class ResultadoBase:
     grupos: tuple[tuple[str, tuple[Verificacao, ...]], ...] = field(default=())
     # flexão oblíqua: a zona da placa sob pressão (polígono em mm, a partir do centro da placa)
     zona_comprimida: tuple[tuple[float, float], ...] = field(default=())
+    # as disposições usadas: a linha da Tabela 18 ou, por fórmula, as medidas calculadas
+    disposicoes: LinhaTabela18 | None = None
+    por_formula: MedidasPorFormula | None = None
+    # por fórmula: (critério, d_b necessário em mm ou None se nenhum diâmetro atende, fonte)
+    diametros: tuple[tuple[str, float | None, str], ...] = field(default=())
+
+    @property
+    def linha(self) -> LinhaTabela18:
+        """As disposições construtivas da base (Tabela 18 ou por fórmula)."""
+        return self.disposicoes or disposicoes(self.entrada)
 
     @property
     def status(self) -> str:
@@ -366,6 +385,322 @@ def razao_de_areas(e: EntradaBase, lx: float, ly: float) -> float:
     return max(e.razao_a2_a1, 1.0)
 
 
+# =============================================================================================
+# Chumbador fora da Tabela 18: as medidas por fórmula
+# =============================================================================================
+# A 6.7.1.1 admite outras configurações, desde que atendam 6.1.1.3. Fora dos diâmetros da
+# Tabela 18, cada medida que ela dava sai de uma fórmula com fonte: a porca da ASME B18.2.6 (que
+# a NBR 8800, 6.3, manda usar nas barras redondas rosqueadas), o furo e a arruela da AISC (Manual,
+# Tabela 14-2, e Design Guide 1: são os mesmos furos da Tabela 18, em mm), o espaçamento e a borda
+# da ACI 318-19 (17.9.2, que dão os 4·d_b e os ≈ 6·d_b da Tabela 18), o embutimento pelo cone de
+# concreto (ACI 318-19 17.6.2) e o concreto mínimo da NBR 6118 (Tabela 7.1). A ancoragem no
+# concreto passa a ser sempre verificada pela ACI 318-19, Capítulo 17.
+CHUMBADOR_LIVRE = "livre"
+SERIE_UNC = "UNC (ASME B1.1)"
+SERIE_ISO = "ISO métrica grossa (ISO 261)"
+SERIE_INFORMADA = "passo informado"
+FAMILIA_POLEGADA = "polegada"
+FAMILIA_METRICA = "métrica"
+#: Como a série aparece nas frases ("série em polegada (UNC)", "série métrica (ISO)").
+NOMES_DAS_FAMILIAS = {FAMILIA_POLEGADA: "em polegada (UNC)", FAMILIA_METRICA: "métrica (ISO)"}
+
+
+@dataclass(frozen=True)
+class Rosca:
+    """O diâmetro e a rosca de um chumbador fora da Tabela 18 (mm)."""
+
+    nome: str
+    d_b: float
+    passo: float
+    serie: str
+
+    @property
+    def familia(self) -> str:
+        return FAMILIA_POLEGADA if self.serie == SERIE_UNC else FAMILIA_METRICA
+
+    @property
+    def area_bruta(self) -> float:
+        return math.pi * self.d_b**2 / 4
+
+    @property
+    def area_resistente(self) -> float:
+        """A_s da rosca: π/4·(d − 0,9743·p)² na UNC (ASME B1.1), π/4·(d − 0,9382·p)² na ISO 898-1."""
+        k = 0.9743 if self.serie == SERIE_UNC else 0.9382
+        return math.pi / 4 * (self.d_b - k * self.passo) ** 2
+
+
+def _polegadas(nome: str) -> float:
+    """'2 1/2"' → 63,5 mm."""
+    total = 0.0
+    for parte in nome.rstrip('"').split():
+        if "/" in parte:
+            cima, baixo = parte.split("/")
+            total += int(cima) / int(baixo)
+        else:
+            total += int(parte)
+    return 25.4 * total
+
+
+#: Fios por polegada da rosca UNC (ASME B1.1) dos chumbadores de 1/2" a 4" (ASTM F1554).
+_FIOS_UNC = {
+    '1/2"': 13, '5/8"': 11, '3/4"': 10, '7/8"': 9, '1"': 8, '1 1/8"': 7, '1 1/4"': 7,
+    '1 3/8"': 6, '1 1/2"': 6, '1 3/4"': 5, '2"': 4.5, '2 1/4"': 4.5, '2 1/2"': 4, '2 3/4"': 4,
+    '3"': 4, '3 1/4"': 4, '3 1/2"': 4, '3 3/4"': 4, '4"': 4,
+}  # fmt: skip
+#: Passo da rosca métrica grossa (ISO 261), mm.
+_PASSOS_ISO = {
+    10: 1.5, 12: 1.75, 16: 2.0, 20: 2.5, 24: 3.0, 27: 3.0, 30: 3.5, 33: 3.5, 36: 4.0, 39: 4.0,
+    42: 4.5, 45: 4.5, 48: 5.0, 52: 5.0, 56: 5.5, 60: 5.5, 64: 6.0,
+}  # fmt: skip
+#: Os diâmetros comerciais que o modo por fórmula oferece, em ordem crescente em cada família.
+ROSCAS: dict[str, Rosca] = {
+    **{n: Rosca(n, _polegadas(n), 25.4 / fios, SERIE_UNC) for n, fios in _FIOS_UNC.items()},
+    **{f"M{d}": Rosca(f"M{d}", float(d), p, SERIE_ISO) for d, p in _PASSOS_ISO.items() if d >= 12},
+}
+#: φ·k das distâncias da ACI 318-19 17.9.2 (sem dados do produto): espaçamento e borda em d_a.
+#: Concretado: espaçamento 4·d_a (sem protensão) e borda 6·d_a (a do chumbador apertado, a favor
+#: da segurança; a Tabela 18 usa a₃ ≈ 6·d_b). Pós-instalado: espaçamento 6·d_a; borda 6·d_a
+#: (químico) e 8·d_a (expansão controlada por torque).
+ESPACAMENTO_ACI = {ANCORAGEM_PORCA: 4.0, ANCORAGEM_GANCHO: 4.0, ANCORAGEM_QUIMICO: 6.0, ANCORAGEM_EXPANSAO: 6.0}  # fmt: skip
+BORDA_ACI = {ANCORAGEM_PORCA: 6.0, ANCORAGEM_GANCHO: 6.0, ANCORAGEM_QUIMICO: 6.0, ANCORAGEM_EXPANSAO: 8.0}  # fmt: skip
+CHAPA_ALEM_DO_FURO = 6.35  # ¼ in de chapa além do furo para furar sem desviar (AISC, FAQ 7.1.7)
+FOLGA_DA_ARGAMASSA = 15.0  # mm de argamassa entre a arruela de nivelamento e o concreto
+FIOS_ALEM_DA_PORCA = 3  # a rosca passa 3 fios da porca de cima (engajamento completo)
+ROSCA_DENTRO_DO_CONCRETO = 25.0  # r₁ − h₂: 25 mm em todas as linhas da Tabela 18
+R2_MINIMO = 50.0  # o menor r₂ da Tabela 18
+FCK_MIN_NBR_6118 = 20.0  # concreto armado na classe de agressividade I (NBR 6118, Tabela 7.1)
+EMBUTIMENTO_MINIMO_EM_D = (
+    12.0  # piso do embutimento calculado (o padrão do programa no pós-instalado)
+)
+EMBUTIMENTO_MAXIMO = 3000.0  # mm: até onde a busca do embutimento pelo cone vai
+NOTA_POR_FORMULA = (
+    "Chumbador fora da Tabela 18 (6.7.1.1): medidas por fórmula — porca pela ASME B18.2.6, furo "
+    "e arruela pela AISC (Manual, Tabela 14-2, e Design Guide 1), espaçamento e borda pela ACI "
+    "318-19 (17.9.2), embutimento pelo cone de concreto (ACI 318-19 17.6.2) e f_ck mínimo pela NBR "
+    "6118 (Tabela 7.1). A ancoragem no concreto é sempre verificada pela ACI 318-19, Capítulo 17, "
+    "e o bloco e a armadura dele são dimensionados pela NBR 6118."
+)
+
+
+@dataclass(frozen=True)
+class MedidasPorFormula:
+    """As medidas de um chumbador fora da Tabela 18, cada uma com a conta e a fonte."""
+
+    rosca: Rosca
+    linha: LinhaTabela18  # no formato da Tabela 18 (h1 = embutimento h_ef)
+    lado_da_porca: float  # s, entre faces (mm)
+    altura_da_porca: float
+    comprimento: float  # da barra inteira (mm)
+    massa_kg: float  # de um chumbador
+    contas: tuple[tuple[str, str, str], ...]  # (medida, valor, conta e fonte)
+
+
+def _acima(valor: float, passo: float = 5.0) -> float:
+    """O múltiplo de ``passo`` logo acima (ou igual)."""
+    return math.ceil(valor / passo - 1e-9) * passo
+
+
+def _mm(valor: float) -> str:
+    return f"{valor:.1f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+def passo_iso_mais_perto(d_b: float) -> float:
+    """O passo da rosca métrica grossa (ISO 261) do diâmetro de tabela mais perto de d_b."""
+    return _PASSOS_ISO[min(_PASSOS_ISO, key=lambda d: (abs(d - d_b), d))]
+
+
+def rosca_do_chumbador(e: EntradaBase) -> Rosca:
+    """A rosca do chumbador por fórmula (comercial ou digitado)."""
+    if e.chumbador == CHUMBADOR_LIVRE:
+        if e.passo_mm > 0:
+            return Rosca(f"{_mm(e.d_b_mm)} mm", e.d_b_mm, e.passo_mm, SERIE_INFORMADA)
+        return Rosca(f"{_mm(e.d_b_mm)} mm", e.d_b_mm, passo_iso_mais_perto(e.d_b_mm), SERIE_ISO)
+    return ROSCAS[e.chumbador]
+
+
+def roscas_da_familia(familia: str) -> list[Rosca]:
+    """Os diâmetros comerciais de uma família (polegada ou métrica), do menor ao maior."""
+    return sorted((r for r in ROSCAS.values() if r.familia == familia), key=lambda r: r.d_b)
+
+
+def furo_padrao(d_b: float) -> float:
+    """d_f (mm): os furos da Tabela 18 (os da AISC, Tabela 14-2) interpolados em d_b.
+
+    Abaixo de 19 mm e acima de 50 mm, a folga (d_f − d_b) da ponta da tabela. Arredondado para o
+    milímetro de cima.
+    """
+    pontos = [(linha.d_b, linha.d_f) for linha in TABELA_18.values()]
+    if d_b <= pontos[0][0]:
+        furo = d_b + pontos[0][1] - pontos[0][0]
+    elif d_b >= pontos[-1][0]:
+        furo = d_b + pontos[-1][1] - pontos[-1][0]
+    else:
+        furo = next(
+            f0 + (f1 - f0) * (d_b - d0) / (d1 - d0)
+            for (d0, f0), (d1, f1) in zip(pontos, pontos[1:], strict=False)
+            if d0 <= d_b <= d1
+        )
+    return _acima(furo, 1.0)
+
+
+def espessura_da_arruela(d_b: float) -> float:
+    """A chapa comercial com espessura ≥ d_b/3 (AISC Design Guide 1), com 2 % de tolerância."""
+    alvo = d_b / 3 / 1.02
+    return next((t for t in ESPESSURAS_COMERCIAIS if t >= alvo), _acima(d_b / 3, 1.0))
+
+
+def lado_da_arruela(d_b: float, d_f: float) -> float:
+    """Lado da arruela que cobre o furo com o chumbador encostado na borda dele: 2·d_f − d_b."""
+    return _acima(2 * d_f - d_b)
+
+
+def medidas_por_formula(e: EntradaBase, h_ef: float | None = None) -> MedidasPorFormula:
+    """As disposições construtivas de um chumbador fora da Tabela 18 (sem h_ef: 12·d_b)."""
+    rosca = rosca_do_chumbador(e)
+    d, p = rosca.d_b, rosca.passo
+    s = 1.5 * d + 3.2  # porca sextavada pesada, entre faces (ASME B18.2.6)
+    altura = d  # altura da porca pesada ≈ d_b
+    d_f = e.d_f_mm or furo_padrao(d)
+    lado = lado_da_arruela(d, d_f)
+    t_a = e.t_arruela_mm or espessura_da_arruela(d)
+    k_s, k_c = ESPACAMENTO_ACI[e.ancoragem], BORDA_ACI[e.ancoragem]
+    a2 = _acima(max(k_s * d, lado))
+    a1 = _acima(max(a2 / 2, lado / 2, d_f / 2 + CHAPA_ALEM_DO_FURO))
+    a3 = _acima(k_c * d)
+    e_n = e.e_n_mm or _acima(altura + t_a + FOLGA_DA_ARGAMASSA)
+    fios = FIOS_ALEM_DA_PORCA * p
+    h2 = _acima(e_n + e.t_placa_mm + t_a + altura + fios)
+    r1 = h2 + ROSCA_DENTRO_DO_CONCRETO
+    r2 = max(R2_MINIMO, _acima(altura + fios))
+    calculado = h_ef is None
+    h = e.h_ef_mm or (h_ef if h_ef is not None else EMBUTIMENTO_MINIMO_EM_D * d)
+    ponta = {
+        ANCORAGEM_PORCA: altura + fios,  # a porca da ponta e a rosca abaixo dela
+        ANCORAGEM_GANCHO: e.e_h_mm or 4.5 * d,  # o gancho (a curva não entra)
+    }.get(e.ancoragem, 0.0)
+    comprimento = h + h2 + ponta
+    massa = rosca.area_bruta * comprimento * 1e-9 * DENSIDADE_ACO
+    linha = LinhaTabela18(
+        rosca.nome, d, a1, a2, a3, h, h2, r1, r2, d_f, t_a, f"{_mm(lado)} × {_mm(lado)}", e_n,
+        FCK_MIN_NBR_6118, 0.0, 0.0, 0.0,
+    )  # fmt: skip
+    rotulo_k = "chumbador concretado" if e.ancoragem in CONCRETADOS else "pós-instalado"
+    if e.h_ef_mm:
+        conta_h = "informado"
+    elif calculado:
+        conta_h = f"provisório: {_mm(EMBUTIMENTO_MINIMO_EM_D)}·d_b (sai do cone de concreto)"
+    else:
+        conta_h = (
+            "o menor, de 25 em 25 mm, que passa no cone de concreto dos tracionados (ACI 318-19 "
+            "17.6.2) — se nenhum passa, o que mais ajuda neste bloco —, nunca menos que "
+            f"{_mm(EMBUTIMENTO_MINIMO_EM_D)}·d_b = {_mm(EMBUTIMENTO_MINIMO_EM_D * d)} mm"
+        )
+    contas = (
+        (
+            "Rosca",
+            f"Ø {rosca.nome}: d_b = {_mm(d)} mm, passo {_n(p, 2)} mm, rosca {rosca.serie}",
+            f"A_b = {_n(rosca.area_bruta, 0)} mm²; área resistente A_s = π/4·(d − "
+            f"{'0,9743' if rosca.serie == SERIE_UNC else '0,9382'}·p)² = {_n(rosca.area_resistente, 0)} "
+            f"mm² ({'ASME B1.1' if rosca.serie == SERIE_UNC else 'ISO 898-1'}); a NBR usa "
+            f"0,75·A_b = {_n(0.75 * rosca.area_bruta, 0)} mm²",
+        ),
+        (
+            "Porca sextavada pesada",
+            f"s = {_mm(s)} mm entre faces, altura ≈ {_mm(altura)} mm",
+            "s = 1,5·d_b + 3,2 mm (ASME B18.2.6, a que a NBR 8800, 6.3, pede nas barras redondas "
+            "rosqueadas)",
+        ),
+        (
+            "Furo na placa d_f",
+            f"{_mm(d_f)} mm",
+            "informado"
+            if e.d_f_mm
+            else "os furos da Tabela 18 (os mesmos da AISC, Manual, Tabela 14-2) interpolados em "
+            "d_b; fora de 19 a 50 mm, a folga da ponta (14 ou 30 mm)",
+        ),
+        (
+            "Arruela especial",
+            f"{_mm(lado)} × {_mm(lado)} × {_mm(t_a)} mm",
+            "lado ≥ 2·d_f − d_b: cobre o furo com o chumbador encostado na borda dele; espessura "
+            + ("informada" if e.t_arruela_mm else "≥ d_b/3, chapa comercial")
+            + " (AISC, Design Guide 1)",
+        ),
+        (
+            "Espaçamento a₂",
+            f"{_mm(a2)} mm",
+            f"a₂ ≥ máx({_mm(k_s)}·d_b; lado da arruela) = máx({_mm(k_s * d)}; {_mm(lado)}) "
+            f"({rotulo_k}, ACI 318-19 17.9.2)",
+        ),
+        (
+            "Furo à borda da placa a₁",
+            f"{_mm(a1)} mm",
+            f"a₁ ≥ máx(a₂/2; lado/2; d_f/2 + 6,4) = máx({_mm(a2 / 2)}; {_mm(lado / 2)}; "
+            f"{_mm(d_f / 2 + CHAPA_ALEM_DO_FURO)}): a₂ = 2·a₁ em todas as linhas da Tabela 18, a "
+            "arruela inteira na placa e ¼ in de chapa além do furo (AISC, FAQ 7.1.7)",
+        ),
+        (
+            "Chumbador à face do bloco a₃",
+            f"{_mm(a3)} mm",
+            f"a₃ ≥ {_mm(k_c)}·d_b = {_mm(k_c * d)} mm ({rotulo_k}, ACI 318-19 17.9.2)",
+        ),
+        (
+            "Argamassa e_n",
+            f"{_mm(e_n)} mm",
+            "informada"
+            if e.e_n_mm
+            else f"porca de nivelamento ({_mm(altura)}) + arruela ({_mm(t_a)}) + "
+            f"{_mm(FOLGA_DA_ARGAMASSA)} mm de argamassa sob a arruela",
+        ),
+        (
+            "Projeção acima do concreto h₂",
+            f"{_mm(h2)} mm",
+            f"h₂ ≥ e_n + t_p + t_a + porca + {FIOS_ALEM_DA_PORCA} fios = {_mm(e_n)} + "
+            f"{_mm(e.t_placa_mm)} + {_mm(t_a)} + {_mm(altura)} + {_mm(fios)}",
+        ),
+        (
+            "Rosca de cima r₁ e de baixo r₂",
+            f"r₁ = {_mm(r1)} mm, r₂ = {_mm(r2)} mm",
+            f"r₁ = h₂ + {_mm(ROSCA_DENTRO_DO_CONCRETO)} (assim em todas as linhas da Tabela 18); "
+            f"r₂ ≥ máx({_mm(R2_MINIMO)}; porca + {FIOS_ALEM_DA_PORCA} fios), {_mm(R2_MINIMO)} mm é "
+            "o menor da Tabela 18",
+        ),
+        ("Embutimento h_ef", f"{_mm(h)} mm", conta_h),
+        (
+            "Barra de um chumbador",
+            f"{_mm(comprimento)} mm, {_n(massa, 2)} kg",
+            "h_ef + h₂"
+            + {ANCORAGEM_PORCA: " + porca e fios da ponta", ANCORAGEM_GANCHO: " + gancho e_h"}.get(
+                e.ancoragem, ""
+            )
+            + f"; massa = A_b·L·{_mm(DENSIDADE_ACO)} kg/m³",
+        ),
+        (
+            "Concreto do bloco",
+            f"f_ck ≥ {_mm(FCK_MIN_NBR_6118)} MPa",
+            "NBR 6118, Tabela 7.1: concreto armado na classe de agressividade I (II pede 25, III "
+            "30 e IV 40 MPa)",
+        ),
+    )
+    return MedidasPorFormula(rosca, linha, s, altura, comprimento, massa, contas)
+
+
+def disposicoes(e: EntradaBase) -> LinhaTabela18:
+    """A linha da Tabela 18 do chumbador ou, por fórmula, as medidas calculadas (h_ef provisório)."""
+    if e.por_formula:
+        return medidas_por_formula(e).linha
+    return TABELA_18[e.chumbador]
+
+
+def nome_do_chumbador(e: EntradaBase) -> str:
+    """'1"' na Tabela 18; por fórmula, o nome da rosca ('M30', '2 1/2"', '30 mm')."""
+    return rosca_do_chumbador(e).nome if e.por_formula else e.chumbador
+
+
+def ancoragem_verificada(e: EntradaBase) -> bool:
+    """A ancoragem no concreto vai pela ACI 318-19: pedida, fora do reto com porca ou por fórmula."""
+    return e.verificar_concreto or e.ancoragem != ANCORAGEM_PORCA or e.por_formula
+
+
 def _validar(e: EntradaBase) -> None:
     if (
         e.tipo not in TIPOS
@@ -378,7 +713,21 @@ def _validar(e: EntradaBase) -> None:
         )
     if e.aco_chumbador not in ACOS_CHUMBADOR:
         raise BaseInvalida(f"Aço do chumbador desconhecido: {e.aco_chumbador!r}.")
-    if e.chumbador not in TABELA_18:
+    if e.por_formula:
+        if e.chumbador != CHUMBADOR_LIVRE and e.chumbador not in ROSCAS:
+            raise BaseInvalida(f"Diâmetro de chumbador desconhecido: {e.chumbador!r}.")
+        if e.chumbador == CHUMBADOR_LIVRE and not 6.0 <= e.d_b_mm <= 150.0:
+            raise BaseInvalida("Informe o diâmetro do chumbador entre 6 e 150 mm.")
+        if e.passo_mm < 0 or e.d_f_mm < 0:
+            raise BaseInvalida("O passo da rosca e o furo na placa não podem ser negativos.")
+        d_b = rosca_do_chumbador(e).d_b
+        if e.passo_mm and not 0.05 * d_b <= e.passo_mm <= 0.25 * d_b:
+            raise BaseInvalida(
+                f"Passo da rosca fora do usual para Ø {_mm(d_b)} mm: entre 5 % e 25 % do diâmetro."
+            )
+        if e.d_f_mm and e.d_f_mm <= d_b:
+            raise BaseInvalida("O furo na placa precisa ser maior que o diâmetro do chumbador.")
+    elif e.chumbador not in TABELA_18:
         raise BaseInvalida(f"Chumbador fora da Tabela 18: {e.chumbador!r}.")
     if e.aco_placa not in ACOS_DA_PLACA:
         raise BaseInvalida(f"Aço da placa desconhecido: {e.aco_placa!r}.")
@@ -403,7 +752,7 @@ def geometria(e: EntradaBase) -> Geometria:
         raise BaseInvalida(f"Perfil desconhecido: {e.perfil!r}.") from None
     if perfil.familia not in FAMILIAS_I:
         raise BaseInvalida("A Subseção 6.7 trata de pilares de perfil I ou H (6.7.1.1).")
-    tab = TABELA_18[e.chumbador]
+    tab = disposicoes(e)
     d, b_f = perfil.altura_mm, perfil.largura_mm
     t_w, t_f = perfil.espessura_alma_mm, perfil.espessura_mesa_mm
     a1 = e.a1_mm or tab.a1
@@ -834,6 +1183,11 @@ def _texto_da_ancoragem(e: EntradaBase, tab: LinhaTabela18) -> str:
         if e.chapa_na_ponta_mm > 0
         else "porca sextavada pesada"
     )
+    if e.por_formula:
+        return (
+            f"reto, {ponta} na ponta (por fórmula): h_ef = {_n(embutimento(e, tab), 0)} mm, "
+            f"h₂ = {_n(tab.h2, 0)} mm, r₁ = {_n(tab.r1, 0)} mm, r₂ = {_n(tab.r2, 0)} mm"
+        )
     return (
         f"reto, {ponta} na ponta (Tabela 18): h₁ = {_n(tab.h1, 0)} mm, h₂ = {_n(tab.h2, 0)} mm, "
         f"r₁ = {_n(tab.r1, 0)} mm, r₂ = {_n(tab.r2, 0)} mm"
@@ -841,9 +1195,14 @@ def _texto_da_ancoragem(e: EntradaBase, tab: LinhaTabela18) -> str:
 
 
 def embutimento(e: EntradaBase, tab: LinhaTabela18) -> float:
-    """h_ef (mm): o informado ou, sem ele, h₁ da Tabela 18 (concretado) ou 12·d_b (pós-instalado)."""
+    """h_ef (mm): o informado ou, sem ele, h₁ da Tabela 18 (concretado) ou 12·d_b (pós-instalado).
+
+    Por fórmula, o h₁ das medidas calculadas (o do cone, depois que as forças são conhecidas).
+    """
     if e.h_ef_mm > 0:
         return e.h_ef_mm
+    if e.por_formula:
+        return tab.h1
     return 12 * tab.d_b if e.ancoragem in POS_INSTALADOS else tab.h1
 
 
@@ -855,6 +1214,8 @@ def bloco_minimo(e: EntradaBase, g: Geometria, tab: LinhaTabela18) -> tuple[floa
     """
     folga = max(2 * g.e_n, 2 * (tab.a3 - tab.a1))
     n_b = max(tab.n_b_min, g.lx + folga)
+    if e.por_formula:  # sem a Tabela 18: a₃ da ACI 318-19 17.9.2 e a altura pelo embutimento
+        return n_b, g.ly + folga, embutimento(e, tab) + 100.0
     return n_b, g.ly + folga, max(embutimento(e, tab) + 100.0, n_b)
 
 
@@ -990,9 +1351,54 @@ def contato_no_furo_da_arruela(
     (d_f, folgado); ℓ_f vai da borda do furo à borda da arruela pelo lado, o caminho mais curto.
     f_u de 450 MPa, o do aço de f_y = 345 MPa da nota a.
     """
+    return contato_na_arruela(tab.lado_da_arruela, tab.d_b, t_arruela, gama_a2)
+
+
+def contato_na_arruela(
+    lado: float, d_b: float, t_arruela: float, gama_a2: float
+) -> tuple[float, float]:
+    """(F_c,Rd em N, ℓ_f em mm) no furo d_b + 1,5 mm de uma arruela quadrada de ``lado`` mm."""
     k1, k2 = coeficientes_contato()
-    l_f = (tab.lado_da_arruela - (tab.d_b + FOLGA_DO_FURO_DA_ARRUELA)) / 2
-    return min(k1 * l_f, k2 * tab.d_b) * t_arruela * FU_ARRUELA / gama_a2, l_f
+    l_f = (lado - (d_b + FOLGA_DO_FURO_DA_ARRUELA)) / 2
+    return min(k1 * l_f, k2 * d_b) * t_arruela * FU_ARRUELA / gama_a2, l_f
+
+
+@dataclass(frozen=True)
+class CortanteDasArruelas:
+    """A cortante resistente pelas arruelas especiais soldadas (6.7.2.5), em N."""
+
+    v_rd: float
+    f_v: float  # F_v,Rd,i de um chumbador
+    f_v_barra: float  # corte da barra rosqueada (6.3.3.2 a)
+    f_v_contato: float  # contato no furo da arruela (6.3.3.3)
+    l_f: float
+    alfa: float
+
+
+def cortante_das_arruelas(
+    d_b: float,
+    lado: float,
+    t_arruela: float,
+    t_placa: float,
+    forcas: tuple[float, ...],
+    f_ub: float,
+    fy_placa: float,
+    c: sd.Coeficientes,
+    sigma_c_rd: float,
+) -> CortanteDasArruelas:
+    """V_Rd = Σ V_Rd,i da 6.7.2.5, com F_v,Rd,i = mín(corte da barra; contato no furo da arruela)."""
+    f_v_barra = ALFA_V_CHUMBADOR * math.pi * d_b**2 / 4 * f_ub / c.a2
+    f_v_contato, l_f = contato_na_arruela(lado, d_b, t_arruela, c.a2)
+    f_v = min(f_v_barra, f_v_contato)  # 6.3.3.2 pede também a 6.3.3.3
+    alfa = 1.45 * (t_placa + 0.5 * t_arruela) / d_b * (f_ub / fy_placa) * (c.a1 / c.a2)
+    teto = 5 * d_b**2 * sigma_c_rd
+    v_rd = 0.0
+    for f_ti in forcas:
+        t = 0.533 * f_ti
+        radicando = (1 + alfa**2) * f_v**2 - t**2
+        v_i = (math.sqrt(radicando) - alfa * t) / (1 + alfa**2) if radicando > 0 else 0.0
+        v_rd += min(max(v_i, 0.0), teto)
+    return CortanteDasArruelas(v_rd, f_v, f_v_barra, f_v_contato, l_f, alfa)
 
 
 def verificar_ancoragem(
@@ -1002,7 +1408,7 @@ def verificar_ancoragem(
     linhas: list[Verificacao] = []
     avisos: list[str] = []
     aco = ACOS_CHUMBADOR[e.aco_chumbador]
-    verificar = e.verificar_concreto or e.ancoragem != ANCORAGEM_PORCA
+    verificar = ancoragem_verificada(e)
     ref = "ACI 318-19"
     if not aco.equivalente_a36:
         texto = (
@@ -1027,7 +1433,8 @@ def verificar_ancoragem(
                 )
             )
     n_min, n_max = N_DA_TABELA_18
-    if e.ancoragem == ANCORAGEM_PORCA and not n_min <= e.n_chumbadores <= n_max:
+    fora_da_faixa = not n_min <= e.n_chumbadores <= n_max
+    if e.ancoragem == ANCORAGEM_PORCA and not e.por_formula and fora_da_faixa:
         nome = f"Tabela 18 com {e.n_chumbadores} chumbadores"
         ref_a = f"{REF} Tabela 18, nota a"
         texto = (
@@ -1040,7 +1447,7 @@ def verificar_ancoragem(
             linhas.append(
                 _alerta(nome, ref_a, texto + ": ligue a verificação da ancoragem no concreto")
             )
-    if e.ancoragem != ANCORAGEM_PORCA:
+    if e.ancoragem != ANCORAGEM_PORCA and not e.por_formula:
         linhas.append(
             _info(
                 f"Tipo do chumbador: {ANCORAGENS_CURTAS[e.ancoragem]}",
@@ -1160,7 +1567,15 @@ def verificar_ancoragem(
                     texto,
                 )
             )
-            if total > resistente:
+            if total > resistente and e.por_formula and not e.h_ef_mm:
+                avisos.append(
+                    f"O cone de concreto não resiste à tração dos chumbadores nem com o embutimento "
+                    f"calculado (h_ef = {_n(embutimento(e, tab), 0)} mm, o que mais ajuda neste "
+                    "bloco): informe o bloco real ou arme o bloco para costurar o cone (armadura "
+                    "de ancoragem, ACI 318-19 17.5.2.1) e marque essa opção. Trocar o diâmetro "
+                    "não resolve o cone."
+                )
+            elif total > resistente:
                 avisos.append(
                     "O cone de concreto não resiste à tração dos chumbadores: aumente o "
                     "embutimento ou o bloco, ou arme o bloco para costurar o cone (armadura de "
@@ -1183,10 +1598,160 @@ def verificar_ancoragem(
     return linhas, avisos
 
 
+def embutimento_pelo_cone(
+    e: EntradaBase, g: Geometria, tab: LinhaTabela18, forcas: tuple[float, ...]
+) -> float:
+    """Por fórmula: o menor h_ef, de 25 em 25 mm, que passa no cone dos tracionados (ACI 17.6.2).
+
+    Nunca menos que 12·d_b. Sem chumbador tracionado, ou com armadura de ancoragem (que substitui o
+    cone), fica esse piso. Quando nenhum passa (perto de 3 ou 4 bordas o h_ef útil para de
+    crescer), o menor com a melhor relação resistente/solicitante — e o cone reprova.
+    """
+    piso = _acima(EMBUTIMENTO_MINIMO_EM_D * tab.d_b, 25.0)
+    if e.armadura_de_ancoragem or not any(f > 0 for f in forcas):
+        return piso
+    sem_h = replace(e, h_ef_mm=0.0)
+    melhor_h, melhor, sem_ganho = piso, -1.0, 0
+    h = piso
+    while h <= EMBUTIMENTO_MAXIMO + 1e-9 and sem_ganho < 8:
+        cone = cone_de_concreto(sem_h, g, replace(tab, h1=h), forcas)
+        if cone is None:
+            return piso
+        total, resistente, _ = cone
+        if resistente >= total:
+            return h
+        if resistente / total > melhor * (1 + 1e-3):
+            melhor_h, melhor, sem_ganho = h, resistente / total, 0
+        else:
+            sem_ganho += 1
+        h += 25.0
+    return melhor_h
+
+
+def _menor_diametro(capacidade: Any, alvo: float, d_max: float = 160.0) -> float | None:
+    """O menor d_b (mm) com capacidade(d_b) ≥ alvo, por bisseção; None se nem d_max basta."""
+    if capacidade(d_max) < alvo:
+        return None
+    baixo, alto = 1.0, d_max
+    if capacidade(baixo) >= alvo:
+        return baixo
+    for _ in range(60):
+        meio = (baixo + alto) / 2
+        if capacidade(meio) >= alvo:
+            alto = meio
+        else:
+            baixo = meio
+    return alto
+
+
+def diametros_por_criterio(
+    e: EntradaBase,
+    forcas: tuple[float, ...],
+    f_t: float,
+    v_sd: float,
+    c: sd.Coeficientes,
+    f_ub: float,
+    fy_placa: float,
+    sigma_c_rd: float,
+    tab: LinhaTabela18,
+) -> tuple[tuple[str, float | None, str], ...]:
+    """Por fórmula: o d_b que cada critério pede, com as forças desta base (mm; None: nenhum)."""
+    linhas: list[tuple[str, float | None, str]] = []
+    if f_t > 0:
+        linhas.append(
+            (
+                "Tração no aço",
+                math.sqrt(4 * f_t / (0.75 * math.pi * f_ub / c.a2)),
+                f"{REF} 6.7.2.2: d_b,min = √(4·F_t,Sd/(0,75·π·f_ub/γ_a2))",
+            )
+        )
+        if e.ancoragem == ANCORAGEM_PORCA and e.chapa_na_ponta_mm <= 1.5 * tab.d_b + 3.2:
+
+            def cabeca(d: float) -> float:  # só a porca pesada na ponta
+                return PHI_CONCRETADO * 8 * (math.sqrt(3) / 2 * (1.5 * d + 3.2) ** 2 - math.pi * d**2 / 4) * e.fck_MPa  # fmt: skip
+
+            linhas.append(
+                (
+                    "Arrancamento da porca da ponta",
+                    _menor_diametro(cabeca, f_t),
+                    "ACI 318-19 17.6.3.2.2 (a): φ·8·A_brg·f_c, A_brg da porca sextavada pesada",
+                )
+            )
+        elif e.ancoragem == ANCORAGEM_GANCHO:
+
+            def gancho(d: float) -> float:
+                return PHI_CONCRETADO * 0.9 * e.fck_MPa * min(e.e_h_mm or 4.5 * d, 4.5 * d) * d
+
+            linhas.append(
+                (
+                    "Arrancamento do gancho",
+                    _menor_diametro(gancho, f_t),
+                    "ACI 318-19 17.6.3.2.2 (b): φ·0,9·f_c·e_h·d_b, e_h até 4,5·d_b",
+                )
+            )
+    if e.cortante == CORTANTE_ARRUELAS and v_sd > 0:
+
+        def corte(d: float) -> float:
+            d_f = e.d_f_mm if e.d_f_mm > d else furo_padrao(d)
+            t_a = e.t_arruela_mm or espessura_da_arruela(d)
+            return cortante_das_arruelas(
+                d, lado_da_arruela(d, d_f), t_a, e.t_placa_mm, forcas, f_ub, fy_placa, c, sigma_c_rd
+            ).v_rd
+
+        linhas.append(
+            (
+                "Cortante pelas arruelas soldadas",
+                _menor_diametro(corte, v_sd),
+                f"{REF} 6.7.2.5, com a arruela e o furo por fórmula para cada d_b",
+            )
+        )
+    return tuple(linhas)
+
+
+#: O cone depende do bloco, do embutimento e da armadura de ancoragem, não do diâmetro: as buscas
+#: de diâmetro do modo por fórmula não o usam (senão o bloco mínimo, que cresce com a₃ = 6·d_b,
+#: faria um chumbador enorme "passar").
+LINHA_DO_CONE = "Cone de concreto dos chumbadores tracionados"
+
+
+def chumbadores_passam(r: ResultadoBase) -> bool:
+    """Nenhuma verificação dos chumbadores (nem a cortante pelas arruelas) reprova, fora o cone."""
+    for nome, linhas in r.grupos:
+        for v in linhas:
+            dos_chumbadores = nome == GRUPO_CHUMBADORES or v.nome.startswith("Cortante: arruelas")
+            if dos_chumbadores and v.nome != LINHA_DO_CONE and v.status == "NÃO OK":
+                return False
+    return True
+
+
+def passa_fora_o_cone(r: ResultadoBase) -> bool:
+    """Nenhuma verificação reprova, fora o cone de concreto (que o diâmetro não resolve)."""
+    return all(v.status != "NÃO OK" for v in r.verificacoes if v.nome != LINHA_DO_CONE)
+
+
+def menor_diametro_que_atende(e: EntradaBase) -> ResultadoBase | None:
+    """Por fórmula: o menor diâmetro comercial, da família do atual, que passa nos chumbadores.
+
+    Cada diâmetro recalcula a base inteira (a₁, a₂, a placa e as forças mudam com ele), com o furo
+    pela regra. A espessura da placa fica como está (a base mais leve troca as duas coisas). None
+    fora do modo por fórmula ou quando nenhum diâmetro atende (o que reprova não depende dele).
+    """
+    if not e.por_formula:
+        return None
+    for rosca in roscas_da_familia(rosca_do_chumbador(e).familia):
+        try:
+            r = calcular(replace(e, chumbador=rosca.nome, d_b_mm=0.0, passo_mm=0.0, d_f_mm=0.0))
+        except BaseInvalida:
+            continue
+        if chumbadores_passam(r):
+            return r
+    return None
+
+
 def calcular(e: EntradaBase) -> ResultadoBase:
     _validar(e)
     g = geometria(e)
-    tab = TABELA_18[e.chumbador]
+    tab = disposicoes(e)
     c = sd.coeficientes(e.combinacao)
     fy = ACOS[e.aco_placa][0]
     fy_d = fy / c.a1
@@ -1541,6 +2106,20 @@ def calcular(e: EntradaBase) -> ResultadoBase:
     )
     # ------------------------------------------------------------------ chumbadores
     inicios.append((GRUPO_CHUMBADORES, len(linhas)))
+    medidas: MedidasPorFormula | None = None
+    if e.por_formula:  # o embutimento sai do cone, agora que as forças são conhecidas
+        h_ef = e.h_ef_mm or embutimento_pelo_cone(e, g, tab, tuple(forcas))
+        medidas = medidas_por_formula(e, h_ef)
+        tab = medidas.linha
+        linhas.append(
+            _info(
+                "Chumbador fora da Tabela 18 (por fórmula)",
+                f"Ø {tab.polegada}: furo, arruela, distâncias, embutimento e concreto calculados "
+                "(porca ASME B18.2.6; furo e arruela AISC; a₂ e a₃ ACI 318-19 17.9.2; h_ef pelo "
+                "cone; f_ck NBR 6118) e a ancoragem no concreto verificada pela ACI 318-19",
+                f"{REF} 6.7.1.1",
+            )
+        )
     if f_t > 0:
         d_min = math.sqrt(4 * f_t / (0.75 * math.pi * aco_ch.f_u / c.a2))
         linhas.append(
@@ -1555,6 +2134,22 @@ def calcular(e: EntradaBase) -> ResultadoBase:
                 f"γ_a2 = {_n(c.a2)}",
             )  # fmt: skip
         )
+        rosca = medidas.rosca if medidas is not None else None
+        if rosca is not None and rosca.area_resistente < 0.75 * rosca.area_bruta:
+            # rosca grossa em diâmetro pequeno: a área da rosca fica abaixo dos 0,75·A_b da norma
+            linhas.append(
+                Verificacao(
+                    "Rosca: tração na área resistente A_s",
+                    f_t / 1e3,
+                    rosca.area_resistente * aco_ch.f_u / c.a2 / 1e3,
+                    "kN",
+                    "ASME B1.1 / ISO 898-1",
+                    f"F_t,Rd = A_s·f_ub/γ_a2 = {_n(rosca.area_resistente, 0)} × "
+                    f"{_n(aco_ch.f_u, 0)}/{_n(c.a2)}; A_s = {_n(rosca.area_resistente, 0)} mm² "
+                    f"< 0,75·A_b = {_n(0.75 * rosca.area_bruta, 0)} mm² (a área que a fórmula de "
+                    "d_b,min supõe)",
+                )
+            )
     linhas_ancoragem, avisos_ancoragem = verificar_ancoragem(e, g, tab, tuple(forcas))
     linhas.extend(linhas_ancoragem)
     avisos.extend(avisos_ancoragem)
@@ -1629,20 +2224,12 @@ def calcular(e: EntradaBase) -> ResultadoBase:
             )  # fmt: skip
         )
     else:  # arruelas soldadas
-        a_b = math.pi * tab.d_b**2 / 4
-        f_v_barra = ALFA_V_CHUMBADOR * a_b * aco_ch.f_u / c.a2
-        f_v_contato, l_f = contato_no_furo_da_arruela(tab, g.t_arruela, c.a2)
-        f_v = min(f_v_barra, f_v_contato)  # 6.3.3.2 pede também a 6.3.3.3
-        alfa = (
-            1.45 * (e.t_placa_mm + 0.5 * g.t_arruela) / tab.d_b * (aco_ch.f_u / fy) * (c.a1 / c.a2)
-        )
-        teto = 5 * tab.d_b**2 * sigma_rd
-        v_rd = 0.0
-        for f_ti in forcas:
-            t = 0.533 * f_ti
-            radicando = (1 + alfa**2) * f_v**2 - t**2
-            v_i = (math.sqrt(radicando) - alfa * t) / (1 + alfa**2) if radicando > 0 else 0.0
-            v_rd += min(max(v_i, 0.0), teto)
+        arruelas = cortante_das_arruelas(
+            tab.d_b, tab.lado_da_arruela, g.t_arruela, e.t_placa_mm, tuple(forcas), aco_ch.f_u,
+            fy, c, sigma_rd,
+        )  # fmt: skip
+        v_rd, f_v, alfa = arruelas.v_rd, arruelas.f_v, arruelas.alfa
+        f_v_barra, f_v_contato, l_f = arruelas.f_v_barra, arruelas.f_v_contato, arruelas.l_f
         linhas.append(
             Verificacao(
                 "Cortante: arruelas especiais soldadas",
@@ -1668,24 +2255,45 @@ def calcular(e: EntradaBase) -> ResultadoBase:
         )
     # ------------------------------------------------------------------ disposições construtivas
     ref_18 = f"{REF} Tabela 18"
-    inicios.append((GRUPO_CONSTRUTIVAS, len(linhas)))
+    ref_formula = "por fórmula"
+    inicios.append((GRUPO_CONSTRUTIVAS_FORMULA if medidas else GRUPO_CONSTRUTIVAS, len(linhas)))
     # disposições construtivas: limites (OK ou NÃO OK), não aproveitamento
-    linhas.append(
-        _limite(
-            "Distância a₁ (furo à borda da placa)",
-            g.a1 >= tab.a1 - 1e-9,
-            ref_18,
-            f"a₁ = {_n(g.a1, 0)} mm ≥ {_n(tab.a1, 0)} mm para Ø {tab.polegada}",
-        )  # fmt: skip
-    )
-    linhas.append(
-        _limite(
-            "Espaçamento a₂ entre chumbadores",
-            g.a2 >= tab.a2 - 1e-9,
-            ref_18,
-            f"a₂ = {_n(g.a2, 0)} mm ≥ {_n(tab.a2, 0)} mm para Ø {tab.polegada}",
-        )  # fmt: skip
-    )
+    if medidas is not None:
+        linhas.append(
+            _limite(
+                "Distância a₁ (furo à borda da placa)",
+                g.a1 >= tab.a1 - 1e-9,
+                f"{ref_formula} (Tabela 18 e AISC)",
+                f"a₁ = {_n(g.a1, 0)} mm ≥ {_n(tab.a1, 0)} mm, o mínimo calculado para Ø "
+                f"{tab.polegada}: máx(a₂/2; arruela/2; d_f/2 + 6,4 mm)",
+            )
+        )
+        linhas.append(
+            _limite(
+                "Espaçamento a₂ entre chumbadores",
+                g.a2 >= tab.a2 - 1e-9,
+                "ACI 318-19 17.9.2",
+                f"a₂ = {_n(g.a2, 0)} mm ≥ {_n(tab.a2, 0)} mm = máx({_mm(ESPACAMENTO_ACI[e.ancoragem])}"
+                f"·d_b; lado da arruela) para Ø {tab.polegada}",
+            )
+        )
+    else:
+        linhas.append(
+            _limite(
+                "Distância a₁ (furo à borda da placa)",
+                g.a1 >= tab.a1 - 1e-9,
+                ref_18,
+                f"a₁ = {_n(g.a1, 0)} mm ≥ {_n(tab.a1, 0)} mm para Ø {tab.polegada}",
+            )  # fmt: skip
+        )
+        linhas.append(
+            _limite(
+                "Espaçamento a₂ entre chumbadores",
+                g.a2 >= tab.a2 - 1e-9,
+                ref_18,
+                f"a₂ = {_n(g.a2, 0)} mm ≥ {_n(tab.a2, 0)} mm para Ø {tab.polegada}",
+            )  # fmt: skip
+        )
     if e.tipo == TIPO_2:
         linhas.append(
             _limite(
@@ -1696,7 +2304,28 @@ def calcular(e: EntradaBase) -> ResultadoBase:
                 f"{_n(A1_X_MINIMO_TIPO_2, 0)} a {_n(tab.a1, 0)} mm para Ø {tab.polegada}",
             )  # fmt: skip
         )
-    if e.ancoragem == ANCORAGEM_PORCA:  # nota b: o f_ck,mín é o da região da porca da ponta
+    if medidas is not None:
+        linhas.append(
+            _limite(
+                "Concreto: f_ck ≥ 20 MPa",
+                e.fck_MPa >= FCK_MIN_NBR_6118 - 1e-9,
+                "NBR 6118:2014, Tabela 7.1",
+                f"f_ck = {_n(e.fck_MPa, 0)} MPa ≥ {_n(FCK_MIN_NBR_6118, 0)} MPa, o mínimo do "
+                "concreto armado (classe de agressividade I; II pede 25, III 30 e IV 40 MPa); o "
+                "esmagamento junto à porca da ponta é o arrancamento da ACI 318-19 17.6.3",
+            )
+        )
+        altura_porca = medidas.altura_da_porca
+        linhas.append(
+            _limite(
+                "Argamassa: cabem a porca de nivelamento e a arruela",
+                g.e_n >= altura_porca + g.t_arruela - 1e-9,
+                "montagem (Tabela 18, nota d)",
+                f"e_n = {_n(g.e_n, 0)} mm ≥ porca ({_n(altura_porca, 0)} mm) + arruela "
+                f"({_n(g.t_arruela, 1)} mm) = {_n(altura_porca + g.t_arruela, 1)} mm",
+            )
+        )
+    elif e.ancoragem == ANCORAGEM_PORCA:  # nota b: o f_ck,mín é o da região da porca da ponta
         linhas.append(
             _limite(
                 "Concreto: f_ck ≥ f_ck,mín",
@@ -1709,14 +2338,19 @@ def calcular(e: EntradaBase) -> ResultadoBase:
     n_b_min, b_b_min, a_b_min = bloco_minimo(e, g, tab)
     if e.bloco_x_mm > 0 and e.bloco_y_mm > 0:
         a3_a1 = tab.a3 - tab.a1
-        ref_bloco = f"{ref_18}, " + ("notas e e g" if e.tipo == TIPO_2 else "nota e")
+        if medidas is not None:
+            ref_bloco = "ACI 318-19 17.9.2 (a₃)"
+        else:
+            ref_bloco = f"{ref_18}, " + ("notas e e g" if e.tipo == TIPO_2 else "nota e")
+        minimo_tabela = "" if medidas is not None else "N_b,mín; "
+        valor_tabela = "" if medidas is not None else f"{_n(tab.n_b_min, 0)}; "
         linhas.append(
             _limite(
                 "Bloco: N_b ao longo de ℓx",
                 e.bloco_x_mm >= n_b_min - 1e-9,
                 ref_bloco,
-                f"N_b = {_n(e.bloco_x_mm, 0)} mm ≥ máx(N_b,mín; ℓx + 2·e_n; ℓx + 2·(a₃ − a₁)) = "
-                f"máx({_n(tab.n_b_min, 0)}; {_n(g.lx + 2 * g.e_n, 0)}; {_n(g.lx + 2 * a3_a1, 0)}) "
+                f"N_b = {_n(e.bloco_x_mm, 0)} mm ≥ máx({minimo_tabela}ℓx + 2·e_n; ℓx + 2·(a₃ − a₁)) "
+                f"= máx({valor_tabela}{_n(g.lx + 2 * g.e_n, 0)}; {_n(g.lx + 2 * a3_a1, 0)}) "
                 f"= {_n(n_b_min, 0)} mm, com a placa centrada no bloco",
             )  # fmt: skip
         )
@@ -1729,42 +2363,80 @@ def calcular(e: EntradaBase) -> ResultadoBase:
                 f"máx({_n(g.ly + 2 * g.e_n, 0)}; {_n(g.ly + 2 * a3_a1, 0)}) = {_n(b_b_min, 0)} mm",
             )  # fmt: skip
         )
-    d_a = 0.5 * (embutimento(e, tab) - 0.5 * (tab.r2 + tab.d_b))  # nota h
     soldadas = e.cortante == CORTANTE_ARRUELAS
-    detalhamento = (
-        ("Placa", f"{_n(g.lx, 0)} × {_n(g.ly, 0)} × {_n(e.t_placa_mm, 1)} mm ({e.aco_placa})"),
-        (
-            "Chumbadores",
-            f"{n_b} × Ø {tab.polegada} ({_n(tab.d_b, 0)} mm), {e.aco_chumbador}, porca sextavada "
-            "pesada",
-        ),
-        ("Disposição", TIPOS[e.tipo]),
-        ("Furo na placa", f"d_f = {_n(tab.d_f, 0)} mm"),
-        ("Ancoragem", _texto_da_ancoragem(e, tab)),
-        (
-            "Arruelas especiais",
-            f"{tab.arruela} mm, espessura {_n(g.t_arruela, 1)} mm, aço com f_y = 345 MPa, furo "
-            f"d_b + 1,5 = {_n(tab.d_b + FOLGA_DO_FURO_DA_ARRUELA, 1)} mm; uma também entre a placa "
-            "e a porca de nivelamento; "
-            + ("as de cima soldadas à placa (6.7.2.5)" if soldadas else "soltas (nota d)"),
-        ),
-        (
-            "Argamassa expansiva",
-            f"e_n = {_n(g.e_n, 0)} mm; f_ck ≥ 2 × {_n(e.fck_MPa, 0)} = {_n(2 * e.fck_MPa, 0)} MPa (6.7.1.5 d)",
-        ),  # fmt: skip
-        (
-            "Armadura mínima do bloco",
-            f"Ø {_n(tab.phi_armadura, 1)} mm a cada {_n(tab.s_armadura, 0)} mm; armadura vertical a "
-            f"até d_a = ½·[h₁ − 0,5·(r₂ + d_b)] = {_n(d_a, 0)} mm dos chumbadores (nota h; mais "
-            "longe, recalcular a armadura)",
-        ),  # fmt: skip
-        (
-            "Bloco mínimo",
-            f"N_b ≥ {_n(n_b_min, 0)} mm ao longo de ℓx, B_b ≥ {_n(b_b_min, 0)} mm, altura ≥ "
-            f"máx(h₁ + 100; N_b) = {_n(a_b_min, 0)} mm; f_ck,mín = {_n(tab.fck_min, 0)} MPa; "
-            "dimensionado pela NBR 6118 (nota e)",
-        ),  # fmt: skip
+    arruelas_texto = (
+        f"{tab.arruela} mm, espessura {_n(g.t_arruela, 1)} mm, aço com f_y = 345 MPa, furo "
+        f"d_b + 1,5 = {_n(tab.d_b + FOLGA_DO_FURO_DA_ARRUELA, 1)} mm; uma também entre a placa "
+        "e a porca de nivelamento; "
+        + ("as de cima soldadas à placa (6.7.2.5)" if soldadas else "soltas (nota d)")
     )
+    argamassa_texto = (
+        f"e_n = {_n(g.e_n, 0)} mm; f_ck ≥ 2 × {_n(e.fck_MPa, 0)} = {_n(2 * e.fck_MPa, 0)} MPa "
+        "(6.7.1.5 d)"
+    )
+    if medidas is not None:
+        rosca = medidas.rosca
+        detalhamento: tuple[tuple[str, str], ...] = (
+            ("Placa", f"{_n(g.lx, 0)} × {_n(g.ly, 0)} × {_n(e.t_placa_mm, 1)} mm ({e.aco_placa})"),
+            (
+                "Chumbadores",
+                f"{n_b} × Ø {rosca.nome} — d_b = {_mm(rosca.d_b)} mm, passo {_n(rosca.passo, 2)} mm, "
+                f"rosca {rosca.serie}; {e.aco_chumbador}, porca sextavada pesada s = "
+                f"{_mm(medidas.lado_da_porca)} mm — fora da Tabela 18, por fórmula",
+            ),
+            ("Disposição", TIPOS[e.tipo]),
+            ("Furo na placa", f"d_f = {_mm(tab.d_f)} mm"),
+            ("Ancoragem", _texto_da_ancoragem(e, tab)),
+            ("Arruelas especiais", arruelas_texto),
+            ("Argamassa expansiva", argamassa_texto),
+            (
+                "Barra de cada chumbador",
+                f"{_mm(medidas.comprimento)} mm, {_n(medidas.massa_kg, 2)} kg; rosca de cima "
+                f"r₁ = {_mm(tab.r1)} mm e de baixo r₂ = {_mm(tab.r2)} mm",
+            ),
+            (
+                "Armadura do bloco",
+                "pela NBR 6118 (a armadura mínima da nota h vale só para a Tabela 18)",
+            ),
+            (
+                "Bloco mínimo",
+                f"N_b ≥ {_n(n_b_min, 0)} mm ao longo de ℓx, B_b ≥ {_n(b_b_min, 0)} mm (chumbador "
+                f"a a₃ = {_n(tab.a3, 0)} mm da face), altura ≥ h_ef + 100 = {_n(a_b_min, 0)} mm; "
+                f"f_ck ≥ {_n(FCK_MIN_NBR_6118, 0)} MPa; dimensionado pela NBR 6118",
+            ),
+        )
+    else:
+        d_a = 0.5 * (embutimento(e, tab) - 0.5 * (tab.r2 + tab.d_b))  # nota h
+        detalhamento = (
+            ("Placa", f"{_n(g.lx, 0)} × {_n(g.ly, 0)} × {_n(e.t_placa_mm, 1)} mm ({e.aco_placa})"),
+            (
+                "Chumbadores",
+                f"{n_b} × Ø {tab.polegada} ({_n(tab.d_b, 0)} mm), {e.aco_chumbador}, porca "
+                "sextavada pesada",
+            ),
+            ("Disposição", TIPOS[e.tipo]),
+            ("Furo na placa", f"d_f = {_n(tab.d_f, 0)} mm"),
+            ("Ancoragem", _texto_da_ancoragem(e, tab)),
+            ("Arruelas especiais", arruelas_texto),
+            ("Argamassa expansiva", argamassa_texto),
+            (
+                "Armadura mínima do bloco",
+                f"Ø {_n(tab.phi_armadura, 1)} mm a cada {_n(tab.s_armadura, 0)} mm; armadura vertical "
+                f"a até d_a = ½·[h₁ − 0,5·(r₂ + d_b)] = {_n(d_a, 0)} mm dos chumbadores (nota h; "
+                "mais longe, recalcular a armadura)",
+            ),  # fmt: skip
+            (
+                "Bloco mínimo",
+                f"N_b ≥ {_n(n_b_min, 0)} mm ao longo de ℓx, B_b ≥ {_n(b_b_min, 0)} mm, altura ≥ "
+                f"máx(h₁ + 100; N_b) = {_n(a_b_min, 0)} mm; f_ck,mín = {_n(tab.fck_min, 0)} MPa; "
+                "dimensionado pela NBR 6118 (nota e)",
+            ),  # fmt: skip
+        )
+    diametros: tuple[tuple[str, float | None, str], ...] = ()
+    if medidas is not None:
+        diametros = diametros_por_criterio(
+            e, tuple(forcas), f_t, v_sd, c, aco_ch.f_u, fy, sigma_rd, tab
+        )
     fins = [inicio for _, inicio in inicios[1:]] + [len(linhas)]
     grupos = tuple(
         (nome, tuple(linhas[inicio:fim]))
@@ -1774,6 +2446,7 @@ def calcular(e: EntradaBase) -> ResultadoBase:
     return ResultadoBase(
         e, caso, g, sigma_rd, sigma_sd, l_c, f_t, tuple(forcas), t_min, d_min, v_rd,
         tuple(linhas), tuple(avisos), detalhamento, grupos, zona,
+        disposicoes=tab, por_formula=medidas, diametros=diametros,
     )  # fmt: skip
 
 
@@ -1787,16 +2460,26 @@ def base_mais_leve(e: EntradaBase) -> ResultadoBase | None:
     esforços e dispositivo de cortante). None quando nenhuma combinação atende — então o que
     reprova não depende da placa nem do chumbador (por exemplo a cortante ou o concreto). O N_Rd
     do fabricante de um pós-instalado vale só para o diâmetro informado: então só a espessura muda.
+
+    Por fórmula, troca entre os diâmetros comerciais da mesma família (o digitado fica) e não olha o
+    cone de concreto, que depende do bloco, do embutimento e da armadura, não do diâmetro.
     """
     melhor: ResultadoBase | None = None
     fixo = e.ancoragem in POS_INSTALADOS and e.n_rd_fabricante_kN > 0
-    for chumbador in [e.chumbador] if fixo else list(TABELA_18):
+    if fixo or (e.por_formula and e.chumbador == CHUMBADOR_LIVRE):  # o diâmetro digitado fica
+        candidatos = [e]
+    elif e.por_formula:  # os comerciais da mesma família, com o furo pela regra
+        familia = rosca_do_chumbador(e).familia
+        candidatos = [replace(e, chumbador=r.nome, d_f_mm=0.0) for r in roscas_da_familia(familia)]
+    else:
+        candidatos = [replace(e, chumbador=chumbador) for chumbador in TABELA_18]
+    for candidato in candidatos:
         for t in ESPESSURAS_COMERCIAIS:
             try:
-                r = calcular(replace(e, chumbador=chumbador, t_placa_mm=t))
+                r = calcular(replace(candidato, t_placa_mm=t))
             except BaseInvalida:
                 break
-            if r.status == "NÃO OK":
+            if (not passa_fora_o_cone(r)) if e.por_formula else r.status == "NÃO OK":
                 continue
             if melhor is None or r.massa_da_placa_kg < melhor.massa_da_placa_kg - 1e-9:
                 melhor = r
@@ -1807,7 +2490,7 @@ def base_mais_leve(e: EntradaBase) -> ResultadoBase | None:
 def destaque(r: ResultadoBase) -> str:
     """Uma frase com o resultado (tela, registro e memorial)."""
     e, g = r.entrada, r.geometria
-    tab = TABELA_18[e.chumbador]
+    nome = nome_do_chumbador(e) + (" (fora da Tabela 18)" if e.por_formula else "")
     tipo = NOMES_CURTOS[e.tipo]
     governante = r.governante
     gov = (
@@ -1818,7 +2501,7 @@ def destaque(r: ResultadoBase) -> str:
     )  # fmt: skip
     return (
         f"Base {tipo} do {e.perfil}: placa {_n(g.lx, 0)} × {_n(g.ly, 0)} × "
-        f"{_n(e.t_placa_mm, 1)} mm ({e.aco_placa}), {e.n_chumbadores} chumbadores Ø {tab.polegada}; "
+        f"{_n(e.t_placa_mm, 1)} mm ({e.aco_placa}), {e.n_chumbadores} chumbadores Ø {nome}; "
         f"N_Sd = {_n(e.n_sd_kN, 1)} kN, M_Sd = {_n(e.m_sd_kNm, 1)} kN·m"
         + (f", M_Sd,y = {_n(e.m_sd_y_kNm, 1)} kN·m" if e.m_sd_y_kNm else "")
         + f", V_Sd = {_n(e.v_sd_kN, 1)} kN"
@@ -1837,17 +2520,25 @@ def registro_base(
 ) -> dict[str, Any]:
     """O registro técnico da base de pilar, com a entrada para o memorial redesenhar a figura."""
     e, g = r.entrada, r.geometria
-    tab = TABELA_18[e.chumbador]
+    tab, medidas = r.linha, r.por_formula
     geral = r.status
     texto = destaque(r)
     entradas: dict[str, Any] = {
         "perfil": e.perfil,
         "tipo_de_base": TIPOS[e.tipo],
-        "chumbadores": f"{e.n_chumbadores} × Ø {tab.polegada} ({e.aco_chumbador})",
+        "chumbadores": f"{e.n_chumbadores} × Ø {nome_do_chumbador(e)} ({e.aco_chumbador})"
+        + (" — fora da Tabela 18, medidas por fórmula" if e.por_formula else ""),
         "ancoragem": ANCORAGENS[e.ancoragem],
-        "ancoragem_no_concreto": "ACI 318-19, Capítulo 17"
-        if e.verificar_concreto or e.ancoragem != ANCORAGEM_PORCA
+        "ancoragem_no_concreto": "ACI 318-19, Capítulo 17" if ancoragem_verificada(e) else None,
+        "rosca": f"d_b = {_mm(medidas.rosca.d_b)} mm, passo {_n(medidas.rosca.passo, 2)} mm "
+        f"rosca {medidas.rosca.serie}, A_s = {_n(medidas.rosca.area_resistente, 0)} mm²"
+        if medidas is not None
         else None,
+        "furo_e_arruela": f"d_f = {_mm(tab.d_f)} mm; arruela {tab.arruela} × {_mm(g.t_arruela)} mm"
+        if medidas is not None
+        else None,
+        "embutimento_h_ef_mm": embutimento(e, tab) if medidas is not None else None,
+        "a3_mm": tab.a3 if medidas is not None else None,
         "placa": f"{_n(g.lx, 0)} × {_n(g.ly, 0)} × {_n(e.t_placa_mm, 1)} mm ({e.aco_placa})",
         "a1_mm": g.a1,
         "a1_x_mm": g.a1_x if e.tipo == TIPO_2 else None,
@@ -1887,7 +2578,15 @@ def registro_base(
             "Base de pilar de perfil I ou H com placa retangular, chumbadores e argamassa "
             "expansiva pela ABNT NBR 8800:2025, Subseção 6.7: caso pela força axial e pela "
             "excentricidade (6.7.1.4), espessura mínima da placa, diâmetro mínimo dos chumbadores "
-            "e cortante (6.7.2.2 a 6.7.2.5), disposições construtivas da Tabela 18."
+            "e cortante (6.7.2.2 a 6.7.2.5), "
+            + (
+                "chumbador fora da Tabela 18 (6.7.1.1) com as disposições por fórmula: porca pela "
+                "ASME B18.2.6, furo e arruela pela AISC (Manual, Tabela 14-2, e Design Guide 1), "
+                "espaçamento e borda pela ACI 318-19 17.9.2, embutimento pelo cone de concreto "
+                "(ACI 318-19 17.6.2) e f_ck mínimo pela NBR 6118."
+                if e.por_formula
+                else "disposições construtivas da Tabela 18."
+            )
             + (
                 ""
                 if e.tipo in TIPOS_DA_NORMA
@@ -1914,7 +2613,7 @@ def registro_base(
             f"Placa centrada no bloco; chumbadores de {e.aco_chumbador} com porca sextavada "
             f"pesada; ancoragem: {ANCORAGENS[e.ancoragem].lower()}.",
             "Pressão de contato resistente pela 6.6.5: 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c.",
-            NOTA_TABELA_18,
+            NOTA_POR_FORMULA if e.por_formula else NOTA_TABELA_18,
         ],
         alertas=alertas,
         referencias=[
@@ -1928,7 +2627,19 @@ def registro_base(
         )
         + (
             ["ACI 318-19, Capítulo 17 (ancoragem no concreto: arrancamento, cone, borda)."]
-            if e.verificar_concreto or e.ancoragem != ANCORAGEM_PORCA
+            if ancoragem_verificada(e)
+            else []
+        )
+        + (
+            [
+                "ACI 318-19, 17.9.2 (espaçamento e distância à borda mínimos dos chumbadores).",
+                "AISC Steel Construction Manual, Tabela 14-2, e AISC Design Guide 1 (furo na "
+                "placa e arruela dos chumbadores).",
+                "ASME B18.2.6 (porca sextavada pesada); ASME B1.1 e ISO 898-1 (área resistente "
+                "da rosca).",
+                "ABNT NBR 6118:2014, Tabela 7.1 (classe mínima do concreto).",
+            ]
+            if e.por_formula
             else []
         ),
         conclusao=texto,

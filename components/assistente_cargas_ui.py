@@ -153,9 +153,12 @@ def _busca() -> None:
         "Procurar um caso",
         list(cat.CASOS),
         index=None,
-        format_func=lambda i: f"{cat.CASOS[i].titulo} · {cat.CASOS[i].grupo}",
-        placeholder="Digite: parafuso, rosca, viga, flexão, chaveta, rolamento, gancho...",
-        help="Digite parte do nome e escolha. O caso abre na hora.",
+        format_func=cat.rotulo_da_busca,
+        placeholder="Digite: parafuso, espanar, viga, flambagem, chaveta, rolamento, fuso...",
+        help=(
+            "Digite parte do nome da peça, do grupo ou um apelido (espanar, fuso, L10) e escolha. "
+            "O caso abre na hora."
+        ),
         key="assistente_busca",
         on_change=_ao_buscar,
     )
@@ -179,30 +182,19 @@ def _botao_do_caso(caso_id: str, *, prefixo: str = "abrir") -> None:
 # ---------------------------------------------------------------------------
 
 
-def _atalhos() -> None:
-    st.subheader("O que você precisa verificar?")
-    por_linha = 3
-    for inicio in range(0, len(cat.ATALHOS), por_linha):
-        colunas = st.columns(por_linha)
-        for coluna, atalho in zip(colunas, cat.ATALHOS[inicio : inicio + por_linha], strict=False):
-            with coluna, st.container(border=True, height="stretch"):
-                desenho, texto = st.columns([2, 3], vertical_alignment="center")
-                svg = _croqui(cat.CASOS[atalho.caso])
-                if svg:
-                    desenho.image(svg, width="stretch")
-                with texto:
-                    st.markdown(f"**{atalho.pergunta}**")
-                    st.caption(atalho.detalhe)
-                st.space("stretch")
-                st.button(
-                    "Abrir",
-                    key=f"atalho::{atalho.caso}",
-                    icon=atalho.icone,
-                    width="stretch",
-                    help=cat.CASOS[atalho.caso].titulo,
-                    on_click=_escolher,
-                    args=(atalho.caso,),
-                )
+def _mais_usados() -> None:
+    st.markdown("**Mais usados**")
+    with st.container(horizontal=True):
+        for caso_id in cat.MAIS_USADOS:
+            caso = cat.CASOS[caso_id]
+            st.button(
+                caso.titulo,
+                key=f"atalho::{caso_id}",
+                icon=cat.info_do_grupo(caso.grupo).icone,
+                help=caso.resumo,
+                on_click=_escolher,
+                args=(caso_id,),
+            )
 
 
 def _recentes() -> None:
@@ -232,10 +224,13 @@ def _cartao_do_grupo(grupo: str, ids: list[str]) -> None:
 
 
 def _area(area: str) -> None:
-    st.caption(cat.AREAS_INFO[area].descricao)
+    info = cat.AREAS_INFO[area]
+    quantos = sum(map(len, cat.GRUPOS[area].values()))
+    st.markdown(f"### {info.icone} {area} :gray-badge[{quantos}]")
+    st.caption(info.descricao)
     grupos = list(cat.GRUPOS[area].items())
-    # Quatro por linha quando a conta fecha, para a grade não terminar com um buraco.
-    por_linha = 4 if len(grupos) % 4 == 0 else 3
+    # Até quatro grupos numa linha; com mais, a grade que não termina com um buraco.
+    por_linha = len(grupos) if len(grupos) <= 4 else 4 if len(grupos) % 4 == 0 else 3
     for inicio in range(0, len(grupos), por_linha):
         colunas = st.columns(por_linha)
         for coluna, (grupo, ids) in zip(colunas, grupos[inicio : inicio + por_linha], strict=False):
@@ -244,25 +239,22 @@ def _area(area: str) -> None:
 
 
 def painel() -> None:
-    """A entrada da página: a busca, as perguntas mais comuns e todos os casos por área."""
+    """A entrada da página: a busca, os mais usados e todos os casos, área por área, à vista."""
     _busca()
     _recentes()
-    _atalhos()
+    _mais_usados()
     st.page_link(
         "app_pages/desenhar_secao.py",
         label="A seção não está no catálogo? Desenhe e use em qualquer caso",
         icon=":material/draw:",
     )
     st.subheader("Todos os casos")
-    abas = st.tabs(
-        [
-            f"{cat.AREAS_INFO[area].icone} {area} ({sum(map(len, cat.GRUPOS[area].values()))})"
-            for area in cat.AREAS
-        ]
+    st.caption(
+        "Organizados pela peça. Passe o mouse sobre um nome para ver o que o cálculo faz, ou "
+        "procure acima pelo nome, pelo grupo ou por um apelido."
     )
-    for aba, area in zip(abas, cat.AREAS, strict=True):
-        with aba:
-            _area(area)
+    for area in cat.AREAS:
+        _area(area)
     with st.expander("Comparar todos os casos em uma tabela", icon=":material/table_rows:"):
         st.dataframe(
             pd.DataFrame(
@@ -1089,7 +1081,7 @@ def detalhes(
 
     fronteira_modelo(
         [
-            "Soldas, contato real, tensões residuais e efeitos térmicos que o caso não cita.",
+            "Tensões residuais, contato real, efeitos térmicos e soldas que o caso não calcula.",
             "Peças e condições fora das hipóteses listadas acima.",
             "A confirmação das propriedades do material no certificado.",
         ]

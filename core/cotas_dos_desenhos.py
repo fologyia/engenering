@@ -52,6 +52,14 @@ COTAS: dict[str, dict[str, Alvo | tuple[Alvo, ...]]] = {
     "rosca_arrancamento": {"F": "forca_kN", "L_e": "le_mm"},
     "torque_aperto": {"T": "torque_Nm"},
     "grupo_parafusos": {"N, M": ("n_kN", "mx_kNm"), "V, T": ("vy_kN", "t_kNm"), "d_c": "dc_mm"},
+    "solda_filete": {
+        "N, M": ("n_kN", "mx_kNm"),
+        "V, T": ("vy_kN", "t_kNm"),
+        "b": "b_mm",
+        "d": "d_mm",
+    },
+    "impacto": {"W": "peso_kN", "h": "altura_mm", "L": "l_mm"},
+    "linga_corrente": {"m": "massa_t", "β": "beta_max", "CMT": "cmt_t"},
     # Vigas e flexão
     "viga_reacoes": {
         "L": "l_m",

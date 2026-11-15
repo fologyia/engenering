@@ -837,7 +837,7 @@ elif modulo == "Assistente de projeto":
             ["Objetivo", "Verificar resistência estática"],
             ["Dados disponíveis", "Forças, momentos e dimensões"],
             ["Regime", "Estático"],
-            ["Modelo inicial", "Viga de seção retangular"],
+            ["Modelo inicial", "Seção retangular sob flexão e cortante"],
         ],
         "A rota será Cálculo de peças → Análise estática. Primeiro obtenha "
         "σx, σy e τxy; depois compare von Mises com a resistência do material.",
@@ -1624,15 +1624,16 @@ elif modulo == "Cálculo de peças":
     st.header("Cálculo de peças")
     st.markdown(
         "Use quando você tem **forças, momentos, torque, potência ou pressão** e quer saber o que "
-        "chega em cada peça e se ela aguenta. A página abre num painel com três áreas: **Estática "
-        "e resistência**, para parafusos, roscas, vigas, barras e perfis; **Elementos de "
-        "máquinas**, que verifica a peça inteira; e **Seção e tensão no ponto**, que transforma "
-        "esforços em tensões."
+        "chega em cada peça e se ela aguenta. A página abre num painel com quatro áreas, pela "
+        "peça que você tem na mão: **Parafusos, pinos e soldas**; **Barras, vigas e perfis**; "
+        "**Elementos de máquinas**; e **Içamento e pressão**. A busca acha o caso pelo nome, "
+        "pelo grupo ou por um apelido (espanar, fuso, flambagem, L10)."
     )
     st.subheader("Passo a passo")
     st.markdown(
         """
-        1. No painel, escolha uma das perguntas, procure pelo nome ou abra a área e o grupo.
+        1. No painel, procure pelo nome (ou por um apelido), use os **Mais usados** ou escolha
+           na lista, que mostra todas as áreas e grupos de uma vez.
         2. Informe os dados à esquerda. Cada campo tem o seu **?**, e o material pode vir do
            catálogo. Cargas e trechos são tabelas: acrescente as linhas que precisar.
         3. A resposta aparece à direita, na hora: o desenho, o que passou e os números.
@@ -1646,23 +1647,34 @@ elif modulo == "Cálculo de peças":
         st.subheader("O que dá para analisar")
         st.markdown(
             """
-            - **Parafusos e roscas:** parafuso sob força axial, arrancamento da rosca, torque de
-              aperto e grupo de parafusos.
-            - **Vigas e flexão:** reações, momentos e flecha com oito esquemas de apoio, flexão de
-              uma seção e perfil de aço pela norma.
-            - **Barras e estruturas:** força axial, torção, coluna, treliça plana, pórtico e console.
-            - **Peças, seções e chapas:** equilíbrio de uma peça, seção montada e chapa com furo.
-            - **Transmissão:** motor e redutor, engrenagens cilíndrica e cônica, sem-fim, correia,
-              corrente e flange de acoplamento.
-            - **Eixos e cubos:** eixo sobre dois mancais, seção de eixo à fadiga, chaveta e ajuste
-              prensado.
-            - **Mancais e contato:** rolamento, bucha, pino de articulação e contato de Hertz.
-            - **Molas, freios e fusos:** mola de compressão, freio ou embreagem de disco, freio de
-              cinta e parafuso de potência.
-            - **Içamento (NBR 8400):** ações, cabo, tambor e polias, roda, peça de mecanismo, gancho
-              e olhal.
-            - **Máquinas e vibração:** desbalanceamento, base de máquina e disco girante.
-            - **Hidráulica e tampas:** cilindro hidráulico, tampa circular e chapa retangular.
+            - **Parafusos e roscas:** parafuso sob tração, arrancamento de rosca, torque de aperto
+              e grupo de parafusos sob carga excêntrica.
+            - **Pinos, chapas e soldas:** pino sob cisalhamento, pino de articulação, pino em
+              balanço, pino transversal em eixo, chapa tracionada com furo e solda de filete sob
+              carga excêntrica.
+            - **Barras e colunas:** barra sob força axial (centrada, excêntrica ou escalonada),
+              barra escalonada sob torção e flambagem de coluna.
+            - **Vigas:** reações e diagramas de viga, flexão e cisalhamento na seção e momento
+              resistente de perfil de aço.
+            - **Seções e perfis:** propriedades de seção composta, seção retangular e perfis I, U,
+              cantoneira e tubo sob esforços combinados.
+            - **Treliças e pórticos:** treliça plana e pórtico simples e console. Peça ou pórtico
+              desenhado fica em Vigas e eixos.
+            - **Motor e transmissão:** motor e redutor, engrenagens cilíndrica e cônica, coroa e
+              sem-fim, transmissão por correia e por corrente e acoplamento de flanges.
+            - **Eixos e cubos:** eixo de transmissão, fadiga de eixo com entalhe, eixo maciço ou
+              vazado sob esforços combinados, chaveta paralela e ajuste prensado.
+            - **Mancais e contato:** seleção de rolamento, bucha de deslizamento e contato de Hertz.
+            - **Molas:** helicoidal de compressão e de tração, de torção e prato.
+            - **Freios, embreagens e fusos:** freio ou embreagem de disco, freio de cinta e
+              parafuso de potência.
+            - **Máquinas e vibração:** desbalanceamento, base de máquina, disco girante e carga
+              de impacto por queda ou batida.
+            - **Içamento:** ações, cabo, tambor e polias, roda, peça de mecanismo, gancho e olhal,
+              pela NBR 8400, e linga de corrente, pela NBR 15516-2.
+            - **Vasos e tubos sob pressão:** parede fina, esfera e parede espessa.
+            - **Cilindros e tampas:** cilindro hidráulico e placas circular e retangular sob
+              pressão.
             """
         )
     with st.container(border=True):
@@ -1678,7 +1690,7 @@ elif modulo == "Cálculo de peças":
         )
     mostrar_exemplo(
         [
-            ["Modelo", "Eixo circular maciço"],
+            ["Modelo", "Eixo maciço sob esforços combinados"],
             ["Diâmetro d", "30 mm"],
             ["Força axial F", "10 kN de tração"],
             ["Momento fletor |M|", "500 N·m"],
@@ -1702,7 +1714,7 @@ elif modulo == "Cálculo de peças":
         )
     st.warning(
         "Nos casos de seção, furos, chavetas, soldas e outros concentradores de tensão só "
-        "entram se você informar o K_t. Em eixos, use o caso Seção de eixo: fadiga e entalhe.",
+        "entram se você informar o K_t. Em eixos, use o caso Fadiga de eixo com entalhe.",
         icon=":material/warning:",
     )
     link_modulo("app_pages/assistente_cargas.py", "Abrir o assistente de cargas")
@@ -3091,7 +3103,8 @@ elif modulo == "Placas de base":
             ],
             [
                 "Chumbadores",
-                "Ø 3/4″ a 2″, aço, tipo (porca, guarda-chuva, químico, parabolt); a₁ e a₂",
+                "Ø 3/4″ a 2″ da Tabela 18 ou qualquer diâmetro por fórmula; aço, tipo "
+                "(porca, guarda-chuva, químico, parabolt); a₁ e a₂",
                 "Desenho da base",
             ],
             ["Placa", "Espessura e aço (ASTM A36, A572 Gr 50 ou A588)", "Lista de material"],
@@ -3139,8 +3152,14 @@ elif modulo == "Placas de base":
             - **Cone de concreto:** no bloco mínimo da Tabela 18 e sem armadura, o cone costuma não
               passar; com **armadura de ancoragem** que costura o cone, ele sai como informação e a
               armadura vai para o projeto do bloco.
-            - **Aço do chumbador:** A36 ou F1554 Gr 36 são os da norma; Gr 55, Gr 105, A193 B7 e SAE
-              1020 mudam o diâmetro mínimo pelo f_u e pedem a ancoragem conferida.
+            - **Aço do chumbador:** A36 ou F1554 Gr 36 são os da norma; Gr 55, Gr 105, A193 B7, SAE
+              1020 e as classes 4.6 e 8.8 da ISO 898-1 mudam o diâmetro mínimo pelo f_u e pedem a
+              ancoragem conferida.
+            - **Chumbador por fórmula (fora da Tabela 18):** qualquer diâmetro — polegada (UNC),
+              métrico (ISO) ou digitado. Furo e arruela saem da AISC, a porca da ASME B18.2.6, a₂ e
+              a₃ da ACI 318-19 (17.9.2), o embutimento do cone de concreto e o f_ck mínimo da NBR
+              6118, cada um com a conta na tela. A página mostra o diâmetro que cada critério pede,
+              o menor comercial que atende e a conferência com a linha da Tabela 18 mais perto.
             - **Momento no eixo fraco (M_Sd,y):** as fórmulas da 6.7 são só do eixo forte; com
               ele a base vai pelo mesmo método em duas direções (flexão oblíqua): zona comprimida
               além de uma linha neutra inclinada e chumbadores em proporção à distância a ela.
@@ -3151,8 +3170,9 @@ elif modulo == "Placas de base":
         """
         1. Escolha o perfil, a disposição, o número e o diâmetro dos chumbadores, depois o
            tipo e o aço do chumbador.
-        2. Deixe **a₁ e a₂ da Tabela 18** ligado para a menor placa; desligue para afastar os
-           chumbadores (por exemplo para ℓy ≥ b_f + 25 mm).
+        2. Deixe **a₁ e a₂ mínimos** ligado para a menor placa; desligue para afastar os
+           chumbadores (por exemplo para ℓy ≥ b_f + 25 mm). Para um diâmetro que a Tabela 18 não
+           tem, escolha **Medidas do chumbador → Por fórmula**.
         3. Informe a espessura e o aço da placa, o f_ck e, se souber, o tamanho do bloco.
         4. Entre com N_Sd, M_Sd e V_Sd **de cálculo** (ELU) no pé do pilar.
         5. Escolha como a cortante passa: atrito, placa de cisalhamento ou arruelas soldadas.

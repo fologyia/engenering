@@ -110,13 +110,13 @@ def test_mostrar_figura_aceita_cada_tipo_de_figura():
 
 
 def test_nenhuma_imagem_passa_por_fora_de_mostrar_figura():
-    """Só as miniaturas do painel acompanham a coluna, e a placa do esqueleto tem tamanho próprio."""
+    """Só a placa do esqueleto tem tamanho próprio; o resto passa por mostrar_figura."""
     achadas = []
     for pasta in ("app_pages", "components"):
         for arquivo in (RAIZ / pasta).glob("*.py"):
             if arquivo.name != "figuras.py":
                 achadas += [arquivo.name] * arquivo.read_text(encoding="utf-8").count(".image(")
-    assert sorted(achadas) == ["assistente_cargas_ui.py", "esforcos_modelo.py"]
+    assert sorted(achadas) == ["esforcos_modelo.py"]
 
 
 @pytest.mark.parametrize(

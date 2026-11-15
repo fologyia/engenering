@@ -200,7 +200,7 @@ def calcular_barra_axial(v: Valores) -> Resultado:
         pior = min(comprimidos, key=lambda i: esforcos[i])
         alertas.append(
             f"O trecho {pior + 1} está comprimido com {abs(esforcos[pior]) / 1000:.1f} kN. Barra "
-            "comprimida pode flambar antes de escoar: confira no caso Coluna simples."
+            "comprimida pode flambar antes de escoar: confira no caso Flambagem de coluna."
         )
         envios.append(
             Envio(
@@ -330,7 +330,7 @@ CAMPOS_BARRA_AXIAL: tuple[Campo, ...] = (
     ),
     Campo(
         "sy_MPa",
-        "Escoamento do material",
+        "Limite de escoamento S_y",
         "Limite de escoamento do material mais fraco da barra.",
         250.0,
         "MPa",
@@ -534,7 +534,7 @@ CAMPOS_BARRA_TORCAO: tuple[Campo, ...] = (
     ),
     Campo(
         "sy_MPa",
-        "Escoamento do material",
+        "Limite de escoamento S_y",
         "Limite de escoamento do material.",
         250.0,
         "MPa",
@@ -1354,7 +1354,7 @@ CAMPOS_PORTICO: tuple[Campo, ...] = (
     ),
     Campo(
         "sy_MPa",
-        "Escoamento do material",
+        "Limite de escoamento S_y",
         "ASTM A36: 250 MPa. ASTM A572 Gr 50: 345 MPa.",
         345.0,
         "MPa",
@@ -1386,7 +1386,7 @@ CAMPOS_PORTICO: tuple[Campo, ...] = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "barra_axial",
-        "Barra sob força axial",
+        "Barra escalonada sob força axial",
         GRUPO,
         "Tensão, alongamento e reações, com trechos de seções diferentes.",
         "Barra puxada ou comprimida, de um ou vários trechos, presa em uma ou nas duas pontas. "
@@ -1397,7 +1397,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "barra_torcao",
-        "Barra em torção",
+        "Barra escalonada sob torção",
         GRUPO,
         "Torque, cisalhamento e giro, em eixos e tubos com trechos diferentes.",
         "Barra redonda ou tubo, de um ou vários trechos, presa em uma ou nas duas pontas.",
@@ -1407,7 +1407,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "coluna_simples",
-        "Coluna simples",
+        "Flambagem de coluna",
         GRUPO,
         "Quanto a barra aguenta à compressão antes de flambar.",
         "Conta clássica de Euler e Johnson, para haste, tirante comprimido, suporte ou pé de "
@@ -1430,7 +1430,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "portico_simples",
-        "Pórtico simples ou console",
+        "Pórtico simples e console",
         GRUPO,
         "Pórtico de um vão, console em L e mão-francesa, com diagramas e deformada.",
         "Estruturas planas pequenas: escolha a forma, os perfis e as cargas e veja as reações, "

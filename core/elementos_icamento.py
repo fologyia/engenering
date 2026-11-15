@@ -450,7 +450,7 @@ def calcular_cabo(v: Valores) -> Resultado:
             Metrica("Tambor mínimo", minimo_tambor, "mm", 0),
             Metrica("Polia mínima", minimo_polia, "mm", 0),
             Metrica("Carga de ruptura", ruptura / 1000.0, "kN", 1),
-            Metrica("Fator à ruptura", fs, "", 1),
+            Metrica("Fator de segurança à ruptura", fs, "", 1),
             Metrica(
                 "Torque no tambor",
                 tracao * d_tambor / 2.0 / 1e6 * float(v["ramos_no_tambor"]),
@@ -912,17 +912,17 @@ def calcular_mecanismo(v: Valores) -> Resultado:
     alertas = []
     if sigma_af <= 0:
         alertas.append(
-            "A fadiga não foi verificada: informe σ_af ou use Seção de eixo: fadiga e entalhe."
+            "A fadiga não foi verificada: informe σ_af ou use Fadiga de eixo com entalhe."
         )
     return Resultado(
         resumo=f"Grupo {grupo}: tensão admissível de {sigma_a:.0f} MPa nos casos I e II.",
         metricas=(
             Metrica("Grupo do mecanismo", grupo),
             Metrica("q", q, "", 2),
-            Metrica("FS_r", fsr, "", 2),
+            Metrica("Fator de segurança à ruptura FS_r", fsr, "", 2),
             Metrica("σ_a, casos I e II", sigma_a, "MPa", 1),
             Metrica("Tensão equivalente", valor_1, "MPa", 1),
-            Metrica("δ de fadiga", delta, "", 2),
+            Metrica("Coeficiente δ de fadiga", delta, "", 2),
         ),
         verificacoes=tuple(verificacoes),
         pontos=tuple(pontos),
@@ -1252,7 +1252,7 @@ CAMPOS_GANCHO = (
     ),
     Campo(
         "sy_MPa",
-        "Limite de escoamento",
+        "Limite de escoamento S_y",
         "Limite de escoamento do material da peça.",
         345.0,
         "MPa",
@@ -1646,7 +1646,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "mecanismo_nbr8400",
-        "Peça de mecanismo",
+        "Peça de mecanismo (NBR 8400)",
         GRUPO,
         "NBR 8400: tensão admissível sobre a ruptura, casos I, II e III, e fadiga.",
         "Para eixos e peças de mecanismos de içamento. Em vez do escoamento, a norma usa a "
@@ -1658,7 +1658,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "gancho",
-        "Gancho e peça curva",
+        "Gancho e viga curva",
         GRUPO,
         "Viga curva de Winkler-Bach: seção retangular, circular ou trapezoidal.",
         "Em peça curva a linha neutra sai do centroide e a fibra interna sofre mais do que a "

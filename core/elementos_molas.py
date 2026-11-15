@@ -1015,7 +1015,7 @@ CAMPOS_PRATO = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "mola_tracao",
-        "Mola de tração",
+        "Mola helicoidal de tração",
         GRUPO_MOLAS,
         "Rigidez, tensão inicial, ganchos e fadiga.",
         "Mola helicoidal com gancho nas pontas. A quebra costuma ser no gancho, e por isso ele é "

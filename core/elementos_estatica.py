@@ -229,7 +229,7 @@ CAMPOS_SECAO: tuple[Campo, ...] = (
     ),
     Campo(
         "densidade_kg_m3",
-        "Densidade do material",
+        "Massa específica ρ",
         "Para a massa por metro. Aço: 7 850 kg/m³.",
         7850.0,
         "kg/m³",
@@ -283,10 +283,10 @@ def calcular_chapa(v: Valores) -> Resultado:
             f"{sigma_bruta:.1f} MPa na seção bruta e {sigma_liquida:.1f} MPa na seção do furo."
         ),
         metricas=(
-            Metrica("A chapa aguenta", capacidade / 1000.0, "kN", 1),
+            Metrica("Força resistente da chapa", capacidade / 1000.0, "kN", 1),
             Metrica("Tensão na seção bruta", sigma_bruta, "MPa", 1),
             Metrica("Tensão na seção do furo", sigma_liquida, "MPa", 1),
-            Metrica("Fator Kt", kt, "", 2),
+            Metrica("Concentração de tensão K_t", kt, "", 2),
             Metrica("Pico no furo", pico, "MPa", 0),
         ),
         verificacoes=(
@@ -380,7 +380,7 @@ CAMPOS_CHAPA: tuple[Campo, ...] = (
     ),
     Campo(
         "sy_MPa",
-        "Escoamento",
+        "Limite de escoamento S_y",
         "ASTM A36: 250 MPa.",
         250.0,
         "MPa",
@@ -390,7 +390,7 @@ CAMPOS_CHAPA: tuple[Campo, ...] = (
     ),
     Campo(
         "sut_MPa",
-        "Ruptura",
+        "Resistência à ruptura S_ut",
         "ASTM A36: 400 MPa.",
         400.0,
         "MPa",
@@ -413,7 +413,7 @@ CAMPOS_CHAPA: tuple[Campo, ...] = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "secao_montada",
-        "Seção montada",
+        "Propriedades de seção composta",
         GRUPO,
         "Área, centro de gravidade, inércia e W de uma seção feita de partes.",
         "Some chapas e barras, tire furos e veja as propriedades. O resultado pode seguir para "

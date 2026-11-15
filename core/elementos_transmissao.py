@@ -1058,7 +1058,7 @@ CAMPOS_SEM_FIM = (
     ),
     Campo(
         "atrito",
-        "Coeficiente de atrito f",
+        "Coeficiente de atrito μ",
         "Atrito entre o sem-fim e a coroa. Partindo do repouso: cerca de 0,15.",
         0.05,
         minimo=0.001,
@@ -1412,7 +1412,7 @@ def calcular_corrente(v: Valores) -> Resultado:
             Metrica("Número de elos", elos_par, "", 0),
             Metrica("Variação de velocidade", variacao * 100.0, "%", 2),
             Metrica("Carga no eixo", carga_eixo / 1000.0, "kN"),
-            Metrica("Fator de segurança", fs, "", 1),
+            Metrica("Fator de segurança à ruptura", fs, "", 1),
         ),
         verificacoes=verificacoes,
         hipoteses=(
@@ -1764,18 +1764,18 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "sem_fim",
-        "Sem-fim e coroa",
+        "Coroa e sem-fim",
         GRUPO,
         "Forças, rendimento, calor a dissipar e autotravamento.",
         "O par sem-fim e coroa perde boa parte da potência em atrito. Este caso mostra o "
         "rendimento, o calor gerado e se o par trava sozinho quando o motor para.",
         CAMPOS_SEM_FIM,
         calcular_sem_fim,
-        r"\eta=\frac{\cos\phi_n-f\tan\lambda}{\cos\phi_n+f\cot\lambda}",
+        r"\eta=\frac{\cos\phi_n-\mu\tan\lambda}{\cos\phi_n+\mu\cot\lambda}",
     ),
     Caso(
         "correia",
-        "Correia e polias",
+        "Transmissão por correia",
         GRUPO,
         "Ramos tenso e frouxo, pré-tensão mínima, comprimento e carga no eixo.",
         "Serve para correia em V e plana. Sai a pré-tensão necessária para não deslizar e a força "
@@ -1786,7 +1786,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "corrente",
-        "Corrente de rolos",
+        "Transmissão por corrente",
         GRUPO,
         "Tração, número de elos, efeito poligonal e segurança à ruptura.",
         "Para transmissão por corrente de rolos. Sai a tração, o comprimento em elos (par), a "
@@ -1797,7 +1797,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "acoplamento",
-        "Flange de acoplamento",
+        "Acoplamento de flanges",
         GRUPO,
         "Parafusos de um flange sob torque: corte, esmagamento e atrito.",
         "Dois flanges unidos por parafusos em círculo. Verifica o corte nos parafusos, o "

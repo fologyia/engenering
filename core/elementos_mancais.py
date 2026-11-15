@@ -130,6 +130,10 @@ def calcular_rolamento(v: Valores) -> Resultado:
         y = float(v["y"])
         e = 0.0
     equivalente = max(fr_media, x * fr_media + y * fa) * fator
+    exigir(
+        equivalente > 0,
+        "A carga equivalente deu zero: com só força axial, informe um fator Y maior que zero.",
+    )
     p0 = max(fr, 0.6 * fr + 0.5 * fa)
 
     l10 = (c / equivalente) ** expoente
@@ -1015,7 +1019,7 @@ CAMPOS_HERTZ = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "rolamento",
-        "Rolamento: vida e carga estática",
+        "Seleção de rolamento",
         GRUPO,
         "L₁₀, fator de confiabilidade, X e Y automáticos, s₀ e C necessário; regime NBR 8400.",
         "Para conferir um rolamento escolhido ou achar a capacidade necessária. Aceita as cargas "
@@ -1038,7 +1042,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "pino_articulacao",
-        "Pino de articulação",
+        "Pino de articulação (olhal e garfo)",
         GRUPO,
         "Olhal e garfo: flexão e corte no pino, esmagamento nas chapas.",
         "Pino de cilindro hidráulico, de manilha ou de articulação. Inclui a flexão do pino, "

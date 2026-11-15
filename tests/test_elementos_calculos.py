@@ -276,9 +276,9 @@ def test_exemplo_de_eixo_de_shigley():
         confiabilidade="99 %",
     )
     assert metrica(r, "Limite de fadiga S_e") == pytest.approx(205.0, abs=1.5)
-    n = metrica(r, "Fadiga, DE-Goodman")
+    n = metrica(r, "Fator à fadiga (DE-Goodman)")
     assert n == pytest.approx(1.64, abs=0.03)
-    assert metrica(r, "Escoamento") == pytest.approx(4.55, abs=0.15)
+    assert metrica(r, "Fator ao escoamento") == pytest.approx(4.55, abs=0.15)
 
 
 def test_goodman_a_mao_sem_entalhe():
@@ -295,7 +295,7 @@ def test_goodman_a_mao_sem_entalhe():
     )
     sigma = 32.0 * 300_000.0 / (math.pi * 40.0**3)
     assert metrica(r, "σ'a") == pytest.approx(sigma)
-    assert metrica(r, "Fadiga, DE-Goodman") == pytest.approx(
+    assert metrica(r, "Fator à fadiga (DE-Goodman)") == pytest.approx(
         metrica(r, "Limite de fadiga S_e") / sigma
     )
 
@@ -304,7 +304,7 @@ def test_diametro_minimo_devolve_o_fator_pedido():
     r = rodar("eixo_secao")
     d_min = metrica(r, "Diâmetro mínimo")
     novo = rodar("eixo_secao", d_mm=d_min, D_mm=d_min * 1.4, r_mm=d_min * 0.06)
-    assert metrica(novo, "Fadiga, DE-Goodman") == pytest.approx(1.5, abs=0.25)
+    assert metrica(novo, "Fator à fadiga (DE-Goodman)") == pytest.approx(1.5, abs=0.25)
 
 
 def test_canal_de_anel_nao_credita_a_sensibilidade():
@@ -584,6 +584,12 @@ def test_regimes_da_nbr_8400_no_rolamento():
     assert linha(classe, "Vida do rolamento").solicitante == 25_000.0
 
 
+def test_rolamento_so_com_axial_e_y_zero_vira_mensagem():
+    """Antes dividia por zero: com X e Y do catálogo, Y = 0 e só força axial dão P = 0."""
+    with pytest.raises(ValueError, match="fator Y"):
+        rodar("rolamento", tipo=ma.TIPOS_ROLAMENTO[2], fr_kN=0.0, fa_kN=3.0, y=0.0)
+
+
 def test_bucha_oscilante_a_mao():
     r = rodar(
         "bucha",
@@ -840,7 +846,7 @@ def test_mecanismo_caso_iii_e_16_vezes_o_caso_i():
 def test_ferro_fundido_sobe_q_e_fsr():
     r = rodar("mecanismo_nbr8400", classe="V1", estado="1", material="Ferro fundido cinzento")
     assert metrica(r, "q") == pytest.approx(1.25)
-    assert metrica(r, "FS_r") == pytest.approx(3.5)
+    assert metrica(r, "Fator de segurança à ruptura FS_r") == pytest.approx(3.5)
 
 
 def test_fadiga_de_mecanismo_usa_delta_da_tabela_26():

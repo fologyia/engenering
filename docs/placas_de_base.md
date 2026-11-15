@@ -17,7 +17,7 @@ pelo AISC Design Guide 1 com a pressão de contato da 6.6.5 (2025) e o critério
 | --- | --- |
 | Perfil do pilar | W, HP ou I duplamente simétrico do catálogo (6.7.1.1); U e outros são recusados. |
 | Disposição | Tipo 1: externos às mesas, 4 ≤ n_b ≤ 8 em duas linhas; tipo 2: 4 entre as mesas (Figura 21); **rotulada**: 2 internos, um de cada lado da alma, no eixo; **internos e externos**: 4 + 4 (as duas últimas pelo método geral). |
-| Chumbador | Ø 3/4" a 2" (Tabela 18); a₁ e a₂ da tabela ou maiores (o toggle libera os campos); no tipo 2, também o a₁ da direção ℓx, de 10 mm ao da tabela (nota f). |
+| Chumbador | Ø 3/4" a 2" (Tabela 18) ou **por fórmula** (qualquer diâmetro, ver abaixo); a₁ e a₂ mínimos ou maiores (o toggle libera os campos); no tipo 2, também o a₁ da direção ℓx, de 10 mm ao da tabela (nota f). |
 | Tipo do chumbador | Reto com porca e chapa na ponta (Tabela 18), **guarda-chuva** (gancho em J ou L, e_h), **químico** ou **parabolt** (pós-instalados, com o N_Rd do fabricante); embutimento h_ef; chapa na ponta; opção de verificar a ancoragem no concreto e de armadura de ancoragem no bloco. |
 | Aço do chumbador | ASTM A36 e F1554 Gr 36 (equivalentes, 6.7.1.5 c), F1554 Gr 55 e Gr 105, A193 B7, SAE 1020. |
 | Placa | Espessura, aço (ASTM A36, A572 Gr 50, A588) e argamassa e_n (0 = Tabela 18). |
@@ -127,6 +127,49 @@ nos concretados e 0,65 nos pós-instalados; concreto fissurado (ψ_c = 1,0).
   da borda com (1 + s/(6·c_a1)) e o fator de c_a2.
 * Aço fora do A36 ou 2 chumbadores (rotulada) sem essa verificação: ALERTA (a Tabela 18 vale para
   o A36, de 4 a 8 chumbadores — nota a).
+
+## Chumbador fora da Tabela 18 (por fórmula, 15/11/2026)
+
+Pedido: calcular o chumbador por fórmulas quando o diâmetro não é um dos 7 da Tabela 18. A 6.7.1.1
+admite outras configurações desde que atendam 6.1.1.3; a 6.7.1.5 c) liga a Tabela 18 ao A36 com
+porca pesada. Opção **Medidas do chumbador → Por fórmula** (`EntradaBase.por_formula`): diâmetro
+comercial (`ROSCAS`: polegada UNC 1/2" a 4", métrico ISO grosso M12 a M64) ou digitado
+(`CHUMBADOR_LIVRE`, com d_b e passo; passo 0 = o da métrica grossa mais perto). Cada medida que a
+tabela dava sai de `medidas_por_formula`, com a conta e a fonte na tela:
+
+| Medida | Fórmula | Fonte |
+|---|---|---|
+| Área resistente | A_s = π/4·(d − 0,9743·p)² (UNC) ou π/4·(d − 0,9382·p)² (ISO) | ASME B1.1 / ISO 898-1; se A_s < 0,75·A_b (5/8" e 1/2"), entra a verificação F_t ≤ A_s·f_ub/γ_a2 |
+| Porca sextavada pesada | s = 1,5·d_b + 3,2 mm, altura ≈ d_b | ASME B18.2.6 (a NBR 8800, 6.3, manda usar nas barras rosqueadas) |
+| Furo d_f | os furos da Tabela 18 interpolados em d_b; fora de 19–50 mm, a folga da ponta (14 ou 30 mm) | são os furos da AISC (Manual, Tabela 14-2) em mm |
+| Arruela | lado ≥ 2·d_f − d_b (cobre o furo com o chumbador na borda dele); t ≥ d_b/3, chapa comercial | AISC Design Guide 1 |
+| a₂ | máx(4·d_b concretado, 6·d_b pós-instalado; lado da arruela) | ACI 318-19 17.9.2 |
+| a₁ | máx(a₂/2; lado/2; d_f/2 + 6,35 mm) | a₂ = 2·a₁ em todas as linhas da Tabela 18; AISC FAQ 7.1.7 (as bordas do Cap. J não valem no furo de chumbador; ¼ in de chapa além do furo) |
+| a₃ | 6·d_b (concretado e químico), 8·d_b (expansão) | ACI 318-19 17.9.2, sem dados do produto |
+| e_n | porca + arruela + 15 mm | montagem (nota d) |
+| h₂, r₁, r₂ | h₂ = e_n + t_p + t_a + porca + 3 fios; r₁ = h₂ + 25 (assim na Tabela 18); r₂ ≥ máx(50; porca + 3 fios) | montagem |
+| h_ef | o menor, de 25 em 25 mm, que passa no cone (17.6.2), nunca menos que 12·d_b; sem tração ou com armadura de ancoragem, 12·d_b; se nenhum passa, o que mais ajuda | ACI 318-19 17.6.2 |
+| f_ck | ≥ 20 MPa | NBR 6118:2014, Tabela 7.1 (CA, classe I) |
+
+Nos 7 diâmetros da tabela as fórmulas dão a₁, a₂ e a₃ a até 5 mm dos dela e o furo a até 1 mm
+(teste). A ancoragem no concreto fica sempre ligada (`ancoragem_verificada`); a nota a (4 a 8
+chumbadores) e a nota b (f_ck,mín) não se aplicam; o bloco mínimo usa a₃ da ACI e altura h_ef + 100.
+
+**Diâmetro por fórmula:** `diametros_por_criterio` dá o d_b que cada critério pede com as forças da
+base — tração (6.7.2.2), arrancamento da porca ou do gancho (ACI 17.6.3) e, com arruelas soldadas, a
+cortante da 6.7.2.5 com a arruela e o furo de cada d_b. `menor_diametro_que_atende` recalcula a base
+inteira para cada diâmetro comercial da série (a₁, a₂, placa e forças mudam) e para no primeiro que
+passa nos chumbadores; o cone fica de fora dessa busca e da base mais leve: ele depende do bloco, do
+embutimento e da armadura, e o bloco mínimo (que cresce com a₃ = 6·d_b) faria um chumbador enorme
+"passar". Testes: `tests/test_base_de_pilar_por_formula.py` (áreas das roscas pelas tabelas ISO e
+UNC, medidas contra a Tabela 18, mesma geometria = mesma placa, h_ef mínimo, menor diâmetro, 2 1/4"
+para 2000 kN de tração).
+
+**Normas consultadas (15/11/2026):** EN 1993-1-8 (F_t,Rd = 0,9·f_ub·A_s/γ_M2; corte α_b = 0,44 −
+0,0003·f_yb) e EN 1992-4 (cone k₁ = 8,9 fissurado, arrancamento 7,5·A_h·f_ck, borda 8,7·c₁·√A_h·√f_ck)
+têm as mesmas verificações que a NBR 8800 e a ACI 318-19 já usadas aqui; a AISC (Manual, Tabela 14-2)
+dá os furos e arruelas, e a ACI 318-19 17.9.2 as distâncias. A tabela 14-2 completa não pôde ser lida
+(o site recusa leitura automática): os furos vêm da Tabela 18, que tem os mesmos valores em mm.
 
 ## Exemplo (do guia)
 

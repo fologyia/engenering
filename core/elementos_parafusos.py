@@ -361,7 +361,7 @@ def calcular_parafuso_axial(v: Valores) -> Resultado:
         )
         metricas = [
             Metrica("Carga por parafuso", por_parafuso / 1000.0, "kN"),
-            Metrica("O conjunto aguenta", capacidade * n / 1000.0, "kN", 1),
+            Metrica("Força resistente do conjunto", capacidade * n / 1000.0, "kN", 1),
             Metrica("Pré-carga", nominal / 1000.0, "kN", 1),
             Metrica("Torque de aperto", torque_nm, "N·m", 1),
             Metrica("Rigidez C", c, "", 3),
@@ -415,7 +415,7 @@ def calcular_parafuso_axial(v: Valores) -> Resultado:
             )
         metricas = [
             Metrica("Carga por parafuso", por_parafuso / 1000.0, "kN"),
-            Metrica("O conjunto aguenta", capacidade * n / 1000.0, "kN", 1),
+            Metrica("Força resistente do conjunto", capacidade * n / 1000.0, "kN", 1),
             Metrica("Tensão na rosca", por_parafuso / area, "MPa", 0),
             Metrica("Carga de prova", prova / 1000.0, "kN", 1),
         ]
@@ -1318,9 +1318,9 @@ CAMPOS_GRUPO: tuple[Campo, ...] = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "parafuso_axial",
-        "Parafuso sob força axial",
+        "Parafuso sob tração",
         GRUPO,
-        "O parafuso aguenta? Com ou sem pré-carga, e qual rosca atende.",
+        "Tensão na rosca com ou sem pré-carga, separação da junta e a menor rosca que atende.",
         "Informe a rosca, a classe, a força e o aperto. O programa diz quanto o conjunto aguenta, "
         "o que limita, o torque de aperto e qual a menor rosca que atende.",
         CAMPOS_PARAFUSO_AXIAL,
@@ -1329,9 +1329,9 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "rosca_arrancamento",
-        "Arrancamento da rosca",
+        "Arrancamento de rosca",
         GRUPO,
-        "A rosca da peça aguenta? Quanto engrenar para o parafuso romper antes.",
+        "Cisalhamento dos filetes do parafuso e da peça e o comprimento de rosca engajado mínimo.",
         "Rosca aberta em chapa, bloco ou fundido. Mostra quem cede primeiro e o comprimento "
         "engrenado mínimo para cada classe de parafuso.",
         CAMPOS_ROSCA,
@@ -1351,7 +1351,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "grupo_parafusos",
-        "Grupo de parafusos",
+        "Grupo de parafusos sob carga excêntrica",
         GRUPO,
         "Força axial, momento, cortante e torque divididos entre os parafusos.",
         "Flange, base ou placa com vários parafusos. Mostra a força em cada um e confere o mais "

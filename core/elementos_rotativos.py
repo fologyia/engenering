@@ -175,7 +175,7 @@ CAMPOS_DISCO_GIRANTE = (
     ),
     Campo(
         "densidade_kg_m3",
-        "Massa específica",
+        "Massa específica ρ",
         "Aço: 7850 kg/m³. Ferro fundido: cerca de 7200 kg/m³.",
         7850.0,
         "kg/m³",
@@ -195,7 +195,7 @@ CAMPOS_DISCO_GIRANTE = (
     ),
     Campo(
         "sy_MPa",
-        "Limite de escoamento",
+        "Limite de escoamento S_y",
         "Limite de escoamento do material do disco.",
         310.0,
         "MPa",
@@ -1248,7 +1248,7 @@ def _campos_de_placa(padrao_t: float) -> tuple[Campo, ...]:
         ),
         Campo(
             "sy_MPa",
-            "Limite de escoamento",
+            "Limite de escoamento S_y",
             "Limite de escoamento da chapa.",
             250.0,
             "MPa",
@@ -1377,7 +1377,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "placa_circular",
-        "Tampa circular",
+        "Placa circular sob pressão",
         GRUPO_FLUIDO,
         "Placa circular sob pressão: tampa, flange cego, fundo de tanque.",
         "Tensão e flecha de uma placa circular sob pressão, engastada ou apoiada.",
@@ -1387,7 +1387,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "placa_retangular",
-        "Chapa retangular",
+        "Placa retangular sob pressão",
         GRUPO_FLUIDO,
         "Chapa sob pressão: janela de inspeção, tampa, parede de silo ou tanque.",
         "Tensão e flecha de uma chapa retangular sob pressão uniforme, pelos coeficientes de "

@@ -27,6 +27,7 @@ from components.load_models import (
     _seta,
     _texto,
 )
+from core import elementos_soldas as es
 from core import elementos_vigas as ev
 from core import geometria_da_secao as gs
 
@@ -1000,6 +1001,87 @@ def _chapa_com_furo() -> str:
     )
 
 
+def _cordao(x1: float, y1: float, x2: float, y2: float) -> str:
+    return (
+        f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{_CARGA}" stroke-width="5" '
+        'stroke-linecap="round"/>'
+    )
+
+
+def croqui_da_solda(valores: Mapping[str, Any]) -> str:
+    """A chapa ligada vista de frente, com os cordões do desenho escolhido em laranja."""
+    padrao = str(valores.get("padrao", es.EM_C))
+    cargas = (
+        _seta(232, 40, 232, 82),
+        _forca(240, 66, "V, T", ancora="start"),
+        _forca(240, 118, "N, M", ancora="start"),
+    )
+    if padrao == es.ANEL:
+        return _pecas(
+            _circulo(130, 68, 48),
+            f'<circle cx="130" cy="68" r="48" fill="none" stroke="{_CARGA}" stroke-width="5"/>',
+            _cota_horizontal(130, 82, 178, "D"),
+            *cargas,
+        )
+    if padrao == es.LIVRE:
+        return _pecas(
+            _retangulo(70, 22, 120, 96),
+            _cordao(70, 22, 70, 118),
+            _cordao(70, 118, 190, 118),
+            _texto(130, 74, "cordões da tabela", tamanho=10),
+            *cargas,
+        )
+    x0, y0, x1, y1 = 80.0, 24.0, 180.0, 112.0
+    cordoes = {
+        es.UM_VERTICAL: ((x0, y0, x0, y1),),
+        es.DOIS_VERTICAIS: ((x0, y0, x0, y1), (x1, y0, x1, y1)),
+        es.DOIS_HORIZONTAIS: ((x0, y0, x1, y0), (x0, y1, x1, y1)),
+        es.EM_L: ((x0, y0, x0, y1), (x0, y1, x1, y1)),
+        es.EM_C: ((x0, y0, x1, y0), (x0, y0, x0, y1), (x0, y1, x1, y1)),
+        es.RETANGULO: ((x0, y0, x1, y0), (x1, y0, x1, y1), (x1, y1, x0, y1), (x0, y1, x0, y0)),
+    }.get(padrao, ())
+    largura = x1 - x0 if padrao != es.UM_VERTICAL else 30.0
+    return _pecas(
+        _retangulo(x0, y0, largura, y1 - y0),
+        *(_cordao(*c) for c in cordoes),
+        *((_cota_horizontal(132, x0, x1, "b"),) if padrao != es.UM_VERTICAL else ()),
+        _cota_vertical(42, y0, y1, "d"),
+        *cargas,
+    )
+
+
+def _impacto() -> str:
+    return _pecas(
+        _retangulo(116, 8, 48, 26),
+        _texto(140, 25, "W", cor=_CONTORNO, tamanho=12, peso="700", italico=True),
+        _cota_vertical(178, 34, 64, "h"),
+        _retangulo(40, 64, 200, 14),
+        _apoio_fixo(52, 78),
+        _apoio_movel(228, 78),
+        _seta(140, 38, 140, 60),
+        _cota_horizontal(118, 52, 228, "L"),
+    )
+
+
+def _linga() -> str:
+    corrente = "".join(
+        _linha(140 + s * 4.2 * i, 30 + 6.6 * i, 140 + s * 4.2 * (i + 1), 30 + 6.6 * (i + 1))
+        for s in (-1, 1)
+        for i in range(10)
+    )
+    return _pecas(
+        f'<ellipse cx="140" cy="20" rx="8" ry="12" fill="none" stroke="{_CONTORNO}" '
+        'stroke-width="3"/>',
+        corrente,
+        _retangulo(70, 96, 140, 40),
+        _linha_eixo(140, 30, 140, 96),
+        f'<path d="M 140 52 A 22 22 0 0 1 154 47" fill="none" stroke="{_COTA}" stroke-width="1"/>',
+        _texto(150, 62, "β", cor=_COTA, tamanho=12, italico=True, ancora="start"),
+        _texto(140, 120, "m", cor=_CONTORNO, tamanho=13, peso="700", italico=True),
+        _texto(214, 24, "CMT", cor=_COTA, tamanho=11, ancora="end"),
+    )
+
+
 CROQUIS: dict[str, str] = {
     "parafuso_axial": _parafuso_axial(),
     "rosca_arrancamento": _rosca_na_peca(),
@@ -1054,6 +1136,9 @@ CROQUIS: dict[str, str] = {
     "placa_circular": _placa_circular(),
     "placa_retangular": _placa_retangular(),
     "Torção de seção retangular": _torcao_retangular(),
+    "solda_filete": croqui_da_solda({}),
+    "impacto": _impacto(),
+    "linga_corrente": _linga(),
 }
 
 
@@ -1061,6 +1146,7 @@ CROQUIS: dict[str, str] = {
 CROQUIS_VIVOS: dict[str, Callable[[Mapping[str, Any]], str]] = {
     "Pinos ou parafusos sob cisalhamento": croqui_do_pino,
     "flexao_secao": croqui_da_flexao,
+    "solda_filete": croqui_da_solda,
 }
 
 

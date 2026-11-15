@@ -24,15 +24,41 @@ AJUDA: dict[str, str] = {
         "internos e externos: 8. A Tabela 18 vale de 4 a 8 chumbadores (nota a): na rotulada, "
         "ligue a verificação da ancoragem no concreto."
     ),
+    "modo_chumbador": (
+        'Da Tabela 18: os 7 diâmetros da norma (3/4" a 2"), com as medidas que ela dá. Por '
+        "fórmula: qualquer diâmetro, em polegada, métrico ou digitado; furo, arruela, distâncias, "
+        "embutimento e concreto mínimo saem de fórmulas com fonte (AISC, ACI 318-19, ASME e NBR "
+        "6118), e a ancoragem no concreto é sempre verificada. A 6.7.1.1 admite essa saída da "
+        "tabela."
+    ),
     "chumbador": (
         "Diâmetro do chumbador (aço ASTM A36). Cada diâmetro tem na Tabela 18 da norma as "
         "distâncias mínimas, a ancoragem, a arruela e o furo — o programa usa esses valores."
     ),
+    "chumbador_formula": (
+        'Diâmetro comercial do chumbador: polegada com rosca UNC (1/2" a 4") ou métrico com '
+        "rosca grossa ISO (M12 a M64). Em Outro diâmetro, você digita o d_b e o passo. Os "
+        "resultados mostram o diâmetro que cada critério pede e o menor comercial que atende."
+    ),
+    "d_b_livre": (
+        "Diâmetro nominal da barra rosqueada (mm), quando não é um dos comerciais da lista: por "
+        "exemplo uma barra torneada sob medida."
+    ),
+    "passo": (
+        "Passo da rosca (mm): a distância entre dois fios. Zero usa o da rosca métrica grossa de "
+        "diâmetro mais perto. Ele dá a área resistente da rosca e o comprimento de rosca acima da "
+        "porca."
+    ),
+    "d_f": (
+        "Diâmetro do furo na placa de base (mm). Zero usa a regra: os furos da Tabela 18, que são "
+        "os mesmos da AISC (Manual, Tabela 14-2), interpolados no diâmetro. O furo é folgado para "
+        "absorver o erro de locação dos chumbadores; a arruela especial cobre a folga."
+    ),
     "tabela_18": (
-        "Ligado, a₁ e a₂ são os mínimos da Tabela 18 para o diâmetro escolhido (a placa sai a "
-        "menor possível). Desligue para informar distâncias maiores — por exemplo para a placa "
-        "ficar mais larga que a mesa (ℓy ≥ b_f + 25 mm) — ou, no tipo 2, um a₁ menor na "
-        "direção ℓx."
+        "Ligado, a₁ e a₂ são os mínimos do diâmetro escolhido — os da Tabela 18 ou, por fórmula, "
+        "os calculados — e a placa sai a menor possível. Desligue para informar distâncias "
+        "maiores — por exemplo para a placa ficar mais larga que a mesa (ℓy ≥ b_f + 25 mm) — ou, "
+        "no tipo 2, um a₁ menor na direção ℓx."
     ),
     "a1": (
         "a₁: do centro do furo à borda da placa (mm), com o mínimo da Tabela 18. No tipo 1 a "
@@ -60,7 +86,8 @@ AJUDA: dict[str, str] = {
     ),
     "aco_chumbador": (
         "A norma pede ASTM A36 ou equivalente (f_y 250, f_u 400 MPa). Outro aço muda o diâmetro "
-        "mínimo (pelo f_u dele) e pede conferir a ancoragem no concreto."
+        "mínimo (pelo f_u dele) e pede conferir a ancoragem no concreto. As classes 4.6 e 8.8 da "
+        "ISO 898-1, que a NBR 8800 (6.3) admite, servem aos chumbadores métricos."
     ),
     "verificar_aci": (
         "Ligue para conferir também o arrancamento da cabeça, o cone de concreto e o arrancamento "
@@ -77,7 +104,8 @@ AJUDA: dict[str, str] = {
     ),
     "h_ef": (
         "Embutimento efetivo: da face do concreto até onde o chumbador apoia (cabeça, gancho ou "
-        "fim da resina), em mm. Zero usa h₁ da Tabela 18 (concretado) ou 12·d_b (pós-instalado)."
+        "fim da resina), em mm. Zero usa h₁ da Tabela 18 (concretado) ou 12·d_b (pós-instalado); "
+        "por fórmula, o menor que passa no cone de concreto, nunca menos que 12·d_b."
     ),
     "n_rd_fabricante": (
         "Resistência de cálculo à tração de um chumbador, da ficha técnica do fabricante (ETA ou "
@@ -97,7 +125,8 @@ AJUDA: dict[str, str] = {
     "aco_placa": "Aço da placa: dá o f_y usado na espessura mínima (ASTM A36: 250 MPa).",
     "e_n": (
         "Espessura da argamassa expansiva de assentamento, entre a placa e o concreto (mm). "
-        "Zero usa o valor da Tabela 18 para o diâmetro do chumbador."
+        "Zero usa o valor da Tabela 18 para o diâmetro do chumbador; por fórmula, a porca de "
+        "nivelamento mais a arruela mais 15 mm de argamassa por baixo."
     ),
     # 3. Concreto e bloco
     "sec_concreto": (
@@ -174,8 +203,9 @@ AJUDA: dict[str, str] = {
     ),
     "t_arruela": (
         "Espessura da arruela especial soldada na placa (mm). Zero usa a da Tabela 18 para o "
-        "diâmetro do chumbador. A arruela é de aço com f_y = 345 MPa e o chumbador encosta no "
-        "furo dela (d_b + 1,5 mm): a pressão nesse furo também limita a cortante (6.3.3.3)."
+        "diâmetro do chumbador (por fórmula, d_b/3 arredondado para a chapa comercial, como na "
+        "AISC). A arruela é de aço com f_y = 345 MPa e o chumbador encosta no furo dela "
+        "(d_b + 1,5 mm): a pressão nesse furo também limita a cortante (6.3.3.3)."
     ),
     # resultados
     "res_status": "OK quando todas as verificações e limites passam; NÃO OK quando alguma reprova.",
@@ -197,7 +227,29 @@ AJUDA: dict[str, str] = {
     ),
     "res_adotado": (
         "As medidas para o desenho de fabricação: placa, chumbadores, furo, ancoragem, arruela, "
-        "argamassa, armadura mínima e medidas mínimas do bloco (Tabela 18 e notas)."
+        "argamassa, armadura mínima e medidas mínimas do bloco (Tabela 18 e notas, ou as "
+        "calculadas no modo por fórmula)."
+    ),
+    "res_por_formula": (
+        "Cada medida do chumbador fora da Tabela 18, com a conta e a norma de onde ela sai: rosca "
+        "e área resistente, porca, furo, arruela, distâncias a₁, a₂ e a₃, argamassa, rosca acima "
+        "e abaixo, embutimento, comprimento e massa da barra e o concreto mínimo."
+    ),
+    "res_diametros": (
+        "O diâmetro mínimo que cada critério pede com as forças desta base: a tração no aço "
+        "(6.7.2.2), o arrancamento da porca ou do gancho no concreto (ACI 318-19) e, com as "
+        "arruelas soldadas, a cortante (6.7.2.5). O maior deles manda."
+    ),
+    "res_menor_diametro": (
+        "O menor diâmetro comercial da mesma série (polegada ou métrica) que passa em todas as "
+        "verificações dos chumbadores, recalculando a base inteira para cada um (a placa e as "
+        "forças mudam com o diâmetro). O cone de concreto fica de fora: ele depende do bloco, do "
+        "embutimento e da armadura."
+    ),
+    "btn_adotar_diametro": "Usa na página o menor diâmetro comercial que atende, com o furo pela regra.",
+    "res_comparacao": (
+        "As medidas calculadas lado a lado com a linha da Tabela 18 de diâmetro mais perto, para "
+        "conferir: nos diâmetros da tabela as fórmulas dão valores parecidos."
     ),
     "res_verificacoes": (
         "Cada verificação com o valor atuante, o resistente e o item da norma. As fórmulas com os "
@@ -206,7 +258,8 @@ AJUDA: dict[str, str] = {
     "res_mais_leve": (
         "A placa mais leve que atende trocando só o diâmetro do chumbador e a espessura (chapas "
         "comerciais). Pilar, esforços, concreto e dispositivo de cortante ficam como estão. No "
-        "químico e no parabolt com N_Rd do fabricante, o diâmetro fica (o N_Rd é dele)."
+        "químico e no parabolt com N_Rd do fabricante, o diâmetro fica (o N_Rd é dele). Por "
+        "fórmula, troca entre os comerciais da mesma série, sem olhar o cone de concreto."
     ),
     "btn_adotar": "Usa na página o chumbador e a espessura da base mais leve que atende.",
     "btn_csv": "Baixa a tabela de verificações em CSV (abre direto no Excel).",

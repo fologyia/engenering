@@ -1,7 +1,11 @@
 # Elementos de máquinas no Cálculo de peças
 
-O Cálculo de peças cobre 66 casos: 14 de estática e resistência, 34 de elementos de máquinas e
-18 de seção e tensão no ponto. Este documento registra as equações, as fontes, as hipóteses e o que
+O Cálculo de peças cobre 69 casos em quatro áreas, pela peça: Parafusos, pinos e soldas (10),
+Barras, vigas e perfis (18), Elementos de máquinas (28) e Içamento e pressão (13). A área, o grupo e a ordem
+de cada caso ficam em `PAINEL`, em `core/elementos_catalogo.py`; o grupo escrito no módulo do caso é
+só o de origem. Nomes: o nome técnico do cálculo, como nos livros e nas normas (Arrancamento de rosca,
+Flambagem de coluna, Seleção de rolamento), nunca uma pergunta. A busca do painel também acha
+pelos apelidos de `APELIDOS` (espanar, fuso, flambagem, L10), sem ligar para acento. Este documento registra as equações, as fontes, as hipóteses e o que
 **não** é feito nos elementos de máquinas. A estática está em `docs/estatica_e_resistencia.md`.
 
 ## Como funciona
@@ -14,7 +18,8 @@ os envios para o próximo caso.
 Para acrescentar um caso:
 
 1. escreva a função `calcular_x(v) -> Resultado` e a tupla de `Campo` no módulo do assunto;
-2. acrescente o `Caso` à tupla `CASOS` do módulo;
+2. acrescente o `Caso` à tupla `CASOS` do módulo e o id ao grupo certo de `PAINEL` (sem isso o
+   programa não abre);
 3. desenhe o croqui em `components/elementos_croquis.py`.
 
 Os testes de `tests/test_elementos_catalogo.py` percorrem o catálogo: um caso novo já nasce testado
@@ -31,8 +36,8 @@ Os resultados seguem de um caso para o outro, com os valores já preenchidos:
 ```text
 Motor e redutor → Engrenagem, Correia, Chaveta, Flange
 Engrenagem, cônica, correia, cabo → Eixo sobre dois mancais
-Eixo sobre dois mancais → Seção de eixo (fadiga) e Rolamento (mancal A e B)
-Chaveta, Ajuste prensado → Seção de eixo com o entalhe certo
+Eixo de transmissão → Fadiga de eixo com entalhe e Seleção de rolamento (mancal A e B)
+Chaveta, Ajuste prensado → Fadiga de eixo com entalhe, com o entalhe certo
 Ações de içamento → Olhal, Gancho
 Olhal, Cilindro hidráulico → Pino de articulação
 Desbalanceamento → Base de máquina
@@ -93,6 +98,19 @@ Desbalanceamento → Base de máquina
   `4/3·F/(2A)` e interação de flexão com cortante.
 - **Contato de Hertz:** esfera ou cilindro. Limite de início de escoamento `p₀ ≤ 1,79·S_y` (linha) e
   `1,61·S_y` (ponto), Johnson.
+
+## Linga de corrente (NBR 15516-2:2013)
+
+`core/elementos_lingas.py`. Lida no PDF escaneado da pasta de normas (imagens das páginas, 14/11/2026).
+A CMT marcada na etiqueta (NBR 15516-1 ou NBR ISO 8539) é multiplicada pelas reduções do Anexo A:
+Tabela A.1 (temperatura: grau 4 com 100/100/75/50 % até 200/300/400/475 °C; grau 8 com 100/90/75 %
+até 200/300/400 °C; acima, não permissível), ácido (grau 4 a 50 %, grau 8 proibido, A.1.1.2.2),
+Tabela A.2 (menos pernas: 1/2, 2/3, 1/3; três e quatro pernas estão na mesma linha, então quatro
+usando três não reduz), método-forca a 80 % e olhal menor que três passos a 50 % (A.1.3.4), e metade
+da CMT quando falta qualquer condição de simetria de A.1.3.5 (carga abaixo de 80 % da CMT, ângulos não
+todos abaixo de 15°, ângulos com a vertical e no plano dentro de 15° um do outro). O ângulo com a
+vertical reprova acima de 60° ou acima da faixa marcada (A.1.3.3). A força por perna,
+`m·g/(n·cos β)`, é só informação e bate com a Figura A.1 (10 t: 7 t a 45°, 10 t a 60°).
 
 ## Içamento (NBR 8400:1984)
 
@@ -179,6 +197,11 @@ coeficientes de norma e aperto, o lugar é o Projeto de parafusos.
 - **Base de máquina:** quatro pés nos cantos de um retângulo, com peso, força horizontal na altura h
   e torque de reação. Chumbador por von Mises.
 - **Disco girante:** Shigley eq. 3-55. Sem furo a tensão é `ρω²(3+ν)/8·r_o²`, e um furo pequeno a dobra.
+- **Carga de impacto** (`core/elementos_impacto.py`): a energia do corpo vira deformação elástica de
+  uma peça de rigidez k (barra `EA/L`, viga biapoiada `48EI/L³`, balanço `3EI/L³` ou k informado).
+  Queda: `δ_máx = δ_st·(1 + √(1 + 2h/δ_st))`; batida horizontal: `δ_máx = v·√(m/k)`. A força é
+  `k·δ_máx` e o fator `n = F_máx/W` multiplica a tensão estática. Sem a massa da peça e sem perda no
+  choque: a favor da segurança (Hibbeler, cap. 14). Altura zero dá n = 2.
 
 ## Hidráulica e tampas
 
@@ -188,7 +211,8 @@ coeficientes de norma e aperto, o lugar é o Projeto de parafusos.
 
 ## Seção e tensão no ponto
 
-Os 15 modelos antigos continuam com os mesmos nomes (o Assistente de projeto grava esses nomes) e as
+Os 15 modelos antigos continuam com a mesma identidade (o Assistente de projeto grava o nome antigo;
+o título na tela é o novo) e as
 mesmas contas de `core/load_to_stress.py` e `core/additional_load_models.py`, mais a torção de seção
 retangular. O que mudou:
 

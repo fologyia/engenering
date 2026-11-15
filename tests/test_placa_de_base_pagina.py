@@ -194,3 +194,39 @@ def test_tipo_2_tem_o_a1_da_direcao_lx_da_nota_f(banco_isolado):
     assert placa.startswith("395 × ")  # ℓx = d + 4·a₁ = 355 + 40
     t.radio(key="pb_tipo").set_value(bp.TIPO_1).run()
     assert not [w for w in t.number_input if w.key == "pb_a1_x"]  # só o tipo 2 tem
+
+
+def test_modo_por_formula_mostra_as_medidas_e_adota_o_menor_diametro(banco_isolado):
+    t = abrir(pb_modo_ch="formula", pb_chumbador_f="M12", pb_n_sd=-300.0, pb_m_sd=20.0)
+    sem_ajuda = {
+        (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
+    } - {("text_input", "Nome do novo projeto")}
+    assert not sem_ajuda, sorted(sem_ajuda)
+    assert "Chumbador por fórmula" in [s.value for s in t.subheader]
+    assert not [w for w in t.toggle if w.key == "pb_aci"]  # a ACI vale sempre
+    assert any("sempre" in c.value for c in t.caption)
+    textos = " ".join(m.value for m in t.markdown)
+    assert "Menor diâmetro comercial que atende" in textos and "série métrica (ISO)" in textos
+    assert "Conferência com a Tabela 18" in textos
+    entrada = bp.EntradaBase(por_formula=True, chumbador="M12", n_sd_kN=-300.0, m_sd_kNm=20.0)
+    menor = bp.menor_diametro_que_atende(entrada)
+    assert menor is not None
+    t.button(key="pb_adotar_d").click().run()
+    assert not t.exception
+    assert t.selectbox(key="pb_chumbador_f").value == menor.entrada.chumbador
+    assert t.number_input(key="pb_df").value == 0.0
+
+
+def test_outro_diametro_digitado_e_volta_para_a_tabela_18(banco_isolado):
+    t = abrir(pb_modo_ch="formula", pb_chumbador_f=bp.CHUMBADOR_LIVRE)
+    assert t.number_input(key="pb_db_livre").value == 24.0
+    t.number_input(key="pb_db_livre").set_value(30.0).run()
+    t.number_input(key="pb_passo").set_value(3.0).run()
+    assert not t.exception
+    chumbadores = t.table[0].value.loc["Chumbadores"].iloc[0]
+    assert "Ø 30 mm" in chumbadores and "passo 3,00 mm" in chumbadores
+    assert any("Chumbador fora da Tabela 18" in c.value for c in t.caption)
+    t.radio(key="pb_modo_ch").set_value("tabela").run()
+    assert not t.exception
+    assert t.selectbox(key="pb_chumbador").value == bp.EntradaBase().chumbador
+    assert not [w for w in t.number_input if w.key == "pb_db_livre"]

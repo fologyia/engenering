@@ -339,7 +339,7 @@ def calcular_pinos(v: Valores) -> Resultado:
             f"até {capacidade / 1000:.1f} kN."
         ),
         metricas=(
-            Metrica("Força que a ligação aguenta", capacidade / 1000.0, "kN", 1),
+            Metrica("Força resistente da ligação", capacidade / 1000.0, "kN", 1),
             Metrica("Força por plano V", t.cortante / 1000.0, "kN", 2),
             Metrica("τ médio", t.tau_media, "MPa", 1),
             Metrica("τ máximo", t.tau_max, "MPa", 1),
@@ -936,7 +936,7 @@ CAMPOS_TRANSVERSAL = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "Pinos ou parafusos sob cisalhamento",
-        "Pinos ou parafusos sob cisalhamento",
+        "Pino sob cisalhamento",
         GRUPO_LIGACOES,
         "Pino ou parafuso com um ou mais planos de corte, com as chapas.",
         "Escolha quantos planos de corte o pino tem: o desenho muda e sai a força em cada chapa, o "
@@ -959,7 +959,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "pino_transversal",
-        "Pino transversal no eixo",
+        "Pino transversal em eixo",
         GRUPO_LIGACOES,
         "Pino que atravessa eixo e cubo para passar torque.",
         "Trava de cubo, colar ou manivela. Sai o corte nos dois planos, a pressão no eixo e no cubo "

@@ -652,7 +652,10 @@ chumbador reto com porca, guarda-chuva, químico ou parabolt, de A36, F1554, A19
 ancoragem no concreto pela ACI 318-19 (arrancamento, cone e borda); o caso pela força normal e pela
 excentricidade (C1 a C3, T1 a T3), com momento também no eixo fraco pela flexão oblíqua, espessura mínima
 da placa, diâmetro mínimo do chumbador, pressão no concreto (6.6.5, com A₂/A₁ pelo bloco), cortante
-por atrito, placa de cisalhamento ou arruelas soldadas e as disposições da Tabela 18. Desenho em planta
+por atrito, placa de cisalhamento ou arruelas soldadas e as disposições da Tabela 18 — ou, para um
+diâmetro que a tabela não tem, o **chumbador por fórmula** (polegada UNC, métrico ISO ou digitado: porca
+pela ASME B18.2.6, furo e arruela pela AISC, distâncias pela ACI 318-19 17.9.2, embutimento pelo cone,
+o diâmetro que cada critério pede e o menor comercial que atende). Desenho em planta
 e corte (`core/desenho_placa_base.py`), a **base mais leve** que atende (chumbador e espessura
 comercial) com o botão para adotá-la, CSV, memorial desta base em Word ou PDF e registro no projeto.
 

@@ -380,8 +380,8 @@ def calcular_eixo_secao(v: Valores) -> Resultado:
             f"Diâmetro mínimo para n = {n_min:g}: {d_min:.1f} mm."
         ),
         metricas=(
-            Metrica("Fadiga, DE-Goodman", fatores["DE-Goodman"], "", 2),
-            Metrica("Escoamento", n_escoamento, "", 2),
+            Metrica("Fator à fadiga (DE-Goodman)", fatores["DE-Goodman"], "", 2),
+            Metrica("Fator ao escoamento", n_escoamento, "", 2),
             Metrica("Diâmetro mínimo", d_min, "mm", 1),
             Metrica("Limite de fadiga S_e", se, "MPa", 1),
             Metrica("K_t / K_f", f"{kt:.2f} / {kf:.2f}"),
@@ -930,7 +930,7 @@ def calcular_eixo_transmissao(v: Valores) -> Resultado:
             "Rotação crítica de Rayleigh com a flecha do peso: dá um valor um pouco acima do real, "
             "por isso a folga de 30 % é tratada como mínima.",
             "Sem a rigidez dos mancais e da carcaça, que baixa a rotação crítica.",
-            "Com ressaltos, confira depois cada seção em Seção de eixo: fadiga e entalhe.",
+            "Com ressaltos, confira depois cada seção em Fadiga de eixo com entalhe.",
         ),
         referencias=(SHIGLEY_7,),
         envios=(
@@ -1189,7 +1189,7 @@ CAMPOS_EIXO_TRANSMISSAO = (
     ),
     Campo(
         "densidade_kg_m3",
-        "Massa específica",
+        "Massa específica ρ",
         "Aço: 7850 kg/m³. Dá o peso do próprio eixo na rotação crítica.",
         7850.0,
         "kg/m³",
@@ -1968,7 +1968,7 @@ CAMPOS_AJUSTE = (
 CASOS: tuple[Caso, ...] = (
     Caso(
         "eixo_transmissao",
-        "Eixo sobre dois mancais",
+        "Eixo de transmissão",
         GRUPO,
         "Cargas nos dois planos: reações, diagramas, flecha, torção e rotação crítica.",
         "Monte o eixo com até quatro cargas (engrenagens, polias, forças). Saem as reações nos "
@@ -1980,7 +1980,7 @@ CASOS: tuple[Caso, ...] = (
     ),
     Caso(
         "eixo_secao",
-        "Seção de eixo: fadiga e entalhe",
+        "Fadiga de eixo com entalhe",
         GRUPO,
         "Ressalto, chaveta, canal de anel ou cubo: K_t, K_f, fadiga e diâmetro mínimo.",
         "Verifica uma seção de eixo com o entalhe que ela tem. Calcula K_t e K_f, o limite de "

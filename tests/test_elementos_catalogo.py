@@ -26,11 +26,73 @@ IDS = [caso.id for caso in CASOS]
 PALAVRAS_PROIBIDAS = ("bloqueio", "Snapshot", "Apêndice", "Não informado", "sem valor normativo")
 
 
-def test_ha_casos_de_estatica_de_maquinas_e_de_secoes():
-    assert len(CASOS) >= 62
-    assert len(cat.GRUPOS[cat.AREA_ESTATICA]) == 4
-    assert len(cat.GRUPOS[cat.AREA_MAQUINAS]) >= 8
-    assert len(cat.GRUPOS[cat.AREA_SECOES]) == 6
+def test_o_painel_tem_quatro_areas_pela_peca():
+    assert len(CASOS) >= 66
+    assert [len(cat.GRUPOS[area]) for area in cat.AREAS] == [2, 4, 6, 3]
+    assert set(cat.GRUPOS_INFO) == {g for grupos in cat.GRUPOS.values() for g in grupos}
+    for grupos in cat.GRUPOS.values():
+        for grupo, ids in grupos.items():
+            assert 2 <= len(ids) <= 8, grupo
+            assert all(cat.CASOS[i].grupo == grupo for i in ids)
+
+
+def test_os_nomes_seguem_o_mesmo_padrao():
+    titulos = [caso.titulo for caso in CASOS]
+    assert len(set(titulos)) == len(titulos), "título repetido"
+    for titulo in titulos:
+        assert ":" not in titulo and "?" not in titulo, titulo
+        assert titulo[0].isupper() and not titulo.endswith("."), titulo
+        assert "carga axial" not in titulo, titulo
+        assert len(titulo) <= 48, titulo
+    grupos = [g for grupos in cat.GRUPOS.values() for g in grupos]
+    assert len(set(grupos)) == len(grupos), "grupo repetido em duas áreas"
+    assert not any("(" in g or ":" in g for g in grupos)
+    for caso in CASOS:
+        assert "?" not in caso.resumo, (caso.id, "o resumo descreve, não pergunta")
+
+
+#: Nomes soltos que já apareceram para a mesma propriedade; cada uma tem um nome só, com o símbolo.
+NOMES_VELHOS_DE_PROPRIEDADE = {
+    "Escoamento": "Limite de escoamento S_y",
+    "Escoamento do material": "Limite de escoamento S_y",
+    "Limite de escoamento": "Limite de escoamento S_y",
+    "Ruptura": "Resistência à ruptura S_ut",
+    "Densidade do material": "Massa específica ρ",
+    "Massa específica": "Massa específica ρ",
+    "Fator de serviço": "Fator de serviço K_s",
+    "Coeficiente de atrito f": "Coeficiente de atrito μ",
+}
+
+
+@pytest.mark.parametrize("caso", CASOS, ids=IDS)
+def test_cada_propriedade_tem_um_nome_so(caso: Caso):
+    for campo in caso.campos:
+        rotulos = [campo.rotulo, *(coluna.rotulo for coluna in campo.colunas)]
+        for rotulo in rotulos:
+            assert rotulo not in NOMES_VELHOS_DE_PROPRIEDADE, (
+                f"{caso.id}: use {NOMES_VELHOS_DE_PROPRIEDADE.get(rotulo)!r} no lugar de {rotulo!r}"
+            )
+
+
+def test_a_busca_acha_por_apelido_sem_ligar_para_acento():
+    assert set(cat.APELIDOS) <= set(cat.CASOS)
+    assert cat.procurar("espanar") == ["rosca_arrancamento"]
+    assert "coluna_simples" in cat.procurar("FLAMBAGEM")
+    assert "parafuso_potencia" in cat.procurar("fuso")
+    assert "rolamento" in cat.procurar("l10") and "mola_prato" in cat.procurar("belleville")
+    assert cat.procurar("tracao mola") == ["mola_tracao"]
+    assert cat.procurar("   ") == [] and cat.procurar("nada disso existe") == []
+    for caso_id in cat.CASOS:
+        assert cat.CASOS[caso_id].titulo in cat.rotulo_da_busca(caso_id)
+    assert "espanar" in cat.rotulo_da_busca("rosca_arrancamento")
+
+
+def test_o_rotulo_antigo_aparece_com_o_nome_de_hoje():
+    assert cat.rotulo_do_modelo("Viga de seção retangular") == (
+        "Seções e perfis · Seção retangular sob flexão e cortante"
+    )
+    assert cat.rotulo_do_modelo("Seção I sob força axial e flexão").startswith("Seções e perfis")
+    assert cat.rotulo_do_modelo("não existe") == "não existe"
 
 
 def test_todo_grupo_e_toda_area_tem_icone_e_descricao():
@@ -42,11 +104,10 @@ def test_todo_grupo_e_toda_area_tem_icone_e_descricao():
             assert info.descricao.endswith("."), grupo
 
 
-def test_os_atalhos_do_painel_abrem_casos_que_existem():
-    assert len(cat.ATALHOS) == 6
-    for atalho in cat.ATALHOS:
-        assert atalho.caso in cat.CASOS
-        assert atalho.icone.startswith(":material/")
+def test_os_mais_usados_abrem_casos_que_existem():
+    assert 6 <= len(cat.MAIS_USADOS) <= 10
+    assert len(set(cat.MAIS_USADOS)) == len(cat.MAIS_USADOS)
+    assert set(cat.MAIS_USADOS) <= set(cat.CASOS)
 
 
 def test_os_modelos_antigos_continuam_abrindo_pelo_mesmo_rotulo():
@@ -113,6 +174,10 @@ def test_o_exemplo_padrao_abre_sem_reprovar(caso: Caso):
     assert resultado.status != "NÃO OK", [
         v.nome for v in resultado.verificacoes if v.status == "NÃO OK"
     ]
+    # Resultado com nome técnico, como os campos: "Força resistente da chapa", e não "A chapa
+    # aguenta".
+    for nome in [m.rotulo for m in resultado.metricas] + [v.nome for v in resultado.verificacoes]:
+        assert "?" not in nome and "aguenta" not in nome, nome
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
@@ -189,9 +254,13 @@ def _numero_ao_acaso(campo, sorteio: random.Random) -> float:
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
 def test_fuzz_entrada_ruim_vira_mensagem_e_nunca_nan(caso: Caso):
-    """Qualquer combinação dentro das faixas dos campos dá resultado ou ``ValueError`` com texto."""
+    """Qualquer combinação dentro das faixas dos campos dá resultado ou ``ValueError`` com texto.
+
+    Divisão por zero não vale como mensagem: ela vira um texto que ninguém entende (era assim na
+    Seleção de rolamento com só força axial e Y = 0).
+    """
     sorteio = random.Random(caso.id)
-    for _ in range(120):
+    for _ in range(200):
         valores = {}
         for campo in caso.campos:
             if campo.e_tabela:
@@ -208,8 +277,6 @@ def test_fuzz_entrada_ruim_vira_mensagem_e_nunca_nan(caso: Caso):
             assert str(erro), "mensagem vazia"
             assert not re.search(r"math domain|could not|invalid literal", str(erro)), str(erro)
             continue
-        except (ZeroDivisionError, OverflowError):
-            continue  # a página mostra como mensagem
         for metrica in resultado.metricas:
             if isinstance(metrica.valor, float):
                 assert not math.isnan(metrica.valor), (caso.id, metrica.rotulo, valores)
