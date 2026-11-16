@@ -617,7 +617,18 @@ def secao_de_perfil(perfil: PerfilAco, *, soldado: bool = False) -> Secao:
             tipo="generica",
             elementos=paredes_t,
         )
-    if any(palavra in texto for palavra in ("enrijecido", "dobrada", "formado a frio")):
+    elementos_l: list[dict[str, Any]] = []
+    if familia in {"l", "cantoneira"} and 0 < tw < min(d, bf):
+        # Cantoneira simples laminada: as duas abas são elementos AL do grupo 3 (Tabela F.1).
+        elementos_l = [
+            dict(tipo="AL", grupo=3, b=d, t=tw, n=1),
+            dict(tipo="AL", grupo=3, b=bf, t=tw, n=1),
+        ]
+        aviso = (
+            "cantoneira simples: compressão com a menor inércia principal (A·r_z²); a flexão fora "
+            "dos eixos principais e a excentricidade da ligação pela aba não entram sozinhas"
+        )
+    elif any(palavra in texto for palavra in ("enrijecido", "dobrada", "formado a frio")):
         aviso = "perfil formado a frio: a NBR 14762 (fora do escopo desta verificação) é que vale"
     else:
         aviso = (
@@ -644,6 +655,7 @@ def secao_de_perfil(perfil: PerfilAco, *, soldado: bool = False) -> Secao:
         Zx=zx,
         Zy=zy,
         tipo="generica",
+        elementos=elementos_l,
         dims={"aviso": aviso},
     )
 

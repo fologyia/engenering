@@ -376,7 +376,8 @@ def _area_de_cisalhamento_em_y(perfil: Any) -> tuple[float, str]:
         return tabelada, ""
     if "tubo" in familia or "barra" in familia:
         return tabelada, ""
-    if primeira == "t" and b > 0 and tf > 0:
+    if primeira in {"t", "l", "cantoneira"} and b > 0 and tf > 0:
+        # T: uma mesa só; cantoneira: só a aba paralela ao cortante.
         return b * tf, ""
     if primeira in _FAMILIAS_ABERTAS and b > 0 and tf > 0:
         return 2.0 * b * tf, ""
