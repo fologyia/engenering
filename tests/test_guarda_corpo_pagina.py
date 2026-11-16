@@ -62,8 +62,8 @@ def test_bloco_mostra_as_bordas_com_ajuda_e_poe_o_peso_no_pe(banco_com_projeto):
     metricas = {m.label: m.value for m in t.metric}
     assert metricas["Com guarda-corpo"] == "20,00 m"
     assert metricas["Bordas"] == "pelas chapas do piso"
-    assert "Guarda-corpo nas bordas do piso" in [s.value for s in t.subheader]
-    t.button(key="gc_enviar").click().run()
+    assert "3. Guarda-corpo nas bordas do piso" in [s.value for s in t.subheader]
+    t.button(key="ce_enviar_tudo").click().run()
     assert not t.exception, [str(e.value) for e in t.exception]
     salvo = obter_projeto_ativo()
     pe = pc.plano_do_projeto(salvo).acao("PE")
@@ -105,7 +105,7 @@ def test_ajustes_a_mao_e_chaves_da_escada_pela_pagina(banco_com_projeto):
     assert any("trechos M" in c.value for c in t.caption)
     chave = next(tg for tg in t.toggle if tg.label.startswith("Achar o acesso"))
     assert chave.value is False
-    t.button(key="gc_enviar").click().run()
+    t.button(key="ce_enviar_tudo").click().run()
     assert not t.exception, [str(e.value) for e in t.exception]
     salvo = gm.escolha_do_projeto(obter_projeto_ativo())
     assert salvo.a_mao == escolha.a_mao and not salvo.acesso_pelas_longarinas

@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
+import functools
+
 from components import desenho_svg as d
 from core import cena_3d as c3
+from core import section_catalog
+
+
+@functools.lru_cache(maxsize=32)
+def svg_guardado(cena: c3.Cena, azimute: float, elevacao: float, perfil_real: bool = True) -> str:
+    """O SVG da cena nesta vista, guardado: projetar um esqueleto com o perfil real custa de
+    décimos de segundo a mais de um segundo, e a página pede o mesmo desenho a cada clique."""
+    with section_catalog.catalogo_estavel():
+        desenho = c3.projetar(cena, azimute=azimute, elevacao=elevacao, perfil_real=perfil_real)
+    return svg_da_cena(desenho)
 
 
 def svg_da_cena(desenho: c3.Desenho2D) -> str:

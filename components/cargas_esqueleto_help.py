@@ -89,10 +89,94 @@ AJUDA: dict[str, str] = {
     ),
     "btn_csv": "As cargas de todos os casos em CSV (abre no Excel).",
     "sec_modelo": (
-        "Com o esqueleto da macro do SolidWorks, a carga do piso (sobrecarga e outras cargas por "
-        "área) vai direto para as vigas do seu modelo: cada pedaço de chapa vai para a viga mais "
-        "perto que a apoia (área de influência). O resultado é a carga em kN/m de cada viga, caso a "
-        "caso, para aplicar no Simulation — e a conferência das reações passa a fechar."
+        "O …_esqueleto.csv da macro do SolidWorks: as barras e as chapas do seu modelo. Com ele, a "
+        "página lê sozinha o que é piso, patamar e escada, acha as vigas que apoiam cada chapa e "
+        "monta a carga de cada viga. Sem ele, a página trabalha pela grade de eixos."
+    ),
+    "sec_entendeu": (
+        "A leitura que o programa fez do esqueleto: quantos pilares, vigas e diagonais, os níveis "
+        "de piso (pela altura das chapas) e o tipo de cada chapa. Confira aqui e no desenho 3D; o "
+        "que estiver errado se corrige na tabela."
+    ),
+    "res_barras_modelo": (
+        "Pela posição de cada barra: em pé é pilar, deitada e alinhada é viga, inclinada é "
+        "diagonal. A barra inclinada que apoia um lance de escada é longarina."
+    ),
+    "res_niveis": (
+        "Os níveis são as alturas das chapas em nível, medidas do ponto mais baixo do modelo. As "
+        "chapas inclinadas são lances de escada e ficam entre os níveis."
+    ),
+    "res_chapas": (
+        "Uma linha por chapa de piso do esqueleto. Tipo: piso, patamar, escada ou sem carga (a "
+        "chapa que não é piso). SC: a sobrecarga dela, na projeção horizontal. Peso informado: "
+        "só vale quando o peso do piso é informado. Apoio: dois sentidos (a carga vai para a viga "
+        "mais perto, nos quatro lados) ou um sentido (só as vigas de uma direção apoiam, como na "
+        "grade de piso)."
+    ),
+    "peso_do_piso": (
+        "De onde sai o peso do piso no caso PE. Pelo volume: o peso de aço de cada chapa do "
+        "modelo. Informado: o valor da coluna Peso informado (use para grade de piso ou outro "
+        "material). Já está no PP: quando a gravidade do seu estudo já pega as chapas, para não "
+        "somar duas vezes."
+    ),
+    "so_no_trecho": (
+        "Quando a chapa cobre só uma parte da viga. Desligado: a carga sai uniforme na viga "
+        "inteira, com o mesmo total. Ligado: a carga sai só no trecho coberto, com o começo e o "
+        "fim medidos da ponta inicial da viga; o momento fica mais certo, mas no SolidWorks a "
+        "carga precisa ser aplicada só nesse trecho."
+    ),
+    "outros_casos": (
+        "Para um caso que não é PE nem SC (por exemplo, uma sobrecarga de manutenção): o valor "
+        "em kN/m² vai em todas as chapas com carga, pelas mesmas vigas."
+    ),
+    "sec_3d": (
+        "O esqueleto como o programa o leu, para conferir antes de enviar. Se uma viga de piso "
+        "aparece sem carga ou uma chapa com o tipo errado, corrija na tabela acima ou no modelo."
+    ),
+    "cor_3d": (
+        "O que é cada peça: pilares, vigas com piso, diagonais e o tipo de cada chapa. Área que "
+        "cada viga recebe: a chapa pintada com a cor da viga que leva aquela parte. Carga do "
+        "caso: as vigas coloridas pela carga em kN/m, com as setas."
+    ),
+    "vista_3d": "De onde olhar o modelo: em perspectiva, de cima, de frente ou de lado.",
+    "giro_3d": "Gira o modelo em torno do eixo vertical, em graus.",
+    "caso_3d": "O caso cujas cargas aparecem nas vigas.",
+    "sec_vigas": (
+        "A carga que cada viga do modelo recebe do piso, caso a caso, já em kN/m para aplicar no "
+        "Simulation. O guarda-corpo entra no envio, mas tem a tabela dele na seção 3."
+    ),
+    "res_vigas_modelo": (
+        "A carga de cada viga no caso: kN/m na viga inteira ou só no trecho (coluna Onde), o "
+        "total, o trecho em que a chapa encosta e de que chapas vem. Aplique no Simulation no "
+        "estudo do caso, com o valor característico."
+    ),
+    "res_conferencia_modelo": (
+        "O que as chapas mandam em cada caso contra o que chegou às vigas: os dois têm de ser "
+        "iguais. Chapa sem viga embaixo fica fora dos dois lados."
+    ),
+    "sec_enviar_tudo": (
+        "Um envio só: as cargas do piso, o peso do guarda-corpo, o acréscimo das ligações no peso "
+        "próprio e a temperatura. A tabela mostra antes o que muda em cada caso do plano."
+    ),
+    "res_muda": (
+        "Cada caso do plano que o envio altera: o total em kN antes e depois, quantas linhas e o "
+        "motivo. O que foi lançado à mão no plano não aparece porque não muda."
+    ),
+    "tirar_grade": (
+        "O plano ainda tem cargas de um envio antigo pela grade de eixos, em barras que o modelo "
+        "não tem. Ligado, elas saem neste envio: assim a carga não fica em dobro."
+    ),
+    "btn_enviar_tudo": (
+        "Grava as escolhas desta página e atualiza o Plano de cargas com o que a tabela mostra. "
+        "Só as linhas do piso e do guarda-corpo são trocadas."
+    ),
+    "btn_gravar_escolhas": (
+        "Grava as escolhas (tipos, cargas e guarda-corpo) sem mexer no Plano de cargas. O vento "
+        "barra a barra já passa a usar o guarda-corpo marcado."
+    ),
+    "usar_grade": (
+        "Abre a forma pela grade de eixos, a que não usa o modelo. Com o esqueleto no projeto, "
+        "ela só serve se a grade for a mesma planta do modelo."
     ),
     "arquivo_esqueleto": (
         "O …_esqueleto.csv que a macro do SolidWorks grava na pasta da peça. A macro v5 grava "
@@ -106,31 +190,11 @@ AJUDA: dict[str, str] = {
         "Baixa a macro do SolidWorks. Com a peça soldada aberta: Ferramentas › Macro › Nova, cole "
         "o texto e tecle F5. Ela grava a lista de corte e o esqueleto na pasta da peça."
     ),
-    "cargas_por_area": (
-        "Cada caso com carga por área (kN/m²), na projeção horizontal — como a NBR 6120 dá a "
-        "sobrecarga. Vêm do plano de cargas (ou da base técnica); mude aqui se quiser. O peso das "
-        "chapas não entra: ele já está no modelo (gravidade do PP)."
-    ),
-    "res_chapas": (
-        "As chapas de piso do esqueleto (até 60° com a horizontal: piso, patamar, escada). "
-        "Desmarque a que não recebe a carga. “Medida por”: contorno (macro v5, com recortes) ou "
-        "retângulo (chapa que enche a caixa)."
-    ),
     "res_modelo": (
         "A área de chapa que recebeu carga (projeção horizontal), quantas vigas a recebem e o "
         "total de cada caso nas vigas."
     ),
     "caso_modelo": "Qual caso mostrar na tabela das vigas.",
-    "res_vigas_modelo": (
-        "A carga de cada viga no caso: kN/m uniforme na viga inteira (o total dividido pelo "
-        "comprimento), o total, o trecho em que a chapa encosta e de que chapas vem. Aplique no "
-        "Simulation no estudo do caso, com o valor característico."
-    ),
-    "btn_enviar_modelo": (
-        "Grava no plano de cargas, para cada caso, uma carga distribuída por viga (substitui as "
-        "linhas do caso). A conferência das reações da página Esforços do modelo passa a "
-        "comparar com elas."
-    ),
     "btn_csv_modelo": "As cargas de todas as vigas, caso a caso, em CSV (abre no Excel).",
     "reg_registrar": (
         "Grava o cálculo no projeto ativo: o memorial ganha o capítulo das ações sobre o esqueleto."

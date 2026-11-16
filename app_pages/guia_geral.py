@@ -2396,9 +2396,33 @@ elif modulo == "Cargas do esqueleto":
         "obra mas não está no modelo — piso, guarda-corpo, escadas, equipamentos, tubulações, "
         "ligações — e a sobrecarga viram **cargas características nas barras**, caso a caso, e vão "
         "para o Plano de cargas, de onde sai a planilha para aplicar no SolidWorks. Com o "
-        "esqueleto da macro do SolidWorks, a seção de cima da página leva a carga do piso direto "
-        "às vigas que apoiam cada chapa do modelo (área de influência), em kN/m por viga."
+        "esqueleto da macro do SolidWorks, a página trabalha a partir dele: lê o que é piso, "
+        "patamar e lance de escada, acha as vigas que apoiam cada chapa e monta a carga de cada "
+        "viga em kN/m. Sem o esqueleto, a página trabalha pela grade de eixos."
     )
+    st.subheader("Com o esqueleto do modelo")
+    st.markdown(
+        """
+        1. **O que o programa entendeu:** quantos pilares, vigas e diagonais, os níveis de piso e
+           o tipo de cada chapa. Na tabela, cada chapa tem o tipo, a sobrecarga, o peso e o
+           apoio; corrija o que estiver diferente da obra.
+        2. **Conferir em 3D:** o esqueleto com cada peça na cor do que ela é, a área da chapa que
+           cada viga recebe e a carga de um caso nas vigas.
+        3. **Guarda-corpo nas bordas:** o programa acha as bordas livres; desmarque o que não tem.
+        4. **Cargas nas vigas:** a carga de cada viga, caso a caso, e a conferência do total.
+        5. **Enviar ao plano de cargas:** a tabela mostra o que muda em cada caso e um botão só
+           envia o piso, o guarda-corpo, o acréscimo das ligações e a temperatura.
+
+        - **Peso do piso:** pelo volume da chapa do modelo, informado em kN/m², ou fora do PE
+          quando a gravidade do estudo já conta as chapas (o programa confere pela reação do PP).
+        - **Apoio em um sentido:** para grade de piso, só as vigas de uma direção recebem a
+          carga; em dois sentidos, a carga vai para a viga mais perto, nos quatro lados.
+        - **Carga só no trecho:** quando a chapa cobre parte da viga, a carga pode sair só nesse
+          trecho, com o começo e o fim medidos da ponta inicial da viga.
+        - Equipamentos e tubulações entram direto no Plano de cargas, na viga do modelo.
+        """
+    )
+    st.subheader("Sem o modelo: pela grade de eixos")
     mostrar_tabela_campos(
         [
             ["Eixos", "Posição dos eixos 1, 2, 3… em X e A, B, C… em Y (m)", "Planta de locação"],

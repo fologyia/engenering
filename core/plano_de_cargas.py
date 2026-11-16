@@ -166,6 +166,9 @@ class CargaDoModelo:
     #: Comprimento de cada barra numa carga distribuída (kN/m), quando se conhece: a resultante da
     #: linha passa a ser valor × comprimento × quantidade (a conferência das reações usa).
     comprimento_m: float = 0.0
+    #: Carga distribuída só num trecho da barra: onde o trecho começa, a partir da ponta inicial
+    #: da barra (m); o trecho tem ``comprimento_m``. Zero: a barra inteira (ou desde a ponta).
+    inicio_m: float = 0.0
 
     @property
     def total(self) -> float:
@@ -352,6 +355,7 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> PlanoDeCargas:
                 observacao=str(c.get("observacao") or ""),
                 quantidade=max(1, int(_numero_gravado(c.get("quantidade"), 1.0))),
                 comprimento_m=max(0.0, _numero_gravado(c.get("comprimento_m"), 0.0)),
+                inicio_m=max(0.0, _numero_gravado(c.get("inicio_m"), 0.0)),
             )
             for c in _lista_gravada(item.get("cargas"))
             if isinstance(c, Mapping)

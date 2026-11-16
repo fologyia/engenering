@@ -21,7 +21,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Mapping
+import threading
+import time
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -208,6 +211,7 @@ def _gravar_arquivo(caminho: Path, documento: Mapping[str, Any]) -> None:
     texto = json.dumps(documento, ensure_ascii=False, indent=2, sort_keys=False)
     temporario.write_text(texto, encoding="utf-8")
     temporario.replace(caminho)
+    _LOCAL.foto = None  # quem grava dentro de um bloco estável volta a ler o disco
     # Na hospedagem de disco descartável, o catálogo do usuário também precisa de uma cópia
     # fora do disco (ver core/espelho_remoto.py); sem espelho configurado, isto não faz nada.
     if caminho == ARQUIVO_USUARIO:
@@ -223,23 +227,53 @@ def catalogos_de_referencia() -> list[Path]:
     return sorted(PASTA_DADOS.glob(PADRAO_REFERENCIA))
 
 
-#: (arquivo, editável) → (resumo do conteúdo quando foi lido, perfis lidos). A página pede o
-#: catálogo centenas de vezes por tela: os perfis só são montados de novo quando o arquivo muda
-#: (pelo conteúdo, não pela data — duas gravações no mesmo instante não enganam).
-_LIDOS: dict[tuple[Path, bool], tuple[str, dict[str, PerfilCadastrado]]] = {}
+#: (arquivo, editável) → (resumo do conteúdo, perfis lidos, marca do arquivo, hora da leitura).
+#: A página pede o catálogo milhares de vezes por tela: os perfis só são montados de novo quando o
+#: arquivo muda (pelo conteúdo, não pela data — duas gravações no mesmo instante não enganam).
+_LIDOS: dict[
+    tuple[Path, bool], tuple[str, dict[str, PerfilCadastrado], tuple[int, int] | None, int]
+] = {}
+#: Arquivo parado há mais que isso: a data e o tamanho bastam para dizer que não mudou (não é
+#: preciso reler o conteúdo). Mexido há pouco, vale o conteúdo.
+_ARQUIVO_PARADO_NS = 2_000_000_000
 
 
-def _carregar(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]:
+def _marca(caminho: Path) -> tuple[int, int] | None:
+    try:
+        estado = caminho.stat()
+    except OSError:
+        return None
+    return estado.st_mtime_ns, estado.st_size
+
+
+def _carregar_com_versao(
+    caminho: Path, *, editavel: bool
+) -> tuple[str, dict[str, PerfilCadastrado]]:
+    """Os perfis do arquivo e o resumo do conteúdo (muda quando o arquivo muda)."""
+    guardado = _LIDOS.get((caminho, editavel))
+    marca = _marca(caminho)
+    if (
+        guardado is not None
+        and marca is not None
+        and guardado[2] == marca
+        and marca[0] < guardado[3] - _ARQUIVO_PARADO_NS
+    ):
+        return guardado[0], guardado[1]
+    agora = time.time_ns()
     try:
         versao = hashlib.sha1(caminho.read_bytes()).hexdigest()
     except OSError:  # ausente: catálogo vazio; ilegível: o erro de sempre
-        return _ler_perfis(caminho, editavel=editavel)
-    guardado = _LIDOS.get((caminho, editavel))
+        return "", _ler_perfis(caminho, editavel=editavel)
     if guardado is not None and guardado[0] == versao:
-        return dict(guardado[1])
+        _LIDOS[(caminho, editavel)] = (versao, guardado[1], marca, agora)
+        return versao, guardado[1]
     resultado = _ler_perfis(caminho, editavel=editavel)
-    _LIDOS[(caminho, editavel)] = (versao, resultado)
-    return dict(resultado)
+    _LIDOS[(caminho, editavel)] = (versao, resultado, marca, agora)
+    return versao, resultado
+
+
+def _carregar(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]:
+    return dict(_carregar_com_versao(caminho, editavel=editavel)[1])
 
 
 def _ler_perfis(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]:
@@ -266,6 +300,58 @@ def _ler_perfis(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]
     return resultado
 
 
+#: O catálogo completo já montado, enquanto nenhum arquivo muda: (versões dos arquivos) → perfis.
+_COMPLETO: dict[str, Any] = {}
+
+
+_LOCAL = threading.local()
+
+
+@contextmanager
+def catalogo_estavel() -> Iterator[None]:
+    """Dentro deste bloco o catálogo é uma fotografia: lido uma vez, sem voltar ao disco.
+
+    Uma conta que pede o catálogo milhares de vezes (o perfil de cada corpo do esqueleto, por
+    exemplo) usa o mesmo catálogo do começo ao fim e não paga uma consulta ao disco por pedido.
+    """
+    if getattr(_LOCAL, "foto", None) is not None:
+        yield
+        return
+    try:
+        _LOCAL.foto = _catalogo_montado()
+    except ErroDeCatalogo:  # catálogo ilegível: o erro aparece onde o catálogo for pedido
+        yield
+        return
+    try:
+        yield
+    finally:
+        _LOCAL.foto = None
+
+
+def _catalogo_montado() -> tuple[dict[str, PerfilCadastrado], dict[str, PerfilAco]]:
+    foto = getattr(_LOCAL, "foto", None)
+    if foto is not None:
+        return foto
+    partes = [
+        (caminho, False, *_carregar_com_versao(caminho, editavel=False))
+        for caminho in catalogos_de_referencia()
+    ]
+    partes.append((ARQUIVO_USUARIO, True, *_carregar_com_versao(ARQUIVO_USUARIO, editavel=True)))
+    chave = (id(CATALOGO_PERFIS), len(CATALOGO_PERFIS), tuple((c, v) for c, _, v, _ in partes))
+    # Arquivo ausente ou ilegível (versão vazia) não é guardado: o erro de sempre aparece de novo.
+    if _COMPLETO.get("chave") == chave and all(v for _, _, v, _ in partes[:-1]):
+        return _COMPLETO["cadastrados"], _COMPLETO["perfis"]
+    completo: dict[str, PerfilCadastrado] = {
+        nome: PerfilCadastrado(perfil=perfil, origem=ORIGEM_EMBUTIDO, editavel=False)
+        for nome, perfil in CATALOGO_PERFIS.items()
+    }
+    for _, _, _, perfis in partes:
+        completo.update(perfis)
+    so_perfis = {nome: item.perfil for nome, item in completo.items()}
+    _COMPLETO.update(chave=chave, cadastrados=completo, perfis=so_perfis)
+    return completo, so_perfis
+
+
 def listar_cadastrados() -> dict[str, PerfilCadastrado]:
     """Catálogo completo: embutidos, de referência e do usuário.
 
@@ -273,19 +359,12 @@ def listar_cadastrados() -> dict[str, PerfilCadastrado]:
     referência, que vence o embutido. Cadastrar com um nome existente é
     corrigir aquele valor, não um erro.
     """
-    completo: dict[str, PerfilCadastrado] = {
-        nome: PerfilCadastrado(perfil=perfil, origem=ORIGEM_EMBUTIDO, editavel=False)
-        for nome, perfil in CATALOGO_PERFIS.items()
-    }
-    for caminho in catalogos_de_referencia():
-        completo.update(_carregar(caminho, editavel=False))
-    completo.update(_carregar(ARQUIVO_USUARIO, editavel=True))
-    return completo
+    return dict(_catalogo_montado()[0])
 
 
 def listar_perfis() -> dict[str, PerfilAco]:
     """Catálogo completo no formato que os módulos de cálculo consomem."""
-    return {nome: item.perfil for nome, item in listar_cadastrados().items()}
+    return dict(_catalogo_montado()[1])
 
 
 def obter(nome: str) -> PerfilCadastrado:

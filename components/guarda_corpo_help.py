@@ -43,11 +43,6 @@ AJUDA: dict[str, str] = {
         "Por viga: o comprimento com guarda-corpo, o peso total e a carga distribuída na viga "
         "inteira (total ÷ comprimento da viga), como o piso."
     ),
-    "btn_enviar": (
-        "Grava a sua escolha no projeto e põe o peso do guarda-corpo nas vigas de borda, no caso "
-        "PE do plano de cargas. As outras linhas do PE (o piso) ficam; um envio anterior do "
-        "guarda-corpo é trocado."
-    ),
     "opcao_longarinas": (
         "Ligado: onde duas longarinas saem da borda para fora do piso, o programa abre o acesso da "
         "escada (sem guarda-corpo). Desligue se ele achar acesso onde não tem. O acesso que vem das "
@@ -62,9 +57,5 @@ AJUDA: dict[str, str] = {
         "longo dela (vazio = a viga inteira, medido do início dela no SolidWorks) e o tipo. "
         "Guarda-corpo à mão entra no lugar do que ele achou naquela parte; acesso ou portão tira o "
         "guarda-corpo dali."
-    ),
-    "btn_gravar": (
-        "Só grava a escolha (trechos, altura e φ) no projeto: o vento barra a barra usa estes "
-        "guarda-corpos."
     ),
 }

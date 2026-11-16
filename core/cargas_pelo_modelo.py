@@ -25,6 +25,7 @@ Sem Streamlit.
 
 from __future__ import annotations
 
+import functools
 import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
@@ -47,6 +48,15 @@ AREA_MINIMA_M2 = 0.10  # menor que isso não é piso (chapa de ligação, nervur
 BALANCO_SUSPEITO_M = 0.60
 TRECHO_PARCIAL = 0.80  # carga em menos de 80 % da viga: aviso
 AMOSTRAS_POR_LADO = 60
+#: Como a chapa leva a carga às vigas. Dois sentidos: cada pedaço vai para a viga mais perto (as
+#: charneiras; chapa presa em todo o contorno). Um sentido: só as vigas de uma direção apoiam (a
+#: grade de piso, que só trabalha ao longo das barras portantes; a chapa presa em duas bordas).
+SENTIDO_DOIS = "Dois sentidos"
+SENTIDO_UM = "Um sentido"
+SENTIDO_UM_OUTRO = "Um sentido (outra direção)"
+SENTIDOS = (SENTIDO_DOIS, SENTIDO_UM, SENTIDO_UM_OUTRO)
+COS_MESMA_DIRECAO = 0.94  # vigas a até 20° uma da outra são da mesma direção
+FOLGA_DA_PONTA_M = 0.05  # a viga apoia a faixa que passa até 5 cm além da ponta dela
 
 Ponto2 = tuple[float, float]
 Ponto3 = tuple[float, float, float]
@@ -374,17 +384,30 @@ class InfluenciaNaViga:
     area_projetada_m2: float
     trecho_m: float
     comprimento_m: float
+    #: O trecho da viga sob a chapa: do início ao fim, a partir da ponta inicial da viga (m).
+    de_m: float = 0.0
+    ate_m: float = 0.0
+    #: A parte da chapa que vai para esta viga (0 a 1).
+    fracao: float = 0.0
 
 
 @dataclass(frozen=True)
 class CargaNaViga:
     caso: str
     viga: str
-    kN_m: float  # uniforme na viga inteira: total ÷ comprimento
+    kN_m: float  # uniforme na viga inteira (total ÷ comprimento) ou só no trecho (``parcial``)
     total_kN: float
     trecho_m: float
     comprimento_m: float
     chapas: tuple[str, ...]
+    de_m: float = 0.0
+    ate_m: float = 0.0
+    #: A carga vai só no trecho ``de_m``–``ate_m`` (kN/m = total ÷ trecho), não na viga inteira.
+    parcial: bool = False
+
+    @property
+    def comprimento_carregado_m(self) -> float:
+        return self.trecho_m if self.parcial else self.comprimento_m
 
 
 @dataclass(frozen=True)
@@ -410,63 +433,155 @@ class DistribuicaoDoPiso:
         return sum(i.area_projetada_m2 for i in self.influencias)
 
 
-def influencias(
-    g: ld.GeometriaDoModelo, chapa: ChapaDoPiso
-) -> tuple[list[InfluenciaNaViga], float, list[str]]:
-    """A área de influência de cada viga sob a chapa, o maior balanço (m) e os avisos.
+Viga = tuple[ld.CorpoDoModelo, Ponto2, Ponto2]
 
-    Balanço é o quanto a chapa passa da envoltória das vigas que a apoiam (o que fica entre elas é
-    vão da chapa, não balanço)."""
-    vigas = vigas_que_apoiam(g, chapa)
-    if not vigas:
-        return (
-            [],
-            0.0,
-            [f"{chapa.nome}: nenhuma viga logo abaixo da chapa — a carga dela fica de fora."],
-        )
+
+def direcoes_das_vigas(vigas: Sequence[Viga]) -> list[tuple[Ponto2, float, list[Viga]]]:
+    """As vigas sob a chapa agrupadas pela direção, no plano dela: (direção, comprimento somado,
+    vigas), da direção com mais comprimento de viga para a de menos."""
+    grupos: list[tuple[Ponto2, float, list[Viga]]] = []
+    for viga in sorted(vigas, key=lambda v: -math.dist(v[1], v[2])):
+        _, a, b = viga
+        comprimento = math.dist(a, b)
+        if comprimento <= 1e-9:
+            continue
+        d = ((b[0] - a[0]) / comprimento, (b[1] - a[1]) / comprimento)
+        for i, (direcao, soma, lista) in enumerate(grupos):
+            if abs(d[0] * direcao[0] + d[1] * direcao[1]) >= COS_MESMA_DIRECAO:
+                grupos[i] = (direcao, soma + comprimento, [*lista, viga])
+                break
+        else:
+            grupos.append((d, comprimento, [viga]))
+    return sorted(grupos, key=lambda grupo: -grupo[1])
+
+
+def vigas_de_apoio(vigas: Sequence[Viga], sentido: str) -> tuple[list[Viga], Ponto2 | None]:
+    """As vigas que apoiam a chapa no sentido escolhido e a direção delas (``None`` nos dois
+    sentidos: todas apoiam). Sem vigas na outra direção, "outra direção" fica na principal."""
+    if sentido not in (SENTIDO_UM, SENTIDO_UM_OUTRO):
+        return list(vigas), None
+    grupos = direcoes_das_vigas(vigas)
+    if not grupos:
+        return list(vigas), None
+    indice = 1 if sentido == SENTIDO_UM_OUTRO and len(grupos) > 1 else 0
+    return grupos[indice][2], grupos[indice][0]
+
+
+def _viga_do_ponto(
+    ponto: Ponto2, vigas: Sequence[Viga], direcao: Ponto2 | None
+) -> tuple[ld.CorpoDoModelo, float]:
+    """A viga que recebe o pedaço da chapa neste ponto, e a posição (0 a 1) ao longo dela.
+
+    Nos dois sentidos, a viga mais perto. Num sentido, o pedaço segue pela faixa perpendicular às
+    vigas de apoio até a primeira delas (metade do vão para cada lado; a ponta em balanço vai
+    para a única viga que a faixa encontra); a faixa que não encontra viga vai para a mais perto.
+    """
+    if direcao is not None:
+        sx, sy = -direcao[1], direcao[0]  # o vão: perpendicular às vigas de apoio
+        melhor: tuple[float, ld.CorpoDoModelo, float] | None = None
+        for corpo, a, b in vigas:
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            denominador = sx * dy - sy * dx
+            comprimento = math.hypot(dx, dy)
+            if abs(denominador) < 1e-9 or comprimento <= 0:
+                continue
+            ax, ay = a[0] - ponto[0], a[1] - ponto[1]
+            salto = (ax * dy - ay * dx) / denominador  # ao longo do vão
+            t = (ax * sy - ay * sx) / denominador  # ao longo da viga
+            folga = FOLGA_DA_PONTA_M / comprimento
+            if -folga <= t <= 1 + folga and (melhor is None or abs(salto) < melhor[0]):
+                melhor = (abs(salto), corpo, max(0.0, min(1.0, t)))
+        if melhor is not None:
+            return melhor[1], melhor[2]
+    (_, t), corpo = min(
+        ((distancia_ao_segmento(ponto, a, b), corpo) for corpo, a, b in vigas),
+        key=lambda par: par[0][0],
+    )
+    return corpo, t
+
+
+def _amostras(chapa: ChapaDoPiso, passo: float) -> list[Ponto2]:
+    """Os centros dos quadrados de lado ``passo`` que caem na chapa (fora das aberturas)."""
     xs = [p[0] for p in chapa.poligono]
     ys = [p[1] for p in chapa.poligono]
-    passo = max(0.02, min(0.10, min(max(xs) - min(xs), max(ys) - min(ys)) / AMOSTRAS_POR_LADO))
-    acumulado: dict[str, float] = {}
-    trechos: dict[str, tuple[float, float]] = {}
-    contagem = 0
-    maior_distancia = 0.0
-    # O que fica entre as vigas é vão da chapa; fora da envoltória delas, balanço.
-    envoltoria = envoltoria_convexa([p for _, a, b in vigas for p in (a, b)])
+    pontos = []
     x = min(xs) + passo / 2
     while x < max(xs):
         y = min(ys) + passo / 2
         while y < max(ys):
             ponto = (x, y)
             if dentro(ponto, chapa.poligono) and not any(dentro(ponto, a) for a in chapa.aberturas):
-                melhor = min(
-                    ((distancia_ao_segmento(ponto, a, b), corpo) for corpo, a, b in vigas),
-                    key=lambda par: par[0][0],
-                )
-                (distancia, t), corpo = melhor
-                contagem += 1
-                acumulado[corpo.nome] = acumulado.get(corpo.nome, 0.0) + 1
-                inicio, fim = trechos.get(corpo.nome, (t, t))
-                trechos[corpo.nome] = (min(inicio, t), max(fim, t))
-                maior_distancia = max(maior_distancia, fora_da_envoltoria(ponto, envoltoria))
+                pontos.append(ponto)
             y += passo
         x += passo
+    return pontos
+
+
+def _passo(chapa: ChapaDoPiso) -> float:
+    xs = [p[0] for p in chapa.poligono]
+    ys = [p[1] for p in chapa.poligono]
+    return max(0.02, min(0.10, min(max(xs) - min(xs), max(ys) - min(ys)) / AMOSTRAS_POR_LADO))
+
+
+def influencias(
+    g: ld.GeometriaDoModelo, chapa: ChapaDoPiso, sentido: str = SENTIDO_DOIS
+) -> tuple[list[InfluenciaNaViga], float, list[str]]:
+    """A área de influência de cada viga sob a chapa, o maior balanço (m) e os avisos.
+
+    Balanço é o quanto a chapa passa da envoltória das vigas que a apoiam (o que fica entre elas é
+    vão da chapa, não balanço). A conta só depende do esqueleto: fica guardada enquanto ele não
+    muda (a página a pede a cada clique)."""
+    resultado, balanco, avisos = _influencias_guardadas(g, chapa, sentido)
+    return list(resultado), balanco, list(avisos)
+
+
+@functools.lru_cache(maxsize=256)
+def _influencias_guardadas(
+    g: ld.GeometriaDoModelo, chapa: ChapaDoPiso, sentido: str
+) -> tuple[tuple[InfluenciaNaViga, ...], float, tuple[str, ...]]:
+    todas = vigas_que_apoiam(g, chapa)
+    if not todas:
+        return (
+            (),
+            0.0,
+            (f"{chapa.nome}: nenhuma viga logo abaixo da chapa — a carga dela fica de fora.",),
+        )
+    vigas, direcao = vigas_de_apoio(todas, sentido)
+    passo = _passo(chapa)
+    acumulado: dict[str, float] = {}
+    trechos: dict[str, tuple[float, float]] = {}
+    maior_distancia = 0.0
+    # O que fica entre as vigas é vão da chapa; fora da envoltória delas, balanço.
+    envoltoria = envoltoria_convexa([p for _, a, b in vigas for p in (a, b)])
+    amostras = _amostras(chapa, passo)
+    for ponto in amostras:
+        corpo, t = _viga_do_ponto(ponto, vigas, direcao)
+        acumulado[corpo.nome] = acumulado.get(corpo.nome, 0.0) + 1
+        inicio, fim = trechos.get(corpo.nome, (t, t))
+        trechos[corpo.nome] = (min(inicio, t), max(fim, t))
+        maior_distancia = max(maior_distancia, fora_da_envoltoria(ponto, envoltoria))
+    contagem = len(amostras)
     if not contagem:
-        return [], 0.0, [f"{chapa.nome}: o contorno não tem área para distribuir."]
+        return (), 0.0, (f"{chapa.nome}: o contorno não tem área para distribuir.",)
     area = chapa.area_projetada_m2
     resultado = []
     for corpo, _, _ in vigas:
         if corpo.nome not in acumulado:
             continue
         inicio, fim = trechos[corpo.nome]
+        comprimento = corpo.comprimento_m
+        meio_passo = passo / 2 / max(comprimento, 1e-9)
+        inicio, fim = max(0.0, inicio - meio_passo), min(1.0, fim + meio_passo)
         resultado.append(
             InfluenciaNaViga(
                 viga=corpo.nome,
                 chapa=chapa.nome,
                 area_projetada_m2=area * acumulado[corpo.nome] / contagem,
-                trecho_m=max(fim - inicio, passo / max(corpo.comprimento_m, 1e-9))
-                * corpo.comprimento_m,
-                comprimento_m=corpo.comprimento_m,
+                trecho_m=(fim - inicio) * comprimento,
+                comprimento_m=comprimento,
+                de_m=inicio * comprimento,
+                ate_m=fim * comprimento,
+                fracao=acumulado[corpo.nome] / contagem,
             )
         )
     avisos = []
@@ -476,7 +591,60 @@ def influencias(
             "(balanço da chapa) — confira se falta viga no esqueleto ou se o balanço é de "
             "propósito (a chapa precisa vencê-lo)."
         )
-    return resultado, maior_distancia, avisos
+    return tuple(resultado), maior_distancia, tuple(avisos)
+
+
+@dataclass(frozen=True)
+class FaixaDeInfluencia:
+    """Um retângulo da chapa (no espaço do modelo) e a viga que recebe a carga dele."""
+
+    viga: str
+    chapa: str
+    pontos: tuple[Ponto3, Ponto3, Ponto3, Ponto3]
+
+
+@functools.lru_cache(maxsize=256)
+def mapa_de_influencia(
+    g: ld.GeometriaDoModelo, chapa: ChapaDoPiso, sentido: str = SENTIDO_DOIS, passo_m: float = 0.10
+) -> tuple[FaixaDeInfluencia, ...]:
+    """A chapa cortada em faixas, cada uma com a viga que a recebe: o desenho da área de
+    influência (as mesmas regras de :func:`influencias`, numa malha mais aberta)."""
+    todas = vigas_que_apoiam(g, chapa)
+    if not todas:
+        return ()
+    vigas, direcao = vigas_de_apoio(todas, sentido)
+    passo = max(passo_m, _passo(chapa))
+    por_coluna: dict[float, list[tuple[float, str]]] = {}
+    for x, y in _amostras(chapa, passo):
+        por_coluna.setdefault(x, []).append((y, _viga_do_ponto((x, y), vigas, direcao)[0].nome))
+
+    def no_espaco(x: float, y: float) -> Ponto3:
+        o, a, b = chapa.origem, chapa.e1, chapa.e2
+        return (o[0] + x * a[0] + y * b[0], o[1] + x * a[1] + y * b[1], o[2] + x * a[2] + y * b[2])
+
+    faixas: list[FaixaDeInfluencia] = []
+    meio = passo / 2
+    for x, celulas in por_coluna.items():
+        celulas.sort()
+        comeco, anterior, viga = celulas[0][0], celulas[0][0], celulas[0][1]
+        for y, nome in [*celulas[1:], (math.inf, "")]:
+            if nome == viga and y - anterior <= 1.5 * passo:
+                anterior = y
+                continue
+            faixas.append(
+                FaixaDeInfluencia(
+                    viga,
+                    chapa.nome,
+                    (
+                        no_espaco(x - meio, comeco - meio),
+                        no_espaco(x + meio, comeco - meio),
+                        no_espaco(x + meio, anterior + meio),
+                        no_espaco(x - meio, anterior + meio),
+                    ),
+                )
+            )
+            comeco, anterior, viga = y, y, nome
+    return tuple(faixas)
 
 
 def distribuir(
@@ -519,6 +687,8 @@ def distribuir(
                     trecho_m=trecho,
                     comprimento_m=comprimento,
                     chapas=tuple(dict.fromkeys(i.chapa for i in itens)),
+                    de_m=min(i.de_m for i in itens),
+                    ate_m=max(i.ate_m for i in itens),
                 )
             )
     for viga, itens in por_viga.items():

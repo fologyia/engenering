@@ -98,8 +98,9 @@ PASSOS: tuple[Passo, ...] = (
         "PE, SC, guarda-corpo, escadas e equipamentos nas barras → plano de cargas",
         (
             "Envie o …_esqueleto.csv e grave no projeto (fica guardado para as outras páginas).",
-            "Confira a carga do piso pelas chapas, o guarda-corpo e os equipamentos.",
-            "Mande as ações ao plano de cargas.",
+            "Confira o que o programa entendeu (piso, patamar, escada) na tabela e no 3D.",
+            "Acerte a carga de cada chapa e o guarda-corpo; veja o que muda no plano.",
+            "Mande tudo ao plano de cargas com um botão só.",
         ),
         "Os totais por ação batem com o que você espera da plataforma.",
     ),

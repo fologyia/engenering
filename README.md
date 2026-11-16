@@ -534,9 +534,13 @@ mesmo núcleo.
 
 ### Cargas do esqueleto
 
-Com o esqueleto da macro (v5: contorno das chapas), a carga do piso vai direto para as vigas do
+Com o esqueleto da macro (v5: contorno das chapas), a página trabalha a partir do modelo
+(`core/piso_do_modelo.py`): lê o que é piso, patamar e lance de escada, os níveis e as vigas de cada
+chapa, mostra a leitura em 3D (`core/cena_do_piso.py`), dá a carga de cada chapa (sobrecarga, peso
+pelo volume ou informado, apoio em um ou dois sentidos, carga só no trecho coberto) e envia tudo ao
+Plano de cargas de uma vez, com a tabela do que muda. A carga do piso vai para as vigas do
 modelo pela área de influência de cada chapa (`core/cargas_pelo_modelo.py`), caso a caso, em kN/m por
-viga, e vai ao Plano de cargas. O **guarda-corpo nas bordas** (`core/guarda_corpo_do_modelo.py`) sai
+viga. O **guarda-corpo nas bordas** (`core/guarda_corpo_do_modelo.py`) sai
 do mesmo esqueleto: as bordas livres do piso (sem outro piso do lado de fora), a viga de borda de
 cada trecho, o acesso da escada (onde o lance encosta, ou pelas longarinas) e as bordas sem viga; o
 peso vai ao PE e os trechos viram guarda-corpos no vento barra a barra. Sem o modelo ainda, pela

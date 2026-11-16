@@ -456,6 +456,25 @@ def _vetor_da_carga(c: pc.CargaDoModelo) -> c3.Ponto | None:
     return None
 
 
+def _trecho_da_carga(
+    carga: pc.CargaDoModelo,
+    corpo: ld.CorpoDoModelo,
+    a: c3.Ponto = (0.0, 0.0, 0.0),
+    b: c3.Ponto = (0.0, 0.0, 0.0),
+) -> tuple[c3.Ponto, c3.Ponto, float]:
+    """As pontas (na planta) e o comprimento do trecho que a linha do plano carrega: a barra
+    inteira, ou o trecho ``inicio_m`` + ``comprimento_m`` quando a carga é só numa parte dela."""
+    total = corpo.comprimento_m
+    trecho = carga.comprimento_m
+    if not (0 < trecho < total - 1e-6) or carga.inicio_m < 0 or total <= 0:
+        return a, b, total
+    t0 = min(carga.inicio_m, total - trecho) / total
+    t1 = t0 + trecho / total
+    inicio = tuple(a[k] + t0 * (b[k] - a[k]) for k in range(3))
+    fim = tuple(a[k] + t1 * (b[k] - a[k]) for k in range(3))
+    return inicio, fim, trecho  # type: ignore[return-value]
+
+
 def cargas_do_caso(
     plano: pc.PlanoDeCargas,
     caso: str,
@@ -483,9 +502,10 @@ def cargas_do_caso(
         corpo = corpos[nome]
         a, b = _planta(corpo.inicio, eixo_vertical), _planta(corpo.fim, eixo_vertical)
         if carga.unidade == "kN/m":
+            a, b, comprimento = _trecho_da_carga(carga, corpo, a, b)
             distribuidas.append(c3.CargaDistribuidaCena(a, b, vetor, "", COR_DA_CARGA, caso))
             magnitudes.append((abs(carga.valor), len(distribuidas) - 1, "d"))
-            resultante = [v * corpo.comprimento_m * carga.quantidade for v in vetor]
+            resultante = [v * comprimento * carga.quantidade for v in vetor]
         else:
             meio = tuple((a[k] + b[k]) / 2 for k in range(3))
             setas.append(c3.SetaCena(meio, vetor, "", COR_DA_CARGA, False, caso))  # type: ignore[arg-type]
@@ -531,7 +551,7 @@ def cargas_distribuidas_por_corpo(
             vetor = _vetor_da_carga(carga)
             if not nome or vetor is None:
                 continue
-            fator = corpos[nome].comprimento_m * carga.quantidade
+            fator = _trecho_da_carga(carga, corpos[nome])[2] * carga.quantidade
             soma = por_corpo.setdefault(nome, [0.0, 0.0, 0.0])
             for k in range(3):
                 soma[k] += vetor[k] * fator

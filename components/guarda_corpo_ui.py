@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import zlib
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-from components.base_tecnica_ui import base_ativa, gravar_campos_do_projeto
+from components.base_tecnica_ui import base_ativa
 from components.figura_guarda_corpo import svg_bordas_do_piso
 from components.figuras import mostrar_figura
 from components.guarda_corpo_help import AJUDA
@@ -125,18 +125,34 @@ def escolha_inicial(projeto: Mapping[str, Any] | None) -> gm.EscolhaDoGuardaCorp
     return escolha
 
 
+@dataclass(frozen=True)
+class GuardaCorpoNaTela:
+    """O que o bloco deixa pronto para a página gravar: a escolha e o peso em cada viga."""
+
+    dados: dict[str, Any]  # vai em ``gm.CHAVE_DO_PROJETO``
+    pesos: tuple[gm.PesoNaViga, ...]
+
+    @property
+    def total_kN(self) -> float:
+        return sum(p.total_kN for p in self.pesos)
+
+    def no_plano(self, plano: pc.PlanoDeCargas) -> pc.PlanoDeCargas:
+        return gm.aplicar_peso_no_plano(plano, self.pesos)
+
+
 def mostrar_guarda_corpo_do_modelo(
     projeto: Mapping[str, Any],
     geometria: ld.GeometriaDoModelo,
     eixo_vertical: str,
     nomes_no_simulation: Mapping[str, str],
-    plano: pc.PlanoDeCargas,
     *,
     chave: str = "gc",
-) -> bool:
-    """O bloco inteiro; devolve ``True`` quando gravou algo (a página recarrega)."""
+    titulo: str = "Guarda-corpo nas bordas do piso",
+) -> GuardaCorpoNaTela | None:
+    """O bloco inteiro, sem gravar nada: devolve a escolha e os pesos para a página enviar junto
+    com o resto (``None`` quando o esqueleto não tem borda de piso)."""
     with st.container(border=True), secao_protegida("Guarda-corpo nas bordas do piso"):
-        st.subheader("Guarda-corpo nas bordas do piso", help=AJUDA["sec_guarda_corpo"])
+        st.subheader(titulo, help=AJUDA["sec_guarda_corpo"])
         escolha = _ajustes(escolha_inicial(projeto), geometria, chave)
         bordas = gm.bordas_do_projeto(geometria, eixo_vertical, escolha)
         if not bordas.trechos:
@@ -148,7 +164,7 @@ def mostrar_guarda_corpo_do_modelo(
             )
             for aviso in bordas.avisos:
                 st.caption(f":material/info: {aviso}")
-            return False
+            return None
         # O que foi trocado nesta sessão sobrevive a uma mudança nos ajustes (a tabela é refeita).
         chave_sessao = f"{chave}_trocados_sessao"
         trocados_antes = {**escolha.trocados, **st.session_state.get(chave_sessao, {})}
@@ -286,31 +302,5 @@ def mostrar_guarda_corpo_do_modelo(
             altura_m=float(altura),
             phi=float(phi),
         )
-        dados = gm.para_dicionario(nova, bordas)
-        colunas = st.columns(2)
-        if colunas[0].button(
-            "Gravar e pôr o peso no plano (PE)",
-            type="primary",
-            icon=":material/send:",
-            key=f"{chave}_enviar",
-            help=AJUDA["btn_enviar"],
-            width="stretch",
-        ) and gravar_campos_do_projeto(
-            {
-                gm.CHAVE_DO_PROJETO: dados,
-                "plano_de_cargas": pc.para_dicionario(gm.aplicar_peso_no_plano(plano, pesos)),
-            },
-            "Guarda-corpo nas bordas: escolha gravada e peso no PE",
-        ):
-            return True
-        if colunas[1].button(
-            "Só gravar a escolha (para o vento)",
-            icon=":material/save:",
-            key=f"{chave}_gravar",
-            help=AJUDA["btn_gravar"],
-            width="stretch",
-        ) and gravar_campos_do_projeto(
-            {gm.CHAVE_DO_PROJETO: dados}, "Guarda-corpo nas bordas: escolha gravada"
-        ):
-            return True
-    return False
+        return GuardaCorpoNaTela(gm.para_dicionario(nova, bordas), tuple(pesos))
+    return None

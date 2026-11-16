@@ -6,6 +6,51 @@ etapa 2 do fluxo (Ações). No SolidWorks modela-se **só o esqueleto**: pilares
 contraventamento. Tudo o que existe na obra mas não está no modelo vira **carga característica nas
 barras**, caso a caso, e vai para o Plano de cargas, que exporta a planilha para o SolidWorks.
 
+## A página pelo modelo (`core/piso_do_modelo.py`, `core/cena_do_piso.py`)
+
+Com o esqueleto no projeto, a página segue cinco seções e a grade de eixos fica fechada (a chave
+"Usar também a grade de eixos" a abre; sem chapas de piso no esqueleto ela já vem aberta):
+
+1. **O que o programa entendeu do modelo** (`pm.ler`, guardado enquanto o esqueleto não muda):
+   * o papel de cada barra pela geometria (pilar, viga, diagonal; a barra inclinada que apoia um
+     lance é **longarina**; pedaço curto é peça curta);
+   * cada chapa de piso com o código C1, C2…: **escada** acima de 10° de inclinação; **patamar** a
+     chapa em nível entre dois lances (ou na ponta de um lance, com até 3 m² e sem ser o piso
+     maior); **piso** as outras. O usuário troca o tipo na tabela ("sem carga" tira a chapa);
+   * os **níveis**: as cotas das chapas em nível acima do ponto mais baixo do modelo, agrupadas a
+     ± 25 cm;
+   * avisos: quatro ou mais vigas em nível numa cota sem chapa em cima (piso não modelado) e chapa
+     sem viga embaixo.
+2. **Carga de cada chapa** (`EscolhaDaChapa`): sobrecarga, peso informado e apoio próprios. A
+   sobrecarga sugerida do piso é a da base técnica; a de escadas e patamares é a da Tabela 2 do
+   critério Anglo ("Escadas e passadiços em geral") nos projetos Anglo e a do piso nos outros.
+3. **Peso do piso (PE)**: pelo volume da chapa (volume × 7 850 kg/m³), informado por chapa em
+   kN/m² ou fora do PE. `pp_conta_as_chapas` compara a reação vertical do PP importado com o aço
+   de todos os corpos e com o aço sem as chapas (± 5 %, com e sem o fator das ligações): quando o
+   PP já conta as chapas, a sugestão é não somar de novo; quando não dá para saber, a página diz.
+4. **Apoio** (`cpm.influencias(..., sentido)`): em **dois sentidos**, cada pedaço da chapa vai para
+   a viga mais perto (charneiras). Em **um sentido**, só as vigas de uma direção apoiam (a direção
+   com mais comprimento de viga sob a chapa, ou a outra): o pedaço segue pela faixa perpendicular a
+   elas até a primeira viga — metade do vão para cada lado, e o balanço para a única viga que a
+   faixa encontra. É o caso da grade de piso.
+5. **Carga só no trecho** (`so_no_trecho`): viga coberta em menos de 80 % sai com a carga no trecho
+   `de_m`–`ate_m` (kN/m = total ÷ trecho); a linha do plano leva `comprimento_m` e `inicio_m`
+   (`pc.CargaDoModelo`), e o Modelo em 3D desenha o pente só nesse trecho. Desligado, a carga é
+   uniforme na viga inteira, com aviso.
+6. **Conferir em 3D** (`cena_do_piso`, num fragmento do Streamlit): o que é cada peça, a área que
+   cada viga recebe (`cpm.mapa_de_influencia`: a chapa em faixas com a cor da viga) e a carga de um
+   caso, com as vistas e o giro.
+7. **Um envio só** (`pm.aplicar_no_plano` + o guarda-corpo): em cada caso, só as linhas do piso
+   (observação começando por "Piso do modelo", ou as de envios antigos) e a carga por área em kN/m²
+   que elas substituem são trocadas; o que foi lançado à mão fica. As sobras da grade de eixos
+   saem, o PP ganha o fator das ligações e a temperatura entra ou sai. `pm.comparar` dá a tabela
+   "antes → depois" por caso. A escolha fica em `projeto["piso_do_modelo"]`.
+
+**Velocidade:** o catálogo de perfis é lido uma vez por execução da página
+(`section_catalog.catalogo_estavel`, ligado em `components/robustez.executar_pagina`); a leitura do
+piso, as áreas de influência e o desenho 3D ficam guardados enquanto o esqueleto e a vista não
+mudam. No modelo de 46 barras, um clique caiu de 1,7 s para 0,4 s.
+
 ## Pelo esqueleto do modelo (`core/cargas_pelo_modelo.py`)
 
 Com o `…_esqueleto.csv` da macro do SolidWorks (enviado nesta página ou em Esforços do modelo, fica em
@@ -36,8 +81,8 @@ No modelo real (macro v5): as quatro chapas com o contorno — o piso principal 
 com a extensão de 1,0 × 1,1 m até a escada), as duas rampas da escada e o patamar —, 32 vigas
 carregadas, 72,98 kN = 5 kN/m² × 14,596 m² projetados.
 
-As cargas por área vêm do plano (as ações com kN/m²) ou da base técnica (SC). O peso das chapas não
-entra: ele já está no modelo (a gravidade do PP).
+A sobrecarga inicial vem do plano (a ação SC em kN/m²) ou da base técnica. O peso das chapas
+entra ou não no PE conforme a escolha do peso do piso (acima).
 
 ## Guarda-corpo nas bordas do piso (`core/guarda_corpo_do_modelo.py`)
 

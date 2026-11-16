@@ -20,6 +20,7 @@ from typing import Any
 import streamlit as st
 
 from core import diagnostico as dg
+from core import section_catalog
 
 CHAVE_OCORRENCIAS = "_ocorrencias_desta_execucao"
 CHAVE_PAGINA = "_pagina_em_execucao"
@@ -72,7 +73,8 @@ def executar_pagina(pagina: Any) -> None:
     """Roda a página de ``st.navigation`` contida; o aviso sai no fim mesmo com ``st.stop()``."""
     st.session_state[CHAVE_PAGINA] = str(getattr(pagina, "title", "") or "")
     try:
-        with secao_protegida():
+        # O catálogo de perfis é lido uma vez por execução da página (ver catalogo_estavel).
+        with secao_protegida(), section_catalog.catalogo_estavel():
             pagina.run()
     finally:
         aviso_final()
