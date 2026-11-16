@@ -428,6 +428,29 @@ with st.container(border=True), secao_protegida("3. Placa"):
         persist_state="session",
         help=AJUDA["e_n"],
     )
+    colunas = st.columns(3)
+    lx_placa = colunas[0].number_input(
+        "Comprimento ℓx (mm) — 0 = o mínimo",
+        0.0,
+        5000.0,
+        0.0,
+        10.0,
+        format="%.0f",
+        key="pb_lx",
+        persist_state="session",
+        help=AJUDA["lx_placa"],
+    )
+    ly_placa = colunas[1].number_input(
+        "Largura ℓy (mm) — 0 = o mínimo",
+        0.0,
+        5000.0,
+        0.0,
+        10.0,
+        format="%.0f",
+        key="pb_ly",
+        persist_state="session",
+        help=AJUDA["ly_placa"],
+    )
 
 with st.container(border=True), secao_protegida("4. Concreto e bloco"):
     st.subheader("4. Concreto e bloco", help=AJUDA["sec_concreto"])
@@ -837,6 +860,8 @@ entrada = bp.EntradaBase(
     cisalhamento_penetracao_total=bool(penetracao_lug),
     perna_arruela_mm=float(perna_arruela),
     bloco_z_mm=float(bloco_z),
+    lx_mm=float(lx_placa),
+    ly_mm=float(ly_placa),
 )
 try:
     resultado = bp.calcular(entrada)
@@ -1004,9 +1029,23 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
     st.subheader("Base mais leve que atende", help=AJUDA["res_mais_leve"])
     leve = bp.base_mais_leve(entrada)
     if leve is None:
+        fora_da_busca = [
+            texto_markdown(v.nome)
+            for v in resultado.verificacoes
+            if v.status == "NÃO OK"
+            and not v.nome.startswith(("Placa de base: espessura", "Chumbador: diâmetro"))
+            and not bp.da_solda_do_pilar(v)
+        ]
         st.warning(
-            "Nenhuma combinação de chumbador e espessura de chapa atende: o que reprova não "
-            "depende da placa nem do chumbador — veja acima a cortante, o concreto ou a geometria.",
+            "Nenhuma combinação de chumbador e espessura de chapa atende"
+            + (
+                ", porque reprova também o que não muda com a placa nem com o chumbador: "
+                + "; ".join(fora_da_busca)
+                + ". Resolva isso primeiro (por exemplo, a cortante com placa de cisalhamento ou "
+                "arruelas soldadas)."
+                if fora_da_busca
+                else ' até 100 mm de chapa e 2" de chumbador.'
+            ),
             icon=":material/warning:",
         )
     else:

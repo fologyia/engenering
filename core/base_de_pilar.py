@@ -348,6 +348,10 @@ class EntradaBase:
     )
     perna_arruela_mm: float = 0.0
     bloco_z_mm: float = 0.0  # altura do bloco h_a (0 = a mínima): cortante no concreto
+    # tamanho da placa informado (0 = o mínimo pela 6.7.2.1); maior que o mínimo, os chumbadores
+    # ficam a a₁ da borda em ℓx (tipo 1) e centrados em ℓy
+    lx_mm: float = 0.0
+    ly_mm: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -820,7 +824,10 @@ def _validar(e: EntradaBase) -> None:
         raise BaseInvalida(
             "Espessura da placa, f_ck e coeficiente de atrito precisam ser positivos."
         )
-    medidas = (e.a1_mm, e.a1_x_mm, e.a2_mm, e.bloco_x_mm, e.bloco_y_mm, e.e_n_mm, e.t_arruela_mm)
+    medidas = (
+        e.a1_mm, e.a1_x_mm, e.a2_mm, e.bloco_x_mm, e.bloco_y_mm, e.e_n_mm, e.t_arruela_mm,
+        e.lx_mm, e.ly_mm,
+    )  # fmt: skip
     if min(*medidas, e.e_h_mm, e.chapa_na_ponta_mm, e.h_ef_mm, e.n_rd_fabricante_kN) < 0:
         raise BaseInvalida("Medidas da base não podem ser negativas.")
     if e.v_sd_kN < 0:
@@ -863,6 +870,20 @@ def geometria(e: EntradaBase) -> Geometria:
         ly = (0.5 * n_b - 1) * a2 + 2 * a1
     else:  # duas fileiras em y, a₂ entre elas
         ly = a2 + 2 * a1
+    if e.lx_mm:
+        if e.lx_mm < lx - 1e-6:
+            raise BaseInvalida(
+                f"A placa em ℓx precisa de ao menos {lx:.0f} mm com este perfil, a₁ e chumbador "
+                "(d + 4·a₁): aumente ℓx ou deixe 0."
+            )
+        lx = e.lx_mm
+    if e.ly_mm:
+        if e.ly_mm < ly - 1e-6:
+            raise BaseInvalida(
+                f"A placa em ℓy precisa de ao menos {ly:.0f} mm com estes a₁ e a₂: aumente ℓy ou "
+                "deixe 0."
+            )
+        ly = e.ly_mm
     l0: float | None = {
         TIPO_1: None,
         TIPO_2: (0.5 * n_b - 1) * a2 + 1.75 * (a2 - t_w),
@@ -1081,6 +1102,77 @@ def _area_e_centro(poligono: list[Ponto]) -> tuple[float, float, float]:
     return dobro / 2, cx / (3 * dobro), cy / (3 * dobro)
 
 
+def _intervalo_na_reta(
+    poligono: list[Ponto], eixo: int, valor: float
+) -> tuple[float, float] | None:
+    """O trecho do polígono convexo sobre a reta coordenada[1 − eixo] = valor, em coordenada[eixo]."""
+    outro = 1 - eixo
+    pontos: list[float] = []
+    for k, a in enumerate(poligono):
+        b = poligono[(k + 1) % len(poligono)]
+        if (a[outro] - valor) * (b[outro] - valor) <= 0 and a[outro] != b[outro]:
+            t = (valor - a[outro]) / (b[outro] - a[outro])
+            pontos.append(a[eixo] + t * (b[eixo] - a[eixo]))
+    return (min(pontos), max(pontos)) if pontos else None
+
+
+FATIAS_DA_ZONA = 240
+
+
+def espessura_pela_zona(
+    g: Geometria, zona: tuple[Ponto, ...], sigma: float, fy_d: float
+) -> tuple[float, str]:
+    """t_p pela pressão σ na zona comprimida da flexão oblíqua, linha a linha.
+
+    Para cada linha de engaste da 6.7 (x = ±0,95·d/2 para m, y = ±0,80·b_f/2 para n), o momento por
+    unidade de largura da pressão além dela é calculado em fatias, q = σ·∫(s − linha)·ds, e tirado
+    na média numa janela da largura do balanço (a placa reparte a carga de borda); t =
+    √(4·q/(f_y/γ_a1)). Com a zona numa faixa da largura toda, é exatamente a fórmula da 6.7 (m, n
+    ou p = √(ℓ_c·(2m − ℓ_c))); com um canto só comprimido, o canto não pede a placa toda.
+    """
+    if not zona:
+        return 0.0, "sem zona comprimida"
+    poligono = list(zona)
+    pior, texto = 0.0, ""
+    casos = (
+        (0, 0.95 * g.d / 2, g.lx / 2, g.ly, "m"),
+        (1, 0.80 * g.b_f / 2, g.ly / 2, g.lx, "n"),
+    )
+    for eixo, meio, borda, lado, nome in casos:
+        balanco = borda - meio
+        if balanco <= 0:
+            continue
+        passo = lado / FATIAS_DA_ZONA
+        for sinal in (1.0, -1.0):
+            q: list[float] = []
+            for k in range(FATIAS_DA_ZONA):
+                valor = -lado / 2 + (k + 0.5) * passo
+                trecho = _intervalo_na_reta(poligono, eixo, valor)
+                momento = 0.0
+                if trecho is not None:
+                    perto, longe = sorted(sinal * v - meio for v in trecho)
+                    perto, longe = max(perto, 0.0), max(longe, 0.0)
+                    momento = sigma * (longe**2 - perto**2) / 2
+                q.append(momento)
+            janela = max(1, min(FATIAS_DA_ZONA, round(balanco / passo)))
+            soma = sum(q[:janela])
+            maior = soma
+            for k in range(janela, FATIAS_DA_ZONA):
+                soma += q[k] - q[k - janela]
+                maior = max(maior, soma)
+            q_medio = maior / janela
+            t = math.sqrt(4 * q_medio / fy_d)
+            if t > pior:
+                pior = t
+                texto = (
+                    f"balanço {nome} = {_n(balanco, 1)} mm: momento da pressão σ_c,Rd além da linha "
+                    f"de engaste, por fatias, na média de uma janela de largura {nome} = "
+                    f"{_n(min(balanco, lado), 0)} mm: q = {_n(q_medio / 1e3, 2)} kN·m/m, "
+                    f"t = √(4·q/(f_y/γ_a1)) = {_n(t, 1)} mm"
+                )
+    return pior, texto or "a zona comprimida não passa das linhas de engaste"
+
+
 def _bissecao(funcao: Any, a: float, b: float, vezes: int) -> float:
     """O ponto de [a, b] onde ``funcao`` (falsa em a, verdadeira em b) muda."""
     for _ in range(vezes):
@@ -1242,6 +1334,26 @@ def flexao_obliqua(
         return FlexaoObliqua(caso, (), sigma_c_rd, 0.0, sem_chumbador, False)
     zona, forcas, area = solucao
     return FlexaoObliqua(caso, tuple(zona), sigma_c_rd, area, forcas, True)
+
+
+def balanco_sob_pressao(g: Geometria, l_c: float, caso: str, n0_lam: float) -> float:
+    """ℓ_max da placa com σ_c,Rd só no trecho ℓ_c (C3 e T3).
+
+    Com ℓ_c ≥ balanço, o balanço inteiro; com ℓ_c menor, p = √(ℓ_c·(2·balanço − ℓ_c)) — a 6.7 faz
+    isso no m, e o programa faz o mesmo no n (AISC Design Guide 1, 3.3: a fórmula de Y < m vale
+    também para n). Com o n inteiro sob σ_c,Rd, uma faixa comprimida de 1 mm exigiria a mesma
+    placa que a base toda comprimida: t_p não cairia com a carga.
+    """
+
+    def reduzido(balanco: float) -> float:
+        if l_c >= balanco:
+            return balanco
+        return math.sqrt(max(l_c * (2 * balanco - l_c), 0.0))
+
+    l_max = max(reduzido(g.m), reduzido(g.n))
+    if caso == "C3" and l_c >= g.m:
+        l_max = max(l_max, n0_lam)
+    return l_max
 
 
 def _ell_c(g: Geometria, sigma_c_rd: float, momento_equivalente: float) -> float | None:
@@ -2121,7 +2233,9 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             g.ly >= g.b_f + 25.0 - 1e-9,
             f"{REF} 6.7.2.1",
             (
-                f"ℓy = (0,5·n_b − 1)·a₂ + 2·a₁ = (0,5·{n_b} − 1)·{_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
+                "ℓy informada"
+                if e.ly_mm
+                else f"ℓy = (0,5·n_b − 1)·a₂ + 2·a₁ = (0,5·{n_b} − 1)·{_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
                 if da_norma
                 else f"ℓy = a₂ + 2·a₁ = {_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
             )
@@ -2229,22 +2343,17 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 )
             )
             if obliqua.equilibrio:
-                # ℓ_c: a maior profundidade da zona em ℓx, a faixa que manda no balanço m (como na
-                # 6.7, p quando ℓ_c < m); o balanço n fica inteiro (a favor da segurança)
+                # ℓ_c: a maior profundidade da zona em ℓx, a faixa sob pressão
                 profundidade = g.lx / 2 - min(x for x, _ in obliqua.zona)
-                if profundidade >= g.m:
-                    l_max = max(g.m, g.n, n0_lam) if caso == "C3" else max(g.m, g.n)
-                else:
-                    l_max = max(math.sqrt(profundidade * (2 * g.m - profundidade)), g.n)
-                t_min1 = l_max * math.sqrt(2 * sigma_rd / fy_d)
+                t_min1, texto_zona_t = espessura_pela_zona(g, obliqua.zona, sigma_rd, fy_d)
+                if caso == "C3" and profundidade >= g.m:  # o λ·n₀ da 6.7 (entre as mesas)
+                    t_min1 = max(t_min1, n0_lam * math.sqrt(2 * sigma_rd / fy_d))
                 t_min2, texto_tracao = _espessura_pela_tracao(g, obliqua.forcas, fy_d)
                 t_min = max(t_min1, t_min2)
                 v_atrito = min(e.mu * sigma_rd * obliqua.area / c.a2, tau_rd * g.lx * g.ly)
                 texto_t = (
-                    f"maior entre t_p,min1 = ℓ_max·√(2·σ_c,Rd/(f_y/γ_a1)) = {_n(t_min1, 1)} mm "
-                    f"(ℓ_max = {_n(l_max, 1)} mm; ℓ_c = {_n(profundidade, 1)} mm, a maior "
-                    f"profundidade da zona em ℓx, e p = √(ℓ_c·(2m − ℓ_c)) se ℓ_c < m) e a flexão "
-                    f"pela tração ({texto_tracao}); {texto_zona}"
+                    f"maior entre a pressão na zona comprimida, t_p,min1 = {_n(t_min1, 1)} mm "
+                    f"({texto_zona_t}), e a flexão pela tração ({texto_tracao}); {texto_zona}"
                 )
             else:
                 texto_t = "sem solução: a pressão de contato não equilibra os dois momentos"
@@ -2288,18 +2397,14 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             l_c, forcas_gerais = solucao
             forcas = list(forcas_gerais)
             f_t = max(forcas)
-            p = math.sqrt(max(l_c * (2 * g.m - l_c), 0.0))
-            if l_c >= g.m:
-                l_max = max(g.m, g.n, n0_lam) if caso == "C3" else max(g.m, g.n)
-            else:
-                l_max = max(p, g.n)
+            l_max = balanco_sob_pressao(g, l_c, caso, n0_lam)
             t_min1 = l_max * math.sqrt(2 * sigma_rd / fy_d)
             t_min2, texto_tracao = _espessura_pela_tracao(g, forcas_gerais, fy_d)
             t_min = max(t_min1, t_min2)
             v_atrito = min(e.mu * sigma_rd * l_c * g.ly / c.a2, tau_rd * g.lx * g.ly)
             texto_t = (
                 f"maior entre t_p,min1 = ℓ_max·√(2·σ_c,Rd/(f_y/γ_a1)) = {_n(t_min1, 1)} mm "
-                f"(ℓ_max = {_n(l_max, 1)} mm) e a flexão pela tração ({texto_tracao}); "
+                f"(ℓ_max = {_n(l_max, 1)} mm; com ℓ_c menor que m ou n, o balanço vira √(ℓ_c·(2·balanço − ℓ_c)), AISC DG1 3.3) e a flexão pela tração ({texto_tracao}); "
                 f"ℓ_c = {_n(l_c, 1)} mm"
             )
         else:
@@ -2325,18 +2430,14 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             f_t = max(f_t, 0.0)
             for i in lado_tracionado:
                 forcas[i] = f_t
-            p = math.sqrt(max(l_c * (2 * g.m - l_c), 0.0))
-            if l_c >= g.m:
-                l_max = max(g.m, g.n, n0_lam) if caso == "C3" else max(g.m, g.n)
-            else:
-                l_max = max(p, g.n)
+            l_max = balanco_sob_pressao(g, l_c, caso, n0_lam)
             t_min1 = l_max * math.sqrt(2 * sigma_rd / fy_d)
             t_min2 = math.sqrt(2 * n_b * f_t * (g.m - g.a1) / (g.ly * fy_d)) if g.m > g.a1 else 0.0
             t_min = max(t_min1, t_min2)
             v_atrito = min(e.mu * sigma_rd * l_c * g.ly / c.a2, tau_rd * g.lx * g.ly)
             texto_t = (
                 f"maior entre t_p,min1 = ℓ_max·√(2·σ_c,Rd/(f_y/γ_a1)) = {_n(t_min1, 1)} mm "
-                f"(ℓ_max = {_n(l_max, 1)} mm) e t_p,min2 = √(2·n_b·F_t,Sd·(m − a₁)/(ℓy·f_y/γ_a1)) "
+                f"(ℓ_max = {_n(l_max, 1)} mm; com ℓ_c menor que m ou n, o balanço vira √(ℓ_c·(2·balanço − ℓ_c)), AISC DG1 3.3) e t_p,min2 = √(2·n_b·F_t,Sd·(m − a₁)/(ℓy·f_y/γ_a1)) "
                 f"= {_n(t_min2, 1)} mm; ℓ_c = {_n(l_c, 1)} mm"
             )
         else:

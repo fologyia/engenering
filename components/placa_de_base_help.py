@@ -336,6 +336,14 @@ AJUDA: dict[str, str] = {
         "Perna do filete em volta de cada arruela soldada na placa (mm). Com 0, o programa "
         "escolhe a menor que passa, sem passar da espessura da arruela."
     ),
+    "lx_placa": (
+        "Comprimento da placa na direção da altura do pilar (mm). Com 0, o mínimo da norma: d + 4·a₁. "
+        "Maior que isso, os chumbadores externos vão para perto da borda, a a₁ dela."
+    ),
+    "ly_placa": (
+        "Largura da placa na direção das mesas (mm). Com 0, o mínimo pelos a₁ e a₂. Maior que isso, "
+        "os chumbadores ficam centrados e sobra borda dos dois lados."
+    ),
     "res_combinacoes": (
         "Cada combinação com o caso dela (C1 a T3), o status, o aproveitamento máximo e a "
         "verificação que manda nela. A base desenhada e o memorial seguem a combinação que governa."

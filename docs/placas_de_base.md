@@ -205,6 +205,21 @@ de diâmetro por fórmula; a solda do pilar fica fora da `base_mais_leve` (não 
 **Testes que mudaram:** os que usavam M = 150 kN·m no W 250 × 32,7 (≈ Z_x·f_y = 148 kN·m) passaram
 a reprovar na solda do pilar — de verdade; eles agora conferem o resto sem a solda.
 
+## Espessura com faixa comprimida fina e tamanho da placa (16/11/2026)
+
+**Erro achado pelo usuário:** base de esforços pequenos (W 200, 4 × Ø 3/4", N = −5,1 kN, M = 1,9
+kN·m) saía com t_p,min = 30,8 mm em T3. A causa era t_p,min1 = ℓ_max·√(2σ_c,Rd/f_yd) com ℓ_max = n
+inteiro, mesmo com ℓ_c = 0,9 mm: a placa nunca caía com a carga. Agora `balanco_sob_pressao` reduz
+m **e n** por √(ℓ_c·(2·balanço − ℓ_c)) (a 6.7 faz no m; AISC DG1 3.3 manda fazer também no n) → 5,5 mm
+(governa a tração). Na flexão oblíqua, `espessura_pela_zona`: momento da pressão além de cada linha de
+engaste (x = ±0,95d/2, y = ±0,80b_f/2) por fatias, média numa janela da largura do balanço; numa faixa
+da largura toda é a fórmula da 6.7; com canto comprimido o canto não pede a placa toda (9,9 mm no
+caso do usuário com M_y = 1 kN·m). O diagnóstico que veio com o relato (m = a₁ + a₂, b_eff = d_b) não
+era o que o código fazia: o termo da tração já usava m − a₁ e ℓy.
+
+**ℓx e ℓy informados** (`lx_mm`, `ly_mm`; 0 = o mínimo d + 4·a₁ e os a₁/a₂): menor que o mínimo é
+erro; maior, os externos ficam a a₁ da borda em ℓx e os chumbadores centrados em ℓy.
+
 ## Exemplo (do guia)
 
 W 250 × 32,7, tipo 1, 4 chumbadores Ø 1", placa de 25 mm ASTM A36, f_ck = 25 MPa, A₂/A₁ = 1,

@@ -322,3 +322,49 @@ def test_ruptura_a_frente_da_placa_de_cisalhamento():
 def test_cortante_no_concreto_so_com_a_ancoragem_verificada():
     r = bp.calcular(replace(ARRUELAS_ACI, verificar_concreto=False))
     assert not _tem(r, "Cortante no concreto")
+
+
+# ============================================================================ espessura com ℓ_c pequeno
+#: A base do usuário (16/11/2026): esforços pequenos, T3 com uma faixa comprimida de ~1 mm.
+PEQUENA = replace(
+    PADRAO, perfil="W 200 x 22,5", chumbador='3/4"', a1_mm=45.0, a2_mm=160.0, t_placa_mm=16.0,
+    n_sd_kN=-5.1, m_sd_kNm=1.9, v_sd_kN=4.8, cortante=bp.CORTANTE_ARRUELAS,
+)  # fmt: skip
+
+
+def test_t3_com_faixa_fina_nao_pede_placa_grossa():
+    """Antes: t_p,min = n·√(2σ_c,Rd/f_yd) = 30,8 mm com ℓ_c = 0,9 mm (o n inteiro sob σ_c,Rd)."""
+    r = bp.calcular(PEQUENA)
+    g = r.geometria
+    assert r.caso == "T3" and r.l_c is not None and r.l_c < 2.0
+    fy_d = 250 / 1.10
+    sigma = 25 * 0.85 / 1.4
+    p_n = math.sqrt(r.l_c * (2 * g.n - r.l_c))
+    p_m = math.sqrt(r.l_c * (2 * g.m - r.l_c))
+    t1 = max(p_m, p_n) * math.sqrt(2 * sigma / fy_d)
+    t2 = math.sqrt(2 * 4 * r.f_t_sd * (g.m - g.a1) / (g.ly * fy_d))
+    assert r.t_p_min == pytest.approx(max(t1, t2))
+    assert r.t_p_min < 8.0 and _linha(r, "Placa de base: espessura").status == "OK"
+
+
+def test_obliqua_com_canto_comprimido_e_continua_com_a_faixa():
+    canto = bp.calcular(replace(PEQUENA, m_sd_y_kNm=1.0))
+    assert canto.zona_comprimida and canto.t_p_min < 16.0
+    # faixa da largura toda (M_y → 0): a conta por fatias dá a da 6.7
+    faixa = bp.calcular(replace(PADRAO, n_chumbadores=6, m_sd_kNm=100, t_placa_mm=38))
+    quase = bp.calcular(replace(PADRAO, n_chumbadores=6, m_sd_kNm=100, m_sd_y_kNm=0.01, t_placa_mm=38))  # fmt: skip
+    assert quase.t_p_min == pytest.approx(faixa.t_p_min, rel=0.02)
+
+
+def test_tamanho_da_placa_informado():
+    minimo = bp.calcular(PADRAO).geometria
+    r = bp.calcular(replace(PADRAO, lx_mm=minimo.lx + 100, ly_mm=minimo.ly + 60))
+    g = r.geometria
+    assert (g.lx, g.ly) == (minimo.lx + 100, minimo.ly + 60)
+    assert max(x for x, _ in g.posicoes) == pytest.approx(g.lx / 2 - g.a1)  # a₁ da borda
+    assert max(y for _, y in g.posicoes) == pytest.approx(minimo.ly / 2 - minimo.a1)  # centrados
+    assert g.m > minimo.m
+    with pytest.raises(bp.BaseInvalida, match="ℓx"):
+        bp.calcular(replace(PADRAO, lx_mm=minimo.lx - 10))
+    with pytest.raises(bp.BaseInvalida, match="ℓy"):
+        bp.calcular(replace(PADRAO, ly_mm=minimo.ly - 10))
