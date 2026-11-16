@@ -134,6 +134,10 @@ def test_caso_sugerido_pelo_nome_do_estudo(estudo, caso):
     [
         ("Viga-2(Canal c C8X13.75(1)[2])", 'U 8" x 20,50'),
         ("Viga-23(Ângulo l L2.5X2.5X0.25(1)[5])", 'L 2 1/2" × 1/4"'),
+        ('Viga-2(Perfil l de abas iguais L 3"X0,25"(1)[7])', 'L 3" × 1/4"'),
+        ('Viga-5(Cantoneira L 2 1/2" x 5/16")', 'L 2 1/2" × 5/16"'),
+        ('Viga-6(L 3" x 3" x 3/8"(1)[2])', 'L 3" × 3/8"'),
+        ('Viga-7(L 3"X0,27")', None),
         ("Beam-1(W8X31)", "W 200 x 46,1 (H)"),
         ("Pilar W 250 x 32.7", "W 250 x 32,7"),
         ("Viga-1(Aparar/Estender12[1])", None),

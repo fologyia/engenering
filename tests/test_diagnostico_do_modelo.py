@@ -228,3 +228,73 @@ def test_painel_na_pagina_trata_sozinho_os_ventos_com_o_nome_trocado(banco_com_p
     salvo = em.esforcos_do_projeto(obter_projeto_ativo())
     assert salvo.casos["W270"].reacoes.modelo == pytest.approx(REACOES["W270"])
     assert dm.diagnosticar(salvo, plano()).tudo_certo
+
+
+# ------------------------------------------------------------------ apoios fora dos pilares
+def _apoios_com_pe_de_escada(
+    reacoes: dict[str, tuple[float, float, float]], escada: float = 0.3
+) -> am.ApoiosDoModelo:
+    """Os dois pilares (cada um com metade do que os pilares levam) e um pé de escada."""
+    casos = {}
+    for codigo, r in reacoes.items():
+        pilar = tuple(1000 * v * (1 - escada) / 2 for v in r)  # o arquivo é em N
+        casos[codigo] = am.ApoiosDoCaso(
+            codigo,
+            "",
+            "",
+            (
+                am.ReacaoNoNo(1, (0.0, 0.0, 0.0), pilar, (0, 0, 0)),
+                am.ReacaoNoNo(2, (2.0, 0.0, 0.0), pilar, (0, 0, 0)),
+                am.ReacaoNoNo(3, (4.0, 0.0, 1.0), tuple(1000 * v * escada for v in r), (0, 0, 0)),
+            ),
+        )
+    return am.ApoiosDoModelo(casos=casos)
+
+
+def _dados_com_pe_de_escada(escada: float = 0.3, **troca: str) -> em.EsforcosDoModelo:
+    """Os pilares levam só a parte deles; ``troca``: caso cujas forças são as de outro caso."""
+    base = dados()
+    casos = {}
+    for codigo, caso in base.casos.items():
+        r = REACOES[troca.get(codigo, codigo)]
+        membros = {
+            p: _pontos(r[1] * (1 - escada) / 2, 1, (r[0] + r[2]) * (1 - escada) / 2)
+            for p in PILARES
+        }
+        casos[codigo] = em.CasoImportado(
+            codigo, caso.estudo, caso.arquivo, "", "", membros, caso.reacoes, caso.arquivo_reacoes
+        )
+    return em.EsforcosDoModelo(casos=casos, membros=base.membros, eixo_vertical="Y")
+
+
+def test_pe_de_escada_nao_vira_forcas_de_outro_caso():
+    """O modelo do usuário (16/11): cinco apoios e só dois pilares. A soma das bases dos pilares
+    não é a reação, e os arquivos estão certos: cada pilar bate com o apoio dele."""
+    d = dm.diagnosticar(_dados_com_pe_de_escada(), plano(), _apoios_com_pe_de_escada(REACOES))
+    assert not [a for a in d.achados if "forças" in a.titulo], _titulos(d)
+    assert any("batem com a reação no pé dele em PP, SC" in c for c in d.certos)
+
+
+def test_pe_de_escada_ainda_acha_o_arquivo_de_outro_caso():
+    d = dm.diagnosticar(
+        _dados_com_pe_de_escada(SC="PP"), plano(), _apoios_com_pe_de_escada(REACOES)
+    )
+    achado = next(a for a in d.achados if a.titulo.startswith("SC:"))
+    assert achado.nivel == dm.NIVEL_ERRO and achado.titulo == "SC: as forças são as do PP"
+
+
+def test_pilar_marcado_que_nao_desce_ate_um_apoio():
+    """Nenhum pilar marcado tem a reação de um apoio: o achado diz as duas causas."""
+    apoios = _apoios_com_pe_de_escada(REACOES, escada=0.6)  # os pés levam outra parte
+    d = dm.diagnosticar(_dados_com_pe_de_escada(), plano(), apoios)
+    achado = next(a for a in d.achados if a.titulo == "PP: as forças não são do caso PP")
+    assert "não descem até um apoio" in achado.problema
+
+
+def test_sem_os_apoios_da_macro_a_soma_que_nao_fecha_e_so_atencao():
+    """Sem prova (nem apoios, nem a reação de outro caso), o programa não acusa o arquivo."""
+    d = dm.diagnosticar(_dados_com_pe_de_escada(), plano())
+    achado = next(a for a in d.achados if a.titulo.startswith("PP:"))
+    assert achado.nivel == dm.NIVEL_ATENCAO
+    assert achado.titulo == "PP: a soma das bases dos pilares não é a reação"
+    assert "pé de escada" in achado.problema and "-apoios.csv" in achado.passos[0]

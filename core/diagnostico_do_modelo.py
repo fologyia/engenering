@@ -264,6 +264,31 @@ def _desvio(
     return max(abs(x - y) for x, y in zip(a, b, strict=True)), _tolerancia(*a, *b)
 
 
+def _pilares_com_apoio(
+    bases: Mapping[str, tuple[float, float]], pes: Mapping[str, tuple[float, float]]
+) -> tuple[int, int] | None:
+    """Quando os apoios não são só os pés dos pilares marcados (pé de escada, mão-francesa, ou
+    pilar marcado que não desce até o chão): quantos pilares com força têm um apoio só deles
+    com a mesma compressão e a mesma horizontal, e quantos pilares com força há. ``None`` com
+    menos de dois pilares com força (não dá para dizer nada)."""
+    livres = dict(pes)
+    com_forca = casados = 0
+    for n, h in sorted(bases.values(), key=lambda v: -math.hypot(*v)):
+        if math.hypot(n, h) <= 5 * TOLERANCIA_ABSOLUTA_KN:
+            continue
+        com_forca += 1
+        tolerancia = _tolerancia(n, h)
+        iguais = [
+            apoio
+            for apoio, (n_pe, h_pe) in livres.items()
+            if abs(n - n_pe) <= tolerancia and abs(h - h_pe) <= tolerancia
+        ]
+        if iguais:
+            casados += 1
+            del livres[min(iguais, key=lambda a: abs(n - livres[a][0]) + abs(h - livres[a][1]))]
+    return (casados, com_forca) if com_forca >= 2 else None
+
+
 def _assinatura_das_forcas(caso: em.CasoImportado) -> tuple[Any, ...] | None:
     """Os números do arquivo de forças (arredondados); ``None`` se não há força nenhuma."""
     pontos_do_caso = [p for pontos in caso.membros.values() for p in pontos]
@@ -414,7 +439,31 @@ def _forcas_de_cada_caso(
         if not bases.completas or vertical is None or codigo not in bases.por_caso:
             return None
         soma = sum(n for n, _ in bases.por_caso[codigo].values())
-        return abs(soma - vertical) <= max(0.02 * abs(vertical), 0.1)
+        if abs(soma - vertical) <= max(0.02 * abs(vertical), 0.1):
+            return True
+        # A soma das bases só tem de dar a reação quando todo apoio é pé de pilar marcado. Com
+        # os apoios da macro, quem diz é a reação de cada apoio: os pilares batem com os apoios
+        # deles e o resto da carga desce por outro apoio (pé de escada, mão-francesa).
+        if pes is not None and codigo in pes.por_caso and codigo not in pes.de_outra_rodada:
+            proprio = pes_batem(codigo, codigo)
+            if proprio is True or (proprio is None and outros_apoios(codigo)):
+                return None
+        return False
+
+    def outros_apoios(codigo: str) -> bool:
+        """O número de apoios do caso não é o de pilares marcados."""
+        return (
+            pes is not None
+            and codigo in pes.por_caso
+            and len(pes.por_caso[codigo]) != len(bases.por_caso.get(codigo, {}))
+        )
+
+    def nenhum_pilar_no_apoio(codigo: str) -> bool:
+        """Com os apoios da macro, nenhum pilar marcado tem na base a reação de um apoio."""
+        if pes is None or codigo not in pes.por_caso or codigo in pes.de_outra_rodada:
+            return False
+        casados = _pilares_com_apoio(bases.por_caso.get(codigo, {}), pes.por_caso[codigo])
+        return casados is not None and casados[0] == 0
 
     def pes_batem(codigo: str, de: str) -> bool | None:
         if pes is None or de in pes.de_outra_rodada or codigo not in bases.por_caso:
@@ -422,7 +471,19 @@ def _forcas_de_cada_caso(
         if de not in pes.por_caso:
             return None
         comparado = _desvio(bases.por_caso[codigo], pes.por_caso[de], pes)
-        return None if comparado is None else comparado[0] <= comparado[1]
+        if comparado is not None:
+            return comparado[0] <= comparado[1]
+        if len(bases.por_caso[codigo]) == len(pes.por_caso[de]):
+            return None
+        # Apoios que não são pé de pilar marcado (ou pilar marcado que não chega ao chão).
+        casados = _pilares_com_apoio(bases.por_caso[codigo], pes.por_caso[de])
+        if casados is None:
+            return None
+        if casados[0] >= 2 and (
+            casados[0] == casados[1] or len(bases.por_caso[codigo]) > len(pes.por_caso[de])
+        ):
+            return True
+        return False if casados[0] == 0 else None
 
     apoios_fora_dos_pilares = pes is not None and any(
         len(v) > len(bases.por_caso.get(c, {})) for c, v in pes.por_caso.items()
@@ -527,8 +588,39 @@ def _forcas_de_cada_caso(
                     " A soma zero na vertical é a de um caso de vento: o arquivo foi salvo com um "
                     "vento carregado."
                 )
+            elif nenhum_pilar_no_apoio(codigo):
+                motivo = (
+                    " Nenhum pilar marcado tem na base a reação de um apoio do arquivo de apoios "
+                    "da macro: ou o arquivo de forças é de outro resultado, ou as barras marcadas "
+                    "como Pilar na tabela das barras não descem até um apoio."
+                )
             else:
                 motivo = " O arquivo de forças e o de reações não são do mesmo resultado."
+            # Sem os apoios da macro e sem a pista de outro caso, a diferença pode ser só um
+            # apoio que não é pé de pilar marcado: não dá para afirmar que o arquivo está errado.
+            sem_prova = pes is None and not estudo_base and not outros
+            if sem_prova:
+                achados.append(
+                    Achado(
+                        NIVEL_ATENCAO,
+                        f"{codigo}: a soma das bases dos pilares não é a reação",
+                        f"Os pilares do arquivo de forças de {codigo} levam {_n(soma)} kN à "
+                        f"fundação, e a reação de {codigo} é {_n(vertical)} kN. Se o modelo tem "
+                        "apoio que não é pé de pilar marcado (pé de escada, mão-francesa, fixação "
+                        "numa viga), a diferença desce por ele e está certo. Se todos os apoios "
+                        "são pés de pilar, o arquivo de forças e o de reações não são do mesmo "
+                        "resultado.",
+                        (
+                            "Envie os arquivos -apoios.csv da macro (passo 1 desta página): com "
+                            "eles o programa confere a reação apoio por apoio.",
+                            "Na tabela das barras (passo 4), confira se todas as barras em pé "
+                            "que descem até um apoio estão como Pilar.",
+                            *passos(codigo),
+                        ),
+                        detalhe={"caso": codigo, "soma": soma, "reacao": vertical, "de": outros},
+                    )
+                )
+                continue
             achados.append(
                 Achado(
                     NIVEL_ERRO,

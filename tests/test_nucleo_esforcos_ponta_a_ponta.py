@@ -323,8 +323,14 @@ def test_forcas_da_sobrecarga_de_outro_caso_pela_vertical():
         forcas={"SC": "PP"}, casos=("SC", "W0", "W180"), com_apoios=False
     )
     d = diagnostico(dados, apoios, geometria)
-    achado = _achado(d, "SC: as forças não são do caso SC")
-    assert "levam 1,99 kN" in achado.problema
+    # Sem os apoios da macro e sem o PP importado não há prova (pode haver apoio fora dos
+    # pilares marcados): o programa avisa, sem acusar o arquivo.
+    achado = _achado(d, "SC: a soma das bases dos pilares não é a reação")
+    assert achado.nivel == dm.NIVEL_ATENCAO and "levam 1,99 kN" in achado.problema
+    # Com o PP importado há prova (os mesmos números nos dois arquivos): aí é erro.
+    dados, apoios, geometria = montar(forcas={"SC": "PP"}, com_apoios=False)
+    achado = _achado(diagnostico(dados, apoios, geometria), "SC: as forças são as do PP")
+    assert achado.nivel == dm.NIVEL_ERRO
 
 
 def test_cortante_das_bases_menor_que_a_reacao_do_vento():
