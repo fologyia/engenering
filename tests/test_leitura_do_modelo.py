@@ -1235,3 +1235,65 @@ def test_esqueleto_de_outro_modelo_nao_e_usado():
     achados = ld.diagnosticar(dados, plano_do_portico(), outro)
     assert achados[0].titulo == "Esqueleto de outro modelo" and achados[0].nivel == pc.NIVEL_ERRO
     assert not any(a.titulo == "Barras fora do esqueleto" for a in achados)
+
+
+def _esqueleto_com_desenho_pesado() -> ld.GeometriaDoModelo:
+    """Biblioteca do SolidWorks com o U 8" x 17,10 desenhado 6 % mais pesado que o catálogo
+    (23,1 cm² em vez de 21,8): uma barra reta, uma cortada (a caixa cresce na aba) e um toco."""
+    cabecalho = (
+        "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);X2 (mm);Y2 (mm);Z2 (mm);"
+        "COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)"
+    )
+    item = '"U 8"" x 17,10<1>";"U 8"" x 17,10"'
+    linhas = [
+        'MACRO;"Mecanica Toolkit - exportar_lista_de_corte v4"',
+        cabecalho,
+        f'"Perfil u U 8"" X 17,10(1)[1]";{item};BARRA;0,0;0,0;0,0;1800,0;0,0;0,0;1800,0;203,2;57,4;4160,6',
+        f'"Perfil u U 8"" X 17,10(1)[2]";{item};BARRA;0,0;0,0;500,0;1244,7;0,0;500,0;1244,7;203,2;63,1;2866,1',
+        f'"Perfil u U 8"" X 17,10(1)[3]";{item};BARRA;0,0;0,0;900,0;0,0;216,8;900,0;216,8;99,6;59,0;158,0',
+    ]
+    return ld.ler_esqueleto(chr(10).join(linhas).encode("cp1252"), "pesado_esqueleto.csv")
+
+
+def test_desenho_mais_pesado_que_o_catalogo_fica_com_o_perfil_do_nome():
+    """O modelo do usuário (16/11): por 6 % de área a barra cortada virava U 8" x 20,50 e o toco
+    de 0,2 m, U 4" x 8,04. O perfil do nome é o mais perto da área: fica ele."""
+    g = _esqueleto_com_desenho_pesado()
+    perfis = ld.perfis_do_esqueleto(g)
+    assert {p for p, _ in perfis.values()} == {'U 8" x 17,10'}
+    origens = {nome[-3:]: origem for nome, (_, origem) in perfis.items()}
+    assert "não confere" not in origens["[1]"] and "não confere" not in origens["[2]"]
+    assert "peça curta, a área não diz o perfil" in origens["[3]"]
+
+
+def test_cantoneira_desenhada_mais_grossa_fica_com_o_perfil_do_nome():
+    """A biblioteca do usuário (16/11) desenha a L 3" x 1/4" com 17,4 cm², a área da L 3" x 1/2".
+    A peça da obra é a do nome: verificar com a de 1/2" daria resistência que ela não tem."""
+    cabecalho = (
+        "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);X2 (mm);Y2 (mm);Z2 (mm);"
+        "COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3)"
+    )
+    item = '"L 3""X0,25""<1>";"L 3""X0,25"""'
+    linhas = [
+        'MACRO;"Mecanica Toolkit - exportar_lista_de_corte v4"',
+        cabecalho,
+        f'"Perfil l L 3""X0,25""(1)[1]";{item};BARRA;0,0;0,0;0,0;1000,0;0,0;0,0;1000,0;76,2;76,2;1740,0',
+    ]
+    g = ld.ler_esqueleto(chr(10).join(linhas).encode("cp1252"), "cantoneira_esqueleto.csv")
+    ((perfil, origem),) = ld.perfis_do_esqueleto(g).values()
+    assert perfil == 'L 3" × 1/4"'
+    assert ld.DESENHO_MAIS_PESADO in origem and "vale o perfil do nome" in origem
+
+
+def test_pp_com_o_acrescimo_das_ligacoes_e_atencao_e_confere_com_o_fator():
+    """Gravidade de 10,5 m/s² no estudo PP (9,81 × 1,07): sem o fator no plano o programa
+    pergunta; com o fator, confere."""
+    esqueleto = geometria_que_pesa(9.0 / 1.07)
+    achados = ld.diagnosticar(importar("PP"), plano_do_portico(), esqueleto)
+    aviso = achado(achados, "PP com o acréscimo das ligações?")
+    assert aviso.nivel == pc.NIVEL_ATENCAO and "7,0 % a mais" in aviso.texto
+    assert "10,50 m/s²" in aviso.texto
+    assert "PP mais pesado que a estrutura" not in titulos(achados)
+    com_fator = pc.com_fator_peso_proprio(plano_do_portico(), 1.07)
+    niveis = titulos(ld.diagnosticar(importar("PP"), com_fator, esqueleto))
+    assert niveis["Peso próprio confere com o esqueleto"] == pc.NIVEL_OK

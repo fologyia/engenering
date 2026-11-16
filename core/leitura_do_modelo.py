@@ -1059,6 +1059,14 @@ def _caixa_bate(nome: str, secao_mm: tuple[float, float] | None) -> bool:
     return abs(secao_mm[0] - maior) <= 0.025 * maior and abs(secao_mm[1] - menor) <= 0.025 * menor
 
 
+#: Quanto a seção desenhada pode pesar a mais que o perfil que o nome diz (desenho da biblioteca).
+FOLGA_DO_DESENHO = 1.10
+#: Como a origem do perfil diz que ele saiu só da área (e não é o que o nome diz).
+PELA_AREA = "por a área da seção"
+#: Como a origem diz que o sólido foi desenhado mais pesado que o perfil do nome (vale o nome).
+DESENHO_MAIS_PESADO = "seção desenhada mais pesada"
+
+
 @dataclass(frozen=True)
 class _Opcoes:
     base: str  # o perfil que o item da lista de corte indica
@@ -1086,10 +1094,17 @@ def _opcoes(corpo: CorpoDoModelo) -> _Opcoes:
     perda = min(0.6, 2 * altura_m / corpo.comprimento_m) if corpo.comprimento_m > 0 else 0.6
     # A caixa só acompanha a seção numa barra comprida (no toco muito cortado, os eixos giram).
     caixa_confiavel = corpo.forma != FORMA_BLOCO
+    # O perfil que o nome diz aceita o desenho até 10 % mais pesado (biblioteca do SolidWorks
+    # com a mesa de espessura constante, raios cheios…), desde que nenhum outro da família esteja
+    # mais perto da área medida: um U 8" x 17,10 desenhado com 23,5 cm² não vira U 8" x 20,50.
+    mais_perto = min(opcoes, key=lambda n: abs(opcoes[n] - area), default="")
+    folga = {
+        n: FOLGA_DO_DESENHO if n in (base, pelo_nome) and n == mais_perto else 1.03 for n in opcoes
+    }
     candidatos = tuple(
         n
         for n, a in opcoes.items()
-        if a * (1 - perda) <= area <= a * 1.03
+        if a * (1 - perda) <= area <= a * folga[n]
         and cabe_na_secao(n, corpo.secao_mm)
         and (not caixa_confiavel or _cabe_na_caixa(n, corpo.secao_mm))
     )
@@ -1126,6 +1141,11 @@ def perfil_do_corpo(corpo: CorpoDoModelo, do_membro: str = "") -> tuple[str, str
             f"{origem}; a seção do modelo ({cm2}) não confere com a do {o.base} nem com outro "
             "perfil da família" + _secao_no_modelo(corpo)
         )
+    # Toco (mais curto que uma altura e meia da seção): o corte come quase todo o volume e a caixa
+    # gira — a área não diz o perfil. Vale o da lista de corte.
+    altura_da_base = max(_dimensoes(o.base) or (0.0, 0.0))
+    if o.base not in o.candidatos and corpo.comprimento_m * 1e3 <= 1.5 * altura_da_base:
+        return o.base, f"{origem}; peça curta, a área não diz o perfil" + _secao_no_modelo(corpo)
     if o.exatos:
         escolhido = next(
             (n for n in (o.pelo_nome, o.base) if n in o.exatos),
@@ -1140,7 +1160,18 @@ def perfil_do_corpo(corpo: CorpoDoModelo, do_membro: str = "") -> tuple[str, str
         escolhido, por = o.base, ""
     else:
         escolhido = min(o.candidatos, key=lambda n: o.opcoes[n])
-        por = "a área da seção"
+        por = PELA_AREA.removeprefix("por ")
+    # O desenho aponta um perfil mais pesado que o do nome e da lista de corte: a peça da obra é a
+    # do nome, e verificar com a mais pesada daria resistência que a peça não tem.
+    if (
+        o.pelo_nome in ("", o.base)
+        and o.base not in o.candidatos
+        and o.opcoes[escolhido] > o.opcoes.get(o.base, float("inf"))
+    ):
+        return o.base, (
+            f"{origem}; {DESENHO_MAIS_PESADO} ({cm2}, a de um {escolhido}): vale o perfil "
+            "do nome" + _secao_no_modelo(corpo)
+        )
     if escolhido == o.base and por in ("", "peça reta: a caixa e a área da seção são as do perfil"):
         return o.base, origem + _secao_no_modelo(corpo)
     return escolhido, f"{origem}; {escolhido} por {por} ({cm2})" + _secao_no_modelo(corpo)
@@ -1163,11 +1194,30 @@ def _perfis_dos_corpos(corpos: Sequence[CorpoDoModelo]) -> dict[str, tuple[str, 
             votos.setdefault(membro, {})
             votos[membro][o.exatos[0]] = votos[membro].get(o.exatos[0], 0) + 1
     do_membro = {m: max(v, key=lambda k: v[k]) for m, v in votos.items()}
-    return {
+    perfis = {
         corpo.nome: perfil_do_corpo(corpo, do_membro.get(_prefixo_e_indice(corpo.nome)[0], ""))
         for corpo in corpos
         if corpo.forma != FORMA_CHAPA
     }
+    # O toco (bloco) cuja área apontou outro perfil segue as barras do mesmo membro: nele o corte
+    # come o volume e a área não diz nada.
+    das_barras: dict[str, dict[str, int]] = {}
+    for corpo in corpos:
+        if corpo.forma == FORMA_BARRA and perfis.get(corpo.nome, ("", ""))[0]:
+            membro = das_barras.setdefault(_prefixo_e_indice(corpo.nome)[0], {})
+            membro[perfis[corpo.nome][0]] = membro.get(perfis[corpo.nome][0], 0) + 1
+    for corpo in corpos:
+        escolha = perfis.get(corpo.nome)
+        votos_do_membro = das_barras.get(_prefixo_e_indice(corpo.nome)[0])
+        if corpo.forma != FORMA_BLOCO or escolha is None or not votos_do_membro:
+            continue
+        maioria = max(votos_do_membro, key=lambda k: votos_do_membro[k])
+        if PELA_AREA in escolha[1] and escolha[0] != maioria:
+            perfis[corpo.nome] = (
+                maioria,
+                escolha[1].split(";")[0] + f"; {maioria} por as barras do mesmo membro",
+            )
+    return perfis
 
 
 def _perfil(
@@ -1634,7 +1684,24 @@ def diagnosticar(
                         "PE…), com as cargas características. Confira também a densidade dos "
                         "materiais (7 850 kg/m³) e a gravidade (9,81 m/s²)."
                     )
-                achados.append(Achado(pc.NIVEL_ERRO, "PP mais pesado que a estrutura", texto))
+                if fator <= 1.0 and razao <= 1.15:
+                    # Até 15 % a mais, sem o acréscimo das ligações informado no plano: é o jeito
+                    # usual de contar ligações e parafusos (gravidade de 10,5 m/s² = 9,81 × 1,07).
+                    achados.append(
+                        Achado(
+                            pc.NIVEL_ATENCAO,
+                            "PP com o acréscimo das ligações?",
+                            f"O PP dá {_n(peso)} kN de reação vertical, e o aço de todos os "
+                            f"corpos do esqueleto pesa {_n(maximo)} kN (volume × 7 850 kg/m³): "
+                            f"{_n(100 * (razao - 1), 1)} % a mais, o que corresponde a uma "
+                            f"gravidade de {_n(9.81 * razao, 2)} m/s² no estudo PP. Se é o "
+                            "acréscimo das ligações não modeladas, informe-o no plano de cargas "
+                            "(página Cargas do esqueleto, campo das ligações): o programa passa "
+                            "a conferir o PP com ele. Se não é, o PP tem carga além da gravidade.",
+                        )
+                    )
+                else:
+                    achados.append(Achado(pc.NIVEL_ERRO, "PP mais pesado que a estrutura", texto))
             elif peso < (1 - em.TOLERANCIA_PESO) * minimo:
                 achados.append(
                     Achado(
@@ -1934,6 +2001,61 @@ def diagnosticar(
         for lb in leituras
         if lb.barra in dados.membros and dados.membros[lb.barra].perfil
     }
+    # O sólido mais pesado que o perfil do nome: a verificação fica com o do nome, e avisa.
+    mais_pesados: dict[str, tuple[list[str], dict[str, int]]] = {}
+    for lb in leituras:
+        if lb.corpo is None or DESENHO_MAIS_PESADO not in lb.origem_do_perfil:
+            continue
+        o = _opcoes(lb.corpo)
+        desenhado = min(o.candidatos, key=lambda n: o.opcoes[n], default="")
+        if desenhado:
+            barras, votos = mais_pesados.setdefault(o.base, ([], {}))
+            barras.append(lb.barra)
+            votos[desenhado] = votos.get(desenhado, 0) + 1
+    for do_nome, (barras, votos) in mais_pesados.items():
+        # Na peça cortada a área medida varia: vale a seção que a maioria das barras mostra.
+        desenhado = max(votos, key=lambda n: votos[n])
+        area_do_nome = _familia(do_nome).get(do_nome, 0.0)
+        area_desenhada = _familia(desenhado).get(desenhado, 0.0)
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                f"Seção desenhada mais pesada que o nome: {do_nome}",
+                f"Em {len(barras)} barra(s) ({_lista(barras, 3)}) o nome e a lista de corte dizem "
+                f"{do_nome} ({_n(area_do_nome / 100, 1)} cm²), mas o sólido do SolidWorks tem a "
+                f"seção de um {desenhado} ({_n(area_desenhada / 100, 1)} cm²). A verificação usa "
+                f"o {do_nome}, que é a peça da obra. Já o Simulation calculou o peso e a rigidez "
+                "com a seção desenhada: os esforços dessas barras e das vizinhas saíram de uma "
+                "peça mais rígida que a real. Corrija o desenho do perfil na biblioteca do "
+                "SolidWorks e rode os estudos de novo.",
+                tuple(barras),
+            )
+        )
+    # O desenho mais leve que o perfil do nome: o programa segue o desenho, e avisa.
+    pelo_desenho: dict[tuple[str, str], list[str]] = {}
+    for lb in leituras:
+        if lb.corpo is None or PELA_AREA not in lb.origem_do_perfil:
+            continue
+        do_nome = _opcoes(lb.corpo).base
+        if do_nome and lb.perfil_sugerido and do_nome != lb.perfil_sugerido:
+            pelo_desenho.setdefault((do_nome, lb.perfil_sugerido), []).append(lb.barra)
+    for (do_nome, desenhado), barras in pelo_desenho.items():
+        area_do_nome = _familia(do_nome).get(do_nome, 0.0)
+        area_desenhada = _familia(desenhado).get(desenhado, 0.0)
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                f"Seção desenhada diferente do nome: {do_nome}",
+                f"Em {len(barras)} barra(s) ({_lista(barras, 3)}) o nome e a lista de corte dizem "
+                f"{do_nome} ({_n(area_do_nome / 100, 1)} cm²), mas o sólido do SolidWorks tem a "
+                f"seção de um {desenhado} ({_n(area_desenhada / 100, 1)} cm²). O Simulation "
+                "calculou o peso e a rigidez com a seção desenhada, e a verificação está usando o "
+                f"{desenhado}, o mais fraco dos dois. Se a peça da obra é {do_nome}, corrija o "
+                "desenho do perfil na biblioteca do SolidWorks e rode os estudos de novo, ou "
+                f"escolha {do_nome} na tabela das barras (passo 4).",
+                tuple(barras),
+            )
+        )
     divergentes = [
         lb.barra
         for lb in leituras
