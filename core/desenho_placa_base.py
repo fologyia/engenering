@@ -537,6 +537,14 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
         ("seta", _TRACAO, "Força nos chumbadores tracionados (em vermelho)"),
         ("seta", _FORCA, "Esforços de cálculo N, M e V"),
     ]
+    if r.perna_do_pilar:
+        itens2.append(
+            (
+                "area",
+                _SOLDA,
+                f"Filete do pilar na placa, d_w = {_n(r.perna_do_pilar)} mm ({e.eletrodo})",
+            )
+        )
     if e.cortante == bp.CORTANTE_PLACA:
         itens2.append(("tracejado", _CISALHAMENTO, f"Placa de cisalhamento {_n(e.b_h_mm)} × {_n(e.t_pv_mm, 1)} mm, b_v = {_n(e.b_v_mm)} mm"))  # fmt: skip
     if e.ancoragem == bp.ANCORAGEM_QUIMICO:
@@ -585,6 +593,12 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
     legenda = (
         f"Base {bp.NOMES_CURTOS[e.tipo]} do {e.perfil}: placa {_n(g.lx)} × "
         f"{_n(g.ly)} × {_n(e.t_placa_mm, 1)} mm, {e.n_chumbadores} chumbadores Ø {tab.polegada}; caso "
-        f"{r.caso}" + (" com flexão oblíqua." if e.m_sd_y_kNm else ".")
+        f"{r.caso}"
+        + (" com flexão oblíqua." if e.m_sd_y_kNm else ".")
+        + (
+            f" Combinação que governa: {r.combinacao_governante}."
+            if r.combinacao_governante
+            else ""
+        )
     )
     return figura_final(imagem, titulo, legenda)

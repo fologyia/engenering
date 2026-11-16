@@ -259,8 +259,9 @@ def test_arruelas_soldadas_sem_tracao():
     alfa = 1.45 * (25 + 0.5 * t_a) / d_b * (400 / 250) * (1.10 / 1.35)
     por_chumbador = min(f_v / math.sqrt(1 + alfa**2), 5 * d_b**2 * SIGMA_RD)
     assert r.v_rd == pytest.approx(4 * por_chumbador)
-    solda = _linha(r, "Solda das arruelas de cima")
-    assert solda.status == "INFO" and f"{corte / 1e3:.1f}".replace(".", ",") in solda.formula
+    solda = _linha(r, "Solda das arruelas na placa: filete")
+    assert solda.status == "OK" and f"{corte / 1e3:.1f}".replace(".", ",") in solda.formula
+    assert solda.solicitante == pytest.approx(f_v / (4 * 75) / 1e3)
 
 
 def test_arruela_soldada_o_contato_no_furo_limita_o_chumbador_forte():
@@ -360,7 +361,10 @@ def test_sem_base_que_atenda_quando_a_falha_nao_e_da_placa():
 def test_registro_e_figura_no_memorial():
     r = bp.calcular(replace(PADRAO, n_chumbadores=6, m_sd_kNm=150, t_placa_mm=40))
     registro = bp.registro_base(r)
-    assert registro["modulo_id"] == bp.MODULO_ID and registro["status"] == "Atende"
+    # M = 150 kN·m é quase o momento de plastificação do W 250 x 32,7: o filete do pilar reprova
+    # (de verdade); fora a solda, a base atende
+    assert registro["modulo_id"] == bp.MODULO_ID and registro["status"] == "Não atende"
+    assert bp.solda_do_pilar_reprova(r) and bp.passa_fora_a_solda_do_pilar(r)
     resultados = registro["resultados"]
     assert resultados["caso"] == "C3"
     assert bp.entrada_de_dicionario(resultados["figura_base_de_pilar"]["entrada"]) == r.entrada

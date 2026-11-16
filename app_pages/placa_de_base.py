@@ -7,6 +7,7 @@ import math
 import pandas as pd
 import streamlit as st
 
+from components.edicao_de_tabela import com_edicoes
 from components.figuras import mostrar_figura
 from components.placa_de_base_help import AJUDA
 from components.project_tools import botao_registrar_calculo
@@ -65,6 +66,80 @@ _sessao("pb_perfil", PADRAO.perfil)
 _sessao("pb_chumbador", PADRAO.chumbador)
 _sessao("pb_chumbador_f", PADRAO.chumbador)
 _sessao("pb_t", PADRAO.t_placa_mm)
+
+CASOS_TELA = "pb_casos"  # as combinações da tabela (lista de dicionários do núcleo)
+CASOS_REV = "pb_casos_rev"
+COLUNAS_CASOS = {
+    "nome": "Combinação",
+    "n_sd_kN": "N_Sd (kN)",
+    "m_sd_kNm": "M_Sd (kN·m)",
+    "m_sd_y_kNm": "M_Sd,y (kN·m)",
+    "v_sd_kN": "V_Sd (kN)",
+}
+EXEMPLO_CASOS = [
+    {"nome": "ELU1 — máxima compressão", "n_sd_kN": 600.0, "m_sd_kNm": 15.0, "m_sd_y_kNm": 0.0, "v_sd_kN": 25.0},
+    {"nome": "ELU2 — vento (sucção)", "n_sd_kN": -80.0, "m_sd_kNm": 25.0, "m_sd_y_kNm": 0.0, "v_sd_kN": 40.0},
+    {"nome": "ELU3 — máximo momento", "n_sd_kN": 200.0, "m_sd_kNm": 40.0, "m_sd_y_kNm": 0.0, "v_sd_kN": 35.0},
+]  # fmt: skip
+_sessao(CASOS_TELA, [dict(linha) for linha in EXEMPLO_CASOS])
+_sessao(CASOS_REV, 0)
+
+
+def _para_a_tela(linhas: list[dict]) -> list[dict]:
+    return [{COLUNAS_CASOS[k]: linha.get(k) for k in COLUNAS_CASOS} for linha in linhas]
+
+
+def _da_tela(linhas: list[dict]) -> list[dict]:
+    saida = []
+    for linha in linhas:
+        valores = {k: linha.get(rotulo) for k, rotulo in COLUNAS_CASOS.items()}
+        nome = str(valores["nome"] or "").strip()
+        numeros = [valores[k] for k in COLUNAS_CASOS if k != "nome"]
+        if not nome and all(v in (None, "") or v != v for v in numeros):
+            continue  # linha acrescentada e deixada em branco
+        for k in COLUNAS_CASOS:
+            if k != "nome":
+                v = valores[k]
+                valores[k] = 0.0 if v in (None, "") or v != v else float(v)
+        valores["nome"] = nome
+        saida.append(valores)
+    return saida
+
+
+def _ao_editar_casos(chave: str) -> None:
+    st.session_state[CASOS_TELA] = _da_tela(
+        com_edicoes(_para_a_tela(st.session_state[CASOS_TELA]), st.session_state.get(chave) or {})
+    )
+    st.session_state[CASOS_REV] = st.session_state.get(CASOS_REV, 0) + 1
+
+
+def _trocar_casos(linhas: list[dict]) -> None:
+    st.session_state[CASOS_TELA] = linhas
+    st.session_state[CASOS_REV] = st.session_state.get(CASOS_REV, 0) + 1
+
+
+def _trazer_do_modelo(perfil: str, linhas: list[dict]) -> None:
+    _trocar_casos(linhas)
+    if perfil in bp.perfis_i():  # o pilar do modelo, se for um perfil I do catálogo
+        st.session_state["pb_perfil"] = perfil
+
+
+def _pilares_do_modelo() -> list:
+    """As combinações ELU na base de cada pilar de Esforços do modelo (vazio sem modelo)."""
+    projeto = obter_projeto_ativo()
+    if not projeto:
+        return []
+    try:
+        from core import placa_base_pilares as pbp
+        from core import plano_de_cargas as pc
+        from core import tratamento_do_modelo as tm
+
+        return pbp.combinacoes_dos_pilares(
+            tm.do_projeto(projeto).dados, pc.plano_do_projeto(projeto)
+        )
+    except (ArithmeticError, ValueError, KeyError, TypeError):
+        return []
+
 
 with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
     st.subheader("1. Pilar e chumbadores", help=AJUDA["sec_pilar"])
@@ -379,7 +454,7 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
     bloco_informado = colunas[2].toggle(
         "Informar o bloco", key="pb_bloco", persist_state="session", help=AJUDA["bloco_informado"]
     )
-    bloco_x = bloco_y = 0.0
+    bloco_x = bloco_y = bloco_z = 0.0
     razao = 1.0
     colunas = st.columns(3)
     if bloco_informado:
@@ -405,6 +480,17 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
             persist_state="session",
             help=AJUDA["bloco_y"],
         )
+        bloco_z = colunas[2].number_input(
+            "Altura do bloco h_a (mm) — 0 = a mínima",
+            0.0,
+            10000.0,
+            0.0,
+            50.0,
+            format="%.0f",
+            key="pb_bz",
+            persist_state="session",
+            help=AJUDA["bloco_z"],
+        )
     else:
         razao = colunas[0].number_input(
             "A₂/A₁",
@@ -420,51 +506,129 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
 
 with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
     st.subheader("5. Esforços de cálculo (ELU)", help=AJUDA["sec_esforcos"])
-    colunas = st.columns(3)
-    n_sd = colunas[0].number_input(
-        "N_Sd (kN) — + compressão",
-        -20000.0,
-        50000.0,
-        PADRAO.n_sd_kN,
-        10.0,
-        format="%.1f",
-        key="pb_n_sd",
-        persist_state="session",
-        help=AJUDA["n_sd"],
+    varias = (
+        st.radio(
+            "Esforços",
+            ["uma", "varias"],
+            format_func={"uma": "Uma combinação", "varias": "Várias combinações (envoltória)"}.get,
+            horizontal=True,
+            key="pb_varias",
+            persist_state="session",
+            help=AJUDA["varias"],
+        )
+        == "varias"
     )
-    m_sd = colunas[1].number_input(
-        "M_Sd (kN·m)",
-        0.0,
-        20000.0,
-        PADRAO.m_sd_kNm,
-        5.0,
-        format="%.1f",
-        key="pb_m_sd",
-        persist_state="session",
-        help=AJUDA["m_sd"],
-    )
-    v_sd = colunas[2].number_input(
-        "V_Sd (kN)",
-        0.0,
-        20000.0,
-        PADRAO.v_sd_kN,
-        5.0,
-        format="%.1f",
-        key="pb_v_sd",
-        persist_state="session",
-        help=AJUDA["v_sd"],
-    )
-    m_sd_y = st.number_input(
-        "M_Sd,y no eixo de menor inércia (kN·m)",
-        0.0,
-        20000.0,
-        0.0,
-        1.0,
-        format="%.1f",
-        key="pb_m_sd_y",
-        persist_state="session",
-        help=AJUDA["m_sd_y"],
-    )
+    casos: tuple = ()
+    if varias:
+        chave_casos = f"pb_tabela_casos_{st.session_state.get(CASOS_REV, 0)}"
+        st.data_editor(
+            pd.DataFrame(
+                _para_a_tela(st.session_state[CASOS_TELA]), columns=list(COLUNAS_CASOS.values())
+            ),
+            key=chave_casos,
+            on_change=_ao_editar_casos,
+            args=(chave_casos,),
+            num_rows="dynamic",
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Combinação": st.column_config.TextColumn(width="medium", required=True),
+                "N_Sd (kN)": st.column_config.NumberColumn(
+                    format="%.1f", help="Positiva na compressão, negativa na tração."
+                ),
+                "M_Sd (kN·m)": st.column_config.NumberColumn(format="%.1f"),
+                "M_Sd,y (kN·m)": st.column_config.NumberColumn(format="%.1f"),
+                "V_Sd (kN)": st.column_config.NumberColumn(format="%.1f", min_value=0.0),
+            },
+        )
+        casos = tuple(bp.caso_de_dicionario(linha) for linha in st.session_state[CASOS_TELA])
+        if not casos:
+            st.warning(
+                "A tabela está vazia: acrescente ao menos uma combinação.",
+                icon=":material/warning:",
+            )
+            st.stop()
+        pilares = _pilares_do_modelo()
+        botoes = st.columns([3, 2])
+        if pilares:
+            nomes_pilares = {p.pilar: p for p in pilares}
+            escolhido = botoes[0].selectbox(
+                "Pilar do modelo (Esforços do modelo)",
+                list(nomes_pilares),
+                format_func=lambda nome: f"{nome} — {nomes_pilares[nome].perfil or 'sem perfil'}",
+                key="pb_pilar_modelo",
+                help=AJUDA["pilar_modelo"],
+            )
+            botoes[1].button(
+                "Trazer as combinações deste pilar",
+                icon=":material/download:",
+                key="pb_trazer_casos",
+                help=AJUDA["btn_trazer"],
+                on_click=_trazer_do_modelo,
+                args=(
+                    nomes_pilares[escolhido].perfil,
+                    [
+                        {"nome": nome, "n_sd_kN": round(n, 2), "m_sd_kNm": round(abs(m), 2),
+                         "m_sd_y_kNm": round(abs(my), 2), "v_sd_kN": round(v, 2)}
+                        for nome, n, m, my, v in nomes_pilares[escolhido].combinacoes
+                    ],
+                ),
+            )  # fmt: skip
+        botoes[-1].button(
+            "Voltar ao exemplo",
+            icon=":material/restart_alt:",
+            key="pb_exemplo_casos",
+            help=AJUDA["btn_exemplo_casos"],
+            on_click=_trocar_casos,
+            args=([dict(linha) for linha in EXEMPLO_CASOS],),
+        )
+    n_sd, m_sd, v_sd, m_sd_y = PADRAO.n_sd_kN, PADRAO.m_sd_kNm, PADRAO.v_sd_kN, 0.0
+    if not varias:
+        colunas = st.columns(3)
+        n_sd = colunas[0].number_input(
+            "N_Sd (kN) — + compressão",
+            -20000.0,
+            50000.0,
+            PADRAO.n_sd_kN,
+            10.0,
+            format="%.1f",
+            key="pb_n_sd",
+            persist_state="session",
+            help=AJUDA["n_sd"],
+        )
+        m_sd = colunas[1].number_input(
+            "M_Sd (kN·m)",
+            0.0,
+            20000.0,
+            PADRAO.m_sd_kNm,
+            5.0,
+            format="%.1f",
+            key="pb_m_sd",
+            persist_state="session",
+            help=AJUDA["m_sd"],
+        )
+        v_sd = colunas[2].number_input(
+            "V_Sd (kN)",
+            0.0,
+            20000.0,
+            PADRAO.v_sd_kN,
+            5.0,
+            format="%.1f",
+            key="pb_v_sd",
+            persist_state="session",
+            help=AJUDA["v_sd"],
+        )
+        m_sd_y = st.number_input(
+            "M_Sd,y no eixo de menor inércia (kN·m)",
+            0.0,
+            20000.0,
+            0.0,
+            1.0,
+            format="%.1f",
+            key="pb_m_sd_y",
+            persist_state="session",
+            help=AJUDA["m_sd_y"],
+        )
 
 with st.container(border=True), secao_protegida("6. Cortante"):
     st.subheader("6. Cortante", help=AJUDA["sec_cortante"])
@@ -480,6 +644,7 @@ with st.container(border=True), secao_protegida("6. Cortante"):
     mu = PADRAO.mu
     b_v, b_h, t_pv = PADRAO.b_v_mm, PADRAO.b_h_mm, PADRAO.t_pv_mm
     t_arruela = 0.0
+    penetracao_lug = False
     colunas = st.columns(3)
     if cortante == bp.CORTANTE_ATRITO:
         mu = colunas[0].number_input(
@@ -527,6 +692,12 @@ with st.container(border=True), secao_protegida("6. Cortante"):
             persist_state="session",
             help=AJUDA["t_pv"],
         )
+        penetracao_lug = st.toggle(
+            "Placa de cisalhamento soldada com penetração total",
+            key="pb_lug_cjp",
+            persist_state="session",
+            help=AJUDA["lug_cjp"],
+        )
     else:
         t_arruela = colunas[0].number_input(
             f"Espessura da arruela (mm) — 0 = {_n(tabela.t_arruela)} {origem}",
@@ -538,6 +709,83 @@ with st.container(border=True), secao_protegida("6. Cortante"):
             key="pb_ta",
             persist_state="session",
             help=AJUDA["t_arruela"],
+        )
+
+with st.container(border=True), secao_protegida("7. Soldas"):
+    st.subheader("7. Soldas", help=AJUDA["sec_soldas"])
+    colunas = st.columns(3)
+    perna_pilar = colunas[0].number_input(
+        "Perna do filete do pilar (mm) — 0 = automática",
+        0.0,
+        30.0,
+        0.0,
+        1.0,
+        format="%.0f",
+        key="pb_perna_pilar",
+        persist_state="session",
+        help=AJUDA["perna_pilar"],
+    )
+    eletrodo = colunas[1].selectbox(
+        "Eletrodo",
+        list(sd.ELETRODOS),
+        index=list(sd.ELETRODOS).index("E70"),
+        key="pb_eletrodo",
+        persist_state="session",
+        help=AJUDA["eletrodo"],
+    )
+    aco_pilar = colunas[2].selectbox(
+        "Aço do pilar",
+        list(bp.ACOS_DA_PLACA),
+        index=list(bp.ACOS_DA_PLACA).index(bp.ACO_DO_PILAR_PADRAO),
+        key="pb_aco_pilar",
+        persist_state="session",
+        help=AJUDA["aco_pilar"],
+    )
+    colunas = st.columns(3)
+    mesas_por_dentro = colunas[0].toggle(
+        "Soldar as mesas também por dentro",
+        value=True,
+        key="pb_solda_dentro",
+        persist_state="session",
+        help=AJUDA["solda_dentro"],
+    )
+    solda_alma = colunas[1].toggle(
+        "Soldar a alma (dos dois lados)",
+        value=True,
+        key="pb_solda_alma",
+        persist_state="session",
+        help=AJUDA["solda_alma"],
+    )
+    contato = colunas[2].toggle(
+        "Compressão por contato (pilar faceado)",
+        key="pb_contato",
+        persist_state="session",
+        help=AJUDA["contato"],
+    )
+    perna_lug = perna_arruela = 0.0
+    if cortante == bp.CORTANTE_PLACA and not penetracao_lug:
+        perna_lug = st.number_input(
+            "Perna dos filetes da placa de cisalhamento (mm) — 0 = automática",
+            0.0,
+            30.0,
+            0.0,
+            1.0,
+            format="%.0f",
+            key="pb_perna_lug",
+            persist_state="session",
+            help=AJUDA["perna_lug"],
+        )
+    elif cortante == bp.CORTANTE_ARRUELAS:
+        perna_arruela = st.number_input(
+            "Perna do filete das arruelas (mm) — 0 = automática",
+            0.0,
+            30.0,
+            0.0,
+            1.0,
+            format="%.0f",
+            key="pb_perna_arruela",
+            persist_state="session",
+            help=AJUDA["perna_arruela"],
         )
 
 entrada = bp.EntradaBase(
@@ -578,6 +826,17 @@ entrada = bp.EntradaBase(
     d_b_mm=float(d_b_livre),
     passo_mm=float(passo_livre),
     d_f_mm=float(d_f),
+    casos=casos,
+    aco_pilar=aco_pilar,
+    eletrodo=eletrodo,
+    perna_pilar_mm=float(perna_pilar),
+    solda_mesas_por_dentro=bool(mesas_por_dentro),
+    solda_alma=bool(solda_alma),
+    compressao_por_contato=bool(contato),
+    perna_cisalhamento_mm=float(perna_lug),
+    cisalhamento_penetracao_total=bool(penetracao_lug),
+    perna_arruela_mm=float(perna_arruela),
+    bloco_z_mm=float(bloco_z),
 )
 try:
     resultado = bp.calcular(entrada)
@@ -590,7 +849,9 @@ colunas = st.columns(4)
 colunas[0].metric("Status", resultado.status, help=AJUDA["res_status"])
 colunas[1].metric("Caso", resultado.caso, help=AJUDA["res_caso"])
 colunas[1].caption(
-    CASOS[resultado.caso].capitalize() + ("; flexão oblíqua" if entrada.m_sd_y_kNm else "")
+    CASOS[resultado.caso].capitalize()
+    + ("; flexão oblíqua" if resultado.entrada.m_sd_y_kNm else "")
+    + (f" — em «{resultado.combinacao_governante}»" if resultado.envoltoria else "")
 )
 aproveitamento = resultado.aproveitamento_maximo
 colunas[2].metric(
@@ -612,9 +873,45 @@ if reprovadas:
         icon=":material/error:",
     )
 
+if resultado.envoltoria:
+    with st.container(border=True), secao_protegida("Combinações"):
+        st.subheader("Combinações", help=AJUDA["res_combinacoes"])
+        st.dataframe(
+            pd.DataFrame(bp.linhas_das_combinacoes(resultado)),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Aproveitamento": st.column_config.NumberColumn(format="percent"),
+            },
+        )
+        st.caption(
+            ":material/info: Em cada verificação abaixo vale a combinação mais desfavorável: o nome "
+            "dela vem entre colchetes no começo da fórmula."
+        )
+if bp.solda_do_pilar_reprova(resultado):
+    st.error(
+        "A solda do pilar na placa não passa. Ela depende do perfil e dos esforços: trocar a placa "
+        "ou o chumbador não resolve. Veja o grupo **Soldas** abaixo.",
+        icon=":material/error:",
+    )
+
 with secao_protegida("Desenho da base"):
     st.subheader("A base", help=AJUDA["res_figura"])
-    desenho = figura_da_base(resultado)
+    resultado_desenho = resultado
+    if resultado.envoltoria:
+        nomes_casos = [item.caso.nome for item in resultado.casos]
+        if st.session_state.get("pb_caso_desenho") not in nomes_casos:
+            st.session_state["pb_caso_desenho"] = resultado.combinacao_governante
+        nome_desenho = st.selectbox(
+            "Combinação desenhada",
+            nomes_casos,
+            key="pb_caso_desenho",
+            help=AJUDA["caso_desenho"],
+        )
+        resultado_desenho = next(
+            i.resultado for i in resultado.casos if i.caso.nome == nome_desenho
+        )
+    desenho = figura_da_base(resultado_desenho)
     mostrar_figura(desenho)
 st.subheader("Detalhamento adotado", help=AJUDA["res_adotado"])
 st.table(pd.DataFrame(resultado.detalhamento, columns=["Item", "Valor"]).set_index("Item"))
@@ -715,6 +1012,11 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
     else:
         g = leve.geometria
         nome_leve = bp.nome_do_chumbador(leve.entrada)
+        if bp.solda_do_pilar_reprova(leve):
+            st.caption(
+                ":material/info: A busca não olha a solda do pilar (não depende da placa nem do "
+                "chumbador); ela continua reprovando — veja o grupo Soldas."
+            )
         st.write(
             f"**Ø {nome_leve}** com placa **{g.lx:.0f} × {g.ly:.0f} × "
             f"{_n(leve.entrada.t_placa_mm)} mm** — {_n(leve.massa_da_placa_kg)} kg "

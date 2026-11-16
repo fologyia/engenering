@@ -860,7 +860,11 @@ ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
         ("M_Sd_y_kNm", "M_Sd,y no eixo fraco [kN·m] (flexão oblíqua)", "se_preenchido"),
         ("V_Sd_kN", "V_Sd [kN]", "se_preenchido"),
         ("combinacao", "Combinação", "sempre"),
+        ("combinacoes", "Combinações verificadas (envoltória)", "se_preenchido"),
+        ("combinacao_governante", "Combinação que governa", "se_preenchido"),
         ("cortante_resistida_por", "Cortante resistida por", "sempre"),
+        ("solda_do_pilar", "Solda do pilar na placa", "se_preenchido"),
+        ("aco_do_pilar", "Aço do pilar", "se_preenchido"),
     ),
     "cargas_esqueleto": (
         ("obra", "Obra", "se_preenchido"),

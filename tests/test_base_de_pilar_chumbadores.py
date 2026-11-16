@@ -25,6 +25,12 @@ def _linha(r: bp.ResultadoBase, inicio: str):
     return next(v for v in r.verificacoes if v.nome.startswith(inicio))
 
 
+def _sem_a_solda(r: bp.ResultadoBase) -> str:
+    """O status sem a solda do pilar: com M = 150 kN·m no W 250 x 32,7 (quase o momento de
+    plastificação do perfil) o filete do pilar reprova — de verdade; aqui o assunto é outro."""
+    return bp.status_geral([v for v in r.verificacoes if not bp.da_solda_do_pilar(v)])
+
+
 def _tem(r: bp.ResultadoBase, inicio: str) -> bool:
     return any(v.nome.startswith(inicio) for v in r.verificacoes)
 
@@ -165,7 +171,7 @@ def test_aco_mais_resistente_reduz_d_b_min_e_alerta_a_ancoragem():
     gr55 = bp.calcular(replace(C3_6, aco_chumbador="ASTM F1554 Gr 55"))
     d36, d55 = _linha(a36, "Chumbador: diâmetro").solicitante, _linha(gr55, "Chumbador: diâmetro").solicitante  # fmt: skip
     assert d55 == pytest.approx(d36 * math.sqrt(400 / 517))
-    assert gr55.status == "ALERTA" and _linha(gr55, "Aço do chumbador").status == "ALERTA"
+    assert _sem_a_solda(gr55) == "ALERTA" and bp.solda_do_pilar_reprova(gr55) and _linha(gr55, "Aço do chumbador").status == "ALERTA"
     assert not _tem(
         bp.calcular(replace(C3_6, aco_chumbador="ASTM F1554 Gr 36")), "Aço do chumbador"
     )
@@ -214,7 +220,7 @@ def test_armadura_de_ancoragem_tira_o_cone_da_conta():
     r = bp.calcular(replace(C3_6, verificar_concreto=True, armadura_de_ancoragem=True))
     linha = _linha(r, "Cone de concreto")
     assert linha.status == "INFO" and "armadura" in linha.formula
-    assert r.status == "OK"
+    assert _sem_a_solda(r) == "OK"
 
 
 def test_bloco_maior_passa_no_cone():

@@ -149,7 +149,8 @@ def test_registro_texto_e_mais_leve_falam_da_flexao_obliqua():
     assert any("dois eixos" in p for p in registro["premissas"])
     assert "M_Sd,y = 30,0 kN·m" in bp.destaque(r)
     leve = bp.base_mais_leve(CASOS["C3"])
-    assert leve is not None and leve.zona_comprimida and leve.status != "NÃO OK"
+    # a solda do pilar (M = 100 kN·m no W 250 x 32,7) fica fora da busca: não depende da placa
+    assert leve is not None and leve.zona_comprimida and bp.passa_fora_a_solda_do_pilar(leve)
 
 
 def test_desenho_hachura_a_zona_inclinada_e_marca_a_linha_neutra():

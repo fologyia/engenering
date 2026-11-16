@@ -106,7 +106,11 @@ def test_quimico_com_a_resistencia_do_fabricante(banco_isolado):
     t.number_input(key="pb_nrd_fab").set_value(150.0).run()
     t.toggle(key="pb_armadura").set_value(True).run()
     assert not t.exception
-    assert _metricas(t)["Status"] == "OK"
+    # o que ainda reprova é só a solda do pilar: M = 150 kN·m é quase o momento de plastificação
+    # do W 250 x 32,7 (a ancoragem, assunto deste teste, passou)
+    nao_passou = next(e.value for e in t.error if e.value.startswith("Não passou:"))
+    itens = nao_passou.removeprefix("Não passou: ").rstrip(".").split("; ")
+    assert itens and all(item.startswith("Solda do pilar na placa") for item in itens)
 
 
 def test_disposicoes_novas_e_momento_no_eixo_fraco(banco_isolado):
@@ -230,3 +234,39 @@ def test_outro_diametro_digitado_e_volta_para_a_tabela_18(banco_isolado):
     assert not t.exception
     assert t.selectbox(key="pb_chumbador").value == bp.EntradaBase().chumbador
     assert not [w for w in t.number_input if w.key == "pb_db_livre"]
+
+
+def test_varias_combinacoes_mostra_a_envoltoria_e_desenha_cada_uma(banco_isolado):
+    t = abrir(pb_varias="varias", pb_cortante=bp.CORTANTE_ARRUELAS)
+    sem_ajuda = {
+        (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
+    } - {("text_input", "Nome do novo projeto")}
+    assert not sem_ajuda, sorted(sem_ajuda)
+    assert not [w for w in t.number_input if w.key == "pb_n_sd"]  # os campos de uma combinação
+    casos = tuple(bp.caso_de_dicionario(c) for c in t.session_state["pb_casos"])
+    r = bp.calcular(replace(bp.EntradaBase(), casos=casos, cortante=bp.CORTANTE_ARRUELAS))
+    assert _metricas(t)["Status"] == r.status
+    assert any(r.combinacao_governante in c.value for c in t.caption)
+    tabela = next(d.value for d in t.dataframe if "Combinação" in d.value.columns)
+    assert list(tabela["Combinação"]) == [c.nome for c in casos]
+    desenho = t.selectbox(key="pb_caso_desenho")
+    assert desenho.value == r.combinacao_governante
+    outro = next(c.nome for c in casos if c.nome != r.combinacao_governante)
+    desenho.set_value(outro).run()
+    assert not t.exception and len(t.get("image")) == 1
+    # a tabela vazia não cai nos esforços de uma combinação sem avisar
+    t.session_state["pb_casos"] = []
+    t.run()
+    assert any("tabela está vazia" in w.value for w in t.warning)
+
+
+def test_secao_de_soldas_e_a_compressao_por_contato(banco_isolado):
+    t = abrir(pb_cortante=bp.CORTANTE_PLACA)
+    assert t.number_input(key="pb_perna_lug").value == 0.0
+    t.toggle(key="pb_lug_cjp").set_value(True).run()
+    assert not t.exception and not [w for w in t.number_input if w.key == "pb_perna_lug"]
+    t = abrir(pb_m_sd=150.0, pb_n=6, pb_t=40.0)
+    assert any("solda do pilar na placa não passa" in e.value for e in t.error)
+    t.number_input(key="pb_perna_pilar").set_value(6.0).run()
+    t.toggle(key="pb_contato").set_value(True).run()
+    assert not t.exception

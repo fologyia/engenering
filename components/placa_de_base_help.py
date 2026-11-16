@@ -155,8 +155,9 @@ AJUDA: dict[str, str] = {
     ),
     # 4. Esforços
     "sec_esforcos": (
-        "Os esforços de cálculo (ELU) no pé do pilar, já combinados — por exemplo os da página "
-        "Reações nas bases ou do modelo."
+        "Os esforços de cálculo (ELU) no pé do pilar, já combinados. Uma base costuma ter várias "
+        "combinações que mandam em coisas diferentes: a de maior compressão na placa e no "
+        "concreto, a de tração nos chumbadores, a de muita cortante com pouca compressão no atrito."
     ),
     "n_sd": (
         "Força normal de cálculo (kN): positiva comprime a placa contra o concreto, negativa "
@@ -259,7 +260,8 @@ AJUDA: dict[str, str] = {
         "A placa mais leve que atende trocando só o diâmetro do chumbador e a espessura (chapas "
         "comerciais). Pilar, esforços, concreto e dispositivo de cortante ficam como estão. No "
         "químico e no parabolt com N_Rd do fabricante, o diâmetro fica (o N_Rd é dele). Por "
-        "fórmula, troca entre os comerciais da mesma série, sem olhar o cone de concreto."
+        "fórmula, troca entre os comerciais da mesma série, sem olhar o cone de concreto. A solda "
+        "do pilar fica de fora: ela não muda com a placa."
     ),
     "btn_adotar": "Usa na página o chumbador e a espessura da base mais leve que atende.",
     "btn_csv": "Baixa a tabela de verificações em CSV (abre direto no Excel).",
@@ -272,5 +274,74 @@ AJUDA: dict[str, str] = {
     "reg_registrar": (
         "Grava esta base no projeto ativo; ela entra no memorial do projeto na Central de "
         "relatórios."
+    ),
+    # combinações, soldas e cortante no concreto
+    "bloco_z": (
+        "Altura do bloco de concreto (mm). Entra na ruptura do concreto pela cortante (ACI 318-19): "
+        "bloco baixo quebra mais fácil. Com 0, o programa usa a altura mínima da Tabela 18."
+    ),
+    "varias": (
+        "Uma combinação: você digita N, M e V. Várias combinações: uma tabela com todas as "
+        "combinações do pé do pilar (compressão alta, tração do vento, momento grande...). Cada "
+        "uma passa por todas as contas e, em cada verificação, vale a pior delas."
+    ),
+    "pilar_modelo": (
+        "Os pilares que a página Esforços do modelo conhece, com a base já identificada. As "
+        "combinações dele vêm já majoradas (ELU), do jeito que a placa precisa."
+    ),
+    "btn_trazer": (
+        "Troca a tabela pelas combinações ELU do pé deste pilar, tiradas do modelo do SolidWorks "
+        "(as mesmas da seção de placas de base de Esforços do modelo)."
+    ),
+    "btn_exemplo_casos": "Volta a tabela para as três combinações de exemplo.",
+    "lug_cjp": (
+        "Marque se a placa de cisalhamento for soldada na placa de base com penetração total: aí a "
+        "solda resiste como a própria chapa e não precisa de conta. Com filetes, o programa "
+        "verifica os dois cordões."
+    ),
+    "sec_soldas": (
+        "As soldas da base: o pilar na placa (o contorno do perfil), a placa de cisalhamento e as "
+        "arruelas soldadas, quando houver. Perna 0 deixa o programa escolher a menor que passa."
+    ),
+    "perna_pilar": (
+        "Tamanho da perna do filete que prende o pilar na placa (mm). Com 0, o programa escolhe a "
+        "menor perna comercial que passa em todas as combinações, entre a mínima da norma e a "
+        "máxima que cabe na ponta da mesa."
+    ),
+    "eletrodo": (
+        "O metal da solda. E70 (485 MPa) é o comum para aço A36 e A572 Gr 50; E60 é mais fraco e "
+        "E80 é para aços mais resistentes."
+    ),
+    "aco_pilar": (
+        "Aço do perfil do pilar. Entra na verificação da chapa do pilar junto da solda (a mesa ou "
+        "a alma não podem escoar antes do cordão)."
+    ),
+    "solda_dentro": (
+        "Além do cordão por fora das mesas, cordões por dentro, de cada lado da alma. Mais solda, "
+        "menos força por milímetro. Desligue se não houver espaço para soldar por dentro."
+    ),
+    "solda_alma": (
+        "Cordões dos dois lados da alma. Ajudam a levar a cortante e parte da força normal."
+    ),
+    "contato": (
+        "Marque só se a ponta do pilar for faceada (usinada) e assentar inteira na placa: aí a "
+        "compressão passa por contato e a solda leva só a tração, o momento e a cortante. Sem "
+        "isso, a solda leva tudo."
+    ),
+    "perna_lug": (
+        "Perna dos dois filetes que prendem a placa de cisalhamento na placa de base (mm). Com 0, "
+        "o programa escolhe a menor que passa."
+    ),
+    "perna_arruela": (
+        "Perna do filete em volta de cada arruela soldada na placa (mm). Com 0, o programa "
+        "escolhe a menor que passa, sem passar da espessura da arruela."
+    ),
+    "res_combinacoes": (
+        "Cada combinação com o caso dela (C1 a T3), o status, o aproveitamento máximo e a "
+        "verificação que manda nela. A base desenhada e o memorial seguem a combinação que governa."
+    ),
+    "caso_desenho": (
+        "Qual combinação o desenho mostra: as forças nos chumbadores e a pressão no concreto "
+        "mudam de uma para outra."
     ),
 }

@@ -171,6 +171,40 @@ têm as mesmas verificações que a NBR 8800 e a ACI 318-19 já usadas aqui; a A
 dá os furos e arruelas, e a ACI 318-19 17.9.2 as distâncias. A tabela 14-2 completa não pôde ser lida
 (o site recusa leitura automática): os furos vêm da Tabela 18, que tem os mesmos valores em mm.
 
+## Várias combinações, soldas e cortante no concreto (16/11/2026)
+
+**Envoltória.** `EntradaBase.casos` (tuplas de `CasoDeCarga`: nome, N, M, M_y, V). Cada combinação
+passa por `_calcular_um` inteira (o caso C1 a T3 sai dela); em cada verificação vale a pior
+(status, depois aproveitamento), com `[nome]` no começo da fórmula quando os valores mudam entre
+combinações. `ResultadoBase.casos` guarda o resultado de cada uma, `combinacao_governante` a que
+governa (a desenhada e a do registro). Por fórmula, o h_ef é o maior dos cones; a perna automática
+do pilar é a maior das combinações (a solda é uma só). Aviso quando há compressão e tração. A página
+traz uma tabela editável e o botão para trazer as combinações ELU de um pilar de Esforços do modelo
+(`placa_base_pilares.combinacoes_dos_pilares`, as mesmas da seção de placas de lá).
+
+**Soldas** (`core/base_de_pilar_soldas.py`):
+
+* Pilar na placa: contorno (mesas por fora, por dentro com o raio estimado em t_f, os dois lados da
+  alma), método elástico — f_n = −N/L − M·x/I_x − M_y·y/I_y, f_v = V/L, resultante nas pontas dos
+  trechos contra 0,60·f_w·0,707·d_w/γ_w2 (6.2.5, sem o fator de direção). Compressão por contato
+  (pilar faceado, AISC 360-22 J1.4 a): só a tração vai à solda. Metal-base do pilar: dois filetes na
+  chapa, √((2f_n/(f_y·t/γ_a1))² + (2f_v/R_v,6.5.5)²) ≤ 1. Limites 6.2.6: perna mínima (Tabela 11),
+  máxima na ponta da mesa, trechos internos ≥ máx(4·d_w; 40). Perna 0 = automática.
+* Placa de cisalhamento: dois filetes ao longo de b_h com V_Rd e M = ½·σ_c,Rd·b_h·(b_v² − e_n²) da
+  6.7.2.4 (pela resistência da placa), binário com braço t_pv + 2·d_w/3; ou penetração total (INFO).
+* Arruelas soldadas: filete no contorno (4 lados) para F_v,Rd,i; perna máxima na borda da arruela.
+
+**Cortante no concreto** (ACI 318-19, só com a ancoragem verificada): arruelas soldadas → ruptura da
+borda pela fila da frente nas duas direções (17.7.2, com 17.7.2.1.2, ψ_ed, ψ_h, V_b com ℓ_e ≤ 8·d_a),
+pryout k_cp·N_cbg do grupo inteiro (17.7.3) e interação N/φN + V/φV ≤ 1,2 quando as duas razões
+passam de 0,2 (17.8); placa de cisalhamento → ruptura à frente dela (17.11.3, marcada "a confirmar":
+o texto da 17.11 não foi visto), A_Vc sem a área de apoio, V_b = 3,7·√f_c·c_a1^1,5. A altura do bloco
+entra como `bloco_z_mm` (0 = a mínima da nota e). Essas linhas, como o cone, ficam fora das buscas
+de diâmetro por fórmula; a solda do pilar fica fora da `base_mais_leve` (não depende da placa).
+
+**Testes que mudaram:** os que usavam M = 150 kN·m no W 250 × 32,7 (≈ Z_x·f_y = 148 kN·m) passaram
+a reprovar na solda do pilar — de verdade; eles agora conferem o resto sem a solda.
+
 ## Exemplo (do guia)
 
 W 250 × 32,7, tipo 1, 4 chumbadores Ø 1", placa de 25 mm ASTM A36, f_ck = 25 MPa, A₂/A₁ = 1,

@@ -510,6 +510,38 @@ COLUNAS = (
 )
 
 
+@dataclass(frozen=True)
+class CombinacoesDoPilar:
+    """As combinações ELU na base de um pilar do modelo, para a página Placas de base."""
+
+    pilar: str
+    perfil: str
+    combinacoes: tuple[tuple[str, float, float, float, float], ...]  # (nome, N, M, M_y, V)
+
+
+def combinacoes_dos_pilares(
+    dados: em.EsforcosDoModelo,
+    plano: pc.PlanoDeCargas,
+    estados: Sequence[str] = ("ELU normal",),
+) -> list[CombinacoesDoPilar]:
+    """Os esforços combinados (ELU) na base de cada pilar com a base conhecida.
+
+    Os mesmos que a seção de placas de base de Esforços do modelo usa: N com compressão positiva,
+    M no eixo forte, M_y no fraco e V resultante, em kN e kN·m.
+    """
+    from core.verificacao_barras import estados_ultimos
+
+    quadro = qf.montar_quadro(dados)
+    preparo = em.preparar_combinacoes(dados, plano, estados_ultimos(estados))
+    if preparo is None:
+        return []
+    return [
+        CombinacoesDoPilar(pilar.pilar, pilar.perfil, tuple(_cargas_combinadas(pilar, preparo)))
+        for pilar in quadro.pilares
+        if pilar.base is not None
+    ]
+
+
 def linhas_da_tabela(resultados: Sequence[ResultadoDaPlaca]) -> list[list[object]]:
     return [
         [
