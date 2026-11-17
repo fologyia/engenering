@@ -277,10 +277,17 @@ AJUDA: dict[str, str] = {
     "btn_adotar": "Usa na página o chumbador e a espessura da base mais leve que atende.",
     "btn_csv": "Baixa a tabela de verificações em CSV (abre direto no Excel).",
     "sec_memorial": (
-        "O memorial só desta base, no padrão do memorial do projeto (capa, desenho, verificações "
-        "e conclusão)."
+        "O memorial só desta base: em Word, o trecho para colar no seu memorial oficial; em "
+        "PDF, o documento completo."
     ),
-    "btn_memorial_word": "Baixa o memorial desta base em Word, para editar.",
+    "btn_memorial_word": (
+        "O memorial desta base em Word, na ordem de um memorial: normas, dados, esforços, "
+        "desenho, hipóteses, verificações, resumo, detalhamento, conclusão e símbolos. Sai "
+        "como trecho para colar no seu memorial oficial: sem capa nem aprovações, títulos sem "
+        "número (o seu documento numera), legendas que se renumeram e as contas como equações "
+        "do Word. Para o documento completo do projeto, registre e use a Central de "
+        "relatórios."
+    ),
     "btn_memorial_pdf": "Baixa o memorial desta base em PDF, pronto para enviar.",
     "reg_registrar": (
         "Grava esta base no projeto ativo; ela entra no memorial do projeto na Central de "

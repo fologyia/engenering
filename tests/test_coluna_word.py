@@ -42,20 +42,18 @@ def test_word_traz_todas_as_secoes_da_pagina(coluna):
     cheio = texto(conteudo)
     for trecho in (
         "Flambagem de colunas — W 250 x 32,7",
-        "Plataforma X",
-        "PX-01",
-        "O que esta página não faz",
+        "Limitações do cálculo",  # memorial separado: títulos sem número (core.memorial_trecho)
         "Dados de entrada",
         "Propriedades da seção",
         "N_Sd = 1,4·100 + 1,5·106,7 = 300 kN",
-        "1. Resumo",
-        "2. Curva de flambagem",
-        "3. Tabela de verificações",
-        "4. Paredes da seção",
-        "5. A mesma coluna nas três normas",
-        "6. Regras adotadas nesta verificação",
+        "Resumo",
+        "Curva de flambagem",
+        "Tabela de verificações",
+        "Paredes da seção",
+        "A mesma coluna nas três normas",
+        "Regras adotadas nesta verificação",
         "Valores da NBR 8800:2008 conferidos na norma",
-        "7. Método, premissas, critérios e referências",
+        "Método, premissas, critérios e referências",
     ):
         assert trecho in cheio, trecho
     for item in cb.FORA_DO_ESCOPO:
@@ -66,6 +64,8 @@ def test_word_traz_todas_as_secoes_da_pagina(coluna):
         assert rotulo in cheio
     for proibida in PALAVRAS_PROIBIDAS:
         assert proibida not in cheio, proibida
+    # memorial separado: o projeto e o código são do documento oficial que recebe o trecho
+    assert "Plataforma X" not in cheio and "PX-01" not in cheio
     assert "γ_a1 = 1,10" in cheio and "N_c,Rd = 835,24 kN" in cheio  # vírgula decimal
     assert "NBR 8800 4.7" in cheio  # item da norma não vira decimal
     documento = Document(BytesIO(conteudo))
@@ -109,7 +109,7 @@ def test_word_sem_flexao_sem_projeto_e_noutra_norma():
     )  # fmt: skip
     conteudo = gerar_word_coluna(entrada, cb.verificar_coluna(entrada))
     cheio = texto(conteudo)
-    assert "1. Resumo" in cheio and "B₁ em" not in cheio
+    assert "Resumo" in cheio and "B₁ em" not in cheio
     assert "Valores da NBR 8800:2008 conferidos" not in cheio
     assert "(norma escolhida)" in cheio and cb.NORMAS_ROTULOS["NBR8800_2024"] in cheio
     primeira = Document(BytesIO(conteudo)).tables[0]

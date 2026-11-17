@@ -1,33 +1,31 @@
-"""Documento Word (editável) em paisagem, com títulos, tabelas copiáveis e figuras.
+"""Documento Word dos botões "Gerar o Word" das páginas (degrau, flambagem, peças, montador).
 
-Base dos botões "Gerar o Word" do fim das páginas (degrau de escada, flambagem de colunas): cada
-página monta o seu conteúdo com esta classe. Sem Streamlit.
+É um **memorial separado** e segue o padrão de :mod:`core.memorial_trecho`: o trecho do cálculo de
+uma peça para colar no documento oficial — A4 em retrato, títulos nativos sem número (o documento
+oficial numera), legendas com numeração automática acima das tabelas e figuras, estilos nativos e
+sem cabeçalho, rodapé ou quebra de seção. A interface de antes continua (``titulo``, ``paragrafo``,
+``itens``, ``tabela``, ``figura``, ``bytes``), então as páginas não mudam. Sem Streamlit.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
-from io import BytesIO
 from typing import Any
 
-from docx import Document
-from docx.enum.section import WD_ORIENT
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Mm, Pt, RGBColor
+from docx.shared import Pt
 
-AZUL = RGBColor(0x16, 0x32, 0x4F)
-CINZA = RGBColor(0x5F, 0x6B, 0x76)
-FUNDO_CABECALHO = "24577A"
-FUNDO_DESTAQUE = "FFF3C4"
-COR_STATUS = {
-    "OK": "D9F2E3",
-    "NÃO OK": "F8D4D4",
-    "ALERTA": "FCEBC4",
-    "INFO": "D8E8F8",
-    "N/A": "E6E9ED",
+from core.memorial_trecho import LARGURA_FIGURA_MM, SITUACAO, Trecho
+from core.memorial_trecho import LARGURA_UTIL_MM as LARGURA_TRECHO_MM
+
+#: Largura em que as tabelas das páginas foram desenhadas (A4 em paisagem); o trecho reduz a escala.
+LARGURA_UTIL_MM = 273.0
+_NUMERACAO = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+")
+#: Títulos de tela trocados pelo nome que eles têm num memorial.
+TITULOS_DE_MEMORIAL = {
+    "O que esta página não faz": "Limitações do cálculo",
+    "Quadro-resumo": "Resumo",
 }
-LARGURA_UTIL_MM = 273.0  # A4 em paisagem com margens de 12 mm
 
 
 def numero_pt(x: float, casas: int = 2) -> str:
@@ -48,52 +46,37 @@ def celula_texto(valor: Any) -> str:
     return str(valor)
 
 
-def _sombrear(celula: Any, cor: str) -> None:
-    propriedades = celula._tc.get_or_add_tcPr()
-    sombra = OxmlElement("w:shd")
-    sombra.set(qn("w:val"), "clear")
-    sombra.set(qn("w:color"), "auto")
-    sombra.set(qn("w:fill"), cor)
-    propriedades.append(sombra)
+def titulo_de_memorial(texto: str) -> str:
+    """'3. Tabela de verificações' → 'Tabela de verificações' (o documento oficial numera)."""
+    limpo = _NUMERACAO.sub("", texto).strip()
+    return TITULOS_DE_MEMORIAL.get(limpo, limpo)
 
 
-def _repetir_cabecalho(linha: Any) -> None:
-    propriedades = linha._tr.get_or_add_trPr()
-    marca = OxmlElement("w:tblHeader")
-    marca.set(qn("w:val"), "true")
-    propriedades.append(marca)
-
-
-class DocumentoWord:
-    """Um documento Word em paisagem com títulos, parágrafos, tabelas e figuras."""
+class DocumentoWord(Trecho):
+    """O trecho de memorial com a interface antiga das páginas."""
 
     def __init__(self) -> None:
-        self.doc = Document()
-        secao = self.doc.sections[0]
-        secao.orientation = WD_ORIENT.LANDSCAPE
-        secao.page_width, secao.page_height = Mm(297), Mm(210)
-        for margem in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
-            setattr(secao, margem, Mm(12))
-        normal = self.doc.styles["Normal"]
-        normal.font.name = "Calibri"
-        normal.font.size = Pt(9)
+        super().__init__()
+        self._desloca = 0  # o título de nível 0 vira o 1 e os outros descem um
+        self._ultimo_titulo = ""
 
     def titulo(self, texto: str, nivel: int = 1) -> None:
-        paragrafo = self.doc.add_heading(texto, level=nivel)
-        for trecho in paragrafo.runs:
-            trecho.font.color.rgb = AZUL
+        if nivel == 0:
+            self._desloca = 1
+        texto = titulo_de_memorial(texto)
+        self._ultimo_titulo = texto
+        super().titulo(texto, nivel + self._desloca if nivel else 1)
 
-    def paragrafo(self, texto: str, *, legenda: bool = False, negrito: bool = False) -> None:
-        paragrafo = self.doc.add_paragraph()
-        trecho = paragrafo.add_run(texto)
-        trecho.bold = negrito
+    def paragrafo(  # type: ignore[override]
+        self, texto: str, *, legenda: bool = False, negrito: bool = False
+    ) -> Any:
         if legenda:
-            trecho.font.size = Pt(8)
-            trecho.font.color.rgb = CINZA
-
-    def itens(self, textos: Sequence[str]) -> None:
-        for texto in textos:
-            self.doc.add_paragraph(texto, style="List Bullet")
+            self.nota(texto)
+            return None
+        paragrafo = super().paragrafo(texto)
+        for trecho in paragrafo.runs:
+            trecho.bold = negrito
+        return paragrafo
 
     def tabela(
         self,
@@ -104,49 +87,35 @@ class DocumentoWord:
         status_coluna: int | None = None,
         destacar_linha: int | None = None,
         fonte: float = 8.0,
+        legenda: str | None = None,
     ) -> None:
-        tabela = self.doc.add_table(rows=1, cols=len(cabecalhos))
-        tabela.style = "Table Grid"
-        if larguras_mm is None:
-            larguras_mm = [LARGURA_UTIL_MM / len(cabecalhos)] * len(cabecalhos)
-        escala = min(1.0, LARGURA_UTIL_MM / sum(larguras_mm))
-        larguras = [Mm(w * escala) for w in larguras_mm]
-
-        def escrever(celula: Any, texto: str, *, cabecalho: bool = False) -> None:
-            celula.text = ""
-            trecho = celula.paragraphs[0].add_run(texto)
-            trecho.font.size = Pt(fonte)
-            if cabecalho:
-                trecho.bold = True
-                trecho.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-
-        topo = tabela.rows[0]
-        _repetir_cabecalho(topo)
-        for celula, texto, largura in zip(topo.cells, cabecalhos, larguras, strict=True):
-            escrever(celula, str(texto), cabecalho=True)
-            _sombrear(celula, FUNDO_CABECALHO)
-            celula.width = largura
-        for indice, linha in enumerate(linhas):
-            celulas = tabela.add_row().cells
-            for coluna, (celula, valor, largura) in enumerate(
-                zip(celulas, linha, larguras, strict=True)
-            ):
+        textos = []
+        for linha in linhas:
+            celulas = []
+            for coluna, valor in enumerate(linha):
                 texto = celula_texto(valor)
-                escrever(celula, texto)
-                celula.width = largura
                 if status_coluna is not None and coluna == status_coluna:
-                    cor = COR_STATUS.get(texto)
-                    if cor:
-                        _sombrear(celula, cor)
-                elif destacar_linha is not None and indice == destacar_linha:
-                    _sombrear(celula, FUNDO_DESTAQUE)
-        self.doc.add_paragraph()
+                    texto = SITUACAO.get(texto, texto)
+                celulas.append(texto)
+            textos.append(celulas)
+        if larguras_mm is not None and sum(larguras_mm) > LARGURA_TRECHO_MM:
+            escala = LARGURA_TRECHO_MM / sum(larguras_mm)
+            fonte = max(6.5, fonte * max(escala, 0.8))
+        super().tabela(
+            cabecalhos,
+            textos,
+            legenda=legenda or self._ultimo_titulo or "Resultados",
+            larguras_mm=larguras_mm,
+            fonte=fonte,
+        )
+        if destacar_linha is not None and self.doc.tables:
+            tabela = self.doc.tables[-1]
+            if destacar_linha + 1 < len(tabela.rows):
+                for celula in tabela.rows[destacar_linha + 1].cells:
+                    for paragrafo in celula.paragraphs:
+                        for corrida in paragrafo.runs:
+                            corrida.bold = True
+                            corrida.font.size = Pt(fonte)
 
-    def figura(self, png: bytes, legenda: str, largura_mm: float = 230) -> None:
-        self.doc.add_picture(BytesIO(png), width=Mm(min(largura_mm, LARGURA_UTIL_MM)))
-        self.paragrafo(legenda, legenda=True)
-
-    def bytes(self) -> bytes:
-        memoria = BytesIO()
-        self.doc.save(memoria)
-        return memoria.getvalue()
+    def figura(self, png: bytes, legenda: str, largura_mm: float = LARGURA_FIGURA_MM) -> None:
+        super().figura(png, legenda, min(largura_mm, LARGURA_FIGURA_MM))

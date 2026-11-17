@@ -923,7 +923,8 @@ def gerar_memorial_fadiga_word(
     dados: Mapping[str, Any],
     linhas_resumo: Sequence[Mapping[str, Any]],
 ) -> bytes:
-    """Preenche o padrão corporativo com a memória da análise de fadiga."""
+    """A memória da análise de fadiga como memorial separado (trecho para colar no documento
+    oficial, :mod:`core.memorial_trecho`)."""
     status = _status_calculo(dados)
     fatores = dados.get("fatores", {})
     sut = float(dados.get("Sut", 0.0))
@@ -1143,8 +1144,6 @@ def gerar_memorial_fadiga_word(
         "Este memorial registra a avaliação de fadiga do ponto crítico informado, "
         "incluindo correções de Marin, efeito da tensão média, verificação de escoamento "
         "e estimativa de vida pelo método tensão-vida.",
-        "O documento é editável e foi estruturado para receber outras partes do projeto "
-        "sem alterar a identificação, o controle de revisão e a hierarquia técnica.",
     ]
     if observacao_projeto:
         scope_paragraphs.append(f"Observação do projeto: {observacao_projeto}")
@@ -1282,7 +1281,7 @@ def gerar_memorial_fadiga_word(
         {
             "titulo": "9. Conclusão e recomendações",
             "paragrafos": [
-                f"Conclusão automática: {status[0]}. {status[2]}",
+                f"Conclusão: {status[0]}. {status[2]}",
                 f"Critério governante: {criterio_governante}, n = {_numero(menor_n, 3)}, para meta n ≥ {_numero(meta_fs, 2)}.",
                 f"Limite corrigido adotado: Se = {_numero(se, 2)} MPa. "
                 f"Amplitude equivalente de Goodman: {_numero(sigma_eq, 2)} MPa.",
@@ -1297,11 +1296,9 @@ def gerar_memorial_fadiga_word(
         },
     ]
 
-    metadata["numero_aprovacoes"] = 10
-    return gerar_memorial_word_padrao(
-        metadata=metadata,
-        resumo=resumo,
-        resumo_executivo=resumo_executivo,
-        secoes=sections,
-        status=status,
-    )
+    # Memorial separado: o trecho para colar no documento oficial (core.memorial_trecho); o
+    # documento completo, com capa e aprovações, é o do relatório geral.
+    from core.memorial_trecho import trecho_de_secoes
+
+    del metadata, resumo, resumo_executivo, status  # só o documento completo os usa
+    return trecho_de_secoes(f"Análise de fadiga — {componente}", sections)

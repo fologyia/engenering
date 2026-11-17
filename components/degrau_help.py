@@ -325,8 +325,10 @@ AJUDA: dict[str, str] = {
     "btn_csv_verificacoes": "Baixa a tabela das 38 verificações em CSV (abre no Excel).",
     "btn_csv_catalogo": "Baixa a tabela dos 64 modelos em CSV (abre no Excel).",
     "sec_word": (
-        "Um arquivo do Word, editável, com tudo o que esta página mostra — para copiar os dados "
-        "para outro documento."
+        "Um arquivo do Word, editável, com tudo o que esta página mostra. Sai como trecho "
+        "para colar no seu memorial oficial: sem capa nem aprovações, títulos sem número (o "
+        "seu documento numera), legendas que se renumeram e as contas como equações do Word. "
+        "Para o documento completo do projeto, registre e use a Central de relatórios."
     ),
     "btn_word": (
         "Gera o Word com a identificação, todos os dados de entrada, o quadro-resumo, as 38 "

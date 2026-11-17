@@ -71,7 +71,11 @@ LARGURAS_APOIO = [2900, 1100, 560, 4800]
 # "RCSC 5.1", "NBR 8800 4.7"), não um decimal.
 _DECIMAL_COM_PONTO = re.compile(
     r"(?<![\d.,])(?<![A-Za-z])(?<!Anglo )(?<!item )(?<!itens )(?<!NBR )(?<!AISC )(?<!RCSC )"
-    r"(?<!Tab\. )(?<!Tabela )(?<!§)(?<!8800 )(\d+)\.(\d+)(?![\d.])"
+    r"(?<!Tab\. )(?<!Tabela )(?<!§)(?<!8800 )"
+    # "Subseção 6.7", "pela 6.7", "na 6.7.2", "Design Guide 1, 3.3": número de item, não decimal
+    r"(?<!ubseção )(?<!Seção )(?<!seção )(?<!pela )(?<!pelo )(?<!da )(?<!na )(?<!à )"
+    r"(?<!Guide 1, )(?<!DG1 )(?<!DG1, )(?<!Anexo )(?<!318-19 )(?<!apítulo )"
+    r"(\d+)\.(\d+)(?![\d.])"
 )
 _IDENTIFICADOR = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
 
@@ -938,6 +942,9 @@ _RESULTADOS_JA_TRATADOS = frozenset(
         "verificações",
         "verificacoes",
         "status_geral",
+        # o que o memorial separado (core.memorial_trecho) usa
+        "objetivo",
+        "titulo_memorial",
         "utilizacao_maxima",
         # flambagem de colunas
         "modo_governante",

@@ -369,9 +369,7 @@ def gerar_word(
     """O documento da conta aberta na tela. ``resumo`` é a frase da resposta, como h ≥ 37,95 mm."""
     documento = DocumentoWord()
     documento.titulo(titulo, 1)
-    nome_do_projeto = (projeto or {}).get("nome") or (projeto or {}).get("titulo")
-    if nome_do_projeto:
-        documento.paragrafo(f"Projeto: {nome_do_projeto}")
+    del projeto  # memorial separado: o projeto é o do documento oficial que recebe o trecho
     montagem = resposta.montagem
     alvo = resposta.alvo
 

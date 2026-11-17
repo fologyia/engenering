@@ -396,8 +396,10 @@ AJUDA: dict[str, str] = {
         "a norma e o item, a figura e o que não passou."
     ),
     "btn_memorial_word": (
-        "Gera o memorial desta ligação em Word, para editar. Com projeto ativo, a capa leva os "
-        "dados dele."
+        "Gera o memorial desta ligação em Word. Sai como trecho para colar no seu memorial "
+        "oficial: sem capa nem aprovações, títulos sem número (o seu documento numera), "
+        "legendas que se renumeram e as contas como equações do Word. Para o documento "
+        "completo do projeto, registre e use a Central de relatórios."
     ),
     "btn_memorial_pdf": "Gera o memorial desta ligação em PDF, pronto para enviar.",
     "reg_registrar": "Grava esta ligação no projeto ativo; ela entra no memorial com a figura e as verificações.",

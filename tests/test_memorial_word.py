@@ -1,7 +1,6 @@
 import copy
 import io
 import unittest
-import xml.etree.ElementTree as ET
 from zipfile import ZipFile
 
 from docx import Document
@@ -81,33 +80,25 @@ class MemorialWordTests(unittest.TestCase):
         self.linhas = [dict(zip(keys, row, strict=True)) for row in rows]
 
     def test_generates_editable_standardized_docx(self):
+        # Memorial separado: o trecho para colar no documento oficial (core.memorial_trecho) —
+        # sem capa, cabeçalho, resumo executivo nem aprovações, títulos sem número.
         content = memorial_word.gerar_memorial_fadiga_word(self.dados, self.linhas)
         self.assertTrue(content.startswith(b"PK"))
-        self.assertGreater(len(content), 20_000)
 
         document = Document(io.BytesIO(content))
         text = "\n".join(paragraph.text for paragraph in document.paragraphs)
-        self.assertIn("Memorial de cálculo - análise de fadiga", text)
-        self.assertIn("1. Resumo executivo", text)
-        self.assertIn("7.2 Correção de temperatura", text)
-        self.assertIn("9. Conclusão e recomendações", text)
-        self.assertIn("10. Aprovações", text)
+        self.assertIn("Análise de fadiga — Eixo - seção junto ao ombro", text)
+        self.assertIn("Correção de temperatura", text)
+        self.assertIn("Conclusão e recomendações", text)
         self.assertIn("500,00 °F", text)
-        # O memorial é a memória de cálculo: sem pendências, checklist,
-        # integração de outras partes, apêndices nem faixa de situação.
-        for ausente in ("pendências e ações", "Checklist", "Apêndice", "Integração com outras"):
+        for ausente in (
+            "Resumo executivo", "Aprovações", "7.2 Correção", "controle de revisão",
+            "pendências e ações", "Checklist", "Apêndice", "Integração com outras",
+        ):  # fmt: skip
             self.assertNotIn(ausente, text)
-        self.assertGreaterEqual(len(document.tables), 7)
-
-        header_text = " ".join(
-            paragraph.text
-            for table in document.sections[0].header.tables
-            for row in table.rows
-            for cell in row.cells
-            for paragraph in cell.paragraphs
-        )
-        self.assertIn("MC-FAD-001", header_text)
-        self.assertIn("REV. 00", header_text)
+        self.assertGreaterEqual(len(document.tables), 2)
+        self.assertEqual(document.sections[0].header.paragraphs[0].text, "")
+        self.assertEqual(len(document.sections), 1)
 
     def test_required_life_can_govern_the_final_status(self):
         dados = copy.deepcopy(self.dados)
@@ -128,99 +119,15 @@ class MemorialWordTests(unittest.TestCase):
         self.assertIn("500.000 ciclos", text)
         self.assertIn("1.000.000 ciclos requeridos", text)
 
-    def test_tables_have_fixed_matching_dxa_geometry(self):
+    def test_trecho_tem_legendas_numeradas_equacoes_e_listas(self):
         content = memorial_word.gerar_memorial_fadiga_word(self.dados, self.linhas)
-        ns = {"w": W_NS}
-        attr = lambda name: f"{{{W_NS}}}{name}"
         with ZipFile(io.BytesIO(content)) as archive:
-            root = ET.fromstring(archive.read("word/document.xml"))
-            numbering_xml = archive.read("word/numbering.xml")
-            numbering = numbering_xml.decode("utf-8")
-            numbering_root = ET.fromstring(numbering_xml)
-
-        tables = root.findall(".//w:tbl", ns)
-        self.assertGreaterEqual(len(tables), 7)
-        for table in tables:
-            width_node = table.find("w:tblPr/w:tblW", ns)
-            indent_node = table.find("w:tblPr/w:tblInd", ns)
-            grid = [
-                int(node.get(attr("w"), "0")) for node in table.findall("w:tblGrid/w:gridCol", ns)
-            ]
-            self.assertIsNotNone(width_node)
-            self.assertEqual(width_node.get(attr("type")), "dxa")
-            self.assertEqual(int(width_node.get(attr("w"))), memorial_word.CONTENT_WIDTH_DXA)
-            self.assertIsNotNone(indent_node)
-            self.assertEqual(int(indent_node.get(attr("w"))), memorial_word.TABLE_INDENT_DXA)
-            self.assertEqual(sum(grid), memorial_word.CONTENT_WIDTH_DXA)
-            for row in table.findall("w:tr", ns):
-                widths = [
-                    int(cell.find("w:tcPr/w:tcW", ns).get(attr("w")))
-                    for cell in row.findall("w:tc", ns)
-                ]
-                self.assertEqual(widths, grid)
-
-        self.assertIn('w:val="bullet"', numbering)
-        self.assertIn('w:val="decimal"', numbering)
-        self.assertIn("\uf0b7", numbering)
-
-        numbering_children = list(numbering_root)
-        abstract_positions = [
-            index
-            for index, node in enumerate(numbering_children)
-            if node.tag == f"{{{W_NS}}}abstractNum"
-        ]
-        num_positions = [
-            index for index, node in enumerate(numbering_children) if node.tag == f"{{{W_NS}}}num"
-        ]
-        self.assertLess(max(abstract_positions), min(num_positions))
-
-        num_to_abstract = {
-            node.get(attr("numId")): node.find("w:abstractNumId", ns).get(attr("val"))
-            for node in numbering_root.findall("w:num", ns)
-        }
-        abstract_to_format = {
-            node.get(attr("abstractNumId")): node.find("w:lvl/w:numFmt", ns).get(attr("val"))
-            for node in numbering_root.findall("w:abstractNum", ns)
-        }
-
-        def list_format_for(text_fragment):
-            for paragraph in root.findall(".//w:body/w:p", ns):
-                text = "".join(node.text or "" for node in paragraph.findall(".//w:t", ns))
-                if text_fragment in text:
-                    num_node = paragraph.find("w:pPr/w:numPr/w:numId", ns)
-                    self.assertIsNotNone(num_node)
-                    return abstract_to_format[num_to_abstract[num_node.get(attr("val"))]]
-            self.fail(f"Item de lista não encontrado: {text_fragment}")
-
-        self.assertEqual(list_format_for("Carregamento proporcional"), "bullet")
-        self.assertEqual(
-            list_format_for("Validar material, unidades, geometria"),
-            "decimal",
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-def test_larguras_que_nao_fecham_a_pagina_sao_ajustadas():
-    from core.memorial_word import CONTENT_WIDTH_DXA, larguras_na_pagina
-
-    for larguras, colunas in (([1000, 2000, 3000], 3), ([0.2, 0.3, 0.5], 3), ([100], 3), ([], 2)):
-        saida = larguras_na_pagina(larguras, colunas)
-        assert len(saida) == colunas and sum(saida) == CONTENT_WIDTH_DXA and min(saida) > 0
-    assert larguras_na_pagina([1000, 2000, 3000], 3)[2] == 4680
-
-
-def test_tabela_com_larguras_que_nao_fecham_a_pagina_sai_no_word():
-    """As larguras são aplicadas duas vezes na tabela: as duas usam as ajustadas."""
-    from docx import Document
-
-    from core.memorial_word import CONTENT_WIDTH_DXA, _add_data_table
-
-    documento = Document()
-    tabela = _add_data_table(
-        documento, ["A", "B", "C"], [["1", "2", "3"], ["4", "5", "6"]], [1000, 2000, 3000]
-    )
-    larguras = [int(c.width.twips) for c in tabela.columns]
-    assert sum(larguras) == CONTENT_WIDTH_DXA
+            xml = archive.read("word/document.xml").decode("utf-8")
+        self.assertGreaterEqual(xml.count("SEQ Tabela"), 2)
+        self.assertGreaterEqual(xml.count("<m:oMathPara"), 5)  # Marin, Goodman, vida…
+        document = Document(io.BytesIO(content))
+        estilos = {p.style.name for p in document.paragraphs if p.text.strip()}
+        self.assertIn("List Bullet", estilos)
+        self.assertIn("List Number", estilos)  # os passos do cálculo, em ordem
+        legendas = [p.text for p in document.paragraphs if p.style.name == "Caption"]
+        self.assertTrue(legendas and not any("Tabela 1 -" in x for x in legendas))

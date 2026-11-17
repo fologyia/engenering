@@ -2181,15 +2181,23 @@ def memorial_da_ligacao(
     formato: str = "word",
     giro_graus: float = 0.0,
 ) -> bytes:
-    """O memorial só desta ligação, em Word ou PDF, no padrão do memorial do projeto.
+    """O memorial só desta ligação. Em Word, o trecho para colar no documento oficial
+    (:mod:`core.memorial_trecho`); em PDF, o documento no padrão do memorial do projeto.
 
-    Com o projeto ativo, a capa e o controle levam os dados dele; sem projeto, ficam
-    "[a preencher]". Entra só o registro desta ligação (os outros cálculos do projeto não). O
-    desenho sai com o mesmo giro da tela.
+    Entra só o registro desta ligação (os outros cálculos do projeto não). O desenho sai com o
+    mesmo giro da tela.
     """
     import importlib
 
     from core.technical_records import normalizar_registro_tecnico
+
+    if formato != "pdf":
+        from core.memorial_trecho import trecho_de_registro
+
+        return trecho_de_registro(
+            normalizar_registro_tecnico(registro_ligacao(r, giro_graus=giro_graus)),
+            projeto=projeto,
+        )
 
     # O gerador do memorial ainda está fora da lista do mypy (adoção gradual): importado pelo nome
     # para não arrastar os módulos dele para a verificação deste.

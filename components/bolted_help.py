@@ -615,9 +615,11 @@ AJUDA: dict[str, str] = {
         "(furo + 2 mm) × espessura da área."
     ),
     "btn_memorial_word": (
-        "Baixa o memorial **só desta ligação** em Word, no padrão do memorial do projeto: dados, "
-        "tabela de verificações com fórmula e item da norma, e o resultado. Com projeto ativo, a "
-        "capa leva os dados dele; sem projeto, os campos ficam para preencher."
+        "O memorial só desta ligação em Word: dados, normas, verificações com a conta e o "
+        "item da norma, e o resumo. Sai como trecho para colar no seu memorial oficial: sem "
+        "capa nem aprovações, títulos sem número (o seu documento numera), legendas que se "
+        "renumeram e as contas como equações do Word. Para o documento completo do projeto, "
+        "registre e use a Central de relatórios."
     ),
     "btn_memorial_pdf": (
         "O mesmo memorial desta ligação, em PDF, pronto para enviar. Para juntar com os outros "

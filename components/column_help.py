@@ -633,8 +633,10 @@ AJUDA: dict[str, str] = {
     ),
     "reg_comparar": "Guarda este cenário para comparar com outros (outro perfil, outro comprimento).",
     "sec_word": (
-        "Um arquivo do Word, editável, com tudo o que esta página mostra — para copiar os dados "
-        "para outro documento."
+        "Um arquivo do Word, editável, com tudo o que esta página mostra. Sai como trecho "
+        "para colar no seu memorial oficial: sem capa nem aprovações, títulos sem número (o "
+        "seu documento numera), legendas que se renumeram e as contas como equações do Word. "
+        "Para o documento completo do projeto, registre e use a Central de relatórios."
     ),
     "btn_word": (
         "Gera o Word com o que a página não faz, todos os dados de entrada e as propriedades da "

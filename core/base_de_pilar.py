@@ -1129,7 +1129,23 @@ def espessura_a_45_graus(g: Geometria, forcas: tuple[float, ...], fy_d: float) -
     sobrepor) —; t = √(4·F_t·m/(b_eff·f_y/γ_a1)). Complementa a fórmula da 6.7 (a linha inteira
     na largura ℓy): quando os chumbadores são poucos numa placa larga, a 45° governa.
     """
-    pior, texto = 0.0, ""
+    dados = dados_a_45_graus(g, forcas, fy_d)
+    if dados is None:
+        return 0.0, ""
+    t, f, m, b_eff, x, y = dados
+    return t, (
+        f"a 45° no chumbador mais exigido (x; y) = ({_n(x, 0)}; {_n(y, 0)}) mm: m = |x| − d/2 "
+        f"= {_n(m, 1)} mm até a face da mesa, b_eff = {_n(b_eff, 1)} mm (45° de cada lado, "
+        f"limitada pela borda da placa e pela metade do espaçamento), F_t = "
+        f"{_n(f / 1e3, 2)} kN: t = √(4·F_t·m/(b_eff·f_y/γ_a1)) = {_n(t, 1)} mm"
+    )
+
+
+def dados_a_45_graus(
+    g: Geometria, forcas: tuple[float, ...], fy_d: float
+) -> tuple[float, float, float, float, float, float] | None:
+    """(t, F_t, m, b_eff, x, y) do chumbador externo que pede a placa mais grossa a 45°."""
+    melhor: tuple[float, float, float, float, float, float] | None = None
     for (x, y), f in zip(g.posicoes, forcas, strict=True):
         if f <= 0 or abs(x) <= g.d / 2 + 1e-9:
             continue
@@ -1143,15 +1159,9 @@ def espessura_a_45_graus(g: Geometria, forcas: tuple[float, ...], fy_d: float) -
         if b_eff <= 0:
             continue
         t = math.sqrt(4 * f * m / (b_eff * fy_d))
-        if t > pior:
-            pior = t
-            texto = (
-                f"a 45° no chumbador mais exigido (x; y) = ({_n(x, 0)}; {_n(y, 0)}) mm: m = |x| − d/2 "
-                f"= {_n(m, 1)} mm até a face da mesa, b_eff = {_n(b_eff, 1)} mm (45° de cada lado, "
-                f"limitada pela borda da placa e pela metade do espaçamento), F_t = "
-                f"{_n(f / 1e3, 2)} kN: t = √(4·F_t·m/(b_eff·f_y/γ_a1)) = {_n(t, 1)} mm"
-            )
-    return pior, texto
+        if melhor is None or t > melhor[0]:
+            melhor = (t, f, m, b_eff, x, y)
+    return melhor
 
 
 Ponto = tuple[float, float]
@@ -1654,6 +1664,106 @@ def _alerta(nome: str, referencia: str, texto: str) -> Verificacao:
     return Verificacao(nome, None, None, "—", referencia, texto, "ALERTA", tipo="limite")
 
 
+def _equacoes_da_base(
+    e: EntradaBase,
+    g: Geometria,
+    contas: Mapping[str, Any],
+    *,
+    sigma_rd: float,
+    razao: float,
+    gc: float,
+    fy: float,
+    gama_a1: float,
+    gama_a2: float,
+    f_t: float,
+    f_ub: float,
+    a_se: float,
+    axial: float,
+    forcas: tuple[float, ...],
+    d_min: float | None,
+) -> dict[str, tuple[str, ...]]:
+    """As contas das verificações principais em notação de equação (memorial em Word)."""
+    saida: dict[str, tuple[str, ...]] = {}
+    fy_d = fy / gama_a1
+    rd = (
+        "σ_c,Rd = 0,85·f_ck/γ_c·√(A_2/A_1) ≤ 1,7·f_ck/γ_c",
+        f"σ_c,Rd = mín(0,85 × {_n(e.fck_MPa, 1)}/{_n(gc, 1)} × √({_n(razao, 2)}); "
+        f"1,7 × {_n(e.fck_MPa, 1)}/{_n(gc, 1)}) = {_n(sigma_rd, 2)} MPa",
+    )
+    saida["Concreto: pressão de contato"] = rd
+    saida["Concreto: pressão de contato σ_c,Sd ≤ σ_c,Rd"] = rd
+    if "compressao" in contas:
+        l_max, sigma_sd, l_c = contas["compressao"]
+        saida["Concreto: pressão de contato σ_c,Sd ≤ σ_c,Rd"] = (
+            *rd,
+            "σ_c,Sd = N_Sd/(ℓ_c·ℓ_y)",
+            f"σ_c,Sd = {_n(axial, 0)}/({_n(l_c, 1)} × {_n(g.ly, 0)}) = {_n(sigma_sd, 2)} MPa ≤ "
+            f"σ_c,Rd = {_n(sigma_rd, 2)} MPa",
+        )
+    placa: list[str] = []
+    if "compressao" in contas:
+        l_max, sigma_sd, _ = contas["compressao"]
+        t1 = l_max * math.sqrt(2 * sigma_sd / fy_d)
+        placa += [
+            "t_p,min = ℓ_máx·√(2·σ_c,Sd/(f_y/γ_a1))",
+            f"t_p,min = {_n(l_max, 1)} × √(2 × {_n(sigma_sd, 3)}/({_n(fy, 0)}/{_n(gama_a1, 2)})) "
+            f"= {_n(t1, 2)} mm",
+        ]
+    if "pressao_rd" in contas:
+        l_max, l_c = contas["pressao_rd"]
+        t1 = l_max * math.sqrt(2 * sigma_rd / fy_d)
+        placa += [
+            "t_p,min1 = ℓ_máx·√(2·σ_c,Rd/(f_y/γ_a1))",
+            f"t_p,min1 = {_n(l_max, 1)} × √(2 × {_n(sigma_rd, 2)}/({_n(fy, 0)}/{_n(gama_a1, 2)})) "
+            f"= {_n(t1, 2)} mm",
+        ]
+    if "linha" in contas and g.m > g.a1:
+        f_linha = contas["linha"]
+        n_b = e.n_chumbadores
+        t2 = math.sqrt(2 * n_b * f_linha * (g.m - g.a1) / (g.ly * fy_d))
+        placa += [
+            "t_p,min2 = √(2·n_b·F_t,Sd·(m − a_1)/(ℓ_y·f_y/γ_a1))",
+            f"t_p,min2 = √(2 × {n_b} × {_n(f_linha, 0)} × {_n(g.m - g.a1, 1)}/({_n(g.ly, 0)} × "
+            f"{_n(fy, 0)}/{_n(gama_a1, 2)})) = {_n(t2, 2)} mm",
+        ]
+    dados = dados_a_45_graus(g, forcas, fy_d)
+    if dados is not None:
+        t45, f45, m45, b45, _, _ = dados
+        placa += [
+            "t_p,45 = √(4·F_t·m/(b_eff·f_y/γ_a1))",
+            f"t_p,45 = √(4 × {_n(f45, 0)} × {_n(m45, 1)}/({_n(b45, 1)} × {_n(fy, 0)}/"
+            f"{_n(gama_a1, 2)})) = {_n(t45, 2)} mm",
+        ]
+    if placa:
+        placa.append(f"t_p = {_n(e.t_placa_mm, 2)} mm")
+        saida["Placa de base: espessura t_p ≥ t_p,min"] = tuple(placa)
+    if d_min is not None and f_t > 0:
+        saida["Chumbador: diâmetro d_b ≥ d_b,min"] = (
+            "d_b,min = √(4·F_t,Sd/(0,75·π·f_ub/γ_a2))",
+            f"d_b,min = √(4 × {_n(f_t, 0)}/(0,75 × π × {_n(f_ub, 0)}/{_n(gama_a2, 2)})) = "
+            f"{_n(d_min, 2)} mm",
+        )
+    if "cortante_aco" in contas:
+        v_i, n_eng, f_ut = contas["cortante_aco"]
+        aco_v = PHI_ACO_CORTANTE * 0.6 * a_se * f_ut * FATOR_ARGAMASSA
+        saida["Chumbador: aço à cortante (ACI 318-19)"] = (
+            "V_ua,i = V_Sd/n_eng",
+            "φ·V_sa = 0,65·0,6·A_se·f_uta·0,80",
+            f"φ·V_sa = 0,65 × 0,6 × {_n(a_se, 0)} × {_n(f_ut, 0)} × 0,80 = {_n(aco_v / 1e3, 2)} kN "
+            f"≥ V_ua,i = {_n(v_i / 1e3, 2)} kN",
+        )
+    if "flexao" in contas:
+        fl = contas["flexao"]
+        saida[LINHA_FLEXAO_NA_ARGAMASSA] = (
+            "M = (V_Sd/n_eng)·(e_n/2 + t_p/2)",
+            f"M = {_n(fl.v_i, 0)} × {_n(fl.braco, 1)} = {_n(fl.momento, 0)} N·mm",
+            "σ = M/(1,5·W) + F_t/A_se ≤ f_y/γ_a1",
+            f"σ = {_n(fl.momento, 0)}/(1,5 × {_n(fl.w, 0)}) + {_n(fl.f_t, 0)}/{_n(fl.a_se, 0)} = "
+            f"{_n(fl.sigma, 1)} MPa ≤ {_n(fl.limite, 1)} MPa",
+        )
+    return saida
+
+
 def _comprimento_da_barra(e: EntradaBase, g: Geometria, tab: LinhaTabela18) -> str:
     """L = h_ef + h₂ + ponta, com h₂ conferido com e_n + t_p + arruela + porca + 3 fios (mm)."""
     passo = passo_da_rosca(e, tab)
@@ -2036,6 +2146,11 @@ def verificar_ancoragem(
             f"{ref} 17.6.1",
             f"φ·N_sa = 0,75·A_se·f_uta = 0,75 × {_n(a_se, 0)} mm² × {_n(f_ut, 0)} MPa, f_uta = "
             "mín(f_u; 1,9·f_y; 862 MPa), no chumbador mais tracionado",
+            equacoes=(
+                "φ·N_sa = 0,75·A_se·f_uta",
+                f"φ·N_sa = 0,75 × {_n(a_se, 0)} × {_n(f_ut, 0)} = "
+                f"{_n(PHI_ACO_TRACAO * a_se * f_ut / 1e3, 1)} kN ≥ N_ua = {_n(f_max / 1e3, 2)} kN",
+            ),
         )
     )
     # 1. arrancamento de um chumbador (ou a resistência do fabricante)
@@ -2719,7 +2834,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 min(folga_alma, folga_mesa) >= -1e-9,
                 "montagem",
                 f"arruela {tab.arruela} mm: folga de {_n(folga_alma, 0)} mm até a alma e de "
-                f"{_n(folga_mesa, 0)} mm até a mesa (precisam ser ≥ 0; senão, perfil mais alto, "
+                f"{_n(folga_mesa, 0)} mm até a mesa, ambas ≥ 0 (senão, perfil mais alto, "
                 "chumbador menor ou outra disposição)",
             )
         )
@@ -2772,6 +2887,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         lam = min(2 * math.sqrt(x_val) / (1 + math.sqrt(1 - x_val)), 1.0)
     n0_lam = lam * g.n0
     zona: tuple[Ponto, ...] = ()
+    contas: dict[str, Any] = {}  # valores para as equações do memorial (_equacoes_da_base)
     if dist is not None:
         forcas = list(dist.forcas)
         f_t = max(forcas) if forcas else 0.0
@@ -2877,6 +2993,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     elif caso == "C1":
         sigma_sd = axial / (g.lx * g.ly)
         l_max = max(g.m, g.n, n0_lam)
+        contas["compressao"] = (l_max, sigma_sd, g.lx)
         t_min = l_max * math.sqrt(2 * sigma_sd / fy_d)
         v_atrito = min(e.mu * sigma_sd * g.lx * g.ly / c.a2, tau_rd * g.lx * g.ly)
         l_c = g.lx
@@ -2887,6 +3004,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         l_c = g.lx - 2 * momento / axial
         sigma_sd = axial / (l_c * g.ly)
         l_max = balanco_sob_pressao(g, l_c, caso, n0_lam)
+        contas["compressao"] = (l_max, sigma_sd, l_c)
         t_min = l_max * math.sqrt(2 * sigma_sd / fy_d)
         v_atrito = min(e.mu * sigma_sd * l_c * g.ly / c.a2, tau_rd * g.lx * g.ly)
         texto_t = (
@@ -2947,6 +3065,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             t_min2 = math.sqrt(2 * n_b * f_t * (g.m - g.a1) / (g.ly * fy_d)) if g.m > g.a1 else 0.0
             t45, texto45 = espessura_a_45_graus(g, tuple(forcas), fy_d)
             t_min = max(t_min1, t_min2, t45)
+            contas["pressao_rd"] = (l_max, l_c)
+            contas["linha"] = f_t
             v_atrito = min(e.mu * sigma_rd * l_c * g.ly / c.a2, tau_rd * g.lx * g.ly)
             texto_t = (
                 f"maior entre t_p,min1 = ℓ_max·√(2·σ_c,Rd/(f_y/γ_a1)) = {_n(t_min1, 1)} mm "
@@ -2977,6 +3097,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 forcas[i] = max(f_td, 0.0)
         if e.tipo == TIPO_1:
             t_linha = math.sqrt(2 * n_b * f_t * (g.m - g.a1) / (g.ly * fy_d)) if g.m > g.a1 else 0.0
+            contas["linha"] = f_t
             t45, texto45 = espessura_a_45_graus(g, tuple(forcas), fy_d)
             t_min = max(t_linha, t45)
             texto_t = (
@@ -3002,7 +3123,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 f"e = M/N = {_n(momento / axial, 0)} mm > ℓx/6 = {_n(g.lx / 6, 0)} mm: o lado oposto "
                 "da placa levanta. Pelo bloco uniforme da 6.7 (C2), N passa todo pela pressão na "
                 "borda, com o centro na resultante, sem tração nos chumbadores — um equilíbrio "
-                "possível, aceito pela norma. Pela distribuição linear elástica (opção da seção 5), "
+                "possível, aceito pela norma. Pela distribuição linear elástica da pressão, "
                 "a compatibilidade da placa rígida traciona os chumbadores do lado que levanta",
                 f"{REF} 6.7.1.4",
             )
@@ -3272,10 +3393,12 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             )
         )
         razoes_v.append(("aço do chumbador, 17.7.1", v_i / aco_v if aco_v > 0 else math.inf))
+        contas["cortante_aco"] = (v_i, n_eng, f_ut)
         if v_sd > 0:
             flexao = flexao_na_argamassa(
                 v_sd, n_eng, f_t, g.e_n, e.t_placa_mm, a_se, aco_ch.f_y, c.a1
             )
+            contas["flexao"] = flexao
             linhas.append(
                 Verificacao(
                     LINHA_FLEXAO_NA_ARGAMASSA,
@@ -3613,6 +3736,12 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         diametros = diametros_por_criterio(
             e, tuple(forcas), f_t, v_sd, c, aco_ch.f_u, fy, sigma_rd, tab
         )
+    equacoes = _equacoes_da_base(
+        e, g, contas, sigma_rd=sigma_rd, razao=razao, gc=gc, fy=fy, gama_a1=c.a1,
+        gama_a2=c.a2, f_t=f_t, f_ub=aco_ch.f_u, a_se=a_se, axial=axial, forcas=tuple(forcas),
+        d_min=d_min,
+    )  # fmt: skip
+    linhas = [replace(v, equacoes=equacoes[v.nome]) if v.nome in equacoes else v for v in linhas]
     fins = [inicio for _, inicio in inicios[1:]] + [len(linhas)]
     grupos = tuple(
         (nome, tuple(linhas[inicio:fim]))
@@ -3975,6 +4104,14 @@ def registro_base(
             "utilizacao_maxima": numero_json(r.aproveitamento_maximo, 4),
             "destaque_memorial": texto,
             "figura_base_de_pilar": {"entrada": asdict(e)},
+            # para o memorial separado (core.memorial_trecho): objetivo, grupos, detalhamento
+            "objetivo": _objetivo_do_memorial(r),
+            "grupos": [
+                {"nome": nome, "verificacoes": [v.nome for v in linhas]}
+                for nome, linhas in r.grupos
+            ],
+            "detalhamento": [list(par) for par in r.detalhamento],
+            "simbolos": [list(par) for par in simbolos_usados(r)],
             **({"combinacoes": linhas_das_combinacoes(r)} if r.envoltoria else {}),
         },
         metodo=(
@@ -4070,8 +4207,8 @@ def registro_base(
         + (
             [
                 f"Envoltória de {len(e.casos)} combinações de cálculo: cada uma pelo cálculo "
-                "inteiro; em cada verificação vale a mais desfavorável (o nome dela entre "
-                "colchetes no começo da fórmula)."
+                "inteiro; em cada verificação vale a mais desfavorável, indicada junto da "
+                "verificação."
             ]
             if e.casos
             else []
@@ -4123,11 +4260,65 @@ def registro_base(
     )
 
 
+#: Símbolos das contas da base: (como aparece no memorial, o que é, as grafias nas fórmulas).
+SIMBOLOS_DA_BASE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("N_Sd, M_Sd, M_Sd,y, V_Sd", "força axial (+ compressão), momentos nos eixos de maior e de menor inércia e cortante de cálculo", ("N_Sd", "M_Sd", "V_Sd")),
+    ("d, b_f, t_w, t_f", "altura, largura da mesa, espessura da alma e da mesa do pilar", ("d/2", "b_f", "t_w")),
+    ("ℓx, ℓy, t_p", "dimensões da placa (ℓx ao longo da altura do pilar) e espessura", ("ℓx", "ℓy", "ℓ_y", "t_p")),
+    ("a₁, a₂", "distância do furo à borda da placa e espaçamento entre chumbadores (Tabela 18)", ("a₁", "a₂", "a_1")),
+    ("m, n, λ·n₀", "balanços da placa além das linhas de engaste (0,95·d e 0,80·b_f)", ("ℓ_max", "ℓ_máx", "m − a", "máx(m; n")),
+    ("ℓ_c", "comprimento da placa sob pressão de contato", ("ℓ_c",)),
+    ("σ_c,Sd, σ_c,Rd", "pressão de contato solicitante e resistente no concreto", ("σ_c",)),
+    ("f_ck, γ_c, A₁, A₂", "resistência característica do concreto, coeficiente do concreto, área da placa e área homotética do bloco", ("f_ck", "A₂", "A_2")),
+    ("f_y, γ_a1, γ_a2", "resistência ao escoamento do aço e coeficientes de ponderação da NBR 8800", ("f_y", "γ_a1", "γ_a2")),
+    ("F_t, F_t,Sd", "força de tração num chumbador", ("F_t",)),
+    ("b_eff", "largura efetiva da placa por chumbador, aberta a 45°", ("b_eff",)),
+    ("d_b, d_s, A_se", "diâmetro do chumbador, diâmetro da área resistente da rosca e área resistente", ("d_b", "A_se", "d_s")),
+    ("f_ub, f_uta", "resistência à ruptura do aço do chumbador (f_uta ≤ 1,9·f_y ≤ 862 MPa na ACI)", ("f_ub", "f_uta")),
+    ("e_n", "espessura da argamassa de assentamento", ("e_n",)),
+    ("h_ef", "embutimento efetivo do chumbador no concreto", ("h_ef",)),
+    ("A_Nc, A_Nco, ψ", "área projetada do cone de concreto (do grupo e de um chumbador isolado) e fatores de modificação da ACI 318-19", ("A_Nc", "ψ_")),
+    ("φ", "fator de redução de resistência da ACI 318-19", ("φ",)),
+    ("μ", "coeficiente de atrito entre a placa e a argamassa", ("μ",)),
+    ("n_eng", "número de chumbadores que resistem à cortante", ("n_eng", "n_engatados")),
+    ("W", "módulo resistente elástico da seção da rosca", ("1,5·W", "W = π")),
+)  # fmt: skip
+
+
+def simbolos_usados(r: ResultadoBase) -> list[tuple[str, str]]:
+    """Os símbolos que aparecem nas contas desta base, com o significado."""
+    texto = " ".join(
+        [v.formula for v in r.verificacoes] + [x for v in r.verificacoes for x in v.equacoes]
+    )
+    return [(simbolo, significado) for simbolo, significado, grafias in SIMBOLOS_DA_BASE if any(g in texto for g in grafias)]  # fmt: skip
+
+
+def _objetivo_do_memorial(r: ResultadoBase) -> str:
+    e, g = r.entrada, r.geometria
+    aci = (
+        " e da ancoragem no concreto pela ACI 318-19 (Capítulo 17)"
+        if ancoragem_verificada(e)
+        else ""
+    )
+    return (
+        f"Este item apresenta a verificação da base do pilar {e.perfil}, com placa "
+        f"{_n(g.lx, 0)} × {_n(g.ly, 0)} × {_n(e.t_placa_mm, 1)} mm e {e.n_chumbadores} "
+        f"chumbadores Ø {nome_do_chumbador(e)}, pela ABNT NBR 8800:2025 (subseção 6.7){aci}."
+    )
+
+
 def memorial_da_base(
     r: ResultadoBase, *, projeto: Mapping[str, Any] | None = None, formato: str = "word"
 ) -> bytes:
-    """O memorial só desta base, em Word ou PDF, no padrão do memorial do projeto."""
+    """O memorial só desta base: em Word, o trecho para colar no documento oficial
+    (:mod:`core.memorial_trecho`); em PDF, o documento do padrão do memorial do projeto."""
     import importlib
+
+    if formato != "pdf":
+        from core.memorial_trecho import trecho_de_registro
+        from core.technical_records import normalizar_registro_tecnico
+
+        return trecho_de_registro(normalizar_registro_tecnico(registro_base(r)), projeto=projeto)
 
     from core.technical_records import normalizar_registro_tecnico
 

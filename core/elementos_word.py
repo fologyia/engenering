@@ -70,9 +70,8 @@ def gerar_word_do_caso(
     projeto: Mapping[str, Any] | None = None,
 ) -> bytes:
     documento = DocumentoWord()
-    documento.titulo(f"Cálculo de peças: {caso.titulo}")
-    if projeto:
-        documento.paragrafo(f"Projeto: {projeto.get('nome') or ''}", legenda=True)
+    documento.titulo(caso.titulo)
+    del projeto  # memorial separado: o projeto é o do documento oficial que recebe o trecho
     documento.paragrafo(caso.descricao)
     documento.paragrafo(_pt(resultado.resumo), negrito=True)
 

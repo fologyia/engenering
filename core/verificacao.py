@@ -57,6 +57,9 @@ class Verificacao:
     aproveitamento: float | None = None
     tipo: str = "resistencia"
     obrigatoria: bool = True
+    # as contas em notação linear (índice com "_"), para o memorial as escrever como equações do
+    # Word: a fórmula simbólica e a mesma com os números (core.equacao_word)
+    equacoes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -155,6 +158,7 @@ def linhas_para_registro(verificacoes: Sequence[Verificacao]) -> list[dict[str, 
             "status": v.status,
             "fórmula": v.formula or "—",
             "referência": v.referencia,
+            **({"equações": list(v.equacoes)} if v.equacoes else {}),
         }
         for v in verificacoes
     ]

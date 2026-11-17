@@ -4,6 +4,38 @@ O memorial é um **molde de cálculo**: os cálculos registrados entram completo
 sabe sai como `[a preencher]`. Como o documento costuma ser **incluído em outro**, ele traz só o que
 quem lê precisa: o resultado de cada análise, o que passou e, no fim, o que não passou.
 
+## Padrão: memorial separado × relatório geral (17/11/2026)
+
+São dois documentos diferentes, e o padrão vale para todos os módulos:
+
+- **Memorial separado** (o botão de Word de cada página: placa de base, ligações, parafusos,
+  flambagem, degrau, fadiga, cálculo de peças, seção desenhada e montador). É o **trecho** de uma
+  peça para **colar no memorial oficial** do usuário (`core/memorial_trecho.py`):
+  - sem capa, controle de revisões, resumo executivo, quadro do projeto, aprovações, cabeçalho,
+    rodapé ou quebra de seção;
+  - títulos nativos (Título 1/2/3) **sem número**: o documento oficial numera e monta o sumário;
+  - legendas "Tabela N – …" e "Figura N – …" **acima** da ilustração, com o número num campo
+    SEQ, que se renumera no destino e entra nos índices;
+  - só estilos nativos e cinza neutro no cabeçalho das tabelas. Colado com "usar estilos do
+    destino", o trecho fica com a fonte e as cores do documento oficial;
+  - A4 em retrato, tabelas até 16 cm e figuras até 15 cm;
+  - linguagem de memorial: sem "a tela", "o programa", "senão, aumente…" nem "[C16-ELU]" na
+    fórmula (a combinação vai no título da verificação);
+  - as contas como **equações do Word** (`core/equacao_word.py`: `X_ab` índice, `a/b` fração,
+    `√(…)` raiz; o que não fecha vira texto). Um módulo dá as contas em `Verificacao.equacoes`,
+    que vão para o registro como `"equações"`.
+- **Relatório geral** (Central de relatórios): o documento completo e conectado, com capa,
+  resumo, controle, todos os cálculos do projeto e aprovações. Não muda.
+
+Sequência do trecho de um registro com verificações (`trecho_de_registro`): título → objetivo →
+normas e critérios → materiais e dados de entrada → esforços (`resultados["combinacoes"]`) →
+desenho → hipóteses → verificações por grupo (`resultados["grupos"]`: nome, situação e
+aproveitamento; equações; conta em texto; referência) → resumo (o que atende e, por último, o que
+não atende) → detalhamento (`resultados["detalhamento"]`) → conclusão → símbolos
+(`resultados["simbolos"]`). As páginas com documento próprio usam `DocumentoWord`
+(`core/word_documento.py`), que agora é um `Trecho` com a interface antiga. A fadiga usa
+`trecho_de_secoes`. `tests/test_memorial_trecho.py` trava as regras em todos eles.
+
 ## Capítulo de uma análise com tabela de verificações
 
 Vale para a **flambagem de colunas** e as **ligações parafusadas** (qualquer registro com

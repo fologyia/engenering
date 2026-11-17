@@ -48,17 +48,15 @@ def test_word_traz_todas_as_secoes_da_pagina(completo):
     for trecho in (
         "Obra X",
         "ESC-01",
-        "Eng. Y",
-        "07/10/2026",
-        "O que esta página não faz",
+        "Limitações do cálculo",  # memorial separado: títulos sem número (core.memorial_trecho)
         "Dados de entrada",
-        "Quadro-resumo",
+        "Resumo",
         "Deslocamento do degrau",
         "Verificações (",
-        "2. Geometria da escada",
-        "2.1 Lances, patamares e esquemático",
-        "3. Memorial do modelo adotado",
-        "3.1 Longarina",
+        "Geometria da escada",
+        "Lances, patamares e esquemático",
+        "Memorial do modelo adotado",
+        "Longarina",
         "Cargas por longarina",
         "Trechos",
         "Reações",
@@ -93,7 +91,7 @@ def test_word_traz_cada_dado_de_entrada_cada_verificacao_e_cada_modelo(completo)
 def test_word_sem_escada_nem_identificacao():
     conteudo = gerar_word_degrau(de.calcular_escada(de.EntradaDegrau()), None)
     cheio = texto(conteudo)
-    assert "Quadro-resumo" in cheio and "3.1 Longarina" not in cheio
+    assert "Resumo" in cheio and "Cargas por longarina" not in cheio
     assert "Não informado" not in cheio
 
 

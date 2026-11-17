@@ -206,18 +206,9 @@ def gerar_word_coluna(
         "(todos os modos de flambagem, flambagem local, flexão em x e y e interação N + Mx + My).",
         legenda=True,
     )
-    if projeto and (projeto.get("nome") or projeto.get("codigo")):
-        doc.tabela(
-            ["Projeto", "Código", "Revisão"],
-            [
-                [
-                    projeto.get("nome") or "-",
-                    projeto.get("codigo") or "-",
-                    projeto.get("revisao") or "-",
-                ]
-            ],
-            [120, 80, 73],
-        )
+    # memorial separado (core.memorial_trecho): o projeto, o código e a revisão são do
+    # documento oficial que recebe o trecho, não dele
+    del projeto
 
     doc.titulo("O que esta página não faz", 1)
     doc.itens(list(cb.FORA_DO_ESCOPO))

@@ -182,13 +182,8 @@ def gerar_word_degrau(
     doc.tabela(
         ["Dado", "Valor", "Dado", "Valor"],
         [
+            # a peça; responsável e data são do controle do documento oficial
             ["Obra", ident.get("obra") or "-", "TAG", ident.get("tag") or "-"],
-            [
-                "Responsável",
-                ident.get("responsavel") or "-",
-                "Data",
-                _data_texto(ident.get("data")) or "-",
-            ],
             [
                 "Enquadramento",
                 de.ENQUADRAMENTOS[e.enquadramento],
