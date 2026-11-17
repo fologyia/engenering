@@ -179,6 +179,14 @@ AJUDA: dict[str, str] = {
         "numa zona limitada por uma linha neutra inclinada e cada chumbador do outro lado puxa "
         "em proporção à distância a ela."
     ),
+    "distribuicao": (
+        "Como a placa aperta o concreto. Bloco uniforme (o da norma, 6.7): a pressão fica igual "
+        "num trecho da borda; com momento médio e pouca compressão, ela cabe toda nesse trecho e "
+        "nenhum chumbador puxa. Linear elástica: a placa é um corpo rígido que gira; a pressão "
+        "cresce em linha reta até a borda e, do lado que levanta, os chumbadores esticam e puxam "
+        "(como a armadura de uma viga de concreto). Use a elástica para ver a tração que a "
+        "rotação da placa dá aos chumbadores; ela pede σ máxima ≤ σ_c,Rd."
+    ),
     # 5. Cortante
     "sec_cortante": (
         "Como a cortante passa para o concreto: só pelo atrito da placa na argamassa, ou por um "
@@ -187,7 +195,10 @@ AJUDA: dict[str, str] = {
     "cortante": (
         "Atrito: vale só quando a placa aperta o concreto (C1, C2, C3 e T3). Placa de cisalhamento: "
         "chapa soldada embaixo da placa, enterrada no bloco. Arruelas soldadas: os próprios "
-        "chumbadores resistem, com a arruela soldada na placa."
+        "chumbadores resistem, com a arruela de furo justo soldada na placa (todos engatam "
+        "juntos). Direto no furo: sem arruela soldada a placa escorrega na folga do furo antes de "
+        "encostar e os chumbadores pegam um de cada vez — o programa conta só 2 e avisa; prefira "
+        "as arruelas ou a placa de cisalhamento."
     ),
     "mu": (
         "Coeficiente de atrito entre a placa e a argamassa. A norma dá 0,45 para argamassa "

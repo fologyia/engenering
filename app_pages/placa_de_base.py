@@ -35,11 +35,11 @@ cabecalho_pagina(
 PADRAO = bp.EntradaBase()
 CASOS = {
     "C1": "compressão centrada",
-    "C2": "compressão, pequena excentricidade",
-    "C3": "compressão, grande excentricidade",
+    "C2": "compressão sem chumbador tracionado",
+    "C3": "compressão com chumbadores tracionados",
     "T1": "tração centrada",
-    "T2": "tração, pequena excentricidade",
-    "T3": "tração, grande excentricidade",
+    "T2": "tração sem contato com o concreto",
+    "T3": "tração com a placa apoiada em parte no concreto",
 }
 
 
@@ -652,6 +652,15 @@ with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
             persist_state="session",
             help=AJUDA["m_sd_y"],
         )
+    distribuicao = st.radio(
+        "Distribuição da pressão sob a placa",
+        list(bp.DISTRIBUICOES),
+        format_func=bp.DISTRIBUICOES.get,
+        horizontal=True,
+        key="pb_distribuicao",
+        persist_state="session",
+        help=AJUDA["distribuicao"],
+    )
 
 with st.container(border=True), secao_protegida("6. Cortante"):
     st.subheader("6. Cortante", help=AJUDA["sec_cortante"])
@@ -720,6 +729,13 @@ with st.container(border=True), secao_protegida("6. Cortante"):
             key="pb_lug_cjp",
             persist_state="session",
             help=AJUDA["lug_cjp"],
+        )
+    elif cortante == bp.CORTANTE_DIRETOS:
+        st.warning(
+            "Sem arruela soldada, a placa desliza no furo folgado até (d_f − d_b)/2 antes de "
+            "encostar nos chumbadores, e eles engatam um a um: o programa conta só 2. A NBR 8800 "
+            "(6.7.2.3) e o AISC Design Guide 1 pedem arruelas soldadas ou placa de cisalhamento.",
+            icon=":material/warning:",
         )
     else:
         t_arruela = colunas[0].number_input(
@@ -862,6 +878,7 @@ entrada = bp.EntradaBase(
     bloco_z_mm=float(bloco_z),
     lx_mm=float(lx_placa),
     ly_mm=float(ly_placa),
+    distribuicao=distribuicao,
 )
 try:
     resultado = bp.calcular(entrada)
@@ -1029,22 +1046,25 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
     st.subheader("Base mais leve que atende", help=AJUDA["res_mais_leve"])
     leve = bp.base_mais_leve(entrada)
     if leve is None:
-        fora_da_busca = [
-            texto_markdown(v.nome)
-            for v in resultado.verificacoes
-            if v.status == "NÃO OK"
-            and not v.nome.startswith(("Placa de base: espessura", "Chumbador: diâmetro"))
-            and not bp.da_solda_do_pilar(v)
-        ]
+        travas = {
+            parte: nomes
+            for parte, nomes in bp.o_que_trava(resultado).items()
+            if parte not in bp.TRAVAS_DA_BUSCA and parte != bp.TRAVA_SOLDA
+        }
         st.warning(
             "Nenhuma combinação de chumbador e espessura de chapa atende"
             + (
-                ", porque reprova também o que não muda com a placa nem com o chumbador: "
-                + "; ".join(fora_da_busca)
-                + ". Resolva isso primeiro (por exemplo, a cortante com placa de cisalhamento ou "
-                "arruelas soldadas)."
-                if fora_da_busca
-                else ' até 100 mm de chapa e 2" de chumbador.'
+                ", porque reprova também o que não muda com a placa nem com o chumbador — "
+                + "; ".join(
+                    f"**{parte}**: " + ", ".join(texto_markdown(n) for n in nomes)
+                    for parte, nomes in travas.items()
+                )
+                + ". Resolva isso primeiro (o concreto com bloco maior, embutimento ou armadura "
+                "de ancoragem; a cortante com placa de cisalhamento ou arruelas soldadas; a "
+                "geometria com a₁, a₂ ou a placa)."
+                if travas
+                else ' até 100 mm de chapa e 2" de chumbador: trava a placa ou o chumbador — '
+                "aumente a placa em planta, afaste os chumbadores ou use mais chumbadores."
             ),
             icon=":material/warning:",
         )

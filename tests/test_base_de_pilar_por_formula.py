@@ -213,8 +213,10 @@ def test_base_mais_leve_fica_na_serie_e_o_digitado_fica():
         TRACAO,
         chumbador=bp.CHUMBADOR_LIVRE,
         d_b_mm=27.0,
+        # sem cortante: com 200 kN de tração, o Ø 27 mm não leva também a flexão da cortante na
+        # argamassa (ACI 318-19 17.7.1 e DG1) e a busca, que não troca o digitado, não acharia base
         cortante=bp.CORTANTE_ARRUELAS,
-        v_sd_kN=40.0,
+        v_sd_kN=0.0,
     )
     leve_livre = bp.base_mais_leve(livre)
     assert leve_livre is not None and leve_livre.entrada.chumbador == bp.CHUMBADOR_LIVRE

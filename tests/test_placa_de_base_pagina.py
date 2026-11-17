@@ -270,3 +270,34 @@ def test_secao_de_soldas_e_a_compressao_por_contato(banco_isolado):
     t.number_input(key="pb_perna_pilar").set_value(6.0).run()
     t.toggle(key="pb_contato").set_value(True).run()
     assert not t.exception
+
+
+def test_distribuicao_elastica_e_chumbadores_direto_no_furo(banco_isolado):
+    t = abrir(
+        pb_n_sd=10.5,
+        pb_m_sd=2.0,
+        pb_m_sd_y=0.7,
+        pb_v_sd=5.0,
+        pb_distribuicao=bp.DISTRIBUICAO_ELASTICA,
+        pb_cortante=bp.CORTANTE_DIRETOS,
+    )
+    entrada = replace(
+        bp.EntradaBase(),
+        n_sd_kN=10.5,
+        m_sd_kNm=2.0,
+        m_sd_y_kNm=0.7,
+        v_sd_kN=5.0,
+        distribuicao=bp.DISTRIBUICAO_ELASTICA,
+        cortante=bp.CORTANTE_DIRETOS,
+    )
+    r = bp.calcular(entrada)
+    assert _metricas(t)["Caso"] == r.caso == "C3"  # o lado que levanta traciona os chumbadores
+    assert any("desliza" in w.value for w in t.warning)
+    assert not [w for w in t.number_input if w.key == "pb_ta"]  # sem arruela soldada
+    faltando = [
+        (tipo, _rotulo(e))
+        for tipo in TIPOS_COM_AJUDA
+        for e in t.get(tipo)
+        if str(getattr(e, "key", "") or "").startswith("pb_") and not _ajuda(e)
+    ]
+    assert not faltando, faltando

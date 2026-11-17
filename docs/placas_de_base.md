@@ -220,6 +220,50 @@ era o que o código fazia: o termo da tração já usava m − a₁ e ℓy.
 **ℓx e ℓy informados** (`lx_mm`, `ly_mm`; 0 = o mínimo d + 4·a₁ e os a₁/a₂): menor que o mínimo é
 erro; maior, os externos ficam a a₁ da borda em ℓx e os chumbadores centrados em ℓy.
 
+## Revisão: tração a 45°, C2, distribuição elástica e cortante pelos chumbadores (17/11/2026)
+
+Pedido com 2 "erros" e 3 implementações, e os casos de aceitação A a D
+(`tests/test_base_de_pilar_revisao.py`). O que se confirmou e o que foi feito:
+
+- **Tração (caso A):** o 34,8 mm já tinha sido corrigido em 16/11 (seção acima). Agora entra também
+  a verificação chumbador a chumbador, `espessura_a_45_graus`: balanço até a **face da mesa**
+  (m = |x| − d/2) na largura aberta a 45°, limitada pela borda e pela metade do espaçamento;
+  t = √(4·F_t·m/(b_eff·f_y/γ_a1)). Vale a maior entre ela e a da 6.7. No caso A, m = 45 mm e
+  b_eff = 90 mm dão 5,8 mm (F_t = 3,8 kN). O 8 a 15 mm pedido não sai dessa conta com o F_t do
+  equilíbrio; no caso C a mesma conta dá os 8,0 mm de referência. A argamassa não entra no balanço.
+- **C2 com e > ℓx/6 (caso B):** pelo bloco uniforme da 6.7, C2 é um equilíbrio válido. O erro era
+  na **espessura**: ela usava o balanço inteiro sob a pressão do canto (26,6 mm). Agora a C2 usa a
+  zona: `balanco_sob_pressao` em uma direção e `espessura_pela_zona` na oblíqua (11,8 mm). Uma
+  linha INFO explica que o lado oposto levanta.
+- **Distribuição linear elástica** (`distribuicao = "elastica"`, `distribuicao_elastica`): placa
+  rígida, w = σ₀ + a_x·x + a_y·y, pressão onde w > 0 e chumbadores com F = n·A_se·(−w), com
+  n = E_s/E_cs e E_cs pela NBR 6118, 8.2.8. O equilíbrio sai da mínima energia (convexa), por
+  Newton, com integrais exatas no polígono, e vale também na oblíqua.
+  - Exige σ_máx ≤ σ_c,Rd. A placa pela pressão linear integrada nas fatias.
+  - No caso B, os chumbadores tracionam (C3).
+  - No caso C (compressão), σ_máx = 0,55 MPa e t = 7,2 mm.
+- **Cortante pelos chumbadores:**
+  - **Arruelas soldadas:** os n chumbadores engatam juntos. Além da 6.7.2.5, entram:
+    - o aço pela ACI 17.7.1, com **0,80 pela argamassa** (17.7.1.2.1): 26,9 kN no Ø 3/4" (33,7
+      sem o 0,80);
+    - a flexão na argamassa, σ = V·(e_n/2 + t_p/2)/Z + F_t/A_se ≤ f_y/γ_a1, com Z do diâmetro da
+      área resistente (só com V > 0).
+  - **Direto no furo** (`CORTANTE_DIRETOS`): só 2 chumbadores, uma linha ALERTA com o
+    deslizamento (d_f − d_b)/2 e a ACI sempre ligada. O atrito não se soma.
+- **Interação 17.8:** a razão de tração é a do modo que governa (no caso C, o cone com 0,38), não a
+  do aço (0,11). Por isso, no caso C a interação é exigida (e passa).
+- **Ancoragem:**
+  - Aço à tração pela ACI (φ·N_sa = 0,75·A_se·f_uta).
+  - Linha INFO "Borda do bloco corta o cone de concreto" (`cone_truncado`). Perto de 3 ou 4
+    bordas, a 17.6.2.1.2 limita o h_ef útil, e embutir mais **não muda** a resistência; ela não
+    cai. No caso D (c = 120 mm), h_ef = 250 e h_ef = 80 dão os mesmos 25,0 kN e passam. Os 12,1 kN
+    do relato ignoram a 17.6.2.1.2 e usam φ 0,75 (condição A).
+  - Armadura de ancoragem com A_s ≥ N_ua/(0,75·f_y), em CA-50.
+  - Linha limite "Rosca acima do concreto" (h₂ da Tabela 18) e o comprimento da barra no
+    detalhamento.
+- **O que trava:** `o_que_trava` agrupa as reprovações em placa, chumbador, concreto, cortante,
+  geometria e solda; a página usa isso na "Base mais leve que atende".
+
 ## Exemplo (do guia)
 
 W 250 × 32,7, tipo 1, 4 chumbadores Ø 1", placa de 25 mm ASTM A36, f_ck = 25 MPa, A₂/A₁ = 1,

@@ -343,7 +343,9 @@ def test_t3_com_faixa_fina_nao_pede_placa_grossa():
     p_m = math.sqrt(r.l_c * (2 * g.m - r.l_c))
     t1 = max(p_m, p_n) * math.sqrt(2 * sigma / fy_d)
     t2 = math.sqrt(2 * 4 * r.f_t_sd * (g.m - g.a1) / (g.ly * fy_d))
-    assert r.t_p_min == pytest.approx(max(t1, t2))
+    # e, chumbador a chumbador, o balanço até a face da mesa na largura aberta a 45°
+    t45, _ = bp.espessura_a_45_graus(g, r.forcas_nos_chumbadores, fy_d)
+    assert r.t_p_min == pytest.approx(max(t1, t2, t45))
     assert r.t_p_min < 8.0 and _linha(r, "Placa de base: espessura").status == "OK"
 
 

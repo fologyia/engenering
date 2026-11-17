@@ -571,11 +571,11 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
             dg.legenda(dr, x_coluna * ESC, 556 * ESC, coluna)
     caso = {
         "C1": "C1: compressão centrada",
-        "C2": "C2: compressão com pequena excentricidade",
-        "C3": "C3: compressão com grande excentricidade (chumbadores tracionados)",
+        "C2": "C2: compressão sem chumbador tracionado",
+        "C3": "C3: compressão com chumbadores tracionados",
         "T1": "T1: tração centrada",
-        "T2": "T2: tração com pequena excentricidade",
-        "T3": "T3: tração com grande excentricidade",
+        "T2": "T2: tração sem contato com o concreto",
+        "T3": "T3: tração com a placa apoiada em parte no concreto",
     }[r.caso]
     titulo = f"Base de pilar — {e.perfil}, {bp.NOMES_CURTOS[e.tipo]}"
     dr.text((18 * ESC, 14 * ESC), titulo, fill=dg.COR_TEXTO, font=_fonte(16 * ESC))
