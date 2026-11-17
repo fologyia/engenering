@@ -110,13 +110,15 @@ def test_mostrar_figura_aceita_cada_tipo_de_figura():
 
 
 def test_nenhuma_imagem_passa_por_fora_de_mostrar_figura():
-    """Só a placa do esqueleto tem tamanho próprio; o resto passa por mostrar_figura."""
+    """Toda imagem passa por mostrar_figura. A placa de base, a única com tamanho próprio, saiu de
+    Esforços do modelo junto com a seção das placas (6fd8a2f): o cálculo é na página Placa de
+    base."""
     achadas = []
     for pasta in ("app_pages", "components"):
         for arquivo in (RAIZ / pasta).glob("*.py"):
             if arquivo.name != "figuras.py":
                 achadas += [arquivo.name] * arquivo.read_text(encoding="utf-8").count(".image(")
-    assert sorted(achadas) == ["esforcos_modelo.py"]
+    assert sorted(achadas) == []
 
 
 @pytest.mark.parametrize(
