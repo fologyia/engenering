@@ -1141,11 +1141,26 @@ def espessura_a_45_graus(g: Geometria, forcas: tuple[float, ...], fy_d: float) -
     )
 
 
-def dados_a_45_graus(
-    g: Geometria, forcas: tuple[float, ...], fy_d: float
-) -> tuple[float, float, float, float, float, float] | None:
-    """(t, F_t, m, b_eff, x, y) do chumbador externo que pede a placa mais grossa a 45°."""
-    melhor: tuple[float, float, float, float, float, float] | None = None
+@dataclass(frozen=True)
+class AberturaA45:
+    """A placa de um chumbador externo tracionado: balanço m até a face da mesa e a largura
+    aberta a 45° de cada lado (limitada pela borda e pela metade do espaçamento), em mm e N."""
+
+    x: float
+    y: float
+    f: float
+    m: float
+    lado_mais: float  # para y crescente
+    lado_menos: float
+
+    @property
+    def b_eff(self) -> float:
+        return max(self.lado_mais, 0.0) + max(self.lado_menos, 0.0)
+
+
+def aberturas_a_45_graus(g: Geometria, forcas: tuple[float, ...]) -> list[AberturaA45]:
+    """A abertura a 45° de cada chumbador externo tracionado (o desenho e a conta usam esta)."""
+    saida: list[AberturaA45] = []
     for (x, y), f in zip(g.posicoes, forcas, strict=True):
         if f <= 0 or abs(x) <= g.d / 2 + 1e-9:
             continue
@@ -1155,12 +1170,21 @@ def dados_a_45_graus(
         abaixo = [y - y2 for y2 in na_linha if y2 < y]
         lado_mais = min(m, g.ly / 2 - y, min(acima) / 2 if acima else math.inf)
         lado_menos = min(m, y + g.ly / 2, min(abaixo) / 2 if abaixo else math.inf)
-        b_eff = max(lado_mais, 0.0) + max(lado_menos, 0.0)
-        if b_eff <= 0:
-            continue
-        t = math.sqrt(4 * f * m / (b_eff * fy_d))
+        abertura = AberturaA45(x, y, f, m, lado_mais, lado_menos)
+        if abertura.b_eff > 0:
+            saida.append(abertura)
+    return saida
+
+
+def dados_a_45_graus(
+    g: Geometria, forcas: tuple[float, ...], fy_d: float
+) -> tuple[float, float, float, float, float, float] | None:
+    """(t, F_t, m, b_eff, x, y) do chumbador externo que pede a placa mais grossa a 45°."""
+    melhor: tuple[float, float, float, float, float, float] | None = None
+    for a in aberturas_a_45_graus(g, forcas):
+        t = math.sqrt(4 * a.f * a.m / (a.b_eff * fy_d))
         if melhor is None or t > melhor[0]:
-            melhor = (t, f, m, b_eff, x, y)
+            melhor = (t, a.f, a.m, a.b_eff, a.x, a.y)
     return melhor
 
 
@@ -1857,6 +1881,55 @@ def area_de_apoio_da_ponta(e: EntradaBase, tab: LinhaTabela18) -> float:
     return cabeca - math.pi * tab.d_b**2 / 4
 
 
+@dataclass(frozen=True)
+class AreaDoCone:
+    """A área projetada do cone de concreto do grupo tracionado (ACI 318-19 17.6.2), em mm."""
+
+    tracionados: tuple[tuple[float, float, float], ...]  # (x, y, F)
+    bx: float
+    by: float
+    informado: bool
+    h_ef_informado: float
+    h_ef: float  # o útil (reduzido perto de 3 ou 4 bordas)
+    bordas: tuple[float, float, float, float]  # c à face −x, +x, −y, +y
+    retangulo: tuple[float, float, float, float]  # x0, x1, y0, y1 de A_Nc, dentro do bloco
+    a_nco: float
+
+    @property
+    def reduzido(self) -> bool:
+        return self.h_ef < self.h_ef_informado - 1e-9
+
+    @property
+    def a_nc(self) -> float:
+        x0, x1, y0, y1 = self.retangulo
+        return min((x1 - x0) * (y1 - y0), len(self.tracionados) * self.a_nco)
+
+
+def area_do_cone(
+    e: EntradaBase, g: Geometria, tab: LinhaTabela18, forcas: tuple[float, ...]
+) -> AreaDoCone | None:
+    """A área A_Nc do grupo tracionado no bloco (a conta e o desenho usam esta); None sem tração."""
+    tracionados = tuple((x, y, f) for (x, y), f in zip(g.posicoes, forcas, strict=True) if f > 0)
+    if not tracionados:
+        return None
+    bx, by, informado = bloco_para_o_cone(e, g, tab)
+    xs = [x for x, _, _ in tracionados]
+    ys = [y for _, y, _ in tracionados]
+    bordas = (bx / 2 + min(xs), bx / 2 - max(xs), by / 2 + min(ys), by / 2 - max(ys))
+    h_informado = h = embutimento(e, tab)
+    s_max = max(max(xs) - min(xs), max(ys) - min(ys))
+    proximas = [c for c in bordas if c < 1.5 * h]
+    if len(proximas) >= 3:
+        h = min(h, max(max(proximas) / 1.5, s_max / 3))
+    retangulo = (
+        max(min(xs) - 1.5 * h, -bx / 2),
+        min(max(xs) + 1.5 * h, bx / 2),
+        max(min(ys) - 1.5 * h, -by / 2),
+        min(max(ys) + 1.5 * h, by / 2),
+    )
+    return AreaDoCone(tracionados, bx, by, informado, h_informado, h, bordas, retangulo, 9 * h * h)
+
+
 def cone_de_concreto(
     e: EntradaBase, g: Geometria, tab: LinhaTabela18, forcas: tuple[float, ...]
 ) -> tuple[float, float, str] | None:
@@ -1865,27 +1938,24 @@ def cone_de_concreto(
     Bloco centrado na placa; ψ_c,N = ψ_cp,N = 1,0 (concreto fissurado); h_ef reduzido pela
     17.6.2.1.2 quando o grupo fica perto de três ou mais bordas.
     """
-    tracionados = [(x, y, f) for (x, y), f in zip(g.posicoes, forcas, strict=True) if f > 0]
-    if not tracionados:
+    area = area_do_cone(e, g, tab, forcas)
+    if area is None:
         return None
+    tracionados = area.tracionados
     concretado = e.ancoragem in CONCRETADOS
-    bx, by, informado = bloco_para_o_cone(e, g, tab)
+    bx, by, informado = area.bx, area.by, area.informado
     xs = [x for x, _, _ in tracionados]
     ys = [y for _, y, _ in tracionados]
-    bordas = [bx / 2 + min(xs), bx / 2 - max(xs), by / 2 + min(ys), by / 2 - max(ys)]
-    h = embutimento(e, tab)
-    s_max = max(max(xs) - min(xs), max(ys) - min(ys))
-    proximas = [c for c in bordas if c < 1.5 * h]
-    reducao = ""
-    if len(proximas) >= 3:
-        h_lim = max(max(proximas) / 1.5, s_max / 3)
-        if h_lim < h:
-            reducao = f" (h_ef reduzido de {_n(h, 0)} mm pela 17.6.2.1.2: perto de 3 ou 4 bordas)"
-            h = h_lim
-    a_nco = 9 * h * h
-    largura_x = min(max(xs) + 1.5 * h, bx / 2) - max(min(xs) - 1.5 * h, -bx / 2)
-    largura_y = min(max(ys) + 1.5 * h, by / 2) - max(min(ys) - 1.5 * h, -by / 2)
-    a_nc = min(largura_x * largura_y, len(tracionados) * a_nco)
+    bordas = area.bordas
+    h = area.h_ef
+    reducao = (
+        f" (h_ef reduzido de {_n(area.h_ef_informado, 0)} mm pela 17.6.2.1.2: perto de 3 ou 4 "
+        "bordas)"
+        if area.reduzido
+        else ""
+    )
+    a_nco = area.a_nco
+    a_nc = area.a_nc
     c_min = max(min(bordas), 0.0)
     psi_ed = 1.0 if c_min >= 1.5 * h else 0.7 + 0.3 * c_min / (1.5 * h)
     total = sum(f for _, _, f in tracionados)
@@ -4315,10 +4385,15 @@ def memorial_da_base(
     import importlib
 
     if formato != "pdf":
+        from core.desenho_placa_base_contas import figuras_das_contas
         from core.memorial_trecho import trecho_de_registro
         from core.technical_records import normalizar_registro_tecnico
 
-        return trecho_de_registro(normalizar_registro_tecnico(registro_base(r)), projeto=projeto)
+        return trecho_de_registro(
+            normalizar_registro_tecnico(registro_base(r)),
+            projeto=projeto,
+            figuras_por_verificacao=figuras_das_contas(r),
+        )
 
     from core.technical_records import normalizar_registro_tecnico
 

@@ -57,7 +57,10 @@ def conferir_trecho(conteudo: bytes) -> str:
     assert titulos, "o trecho abre com o título da peça"
     assert not [t for t in titulos if TITULO_NUMERADO.match(t)], titulos
     xml = d.element.body.xml
-    assert xml.count("SEQ Tabela") == len(d.tables)  # toda tabela com legenda numerada
+    com_grade = [t for t in d.tables if t.style is not None and t.style.name == "Table Grid"]
+    # toda tabela com legenda numerada (as sem borda são as das equações numeradas)
+    assert xml.count("SEQ Tabela") == len(com_grade)
+    assert xml.count("SEQ Equação") == len(d.tables) - len(com_grade)
     largura_max = Mm(LARGURA_UTIL_MM + 1)
     for tabela in d.tables:
         larguras = [c.width or 0 for c in tabela.rows[0].cells]
@@ -81,9 +84,12 @@ def test_equacao_vira_omml_com_indice_fracao_e_raiz():
     assert arvore[-1][0] == "f"  # 0,036 kN sobre mm
 
 
-def test_equacao_que_nao_fecha_vira_texto_sem_erro():
-    xml = eq.omml("conta (sem fechar")
-    assert "conta (sem fechar" in xml and "<m:oMathPara" in xml
+def test_equacao_que_nao_fecha_e_consertada_sem_erro():
+    from lxml import etree
+
+    for texto in ("conta (sem fechar", "sobra) = 3 /", "x^", "√", "a/", "/b", "Σ", "| a", "_ x"):
+        etree.fromstring(eq.omml(texto))  # XML válido, sem exceção
+    assert "sem fechar" in eq.omml("conta (sem fechar")
 
 
 def test_texto_de_memorial_tira_conselho_de_tela_e_separa_a_combinacao():
@@ -138,6 +144,7 @@ def test_ligacoes_e_parafusos():
     conferir_trecho(lg.memorial_da_ligacao(lg.calcular(ls.EntradaBarraSoldada()), formato="word"))
     texto = conferir_trecho(chk.memorial_da_ligacao(M22, chk.verificar_ligacao(M22), None))
     assert "Resumo das verificações" in texto
+    assert "Equações do método:" in texto  # corte, contato e grupo excêntrico, como equações
 
 
 def test_flambagem_e_degrau():
@@ -173,3 +180,56 @@ def test_calculo_de_pecas_e_montador():
     valores = caso.padroes()
     conferir_trecho(gerar_word_do_caso(caso, valores, calcular_caso(caso, valores)))
     conferir_trecho(_word(mm.MODELOS[0], g.SISTEMA_SOLIDOS))
+
+
+# ------------------------------------------------------------- gráficos e figuras de apoio
+def test_barra_de_aproveitamento_em_texto():
+    from core.memorial_trecho import barra_texto
+
+    assert barra_texto(72) == "■■■■■■■□□□"
+    assert barra_texto(0) == "□" * 10
+    assert barra_texto(130).endswith("▸") and barra_texto(None) == ""
+
+
+def test_graficos_de_aproveitamento():
+    from core import graficos_memorial as gm
+
+    assert gm.grafico_das_verificacoes([("a", 50.0, "OK")]) is None  # uma só: sem gráfico
+    figura = gm.grafico_das_verificacoes([("a", 50.0, "OK"), ("b", 120.0, "NÃO OK")])
+    assert figura is not None and figura.png[:4] == b"\x89PNG"
+    combinacoes = gm.grafico_das_combinacoes(
+        [("C1", 20.0, "placa", "OK"), ("C2", 56.0, "cone", "OK")], "C2"
+    )
+    assert combinacoes is not None and combinacoes.png
+
+
+def test_figuras_de_apoio_da_placa():
+    from core import desenho_placa_base_contas as dc
+
+    r = bp.calcular(BASE)
+    figuras = dc.figuras_das_contas(r)
+    assert set(figuras) == {
+        "Concreto: pressão de contato σ_c,Sd ≤ σ_c,Rd",
+        "Placa de base: espessura t_p ≥ t_p,min",
+        bp.LINHA_DO_CONE,
+    }
+    titulos = [f.titulo for lista in figuras.values() for f in lista]
+    assert any("C08-ELU" in t for t in titulos) and any("C16-ELU" in t for t in titulos)
+    elastica = bp.calcular(
+        replace(BASE, casos=(), n_sd_kN=10.5, m_sd_kNm=2.0, m_sd_y_kNm=0.7,
+                distribuicao=bp.DISTRIBUICAO_ELASTICA)
+    )  # fmt: skip
+    assert dc.figura_das_pressoes(elastica) is not None
+    # tração centrada sem momento: sem pressão, só os chumbadores; sem chumbador externo, sem 45°
+    assert dc.figura_da_tracao_a_45(bp.calcular(replace(BASE, casos=(), n_sd_kN=300))) is None
+
+
+def test_trecho_da_placa_traz_graficos_figuras_e_equacoes_numeradas():
+    conteudo = bp.memorial_da_base(bp.calcular(BASE))
+    d = _documento(conteudo)
+    xml = d.element.body.xml
+    # desenho + aproveitamento + combinações + pressão + 45° + cone
+    assert len(d.inline_shapes) >= 6
+    assert xml.count("SEQ Equação") >= 5 and "<m:borderBox>" in xml
+    texto = conferir_trecho(conteudo)
+    assert "✔ Atende" in texto and "■" in texto

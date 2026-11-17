@@ -39,7 +39,7 @@ def test_word_abre_e_traz_as_figuras(completo):
     _, conteudo = completo
     documento = Document(BytesIO(conteudo))
     # esquemático + 7 diagramas por longarina (3 longarinas)
-    assert len(documento.inline_shapes) == 1 + 3 * 7
+    assert len(documento.inline_shapes) == 1 + 1 + 3 * 7  # + o gráfico de aproveitamento
     assert len(documento.tables) >= 20
 
 
@@ -107,5 +107,6 @@ def test_word_com_a_escada_em_3d():
     )
     dados["azimute"], dados["elevacao"] = c3.VISTAS[c3.VISTA_ISOMETRICA]
     conteudo = gerar_word_degrau(r, IDENT, escada=esc, escada_3d=dados)
-    assert len(Document(BytesIO(conteudo)).inline_shapes) == 2  # esquemático + 3D
+    # esquemático + 3D + o gráfico de aproveitamento
+    assert len(Document(BytesIO(conteudo)).inline_shapes) == 3
     assert "Escada em 3D" in texto(conteudo)

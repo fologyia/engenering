@@ -31,7 +31,7 @@ from io import BytesIO
 from typing import Any
 
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -42,13 +42,37 @@ from core import equacao_word as eq
 LARGURA_UTIL_MM = 160.0  # A4 em retrato, margens de 30 mm (esquerda) e 20 mm (direita)
 LARGURA_FIGURA_MM = 150.0
 FUNDO_CABECALHO = "E7E6E6"  # cinza claro neutro, legível em preto e branco
-SITUACAO = {
+#: A situação por extenso, para o texto ("— atende (56 %)").
+SITUACAO_TEXTO = {
     "OK": "Atende",
     "NÃO OK": "Não atende",
     "ALERTA": "Atenção",
     "INFO": "Informativo",
     "N/A": "Não avaliado",
 }
+#: A situação nas tabelas, com símbolo: lê-se num relance e também impresso em preto e branco.
+SITUACAO = {
+    "OK": "✔ Atende",
+    "NÃO OK": "✖ Não atende",
+    "ALERTA": "⚠ Atenção",
+    "INFO": "ⓘ Informativo",
+    "N/A": "– Não avaliado",
+}
+#: Quadradinhos da barra de aproveitamento em texto (cada um, 10 %).
+CASAS_DA_BARRA = 10
+
+
+def barra_texto(percentual: float | None) -> str:
+    """'■■■■■■■□□□' para 72 %: a barra de aproveitamento que sobrevive a colar como texto."""
+    if percentual is None or percentual != percentual:
+        return ""
+    if percentual == float("inf"):
+        return "■" * CASAS_DA_BARRA + " ▸"
+    cheias = min(CASAS_DA_BARRA, max(0, round(percentual / (100 / CASAS_DA_BARRA))))
+    barra = "■" * cheias + "□" * (CASAS_DA_BARRA - cheias)
+    return barra + (" ▸" if percentual > 100.5 else "")
+
+
 PRETO = RGBColor(0, 0, 0)
 
 
@@ -85,6 +109,7 @@ class Trecho:
             estilo.font.color.rgb = PRETO  # neutro: no destino vale o estilo do documento oficial
         self.figuras = 0
         self.tabelas = 0
+        self.equacoes = 0
 
     # ---------------------------------------------------------------- texto
     def titulo(self, texto: str, nivel: int = 1) -> None:
@@ -110,11 +135,76 @@ class Trecho:
         for trecho in paragrafo.runs:
             trecho.font.size = Pt(9)
 
-    def equacao(self, texto: str) -> None:
-        """A conta como equação do Word, centrada, numa linha própria."""
-        paragrafo = self.doc.add_paragraph()
-        paragrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        eq.acrescentar_equacao(paragrafo, texto)
+    def equacao(self, texto: str, *, maquina: bool = False, numerar: bool = True) -> None:
+        """A conta como equação do Word, centrada, numa linha própria.
+
+        O rótulo do começo e a referência do fim ficam em texto; várias contas separadas por ";"
+        viram uma linha cada; as fórmulas só com símbolos ganham o número "(n)" à direita, num campo
+        SEQ Equação que o documento oficial renumera; o valor calculado sai em caixa.
+        """
+        rotulo, equacoes, referencia = eq.preparar(texto, maquina=maquina)
+        if rotulo:
+            paragrafo = Trecho.paragrafo(self, rotulo, italico=True)
+            paragrafo.paragraph_format.keep_with_next = True
+        for equacao in equacoes:
+            if numerar and equacao.simbolica:
+                self._equacao_numerada(equacao)
+            else:
+                paragrafo = self.doc.add_paragraph()
+                paragrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                eq.acrescentar(paragrafo, equacao)
+        if referencia:
+            paragrafo = Trecho.paragrafo(self, f"({referencia})", italico=True)
+            paragrafo.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            for corrida in paragrafo.runs:
+                corrida.font.size = Pt(9)
+
+    def _campo_seq(self, paragrafo: Any, tipo: str, numero: int) -> None:
+        campo = OxmlElement("w:fldSimple")
+        campo.set(qn("w:instr"), f" SEQ {tipo} \\* ARABIC ")
+        corrida = OxmlElement("w:r")
+        valor = OxmlElement("w:t")
+        valor.text = str(numero)
+        corrida.append(valor)
+        campo.append(corrida)
+        paragrafo._p.append(campo)
+
+    def _equacao_numerada(self, equacao: eq.Equacao) -> None:
+        """A equação centrada e o número à direita: tabela sem bordas de três colunas, o jeito que
+        o Word guarda bem ao colar (o número é um campo SEQ Equação)."""
+        self.equacoes += 1
+        tabela = self.doc.add_table(rows=1, cols=3)  # sem estilo: sem bordas
+        tabela.alignment = WD_TABLE_ALIGNMENT.CENTER
+        larguras = (Mm(14), Mm(LARGURA_UTIL_MM - 28), Mm(14))
+        for celula, largura in zip(tabela.rows[0].cells, larguras, strict=True):
+            celula.width = largura
+            celula.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        meio = tabela.rows[0].cells[1].paragraphs[0]
+        meio.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        eq.acrescentar(meio, equacao)
+        numero = tabela.rows[0].cells[2].paragraphs[0]
+        numero.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        numero.add_run("(")
+        self._campo_seq(numero, "Equação", self.equacoes)
+        numero.add_run(")")
+
+    def figura_do_diagrama(self, imagem: Any, largura_mm: float = LARGURA_FIGURA_MM) -> None:
+        """Uma figura do programa (ImagemDiagrama): o título na legenda e a explicação embaixo."""
+        if imagem is None or not getattr(imagem, "png", b""):
+            return
+        self.figura(imagem.png, imagem.titulo or imagem.legenda, largura_mm)
+        if imagem.legenda and imagem.legenda != imagem.titulo:
+            self.nota(limpar_texto(imagem.legenda))
+
+    def grafico_das_verificacoes(self, verificacoes: Sequence[Any]) -> None:
+        """O gráfico de aproveitamento de uma lista de :class:`core.verificacao.Verificacao`."""
+        from core.graficos_memorial import grafico_das_verificacoes
+
+        itens = [
+            (v.nome, None if v.aproveitamento is None else 100 * v.aproveitamento, v.status)
+            for v in verificacoes
+        ]
+        self.figura_do_diagrama(grafico_das_verificacoes(itens))
 
     # ---------------------------------------------------------------- legendas, tabelas, figuras
     def legenda(self, tipo: str, texto: str) -> None:
@@ -128,14 +218,7 @@ class Trecho:
         paragrafo = self.doc.add_paragraph(style="Caption")
         paragrafo.paragraph_format.keep_with_next = True
         paragrafo.add_run(f"{tipo} ")
-        campo = OxmlElement("w:fldSimple")
-        campo.set(qn("w:instr"), f" SEQ {tipo} \\* ARABIC ")
-        corrida = OxmlElement("w:r")
-        valor = OxmlElement("w:t")
-        valor.text = str(numero)
-        corrida.append(valor)
-        campo.append(corrida)
-        paragrafo._p.append(campo)
+        self._campo_seq(paragrafo, tipo, numero)
         # "Tabela 1 - Entradas…" que o módulo já numerou: o número é o do campo
         texto = _NUMERO_NA_LEGENDA.sub("", texto.strip()).rstrip(".")
         paragrafo.add_run(f" – {texto}")
@@ -273,18 +356,21 @@ def _linha_da_tabela(linha: Any) -> list[str]:
         numero_pt(linha.resistente, casas),
         linha.unidade or "-",
         _aproveitamento(linha),
+        barra_texto(linha.aproveitamento),
         SITUACAO.get(linha.status, linha.status),
     ]
 
 
-CABECALHOS_RESUMO = ["Verificação", "Solicitante", "Resistente", "Un.", "Aprov.", "Situação"]
-LARGURAS_RESUMO = [58.0, 21.0, 21.0, 12.0, 16.0, 22.0]
+CABECALHOS_RESUMO = [
+    "Verificação", "Solicitante", "Resistente", "Un.", "Aprov.", "0 a 100 %", "Situação",
+]  # fmt: skip
+LARGURAS_RESUMO = [45.0, 18.0, 18.0, 10.0, 14.0, 26.0, 29.0]
 
 
 def _escrever_conta(t: Trecho, linha: Any, equacoes: Sequence[str]) -> None:
     """Uma verificação: o nome e a situação, o cálculo em texto, as equações e a referência."""
     combinacao, formula = separar_combinacao(linha.formula)
-    situacao = SITUACAO.get(linha.status, linha.status)
+    situacao = SITUACAO_TEXTO.get(linha.status, linha.status)
     cabeca = linha.nome
     if linha.aproveitamento is not None and linha.status in ("OK", "NÃO OK", "ALERTA"):
         cabeca += f" — {situacao.lower()} ({_aproveitamento(linha)})"
@@ -310,9 +396,15 @@ def escrever_registro(
     *,
     imagens: Sequence[Mapping[str, Any]] = (),
     nivel: int = 1,
+    figuras_por_verificacao: Mapping[str, Sequence[Any]] | None = None,
 ) -> None:
-    """Escreve no trecho o memorial de um registro técnico com tabela de verificações."""
+    """Escreve no trecho o memorial de um registro técnico com tabela de verificações.
+
+    ``figuras_por_verificacao``: figuras de apoio (ImagemDiagrama) que entram logo depois da conta
+    da verificação de mesmo nome — a pressão sob a placa junto da pressão de contato, por exemplo.
+    """
     from core import memorial_verificacoes as mv
+    from core.graficos_memorial import grafico_das_combinacoes, grafico_das_verificacoes
 
     # o gerador do relatório geral está fora da lista do mypy: importado pelo nome
     relatorio = importlib.import_module("core.project_report")
@@ -366,6 +458,22 @@ def escrever_registro(
             legenda="Combinações de cálculo (ELU) e o resultado de cada uma",
             fonte=7.5,
         )
+        if all(isinstance(c.get("Aproveitamento"), (int, float)) for c in combinacoes):
+            governante = str(resultados.get("combinacao_governante") or "")
+            t.figura_do_diagrama(
+                grafico_das_combinacoes(
+                    [
+                        (
+                            str(c.get("Combinação") or ""),
+                            100 * float(c["Aproveitamento"]),
+                            str(c.get("Governa") or ""),
+                            str(c.get("Status") or ""),
+                        )
+                        for c in combinacoes
+                    ],
+                    governante,
+                )
+            )
 
     # 5. figuras
     if imagens:
@@ -389,11 +497,16 @@ def escrever_registro(
     # 6. hipóteses
     metodo = str(registro.get("metodo") or "").strip()
     premissas = [str(p) for p in _lista(registro.get("premissas")) if str(p).strip()]
-    if metodo or premissas:
+    gerais = mv.equacoes_gerais(registro, linhas)  # as do método (corte, contato, grupo…)
+    if metodo or premissas or gerais:
         t.titulo("Hipóteses de cálculo", nivel + 1)
         if metodo:
             t.paragrafo(texto_de_memorial(metodo))
         t.itens([texto_de_memorial(p) for p in premissas])
+        if gerais:
+            t.paragrafo("", rotulo="Equações do método:").paragraph_format.keep_with_next = True
+            for texto in gerais:
+                t.equacao(texto)
 
     # 7. verificações, por grupo
     if linhas:
@@ -404,10 +517,15 @@ def escrever_registro(
                 t.titulo(nome_grupo, nivel + 2)
             for linha in do_grupo:
                 _escrever_conta(t, linha, equacoes_por_nome.get(linha.nome, ()))
+                for figura in (figuras_por_verificacao or {}).get(linha.nome, ()):
+                    t.figura_do_diagrama(figura)
 
         # 8. resumo: o que atende e, por último, o que não atende
         t.titulo("Resumo das verificações", nivel + 1)
         t.paragrafo(texto_de_memorial(mv.texto_do_resultado({}, resumo, _valor)))
+        t.figura_do_diagrama(
+            grafico_das_verificacoes([(x.nome, x.aproveitamento, x.status) for x in linhas])
+        )
         if resumo.passaram:
             t.tabela(
                 CABECALHOS_RESUMO,
@@ -490,13 +608,14 @@ def trecho_de_registro(
     *,
     projeto: Mapping[str, Any] | None = None,
     imagens: Sequence[Mapping[str, Any]] | None = None,
+    figuras_por_verificacao: Mapping[str, Sequence[Any]] | None = None,
 ) -> bytes:
     """O memorial separado (Word) de um registro técnico, pronto para colar no documento oficial."""
     if imagens is None:
         graficos = importlib.import_module("core.record_charts")  # fora da lista do mypy
         imagens, _ = graficos.imagens_do_registro(registro, projeto or {})
     t = Trecho()
-    escrever_registro(t, registro, imagens=imagens)
+    escrever_registro(t, registro, imagens=imagens, figuras_por_verificacao=figuras_por_verificacao)
     return t.bytes()
 
 
@@ -542,7 +661,7 @@ def escrever_secoes(t: Trecho, secoes: Sequence[Mapping[str, Any]], *, nivel_bas
                     numerados=tipo == "passos",
                 )
             elif tipo == "formula":
-                t.equacao(str(bloco.get("texto") or ""))
+                t.equacao(limpar_texto(str(bloco.get("texto") or "")))
             elif tipo == "imagem":
                 png = bloco.get("png") or bloco.get("bytes")
                 if isinstance(png, (bytes, bytearray)):

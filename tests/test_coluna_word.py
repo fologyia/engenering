@@ -69,7 +69,8 @@ def test_word_traz_todas_as_secoes_da_pagina(coluna):
     assert "γ_a1 = 1,10" in cheio and "N_c,Rd = 835,24 kN" in cheio  # vírgula decimal
     assert "NBR 8800 4.7" in cheio  # item da norma não vira decimal
     documento = Document(BytesIO(conteudo))
-    assert len(documento.inline_shapes) == 2  # o desenho da seção e a curva de flambagem
+    # o desenho da seção, a curva de flambagem e o gráfico de aproveitamento
+    assert len(documento.inline_shapes) == 3
     assert "W 250 x 32,7: perfil I laminado" in cheio  # a legenda do desenho da seção
 
 
@@ -86,7 +87,8 @@ def test_word_leva_a_coluna_em_pe_com_a_mao_francesa(coluna):
         "Biapoiada (pino-pino)", dc.MaoFrancesaNoDesenho(20.0, 45.0, 3000.0, "x", 120.0),
     )  # fmt: skip
     conteudo = gerar_word_coluna(entrada, resultado, coluna_em_pe=em_pe)
-    assert len(Document(BytesIO(conteudo)).inline_shapes) == 3  # seção, coluna em pé e curva
+    # seção, coluna em pé, curva e o gráfico de aproveitamento
+    assert len(Document(BytesIO(conteudo)).inline_shapes) == 4
     assert "mão-francesa a 3000 mm da base" in texto(conteudo)
 
 

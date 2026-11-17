@@ -201,7 +201,16 @@ def cantoneira_do_catalogo(medida: Any, nome: str = "") -> Cantoneira:
     ix, iz = float(medida.i_x_mm4), float(medida.i_z_mm4)
     xb = float(medida.x_barra_mm)
     return Cantoneira(
-        nome or str(medida.nome), b, b, t, float(medida.area_mm2), xb, xb, ix, ix, -(ix - iz),
+        nome or str(medida.nome),
+        b,
+        b,
+        t,
+        float(medida.area_mm2),
+        xb,
+        xb,
+        ix,
+        ix,
+        -(ix - iz),
         float(medida.j_mm4),
     )
 

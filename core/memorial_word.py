@@ -476,11 +476,35 @@ def _paragraph_box(paragraph, fill: str, border: str = BORDER) -> None:
 
 
 def _add_formula(document: Document, formula: str) -> None:
-    paragraph = document.add_paragraph(style="Memorial Formula")
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    _paragraph_box(paragraph, NOTE_FILL)
-    run = paragraph.add_run(formula)
-    _set_run_font(run, name="Cambria Math", size=10.5, color=NAVY)
+    """A fórmula como equação do Word (core.equacao_word), na caixa do memorial: o rótulo e a
+    referência em texto, uma linha por conta. Sem conta reconhecível, o texto como antes."""
+    from core import equacao_word as eq
+
+    rotulo, equacoes, referencia = eq.preparar(formula)
+    if not equacoes:
+        paragraph = document.add_paragraph(style="Memorial Formula")
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _paragraph_box(paragraph, NOTE_FILL)
+        run = paragraph.add_run(formula)
+        _set_run_font(run, name="Cambria Math", size=10.5, color=NAVY)
+        return
+    if rotulo:
+        paragraph = document.add_paragraph(style="Memorial Formula")
+        _paragraph_box(paragraph, NOTE_FILL)
+        paragraph.paragraph_format.keep_with_next = True
+        run = paragraph.add_run(rotulo)
+        _set_run_font(run, size=9.5, color=NAVY, bold=True)
+    for equacao in equacoes:
+        paragraph = document.add_paragraph(style="Memorial Formula")
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _paragraph_box(paragraph, NOTE_FILL)
+        eq.acrescentar(paragraph, equacao)
+    if referencia:
+        paragraph = document.add_paragraph(style="Memorial Formula")
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        _paragraph_box(paragraph, NOTE_FILL)
+        run = paragraph.add_run(f"({referencia})")
+        _set_run_font(run, size=8.5, color="26323D")
 
 
 def _add_note(document: Document, text: str, *, fill: str = NOTE_FILL) -> None:
@@ -1044,17 +1068,17 @@ def gerar_memorial_fadiga_word(
 
     if dados.get("modelo") == "norton":
         if temp_f <= 450.0:
-            formula_temperatura = f"T_F = {_numero(temp_f, 2)} °F <= 450 °F  =>  Ctemp = 1,000"
+            formula_temperatura = f"T_F = {_numero(temp_f, 2)} °F ≤ 450 °F ⇒ C_temp = 1,000"
         else:
             formula_temperatura = (
-                f"Ctemp = 1 - 0,0058 x ({_numero(temp_f, 2)} - 450) = {_numero(ctemp, 3)}"
+                f"C_temp = 1 − 0,0058 × ({_numero(temp_f, 2)} − 450) = {_numero(ctemp, 3)}"
             )
         texto_temperatura = (
             "Norton utiliza a temperatura em graus Fahrenheit, com correlação "
             "limitada a 550 °F (287,78 °C)."
         )
     else:
-        formula_temperatura = f"Shigley: kd(T = {_numero(temp_c, 2)} °C) = {_numero(ctemp, 3)}"
+        formula_temperatura = f"Shigley: k_d(T = {_numero(temp_c, 2)} °C) = {_numero(ctemp, 3)}"
         texto_temperatura = (
             "Shigley utiliza a temperatura em graus Celsius; para temperaturas elevadas, "
             "as propriedades mecânicas devem corresponder à condição de serviço."
@@ -1067,37 +1091,37 @@ def gerar_memorial_fadiga_word(
         fatores.get("Temperatura"),
         fatores.get("Confiabilidade"),
     ]
-    marin_substitution = " x ".join(_numero(float(value), 4) for value in marin_values)
+    marin_substitution = " × ".join(_numero(float(value), 4) for value in marin_values)
 
     if dados.get("modo_entalhe") == "Usar Kf com q":
         notch_formula = (
-            f"Kf = 1 + q(Kt - 1) = 1 + {_numero(dados.get('q'), 2)}"
-            f"({_numero(dados.get('Kt'), 3)} - 1) = {_numero(dados.get('fator_entalhe'), 3)}"
+            f"K_f = 1 + q·(K_t − 1) = 1 + {_numero(dados.get('q'), 2)} × "
+            f"({_numero(dados.get('Kt'), 3)} − 1) = {_numero(dados.get('fator_entalhe'), 3)}"
         )
     elif dados.get("modo_entalhe") == "Usar Kt diretamente":
-        notch_formula = f"Fator aplicado = Kt = {_numero(dados.get('Kt'), 3)}"
+        notch_formula = f"Fator aplicado: K_f = K_t = {_numero(dados.get('Kt'), 3)}"
     else:
-        notch_formula = "Sem entalhe: fator aplicado = 1,000"
+        notch_formula = "Sem entalhe: K_f = 1,000"
 
     goodman_formula = (
-        f"1/nG = σa/Se + σm/Sut = {_numero(sigma_a, 2)}/{_numero(se, 2)} + "
-        f"{_numero(sigma_m, 2)}/{_numero(sut, 2)}  =>  nG = {_numero(n_goodman, 3)}"
+        f"1/n_G = σ_a/S_e + σ_m/S_ut = {_numero(sigma_a, 2)}/{_numero(se, 2)} + "
+        f"{_numero(sigma_m, 2)}/{_numero(sut, 2)} ⇒ n_G = {_numero(n_goodman, 3)}"
     )
     soderberg_formula = (
-        f"1/nS = σa/Se + σm/Sy = {_numero(sigma_a, 2)}/{_numero(se, 2)} + "
-        f"{_numero(sigma_m, 2)}/{_numero(sy, 2)}  =>  nS = {_numero(n_soderberg, 3)}"
+        f"1/n_S = σ_a/S_e + σ_m/S_y = {_numero(sigma_a, 2)}/{_numero(se, 2)} + "
+        f"{_numero(sigma_m, 2)}/{_numero(sy, 2)} ⇒ n_S = {_numero(n_soderberg, 3)}"
         if n_soderberg is not None
         else "Soderberg não calculado: Sy não foi informado em domínio válido."
     )
     yield_formula = (
-        f"ny = Sy/(σa + σm) = {_numero(sy, 2)}/"
+        f"n_y = S_y/(σ_a + σ_m) = {_numero(sy, 2)}/"
         f"({_numero(sigma_a, 2)} + {_numero(sigma_m, 2)}) = {_numero(n_escoamento, 3)}"
         if n_escoamento is not None
         else "Verificação de escoamento não calculada."
     )
     life_formula = (
-        f"σa,eq = σa/(1 - σm/Sut) = {_numero(sigma_a, 2)}/"
-        f"(1 - {_numero(sigma_m, 2)}/{_numero(sut, 2)}) = {_numero(sigma_eq, 2)} MPa"
+        f"σ_a,eq = σ_a/(1 − σ_m/S_ut) = {_numero(sigma_a, 2)}/"
+        f"(1 − {_numero(sigma_m, 2)}/{_numero(sut, 2)}) = {_numero(sigma_eq, 2)} MPa"
     )
 
     if vida_requerida <= 0:
@@ -1208,7 +1232,7 @@ def gerar_memorial_fadiga_word(
         {
             "titulo": "7.1 Resistência de fadiga de referência",
             "nivel": 2,
-            "formulas": [f"Se' = {_numero(se_linha, 2)} MPa"],
+            "formulas": [f"S_e' = {_numero(se_linha, 2)} MPa"],
         },
         {
             "titulo": "7.2 Correção de temperatura",
@@ -1224,8 +1248,8 @@ def gerar_memorial_fadiga_word(
             "titulo": "7.3 Equação de Marin",
             "nivel": 2,
             "formulas": [
-                "Se = Se' x Ccarreg x Ctamanho x Csuperf x Ctemp x Cconf",
-                f"Se = {_numero(se_linha, 2)} x {marin_substitution} = {_numero(se, 2)} MPa",
+                "S_e = S_e'·C_carreg·C_tamanho·C_superf·C_temp·C_conf",
+                f"S_e = {_numero(se_linha, 2)} × {marin_substitution} = {_numero(se, 2)} MPa",
                 f"Produto dos fatores = {_numero(produto_marin, 4)}",
             ],
         },
@@ -1234,8 +1258,8 @@ def gerar_memorial_fadiga_word(
             "nivel": 2,
             "formulas": [
                 notch_formula,
-                f"σa = fator x σa,nom = {_numero(dados.get('fator_entalhe'), 3)} x {_numero(sigma_a_nom, 2)} = {_numero(sigma_a, 2)} MPa",
-                f"σm = {_numero(sigma_m, 2)} MPa",
+                f"σ_a = K_f·σ_a,nom = {_numero(dados.get('fator_entalhe'), 3)} × {_numero(sigma_a_nom, 2)} = {_numero(sigma_a, 2)} MPa",
+                f"σ_m = {_numero(sigma_m, 2)} MPa",
             ],
         },
         {

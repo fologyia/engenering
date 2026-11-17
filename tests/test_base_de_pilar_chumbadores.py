@@ -171,7 +171,11 @@ def test_aco_mais_resistente_reduz_d_b_min_e_alerta_a_ancoragem():
     gr55 = bp.calcular(replace(C3_6, aco_chumbador="ASTM F1554 Gr 55"))
     d36, d55 = _linha(a36, "Chumbador: diâmetro").solicitante, _linha(gr55, "Chumbador: diâmetro").solicitante  # fmt: skip
     assert d55 == pytest.approx(d36 * math.sqrt(400 / 517))
-    assert _sem_a_solda(gr55) == "ALERTA" and bp.solda_do_pilar_reprova(gr55) and _linha(gr55, "Aço do chumbador").status == "ALERTA"
+    assert (
+        _sem_a_solda(gr55) == "ALERTA"
+        and bp.solda_do_pilar_reprova(gr55)
+        and _linha(gr55, "Aço do chumbador").status == "ALERTA"
+    )
     assert not _tem(
         bp.calcular(replace(C3_6, aco_chumbador="ASTM F1554 Gr 36")), "Aço do chumbador"
     )

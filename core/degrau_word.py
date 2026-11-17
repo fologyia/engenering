@@ -214,6 +214,7 @@ def gerar_word_degrau(
         "verificações de resistência.",
         legenda=True,
     )
+    doc.grafico_das_verificacoes(r.verificacoes)
     doc.tabela(
         list(reg.COLUNAS_VERIFICACAO),
         [

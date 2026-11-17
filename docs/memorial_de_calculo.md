@@ -25,7 +25,41 @@ São dois documentos diferentes, e o padrão vale para todos os módulos:
     `√(…)` raiz; o que não fecha vira texto). Um módulo dá as contas em `Verificacao.equacoes`,
     que vão para o registro como `"equações"`.
 - **Relatório geral** (Central de relatórios): o documento completo e conectado, com capa,
-  resumo, controle, todos os cálculos do projeto e aprovações. Não muda.
+  resumo, controle, todos os cálculos do projeto e aprovações. As fórmulas dele também saem como
+  equações do Word, na caixa do memorial.
+
+**Fórmulas (17/11/2026, rodada 2):** `equacao_word.preparar(texto)` separa:
+- o rótulo do começo ("Corte (…):"), que fica em texto;
+- a referência do fim ("(NBR 8800:2025, 6.3.3.2)"), também em texto;
+- as várias contas separadas por ";", uma equação cada.
+
+O que o leitor entende:
+- letra grega com índice colado (σa, ℓx);
+- índices Unicode (a₁), `_{…}`, `^{…}`, Σ como somatório e |x| como módulo;
+- " x ", "*", "=>", "<=", ">=" e, com `maquina=True`, o ponto decimal;
+- palavras ("fator aplicado") em texto reto e unidades depois de parêntese em letra reta.
+
+Parêntese faltando fecha, parêntese sobrando vira texto e fração sem um dos lados vira barra: nunca
+há erro. O valor calculado (o que vem antes da comparação, ou o último, depois de uma conta) sai em
+caixa (`m:borderBox`). As fórmulas só com símbolos são numeradas "(n)" à direita, numa tabela sem
+bordas com campo SEQ Equação.
+
+`tests/test_equacao_word.py` cobre 3000 fórmulas aleatórias e todas as fórmulas reais: o XML sai
+sempre válido e nenhum "_" fica cru.
+
+**Elementos gráficos do trecho:**
+- `core/graficos_memorial.py`:
+  - o aproveitamento das verificações, em barras da maior para a menor, com a linha de 100 % e as
+    que não atendem em preto;
+  - o de cada combinação, com a que governa.
+- `Trecho.grafico_das_verificacoes`, também na flambagem, no degrau e no cálculo de peças.
+- A situação com símbolo nas tabelas (✔ ✖ ⚠) e a barra em texto "■■■■■□□□□□" na coluna de
+  aproveitamento, que sobrevive a colar como texto.
+- Placa de base (`core/desenho_placa_base_contas.py`), cada figura logo depois da conta dela
+  (`figuras_por_verificacao`), na combinação que governa aquela verificação:
+  - a pressão sob a placa e as forças nos chumbadores;
+  - a largura a 45° até a face da mesa;
+  - a área A_Nc do cone no bloco.
 
 Sequência do trecho de um registro com verificações (`trecho_de_registro`): título → objetivo →
 normas e critérios → materiais e dados de entrada → esforços (`resultados["combinacoes"]`) →

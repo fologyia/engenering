@@ -104,6 +104,7 @@ def gerar_word_do_caso(
 
     if resultado.verificacoes:
         documento.titulo("Verificações", 2)
+        documento.grafico_das_verificacoes(resultado.verificacoes)
         documento.tabela(
             [
                 "Verificação",

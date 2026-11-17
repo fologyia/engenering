@@ -273,6 +273,7 @@ def gerar_word_coluna(
         "(esbeltez, espessuras) só dizem OK ou NÃO OK.",
         legenda=True,
     )
+    doc.grafico_das_verificacoes(resultado.verificacoes)
     doc.tabela(
         [
             "Verificação",

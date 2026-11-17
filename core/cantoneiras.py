@@ -13,8 +13,8 @@ Eixos: ``x`` e ``y`` passam pelo centro geométrico paralelos às abas (iguais, 
 
 from __future__ import annotations
 
-import math
 import json
+import math
 import re
 from dataclasses import dataclass, replace
 from fractions import Fraction
@@ -147,7 +147,7 @@ def _da_gerdau() -> dict[tuple[str, str], Cantoneira]:
         return {}
     tabela: dict[tuple[str, str], Cantoneira] = {}
     for p in dados.get("perfis", []):
-        m = re.fullmatch(r'L\s+(\S+)\s+x\s+(\S+)', str(p.get("nome", "")).strip())
+        m = re.fullmatch(r"L\s+(\S+)\s+x\s+(\S+)", str(p.get("nome", "")).strip())
         if not m:
             continue
         aba, espessura = _aba_do_catalogo(m.group(1)), _aba_do_catalogo(m.group(2))
@@ -215,7 +215,9 @@ def gabarito_usual_mm(b_mm: float) -> float:
 # A cantoneira pelo nome que vem de fora (SolidWorks, lista de corte, catálogo do fabricante)
 # ---------------------------------------------------------------------------------------------
 TOLERANCIA_ABA = 0.02  # 50 mm não é 2" (50,8): 1,6 %, passa; 48 mm não passa
-TOLERANCIA_ESPESSURA = 0.03  # 6,3 mm é 1/4" (6,35); 6 mm não é (5,5 % mais fina, contra a segurança)
+TOLERANCIA_ESPESSURA = (
+    0.03  # 6,3 mm é 1/4" (6,35); 6 mm não é (5,5 % mais fina, contra a segurança)
+)
 ABA_MAXIMA_POL = 8.5  # sem aspas: até aqui é polegada; de 10 para cima é milímetro
 ABA_MINIMA_MM = 10.0
 
@@ -296,9 +298,7 @@ def medidas_do_nome(texto: str) -> tuple[float, float, float] | None:
     return None
 
 
-def cantoneira_pelas_medidas(
-    aba_a_mm: float, aba_b_mm: float, espessura_mm: float
-) -> str | None:
+def cantoneira_pelas_medidas(aba_a_mm: float, aba_b_mm: float, espessura_mm: float) -> str | None:
     """A bitola do catálogo com estas medidas (abas iguais; ±2 % na aba, ±3 % na espessura)."""
     if abs(aba_a_mm - aba_b_mm) > TOLERANCIA_ABA * max(aba_a_mm, aba_b_mm):
         return None  # abas desiguais: o catálogo só tem abas iguais

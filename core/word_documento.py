@@ -15,7 +15,7 @@ from typing import Any
 
 from docx.shared import Pt
 
-from core.memorial_trecho import LARGURA_FIGURA_MM, SITUACAO, Trecho
+from core.memorial_trecho import LARGURA_FIGURA_MM, SITUACAO, Trecho, barra_texto
 from core.memorial_trecho import LARGURA_UTIL_MM as LARGURA_TRECHO_MM
 
 #: Largura em que as tabelas das páginas foram desenhadas (A4 em paisagem); o trecho reduz a escala.
@@ -44,6 +44,15 @@ def celula_texto(valor: Any) -> str:
     if isinstance(valor, float):
         return numero_pt(valor, 4)
     return str(valor)
+
+
+def _percentual(texto: str) -> float | None:
+    """'56,3', '56,3 %' ou '56%' → 56,3; o que não é número → None."""
+    limpo = texto.replace("%", "").replace(",", ".").strip()
+    try:
+        return float(limpo)
+    except ValueError:
+        return None
 
 
 def titulo_de_memorial(texto: str) -> str:
@@ -89,6 +98,9 @@ class DocumentoWord(Trecho):
         fonte: float = 8.0,
         legenda: str | None = None,
     ) -> None:
+        # a coluna de aproveitamento ganha a barra em texto ("■■■■■□□□□□"), que sobrevive a
+        # colar o trecho como texto e se lê em preto e branco
+        de_aproveitamento = {k for k, c in enumerate(cabecalhos) if "aprov" in str(c).casefold()}
         textos = []
         for linha in linhas:
             celulas = []
@@ -96,6 +108,10 @@ class DocumentoWord(Trecho):
                 texto = celula_texto(valor)
                 if status_coluna is not None and coluna == status_coluna:
                     texto = SITUACAO.get(texto, texto)
+                elif coluna in de_aproveitamento:
+                    percentual = _percentual(texto)
+                    if percentual is not None:
+                        texto = f"{texto}\n{barra_texto(percentual)}"
                 celulas.append(texto)
             textos.append(celulas)
         if larguras_mm is not None and sum(larguras_mm) > LARGURA_TRECHO_MM:
