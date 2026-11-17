@@ -234,7 +234,16 @@ def perfil_conhecido(descricao: str) -> PerfilConhecido | None:
     if nome in ct.CATALOGO_CANTONEIRAS:
         c = ct.CATALOGO_CANTONEIRAS[nome]
         return PerfilConhecido(nome, c.massa_kg_m, 4 * c.b_mm)
-    return _por_medidas(texto)
+    por_medidas = _por_medidas(texto)
+    if por_medidas is not None:
+        return por_medidas
+    # Cantoneira fora do catálogo (abas desiguais, bitola que não existe) descrita em polegadas:
+    # a massa sai das medidas, sem os raios (dois retângulos).
+    medidas = ct.medidas_do_nome(texto)
+    if medidas is not None:
+        a, b, e = medidas
+        return PerfilConhecido(texto, e * (a + b - e) * DENSIDADE_ACO * 1e-6, 2 * (a + b))
+    return None
 
 
 # ---------------------------------------------------------------------------------------------
@@ -900,16 +909,25 @@ def _ler_lista_de_corte(
                 secoes.setdefault(descricao, []).append((len(itens) - 1, area, reta))
         elif massa_geometria is not None:
             pela_geometria.append(descricao)
+            motivo = ct.por_que_nao_reconheceu(descricao)
             itens.append(
                 replace(
                     base,
                     tipo=TIPO_PERFIL if comprimento_m > 0 else TIPO_OUTRO,
-                    observacao="fora do catálogo: massa pela geometria do modelo (aço)",
+                    observacao=(f"{motivo}; " if motivo else "")
+                    + "fora do catálogo: massa pela geometria do modelo (aço)",
                 )
             )
         else:
             estranhos.append(descricao)
-            itens.append(replace(base, observacao="fora do catálogo: informe a massa (kg/m)"))
+            motivo = ct.por_que_nao_reconheceu(descricao)
+            itens.append(
+                replace(
+                    base,
+                    observacao=(f"{motivo}; " if motivo else "")
+                    + "fora do catálogo: informe a massa (kg/m)",
+                )
+            )
     adotados, divergentes = _conferir_secoes(itens, secoes)
     if adotados:
         avisos.append(

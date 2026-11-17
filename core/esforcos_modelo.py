@@ -754,6 +754,11 @@ def _numero_em_polegadas(texto: str) -> float | None:
     return total
 
 
+_PARECE_CANTONEIRA = re.compile(
+    r"(?:cantoneira|\bcant\b|angle|[âa]ngulo|(?<![A-Za-zÀ-ÿ])L\s*\d)", re.IGNORECASE
+)
+
+
 def perfil_do_nome(nome: str) -> str | None:
     """O perfil do catálogo que o nome da viga do SolidWorks indica, se indicar.
 
@@ -783,22 +788,13 @@ def perfil_do_nome(nome: str) -> str | None:
         massa = float(m.group(2)) * 1.48816
         candidatos = {n: k for n, k in catalogo.items() if n.startswith(f'U {m.group(1)}"')}
         return min(candidatos, key=lambda n: abs(candidatos[n] - massa)) if candidatos else None
-    # Cantoneira com a aba em polegadas (com aspas) e a espessura por último, em decimal ou em
-    # fração: L 3"X0,25", L 2 1/2" x 1/4", L 3" x 3" x 5/16".
-    m = re.search(r"\bL\s*([\d./ ]+?)\s*(?:\"|'')\s*((?:[xX×]\s*[\d./ ]+(?:\"|'')?\s*)+)", texto)
-    if m:
-        aba = _numero_em_polegadas(m.group(1))
-        partes = [p for p in re.split(r"[xX×]", m.group(2)) if p.strip(" \"'")]
-        espessura = _numero_em_polegadas(partes[-1]) if partes else None
-        if aba is None or espessura is None:
-            return None
-        candidato = f'L {_polegadas(aba)}" × {_polegadas(espessura)}"'
-        return candidato if candidato in catalogo else None
-    m = re.search(r"\bL\s*([\d.]+)\s*[xX]\s*([\d.]+)\s*[xX]\s*([\d.]+)", texto)
-    if m:
-        aba, espessura = float(m.group(1)), float(m.group(3))
-        candidato = f'L {_polegadas(aba)}" × {_polegadas(espessura)}"'
-        return candidato if candidato in catalogo else None
+    # Cantoneira, por qualquer jeito de escrever (polegadas com ou sem aspas, fração, decimal, o
+    # 1.1/4" da Gerdau, milímetros): core/cantoneiras.py lê e casa com o catálogo. Abas desiguais e
+    # medidas que não são de bitola dão None, em vez de trocar a peça por outra.
+    if _PARECE_CANTONEIRA.search(nome):
+        from core import cantoneiras as ct
+
+        return ct.cantoneira_pelo_nome(nome)
     m = re.search(r"\bW\s*(\d+)\s*[xX]\s*([\d.]+)", texto)
     if m:
         altura, massa = float(m.group(1)), float(m.group(2))

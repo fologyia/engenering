@@ -449,7 +449,7 @@ def _secao_composta() -> Secao:
             peca = pc.cantoneira(aba_a, aba_b, espessura)
         else:
             medida = ct.obter_cantoneira(nome)
-            peca = pc.cantoneira(medida.b_mm, medida.b_mm, medida.t_mm, nome)
+            peca = pc.cantoneira_do_catalogo(medida, nome)
         return pc.duas_cantoneiras(peca, arranjo, afastamento)
     perfis = catalogo_perfis.listar_perfis()
     nome = linha[1].selectbox(

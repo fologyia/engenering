@@ -127,7 +127,7 @@ def area_bruta_mm2(d: Diagonal) -> float:
 def secao_de_2_cantoneiras(d: Diagonal) -> cd.Secao:
     """A barra composta da diagonal: duas cantoneiras em T, afastadas pela chapa de nó."""
     medida = ct.obter_cantoneira(d.perfil)
-    peca = pc.cantoneira(medida.b_mm, medida.b_mm, medida.t_mm, d.perfil)
+    peca = pc.cantoneira_do_catalogo(medida, d.perfil)
     return pc.duas_cantoneiras(peca, pc.ARRANJO_2L_T, d.t_chapa_no_mm)
 
 

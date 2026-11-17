@@ -43,9 +43,7 @@ def entrada_do_exemplo(norma: str = "AISC360_16_LRFD", **campos) -> cb.EntradaCo
 
 def duas_L(arranjo: str = pc.ARRANJO_2L_T, nome: str = 'L 3" × 1/4"', s: float = 8.0) -> cd.Secao:
     medida = ct.obter_cantoneira(nome)
-    return pc.duas_cantoneiras(
-        pc.cantoneira(medida.b_mm, medida.b_mm, medida.t_mm, nome), arranjo, s
-    )
+    return pc.duas_cantoneiras(pc.cantoneira_do_catalogo(medida, nome), arranjo, s)
 
 
 def dois_u(arranjo: str = pc.ARRANJO_2U_I, s: float = 8.0) -> cd.Secao:
@@ -86,13 +84,17 @@ def inercias_dos_contornos(secao: cd.Secao) -> tuple[float, float, float, float]
 # ------------------------------------------------------------------ a cantoneira
 def test_abas_iguais_batem_com_o_catalogo_de_cantoneiras():
     catalogo = ct.obter_cantoneira('L 2" × 3/16"')
-    peca = pc.cantoneira(catalogo.b_mm, catalogo.b_mm, catalogo.t_mm)
+    peca = pc.cantoneira_do_catalogo(catalogo)
     assert peca.area_mm2 == pytest.approx(catalogo.area_mm2)
     assert peca.i_x_mm4 == pytest.approx(catalogo.i_x_mm4)
     assert peca.i_y_mm4 == pytest.approx(catalogo.i_x_mm4)
     assert peca.r_min_mm == pytest.approx(catalogo.r_z_mm)
     assert peca.j_mm4 == pytest.approx(catalogo.j_mm4)
     assert peca.x_b_mm == pytest.approx(catalogo.x_barra_mm)
+    # Pelas medidas (dois retângulos, sem os raios) fica perto da tabela do fabricante.
+    medidas = pc.cantoneira(catalogo.b_mm, catalogo.b_mm, catalogo.t_mm)
+    assert medidas.area_mm2 == pytest.approx(catalogo.area_mm2, rel=0.02)
+    assert medidas.r_min_mm == pytest.approx(catalogo.r_z_mm, rel=0.03)
 
 
 @pytest.mark.parametrize(
@@ -371,12 +373,18 @@ def test_momento_em_barra_composta_pede_m_rd_informado():
 # ------------------------------------------------------------------ outras geometrias
 @pytest.mark.parametrize("arranjo", pc.ARRANJOS_DE_CANTONEIRA)
 def test_as_contas_batem_com_o_desenho(arranjo):
-    s = duas_L(arranjo)
+    medida = ct.obter_cantoneira('L 3" × 1/4"')
+    s = pc.duas_cantoneiras(pc.cantoneira(medida.b_mm, medida.b_mm, medida.t_mm), arranjo, 8.0)
     area, ix, iy, ixy = inercias_dos_contornos(s)
     assert area == pytest.approx(s.A)
     assert ix == pytest.approx(s.Ix)
     assert iy == pytest.approx(s.Iy)
     assert ixy == pytest.approx(0.0, abs=1e-3 * s.Ix)  # x e y são eixos principais
+    # Com os valores Gerdau (que têm os raios de concordância) o desenho idealizado fica perto.
+    s = duas_L(arranjo)
+    area, ix, iy, ixy = inercias_dos_contornos(s)
+    assert (area, ix, iy) == pytest.approx((s.A, s.Ix, s.Iy), rel=0.05)
+    assert ixy == pytest.approx(0.0, abs=2e-2 * s.Ix)  # o giro sai das inércias da tabela
 
 
 def test_y_passa_pelo_centro_geometrico_das_cantoneiras_em_t():

@@ -24,14 +24,16 @@ POL = 25.4
         ('L 3" × 3/8"', 2.11, 0.884, 1.75, 0.581),  # AISC L3x3x3/8
     ],
 )
-def test_cantoneira_idealizada_fica_a_1_porcento_da_tabela_do_aisc(
+def test_cantoneira_do_catalogo_gerdau_fica_perto_da_tabela_do_aisc(
     nome, area_in2, x_in, ix_in4, rz_in
 ):
+    # Gerdau e AISC arredondam diferente (o L 3" × 3/8" tem Ix 3 % acima): até 3,5 %.
     c = ct.obter_cantoneira(nome)
-    assert c.area_mm2 / POL**2 == pytest.approx(area_in2, rel=0.01)
-    assert c.x_barra_mm / POL == pytest.approx(x_in, rel=0.015)
-    assert c.i_x_mm4 / POL**4 == pytest.approx(ix_in4, rel=0.015)
-    assert c.r_z_mm / POL == pytest.approx(rz_in, rel=0.015)
+    assert c.fonte == ct.FONTE_GERDAU
+    assert c.area_mm2 / POL**2 == pytest.approx(area_in2, rel=0.035)
+    assert c.x_barra_mm / POL == pytest.approx(x_in, rel=0.035)
+    assert c.i_x_mm4 / POL**4 == pytest.approx(ix_in4, rel=0.035)
+    assert c.r_z_mm / POL == pytest.approx(rz_in, rel=0.035)
 
 
 def test_cantoneira_massa_do_catalogo_gerdau():

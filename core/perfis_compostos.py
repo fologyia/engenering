@@ -190,6 +190,22 @@ def cantoneira(a_mm: float, b_mm: float, t_mm: float, nome: str = "") -> Cantone
     )
 
 
+def cantoneira_do_catalogo(medida: Any, nome: str = "") -> Cantoneira:
+    """A cantoneira de abas iguais do catálogo (``core.cantoneiras``) com os valores dele.
+
+    O catálogo traz a área, o centroide, I_x = I_y e a menor inércia I_z do fabricante (com os
+    raios de concordância). Com o canto na origem e as abas em +x e +y, o produto de inércia pelo
+    centro é negativo e vale ``−(I_x − I_z)``: é o que faz I_mín sair igual ao I_z da tabela.
+    """
+    b, t = float(medida.b_mm), float(medida.t_mm)
+    ix, iz = float(medida.i_x_mm4), float(medida.i_z_mm4)
+    xb = float(medida.x_barra_mm)
+    return Cantoneira(
+        nome or str(medida.nome), b, b, t, float(medida.area_mm2), xb, xb, ix, ix, -(ix - iz),
+        float(medida.j_mm4),
+    )
+
+
 def _paredes_das_abas(a: float, b: float, t: float) -> list[dict[str, Any]]:
     """Abas com chapas espaçadoras: grupo 3 da Tabela 4 (F.1 na NBR 2008), elementos livres."""
     if a == b:
