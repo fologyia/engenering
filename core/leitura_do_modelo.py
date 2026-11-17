@@ -1204,8 +1204,8 @@ def _perfis_dos_corpos(corpos: Sequence[CorpoDoModelo]) -> dict[str, tuple[str, 
     das_barras: dict[str, dict[str, int]] = {}
     for corpo in corpos:
         if corpo.forma == FORMA_BARRA and perfis.get(corpo.nome, ("", ""))[0]:
-            membro = das_barras.setdefault(_prefixo_e_indice(corpo.nome)[0], {})
-            membro[perfis[corpo.nome][0]] = membro.get(perfis[corpo.nome][0], 0) + 1
+            contagem = das_barras.setdefault(_prefixo_e_indice(corpo.nome)[0], {})
+            contagem[perfis[corpo.nome][0]] = contagem.get(perfis[corpo.nome][0], 0) + 1
     for corpo in corpos:
         escolha = perfis.get(corpo.nome)
         votos_do_membro = das_barras.get(_prefixo_e_indice(corpo.nome)[0])
