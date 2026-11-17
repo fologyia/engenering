@@ -81,14 +81,27 @@ def test_lista_gravada_mostra_resumo_pendencias_e_conferencia(banco_com_projeto)
     assert "PP: reação vertical" in conferencia and "peso da estrutura" in conferencia
 
 
-def test_incluir_as_placas_de_base_e_gravar(banco_com_projeto):
+def test_sem_base_registrada_o_botao_das_placas_fica_desligado_e_explica(banco_com_projeto):
     gravar_no_projeto(LISTA, portico(PILAR, PILAR_2))
     t = abrir()
+    assert t.button(key="lm_placas").disabled
+    assert any("sem base registrada" in c.value for c in t.caption)
+
+
+def test_incluir_as_placas_de_base_e_gravar(banco_com_projeto):
+    from tests.test_lista_de_material import projeto_com_base
+
+    gravar_no_projeto(LISTA, portico(PILAR, PILAR_2))
+    projeto = obter_projeto_ativo()
+    projeto["registros_tecnicos"] = projeto_com_base(22.4)["registros_tecnicos"]
+    salvar_projeto(projeto, motivo="teste")
+    t = abrir()
+    assert not any("sem base registrada" in c.value for c in t.caption)
     t.button(key="lm_placas").click().run()
     assert not t.exception
     salva = lm.lista_do_projeto(obter_projeto_ativo())
     placas = [i for i in salva.itens if i.marca == lm.MARCA_PLACA_DE_BASE]
-    assert len(placas) == 1 and placas[0].quantidade == 2
+    assert len(placas) == 1 and placas[0].quantidade == 2 and placas[0].espessura_mm == 22.4
     t.number_input(key="lm_acrescimo_1").set_value(8.0)
     t.button(key="lm_gravar").click().run()
     assert not t.exception

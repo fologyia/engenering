@@ -2310,11 +2310,6 @@ elif modulo == "Esforços do modelo":
         9. Marque os **pilares** (tipo Pilar) e veja o **quadro de cargas para as fundações**:
            a base de cada pilar, caso a caso, sem combinar nem majorar (critério Anglo 5.9), com
            Excel, CSV e registro.
-        10. Em **Placas de base dos pilares**, informe a placa padrão (N, B, espessura, f_ck e os
-           chumbadores) e grave: o programa combina os esforços da base de cada pilar e verifica
-           a placa e os chumbadores (concreto pela NBR 8800:2025 6.6.5, placa e chumbadores pelo
-           Design Guide 1 do AISC), com as exigências da Anglo
-           (placa ≥ 16 mm, chumbador ≥ 5/8" e o furo, a arruela e o graute do item 8.7).
         """
     )
     mostrar_exemplo(

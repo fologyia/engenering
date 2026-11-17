@@ -40,8 +40,8 @@ AJUDA: dict[str, str] = {
     ),
     "btn_gravar": "Grava a tabela, o acréscimo e a barra comercial no projeto ativo.",
     "btn_placas": (
-        "Acrescenta a placa de base de cada pilar, com as medidas gravadas em Esforços do modelo "
-        "(seção 9). Se já houver, troca pela placa atual."
+        "Acrescenta a placa de base de cada pilar com as medidas da base registrada na página "
+        "Placa de base para o perfil do pilar (a mais recente). Se já houver, troca pela atual."
     ),
     "sec_resumo": "Massa, peso e área de pintura da lista, com o acréscimo das ligações.",
     "res_massa": "Massa dos itens mais o acréscimo das ligações, parafusos e soldas.",

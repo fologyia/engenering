@@ -463,37 +463,119 @@ def com_itens(lista: ListaDeMaterial, itens: Iterable[ItemDaLista]) -> ListaDeMa
 
 
 # ---------------------------------------------------------------------------------------------
-# Placas de base dos pilares (da página Esforços do modelo)
+# Placas de base dos pilares (das bases registradas na página Placa de base)
 # ---------------------------------------------------------------------------------------------
 MARCA_PLACA_DE_BASE = "PB"
+MODULO_PLACA_DE_BASE = "placa_de_base"
 
 
-def itens_das_placas_de_base(dados: em.EsforcosDoModelo) -> list[ItemDaLista]:
-    """Uma linha de chapa com a placa padrão para cada pilar marcado no modelo."""
-    from core import placa_base_pilares as pb
+@dataclass(frozen=True)
+class PlacaRegistrada:
+    """A placa de uma base de pilar registrada no projeto (página Placa de base)."""
 
-    pilares = [n for n, m in dados.membros.items() if m.tipo == "Pilar"]
-    if not pilares:
-        return []
-    placa = pb.placa_do_modelo(dados)
-    return [
-        ItemDaLista(
-            marca=MARCA_PLACA_DE_BASE,
-            tipo=TIPO_CHAPA,
-            descricao=f"Placa de base {placa.aco}",
-            quantidade=len(pilares),
-            comprimento_m=placa.comprimento_mm / 1e3,
-            largura_mm=placa.largura_mm,
-            espessura_mm=placa.espessura_mm,
-            observacao="da verificação das placas de base (Esforços do modelo)",
+    perfil: str
+    comprimento_mm: float  # ℓx
+    largura_mm: float  # ℓy
+    espessura_mm: float
+    aco: str
+    titulo: str
+
+
+def _chave_do_perfil(nome: str) -> str:
+    """Nome do perfil sem espaço, maiúsculas, × = x e vírgula = ponto ("W 200 × 35,9" = "w200x35.9")."""
+    return re.sub(r"\s+", "", str(nome or "")).casefold().replace("×", "x").replace(",", ".")
+
+
+def placas_registradas(projeto: Mapping[str, Any] | None) -> dict[str, PlacaRegistrada]:
+    """A base mais recente registrada para cada perfil de pilar (chave = nome normalizado).
+
+    Lê os registros técnicos da página Placa de base — o motor da NBR 8800:2025 6.7 — e
+    refaz a geometria da entrada gravada. Registros superados e entradas inválidas ficam de fora.
+    """
+    from core import base_de_pilar as bp
+    from core.technical_records import registro_superado
+
+    if not isinstance(projeto, Mapping):
+        return {}
+    registros = [
+        r
+        for r in projeto.get("registros_tecnicos") or []
+        if isinstance(r, Mapping)
+        and r.get("modulo_id") == MODULO_PLACA_DE_BASE
+        and not registro_superado(r)
+    ]
+    registros.sort(key=lambda r: str(r.get("criado_em") or ""))
+    placas: dict[str, PlacaRegistrada] = {}
+    for registro in registros:  # o mais recente fica por último e vale
+        figura = (registro.get("resultados") or {}).get("figura_base_de_pilar") or {}
+        try:
+            entrada = bp.entrada_de_dicionario(figura.get("entrada") or {})
+            g = bp.geometria(entrada)
+        except (ArithmeticError, ValueError, KeyError, TypeError):
+            continue
+        if not entrada.perfil:
+            continue
+        placas[_chave_do_perfil(entrada.perfil)] = PlacaRegistrada(
+            perfil=entrada.perfil,
+            comprimento_mm=float(g.lx),
+            largura_mm=float(g.ly),
+            espessura_mm=float(entrada.t_placa_mm),
+            aco=str(entrada.aco_placa),
+            titulo=str(registro.get("titulo") or ""),
         )
+    return placas
+
+
+def _pilares_por_perfil(dados: em.EsforcosDoModelo) -> dict[str, list[str]]:
+    grupos: dict[str, list[str]] = {}
+    for nome, membro in dados.membros.items():
+        if membro.tipo == "Pilar":
+            grupos.setdefault(_chave_do_perfil(membro.perfil), []).append(nome)
+    return grupos
+
+
+def itens_das_placas_de_base(
+    dados: em.EsforcosDoModelo, projeto: Mapping[str, Any] | None
+) -> list[ItemDaLista]:
+    """Uma linha de chapa por perfil de pilar, com a placa da base registrada para esse perfil."""
+    placas = placas_registradas(projeto)
+    itens = []
+    for chave, pilares in _pilares_por_perfil(dados).items():
+        placa = placas.get(chave)
+        if placa is None:
+            continue
+        itens.append(
+            ItemDaLista(
+                marca=MARCA_PLACA_DE_BASE,
+                tipo=TIPO_CHAPA,
+                descricao=f"Placa de base {placa.aco} — pilar {placa.perfil}",
+                quantidade=len(pilares),
+                comprimento_m=placa.comprimento_mm / 1e3,
+                largura_mm=placa.largura_mm,
+                espessura_mm=placa.espessura_mm,
+                observacao=f"da base registrada na página Placa de base ({placa.titulo})",
+            )
+        )
+    return itens
+
+
+def pilares_sem_base(dados: em.EsforcosDoModelo, projeto: Mapping[str, Any] | None) -> list[str]:
+    """Os pilares cujo perfil ainda não tem base registrada (ficam fora da lista)."""
+    placas = placas_registradas(projeto)
+    return [
+        nome
+        for chave, pilares in _pilares_por_perfil(dados).items()
+        if chave not in placas
+        for nome in pilares
     ]
 
 
-def com_placas_de_base(lista: ListaDeMaterial, dados: em.EsforcosDoModelo) -> ListaDeMaterial:
-    """Troca as linhas de placa de base pela placa atual (não duplica ao repetir)."""
+def com_placas_de_base(
+    lista: ListaDeMaterial, dados: em.EsforcosDoModelo, projeto: Mapping[str, Any] | None
+) -> ListaDeMaterial:
+    """Troca as linhas de placa de base pelas bases registradas (não duplica ao repetir)."""
     outras = [i for i in lista.itens if i.marca != MARCA_PLACA_DE_BASE]
-    return com_itens(lista, [*outras, *itens_das_placas_de_base(dados)])
+    return com_itens(lista, [*outras, *itens_das_placas_de_base(dados, projeto)])
 
 
 # ---------------------------------------------------------------------------------------------

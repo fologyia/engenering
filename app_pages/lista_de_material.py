@@ -223,15 +223,23 @@ with st.container(border=True), secao_protegida("2. Itens da lista"):
     ) and gravar(atual, "Lista de material atualizada"):
         st.rerun()
     pilares = sum(m.tipo == "Pilar" for m in dados.membros.values())
+    sem_base = lm.pilares_sem_base(dados, projeto)
+    com_base = pilares - len(sem_base)
     if colunas[1].button(
-        f"Incluir as placas de base ({pilares} pilar(es))",
+        f"Incluir as placas de base ({com_base} pilar(es))",
         icon=":material/crop_square:",
         key="lm_placas",
         help=AJUDA["btn_placas"],
-        disabled=pilares == 0,
+        disabled=com_base == 0,
         width="stretch",
-    ) and gravar(lm.com_placas_de_base(atual, dados), "Lista de material: placas de base"):
+    ) and gravar(lm.com_placas_de_base(atual, dados, projeto), "Lista de material: placas de base"):
         st.rerun()
+    if sem_base:
+        st.caption(
+            f":material/info: {len(sem_base)} pilar(es) sem base registrada para o perfil "
+            f"({', '.join(sem_base[:6])}{'…' if len(sem_base) > 6 else ''}): verifique a base na "
+            "página **Placa de base** e registre no projeto para a placa entrar na lista."
+        )
 
 # ============================================================ 3. resumo
 resumo = lm.resumir(atual)

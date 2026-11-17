@@ -11,7 +11,6 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 from core import lista_de_material as lm
-from core import placa_base_pilares as pb
 from core import plano_de_cargas as pc
 from core import section_catalog as sc
 from tests.test_esforcos_modelo import PILAR, importar
@@ -473,17 +472,41 @@ def test_conferencia_com_o_caso_pp_do_modelo():
     assert "importe em Esforços do modelo o caso PP" in sem_pp[0].texto
 
 
-def test_placas_de_base_dos_pilares_entram_sem_duplicar():
-    dados = portico(PILAR, PILAR_2)
-    placa = pb.ParametrosDaPlaca(espessura_mm=22.4)
-    from core import esforcos_modelo as em
+def projeto_com_base(espessura_mm: float = 22.4, perfil: str = "W 200 x 35,9 (H)") -> dict:
+    """Um projeto com a base registrada na página Placa de base (o motor da NBR 8800 6.7)."""
+    from dataclasses import replace
 
-    dados = em.com_placa(dados, pb.para_dicionario(placa))
-    lista = lm.com_placas_de_base(lm.ListaDeMaterial(), dados)
+    from core import base_de_pilar as bp
+
+    r = bp.calcular(replace(bp.EntradaBase(), perfil=perfil, t_placa_mm=espessura_mm))
+    return {"registros_tecnicos": [bp.registro_base(r)]}
+
+
+def test_placas_de_base_vem_da_base_registrada_e_nao_duplicam():
+    dados = portico(PILAR, PILAR_2)
+    projeto = projeto_com_base(22.4)
+    lista = lm.com_placas_de_base(lm.ListaDeMaterial(), dados, projeto)
     (item,) = lista.itens
     assert item.tipo == lm.TIPO_CHAPA and item.quantidade == 2 and item.espessura_mm == 22.4
-    assert lm.com_placas_de_base(lista, dados).itens == lista.itens
-    assert lm.itens_das_placas_de_base(importar("PP")) == []
+    assert item.comprimento_m == pytest.approx(0.401) and item.largura_mm == 200.0
+    assert "W 200 x 35,9 (H)" in item.descricao
+    assert lm.com_placas_de_base(lista, dados, projeto).itens == lista.itens
+    assert lm.pilares_sem_base(dados, projeto) == []
+    assert lm.itens_das_placas_de_base(importar("PP"), projeto) == []
+
+
+def test_vale_a_base_mais_recente_e_sem_base_o_pilar_fica_de_fora():
+    dados = portico(PILAR, PILAR_2)
+    antiga, nova = projeto_com_base(19.0), projeto_com_base(31.5)
+    antiga["registros_tecnicos"][0]["criado_em"] = "2026-01-01T00:00:00"
+    projeto = {"registros_tecnicos": [*nova["registros_tecnicos"], *antiga["registros_tecnicos"]]}
+    (item,) = lm.itens_das_placas_de_base(dados, projeto)
+    assert item.espessura_mm == 31.5
+    # base registrada de outro perfil: os pilares ficam de fora e a página avisa
+    outro = projeto_com_base(25.0, perfil="W 250 x 32,7")
+    assert lm.itens_das_placas_de_base(dados, outro) == []
+    assert sorted(lm.pilares_sem_base(dados, outro)) == sorted([PILAR, PILAR_2])
+    assert lm.itens_das_placas_de_base(dados, None) == []
 
 
 def test_lista_vai_e_volta_pelo_projeto_e_pela_tabela_da_pagina():
