@@ -102,6 +102,37 @@ def tabela_verificacoes(verificacoes: Sequence[Verificacao]) -> list[dict[str, A
     ]
 
 
+def casas_coerentes(v: Verificacao, casas: int = 2, maximo: int = 6) -> int:
+    """Casas decimais para mostrar solicitante e resistente sem contradizer o status.
+
+    O status compara os valores sem arredondar: 16,004 mm contra 16 mm reprova, e com 2 casas a
+    tela mostraria "16,00 / 16,00". Aqui as casas aumentam até a diferença aparecer (reprova:
+    solicitante > resistente; passa: solicitante ≤ resistente).
+    """
+    s, r = v.solicitante, v.resistente
+    if s is None or r is None or v.status not in ("OK", "NÃO OK"):
+        return casas
+    if not (math.isfinite(s) and math.isfinite(r)) or r <= 0:
+        return casas
+    reprova = v.status == "NÃO OK"
+    for k in range(casas, maximo + 1):
+        if (round(s, k) > round(r, k)) == reprova:
+            return k
+    return maximo
+
+
+def percentual_coerente(v: Verificacao) -> str:
+    """O aproveitamento em % sem mostrar "100 %" numa linha que reprova por pouco."""
+    a = v.aproveitamento
+    if a is None or math.isinf(a) or math.isnan(a):
+        return "—"
+    for k in range(0, 4):
+        texto = f"{100 * a:.{k}f}"
+        if v.status != "NÃO OK" or float(texto) > 100.0:
+            return texto.replace(".", ",") + " %"
+    return f"{100 * a:.3f}".replace(".", ",") + " %"
+
+
 def numero_json(valor: float | None, casas: int = 3) -> float | str:
     """Número arredondado, ou texto quando não houver número (o hash do registro proíbe NaN/∞)."""
     if valor is None or math.isnan(valor):
@@ -114,11 +145,12 @@ def linhas_para_registro(verificacoes: Sequence[Verificacao]) -> list[dict[str, 
     return [
         {
             "verificação": v.nome,
-            "solicitante": numero_json(v.solicitante),
-            "resistente": numero_json(v.resistente),
+            "solicitante": numero_json(v.solicitante, max(3, casas_coerentes(v, 3))),
+            "resistente": numero_json(v.resistente, max(3, casas_coerentes(v, 3))),
             "unidade": v.unidade,
             "aproveitamento_pct": numero_json(
-                None if v.aproveitamento is None else 100.0 * v.aproveitamento, 1
+                None if v.aproveitamento is None else 100.0 * v.aproveitamento,
+                1 if v.status != "NÃO OK" or round(100.0 * (v.aproveitamento or 0), 1) > 100 else 3,
             ),
             "status": v.status,
             "fórmula": v.formula or "—",

@@ -311,3 +311,66 @@ def test_registro_tem_os_criterios_novos():
     assert "só 2 chumbadores" in premissas
     assert "Distribuição linear elástica" in reg["metodo"]
     assert reg["entradas"]["distribuicao_da_pressao"] == bp.DISTRIBUICOES[EL]
+
+
+# ------------------------------------------------- rodada 2: flexão, espessura exibida, furo justo
+def test_c16_flexao_na_argamassa_com_os_valores_de_referencia():
+    # direto no furo, 2 engatados: V = 4,9 kN, F_t = 6,4 kN, e_n = 50, t_p = 16, A_se = 216, f_y = 248
+    f = bp.flexao_na_argamassa(4.9e3, 2, 6.4e3, 50.0, 16.0, 216.0, 248.0, 1.1)
+    assert f.n_engatados == 2 and f.braco == pytest.approx(33.0)
+    assert f.momento / 1e3 == pytest.approx(80.9, rel=0.01)  # 2,45 kN × 33 mm
+    assert f.sigma_b == pytest.approx(119, rel=0.05)
+    assert f.sigma_t == pytest.approx(30, rel=0.05)
+    assert f.sigma == pytest.approx(149, rel=0.05)
+    assert f.sigma / f.limite == pytest.approx(0.66, rel=0.05)
+    texto = f.texto()
+    for parte in ("n_engatados = 2", "b = e_n/2 + t_p/2 = 33,0 mm", "M = V_i·b", "W = π·d_s³/32",
+                  "σ_b = M/(1,5·W)", "σ_t = F_t/A_se", "f_y/γ_a1 = 248/1,10"):  # fmt: skip
+        assert parte in texto, parte
+
+
+def test_c16_na_base_a_flexao_fica_em_66_por_cento():
+    e = replace(
+        CASO_C,
+        n_sd_kN=-6.3,
+        m_sd_kNm=3.15,
+        v_sd_kN=4.9,
+        cortante=bp.CORTANTE_DIRETOS,
+        aco_chumbador="ASTM F1554 Gr 36",
+    )
+    r = bp.calcular(e)
+    flexao = _linha(r, bp.LINHA_FLEXAO_NA_ARGAMASSA)
+    # antes 93 % (W elástico na rosca, sem a reserva plástica); agora ≈ 66 %
+    assert flexao.aproveitamento == pytest.approx(0.66, rel=0.05)
+    assert "n_engatados = 2" in flexao.formula
+
+
+def test_placa_que_reprova_por_pouco_mostra_a_diferenca_e_a_chapa_seguinte():
+    from core.verificacao import Verificacao, casas_coerentes, percentual_coerente
+
+    justa = Verificacao("Placa de base: espessura t_p ≥ t_p,min", 16.004, 16.0, "mm", "")
+    assert justa.status == "NÃO OK"
+    casas = casas_coerentes(justa)
+    assert f"{justa.solicitante:.{casas}f}" != f"{justa.resistente:.{casas}f}"
+    assert percentual_coerente(justa) != "100 %"
+    passa = Verificacao("x", 15.996, 16.0, "mm", "")
+    assert passa.status == "OK" and casas_coerentes(passa) == 2
+    # no cálculo: a sugestão da chapa comercial seguinte
+    r = bp.calcular(replace(BASE, n_sd_kN=900, t_placa_mm=16))
+    placa = _linha(r, "Placa de base: espessura")
+    assert placa.status == "NÃO OK" and "a chapa comercial seguinte é" in placa.formula
+    assert f"t_p,min = {r.t_p_min:.2f}".replace(".", ",") in bp.destaque(r)
+
+
+def test_furo_justo_avisa_e_vai_para_o_memorial():
+    e = replace(BASE, por_formula=True, d_f_mm=20.0, n_sd_kN=100)
+    r = bp.calcular(e)
+    linha = _linha(r, "Furo justo na placa")
+    assert (
+        "gabarito de montagem" in linha.formula
+        and "furo padrão + arruelas soldadas" in linha.formula
+    )
+    assert any("Furo justo" in a for a in r.avisos)
+    assert any("Furo justo" in p for p in bp.registro_base(r)["premissas"])
+    padrao = bp.calcular(replace(e, d_f_mm=0.0))
+    assert not any(v.nome == "Furo justo na placa" for v in padrao.verificacoes)

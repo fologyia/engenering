@@ -264,6 +264,28 @@ Pedido com 2 "erros" e 3 implementações, e os casos de aceitação A a D
 - **O que trava:** `o_que_trava` agrupa as reprovações em placa, chumbador, concreto, cortante,
   geometria e solda; a página usa isso na "Base mais leve que atende".
 
+### Rodada 2 (17/11/2026): flexão na argamassa, espessura exibida, furo justo
+
+**Flexão na argamassa** (`flexao_na_argamassa`): o braço já era b = e_n/2 + t_p/2, e os
+engatados os mesmos do aço à cortante. A diferença estava no momento resistente: era o W elástico
+na rosca, M/W.
+- Agora a seção continua na rosca (d_s da área resistente: a rosca passa pela argamassa), mas o
+  momento resistente é o da barra redonda maciça. Vale M_Rd = Z·f_y ≤ 1,5·W·f_y (NBR 8800
+  5.4.2.2), e no círculo governa 1,5·W.
+- Fica σ = M/(1,5·W) + F_t/A_se ≤ f_y/γ_a1. O texto mostra n_engatados, b, M, W, σ_b, σ_t e o
+  limite.
+- Na C16: 149 MPa e 66 % (antes 93 % nos dados reconstruídos).
+- O "Z = π·d_b³/32 no fuste" do pedido dá o mesmo número por outro caminho, mas ignora a rosca.
+
+**Espessura exibida:** o status sempre comparou sem arredondar.
+- `casas_coerentes` e `percentual_coerente` (`core/verificacao.py`) aumentam as casas até a tela,
+  a tabela e o memorial não mostrarem "demanda = capacidade" numa reprovação.
+- O cartão e o destaque mostram t_p,min com 2 casas.
+- A linha que reprova sugere a chapa comercial seguinte.
+
+**Furo justo** (por fórmula, d_f menor que o padrão AISC 14-2): linha INFO, aviso e premissa no
+memorial (locação precisa com gabarito; alternativa: furo padrão + arruelas soldadas).
+
 ## Exemplo (do guia)
 
 W 250 × 32,7, tipo 1, 4 chumbadores Ø 1", placa de 25 mm ASTM A36, f_ck = 25 MPa, A₂/A₁ = 1,

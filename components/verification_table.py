@@ -16,7 +16,13 @@ import pandas as pd
 import streamlit as st
 
 from components.robustez import conferir_valores
-from core.verificacao import COLUNAS_TABELA, Verificacao, tabela_verificacoes
+from core.verificacao import (
+    COLUNAS_TABELA,
+    Verificacao,
+    casas_coerentes,
+    percentual_coerente,
+    tabela_verificacoes,
+)
 
 COR_STATUS = {
     "OK": "background-color: rgba(34, 197, 94, 0.28)",
@@ -144,12 +150,12 @@ def texto_markdown(texto: str) -> str:
     return texto.translate(_ESCAPAR_MARKDOWN)
 
 
-def _valor_com_unidade(valor: float | None, unidade: str) -> str:
+def _valor_com_unidade(valor: float | None, unidade: str, casas: int = 2) -> str:
     if valor is None or (isinstance(valor, float) and math.isnan(valor)):
         return "—"
     if isinstance(valor, float) and math.isinf(valor):
         return "∞"
-    numero = f"{valor:.2f}".replace(".", ",")
+    numero = f"{valor:.{casas}f}".replace(".", ",")
     return numero if unidade in ("", "—") else f"{numero} {unidade}"
 
 
@@ -161,11 +167,9 @@ def linhas_resumidas(
         [
             (
                 nome(v),
-                _valor_com_unidade(v.solicitante, v.unidade),
-                _valor_com_unidade(v.resistente, v.unidade),
-                "—"
-                if v.aproveitamento is None or math.isinf(v.aproveitamento)
-                else f"{100 * v.aproveitamento:.0f} %",
+                _valor_com_unidade(v.solicitante, v.unidade, casas_coerentes(v)),
+                _valor_com_unidade(v.resistente, v.unidade, casas_coerentes(v)),
+                percentual_coerente(v),
                 v.status,
             )
             for v in verificacoes
@@ -210,8 +214,8 @@ def mostrar_verificacoes_resumidas(
             st.markdown(f"#### {texto_markdown(grupo)}")
             for v in linhas:
                 valores = (
-                    f"{_valor_com_unidade(v.solicitante, v.unidade)} / "
-                    f"{_valor_com_unidade(v.resistente, v.unidade)}"
+                    f"{_valor_com_unidade(v.solicitante, v.unidade, casas_coerentes(v))} / "
+                    f"{_valor_com_unidade(v.resistente, v.unidade, casas_coerentes(v))}"
                 )
                 partes = [f"**{texto_markdown(nome(v))}** — {v.status} ({texto_markdown(valores)})"]
                 if v.formula:

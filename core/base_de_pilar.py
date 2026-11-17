@@ -655,6 +655,11 @@ def furo_padrao(d_b: float) -> float:
     return _acima(furo, 1.0)
 
 
+def furo_justo(e: EntradaBase, tab: LinhaTabela18) -> bool:
+    """O furo informado é menor que o padrão da AISC (Tabela 14-2) para o diâmetro."""
+    return e.por_formula and e.d_f_mm > 0 and tab.d_f < furo_padrao(tab.d_b) - 1e-9
+
+
 def espessura_da_arruela(d_b: float) -> float:
     """A chapa comercial com espessura ≥ d_b/3 (AISC Design Guide 1), com 2 % de tolerância."""
     alvo = d_b / 3 / 1.02
@@ -2309,6 +2314,81 @@ def ruptura_a_frente_da_placa_de_cisalhamento(
 
 
 LINHA_ACO_TRACAO_ACI = "Chumbador: aço à tração (ACI 318-19)"
+LINHA_FLEXAO_NA_ARGAMASSA = "Chumbador: flexão na camada de argamassa"
+#: Barra redonda maciça: M_Rd = Z·f_y/γ_a1 ≤ 1,5·W·f_y/γ_a1 (NBR 8800:2025 5.4.2.2); no círculo
+#: Z/W = 16/(3π) = 1,70, então vale o teto 1,5·W.
+FATOR_PLASTICO_REDONDO = 1.5
+
+
+@dataclass(frozen=True)
+class FlexaoNaArgamassa:
+    """O chumbador fletido pela cortante na camada de argamassa (mm, N, MPa)."""
+
+    n_engatados: int
+    v_i: float  # N, cortante de um chumbador
+    braco: float  # mm, e_n/2 + t_p/2
+    momento: float  # N·mm
+    d_s: float  # mm, diâmetro da área resistente da rosca
+    w: float  # mm³, módulo elástico π·d_s³/32
+    sigma_b: float  # MPa, M/(1,5·W)
+    sigma_t: float  # MPa, F_t/A_se
+    f_t: float
+    a_se: float
+    f_y: float
+    gama_a1: float
+
+    @property
+    def sigma(self) -> float:
+        return self.sigma_b + self.sigma_t
+
+    @property
+    def limite(self) -> float:
+        return self.f_y / self.gama_a1
+
+    def texto(self) -> str:
+        return (
+            f"n_engatados = {self.n_engatados} (os mesmos do aço à cortante): V_i = "
+            f"{_n(self.v_i / 1e3, 2)} kN; braço b = e_n/2 + t_p/2 = {_n(self.braco, 1)} mm (a "
+            "pressão da argamassa no meio da camada, seção crítica no meio da placa); M = V_i·b = "
+            f"{_n(self.momento / 1e3, 1)} kN·mm; na rosca, d_s = √(4·A_se/π) = {_n(self.d_s, 2)} mm, "
+            f"W = π·d_s³/32 = {_n(self.w, 0)} mm³ e M_Rd pela plastificação da barra redonda, "
+            f"Z·f_y ≤ 1,5·W·f_y (NBR 8800 5.4.2.2): σ_b = M/(1,5·W) = {_n(self.sigma_b, 1)} MPa; "
+            f"σ_t = F_t/A_se = {_n(self.f_t / 1e3, 2)} kN/{_n(self.a_se, 0)} mm² = "
+            f"{_n(self.sigma_t, 1)} MPa; σ = σ_b + σ_t = {_n(self.sigma, 1)} MPa ≤ f_y/γ_a1 = "
+            f"{_n(self.f_y, 0)}/{_n(self.gama_a1)} = {_n(self.limite, 1)} MPa (o mesmo que "
+            "M/M_Rd + N/N_Rd ≤ 1)"
+        )
+
+
+def flexao_na_argamassa(
+    v_sd: float,
+    n_engatados: int,
+    f_t: float,
+    e_n: float,
+    t_p: float,
+    a_se: float,
+    f_y: float,
+    gama_a1: float,
+) -> FlexaoNaArgamassa:
+    """Flexão do chumbador na argamassa com a tração dele (N, mm, MPa).
+
+    A rosca passa pela camada de argamassa: a seção é a da área resistente (d_s); o momento
+    resistente é o da plastificação da barra redonda maciça, limitado a 1,5·W·f_y (NBR 8800
+    5.4.2.2), e a interação com a tração é linear.
+    """
+    n = max(n_engatados, 1)
+    v_i = v_sd / n
+    braco = e_n / 2 + t_p / 2
+    momento = v_i * braco
+    d_s = math.sqrt(4 * a_se / math.pi)
+    w = math.pi * d_s**3 / 32
+    sigma_b = momento / (FATOR_PLASTICO_REDONDO * w)
+    sigma_t = f_t / a_se
+    return FlexaoNaArgamassa(
+        n, v_i, braco, momento, d_s, w, sigma_b, sigma_t, f_t, a_se, f_y, gama_a1
+    )
+
+
 #: Linhas da ancoragem à tração e à cortante que entram na interação da ACI 318-19 17.8.
 LINHAS_DE_TRACAO_ACI = (
     LINHA_ACO_TRACAO_ACI,
@@ -2971,6 +3051,14 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     elif caso in ("C3", "T3"):
         trecho = "na zona comprimida A_c" if obliqua is not None else "no trecho ℓ_c"
         linhas.append(_info("Concreto: pressão de contato", f"σ_c = σ_c,Rd {trecho}; {texto_sigma}", ref_cc))  # fmt: skip
+    proxima = next((t for t in ESPESSURAS_COMERCIAIS if t >= t_min - 1e-9), None)
+    sugestao = ""
+    if t_min > e.t_placa_mm * (1 + 1e-9):
+        sugestao = f"; t_p,min = {_n(t_min, 2)} mm > t_p = {_n(e.t_placa_mm, 2)} mm: " + (
+            f"a chapa comercial seguinte é {_n(proxima, 1)} mm"
+            if proxima is not None
+            else "acima das chapas comerciais, refaça a base"
+        )
     linhas.append(
         Verificacao(
             "Placa de base: espessura t_p ≥ t_p,min",
@@ -2978,7 +3066,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             e.t_placa_mm,
             "mm",
             ref_caso,
-            f"{texto_t}; f_y = {_n(fy, 0)} MPa ({e.aco_placa}), γ_a1 = {_n(c.a1)}",
+            f"{texto_t}; f_y = {_n(fy, 0)} MPa ({e.aco_placa}), γ_a1 = {_n(c.a1)}{sugestao}",
         )  # fmt: skip
     )
     # ------------------------------------------------------------------ chumbadores
@@ -3184,24 +3272,18 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             )
         )
         razoes_v.append(("aço do chumbador, 17.7.1", v_i / aco_v if aco_v > 0 else math.inf))
-        braco = g.e_n / 2 + e.t_placa_mm / 2
-        d_s = math.sqrt(4 * a_se / math.pi)
-        z_el = math.pi * d_s**3 / 32
-        sigma_flexao = v_i * braco / z_el + f_t / a_se
-        fy_ch_d = aco_ch.f_y / c.a1
         if v_sd > 0:
+            flexao = flexao_na_argamassa(
+                v_sd, n_eng, f_t, g.e_n, e.t_placa_mm, a_se, aco_ch.f_y, c.a1
+            )
             linhas.append(
                 Verificacao(
-                    "Chumbador: flexão na camada de argamassa",
-                    sigma_flexao,
-                    fy_ch_d,
+                    LINHA_FLEXAO_NA_ARGAMASSA,
+                    flexao.sigma,
+                    flexao.limite,
                     "MPa",
-                    "AISC Design Guide 1 (chumbador fletido pela cortante)",
-                    f"σ = V_i·braço/Z + F_t/A_se = {_n(v_i / 1e3, 2)} kN × {_n(braco, 1)} mm/"
-                    f"{_n(z_el, 0)} mm³ + {_n(f_t / 1e3, 2)} kN/{_n(a_se, 0)} mm² = {_n(sigma_flexao, 1)} "
-                    f"MPa ≤ f_y/γ_a1 = {_n(aco_ch.f_y, 0)}/{_n(c.a1)}; braço = e_n/2 + t_p/2 = "
-                    f"{_n(g.e_n, 0)}/2 + {_n(e.t_placa_mm, 1)}/2; Z = π·d_s³/32 com o diâmetro da área "
-                    f"resistente d_s = √(4·A_se/π) = {_n(d_s, 1)} mm (a rosca passa pela argamassa)",
+                    "AISC Design Guide 1 (chumbador fletido pela cortante); NBR 8800:2025 5.4.2.2",
+                    flexao.texto(),
                 )
             )
         if not soldadas:
@@ -3371,6 +3453,24 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 f"e_n = {_n(g.e_n, 0)} mm ≥ porca ({_n(altura_porca, 0)} mm) + arruela "
                 f"({_n(g.t_arruela, 1)} mm) = {_n(altura_porca + g.t_arruela, 1)} mm",
             )
+        )
+    if furo_justo(e, tab):
+        padrao = furo_padrao(tab.d_b)
+        linhas.append(
+            _info(
+                "Furo justo na placa",
+                f"d_f = {_n(tab.d_f, 1)} mm < furo padrão {_n(padrao, 0)} mm para Ø {tab.polegada} "
+                "(AISC Manual, Tabela 14-2, furo superdimensionado de placa de base): o "
+                f"deslizamento cai para {_n((tab.d_f - tab.d_b) / 2, 1)} mm, mas some a tolerância "
+                "de locação dos chumbadores — o furo justo exige locação precisa (template ou "
+                "gabarito de montagem). Alternativa: furo padrão + arruelas soldadas",
+                "AISC Manual, Tabela 14-2; AISC Design Guide 1",
+            )
+        )
+        avisos.append(
+            f"Furo justo (d_f = {_n(tab.d_f, 1)} mm, padrão {_n(padrao, 0)} mm): exige locação precisa "
+            "dos chumbadores, com template ou gabarito de montagem; alternativa: furo padrão + "
+            "arruelas soldadas."
         )
     if medidas is None:  # a rosca acima do concreto (h₂ da Tabela 18) cabe a placa e as porcas?
         passo = passo_da_rosca(e, tab)
@@ -3759,7 +3859,7 @@ def destaque(r: ResultadoBase) -> str:
     return (
         f"Base {tipo} do {e.perfil}: placa {_n(g.lx, 0)} × {_n(g.ly, 0)} × "
         f"{_n(e.t_placa_mm, 1)} mm ({e.aco_placa}), {e.n_chumbadores} chumbadores Ø {nome}"
-        f"{solda}; {esforcos} — caso {r.caso}, t_p,min = {_n(r.t_p_min, 1)} mm{gov}."
+        f"{solda}; {esforcos} — caso {r.caso}, t_p,min = {_n(r.t_p_min, 2)} mm{gov}."
     )
 
 
@@ -3780,7 +3880,7 @@ def linhas_das_combinacoes(r: ResultadoBase) -> list[dict[str, Any]]:
                 "Status": rc.status,
                 "Aproveitamento": numero_json(rc.aproveitamento_maximo, 4),
                 "Governa": gov.nome if gov is not None else "",
-                "t_p,min (mm)": round(rc.t_p_min, 1),
+                "t_p,min (mm)": round(rc.t_p_min, 2),
                 "F_t máx (kN)": round(rc.f_t_sd / 1e3, 1),
             }
         )
@@ -3931,6 +4031,15 @@ def registro_base(
             "a face da mesa (m = |x| − d/2) na largura b_eff aberta a 45°, limitada pelas bordas e "
             "pela metade do espaçamento — vale a maior. A argamassa não entra no balanço da placa.",
             NOTA_POR_FORMULA if e.por_formula else NOTA_TABELA_18,
+            *(
+                [
+                    f"Furo justo na placa (d_f = {_n(tab.d_f, 1)} mm, menor que o padrão de "
+                    f"{_n(furo_padrao(tab.d_b), 0)} mm da AISC, Tabela 14-2): hipótese de locação "
+                    "precisa dos chumbadores, com template ou gabarito de montagem."
+                ]
+                if furo_justo(e, tab)
+                else []
+            ),
             "Solda do pilar na placa pelo método elástico (filetes como linhas, N, M, M_y e V), "
             "resistência do filete pela 6.2.5 sem o fator de direção; "
             + (

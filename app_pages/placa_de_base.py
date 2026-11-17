@@ -901,7 +901,7 @@ colunas[2].metric(
     f"{100 * aproveitamento:.0f} %" if math.isfinite(aproveitamento) else "sem resistência",
     help=AJUDA["res_aproveitamento"],
 )
-colunas[3].metric("t_p,min (mm)", _n(resultado.t_p_min), help=AJUDA["res_tp"])
+colunas[3].metric("t_p,min (mm)", _n(resultado.t_p_min, 2), help=AJUDA["res_tp"])
 colunas[3].caption(f"Adotada: {_n(entrada.t_placa_mm)} mm")
 governante = resultado.governante
 if governante is not None:

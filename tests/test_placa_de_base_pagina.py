@@ -65,7 +65,7 @@ def test_pagina_padrao_tem_ajuda_em_tudo_e_os_numeros_do_nucleo(banco_isolado):
     assert metricas["Status"] == "OK"
     assert metricas["Caso"] == "C1"
     assert metricas["Aproveitamento"] == f"{100 * r.aproveitamento_maximo:.0f} %"
-    assert metricas["t_p,min (mm)"] == f"{r.t_p_min:.1f}".replace(".", ",")
+    assert metricas["t_p,min (mm)"] == f"{r.t_p_min:.2f}".replace(".", ",")
     assert len(t.get("image")) == 1
     assert any("Governa" in m.value for m in t.markdown)
 
