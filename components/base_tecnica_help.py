@@ -104,6 +104,14 @@ AJUDA: dict[str, str] = {
         "Uma linha por carga que vai para o modelo: elemento (pórtico, viga, nó), valor, unidade "
         "e direção. Pode ficar vazia se você só quer a ação nas combinações."
     ),
+    "comprimento_carga": (
+        "Numa carga em kN/m, o comprimento carregado da barra, em metros: com ele o programa "
+        "sabe o total da linha (kN/m × m). Vazio ou zero: a barra inteira, total desconhecido."
+    ),
+    "inicio_carga": (
+        "Onde o trecho carregado começa, em metros a partir da ponta inicial da barra. Zero: "
+        "desde a ponta. As Cargas do esqueleto preenchem quando a chapa cobre só parte da viga."
+    ),
     "btn_adicionar": "Grava a ação no plano de cargas do projeto ativo.",
     "btn_sobrecarga": "Inclui a ação SC com a sobrecarga da base técnica, em todos os pisos.",
     "btn_temperatura": "Inclui T+ e T− (±10 °C, Anglo 5.8) num grupo exclusivo.",

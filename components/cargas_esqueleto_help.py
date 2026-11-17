@@ -174,6 +174,10 @@ AJUDA: dict[str, str] = {
         "Grava as escolhas (tipos, cargas e guarda-corpo) sem mexer no Plano de cargas. O vento "
         "barra a barra já passa a usar o guarda-corpo marcado."
     ),
+    "btn_abrir_plano": (
+        "Vai para o Plano de cargas para ver as linhas que acabaram de chegar: cada viga, o valor "
+        "em kN/m e o trecho carregado."
+    ),
     "usar_grade": (
         "Abre a forma pela grade de eixos, a que não usa o modelo. Com o esqueleto no projeto, "
         "ela só serve se a grade for a mesma planta do modelo."

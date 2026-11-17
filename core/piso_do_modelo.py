@@ -705,6 +705,22 @@ def aplicar_no_plano(
 
 
 ORIGENS_DA_TEMPERATURA = (ORIGEM, "Cargas do esqueleto")
+#: Onde cada origem da temperatura guarda a sua chave (o próximo envio lê dali).
+_CHAVE_DA_TEMPERATURA = {ORIGEM: CHAVE_DO_PROJETO, "Cargas do esqueleto": "cargas_do_esqueleto"}
+
+
+def campos_sem_a_temperatura(projeto: Mapping[str, Any] | None, origem: str) -> dict[str, Any]:
+    """Os campos do projeto com a temperatura desligada na página que gerou T+/T−.
+
+    Quem tira T+ ou T− do plano à mão não quer que o próximo envio das cargas do esqueleto as
+    devolva: a chave "Temperatura ±10 °C" daquela forma (modelo ou grade) passa a desligada.
+    Vazio quando a ação não veio das cargas do esqueleto."""
+    chave = _CHAVE_DA_TEMPERATURA.get(origem)
+    if chave is None:
+        return {}
+    gravado = (projeto or {}).get(chave)
+    gravado = gravado if isinstance(gravado, Mapping) else {}
+    return {chave: {**gravado, "temperatura": False}}
 
 
 def _com_a_temperatura(plano: pc.PlanoDeCargas, ligada: bool) -> pc.PlanoDeCargas:
@@ -743,8 +759,38 @@ def _total(acao: pc.Acao | None) -> tuple[float, int]:
     return sum(abs(c.resultante or 0.0) for c in acao.cargas), len(acao.cargas)
 
 
-def comparar(antes: pc.PlanoDeCargas, depois: pc.PlanoDeCargas) -> list[dict[str, object]]:
-    """Caso a caso, o que o envio muda no plano de cargas (só os casos que mudam)."""
+def _renomeadas(
+    cargas_a: tuple[pc.CargaDoModelo, ...],
+    cargas_b: tuple[pc.CargaDoModelo, ...],
+    nomes_no_simulation: Mapping[str, str],
+) -> list[tuple[str, str]]:
+    """As vigas que saem só com o nome do corpo e voltam com o da barra no Simulation.
+
+    As linhas do piso e do guarda-corpo levam "corpo (barra)" (``linhas_do_caso``); outra
+    página pode levar só a barra."""
+    antes = {c.elemento for c in cargas_a}
+    depois = {c.elemento for c in cargas_b}
+    trocas = []
+    for corpo, barra in nomes_no_simulation.items():
+        if corpo == barra or corpo not in antes or corpo in depois:
+            continue
+        for novo in (f"{corpo} ({barra})", barra):
+            if novo in depois and novo not in antes:
+                trocas.append((corpo, barra))
+                break
+    return sorted(trocas)
+
+
+def comparar(
+    antes: pc.PlanoDeCargas,
+    depois: pc.PlanoDeCargas,
+    nomes_no_simulation: Mapping[str, str] | None = None,
+) -> list[dict[str, object]]:
+    """Caso a caso, o que o envio muda no plano de cargas (só os casos que mudam).
+
+    Com ``nomes_no_simulation`` (corpo → barra), diz quando as vigas só trocam de nome: o envio
+    feito antes de importar os esforços leva o nome do corpo; depois, o da barra no Simulation."""
+    nomes = nomes_no_simulation or {}
     linhas: list[dict[str, object]] = []
     do_fator = ""
     if abs(antes.fator_peso_proprio - depois.fator_peso_proprio) > 1e-9:
@@ -766,6 +812,13 @@ def comparar(antes: pc.PlanoDeCargas, depois: pc.PlanoDeCargas) -> list[dict[str
             muda = "sai do plano"
         else:
             partes = []
+            renomeadas = _renomeadas(cargas_a, cargas_b, nomes)
+            if renomeadas:
+                corpo, barra = renomeadas[0]
+                partes.append(
+                    f"{len(renomeadas)} viga(s) ganham o nome da barra no Simulation "
+                    f"(ex.: {corpo} → {barra})"
+                )
             da_grade = sum(1 for c in cargas_a if cpm._NOME_DA_GRADE.match(c.elemento.strip()))
             ainda = sum(1 for c in cargas_b if cpm._NOME_DA_GRADE.match(c.elemento.strip()))
             if da_grade > ainda:
@@ -797,6 +850,23 @@ def comparar(antes: pc.PlanoDeCargas, depois: pc.PlanoDeCargas) -> list[dict[str
             }
         )
     return linhas
+
+
+def resumo_do_envio(mudancas: Sequence[Mapping[str, object]]) -> str:
+    """A confirmação que a página mostra depois de gravar: caso a caso, como o plano ficou."""
+    if not mudancas:
+        return "Gravado. O plano de cargas já estava com estas cargas: nada mudou."
+    partes = []
+    for m in mudancas:
+        caso, depois = m.get("Caso"), m.get("Depois (kN)")
+        n = str(m.get("Linhas") or "").split("→")[-1].strip()
+        if depois is None:
+            partes.append(f"{caso} saiu do plano")
+        elif isinstance(depois, int | float) and depois > 0:
+            partes.append(f"{caso}: {n} linha(s), {_n(float(depois))} kN")
+        else:
+            partes.append(f"{caso}: {n} linha(s)")
+    return "Enviado ao plano de cargas — " + " · ".join(partes) + "."
 
 
 # ---------------------------------------------------------------------------------------------

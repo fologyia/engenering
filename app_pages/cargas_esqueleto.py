@@ -67,9 +67,30 @@ def _pt(valor: float, casas: int = 2) -> str:
     return f"{valor:.{casas}f}".replace(".", ",")
 
 
-def _recarregar() -> None:
+def _recarregar(confirmacao: str = "") -> None:
+    """Recarrega a página; com ``confirmacao``, ela aparece na volta (o rerun apagaria o aviso)."""
     st.session_state["ce_versao"] = versao + 1
+    if confirmacao:
+        st.session_state[CHAVE_CONFIRMACAO] = confirmacao
     st.rerun()
+
+
+CHAVE_CONFIRMACAO = "ce_enviado"
+
+
+def _mostrar_confirmacao() -> None:
+    """O aviso do envio que acabou de gravar, com o caminho para o plano de cargas."""
+    texto = st.session_state.pop(CHAVE_CONFIRMACAO, "")
+    if not texto:
+        return
+    st.toast(texto, icon=":material/check_circle:")
+    st.success(texto, icon=":material/check_circle:")
+    st.page_link(
+        "app_pages/plano_cargas.py",
+        label="Abrir o Plano de cargas",
+        icon=":material/table_chart:",
+        help=AJUDA["btn_abrir_plano"],
+    )
 
 
 # ============================================================ o esqueleto do modelo
@@ -511,6 +532,7 @@ def _pelo_modelo(leitura: pm.LeituraDoPiso) -> None:
     # -------------------------------------------------------- 5. enviar
     with st.container(border=True), secao_protegida("5. Enviar ao plano de cargas"):
         st.subheader("5. Enviar ao plano de cargas", help=AJUDA["sec_enviar_tudo"])
+        _mostrar_confirmacao()
         if com_grade_no_plano:
             total_da_grade = sum(abs(c.resultante or 0.0) for _, c in com_grade_no_plano)
             st.toggle(
@@ -523,7 +545,7 @@ def _pelo_modelo(leitura: pm.LeituraDoPiso) -> None:
         depois = pm.aplicar_no_plano(plano, leitura, escolha, distribuicao, nomes_no_simulation)
         if guarda_corpo is not None:
             depois = guarda_corpo.no_plano(depois)
-        mudancas = pm.comparar(plano, depois)
+        mudancas = pm.comparar(plano, depois, nomes_no_simulation)
         if mudancas:
             st.caption("O que muda no plano de cargas", help=AJUDA["res_muda"])
             st.dataframe(
@@ -555,7 +577,7 @@ def _pelo_modelo(leitura: pm.LeituraDoPiso) -> None:
             {**campos, "plano_de_cargas": pc.para_dicionario(depois)},
             "Cargas do esqueleto pelo modelo enviadas ao plano de cargas",
         ):
-            _recarregar()
+            _recarregar(pm.resumo_do_envio(mudancas))
         if colunas[1].button(
             "Gravar só as escolhas",
             icon=":material/save:",
@@ -563,7 +585,10 @@ def _pelo_modelo(leitura: pm.LeituraDoPiso) -> None:
             help=AJUDA["btn_gravar_escolhas"],
             width="stretch",
         ) and gravar_campos_do_projeto(campos, "Cargas do esqueleto: escolhas gravadas"):
-            _recarregar()
+            _recarregar(
+                "Escolhas gravadas no projeto. O plano de cargas não mudou: use “Gravar e enviar "
+                "tudo ao plano” para levar as cargas."
+            )
         colunas[2].download_button(
             "Cargas nas vigas (CSV)",
             data=pm.csv_das_cargas(distribuicao, nomes_no_simulation),
@@ -860,7 +885,10 @@ def _pela_grade() -> None:
             ):
                 st.session_state["ce_versao"] = versao + 1
                 st.rerun()
+        if not pelo_modelo:
+            _mostrar_confirmacao()  # pelo modelo, a seção 5 já mostrou
         colunas = st.columns(3)
+        novo_plano = ce.aplicar_no_plano(resultado, plano)
         if colunas[0].button(
             "Gravar e enviar ao plano",
             type="primary",
@@ -872,12 +900,11 @@ def _pela_grade() -> None:
         ) and gravar_campos_do_projeto(
             {
                 "cargas_do_esqueleto": ce.para_dicionario(entrada),
-                "plano_de_cargas": pc.para_dicionario(ce.aplicar_no_plano(resultado, plano)),
+                "plano_de_cargas": pc.para_dicionario(novo_plano),
             },
             "Cargas do esqueleto enviadas ao plano de cargas",
         ):
-            st.session_state["ce_versao"] = versao + 1
-            st.rerun()
+            _recarregar(pm.resumo_do_envio(pm.comparar(plano, novo_plano)))
         if colunas[1].button(
             "Gravar só os dados",
             icon=":material/save:",
@@ -887,8 +914,10 @@ def _pela_grade() -> None:
         ) and gravar_campos_do_projeto(
             {"cargas_do_esqueleto": ce.para_dicionario(entrada)}, "Cargas do esqueleto gravadas"
         ):
-            st.session_state["ce_versao"] = versao + 1
-            st.rerun()
+            _recarregar(
+                "Dados gravados no projeto. O plano de cargas não mudou: use “Gravar e enviar ao "
+                "plano” para levar as cargas."
+            )
         colunas[2].download_button(
             "Cargas (CSV)",
             data=ce.csv_das_cargas(resultado),

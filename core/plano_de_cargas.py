@@ -184,6 +184,13 @@ class CargaDoModelo:
         return None
 
 
+def origem_da_linha(carga: CargaDoModelo) -> str:
+    """De onde a linha veio, pelo começo da observação ("Piso do modelo", "Guarda-corpo nas
+    bordas"…); vazio quando a observação não diz."""
+    texto = carga.observacao.strip()
+    return texto.split(":", 1)[0].strip().casefold() if ":" in texto else ""
+
+
 @dataclass(frozen=True)
 class Acao:
     codigo: str
@@ -681,7 +688,7 @@ def conferir_plano(plano: PlanoDeCargas, *, anglo: bool = False) -> list[ItemDeC
         temperatura = a.categoria == CATEGORIA_TEMPERATURA
         if not a.cargas and a.codigo != "PP":
             atencao(f"{a.codigo}: sem cargas para o modelo — só entra nas combinações.")
-        vistos: set[tuple[str, str]] = set()
+        vistos: set[tuple[str, str, str, float, float]] = set()
         for c in a.cargas:
             if temperatura and c.unidade != "°C":
                 erro(f"{a.codigo}: ação de temperatura com carga em {c.unidade} ({c.elemento}).")
@@ -691,7 +698,15 @@ def conferir_plano(plano: PlanoDeCargas, *, anglo: bool = False) -> list[ItemDeC
                 atencao(f"{a.codigo}: carga nula em {c.elemento!r}.")
             if c.unidade != "°C" and c.direcao.strip() in ("", "—"):
                 erro(f"{a.codigo}: carga sem direção em {c.elemento!r} (X, Y ou Z).")
-            chave = (c.elemento.strip().casefold(), c.direcao.strip())
+            # A mesma viga pode levar duas linhas de origens diferentes (o piso e o guarda-corpo)
+            # ou dois trechos: só a repetição da mesma origem no mesmo trecho é suspeita.
+            chave = (
+                c.elemento.strip().casefold(),
+                c.direcao.strip(),
+                origem_da_linha(c),
+                round(c.inicio_m, 4),
+                round(c.comprimento_m, 4),
+            )
             if chave in vistos:
                 atencao(f"{a.codigo}: {c.elemento!r} aparece duas vezes na mesma direção.")
             vistos.add(chave)

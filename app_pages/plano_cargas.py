@@ -9,7 +9,7 @@ import streamlit as st
 from components.base_tecnica_help import AJUDA
 from components.base_tecnica_ui import (
     gravar_acoes_no_plano,
-    gravar_plano,
+    gravar_campos_do_projeto,
     mapa_do_projeto,
 )
 from components.figuras import mostrar_figura
@@ -51,6 +51,29 @@ if projeto is None:
     st.stop()
 
 plano = pc.plano_do_projeto(projeto)
+#: Colunas do editor de cargas de uma ação: o trecho (comprimento e início) vai junto, para a
+#: edição não apagar o que as Cargas do esqueleto mandaram.
+COLUNAS_DO_EDITOR = (
+    "Elemento",
+    "Valor",
+    "Unidade",
+    "Direção",
+    "Qtde",
+    "Comprimento (m)",
+    "Início (m)",
+    "Observação",
+)
+
+
+def _metros(valor: object) -> float:
+    """Comprimento ou início digitado; vazio ou negativo vale zero (a barra inteira)."""
+    try:
+        numero = float(valor)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+    return numero if numero > 0 and not pd.isna(numero) else 0.0
+
+
 base = bt.base_do_projeto(projeto)
 anglo = base is not None and base.anglo
 ICONES = {
@@ -71,6 +94,9 @@ with st.container(border=True), secao_protegida("Conferência do plano"):
 # ============================================================ ações
 with st.container(border=True), secao_protegida("Ações"):
     st.subheader(f"Ações ({len(plano.acoes)})", help=AJUDA["sec_plano"])
+    aviso = st.session_state.pop("pc_aviso", "")
+    if aviso:
+        st.info(aviso, icon=":material/thermostat:")
     if plano.acoes:
         linhas = []
         for a in plano.acoes:
@@ -114,6 +140,7 @@ with st.container(border=True), secao_protegida("Ações"):
                 if a.descricao:
                     st.caption(a.descricao)
                 if a.cargas:
+                    com_trecho = any(c.comprimento_m > 0 or c.inicio_m > 0 for c in a.cargas)
                     st.dataframe(
                         pd.DataFrame(
                             [
@@ -123,6 +150,15 @@ with st.container(border=True), secao_protegida("Ações"):
                                     "Valor": c.valor,
                                     "Unidade": c.unidade,
                                     "Qtde": c.quantidade,
+                                    **(
+                                        {
+                                            "Comprimento (m)": c.comprimento_m or None,
+                                            "Início (m)": c.inicio_m,
+                                            "Total (kN)": c.resultante,
+                                        }
+                                        if com_trecho
+                                        else {}
+                                    ),
                                     "Observação": c.observacao,
                                 }
                                 for c in a.cargas
@@ -130,7 +166,16 @@ with st.container(border=True), secao_protegida("Ações"):
                         ),
                         hide_index=True,
                         width="stretch",
-                        column_config={"Valor": st.column_config.NumberColumn(format="%.3f")},
+                        column_config={
+                            "Valor": st.column_config.NumberColumn(format="%.3f"),
+                            "Comprimento (m)": st.column_config.NumberColumn(
+                                format="%.3f", help=AJUDA["comprimento_carga"]
+                            ),
+                            "Início (m)": st.column_config.NumberColumn(
+                                format="%.3f", help=AJUDA["inicio_carga"]
+                            ),
+                            "Total (kN)": st.column_config.NumberColumn(format="%.2f"),
+                        },
                     )
                 colunas = st.columns(2)
                 if colunas[0].button(
@@ -148,9 +193,23 @@ with st.container(border=True), secao_protegida("Ações"):
                     key=f"pc_remover_{a.codigo}",
                     help=AJUDA["btn_remover"],
                 ):
-                    if gravar_plano(
-                        pc.sem_acao(plano, a.codigo), f"Plano de cargas: {a.codigo} removida"
+                    from core import piso_do_modelo as pm
+
+                    campos = {"plano_de_cargas": pc.para_dicionario(pc.sem_acao(plano, a.codigo))}
+                    sem_temperatura = (
+                        pm.campos_sem_a_temperatura(projeto, a.origem)
+                        if a.categoria == pc.CATEGORIA_TEMPERATURA
+                        else {}
+                    )
+                    if gravar_campos_do_projeto(
+                        {**campos, **sem_temperatura}, f"Plano de cargas: {a.codigo} removida"
                     ):
+                        if sem_temperatura:
+                            st.session_state["pc_aviso"] = (
+                                f"{a.codigo} removida. A chave “Temperatura ±10 °C” das Cargas "
+                                "do esqueleto foi desligada: o próximo envio de lá não põe T+ e "
+                                "T− de volta (e tira a que sobrar, se veio de lá)."
+                            )
                         st.rerun()
     else:
         st.caption(
@@ -271,11 +330,13 @@ with st.container(border=True), secao_protegida("Adicionar ou editar uma ação"
                         "Unidade": c.unidade,
                         "Direção": c.direcao,
                         "Qtde": c.quantidade,
+                        "Comprimento (m)": c.comprimento_m,
+                        "Início (m)": c.inicio_m,
                         "Observação": c.observacao,
                     }
                     for c in (existente.cargas if existente else ())
                 ],
-                columns=["Elemento", "Valor", "Unidade", "Direção", "Qtde", "Observação"],
+                columns=list(COLUNAS_DO_EDITOR),
             ),
             num_rows="dynamic",
             hide_index=True,
@@ -296,6 +357,12 @@ with st.container(border=True), secao_protegida("Adicionar ou editar uma ação"
                     step=1,
                     help="Em quantos pontos iguais a carga vai (os nós de um pórtico, por exemplo).",
                 ),
+                "Comprimento (m)": st.column_config.NumberColumn(
+                    min_value=0.0, format="%.4f", help=AJUDA["comprimento_carga"]
+                ),
+                "Início (m)": st.column_config.NumberColumn(
+                    min_value=0.0, format="%.4f", help=AJUDA["inicio_carga"]
+                ),
                 "Observação": st.column_config.TextColumn(help="Nota livre."),
             },
         )
@@ -315,6 +382,8 @@ with st.container(border=True), secao_protegida("Adicionar ou editar uma ação"
                     str(linha.get("Direção") or "—"),
                     str(linha.get("Observação") or ""),
                     1 if pd.isna(linha.get("Qtde")) else max(1, int(linha.get("Qtde"))),
+                    comprimento_m=_metros(linha.get("Comprimento (m)")),
+                    inicio_m=_metros(linha.get("Início (m)")),
                 )
             )
         acao = pc.nova_acao(
