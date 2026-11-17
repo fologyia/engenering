@@ -32,6 +32,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from core import leitura_do_modelo as ld
+from core import papel_pelo_nome as pn
 from core import plano_de_cargas as pc
 from core import travamentos as tv
 
@@ -252,12 +253,17 @@ def _base(normal: Ponto3, preferida: Ponto3 | None) -> tuple[Ponto3, Ponto3]:
 def chapas_do_piso(
     g: ld.GeometriaDoModelo, eixo_vertical: str
 ) -> tuple[list[ChapaDoPiso], list[ChapaFora]]:
-    """As chapas de piso do esqueleto, e as chapas que ficam de fora (com o motivo)."""
+    """As chapas de piso do esqueleto, e as chapas que ficam de fora (com o motivo). A chapa que o
+    nome diz sem carga (``CH-…``: ligação, base, enrijecedor) fica de fora sem mais conta."""
     cima = tv.vertical(eixo_vertical)
     chapas: list[ChapaDoPiso] = []
     fora: list[ChapaFora] = []
     for corpo in g.corpos:
         if corpo.forma != ld.FORMA_CHAPA:
+            continue
+        lido = pn.papel_do_nome(corpo.nome)
+        if lido is not None and lido.papel is pn.CHAPA:
+            fora.append(ChapaFora(corpo.nome, "chapa sem carga pelo nome no SolidWorks"))
             continue
         if len(corpo.contorno) >= 3:
             normal = _normal_de_newell(corpo.contorno)

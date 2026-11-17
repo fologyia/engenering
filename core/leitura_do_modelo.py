@@ -39,6 +39,7 @@ from typing import Any
 from core import cantoneiras as ct
 from core import esforcos_modelo as em
 from core import lista_de_material as lm
+from core import papel_pelo_nome as pn
 from core import plano_de_cargas as pc
 from core import section_catalog as sc
 from core import steel_sections as ss
@@ -78,7 +79,9 @@ class GeometriaInvalida(ValueError):
 # ---------------------------------------------------------------------------------------------
 FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO = "BARRA", "CHAPA", "BLOCO"
 FORMAS = (FORMA_BARRA, FORMA_CHAPA, FORMA_BLOCO)
-VERSAO_ATUAL_DA_MACRO = "v6"
+VERSAO_ATUAL_DA_MACRO = "v7"
+#: Versões que o programa lê inteiras, sem aviso: a v7 só acrescenta o PERFIL declarado.
+VERSOES_COMPLETAS = ("v6", VERSAO_ATUAL_DA_MACRO)
 COORDENADA_ABSURDA_M = 10_000.0  # 10 km: o arquivo não está em mm
 #: Linhas de cabeçalho da macro (antes da linha das colunas) → campo da geometria.
 _METADADOS = {
@@ -114,6 +117,9 @@ class CorpoDoModelo:
     direcao_1: tuple[float, float, float] | None = None
     #: Quanto essa aresta passa a mais longa das outras direções (mm): perto de zero é empate.
     folga_da_direcao_1_mm: float | None = None
+    #: O perfil declarado no item da lista de corte (propriedade PERFIL, macro v7), gravado pela
+    #: página Nomes das barras: o que a peça da obra é, dito por quem projetou.
+    perfil_declarado: str = ""
 
     @property
     def vetor(self) -> tuple[float, float, float]:
@@ -145,6 +151,9 @@ class GeometriaDoModelo:
     gerado_em: str = ""
     versao_da_macro: str = ""
     avisos: tuple[str, ...] = ()
+    #: As trocas de nome feitas pela página Nomes das barras (gravadas no projeto, não no
+    #: arquivo): um estudo rodado antes da troca ainda acha cada corpo (:func:`correspondencia`).
+    renomeacoes: tuple[pn.Renomeacao, ...] = ()
 
     def corpo(self, nome: str) -> CorpoDoModelo | None:
         return next((c for c in self.corpos if c.nome == nome), None)
@@ -273,6 +282,7 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
     c_contorno, c_aberturas = opcional("contorno"), opcional("aberturas")
     c_direcao_1 = (opcional("direcao 1 x"), opcional("direcao 1 y"), opcional("direcao 1 z"))
     c_folga = opcional("direcao 1 folga")
+    c_perfil = opcional("perfil")
     obrigatorias = max([c_corpo, c_comp, *c_coord])
 
     def celula(linha: list[str], j: int | None) -> str:
@@ -336,6 +346,7 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
                 aberturas=aberturas,
                 direcao_1=direcao_1,
                 folga_da_direcao_1_mm=folga if folga is not None and math.isfinite(folga) else None,
+                perfil_declarado=celula(linha, c_perfil),
             )
         )
     if not corpos:
@@ -358,10 +369,23 @@ def _ler_esqueleto(conteudo: bytes, nome_arquivo: str) -> GeometriaDoModelo:
             "com vento nos pilares). Rode a macro v6 (botão “Macro do SolidWorks”) para ter a "
             "direção de cada seção."
         )
-    elif versao != VERSAO_ATUAL_DA_MACRO:
+    elif versao not in VERSOES_COMPLETAS:
         avisos.append(
             f"Gerado pela macro {versao}; o programa espera a {VERSAO_ATUAL_DA_MACRO}: baixe a "
             "macro nova (botão “Macro do SolidWorks”) e gere de novo."
+        )
+    desconhecidos = sorted(
+        {
+            c.perfil_declarado
+            for c in corpos
+            if c.perfil_declarado and lm.perfil_conhecido(c.perfil_declarado) is None
+        }
+    )
+    if desconhecidos:
+        avisos.append(
+            f"Perfil declarado que o programa não conhece: {_lista(desconhecidos, 4)} (propriedade "
+            "PERFIL da lista de corte). Esses corpos seguem a descrição e a seção desenhada; "
+            "escreva o perfil como no catálogo do programa (página Nomes das barras)."
         )
     if pulados:
         avisos.append(
@@ -491,6 +515,7 @@ def para_dicionario(g: GeometriaDoModelo) -> dict[str, Any]:
                 [[[round(v, 4) for v in ponto] for ponto in abertura] for abertura in c.aberturas],
                 list(c.direcao_1) if c.direcao_1 else None,
                 c.folga_da_direcao_1_mm,
+                c.perfil_declarado,
             ]
             for c in g.corpos
         ],
@@ -597,6 +622,7 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
                 aberturas,
                 direcao_1,
                 folga,
+                _texto(linha[19]) if len(linha) > 19 else "",
             )
         )
     avisos = dados.get("avisos")
@@ -613,9 +639,12 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
 
 
 def geometria_do_projeto(projeto: Mapping[str, Any] | None) -> GeometriaDoModelo:
+    """O esqueleto gravado no projeto, com as trocas de nome da página Nomes das barras."""
     if not isinstance(projeto, Mapping):
         return GeometriaDoModelo()
-    return de_dicionario(projeto.get("geometria_do_modelo"))
+    g = de_dicionario(projeto.get("geometria_do_modelo"))
+    renomeacoes = pn.renomeacoes_do_projeto(projeto)
+    return replace(g, renomeacoes=renomeacoes) if renomeacoes else g
 
 
 def nome_do_corpo(nome_da_viga: str) -> str:
@@ -649,6 +678,8 @@ class Correspondencia:
 
     corpos: Mapping[str, CorpoDoModelo]
     renomeados: Mapping[str, str]  # prefixo antigo (no Simulation) → prefixo novo (no esqueleto)
+    #: Vigas do Simulation casadas pelas trocas de nome da página Nomes das barras.
+    pelos_nomes_trocados: tuple[str, ...] = ()
 
     @property
     def pela_renomeacao(self) -> int:
@@ -680,6 +711,23 @@ def correspondencia(
         if corpo is not None:
             mapa[viga] = corpo
     usados = {c.nome for c in mapa.values()}
+    # Pelas trocas de nome da página Nomes das barras: o estudo rodado antes da troca (ou o
+    # esqueleto de antes dela) acha o corpo pelo outro nome — se ele não se mexeu desde então.
+    pelos_nomes: list[str] = []
+    if g.renomeacoes and g.corpos:
+        por_chave = {_chave(c.nome): c for c in g.corpos}
+        for viga in nomes:
+            if viga in mapa:
+                continue
+            for outro, troca in pn.nomes_equivalentes(nome_do_corpo(viga), g.renomeacoes):
+                achado = g.corpo(outro) or por_chave.get(_chave(outro))
+                if achado is None or achado.nome in usados:
+                    continue
+                if troca.confere(achado.inicio, achado.fim, achado.comprimento_m):
+                    mapa[viga] = achado
+                    usados.add(achado.nome)
+                    pelos_nomes.append(viga)
+                    break
     antigos: dict[str, dict[str, str]] = {}
     for viga in nomes:
         if viga not in mapa:
@@ -693,7 +741,7 @@ def correspondencia(
             if indice:
                 novos.setdefault(prefixo, {})[indice] = corpo
     if not antigos or not novos:
-        return Correspondencia(mapa, {})
+        return Correspondencia(mapa, {}, tuple(pelos_nomes))
     eixo = dados.eixo_vertical if dados is not None else "Y"
     angulos = (
         {
@@ -732,14 +780,93 @@ def correspondencia(
         renomeados[antigo] = novo
         for indice in set(antigos[antigo]) & set(novos[novo]):
             mapa[antigos[antigo][indice]] = novos[novo][indice]
-    return Correspondencia(mapa, renomeados)
+    return Correspondencia(mapa, renomeados, tuple(pelos_nomes))
 
 
 def _indice_vertical(eixo_vertical: str) -> int:
     return 1 if eixo_vertical == "Y" else 2
 
 
+@dataclass(frozen=True)
+class PapelDeclarado:
+    """O papel que o nome do corpo diz (:mod:`core.papel_pelo_nome`) e se a geometria o deixa valer."""
+
+    lido: pn.NomeLido
+    avaliacao: pn.Avaliacao
+
+    @property
+    def papel(self) -> pn.Papel:
+        return self.lido.papel
+
+    @property
+    def vale(self) -> bool:
+        return self.avaliacao.vale
+
+    @property
+    def tipo(self) -> str:
+        """O tipo da barra que o nome dá (vazio quando não vale ou quando o papel não é de barra)."""
+        return self.papel.tipo if self.vale else ""
+
+    @property
+    def motivo(self) -> str:
+        texto = f"{self.papel.nome.lower()} pelo nome no SolidWorks"
+        return texto + (f" ({self.avaliacao.nota})" if self.avaliacao.nota else "")
+
+    @property
+    def contradicao(self) -> str:
+        """ "o nome diz pilar, mas a barra está a 3° da horizontal" (vazio se o nome vale)."""
+        if self.vale:
+            return ""
+        return f"o nome diz {self.papel.nome.lower()}, mas {self.avaliacao.nota}: vale a posição"
+
+
+def papel_declarado(
+    corpo: CorpoDoModelo, eixo_vertical: str, angulo_graus: float | None = None
+) -> PapelDeclarado | None:
+    """O papel que o nome do corpo diz, conferido com a inclinação dele.
+
+    A inclinação de uma barra sai da linha de centro do esqueleto. Na chapa e na peça curta (bloco)
+    a medida maior não é o eixo — a de uma chapa em pé pode ser horizontal —: aí vale
+    ``angulo_graus`` (o do peso próprio, quando o estudo diz) ou nenhuma.
+    """
+    lido = pn.papel_do_nome(corpo.nome)
+    if lido is None:
+        return None
+    if corpo.forma not in (FORMA_CHAPA, FORMA_BLOCO):
+        angulo_graus = _angulo_do_corpo(corpo, eixo_vertical)
+    return PapelDeclarado(lido, pn.avaliar(lido.papel, angulo_graus, corpo.forma))
+
+
+def _declarado_da_barra(
+    barra: str, corpo: CorpoDoModelo | None, eixo_vertical: str, pelo_peso: float | None
+) -> PapelDeclarado | None:
+    """O papel pelo nome do corpo; sem o esqueleto, pelo nome que o Simulation mostra entre
+    parênteses ("Viga-3(P-A1)"), conferido com a inclinação que o peso próprio dá."""
+    if corpo is not None:
+        return papel_declarado(corpo, eixo_vertical, pelo_peso)
+    nome = pn.corpo_do_nome(barra)
+    if nome == barra.strip():
+        return None  # sem o corpo entre parênteses, o nome é o da viga ("Viga-3"): não diz nada
+    lido = pn.papel_do_nome(nome)
+    if lido is None:
+        return None
+    return PapelDeclarado(lido, pn.avaliar(lido.papel, pelo_peso, ""))
+
+
 def tipo_pela_geometria(corpo: CorpoDoModelo, eixo_vertical: str) -> tuple[str, str]:
+    """O tipo da barra no modelo: o que o nome do corpo diz (``P-A1``, ``W200 - Pilar``), quando a
+    posição não o contradiz; senão, pela posição (:func:`tipo_pela_posicao`)."""
+    tipo, motivo = tipo_pela_posicao(corpo, eixo_vertical)
+    declarado = papel_declarado(corpo, eixo_vertical)
+    if declarado is None or not declarado.papel.tipo:
+        return tipo, motivo
+    if not declarado.vale:
+        return tipo, f"{motivo} ({declarado.contradicao})"
+    return declarado.papel.tipo, declarado.motivo
+
+
+def tipo_pela_posicao(corpo: CorpoDoModelo, eixo_vertical: str) -> tuple[str, str]:
+    """Só pela posição: vertical é pilar, horizontal é viga, inclinada é contraventamento."""
     vetor = corpo.vetor
     comprimento = math.hypot(*vetor)
     if comprimento <= 0:
@@ -829,6 +956,11 @@ class LeituraDaBarra:
     motivo_dos_comprimentos: str = ""
     #: De onde veio o eixo forte (EIXO_PELA_MACRO, EIXO_PELO_PERFIL ou EIXO_PELO_MOMENTO).
     origem_do_eixo: str = EIXO_PELO_MOMENTO
+    #: O papel que o nome do corpo deu ao tipo sugerido ("Pilar", "Longarina de escada"…); vazio
+    #: quando o tipo saiu da posição ou dos esforços.
+    papel_pelo_nome: str = ""
+    #: O nome diz um papel que a geometria contradiz (e não valeu): o porquê.
+    nome_contradiz: str = ""
 
     @property
     def tem_ponta_solta(self) -> bool:
@@ -1076,19 +1208,31 @@ class _Opcoes:
     opcoes: Mapping[str, float]  # perfis da família → área
     candidatos: tuple[str, ...]  # os que a área e as medidas permitem
     exatos: tuple[str, ...]  # peça reta: a caixa e a área batem com o perfil
+    #: A base veio do PERFIL declarado (página Nomes das barras), não da descrição do item.
+    declarado: bool = False
 
 
 def _opcoes(corpo: CorpoDoModelo) -> _Opcoes:
+    # O PERFIL declarado no item da lista de corte vale como o nome e a descrição juntos: é a peça
+    # da obra. A área desenhada continua conferindo (mais pesada até 10 %, mais leve vale o desenho).
+    declarado = lm.perfil_conhecido(corpo.perfil_declarado) if corpo.perfil_declarado else None
     base = texto_base = ""
-    for texto in (corpo.descricao, corpo.item.split("<")[0]):
-        conhecido = lm.perfil_conhecido(texto) if texto else None
-        if conhecido is not None:
-            base, texto_base = conhecido.nome, texto
-            break
-    pelo_nome = em.perfil_do_nome(_prefixo_e_indice(corpo.nome)[0]) or ""
+    if declarado is not None:
+        base, texto_base = declarado.nome, corpo.perfil_declarado
+    else:
+        for texto in (corpo.descricao, corpo.item.split("<")[0]):
+            conhecido = lm.perfil_conhecido(texto) if texto else None
+            if conhecido is not None:
+                base, texto_base = conhecido.nome, texto
+                break
+    pelo_nome = (
+        declarado.nome
+        if declarado is not None
+        else em.perfil_do_nome(_prefixo_e_indice(corpo.nome)[0]) or ""
+    )
     area = corpo.area_mm2
     if not base or not area:
-        return _Opcoes(base, texto_base, pelo_nome, area, {}, (), ())
+        return _Opcoes(base, texto_base, pelo_nome, area, {}, (), (), declarado is not None)
     opcoes = _familia(base)
     altura_m = (corpo.secao_mm[0] if corpo.secao_mm else 300.0) / 1e3
     perda = min(0.6, 2 * altura_m / corpo.comprimento_m) if corpo.comprimento_m > 0 else 0.6
@@ -1115,7 +1259,9 @@ def _opcoes(corpo: CorpoDoModelo) -> _Opcoes:
         for n in candidatos
         if _caixa_bate(n, corpo.secao_mm) and abs(area - opcoes[n]) <= 0.03 * opcoes[n]
     )
-    return _Opcoes(base, texto_base, pelo_nome, area, opcoes, candidatos, exatos)
+    return _Opcoes(
+        base, texto_base, pelo_nome, area, opcoes, candidatos, exatos, declarado is not None
+    )
 
 
 def perfil_do_corpo(corpo: CorpoDoModelo, do_membro: str = "") -> tuple[str, str]:
@@ -1127,11 +1273,16 @@ def perfil_do_corpo(corpo: CorpoDoModelo, do_membro: str = "") -> tuple[str, str
     perfis da família que passam, nesta ordem: o da peça reta (caixa e área exatas), o das peças
     retas do mesmo membro (``do_membro``, :func:`perfis_do_esqueleto`), o que o nome do corpo
     indica (U 8"x17,1), o do item da lista de corte; sem nenhum, o mais leve que cobre a área.
+    O PERFIL declarado no item (página Nomes das barras) toma o lugar do nome e da descrição.
     """
     o = _opcoes(corpo)
     if not o.base:
         return (o.pelo_nome, "nome do corpo no SolidWorks") if o.pelo_nome else ("", "")
-    origem = f"lista de corte ({o.texto_base})"
+    origem = (
+        f"perfil declarado no SolidWorks ({o.texto_base})"
+        if o.declarado
+        else f"lista de corte ({o.texto_base})"
+    )
     if not o.area:
         return o.base, origem + _secao_no_modelo(corpo)
     area = o.area
@@ -1177,25 +1328,50 @@ def perfil_do_corpo(corpo: CorpoDoModelo, do_membro: str = "") -> tuple[str, str
     return escolhido, f"{origem}; {escolhido} por {por} ({cm2})" + _secao_no_modelo(corpo)
 
 
+def nome_original(nome: str, renomeacoes: Sequence[pn.Renomeacao]) -> str:
+    """O nome que o corpo tinha antes das trocas da página Nomes das barras (o próprio, sem troca)."""
+    atual, vistos = nome, {nome}
+    ordenadas = sorted(renomeacoes, key=lambda r: r.quando, reverse=True)
+    while True:
+        anterior = next((r.antigo for r in ordenadas if r.novo == atual), None)
+        if anterior is None or anterior in vistos:
+            return atual
+        vistos.add(anterior)
+        atual = anterior
+
+
 def perfis_do_esqueleto(g: GeometriaDoModelo) -> dict[str, tuple[str, str]]:
     """O perfil de cada corpo, com a evidência do membro: as peças retas de um membro (o mesmo nome
-    antes do [n]) dizem o perfil dele, e as peças cortadas do mesmo membro seguem, se couberem."""
-    return _perfis_dos_corpos(g.corpos)
+    antes do [n]) dizem o perfil dele, e as peças cortadas do mesmo membro seguem, se couberem.
+    Corpo renomeado pela página Nomes das barras conta no membro do nome de antes."""
+    membros = (
+        {c.nome: _prefixo_e_indice(nome_original(c.nome, g.renomeacoes))[0] for c in g.corpos}
+        if g.renomeacoes
+        else None
+    )
+    return _perfis_dos_corpos(g.corpos, membros)
 
 
-def _perfis_dos_corpos(corpos: Sequence[CorpoDoModelo]) -> dict[str, tuple[str, str]]:
+def _perfis_dos_corpos(
+    corpos: Sequence[CorpoDoModelo], membros: Mapping[str, str] | None = None
+) -> dict[str, tuple[str, str]]:
+    def membro_de(corpo: CorpoDoModelo) -> str:
+        if membros is not None and corpo.nome in membros:
+            return membros[corpo.nome]
+        return _prefixo_e_indice(corpo.nome)[0]
+
     votos: dict[str, dict[str, int]] = {}
     for corpo in corpos:
         if corpo.forma == FORMA_CHAPA:
             continue
         o = _opcoes(corpo)
         if len(o.exatos) == 1:
-            membro = _prefixo_e_indice(corpo.nome)[0]
+            membro = membro_de(corpo)
             votos.setdefault(membro, {})
             votos[membro][o.exatos[0]] = votos[membro].get(o.exatos[0], 0) + 1
     do_membro = {m: max(v, key=lambda k: v[k]) for m, v in votos.items()}
     perfis = {
-        corpo.nome: perfil_do_corpo(corpo, do_membro.get(_prefixo_e_indice(corpo.nome)[0], ""))
+        corpo.nome: perfil_do_corpo(corpo, do_membro.get(membro_de(corpo), ""))
         for corpo in corpos
         if corpo.forma != FORMA_CHAPA
     }
@@ -1204,11 +1380,11 @@ def _perfis_dos_corpos(corpos: Sequence[CorpoDoModelo]) -> dict[str, tuple[str, 
     das_barras: dict[str, dict[str, int]] = {}
     for corpo in corpos:
         if corpo.forma == FORMA_BARRA and perfis.get(corpo.nome, ("", ""))[0]:
-            contagem = das_barras.setdefault(_prefixo_e_indice(corpo.nome)[0], {})
+            contagem = das_barras.setdefault(membro_de(corpo), {})
             contagem[perfis[corpo.nome][0]] = contagem.get(perfis[corpo.nome][0], 0) + 1
     for corpo in corpos:
         escolha = perfis.get(corpo.nome)
-        votos_do_membro = das_barras.get(_prefixo_e_indice(corpo.nome)[0])
+        votos_do_membro = das_barras.get(membro_de(corpo))
         if corpo.forma != FORMA_BLOCO or escolha is None or not votos_do_membro:
             continue
         maioria = max(votos_do_membro, key=lambda k: votos_do_membro[k])
@@ -1327,23 +1503,40 @@ def ler_barras(
         corpo = corpos.get(barra)
         avisos: list[str] = []
         pelo_peso = inclinacao_pelo_peso(dados, barra)
-        if corpo is not None and corpo.forma == FORMA_BLOCO and pelo_peso is not None:
+        declarado = _declarado_da_barra(barra, corpo, dados.eixo_vertical, pelo_peso)
+        papel_pelo_nome = ""
+        if declarado is not None and declarado.tipo:
+            # O nome diz o papel e a geometria não o contradiz: vale o nome.
+            tipo, motivo = declarado.tipo, declarado.motivo
+            papel_pelo_nome = declarado.papel.nome
+            if declarado.tipo == TIPO_CONTRAVENTAMENTO and _flexao_domina(dados, barra):
+                avisos.append(
+                    f"o nome diz {declarado.papel.nome.lower()}, mas a barra trabalha fletida "
+                    "(cortante acima de 10 % da normal): confira se não é uma viga"
+                )
+        elif corpo is not None and corpo.forma == FORMA_BLOCO and pelo_peso is not None:
             # Peça curta: a maior medida pode ser a da seção, não a do eixo.
             tipo, motivo = tipo_pelos_esforcos(dados, barra, plano)
             motivo = f"{motivo} (peça curta no esqueleto: a direção vem do peso próprio)"
         elif corpo is not None:
-            tipo, motivo = tipo_pela_geometria(corpo, dados.eixo_vertical)
-            pela_geometria = _angulo_do_corpo(corpo, dados.eixo_vertical)
+            tipo, motivo = tipo_pela_posicao(corpo, dados.eixo_vertical)
             if tipo == TIPO_CONTRAVENTAMENTO and motivo.startswith("inclinada"):
-                tipo, motivo = _tipo_inclinada(dados, barra, pela_geometria, "no modelo")
-            if pelo_peso is not None and abs(pelo_peso - pela_geometria) > DIFERENCA_DE_INCLINACAO:
+                tipo, motivo = _tipo_inclinada(
+                    dados, barra, _angulo_do_corpo(corpo, dados.eixo_vertical), "no modelo"
+                )
+        else:
+            tipo, motivo = tipo_pelos_esforcos(dados, barra, plano)
+        nome_contradiz = declarado.contradicao if declarado is not None else ""
+        if nome_contradiz:
+            avisos.append(nome_contradiz)
+        if corpo is not None and corpo.forma != FORMA_BLOCO and pelo_peso is not None:
+            pela_geometria = _angulo_do_corpo(corpo, dados.eixo_vertical)
+            if abs(pelo_peso - pela_geometria) > DIFERENCA_DE_INCLINACAO:
                 avisos.append(
                     f"no esqueleto a barra está a {pela_geometria:.0f}° da horizontal, e pelo peso "
                     f"próprio no PP a {pelo_peso:.0f}°: o corpo não é o desta viga (esqueleto de "
                     "outra versão) ou a gravidade do PP não está na vertical"
                 )
-        else:
-            tipo, motivo = tipo_pelos_esforcos(dados, barra, plano)
         perfil, origem = _perfil(barra, corpo, perfis)
         elementos = _elementos(dados, barra)
         pontas = classificar_pontas(dados, barra)
@@ -1403,6 +1596,8 @@ def ler_barras(
                 lb_m=sugeridos.lb_m if sugeridos else None,
                 motivo_dos_comprimentos=sugeridos.motivo if sugeridos else "",
                 origem_do_eixo=origem_do_eixo,
+                papel_pelo_nome=papel_pelo_nome,
+                nome_contradiz=nome_contradiz,
             )
         )
     return leituras
@@ -1917,22 +2112,55 @@ def diagnosticar(
         for lb in leituras
     }
     trocados = [
-        lb.barra
+        lb
         for lb in leituras
-        if lb.corpo is not None
+        if (lb.corpo is not None or lb.papel_pelo_nome)
         and tipos[lb.barra][0] not in ("—", "Outro")
         and lb.tipo_sugerido != "—"
         and not _mesmo_papel(*tipos[lb.barra])
     ]
-    if trocados:
+    pela_posicao = [lb.barra for lb in trocados if not lb.papel_pelo_nome]
+    pelo_nome = [lb for lb in trocados if lb.papel_pelo_nome]
+    if pela_posicao:
         achados.append(
             Achado(
                 pc.NIVEL_ATENCAO,
                 "Tipo diferente da posição no modelo",
-                f"{_lista(trocados)}: o tipo escolhido na tabela não é o da posição da barra no "
-                "esqueleto (vertical = pilar, horizontal = viga, inclinada = contraventamento). "
+                f"{_lista(pela_posicao)}: o tipo escolhido na tabela não é o da posição da barra "
+                "no esqueleto (vertical = pilar, horizontal = viga, inclinada = contraventamento). "
                 "Os parâmetros da verificação (comprimentos, Cb, aço, B₂) saem do tipo da tabela.",
-                tuple(trocados),
+                tuple(pela_posicao),
+            )
+        )
+    if pelo_nome:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Tipo diferente do nome no SolidWorks",
+                _lista(
+                    [
+                        f"{lb.barra} ({tipos[lb.barra][0].lower()} na tabela, "
+                        f"{lb.papel_pelo_nome.lower()} no nome)"
+                        for lb in pelo_nome
+                    ],
+                    4,
+                )
+                + ": o tipo escolhido na tabela não é o que o nome da peça diz. Os parâmetros da "
+                "verificação (comprimentos, Cb, aço, B₂) saem do tipo da tabela: troque o tipo na "
+                "tabela das barras ou, se o nome está errado, corrija-o na página Nomes das barras.",
+                tuple(lb.barra for lb in pelo_nome),
+            )
+        )
+    contradizem = [lb for lb in leituras if lb.nome_contradiz]
+    if contradizem:
+        achados.append(
+            Achado(
+                pc.NIVEL_ATENCAO,
+                "Nome que contradiz a posição",
+                _lista([f"{lb.barra}: {lb.nome_contradiz}" for lb in contradizem], 4)
+                + ". O programa seguiu a posição. Corrija o nome no SolidWorks (página Nomes das "
+                "barras) para o nome e o modelo dizerem a mesma coisa.",
+                tuple(lb.barra for lb in contradizem),
             )
         )
     pilares = [lb.barra for lb in leituras if TIPO_PILAR in tipos[lb.barra]]
@@ -2092,6 +2320,19 @@ def diagnosticar(
                     f"inclinação do peso próprio: {mapa_texto}. Confira; para não depender disso, "
                     "refaça a malha dos estudos (os nomes novos passam ao Simulation) ou gere o "
                     "esqueleto com os nomes do estudo.",
+                )
+            )
+        if casamento.pelos_nomes_trocados:
+            achados.append(
+                Achado(
+                    em.NIVEL_INFO,
+                    "Nomes trocados depois do estudo",
+                    f"{len(casamento.pelos_nomes_trocados)} viga(s) do Simulation estão com o nome "
+                    "de antes da troca feita na página Nomes das barras "
+                    f"({_lista(list(casamento.pelos_nomes_trocados), 3)}): o programa achou cada "
+                    "corpo pelo outro nome e conferiu que ele não saiu do lugar. Para os resultados "
+                    "mostrarem os nomes novos, refaça a malha e rode os estudos de novo.",
+                    casamento.pelos_nomes_trocados,
                 )
             )
 

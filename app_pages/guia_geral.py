@@ -76,6 +76,7 @@ opcoes = [
     "Base técnica do projeto",
     "Cargas do esqueleto",
     "Plano de cargas",
+    "Nomes das barras",
     "Esforços do modelo",
     "Pilares do modelo",
     "Lista de material",
@@ -2344,6 +2345,46 @@ elif modulo == "Esforços do modelo":
             """
         )
     link_modulo("app_pages/esforcos_modelo.py", "Abrir Esforços do modelo")
+
+
+elif modulo == "Nomes das barras":
+    st.header("Nomes das barras")
+    st.markdown(
+        "Cada corpo do SolidWorks com um nome que diz **o que ele é e onde está**: `P-A1` é o "
+        "pilar do cruzamento A1, `V-N1-A1-A2` a viga do nível 1 entre A1 e A2, `C-N0-B1-B2` uma "
+        "diagonal, `PS-N1-01` uma chapa de piso. O prefixo é o que conta para o programa: com ele, "
+        "a longarina da escada deixa de ser lida como contraventamento, o montante do guarda-corpo "
+        "deixa de ser pilar e a chapa de base deixa de receber sobrecarga."
+    )
+    with st.expander("Como usar", expanded=True):
+        st.markdown(
+            """
+            1. No SolidWorks, rode a macro **exportar_lista_de_corte** e envie o …_esqueleto.csv
+               na seção 1 da página.
+            2. Confira a planta (a grade sai dos pés dos pilares; os níveis, das vigas e chapas de
+               piso) e a tabela: troque o papel onde o programa errou — o nome se refaz.
+            3. Escolha o **perfil da obra** de cada item da lista de corte onde ficou vazio.
+            4. Baixe o …_nomes.csv e a macro **renomear_corpos**; salve o arquivo ao lado da peça e
+               rode a macro com a peça aberta. Ela mostra o que vai trocar e só troca com a sua
+               confirmação.
+            5. Salve a peça, rode a exportar_lista_de_corte de novo e envie o esqueleto novo. Envie
+               também o relatório da macro (…_nomes_aplicados.csv) na seção 6.
+            6. Faça isso **antes de montar o estudo**. Se os estudos já foram rodados, refaça a
+               malha e rode de novo; enquanto isso, o programa acha cada corpo pelo nome antigo.
+            """
+        )
+    with st.expander("O que o programa confere"):
+        st.markdown(
+            """
+            - O nome não manda sozinho: pilar deitado, viga em pé, chapa chamada de barra são
+              tratados como engano — vale a posição, e o programa avisa.
+            - A macro confere cada corpo pela geometria (centro de massa e volume) antes de trocar:
+              um nome `[n]` que passou para outro corpo depois de uma edição não engana.
+            - Rodar de novo não troca o nome que já está no padrão; o arquivo …_nomes_desfazer.csv
+              volta tudo como era.
+            """
+        )
+    link_modulo("app_pages/nomes_das_barras.py", "Abrir Nomes das barras")
 
 
 elif modulo == "Pilares do modelo":

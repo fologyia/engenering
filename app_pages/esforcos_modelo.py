@@ -546,6 +546,19 @@ with st.container(border=True), secao_protegida("3. Conferência das reações")
         )
         for aviso in geometria.avisos:
             st.warning(f"Esqueleto: {aviso}", icon=":material/warning:")
+        pelo_nome = sum(1 for lb in leituras if lb.papel_pelo_nome)
+        st.caption(
+            f":material/label: {pelo_nome} das {len(leituras)} barras com o papel pelo nome no "
+            "SolidWorks (P-, V-, LG-, C-…). Papel lido errado? Dê nomes às barras e o programa "
+            "deixa de adivinhar pela posição."
+        )
+        st.page_link(
+            "app_pages/nomes_das_barras.py",
+            label="Nomes das barras",
+            icon=":material/label:",
+            help="Página que sugere um nome para cada barra e chapa (P-A1, V-N1-A1-A2) e a macro "
+            "que os aplica no SolidWorks.",
+        )
     else:
         st.caption(
             ":material/account_tree: Sem o esqueleto do modelo, o tipo de cada barra sai só do "

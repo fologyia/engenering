@@ -924,6 +924,9 @@ def _ler_lista_de_corte(
     c_angulo1 = coluna(_COLUNA_ANGULO1)
     c_angulo2 = coluna(_COLUNA_ANGULO2)
     c_material = next((j for j, n in enumerate(nomes) if n == "material"), None)
+    # A propriedade PERFIL que a página Nomes das barras grava em cada item: a peça da obra,
+    # declarada por quem projeta. Vale sobre a descrição e sobre a área desenhada.
+    c_perfil = next((j for j, n in enumerate(nomes) if n == "perfil" and j != c_desc), None)
     materiais: list[str] = []
     itens: list[ItemDaLista] = []
     estranhos: list[str] = []
@@ -954,6 +957,16 @@ def _ler_lista_de_corte(
             comprimento_m=comprimento_m,
             massa_geometria_kg=massa_geometria,
         )
+        declarado = perfil_conhecido(celula(c_perfil)) if c_perfil is not None else None
+        if declarado is not None:
+            itens.append(
+                replace(
+                    base,
+                    descricao=declarado.nome,
+                    observacao=f"perfil declarado no SolidWorks (PERFIL; descrição: {descricao})",
+                )
+            )
+            continue
         perfil = perfil_conhecido(descricao)
         caixa = _caixa(celula(c_caixa))
         fina = (

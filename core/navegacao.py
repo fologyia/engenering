@@ -131,6 +131,13 @@ MENU: tuple[GrupoMenu, ...] = (
         "reações para o projeto civil, sensores, modelo em 3D e lista de material.",
         (
             ItemMenu(
+                "app_pages/nomes_das_barras.py",
+                "Nomes das barras",
+                ":material/label:",
+                "Dar a cada barra e chapa do SolidWorks um nome que o programa entende",
+                outros_nomes=("Renomear corpos", "Padrão de nomes"),
+            ),
+            ItemMenu(
                 "app_pages/esforcos_modelo.py",
                 "Esforços do modelo",
                 ":material/upload_file:",

@@ -417,6 +417,23 @@ Calcula a ação do vento numa edificação de planta retangular pela **ABNT NBR
   tabelas e o que não passou;
 - V₀, relevo, terreno, grupo e o S₃ do cliente começam com os valores da **base técnica** do projeto.
 
+### Nomes das barras
+
+Cada corpo do modelo do SolidWorks com um nome que diz o que ele é e onde está (detalhes em
+`docs/nomes_das_barras.md`). O padrão é `PREFIXO-LOCAL` (`core/papel_pelo_nome.py`): o prefixo diz o
+papel — P pilar, V viga, LG longarina, DG degrau, C contraventamento, MF mão-francesa, GC
+guarda-corpo, PS piso, PT patamar, ES lance de escada, CH chapa sem carga, PC outra peça — e o resto,
+o lugar: `P-A1` (pilar do cruzamento A1), `V-N1-A1-A2` (viga do nível 1 entre A1 e A2), `C-N0-B1-B2`,
+`PS-N1-01`. A página (`core/nomes_das_barras.py`) lê o esqueleto, monta a grade pelos pés dos pilares
+e os níveis pelas vigas e chapas de piso, sugere o papel de cada corpo (com a mão-francesa e o degrau
+achados pela geometria) e o nome, e o PERFIL de cada item da lista de corte; a macro
+`renomear_corpos.bas` aplica tudo no SolidWorks conferindo cada corpo pela geometria (centro de
+massa na linha de centro, volume), em duas fases, com confirmação, relatório e arquivo para
+desfazer. A leitura do modelo usa o papel do nome quando a geometria não o contradiz (pilar deitado,
+viga em pé e chapa chamada de barra viram aviso e valem a posição), o PERFIL declarado vale como o
+nome e a descrição juntos (exportar_lista_de_corte v7), e as trocas guardadas no projeto deixam um
+estudo rodado antes da troca achar cada corpo no esqueleto novo.
+
 ### Esforços do modelo
 
 Importa os resultados do **SolidWorks Simulation** (`core/esforcos_modelo.py`; detalhes em

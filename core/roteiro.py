@@ -80,13 +80,19 @@ PASSOS: tuple[Passo, ...] = (
         SOLIDWORKS,
         None,
         "a peça soldada (o esqueleto da estrutura)",
-        "Peça_lista_de_corte.csv e Peça_esqueleto.csv (na pasta da peça)",
+        "Peça_lista_de_corte.csv e Peça_esqueleto.csv (na pasta da peça); Peça_nomes.csv para a "
+        "macro renomear_corpos",
         (
             "Modele o esqueleto (membros estruturais) e as chapas de piso.",
-            "Nomeie os membros com o perfil e a função (W200x31,3 - Pilar).",
             "Rode a macro exportar_lista_de_corte.bas (Ferramentas → Macro → Executar).",
+            "Na página Nomes das barras, envie o …_esqueleto.csv, confira o papel de cada peça e "
+            "o perfil de cada item, baixe o …_nomes.csv e rode a macro renomear_corpos.bas: cada "
+            "barra passa a dizer o que é (P-A1, V-N1-A1-A2).",
+            "Salve a peça e rode a exportar_lista_de_corte.bas de novo: os CSV saem com os nomes "
+            "novos. Faça isso antes de montar o estudo.",
         ),
-        "Os dois CSV saem na pasta da peça. Mudou o modelo? Rode de novo.",
+        "Os CSV saem na pasta da peça. Mudou o modelo? Rode as macros de novo — os nomes que já "
+        "estão no padrão ficam.",
     ),
     Passo(
         4,

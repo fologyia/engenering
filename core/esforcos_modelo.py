@@ -36,6 +36,7 @@ from datetime import datetime
 from typing import Any
 
 from core import exportacao_cargas as ex
+from core import papel_pelo_nome as pn
 from core import plano_de_cargas as pc
 
 TIPO_VIGAS = "Forças da viga"
@@ -764,7 +765,11 @@ def perfil_do_nome(nome: str) -> str | None:
 
     ``Canal c C8X13.75`` → o U 8" mais próximo em massa; ``Ângulo l L2.5X2.5X0.25`` → L 2 1/2" × 1/4";
     ``W8X31`` e ``W 200 x 35.9`` → o W do catálogo com a mesma altura nominal e a massa mais próxima.
+    Os nomes do padrão de papéis (``P-A1``, ``V-N1-L1-L2``, ``Viga-3(C-N0-01)``) não dizem perfil:
+    a letra da grade não é cantoneira.
     """
+    if pn.e_nome_codificado(nome):
+        return None
     catalogo = _catalogo()
     texto = nome.replace(",", ".")
     # Nome brasileiro: altura em polegadas com aspas e massa em kg/m (U 8" x 17,1; W 8" x 31,3).

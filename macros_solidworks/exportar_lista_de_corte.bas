@@ -10,7 +10,8 @@
 ' - <peca>_esqueleto.csv: cada corpo com a linha de centro (mm), a forma (barra, chapa ou bloco),
 '   as medidas, a direcao da medida maior da secao (a alma), a direcao 1 do Simulation (a
 '   aresta reta mais longa da secao) e o volume; nas chapas, o contorno da face maior e as
-'   aberturas. Envie na pagina "Esforcos do modelo" junto com os CSV do
+'   aberturas; e o PERFIL declarado do item da lista de corte (pagina "Nomes das barras").
+'   Envie na pagina "Esforcos do modelo" junto com os CSV do
 '   Simulation (pilares, vigas e contraventamentos, comprimentos de flambagem, perfis) e use em
 '   "Cargas do esqueleto" (a carga do piso distribuida pelas vigas que apoiam cada chapa).
 '
@@ -20,7 +21,7 @@
 ' sempre com virgula decimal, qualquer que seja a configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v6"
+Const VERSAO_DA_MACRO As String = "v7"
 Const DENSIDADE_ACO As Double = 7850#
 
 Dim nomes() As String
@@ -140,12 +141,13 @@ Sub main()
     Cabecalho arquivoEsqueleto, peca, configuracao, quando
     Print #arquivoEsqueleto, "CORPO;ITEM DA LISTA;DESCRICAO;FORMA;X1 (mm);Y1 (mm);Z1 (mm);" & _
         "X2 (mm);Y2 (mm);Z2 (mm);COMPRIMENTO (mm);SECAO A (mm);SECAO B (mm);VOLUME (cm3);" & _
-        "DIRECAO A X;DIRECAO A Y;DIRECAO A Z;CONTORNO (mm);ABERTURAS (mm);DIRECAO 1 X;DIRECAO 1 Y;DIRECAO 1 Z;DIRECAO 1 FOLGA (mm)"
+        "DIRECAO A X;DIRECAO A Y;DIRECAO A Z;CONTORNO (mm);ABERTURAS (mm);DIRECAO 1 X;DIRECAO 1 Y;DIRECAO 1 Z;DIRECAO 1 FOLGA (mm);PERFIL"
 
     ' 5) Um item por linha na lista de corte; um corpo por linha no esqueleto.
     Dim vistos As Object
     Set vistos = CreateObject("Scripting.Dictionary")
     Dim valor As String, resolvido As String, comprimento As String, descricao As String
+    Dim perfilDeclarado As String
     Dim vCorpos As Variant, vMassa As Variant, swCorpo As SldWorks.Body2
     Dim volume As Double, corpos As Long, k As Long, caixa As String
     Dim g(11) As Double, forma As String
@@ -156,6 +158,7 @@ Sub main()
         Set swPasta = swSub.GetSpecificFeature2
         Set swProps = swSub.CustomPropertyManager
         comprimento = ""
+        perfilDeclarado = ""
         descricao = SemSufixo(swSub.Name)
         For j = 0 To totalNomes - 1
             valor = ""
@@ -167,6 +170,10 @@ Sub main()
                 ' Item com nome automatico ("Item da lista de corte1"): vale a descricao do perfil.
                 swProps.Get4 nomes(j), False, valor, resolvido
                 If resolvido <> "" Then descricao = resolvido
+            ElseIf UCase(nomes(j)) = "PERFIL" Then
+                ' O perfil declarado pela pagina Nomes das barras (macro renomear_corpos).
+                swProps.Get4 nomes(j), False, valor, resolvido
+                perfilDeclarado = resolvido
             End If
         Next j
         If comprimento <> "" And unidade <> "" And Not (comprimento Like "*[A-Za-z]*") Then
@@ -187,7 +194,7 @@ Sub main()
                     corpos = corpos + 1
                 End If
                 If Geometria(swCorpo, vMassa, g, forma) Then
-                    EscreverCorpo swCorpo, swSub.Name, descricao, forma, g, vMassa
+                    EscreverCorpo swCorpo, swSub.Name, descricao, forma, g, vMassa, perfilDeclarado
                     totalCorpos = totalCorpos + 1
                     Contar forma, barras, chapas, blocos
                     ' Caixa de uma peca nas direcoes do proprio corpo (chapa inclinada tambem).
@@ -232,7 +239,7 @@ Sub main()
             If Not vistos.Exists(swCorpo.Name) Then
                 vMassa = Massa(swCorpo)
                 If Geometria(swCorpo, vMassa, g, forma) Then
-                    EscreverCorpo swCorpo, "", "fora da lista de corte", forma, g, vMassa
+                    EscreverCorpo swCorpo, "", "fora da lista de corte", forma, g, vMassa, ""
                     totalCorpos = totalCorpos + 1
                     foraDaLista = foraDaLista + 1
                     Contar forma, barras, chapas, blocos
@@ -311,7 +318,7 @@ Sub Cabecalho(ByVal numeroDoArquivo As Integer, peca As String, configuracao As 
 End Sub
 
 Sub EscreverCorpo(swCorpo As SldWorks.Body2, item As String, descricao As String, forma As String, _
-    g() As Double, vMassa As Variant)
+    g() As Double, vMassa As Variant, perfil As String)
     Dim volumeTexto As String, contorno As String, aberturas As String
     Dim d1(2) As Double, folga As Double, direcaoUm As String
     volumeTexto = ""
@@ -339,7 +346,7 @@ Sub EscreverCorpo(swCorpo As SldWorks.Body2, item As String, descricao As String
         Num(g(6) * 1000#, "0.0") & ";" & Num(g(7) * 1000#, "0.0") & ";" & Num(g(8) * 1000#, "0.0") & ";" & _
         volumeTexto & ";" & _
         Num(g(9), "0.0000") & ";" & Num(g(10), "0.0000") & ";" & Num(g(11), "0.0000") & ";" & _
-        Campo(contorno) & ";" & Campo(aberturas) & ";" & direcaoUm
+        Campo(contorno) & ";" & Campo(aberturas) & ";" & direcaoUm & ";" & Campo(perfil)
 End Sub
 
 Function DirecaoDaSecao(swCorpo As SldWorks.Body2, g() As Double, d1() As Double, folga As Double) As Boolean

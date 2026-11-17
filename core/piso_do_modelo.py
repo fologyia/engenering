@@ -36,6 +36,7 @@ from core import criterio_anglo as ca
 from core import esforcos_modelo as em
 from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
+from core import papel_pelo_nome as pn
 from core import plano_de_cargas as pc
 from core import travamentos as tv
 
@@ -180,6 +181,38 @@ def _nivel_da_cota(cota: float, niveis: Sequence[float]) -> int:
     return min(range(len(niveis)), key=lambda i: abs(niveis[i] - cota)) + 1
 
 
+def _papel_pelo_nome(corpo: ld.CorpoDoModelo, eixo_vertical: str) -> pn.Papel | None:
+    """O papel de barra que o nome do corpo diz, se a posição o deixa valer."""
+    declarado = ld.papel_declarado(corpo, eixo_vertical)
+    return declarado.papel if declarado is not None and declarado.vale else None
+
+
+def _longarina_do_lance(corpo: ld.CorpoDoModelo, eixo_vertical: str) -> bool:
+    """A barra sob o lance é longarina: pelo nome, ou inclinada sem outro papel no nome."""
+    papel = _papel_pelo_nome(corpo, eixo_vertical)
+    if papel is not None and papel.tipo:
+        return papel is pn.LONGARINA
+    return ld.tipo_pela_posicao(corpo, eixo_vertical)[0] == ld.TIPO_CONTRAVENTAMENTO
+
+
+#: O tipo da chapa que o nome dá (PS, PT, ES); o nome CH tira a chapa antes (cargas_pelo_modelo).
+_TIPO_DA_CHAPA_PELO_NOME = {pn.PISO: TIPO_PISO, pn.PATAMAR: TIPO_PATAMAR, pn.LANCE: TIPO_ESCADA}
+
+
+def _tipo_da_chapa_pelo_nome(chapa: cpm.ChapaDoPiso) -> tuple[str, str] | None:
+    """(tipo, motivo) pelo nome da chapa, se ele diz e a inclinação deixa; senão ``None``."""
+    lido = pn.papel_do_nome(chapa.nome)
+    if lido is None or lido.papel not in _TIPO_DA_CHAPA_PELO_NOME:
+        return None
+    avaliacao = pn.avaliar(lido.papel, chapa.inclinacao_graus, ld.FORMA_CHAPA)
+    if not avaliacao.vale:
+        return None
+    motivo = f"{lido.papel.nome.lower()} pelo nome no SolidWorks"
+    if avaliacao.nota:
+        motivo += f" ({avaliacao.nota})"
+    return _TIPO_DA_CHAPA_PELO_NOME[lido.papel], motivo
+
+
 @functools.lru_cache(maxsize=32)
 def ler(g: ld.GeometriaDoModelo, eixo_vertical: str) -> LeituraDoPiso:
     """O que o programa entende do esqueleto para as cargas do piso (guardado enquanto o esqueleto
@@ -202,13 +235,12 @@ def ler(g: ld.GeometriaDoModelo, eixo_vertical: str) -> LeituraDoPiso:
     longarinas: set[str] = set()
     for indice, chapa in enumerate(chapas, start=1):
         vigas = cpm.vigas_que_apoiam(g, chapa)
+        pelo_nome = _tipo_da_chapa_pelo_nome(chapa)
         if chapa.inclinacao_graus > INCLINACAO_DE_ESCADA_GRAUS:
             tipo = TIPO_ESCADA
             motivo = f"inclinada {_n(chapa.inclinacao_graus, 0)}°: lance de escada"
             longarinas.update(
-                corpo.nome
-                for corpo, _, _ in vigas
-                if ld.tipo_pela_geometria(corpo, eixo_vertical)[0] == ld.TIPO_CONTRAVENTAMENTO
+                corpo.nome for corpo, _, _ in vigas if _longarina_do_lance(corpo, eixo_vertical)
             )
         else:
             encostados = sum(
@@ -225,6 +257,8 @@ def ler(g: ld.GeometriaDoModelo, eixo_vertical: str) -> LeituraDoPiso:
                 motivo = f"em nível, {_n(chapa.area_m2)} m², na ponta de um lance de escada"
             else:
                 tipo, motivo = TIPO_PISO, "em nível"
+        if pelo_nome is not None:
+            tipo, motivo = pelo_nome  # o nome (PS, PT, ES) diz, e a inclinação deixa
         corpo = chapa.corpo
         peso = None
         if corpo.volume_m3 is not None and corpo.volume_m3 > 0:
@@ -251,8 +285,8 @@ def ler(g: ld.GeometriaDoModelo, eixo_vertical: str) -> LeituraDoPiso:
             continue
         if corpo.forma == ld.FORMA_BLOCO:
             papel = PAPEL_PECA_CURTA
-        elif corpo.nome in longarinas:
-            papel = PAPEL_LONGARINA
+        elif corpo.nome in longarinas or _papel_pelo_nome(corpo, eixo_vertical) is pn.LONGARINA:
+            papel = PAPEL_LONGARINA  # a escada modelada sem as chapas: a longarina pelo nome
         else:
             papel = ld.tipo_pela_geometria(corpo, eixo_vertical)[0]
         papeis.append((corpo.nome, papel))
@@ -275,10 +309,10 @@ def ler(g: ld.GeometriaDoModelo, eixo_vertical: str) -> LeituraDoPiso:
                 "cima: se ali há piso, a carga dele não entra — modele a chapa no SolidWorks ou "
                 "lance a carga no Plano de cargas."
             )
-    for chapa in lidas:
-        if not chapa.vigas:
+    for lida in lidas:
+        if not lida.vigas:
             avisos.append(
-                f"{chapa.codigo} ({chapa.nome}): nenhuma viga logo abaixo da chapa — a carga "
+                f"{lida.codigo} ({lida.nome}): nenhuma viga logo abaixo da chapa — a carga "
                 "dela fica de fora."
             )
     return LeituraDoPiso(
