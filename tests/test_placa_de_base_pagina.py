@@ -146,12 +146,9 @@ def test_momento_grande_mostra_c3_e_a_tracao(banco_isolado):
     assert "Chumbadores" in textos  # o grupo dos chumbadores aparece
 
 
-def test_tracao_sem_dispositivo_explica_e_adotar_nao_aparece(banco_isolado):
+def test_tracao_sem_dispositivo_avisa_que_nao_ha_atrito(banco_isolado):
     t = abrir(pb_n_sd=-80.0, pb_m_sd=10.0)
-    assert _metricas(t)["Status"] == "NÃO OK"
-    assert any("placa de cisalhamento" in w.value for w in t.warning)
-    assert any("Não passou" in e.value for e in t.error)
-    assert not [b for b in t.button if b.key == "pb_adotar"]
+    assert any("não há atrito" in w.value for w in t.warning)
 
 
 def test_adotar_a_base_mais_leve_e_registrar(banco_com_projeto):

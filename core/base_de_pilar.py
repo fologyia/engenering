@@ -272,13 +272,13 @@ class LinhaTabela18:
 TABELA_18: dict[str, LinhaTabela18] = {
     linha.polegada: linha
     for linha in (
-        LinhaTabela18('3/4"', 19, 40, 80, 120, 450, 150, 175, 50, 33, 6.3, "50 × 50", 40, 20, 900, 125, 10),
-        LinhaTabela18('7/8"', 22, 45, 90, 140, 465, 200, 225, 50, 40, 6.3, "65 × 65", 50, 20, 900, 100, 10),
-        LinhaTabela18('1"', 25, 50, 100, 160, 465, 200, 225, 50, 45, 8.0, "75 × 75", 60, 25, 900, 125, 12.5),
-        LinhaTabela18('1 1/4"', 32, 65, 130, 190, 525, 225, 250, 60, 50, 9.5, "75 × 75", 60, 25, 1100, 100, 12.5),
-        LinhaTabela18('1 1/2"', 38, 80, 160, 230, 610, 250, 275, 70, 60, 9.5, "90 × 90", 70, 25, 1300, 150, 16),
-        LinhaTabela18('1 3/4"', 44, 90, 180, 270, 700, 300, 325, 70, 70, 12.5, "100 × 100", 80, 25, 1600, 125, 16),
-        LinhaTabela18('2"', 50, 100, 200, 300, 850, 350, 375, 100, 80, 16.0, "125 × 125", 90, 30, 1800, 100, 16),
+        LinhaTabela18('3/4"', 19, 40, 80, 120, 450, 150, 175, 50, 27, 6.3, "50 × 50", 40, 20, 900, 125, 10),
+        LinhaTabela18('7/8"', 22, 45, 90, 140, 465, 200, 225, 50, 30, 6.3, "65 × 65", 50, 20, 900, 100, 10),
+        LinhaTabela18('1"', 25, 50, 100, 160, 465, 200, 225, 50, 33, 8.0, "75 × 75", 60, 25, 900, 125, 12.5),
+        LinhaTabela18('1 1/4"', 32, 65, 130, 190, 525, 225, 250, 60, 40, 9.5, "75 × 75", 60, 25, 1100, 100, 12.5),
+        LinhaTabela18('1 1/2"', 38, 80, 160, 230, 610, 250, 275, 70, 46, 9.5, "90 × 90", 70, 25, 1300, 150, 16),
+        LinhaTabela18('1 3/4"', 44, 90, 180, 270, 700, 300, 325, 70, 52, 12.5, "100 × 100", 80, 25, 1600, 125, 16),
+        LinhaTabela18('2"', 50, 100, 200, 300, 850, 350, 375, 100, 58, 16.0, "125 × 125", 90, 30, 1800, 100, 16),
     )
 }  # fmt: skip
 
@@ -636,7 +636,7 @@ def roscas_da_familia(familia: str) -> list[Rosca]:
 
 
 def furo_padrao(d_b: float) -> float:
-    """d_f (mm): os furos da Tabela 18 (os da AISC, Tabela 14-2) interpolados em d_b.
+    """d_f (mm): furo alargado da placa, d_b + 8 mm (a folga da Tabela 18 em todos os diâmetros).
 
     Abaixo de 19 mm e acima de 50 mm, a folga (d_f − d_b) da ponta da tabela. Arredondado para o
     milímetro de cima.
@@ -656,7 +656,7 @@ def furo_padrao(d_b: float) -> float:
 
 
 def furo_justo(e: EntradaBase, tab: LinhaTabela18) -> bool:
-    """O furo informado é menor que o padrão da AISC (Tabela 14-2) para o diâmetro."""
+    """O furo informado é menor que o padrão (d_b + 8 mm) para o diâmetro."""
     return e.por_formula and e.d_f_mm > 0 and tab.d_f < furo_padrao(tab.d_b) - 1e-9
 
 
@@ -730,10 +730,7 @@ def medidas_por_formula(e: EntradaBase, h_ef: float | None = None) -> MedidasPor
         (
             "Furo na placa d_f",
             f"{_mm(d_f)} mm",
-            "informado"
-            if e.d_f_mm
-            else "os furos da Tabela 18 (os mesmos da AISC, Manual, Tabela 14-2) interpolados em "
-            "d_b; fora de 19 a 50 mm, a folga da ponta (14 ou 30 mm)",
+            "informado" if e.d_f_mm else "furo alargado d_b + 8 mm (NBR 8800, furos alargados)",
         ),
         (
             "Arruela especial",
@@ -3312,7 +3309,17 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     # ------------------------------------------------------------------ cortante
     inicios.append((GRUPO_CORTANTE, len(linhas)))
     v_rd = v_atrito
-    if e.cortante == CORTANTE_ATRITO:
+    modo_v = e.cortante
+    # Com tração (T1, T2, T3) ou sem pressão de contato não há atrito: a cortante vai aos chumbadores.
+    if modo_v == CORTANTE_ATRITO and v_sd > 0 and (caso.startswith("T") or v_rd <= 0):
+        modo_v = CORTANTE_DIRETOS
+        avisos.append(
+            f"Caso {caso}: com tração não há atrito na argamassa (6.7.2.3); a cortante V_Sd = "
+            f"{_n(v_sd / 1e3, 1)} kN foi verificada nos chumbadores (corte do chumbador e flexão na "
+            "argamassa). Para os n chumbadores engatarem juntos, use arruelas soldadas ou placa de "
+            "cisalhamento."
+        )
+    if modo_v == CORTANTE_ATRITO:
         if v_rd <= 0:  # T1 e T2 (ou C3/T3 sem equilíbrio): não há pressão de contato, nem atrito
             texto_v = (
                 f"V_Sd = {_n(v_sd / 1e3, 1)} kN sem pressão de contato sob a placa: não há atrito; "
@@ -3343,7 +3350,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "(6.7.2.3) — ou, com o aviso do deslizamento, os chumbadores direto no furo; com o "
                 "dispositivo, só ele resiste à cortante (o atrito não se soma)."
             )
-    elif e.cortante == CORTANTE_PLACA:
+    elif modo_v == CORTANTE_PLACA:
         sigma4 = tensao_resistente_do_concreto(e.fck_MPa, 4.0, e.combinacao)
         v_rd = sigma4 * max(e.b_v_mm - g.e_n, 0.0) * e.b_h_mm
         linhas.append(
@@ -3394,7 +3401,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                     )
                 )
     else:  # pelos chumbadores: arruelas soldadas ou direto no furo da placa
-        soldadas = e.cortante == CORTANTE_ARRUELAS
+        soldadas = modo_v == CORTANTE_ARRUELAS
         razoes_v: list[tuple[str, float]] = []
         if soldadas:
             arruelas = cortante_das_arruelas(
@@ -3653,7 +3660,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             _info(
                 "Furo justo na placa",
                 f"d_f = {_n(tab.d_f, 1)} mm < furo padrão {_n(padrao, 0)} mm para Ø {tab.polegada} "
-                "(AISC Manual, Tabela 14-2, furo superdimensionado de placa de base): o "
+                "(furo alargado d_b + 8 mm da placa de base): o "
                 f"deslizamento cai para {_n((tab.d_f - tab.d_b) / 2, 1)} mm, mas some a tolerância "
                 "de locação dos chumbadores — o furo justo exige locação precisa (template ou "
                 "gabarito de montagem). Alternativa: furo padrão + arruelas soldadas",
@@ -4241,7 +4248,7 @@ def registro_base(
             *(
                 [
                     f"Furo justo na placa (d_f = {_n(tab.d_f, 1)} mm, menor que o padrão de "
-                    f"{_n(furo_padrao(tab.d_b), 0)} mm da AISC, Tabela 14-2): hipótese de locação "
+                    f"{_n(furo_padrao(tab.d_b), 0)} mm, d_b + 8): hipótese de locação "
                     "precisa dos chumbadores, com template ou gabarito de montagem."
                 ]
                 if furo_justo(e, tab)

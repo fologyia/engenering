@@ -134,8 +134,8 @@ def test_por_formula_usa_o_mesmo_embutimento_em_todas_as_combinacoes():
 
 def test_atrito_nao_serve_na_combinacao_tracionada():
     r = bp.calcular(VARIAS)
-    atrito = _linha(r, "Cortante: atrito")
-    assert atrito.status == "NÃO OK" and atrito.formula.startswith("[vento]")
+    assert any("não há atrito" in a for a in r.avisos)
+    assert _linha(r, "Chumbador: aço à cortante")
 
 
 def test_base_mais_leve_atende_todas_as_combinacoes():

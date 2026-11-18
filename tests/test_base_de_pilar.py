@@ -229,14 +229,21 @@ def test_sigma_rd_da_6_6_5_limitado_a_1_7_fck_sobre_gama_c():
 
 
 # ------------------------------------------------------------------ cortante
-def test_sem_contato_o_atrito_reprova_sem_aproveitamento_infinito():
+def test_com_tracao_nao_ha_atrito_e_a_cortante_vai_aos_chumbadores():
     r = bp.calcular(replace(PADRAO, n_sd_kN=-80, m_sd_kNm=10))
-    linha = _linha(r, "Cortante: atrito")
-    assert linha.tipo == "limite" and linha.status == "NÃO OK"
+    nomes = [v.nome for v in r.verificacoes]
+    assert not [n for n in nomes if n.startswith("Cortante: atrito")]
+    assert _linha(r, "Chumbador: aço à cortante").status in ("OK", "NÃO OK")
     assert math.isfinite(r.aproveitamento_maximo)
-    assert any("placa de cisalhamento" in a for a in r.avisos)
+    assert any("não há atrito" in a for a in r.avisos)
     sem_cortante = bp.calcular(replace(PADRAO, n_sd_kN=-80, v_sd_kN=0))
     assert _linha(sem_cortante, "Cortante: atrito").status == "OK"
+
+
+def test_furo_da_placa_e_d_b_mais_8_mm():
+    assert bp.TABELA_18['3/4"'].d_f == 27
+    assert all(t.d_f == t.d_b + 8 for t in bp.TABELA_18.values())
+    assert bp.furo_padrao(16) == 24
 
 
 def test_placa_de_cisalhamento():
@@ -353,9 +360,10 @@ def test_base_mais_leve_atende_e_nao_ha_outra_mais_leve():
                 assert r.massa_da_placa_kg >= leve.massa_da_placa_kg - 1e-9
 
 
-def test_sem_base_que_atenda_quando_a_falha_nao_e_da_placa():
-    entrada = replace(PADRAO, n_sd_kN=-80, m_sd_kNm=10)  # cortante sem contato e sem dispositivo
-    assert bp.base_mais_leve(entrada) is None
+def test_com_tracao_a_base_mais_leve_usa_a_cortante_nos_chumbadores():
+    entrada = replace(PADRAO, n_sd_kN=-80, m_sd_kNm=10)  # sem atrito: corte nos chumbadores
+    leve = bp.base_mais_leve(entrada)
+    assert leve is not None and leve.status != "NÃO OK"
 
 
 def test_registro_e_figura_no_memorial():

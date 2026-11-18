@@ -154,7 +154,8 @@ def test_caso_c_tracao_sem_dispositivo_nao_tem_atrito():
     r = bp.calcular(
         replace(CASO_C, n_sd_kN=-18, m_sd_kNm=1.6, v_sd_kN=4.8, cortante=bp.CORTANTE_ATRITO)
     )
-    assert _linha(r, "Cortante: atrito").status == "NÃO OK"
+    assert not [v for v in r.verificacoes if v.nome.startswith("Cortante: atrito")]
+    assert _linha(r, "Chumbador: aço à cortante")
 
 
 def test_chumbadores_direto_no_furo_contam_dois_e_avisam():
@@ -163,7 +164,7 @@ def test_chumbadores_direto_no_furo_contam_dois_e_avisam():
     )
     deslize = _linha(r, "Chumbadores direto no furo")
     assert deslize.status == "ALERTA"
-    assert "(d_f − d_b)/2 = 7,0 mm" in deslize.formula  # furo 33 mm, chumbador 19 mm
+    assert "(d_f − d_b)/2 = 4,0 mm" in deslize.formula  # furo 27 mm, chumbador 19 mm
     assert _linha(r, "Chumbador: aço à cortante").solicitante == pytest.approx(2.4)  # V/2
     assert LINHAS_OBRIGATORIAS <= set(_nomes(r))
     assert any("desliza" in a for a in r.avisos)
@@ -289,7 +290,7 @@ def test_o_que_trava_separa_as_partes_da_base():
         replace(CASO_C, n_sd_kN=-18, m_sd_kNm=1.6, v_sd_kN=4.8, cortante=bp.CORTANTE_ATRITO)
     )
     travas = bp.o_que_trava(r)
-    assert travas[bp.TRAVA_CORTANTE] == ["Cortante: atrito na argamassa"]
+    assert "Cortante: atrito na argamassa" not in travas.get(bp.TRAVA_CORTANTE, [])
     assert any(n.startswith("Bloco") for n in travas[bp.TRAVA_CONCRETO])  # nota e da Tabela 18
     assert bp.TRAVA_PLACA not in travas
 
