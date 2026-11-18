@@ -381,6 +381,14 @@ MENU: tuple[GrupoMenu, ...] = (
                 secao=TERMICA,
             ),
             ItemMenu(
+                "app_pages/circuito_fechado.py",
+                "Circuito fechado",
+                ":material/autorenew:",
+                "Desenhar um circuito de resfriamento com bomba, dry cooler, chiller e vaso de expansão",
+                secao=TERMICA,
+                outros_nomes=("Circuito de resfriamento", "Dry cooler", "Chiller", "Vaso de expansão"),
+            ),
+            ItemMenu(
                 "app_pages/calor_no_tempo.py",
                 "Calor no tempo",
                 ":material/local_fire_department:",

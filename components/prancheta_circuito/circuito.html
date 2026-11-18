@@ -1,0 +1,34 @@
+<div class="pr">
+  <div class="barra">
+    <div class="bloco">
+      <button type="button" data-f="mover" title="Selecionar e mover (V). Arraste o fundo para andar pelo desenho.">Selecionar</button>
+      <button type="button" data-f="tubo" title="Desenhar tubos: clique num ponto e no seguinte; no vazio, o ponto nasce ali (T)">Tubo</button>
+      <button type="button" data-f="vaso" title="Vaso de expansão: clique num ponto ou em cima de um tubo">Vaso</button>
+    </div>
+    <span class="rotulo">Peças no tubo:</span>
+    <div class="bloco">
+      <button type="button" data-f="bomba" title="Bomba: clique em cima de um tubo. Ela empurra no sentido do desenho (B)">Bomba</button>
+      <button type="button" data-f="fonte" title="Fonte de calor: o equipamento a resfriar (máquina, painel, molde, motor)">Fonte</button>
+      <button type="button" data-f="dry_cooler" title="Dry cooler: troca o calor do fluido com o ar, com ventilador">Dry cooler</button>
+      <button type="button" data-f="chiller" title="Chiller: tira calor do fluido até a temperatura ajustada">Chiller</button>
+      <button type="button" data-f="valvula" title="Válvula (registro ou balanceamento), pelo K">Válvula</button>
+      <button type="button" data-f="filtro" title="Filtro, pela perda de carga do catálogo">Filtro</button>
+      <button type="button" data-f="tanque" title="Tanque pulmão: volume que dá inércia térmica ao circuito">Tanque</button>
+    </div>
+    <span class="vao"></span>
+    <label class="grade" title="O ponto pula de quanto em quanto metros.">Grade <select data-c="grade"></select></label>
+    <div class="bloco">
+      <button type="button" data-a="inverter" title="Inverter o sentido do tubo ou da peça selecionada (a bomba passa a empurrar ao contrário)">⇄</button>
+      <button type="button" data-a="apagar" title="Apagar (Delete). Apagar uma peça a troca por tubo; apagar um ponto apaga o que chega nele.">Apagar</button>
+      <button type="button" data-a="desfazer" title="Desfazer (Ctrl+Z)">↶</button>
+      <button type="button" data-a="refazer" title="Refazer (Ctrl+Y)">↷</button>
+      <button type="button" data-a="maisLonge" title="Afastar (rodinha)">−</button>
+      <button type="button" data-a="maisPerto" title="Aproximar (rodinha)">+</button>
+      <button type="button" data-a="ajustar" title="Mostrar o circuito inteiro">Ver tudo</button>
+    </div>
+  </div>
+  <div class="area">
+    <svg tabindex="0" aria-label="Prancheta do circuito fechado"></svg>
+  </div>
+  <div class="rodape"><span data-i="xy"></span><span data-i="dica"></span></div>
+</div>

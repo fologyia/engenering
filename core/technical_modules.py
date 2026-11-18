@@ -376,6 +376,20 @@ def _registrar_padrao() -> None:
             aliases=("Fluidos e térmica", "Termofluidos"),
         ),
         ModuloTecnico(
+            id="circuito_fechado",
+            titulo="Circuito fechado",
+            versao="1.0",
+            pagina="app_pages/circuito_fechado.py",
+            grupo_navegacao="Mecânica",
+            ordem=75,
+            icone=":material/autorenew:",
+            descricao=(
+                "Circuito de resfriamento desenhado, com ramais: hidráulica, temperaturas em "
+                "regime e no tempo, dry cooler, chiller e vaso de expansão."
+            ),
+            aliases=("Circuito de resfriamento", "Dry cooler", "Chiller", "Vaso de expansão"),
+        ),
+        ModuloTecnico(
             id="calor_no_tempo",
             titulo="Calor no tempo",
             versao="1.0",

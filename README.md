@@ -370,6 +370,21 @@ Quatro casos em animação, com as curvas no tempo ao lado:
 Setas andam nos tubos no sentido da água, e os gráficos marcam quando cada coisa estabiliza.
 Tudo conferido com as soluções exatas nos testes. Detalhes em `docs/tanques_e_linhas.md`.
 
+### Circuito fechado
+
+Circuito de resfriamento (ou de aquecimento) desenhado numa prancheta: tubos, e em cima deles a
+bomba, a fonte de calor (o equipamento a resfriar), dry cooler, chiller, válvula, filtro e tanque
+pulmão, mais o vaso de expansão num ponto, com ramais em paralelo.
+
+- **Hidráulica:** a vazão de cada ramal pela curva da bomba e as perdas de catálogo, e a pressão em
+  cada ponto a partir do vaso, com o NPSH e o aviso de entrada de ar.
+- **Regime permanente:** as temperaturas, com o dry cooler pelo ponto do catálogo (ε-NTU) e o
+  chiller até a capacidade, e os dois com controle.
+- **No tempo (animado):** da partida a frio até estabilizar, com o ar e a carga variando ao longo do
+  dia e a pressão do vaso subindo com a dilatação.
+
+Detalhes em `docs/circuito_fechado.md`.
+
 ### Calor no tempo
 
 Condução de calor no tempo em parede, tubo, cilindro ou esfera, e na seção desenhada (2D). A peça

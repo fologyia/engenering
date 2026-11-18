@@ -113,6 +113,7 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "montador_termico",
         "montador_processos",
         "calor_no_tempo",
+        "circuito_fechado",
     ]
     cargas = [item.id for item in listar_modulos(grupo="Cargas e vento")]
     assert cargas == [
