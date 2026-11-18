@@ -109,8 +109,10 @@ def test_catalogo_de_modulos_governa_grupos_de_navegacao():
         "assistente_cargas",
         "montador_fluidos",
         "rede_de_tubos",
+        "tanques_e_linhas",
         "montador_termico",
         "montador_processos",
+        "calor_no_tempo",
     ]
     cargas = [item.id for item in listar_modulos(grupo="Cargas e vento")]
     assert cargas == [

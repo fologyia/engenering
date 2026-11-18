@@ -376,6 +376,34 @@ def _registrar_padrao() -> None:
             aliases=("Fluidos e térmica", "Termofluidos"),
         ),
         ModuloTecnico(
+            id="calor_no_tempo",
+            titulo="Calor no tempo",
+            versao="1.0",
+            pagina="app_pages/calor_no_tempo.py",
+            grupo_navegacao="Mecânica",
+            ordem=74,
+            icone=":material/local_fire_department:",
+            descricao=(
+                "Condução transiente em parede, cilindro, esfera e na seção desenhada, em "
+                "animação, conferida com a solução exata em série."
+            ),
+            aliases=("Condução transiente", "Aquecimento de peça", "Resfriamento de peça"),
+        ),
+        ModuloTecnico(
+            id="tanques_e_linhas",
+            titulo="Tanques e linhas no tempo",
+            versao="1.0",
+            pagina="app_pages/tanques_e_linhas.py",
+            grupo_navegacao="Mecânica",
+            ordem=71,
+            icone=":material/water_full:",
+            descricao=(
+                "Tanque enchendo, esvaziando ou esquentando e linha partindo (vazão e "
+                "temperatura), em animação."
+            ),
+            aliases=("Esvaziamento de tanque", "Partida de bomba", "Regime transiente"),
+        ),
+        ModuloTecnico(
             id="rede_de_tubos",
             titulo="Rede de tubos",
             versao="1.0",

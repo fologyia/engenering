@@ -352,7 +352,34 @@ O núcleo das partes resolve antes as letras do meio, que nenhum campo dá mas u
 
 ### Rede de tubos
 
-Rede com ramais e malhas, um ou mais reservatórios e bombas, **desenhada numa prancheta** (reservatório, nó, tubo, dividir o tubo, mover, apagar, desfazer); o comprimento sai do desenho e as tabelas só completam cotas, vazões, diâmetros e materiais. A rede inteira é resolvida de uma vez (energia em cada trecho por Darcy-Weisbach e Colebrook, continuidade em cada nó, Newton nas vazões e nas cargas, o método do EPANET); a soma das perdas em cada malha fecha em zero, como em Hardy Cross. Sai a vazão, a velocidade e a perda de cada trecho, a pressão de cada nó, as verificações de pressão mínima e máxima e de velocidade, com o resultado no próprio desenho (o que não passa em vermelho), e o registro no projeto. Detalhes em `docs/rede_de_tubos.md`.
+Rede com ramais e malhas, um ou mais reservatórios e bombas, **desenhada numa prancheta** (reservatório, nó, tubo, dividir o tubo, mover, apagar, desfazer); o comprimento sai do desenho e as tabelas só completam cotas, vazões, diâmetros e materiais. A rede inteira é resolvida de uma vez (energia em cada trecho por Darcy-Weisbach e Colebrook, continuidade em cada nó, Newton nas vazões e nas cargas, o método do EPANET); a soma das perdas em cada malha fecha em zero, como em Hardy Cross. Sai a vazão, a velocidade e a perda de cada trecho, a pressão de cada nó, as verificações de pressão mínima e máxima e de velocidade, com o resultado no próprio desenho (o que não passa em vermelho), e o registro no projeto. A seção **Ao longo do dia** faz a simulação estendida, como o EPANET: tanques de nível variável e consumo hora a hora, com a rede animada (velocidade e sentido da água nos tubos, pressão nos nós, nível dos tanques) e a verificação do dia inteiro. Detalhes em `docs/rede_de_tubos.md`.
+
+### Tanques e linhas no tempo
+
+Quatro casos em animação, com as curvas no tempo ao lado:
+
+- tanque enchendo ou esvaziando (orifício pela fórmula de Torricelli, tubo com atrito ou bomba,
+  inclusive tanque horizontal), e dois tanques ligados até os níveis se igualarem (tempo de
+  equalização);
+- tanque esquentando ou esfriando (resistência ou serpentina, perda, vazão e termostato);
+- partida da linha (coluna rígida, abrindo a válvula ou ligando a bomba, com o aviso de quando a
+  onda de pressão conta);
+- água quente chegando num tubo frio (a parede rouba calor no caminho; sai em quanto tempo e quanta
+  água sai fria antes).
+
+Setas andam nos tubos no sentido da água, e os gráficos marcam quando cada coisa estabiliza.
+Tudo conferido com as soluções exatas nos testes. Detalhes em `docs/tanques_e_linhas.md`.
+
+### Calor no tempo
+
+Condução de calor no tempo em parede, tubo, cilindro ou esfera, e na seção desenhada (2D). A peça
+muda de cor numa animação, e ao lado ficam as curvas dos pontos, o perfil na espessura e o calor
+guardado, com setas do calor em cada face. Responde em quanto tempo um ponto chega a uma
+temperatura e em quanto tempo a peça estabiliza e equaliza (fica por igual por dentro), com a maior
+diferença interna, que dá o choque térmico. A conta de uma dimensão é
+comparada com a solução exata em série dos livros (Incropera e Çengel), e a de duas dimensões
+corrige os degraus do contorno curvo para o comprimento de verdade. Detalhes em
+`docs/calor_no_tempo.md`.
 
 ### Cálculo de peças e elementos de máquinas
 

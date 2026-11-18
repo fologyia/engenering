@@ -82,4 +82,36 @@ AJUDA: dict[str, str] = {
     ),
     "csv": "Os resultados dos nós e dos tubos em CSV, para abrir no Excel.",
     "registrar": "Grava a rede e os resultados no projeto ativo. Vai para o memorial.",
+    # ------------------------------------------------------------------ ao longo do dia
+    "sec_dia": (
+        "A mesma rede, hora a hora: o consumo de cada nó muda pelo padrão do dia e os tanques "
+        "marcados sobem e descem. A conta resolve a rede a cada passo, como o EPANET, e a "
+        "animação mostra as velocidades, as pressões e os níveis andando."
+    ),
+    "dia_tanques": (
+        "Marque os reservatórios que são tanques de nível variável (caixa d'água, reservatório "
+        "elevado) e dê a área da água e os níveis mínimo e máximo, em cota como o nível da água. "
+        "Os não marcados ficam com o nível fixo (manancial, rede de fora)."
+    ),
+    "dia_area": "Área da superfície da água no tanque (tanque de parede vertical).",
+    "dia_min": "Cota da água em que o tanque conta como vazio: a simulação para se chegar nela.",
+    "dia_max": "Cota da água em que o tanque transborda: a simulação para se chegar nela.",
+    "dia_padrao": (
+        "Multiplicador do consumo de cada hora: 1 é a retirada informada em cada nó; 1,5 é 50 % "
+        "a mais. Use o padrão medido ou adotado no projeto."
+    ),
+    "dia_exemplo": (
+        "Põe um padrão de EXEMPLO (ilustrativo, média 1): pouco consumo de madrugada e picos de "
+        "manhã e à noite. Não é dado de norma: troque pelo do seu projeto."
+    ),
+    "dia_plano": "Volta todos os multiplicadores para 1 (consumo igual o dia inteiro).",
+    "dia_horas": "Quantas horas simular, a partir da hora zero.",
+    "dia_passo": (
+        "De quanto em quanto tempo a rede é resolvida. 10 min acompanha bem os tanques; passo "
+        "maior é mais rápido e menos fino."
+    ),
+    "dia_pressao": "A menor pressão do dia nos nós de consumo, onde e quando.",
+    "dia_velocidade": "A maior velocidade do dia nos tubos, onde e quando.",
+    "dia_tanque": "Nível da água do tanque no fim da simulação.",
+    "dia_registrar": "Grava a simulação do dia no projeto ativo, com as curvas para o memorial.",
 }

@@ -673,6 +673,7 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     * ``figura_sensores`` — cada sensor do SolidWorks combinação a combinação, com o limite
       (:func:`core.desenho_dos_sensores.paineis_para_o_registro`);
     * ``esquematico_escada`` — a vista lateral da escada (:mod:`core.escada_lances`);
+    * ``graficos_no_tempo`` — curvas no tempo e mapas de calor (:mod:`core.figuras_no_tempo`);
     * ``figuras_portico`` — lista de ``{"titulo", "caso", "modelo", "modelo_deformada",
       "caso_deformada"}``: o modelo do núcleo de pórtico plano (:mod:`core.portico_plano`) é
       resolvido de novo e sai com estrutura, reações, N, V, M, tensão e deformada (Ftool); a chave
@@ -772,7 +773,16 @@ def imagens_gravadas(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
     figuras.extend(_figura_da_coluna(resultados))
     figuras.extend(_figura_dos_parafusos(resultados))
     figuras.extend(_figuras_do_caso(resultados))
+    figuras.extend(_figuras_no_tempo(resultados))
     return figuras
+
+
+def _figuras_no_tempo(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
+    """``graficos_no_tempo``: curvas no tempo e mapas de calor das contas no tempo
+    (:mod:`core.figuras_no_tempo`)."""
+    from core import figuras_no_tempo as fnt
+
+    return [(figura, LARGURA_DIAGRAMA_MM) for figura in fnt.figuras_do_registro(resultados)]
 
 
 def _figuras_2d(resultados: Mapping[str, Any]) -> list[tuple[Any, float]]:
@@ -882,6 +892,7 @@ CHAVES_DE_FIGURA = frozenset(
         "figura_coluna",
         "figura_parafusos",
         "figuras_do_caso",
+        "graficos_no_tempo",
     }
 )
 

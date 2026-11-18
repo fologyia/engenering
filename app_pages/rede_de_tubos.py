@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.animacao_ui import tocador
 from components.prancheta_rede_ui import prancheta_da_rede
 from components.project_tools import botao_registrar_calculo
 from components.rede_de_tubos_help import AJUDA
@@ -21,6 +22,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
 from core import montador_fluidos as fl
 from core import rede_de_tubos as rt
+from core import rede_no_tempo as rnt
 
 configurar_pagina("Rede de tubos", ":material/lan:")
 cabecalho_pagina(
@@ -510,3 +512,176 @@ with st.container(border=True), secao_protegida("Resultado da rede"):
         rotulo="Registrar a rede no projeto ativo",
         identificar_peca=False,
     )
+
+
+# ============================================================ ao longo do dia
+PADRAO = "rede_padrao"
+PADRAO_REV = "rede_padrao_rev"
+
+
+def _trocar_padrao(valores: tuple[float, ...]) -> None:
+    estado[PADRAO] = list(valores)
+    estado[PADRAO_REV] = estado.get(PADRAO_REV, 0) + 1
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _simular_o_dia(
+    nos_: tuple[rt.No, ...],
+    trechos_: tuple[rt.Trecho, ...],
+    fluido_: rt.Fluido,
+    limites_: rt.Limites,
+    tanques_: tuple[rnt.TanqueDaRede, ...],
+    padrao_: tuple[float, ...],
+    horas_: float,
+    passo_: float,
+) -> rnt.ResultadoNoTempo:
+    return rnt.simular(nos_, trechos_, fluido_, limites_, tanques_, padrao_, horas_, passo_)
+
+
+with st.container(border=True), secao_protegida("Ao longo do dia"):
+    st.subheader("Ao longo do dia", help=AJUDA["sec_dia"])
+    estado.setdefault(PADRAO, list(rnt.PADRAO_PLANO))
+    estado.setdefault(PADRAO_REV, 0)
+    reservatorios = [n for n in nos if n.reservatorio]
+    esquerda, direita = st.columns([1.6, 1])
+    with esquerda:
+        st.markdown("**Tanques de nível variável**")
+        base = pd.DataFrame(
+            [
+                {
+                    "Reservatório": n.nome,
+                    "Nível variável": False,
+                    "Área (m²)": 100.0,
+                    "Nível mínimo (m)": round(n.carga_fixa_m - 4.0, 2),
+                    "Nível máximo (m)": round(n.carga_fixa_m + 1.0, 2),
+                }
+                for n in reservatorios
+            ]
+        )
+        tabela_tanques = st.data_editor(
+            base,
+            key=f"rede_dia_tanques_{estado[REVISAO]}",
+            hide_index=True,
+            num_rows="fixed",
+            width="stretch",
+            disabled=["Reservatório"],
+            column_config={
+                "Reservatório": st.column_config.TextColumn(help=AJUDA["dia_tanques"]),
+                "Nível variável": st.column_config.CheckboxColumn(help=AJUDA["dia_tanques"]),
+                "Área (m²)": st.column_config.NumberColumn(
+                    min_value=0.0, format="%.1f", help=AJUDA["dia_area"]
+                ),
+                "Nível mínimo (m)": st.column_config.NumberColumn(
+                    format="%.2f", help=AJUDA["dia_min"]
+                ),
+                "Nível máximo (m)": st.column_config.NumberColumn(
+                    format="%.2f", help=AJUDA["dia_max"]
+                ),
+            },
+        )
+        colunas = st.columns(2)
+        horas = colunas[0].number_input(
+            "Duração (h)", min_value=1.0, max_value=168.0, value=24.0, step=1.0,
+            key="rede_dia_horas", persist_state="session", help=AJUDA["dia_horas"],
+        )  # fmt: skip
+        passo = colunas[1].selectbox(
+            "Passo (min)", [5, 10, 15, 30, 60], index=1, key="rede_dia_passo",
+            persist_state="session", help=AJUDA["dia_passo"],
+        )  # fmt: skip
+    with direita:
+        st.markdown("**Padrão de consumo**")
+        botoes_dia = st.columns(2)
+        botoes_dia[0].button(
+            "Padrão de exemplo", key="rede_dia_exemplo", on_click=_trocar_padrao,
+            args=(rnt.PADRAO_DE_EXEMPLO,), help=AJUDA["dia_exemplo"], width="stretch",
+        )  # fmt: skip
+        botoes_dia[1].button(
+            "Tudo 1,0", key="rede_dia_plano", on_click=_trocar_padrao, args=(rnt.PADRAO_PLANO,),
+            help=AJUDA["dia_plano"], width="stretch",
+        )  # fmt: skip
+        tabela_padrao = st.data_editor(
+            pd.DataFrame(
+                {
+                    "Hora": [f"{h:02d}h" for h in range(24)],
+                    "Multiplicador": [float(v) for v in estado[PADRAO]],
+                }
+            ),
+            key=f"rede_dia_padrao_{estado[PADRAO_REV]}",
+            hide_index=True,
+            num_rows="fixed",
+            width="stretch",
+            height=260,
+            disabled=["Hora"],
+            column_config={
+                "Hora": st.column_config.TextColumn(help=AJUDA["dia_padrao"]),
+                "Multiplicador": st.column_config.NumberColumn(
+                    min_value=0.0, format="%.3f", help=AJUDA["dia_padrao"]
+                ),
+            },
+        )
+    tanques_dia = tuple(
+        rnt.TanqueDaRede(
+            str(linha["Reservatório"]),
+            float(linha["Área (m²)"] or 0.0),
+            float(linha["Nível mínimo (m)"] or 0.0),
+            float(linha["Nível máximo (m)"] or 0.0),
+        )
+        for _, linha in tabela_tanques.iterrows()
+        if bool(linha["Nível variável"])
+    )
+    padrao = tuple(float(v) if v == v else 0.0 for v in tabela_padrao["Multiplicador"])
+    erros_dia = rnt.problemas(nos, tanques_dia, padrao, float(horas), float(passo))
+    for erro in erros_dia:
+        st.error(erro, icon=":material/error:")
+    dia: rnt.ResultadoNoTempo | None = None
+    if not erros_dia:
+        try:
+            dia = _simular_o_dia(
+                tuple(nos), tuple(trechos), fluido, limites, tanques_dia, padrao,
+                float(horas), float(passo),
+            )  # fmt: skip
+        except rnt.ErroDaSimulacao as erro:
+            st.error(str(erro), icon=":material/error:")
+    if dia is not None:
+        if dia.evento:
+            st.error(dia.evento, icon=":material/error:")
+        elif dia.status == "OK":
+            st.success(
+                "A rede atende o dia inteiro: pressões e velocidades dentro dos limites.",
+                icon=":material/check_circle:",
+            )
+        else:
+            st.error(
+                "A rede não atende em algum momento do dia: veja a tabela de verificação.",
+                icon=":material/error:",
+            )
+        pior = dia.pior_pressao()
+        veloz = dia.maior_velocidade()
+        metricas_dia = st.columns(3)
+        metricas_dia[0].metric(
+            "Menor pressão do dia",
+            "—"
+            if pior is None
+            else f"{pior[1]:.1f} m ({pior[0]}, {rnt.hora_em_texto(pior[2])})".replace(".", ","),
+            help=AJUDA["dia_pressao"],
+        )
+        metricas_dia[1].metric(
+            "Maior velocidade do dia",
+            f"{veloz[1]:.2f} m/s ({veloz[0]}, {rnt.hora_em_texto(veloz[2])})".replace(".", ","),
+            help=AJUDA["dia_velocidade"],
+        )
+        if dia.tanques:
+            metricas_dia[2].metric(
+                f"Tanque {dia.tanques[0].no} no fim",
+                f"NA {dia.niveis[-1, 0]:.2f} m".replace(".", ","),
+                help=AJUDA["dia_tanque"],
+            )
+        tocador(rnt.cena_da_rede(dados, dia), key="rede_dia_tocador")
+        mostrar_tabela_verificacoes(list(dia.verificacoes))
+        st.subheader("Registrar no projeto", help=AJUDA["dia_registrar"])
+        botao_registrar_calculo(
+            rnt.registro(dia, padrao, float(horas), float(passo)),
+            key="registrar_rede_no_dia",
+            rotulo="Registrar o dia no projeto ativo",
+            identificar_peca=False,
+        )

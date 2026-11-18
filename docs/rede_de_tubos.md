@@ -66,8 +66,41 @@ perda; duas malhas e dois reservatórios (malhas fecham, o que entra é o que sa
 trecho, o reservatório mais baixo recebe água); laminar contra Hagen-Poiseuille; bomba; tabelas
 erradas; desenho, CSV e registro; a página com o exemplo.
 
+## Ao longo do dia
+
+A seção "Ao longo do dia" (`core/rede_no_tempo.py`) faz a simulação estendida, como o EPANET
+(Rossman, manual do EPANET 2, cap. 3).
+
+- **Tanques:** cada reservatório pode virar tanque de nível variável, com a área da água e os
+  níveis mínimo e máximo (em cota, como o nível da água). Os não marcados ficam com o nível fixo.
+- **Padrão de consumo:** 24 multiplicadores, um por hora. O botão "Padrão de exemplo" põe um
+  padrão ILUSTRATIVO de média 1, que não é dado de norma e deve ser trocado pelo do projeto.
+- **A conta:** a cada passo (10 min, por padrão), a rede é resolvida em regime permanente pela mesma
+  conta da página, com o consumo daquela hora e cada tanque no nível daquele instante. Entre os
+  passos, o nível anda por A·dh/dt = −Q.
+- **Esvaziou ou transbordou:** a simulação para ali e diz quando (por exemplo, "perto de 14h20").
+  Na rede real, alguém precisaria fechar uma válvula ou ligar uma bomba, e a conta não decide
+  isso.
+- **O que sai:**
+  - a animação da rede: tubos com a cor da velocidade, setas andando no sentido da água,
+    pressão em cada nó e o nível dos tanques;
+  - os gráficos do nível dos tanques, da pressão dos nós mais baixos e do consumo;
+  - a verificação do dia inteiro (pressão mínima e máxima de cada nó, velocidade de cada trecho,
+    tanques dentro dos níveis);
+  - o registro com as figuras.
+
+Testes em `tests/test_rede_no_tempo.py`:
+
+- sem tanque, cada passo é a rede parada;
+- o balanço de volume passo a passo;
+- o tanque que esvazia e para a simulação;
+- os dados ruins;
+- a cena e o registro;
+- a página.
+
 ## Limites
 
-Escoamento permanente e incompressível; reservatórios de nível fixo; bomba como altura constante
-(sem curva); sem válvula redutora de pressão nem retenção. Para curva de bomba e NPSH, use o
-Montador de fluidos.
+Escoamento permanente e incompressível; reservatórios de nível fixo (menos os tanques marcados em
+"Ao longo do dia", de parede vertical); bomba como altura constante (sem curva nem liga e desliga);
+sem válvula redutora de pressão nem retenção. Para curva de bomba e NPSH, use o Montador de
+fluidos.
