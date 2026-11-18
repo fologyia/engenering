@@ -240,7 +240,10 @@ def marcas_para_o_desenho(r: Resultado) -> dict[str, Any]:
         q = h.vazoes[e.id]
         # textos curtos: o detalhe está no painel ao lado e nas tabelas
         if e.tipo in (ci.FONTE, ci.DRY_COOLER, ci.CHILLER) and e.id in regime.saidas:
-            partes = [f"{_N(abs(regime.calores[e.id]) / 1000.0, 1)} kW", f"sai {_N(regime.saidas[e.id], 1)} °C"]
+            partes = [
+                f"{_N(abs(regime.calores[e.id]) / 1000.0, 1)} kW",
+                f"sai {_N(regime.saidas[e.id], 1)} °C",
+            ]
         else:
             partes = [f"{_N(abs(q) * 3600.0, 1)} m³/h"]
         ruim = any(e.nome in nome for nome in ruins)

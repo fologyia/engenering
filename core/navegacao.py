@@ -386,7 +386,12 @@ MENU: tuple[GrupoMenu, ...] = (
                 ":material/autorenew:",
                 "Desenhar um circuito de resfriamento com bomba, dry cooler, chiller e vaso de expansão",
                 secao=TERMICA,
-                outros_nomes=("Circuito de resfriamento", "Dry cooler", "Chiller", "Vaso de expansão"),
+                outros_nomes=(
+                    "Circuito de resfriamento",
+                    "Dry cooler",
+                    "Chiller",
+                    "Vaso de expansão",
+                ),
             ),
             ItemMenu(
                 "app_pages/calor_no_tempo.py",
