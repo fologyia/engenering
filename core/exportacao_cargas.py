@@ -722,7 +722,8 @@ def texto_leia_me(
         "estudo à do plano, confere o valor e o sentido com que ela foi criada e devolve o arquivo "
         "preenchido para carregar — com o cabeçalho do seu SolidWorks.",
         "4. Temperatura: no SolidWorks a carga é a temperatura aplicada (a de referência do estudo "
-        "+ ΔT); preencha esses casos à mão.",
+        "+ ΔT). O arquivo já leva esse valor em cada caso (20 °C + 10 = 30 no T+, 20 − 10 = 10 no "
+        "T−); informe na página a temperatura de referência do seu estudo.",
         "5. Rode. Na Vista de resultados, para cada caso primário: Listar forças da viga e Listar "
         "forças resultantes, salvando cada CSV com o código do caso no nome (SC-forcas.csv, "
         "SC-reacoes.csv) — todos saem do mesmo estudo, e é pelo nome do arquivo que o programa "

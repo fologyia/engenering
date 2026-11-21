@@ -187,6 +187,8 @@ def test_plano_inclui_sobrecarga_e_temperatura_e_combina(banco_com_projeto):
     # As combinações não se digitam no SolidWorks: o programa combina e o gerenciador as leva.
     aviso = next(i.value for i in t.info if "não digita estas combinações" in i.value)
     assert "3 casos primários (SC, T+, T−)" in aviso and "Gerenciador de casos de carga" in aviso
+    # Com temperatura, o gerenciador pede a temperatura de referência do estudo (T = ref + ΔT).
+    assert t.number_input(key="pc_t_ref").value == 20.0
     t.button(key="pc_remover_T+").click().run()
     assert pc.plano_do_projeto(obter_projeto_ativo()).codigos == ("SC", "T−")
 

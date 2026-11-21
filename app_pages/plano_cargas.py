@@ -510,6 +510,7 @@ def _conferir_gerenciador(
     plano: pc.PlanoDeCargas,
     eixos: str,
     estados: list[str],
+    temperatura_referencia: float = gs.TEMPERATURA_DE_REFERENCIA,
 ) -> None:
     """Liga as cargas do arquivo salvo pelo SolidWorks às do plano e devolve o arquivo preenchido."""
     try:
@@ -517,7 +518,7 @@ def _conferir_gerenciador(
     except ValueError as erro:
         st.error(str(erro), icon=":material/error:")
         return
-    resultado = gs.preencher(lido, plano, eixos, estados)
+    resultado = gs.preencher(lido, plano, eixos, estados, temperatura_referencia)
     st.subheader(
         f"Cargas do estudo × plano ({resultado.ligadas} de {len(resultado.ligacoes)} ligadas)",
         help=AJUDA["res_ligacoes"],
@@ -644,7 +645,19 @@ with st.container(border=True), secao_protegida("Exportar para o modelo"):
             hide_index=True,
             width="stretch",
         )
-        arquivo_sw, avisos_sw = gs.do_plano(plano, eixos, estados_exportados)
+        t_ref = gs.TEMPERATURA_DE_REFERENCIA
+        if any(c.tipo == ex.TIPO_TEMPERATURA for c in cenario.cargas):
+            t_ref = float(
+                st.number_input(
+                    "Temperatura de referência do estudo no SolidWorks (°C)",
+                    value=gs.TEMPERATURA_DE_REFERENCIA,
+                    step=1.0,
+                    format="%.1f",
+                    key="pc_t_ref",
+                    help=AJUDA["num_t_ref"],
+                )
+            )
+        arquivo_sw, avisos_sw = gs.do_plano(plano, eixos, estados_exportados, t_ref)
         st.download_button(
             "Gerenciador de casos de carga (CSV do SolidWorks)",
             data=gs.csv_do_gerenciador(arquivo_sw),
@@ -664,7 +677,7 @@ with st.container(border=True), secao_protegida("Exportar para o modelo"):
         )
         if enviado is not None:
             _conferir_gerenciador(
-                enviado.getvalue(), enviado.name, plano, eixos, estados_exportados
+                enviado.getvalue(), enviado.name, plano, eixos, estados_exportados, t_ref
             )
     colunas = st.columns(4)
     for coluna, (rotulo, dados, arquivo, chave, ajuda) in zip(

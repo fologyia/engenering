@@ -144,8 +144,8 @@ cargas que vão para o modelo.
   valor e o sinal com que ela foi criada (gravidade de 10,5 contra 9,81 do plano: aviso e o valor
   do plano; sinal oposto: troca o sinal e pede para conferir a seta), suprime a carga que o plano
   não tem, aponta a que falta e devolve o arquivo com o cabeçalho do SolidWorks e os casos do
-  plano. A temperatura fica como está no SolidWorks: lá a carga é a temperatura aplicada
-  (referência do estudo + ΔT). Caso sem nenhuma carga no estudo fica de fora do arquivo.
+  plano. A temperatura entra como temperatura aplicada (referência do estudo, 20 °C por padrão
+  e editável na página, + ΔT de cada caso: T+ = 30, T− = 10). Caso sem nenhuma carga no estudo fica de fora do arquivo.
 * **Planilha Excel** com as abas Leia-me (passo a passo no SolidWorks — um estudo por caso ou um
   estudo só com o gerenciador de casos de carga —, no Robot e em outros programas), Ações, Cargas,
   Casos de carga (SolidWorks), Cargas do estudo, Combinações e Combinações (lista); os mesmos dados

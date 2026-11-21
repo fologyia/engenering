@@ -75,6 +75,14 @@ SUPRIMIR = ex.SUPRIMIR
 TIPO_PRESSAO = "1"
 TIPO_FORCA = "3"
 TIPO_GRAVIDADE = "4"
+#: O código da temperatura ainda não foi visto num arquivo salvo pelo SolidWorks: o arquivo montado
+#: do plano usa este; o "Conferir e preencher" usa o do próprio arquivo (o caminho seguro).
+TIPO_TEMPERATURA = "7"
+VALOR_DA_TEMPERATURA = "Temperatura"
+
+#: Temperatura de referência do estudo (deformação nula) que o programa supõe, em °C. No estudo:
+#: Propriedades › Efeitos de fluxo/térmicos › "Temperatura de referência na deformação nula".
+TEMPERATURA_DE_REFERENCIA = 20.0
 
 DIR_1 = "Ao longo da face dir 1"
 DIR_2 = "Ao longo da face dir 2"
@@ -142,6 +150,18 @@ def _chave_da_unidade(unidade: str) -> str:
 def grandeza(unidade: str) -> str:
     """ "força", "pressão"… da unidade escrita pelo SolidWorks ("" se não reconhecida)."""
     return _UNIDADES.get(_chave_da_unidade(unidade), (0.0, ""))[1]
+
+
+def temperatura_aplicada(unidade: str, referencia_c: float) -> tuple[float, float]:
+    """(fator, soma) para levar o ΔT do plano (°C) à temperatura aplicada no SolidWorks, na unidade
+    da carga lá: T = ΔT × fator + soma — Celsius: referência + ΔT; Kelvin: + 273,15;
+    Fahrenheit: 1,8 × (referência + ΔT) + 32."""
+    chave = _chave_da_unidade(unidade)
+    if chave in ("k", "kelvin"):
+        return 1.0, referencia_c + 273.15
+    if chave in ("f", "°f", "fahrenheit"):
+        return 1.8, 1.8 * referencia_c + 32.0
+    return 1.0, referencia_c
 
 
 def _br(valor: float) -> str:
@@ -314,9 +334,16 @@ def _componente(
     return Coluna(tipo, carga, componente, original, valor, unidade)
 
 
-def _colunas_da_carga(carga: ex.CargaDoEstudo) -> tuple[list[Coluna], int, str]:
+def _colunas_da_carga(
+    carga: ex.CargaDoEstudo, referencia_c: float = TEMPERATURA_DE_REFERENCIA
+) -> tuple[list[Coluna], int, str]:
     """As colunas de uma carga do plano, a que leva o valor e, se ficar de fora, o porquê."""
     valor = carga.valor_ao_criar
+    if carga.tipo == ex.TIPO_TEMPERATURA:
+        coluna = _componente(
+            TIPO_TEMPERATURA, carga.nome, VALOR_DA_TEMPERATURA, "Celsius", referencia_c + valor
+        )
+        return [coluna], 0, ""
     if carga.tipo == ex.TIPO_GRAVIDADE and carga.eixo:
         return (
             [
@@ -348,13 +375,7 @@ def _colunas_da_carga(carga: ex.CargaDoEstudo) -> tuple[list[Coluna], int, str]:
             5 if momento else 2,
             "",
         )
-    if carga.tipo == ex.TIPO_TEMPERATURA:
-        motivo = (
-            "temperatura — no SolidWorks a carga é a temperatura aplicada (a de referência do "
-            "estudo + ΔT): crie e preencha à mão no gerenciador"
-        )
-    else:
-        motivo = f"carga em mais de um eixo ({carga.referencia}) — no plano, uma carga por eixo"
+    motivo = f"carga em mais de um eixo ({carga.referencia}) — no plano, uma carga por eixo"
     return [], 0, f"{carga.nome} ({carga.onde}) ficou de fora: {motivo}."
 
 
@@ -363,14 +384,15 @@ def _casos_e_combinacoes(
     estados: Sequence[str],
     cenario: ex.CenarioDeCarga,
     total: int,
-    ligacoes: dict[int, tuple[int, float]],
+    ligacoes: dict[int, tuple[int, float, float]],
     manter: dict[int, tuple[str, bool]] | None = None,
     anteriores: dict[str, tuple[str, ...]] | None = None,
 ) -> tuple[list[tuple[str, tuple[str, ...]]], list[tuple[str, str]], list[str]]:
     """As linhas dos casos primários e as combinações do plano.
 
     ``ligacoes``: número da carga do plano → (coluna que leva o valor, fator do valor em N e m para
-    a unidade e o sinal da carga no SolidWorks). ``manter``: coluna que o programa não preenche →
+    a unidade e o sinal da carga no SolidWorks, soma — a temperatura de referência na temperatura,
+    zero nas outras). ``manter``: coluna que o programa não preenche →
     (célula quando o SolidWorks não tem o caso, se é carga); ela recebe a célula do caso de mesmo
     nome que já estava no SolidWorks (``anteriores``, pelo nome normalizado). Um caso sem nenhuma
     carga no estudo fica de fora (não tem o que calcular), e as combinações saem sem ele.
@@ -386,11 +408,11 @@ def _casos_e_combinacoes(
         celulas = [SUPRIMIR] * total
         for i, (sem_caso, _) in manter.items():
             celulas[i] = anterior[i] if i < len(anterior) else sem_caso
-        for numero, (indice, fator) in ligacoes.items():
+        for numero, (indice, fator, soma) in ligacoes.items():
             valor = cenario.valores.get((codigo, numero))
             if valor is not None:
-                celulas[indice] = numero_sw(valor * fator)
-        cargas = [indice for indice, _ in ligacoes.values()]
+                celulas[indice] = numero_sw(valor * fator + soma)
+        cargas = [indice for indice, _, _ in ligacoes.values()]
         cargas += [i for i, (_, e_carga) in manter.items() if e_carga]
         if any(celulas[i] not in (SUPRIMIR, "") for i in cargas):
             casos.append((nome, tuple(celulas)))
@@ -419,24 +441,38 @@ def _casos_e_combinacoes(
 
 
 def do_plano(
-    plano: pc.PlanoDeCargas, eixos: str, estados: Sequence[str]
+    plano: pc.PlanoDeCargas,
+    eixos: str,
+    estados: Sequence[str],
+    temperatura_referencia: float = TEMPERATURA_DE_REFERENCIA,
 ) -> tuple[ArquivoDoGerenciador, list[str]]:
     """O arquivo do gerenciador montado do plano, em N e m, e o que ficou de fora.
 
     Vale para as cargas criadas no estudo como diz a aba "Cargas do estudo": na mesma ordem (os
     nomes Gravidade-1, Força-1, Pressão-1… batem), com o plano de referência do eixo e o valor com
-    sinal em "Normal ao plano".
+    sinal em "Normal ao plano". A temperatura vai em Celsius como temperatura aplicada: a de
+    referência do estudo (``temperatura_referencia``, °C) + o ΔT de cada caso (T+ e T−).
     """
     cenario = ex.cenario_de_carga(plano, ex.UNIDADES_N_M, eixos, estados)
     colunas: list[Coluna] = []
-    ligacoes: dict[int, tuple[int, float]] = {}
+    ligacoes: dict[int, tuple[int, float, float]] = {}
     avisos: list[str] = []
     for carga in cenario.cargas:
-        novas, alvo, motivo = _colunas_da_carga(carga)
+        novas, alvo, motivo = _colunas_da_carga(carga, temperatura_referencia)
         if motivo:
             avisos.append(motivo)
             continue
-        ligacoes[carga.numero] = (len(colunas) + alvo, 1.0)
+        soma = 0.0
+        if carga.tipo == ex.TIPO_TEMPERATURA:
+            soma = temperatura_referencia
+            avisos.append(
+                f"{carga.nome}: temperatura aplicada = {_br(temperatura_referencia)} °C (referência "
+                "do estudo) + ΔT de cada caso. Confira a referência no estudo (Propriedades › "
+                "Efeitos de fluxo/térmicos › Temperatura de referência na deformação nula). Se o "
+                "SolidWorks não carregar a coluna da temperatura, salve o arquivo pelo gerenciador "
+                "e use “Conferir e preencher” — ele usa o cabeçalho do seu SolidWorks."
+            )
+        ligacoes[carga.numero] = (len(colunas) + alvo, 1.0, soma)
         colunas.extend(novas)
     casos, combinacoes, avisos_dos_casos = _casos_e_combinacoes(
         plano, estados, cenario, len(colunas), ligacoes
@@ -472,10 +508,12 @@ class Preenchimento:
 
 
 def _correspondencia(
-    grupos: Sequence[str], cenario: ex.CenarioDeCarga
+    grupos: Sequence[str], cenario: ex.CenarioDeCarga, temperaturas: Sequence[str] = ()
 ) -> dict[str, ex.CargaDoEstudo]:
     """Carga do SolidWorks → carga do plano: pelo nome (Força-1) ou, quando a carga foi chamada pelo
-    código do caso (PP, SC), pela única carga do plano que só esse caso usa."""
+    código do caso (PP, SC), pela única carga do plano que só esse caso usa. As cargas de
+    temperatura que sobrarem (``temperaturas``: as do SolidWorks em Celsius, Kelvin…; a mesma carga
+    serve ao T+ e ao T−, com outro valor) ligam-se às temperaturas do plano, na ordem."""
     por_nome = {em._normal(carga.nome): carga for carga in cenario.cargas}
     escolha: dict[str, ex.CargaDoEstudo] = {}
     usadas: set[int] = set()
@@ -505,7 +543,56 @@ def _correspondencia(
         if len(so_deste) == 1:
             escolha[nome] = so_deste[0]
             usadas.add(so_deste[0].numero)
+    sobra_sw = [nome for nome in temperaturas if nome not in escolha]
+    sobra_plano = [
+        carga
+        for carga in cenario.cargas
+        if carga.tipo == ex.TIPO_TEMPERATURA and carga.numero not in usadas
+    ]
+    for nome, carga in zip(sobra_sw, sobra_plano, strict=False):
+        escolha[nome] = carga
     return escolha
+
+
+def _ligar_temperatura(
+    carga: ex.CargaDoEstudo,
+    colunas: Sequence[Coluna],
+    cenario: ex.CenarioDeCarga,
+    referencia_c: float,
+) -> tuple[int | None, float, float, str, list[str]]:
+    """A temperatura: no SolidWorks a carga é a temperatura aplicada = referência do estudo + ΔT."""
+    candidatas = [k for k, c in enumerate(colunas) if grandeza(c.unidade) == TEMPERATURA]
+    if len(candidatas) != 1:
+        return (
+            None,
+            1.0,
+            0.0,
+            "temperatura sem a unidade (Celsius, Kelvin…) no SolidWorks: vale o que está lá",
+            [
+                f"{carga.nome}: não deu para achar a coluna da temperatura (a unidade dela na "
+                "linha dos valores originais); os casos ficam como estão no SolidWorks."
+            ],
+        )
+    indice = candidatas[0]
+    coluna = colunas[indice]
+    fator, soma = temperatura_aplicada(coluna.unidade, referencia_c)
+    deltas = sorted(
+        {v for (_, numero), v in cenario.valores.items() if numero == carga.numero and v}
+    )
+    texto_deltas = ", ".join(f"{v:+g}".replace(".", ",") for v in deltas) or "—"
+    situacao = f"ligada; temperatura aplicada = {_br(referencia_c)} °C + ΔT ({texto_deltas} °C)"
+    avisos: list[str] = []
+    if coluna.valor_original is not None:
+        criada = coluna.valor_original
+        esperadas = [soma] + [v * fator + soma for v in deltas]
+        if all(abs(criada - t) > 0.05 for t in esperadas):
+            avisos.append(
+                f"{carga.nome}: criada no SolidWorks com {_br(criada)} {coluna.unidade}, que não é "
+                f"a referência ({_br(soma)}) nem a referência + ΔT do plano. Confira se a "
+                "temperatura de referência do estudo (Propriedades › Efeitos de fluxo/térmicos) é "
+                f"{_br(referencia_c)} °C — o arquivo preenchido usa esse valor."
+            )
+    return indice, fator, soma, situacao, avisos
 
 
 def _ligar(
@@ -513,16 +600,6 @@ def _ligar(
 ) -> tuple[int | None, float, str, list[str]]:
     """A coluna que leva o valor, o fator (N e m → unidade e sinal do SolidWorks), a situação e os
     avisos de uma carga do estudo ligada a uma carga do plano."""
-    if carga.tipo == ex.TIPO_TEMPERATURA:
-        return (
-            None,
-            1.0,
-            "temperatura: vale o que está no SolidWorks",
-            [
-                f"{carga.nome}: a temperatura fica como está no SolidWorks — lá a carga é a "
-                "temperatura aplicada (a de referência do estudo + ΔT); preencha os casos à mão."
-            ],
-        )
     esperada = _GRANDEZA_DO_PLANO.get(carga.unidade, "")
     candidatas = [
         (k, coluna)
@@ -598,14 +675,27 @@ def _ligar(
 
 
 def preencher(
-    lido: ArquivoDoGerenciador, plano: pc.PlanoDeCargas, eixos: str, estados: Sequence[str]
+    lido: ArquivoDoGerenciador,
+    plano: pc.PlanoDeCargas,
+    eixos: str,
+    estados: Sequence[str],
+    temperatura_referencia: float = TEMPERATURA_DE_REFERENCIA,
 ) -> Preenchimento:
-    """O arquivo salvo pelo SolidWorks com os casos primários e as combinações do plano."""
+    """O arquivo salvo pelo SolidWorks com os casos primários e as combinações do plano.
+
+    A temperatura recebe, em cada caso, a temperatura aplicada: ``temperatura_referencia`` (°C, a
+    do estudo) + o ΔT do caso, na unidade da carga no SolidWorks.
+    """
     cenario = ex.cenario_de_carga(plano, ex.UNIDADES_N_M, eixos, estados)
     grupos = lido.cargas()
-    escolha = _correspondencia(list(grupos), cenario)
+    temperaturas = [
+        nome
+        for nome, indices in grupos.items()
+        if any(grandeza(lido.colunas[i].unidade) == TEMPERATURA for i in indices)
+    ]
+    escolha = _correspondencia(list(grupos), cenario, temperaturas)
     primeira = lido.casos[0][1] if lido.casos else ()
-    ligacoes: dict[int, tuple[int, float]] = {}
+    ligacoes: dict[int, tuple[int, float, float]] = {}
     manter: dict[int, tuple[str, bool]] = {}
     lista: list[Ligacao] = []
     avisos: list[str] = []
@@ -624,13 +714,19 @@ def preencher(
                     manter[i] = (primeira[i] if i < len(primeira) else "", False)
                 lista.append(Ligacao(nome, "", "", "mantida como está no SolidWorks"))
             continue
-        alvo, fator, situacao, avisos_da_carga = _ligar(carga, colunas)
+        if carga.tipo == ex.TIPO_TEMPERATURA:
+            alvo, fator, soma, situacao, avisos_da_carga = _ligar_temperatura(
+                carga, colunas, cenario, temperatura_referencia
+            )
+        else:
+            alvo, fator, situacao, avisos_da_carga = _ligar(carga, colunas)
+            soma = 0.0
         avisos += avisos_da_carga
         componente = ""
         if alvo is not None:
-            ligacoes[carga.numero] = (indices[alvo], fator)
+            ligacoes[carga.numero] = (indices[alvo], fator, soma)
             componente = f"{colunas[alvo].componente} ({colunas[alvo].unidade})"
-        else:  # a temperatura e a carga que não deu para ligar: vale o que está no SolidWorks
+        else:  # a carga que não deu para ligar: vale o que está no SolidWorks
             for i in indices:
                 manter[i] = (SUPRIMIR, True)
         lista.append(Ligacao(nome, carga.titulo, componente, situacao))

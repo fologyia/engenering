@@ -181,6 +181,13 @@ AJUDA: dict[str, str] = {
         "plano, com o valor de cada carga ou Suprimir, e as combinações embaixo. Vale para as "
         "cargas criadas como diz a aba “Cargas do estudo”."
     ),
+    "num_t_ref": (
+        "No SolidWorks a carga de temperatura é a temperatura da peça, não a variação. Por isso o "
+        "arquivo leva, em cada caso, a temperatura de referência + a variação do plano: com 20 °C, "
+        "o T+ (+10 °C) vira 30 e o T− (−10 °C) vira 10. Use o mesmo valor que está no estudo "
+        "(Propriedades do estudo › Efeitos de fluxo/térmicos › Temperatura de referência na "
+        "deformação nula)."
+    ),
     "up_gerenciador": (
         "O mais seguro: no gerenciador do SolidWorks, “Salvar os dados em um arquivo .csv "
         "externo” e envie aqui. O programa liga cada carga do estudo à do plano (pelo nome Força-1… "

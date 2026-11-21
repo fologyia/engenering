@@ -101,9 +101,9 @@ def test_do_plano_no_formato_do_solidworks():
     arquivo, avisos = gs.do_plano(com_temperatura(plano_completo()), Y, comb.ESTADOS_PADRAO)
     texto = gs.csv_do_gerenciador(arquivo).decode("cp1252")
     linhas = texto.split("\r\n")
-    assert linhas[0] == "Tipo de carga,4,4,4,1" + ",3" * 12
+    assert linhas[0] == "Tipo de carga,4,4,4,1" + ",3" * 12 + f",{gs.TIPO_TEMPERATURA}"
     assert linhas[1].startswith("Nome da carga:,Gravidade-1,Gravidade-1,Gravidade-1,Pressão-1,")
-    assert "Força-2" in linhas[1] and "Temperatura" not in linhas[1]
+    assert "Força-2" in linhas[1] and linhas[1].endswith(",Temperatura-1")
     originais = linhas[3].split(",")
     assert originais[1:5] == ["-9.81 m/s^2", "0 m/s^2", "0 m/s^2", "5000 N/m^2"]
     assert originais[5:11] == [
@@ -115,20 +115,27 @@ def test_do_plano_no_formato_do_solidworks():
         "Suprimir (N.m)",
     ]
     assert originais[13] == "-3000 N"  # o Y da planta é o −Z do SolidWorks
-    casos = {linha.split(",")[0]: linha.split(",")[1:] for linha in linhas[4:10]}
-    assert list(casos) == ["PP", "SC", "W0", "W90", "W180", "W270"]
+    # A temperatura vai como temperatura aplicada: referência (20 °C) + ΔT do caso.
+    assert linhas[2].endswith(",Temperatura") and originais[-1] == "30 Celsius"
+    casos = {linha.split(",")[0]: linha.split(",")[1:] for linha in linhas[4:12]}
+    assert list(casos) == ["PP", "SC", "W0", "W90", "W180", "W270", "T+", "T-"]
     assert casos["PP"][:3] == ["-9.81", "Suprimir", "Suprimir"]
     assert casos["SC"][3] == "5000" and casos["W0"][6] == "2000" and casos["W180"][6] == "-2000"
     assert casos["W90"][12] == "-3000" and casos["W270"][12] == "3000"
     assert set(casos["W0"]) == {"Suprimir", "2000"}
-    # A temperatura fica de fora (lá ela é a temperatura aplicada), e os casos dela também.
-    assert any("Temperatura-1" in a and "temperatura aplicada" in a for a in avisos)
-    assert any("T+, T-" in a for a in avisos)
-    assert linhas[10] == "Combinações de casos de carga"
-    for linha in linhas[11:]:
+    assert casos["T+"][-1] == "30" and casos["T-"][-1] == "10"
+    assert set(casos["T+"][:-1]) == {"Suprimir"} and casos["PP"][-1] == "Suprimir"
+    assert any("Temperatura-1" in a and "referência" in a for a in avisos)
+    assert linhas[12] == "Combinações de casos de carga"
+    assert any('"T+"' in linha for linha in linhas[13:])
+    # Com outra referência no estudo (25 °C), os casos acompanham.
+    arquivo25, _ = gs.do_plano(com_temperatura(plano_completo()), Y, comb.ESTADOS_PADRAO, 25.0)
+    casos25 = dict(arquivo25.casos)
+    assert casos25["T+"][-1] == "35" and casos25["T-"][-1] == "15"
+    for linha in linhas[13:]:
         nome, expressao = linha.split(", ", 1)
         assert nome.startswith("C") and expressao.count('"') % 2 == 0
-        assert '"T' not in expressao
+        assert '"T−"' not in expressao  # no SolidWorks o caso é T- (hífen)
     assert ";" not in texto and "−" not in texto and not texto.endswith("\r\n")
     # O arquivo do programa é lido de volta como um do SolidWorks.
     assert gs.ler(gs.csv_do_gerenciador(arquivo)) == arquivo
@@ -184,21 +191,51 @@ def test_carga_que_o_plano_nao_tem_fica_suprimida():
     assert all(set(celulas[:6]) == {"Suprimir"} for _, celulas in resultado.arquivo.casos)
 
 
-def test_temperatura_fica_como_esta_no_solidworks():
+def _arquivo_com_temperatura(nome: str, original: str, tipo: str = "9") -> gs.ArquivoDoGerenciador:
     linhas = [
-        "Tipo de carga,4,4,4,7",
-        "Nome da carga:,PP,PP,PP,Temperatura-1",
+        f"Tipo de carga,4,4,4,{tipo}",
+        f"Nome da carga:,PP,PP,PP,{nome}",
         "Valor de:,Normal ao plano,Ao longo da face dir 2,Ao longo da face dir 1,Temperatura",
-        "Valores originais/iniciais:,-9.81 m/s^2,0 m/s^2,0 m/s^2,35 Celsius",
-        "T+,Suprimir,Suprimir,Suprimir,45",
+        f"Valores originais/iniciais:,-9.81 m/s^2,0 m/s^2,0 m/s^2,{original}",
+        "PP,-9.81,Suprimir,Suprimir,Suprimir",
+        "T+,Suprimir,Suprimir,Suprimir,30",
     ]
-    lido = gs.ler("\r\n".join(linhas).encode("cp1252"))
+    return gs.ler("\r\n".join(linhas).encode("cp1252"))
+
+
+def test_temperatura_preenchida_como_temperatura_aplicada():
+    """Como no estudo do usuário: a carga de temperatura chamada "T+", criada com 30 Celsius, e os
+    casos T+ = 30 e T− = 10 (referência 20 °C ± 10). O código do tipo é o do próprio arquivo."""
+    lido = _arquivo_com_temperatura("T+", "30 Celsius")
     plano = com_temperatura(pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("PP")))
     resultado = gs.preencher(lido, plano, Y, [])
     casos = dict(resultado.arquivo.casos)
-    assert casos["T+"] == ("Suprimir", "Suprimir", "Suprimir", "45")
-    assert "T-" not in casos  # o T− ainda não foi preenchido no SolidWorks
-    assert any("temperatura aplicada" in a for a in resultado.avisos)
+    assert casos["T+"] == ("Suprimir", "Suprimir", "Suprimir", "30")
+    assert casos["T-"] == ("Suprimir", "Suprimir", "Suprimir", "10")
+    assert casos["PP"][3] == "Suprimir"
+    ligacao = next(lig for lig in resultado.ligacoes if lig.carga_sw == "T+")
+    assert ligacao.carga_plano and "ligada" in ligacao.situacao
+    assert not any("T+" in a and "criada" in a for a in resultado.avisos)
+    texto = gs.csv_do_gerenciador(resultado.arquivo).decode("cp1252")
+    assert texto.split("\r\n")[0] == "Tipo de carga,4,4,4,9"  # cabeçalho do SolidWorks mantido
+    assert "T-,Suprimir,Suprimir,Suprimir,10" in texto
+
+
+def test_temperatura_com_outra_referencia_e_em_kelvin():
+    plano = com_temperatura(pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("PP")))
+    casos = dict(
+        gs.preencher(_arquivo_com_temperatura("T+", "30 Celsius"), plano, Y, [], 25).arquivo.casos
+    )
+    assert casos["T+"][3] == "35" and casos["T-"][3] == "15"
+    resultado = gs.preencher(
+        _arquivo_com_temperatura("Temperatura-1", "303.15 Kelvin"), plano, Y, []
+    )
+    casos = dict(resultado.arquivo.casos)
+    assert casos["T+"][3] == "303.15" and casos["T-"][3] == "283.15"
+    # Criada com um valor que não é referência ± ΔT: aviso para conferir a referência do estudo.
+    resultado = gs.preencher(_arquivo_com_temperatura("T+", "45 Celsius"), plano, Y, [])
+    assert any("referência" in a and "45" in a for a in resultado.avisos)
+    assert dict(resultado.arquivo.casos)["T+"][3] == "30"
 
 
 def test_forca_por_item_numa_carga_por_metro_do_plano():
