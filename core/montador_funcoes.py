@@ -24,6 +24,7 @@ from core import elementos_eixos as ee
 from core import elementos_mancais as em
 from core import elementos_molas_atrito as ema
 from core import elementos_transmissao as et
+from core import esboco_secao as es
 from core import fatigue as ft
 from core.montador_propriedades import FUNCOES as FUNCOES_DAS_PROPRIEDADES
 from core.montador_propriedades import Propriedade
@@ -383,6 +384,7 @@ class CoeficienteOrificio(_Numerica):
 #: Elas não têm forma fechada: simplificar não adianta e custa caro.
 NUMERICAS: tuple[type[sp.Function], ...] = (
     Propriedade,
+    es.DoDesenho,
     AtritoDarcy,
     LimiteBase,
     FatorSuperficie,
@@ -416,7 +418,13 @@ TABELADAS: tuple[type[sp.Function], ...] = (
 )
 #: As que vêm de uma biblioteca de fora, como as propriedades dos fluidos pela CoolProp: a planilha
 #: leva o valor calculado, porque o Excel não tem a biblioteca.
-DA_BIBLIOTECA: tuple[type[sp.Function], ...] = (Propriedade, KCrane, CoeficienteOrificio)
+#: A seção desenhada com letras também: cada número refaz o esboço, e o Excel não tem o esboço.
+DA_BIBLIOTECA: tuple[type[sp.Function], ...] = (
+    Propriedade,
+    KCrane,
+    CoeficienteOrificio,
+    es.DoDesenho,
+)
 #: O que o ``lambdify`` precisa para calcular estas funções em número.
 FUNCOES: dict[str, Any] = {
     **FUNCOES_DAS_PROPRIEDADES,
@@ -439,4 +447,5 @@ FUNCOES: dict[str, Any] = {
     "TensaoCritica": tensao_critica_coluna,
     "KCrane": k_do_crane,
     "CoeficienteOrificio": coeficiente_do_orificio,
+    "DoDesenho": es.numero,
 }

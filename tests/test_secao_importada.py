@@ -233,7 +233,9 @@ def test_secao_em_pedacos_avisa_em_vez_de_quebrar():
 def test_botao_da_pagina_de_desenho_abre_a_flexao_com_a_forma_real():
     at = AppTest.from_file(APP, default_timeout=180)
     at.run()
-    at.switch_page("app_pages/desenhar_secao.py").run()
+    at.switch_page("app_pages/desenhar_secao.py")
+    at.session_state["secao_modo"] = "Desenho simples"  # o I do começo
+    at.run()
     at.button(key=f"secao_usar_{FLEXAO}").click().run()
     assert not at.exception
     assert at.session_state["assistente_geometria"] == FLEXAO

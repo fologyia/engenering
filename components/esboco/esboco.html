@@ -1,0 +1,63 @@
+<div class="es">
+  <div class="es-barra" role="toolbar" aria-label="Ferramentas do esboço">
+    <button type="button" data-a="desfazer" data-icone="desfazer" title="Desfazer (Ctrl+Z)"></button>
+    <button type="button" data-a="refazer" data-icone="refazer" title="Refazer (Ctrl+Y)"></button>
+    <span class="es-sep"></span>
+    <button type="button" data-f="selecionar" data-icone="selecionar" title="Selecionar e arrastar (Esc). No vazio, arraste para pegar vários: da esquerda para a direita, o que está inteiro dentro; da direita para a esquerda, o que a janela toca."></button>
+    <button type="button" data-f="linha" data-icone="linha" title="Linha (L): ponto a ponto. Digite um número para dar o comprimento. Clique no primeiro ponto para fechar; Esc termina."></button>
+    <div class="es-grupo" data-grupo="ret">
+      <button type="button" data-f="retangulo" data-icone="retangulo" data-principal title="Retângulo pelo canto (R): um canto e o canto oposto."></button>
+      <button type="button" class="es-seta" data-abre="ret" title="Outros retângulos" aria-label="Outros retângulos"></button>
+      <div class="es-menu" data-menu="ret" hidden>
+        <button type="button" data-f="retangulo" data-icone="retangulo">Retângulo pelo canto <kbd>R</kbd></button>
+        <button type="button" data-f="retangulo_centro" data-icone="retangulo_centro">Retângulo pelo centro <kbd>Shift+R</kbd></button>
+      </div>
+    </div>
+    <button type="button" data-f="circulo" data-icone="circulo" title="Círculo (C): o centro e um ponto da borda. Digite um número para dar o diâmetro."></button>
+    <div class="es-grupo" data-grupo="arco">
+      <button type="button" data-f="arco" data-icone="arco" data-principal title="Arco por 3 pontos (A): início, fim e um ponto do arco."></button>
+      <button type="button" class="es-seta" data-abre="arco" title="Outros arcos" aria-label="Outros arcos"></button>
+      <div class="es-menu" data-menu="arco" hidden>
+        <button type="button" data-f="arco" data-icone="arco">Arco por 3 pontos <kbd>A</kbd></button>
+        <button type="button" data-f="arco_tangente" data-icone="arco_tangente">Arco tangente <kbd>T</kbd></button>
+      </div>
+    </div>
+    <button type="button" data-f="ponto" data-icone="ponto" title="Ponto (P): um ponto solto, para cotas e restrições."></button>
+    <span class="es-sep"></span>
+    <button type="button" data-a="construcao" data-icone="construcao" title="Construção (Q): a curva vira guia e não aço. Com curvas escolhidas, troca só elas."></button>
+    <button type="button" data-f="cota" data-icone="cota" title="Cota (D): uma curva, ou dois pontos ou curvas, e depois onde a cota fica. A medida aceita número, letra ou conta: 25, d, 2*d, L/2-10."></button>
+    <span class="es-sep"></span>
+    <button type="button" data-r="coincidente" data-icone="coincidente" title="Juntos (I): dois pontos viram um só, ou o ponto fica sobre a curva."></button>
+    <button type="button" data-r="horizontal" data-icone="horizontal" title="Horizontal (H): a linha, ou dois pontos na mesma altura."></button>
+    <button type="button" data-r="vertical" data-icone="vertical" title="Vertical (V): a linha, ou dois pontos no mesmo prumo."></button>
+    <button type="button" data-r="paralela" data-icone="paralela" title="Paralelas: duas ou mais linhas."></button>
+    <button type="button" data-r="perpendicular" data-icone="perpendicular" title="Perpendiculares: duas linhas."></button>
+    <button type="button" data-r="tangente" data-icone="tangente" title="Tangentes: uma linha e um arco ou círculo, ou dois arcos."></button>
+    <button type="button" data-r="igual" data-icone="igual" title="Iguais (E): linhas do mesmo comprimento, ou círculos e arcos do mesmo raio."></button>
+    <button type="button" data-r="ponto_medio" data-icone="ponto_medio" title="No meio (M): o ponto no meio da linha."></button>
+    <button type="button" data-r="concentrico" data-icone="concentrico" title="Mesmo centro: dois círculos ou arcos."></button>
+    <button type="button" data-r="simetrico" data-icone="simetrico" title="Simétricos: dois pontos e a linha do espelho."></button>
+    <button type="button" data-r="fixo" data-icone="fixo" title="Fixo: o ponto não sai do lugar."></button>
+    <span class="es-vao"></span>
+    <button type="button" data-a="enquadrar" data-icone="enquadrar" title="Ver o desenho inteiro (F)"></button>
+    <button type="button" data-a="tela" data-icone="tela" title="Tela cheia (Esc sai)"></button>
+  </div>
+  <div class="es-area"><svg tabindex="0" aria-label="Esboço da seção"></svg></div>
+  <div class="es-info">
+    <div class="es-linha">
+      <div class="es-situacao" data-situacao></div>
+      <span class="es-vao"></span>
+      <label class="es-chave" title="Mostra os sinais das restrições ao lado das curvas"><input type="checkbox" data-c="sinais" checked> Sinais</label>
+      <label class="es-chave" title="O mouse pula de quanto em quanto ao desenhar"><input type="checkbox" data-c="grade"> Grade</label>
+      <select data-c="passo" title="Passo da grade" aria-label="Passo da grade">
+        <option value="1">1 mm</option>
+        <option value="2">2 mm</option>
+        <option value="5" selected>5 mm</option>
+        <option value="10">10 mm</option>
+        <option value="25">25 mm</option>
+      </select>
+    </div>
+    <div class="es-linha es-letras" data-letras></div>
+    <div class="es-linha es-status"><span data-i="xy"></span><span data-i="dica"></span><span data-selecao></span></div>
+  </div>
+</div>

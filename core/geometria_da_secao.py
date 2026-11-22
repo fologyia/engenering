@@ -25,19 +25,25 @@ class Geometria:
     cheios: tuple[tuple[Ponto, ...], ...] = ()
     vazados: tuple[tuple[Ponto, ...], ...] = ()
     aneis: tuple[tuple[float, float], ...] = ()
+    #: Círculos em qualquer lugar, exatos: (x do centro, y do centro, raio, é furo).
+    circulos: tuple[tuple[float, float, float, bool], ...] = ()
 
     def _cordas(self, y: np.ndarray, poligonos: Sequence[Sequence[Ponto]]) -> np.ndarray:
         total = np.zeros_like(y)
         for poligono in poligonos:
-            soma = np.zeros_like(y)
-            for k in range(len(poligono)):
-                (x1, y1), (x2, y2) = poligono[k - 1], poligono[k]
-                if y1 == y2:
-                    continue
-                sobe = (y1 <= y) & (y < y2)
-                desce = (y2 <= y) & (y < y1)
-                x = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
-                soma += np.where(sobe, x, 0.0) - np.where(desce, x, 0.0)
+            pontos = np.asarray(poligono, dtype=float)
+            if len(pontos) < 2:
+                continue
+            x2, y2 = pontos[:, 0], pontos[:, 1]
+            x1, y1 = np.roll(x2, 1), np.roll(y2, 1)
+            usar = y1 != y2  # aresta horizontal não corta a linha
+            x1, y1, x2, y2 = x1[usar, None], y1[usar, None], x2[usar, None], y2[usar, None]
+            linha = y[None, :]
+            sobe = (y1 <= linha) & (linha < y2)
+            desce = (y2 <= linha) & (linha < y1)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                x = x1 + (linha - y1) * (x2 - x1) / (y2 - y1)
+            soma = np.where(sobe, x, 0.0).sum(axis=0) - np.where(desce, x, 0.0).sum(axis=0)
             total += np.abs(soma)
         return total
 
@@ -47,17 +53,24 @@ class Geometria:
         for externo, interno in self.aneis:
             b = b + 2.0 * np.sqrt(np.maximum(externo**2 - y**2, 0.0))
             b = b - 2.0 * np.sqrt(np.maximum(interno**2 - y**2, 0.0))
+        for _, cy, r, furo in self.circulos:
+            corda = 2.0 * np.sqrt(np.maximum(r**2 - (y - cy) ** 2, 0.0))
+            b = b - corda if furo else b + corda
         return np.maximum(b, 0.0)
 
     def extremos_y(self) -> tuple[float, float]:
-        ys = [p[1] for contorno in self.cheios for p in contorno]
-        ys += [s * externo for externo, _ in self.aneis for s in (-1.0, 1.0)]
-        return min(ys), max(ys)
+        ys = [np.asarray(c, dtype=float)[:, 1] for c in self.cheios if len(c)]
+        ys += [np.array([-externo, externo]) for externo, _ in self.aneis]
+        ys += [np.array([cy - r, cy + r]) for _, cy, r, furo in self.circulos if not furo]
+        todos = np.concatenate(ys)
+        return float(todos.min()), float(todos.max())
 
     def extremos_x(self) -> tuple[float, float]:
-        xs = [p[0] for contorno in self.cheios for p in contorno]
-        xs += [s * externo for externo, _ in self.aneis for s in (-1.0, 1.0)]
-        return min(xs), max(xs)
+        xs = [np.asarray(c, dtype=float)[:, 0] for c in self.cheios if len(c)]
+        xs += [np.array([-externo, externo]) for externo, _ in self.aneis]
+        xs += [np.array([cx - r, cx + r]) for cx, _, r, furo in self.circulos if not furo]
+        todos = np.concatenate(xs)
+        return float(todos.min()), float(todos.max())
 
     def deitada(self) -> Geometria:
         """A mesma seção com flexão em torno do outro eixo: o antigo x vira a altura."""
@@ -69,6 +82,7 @@ class Geometria:
             tuple(virar(c) for c in self.cheios),
             tuple(virar(c) for c in self.vazados),
             self.aneis,
+            tuple((-cy, cx, r, furo) for cx, cy, r, furo in self.circulos),
         )
 
 
@@ -148,15 +162,22 @@ def faixas_da_secao(geometria: Geometria) -> Faixas:
     if altura <= 0:
         raise ValueError("A seção não tem altura.")
     folga = altura * 1e-7
-    quebras = [p[1] for contorno in (*geometria.cheios, *geometria.vazados) for p in contorno]
-    quebras += [s * r for _, r in geometria.aneis if r > 0 for s in (-1.0, 1.0)]
+    quebras = [
+        np.asarray(contorno, dtype=float)[:, 1]
+        for contorno in (*geometria.cheios, *geometria.vazados)
+        if len(contorno)
+    ]
+    quebras.append(np.array([s * r for _, r in geometria.aneis if r > 0 for s in (-1.0, 1.0)]))
+    quebras.append(
+        np.array([cy + s * r for _, cy, r, _ in geometria.circulos for s in (-1.0, 1.0)])
+    )
+    todas = np.unique(np.concatenate(quebras)) if quebras else np.zeros(0)
     niveis = np.linspace(baixo, alto, _FAIXAS + 1)
-    extras = [v for q in quebras for v in (q - folga, q + folga) if baixo < v < alto]
+    extras = np.concatenate([todas - folga, todas + folga])
+    extras = extras[(baixo < extras) & (extras < alto)]
     if baixo < 0.0 < alto:
-        extras.append(0.0)  # o centro é onde τ costuma ter o pico
-    y = np.unique(np.concatenate([niveis, np.array(extras, dtype=float)]))[
-        ::-1
-    ]  # de cima para baixo
+        extras = np.append(extras, 0.0)  # o centro é onde τ costuma ter o pico
+    y = np.unique(np.concatenate([niveis, extras]))[::-1]  # de cima para baixo
     # A largura é lida um fio para dentro: exatamente na borda, a corda da forma é zero.
     b = geometria.largura(np.clip(y, baixo + folga, alto - folga))
     # Em cada faixa, b é a média e as integrais de y e y² são exatas: nas formas retas, tudo fecha.
@@ -224,3 +245,47 @@ def linha_neutra(sigma_sup: float, sigma_inf: float, y_topo: float, y_base: floa
     if sigma_sup == sigma_inf or sigma_sup * sigma_inf > 0:
         return None
     return y_topo + (y_base - y_topo) * sigma_sup / (sigma_sup - sigma_inf)
+
+
+# ---------------------------------------------------------------------------
+# Pontos que mandam numa seção qualquer
+# ---------------------------------------------------------------------------
+
+#: Acima disso, a mudança de largura é uma junção, como alma e mesa.
+SALTO_DE_LARGURA = 0.2
+
+
+def niveis_de_juncao(y: np.ndarray, b: np.ndarray) -> list[int]:
+    """Onde a largura pula: o lado estreito do salto, que é onde o cortante aperta."""
+    niveis = []
+    for i in range(len(y) - 1):
+        menor, maior = sorted((float(b[i]), float(b[i + 1])))
+        if maior > 0 and menor > 0 and (maior - menor) / maior > SALTO_DE_LARGURA:
+            niveis.append(i if b[i] < b[i + 1] else i + 1)
+    return niveis
+
+
+def tau_no_nivel(faixas: Faixas, posicao: float, inercia: float) -> float:
+    """τ por unidade de cortante na altura pedida. Num salto de largura, vale o lado largo."""
+    distancia = np.abs(faixas.y - posicao)
+    perto = np.flatnonzero(distancia <= distancia.min() + 1e-6 * max(abs(faixas.y_topo), 1.0))
+    valores = [
+        abs(float(faixas.q[i])) / (inercia * float(faixas.b[i]))
+        for i in perto.tolist()
+        if faixas.b[i] > 0
+    ]
+    return min(valores) if valores else 0.0
+
+
+def cantos_que_mandam(x: np.ndarray, y: np.ndarray) -> list[int]:
+    """Os pontos da borda que podem mandar com M_x e M_y juntos (índices em x e y, em módulo)."""
+    x_max, y_max = float(x.max()), float(y.max())
+    achados: list[int] = []
+    for peso in (0.25, 0.5, 0.75):
+        nota = peso * x / x_max + (1.0 - peso) * y / y_max
+        i = int(np.argmax(nota))
+        if all(
+            abs(float(x[i]) - float(x[j])) + abs(float(y[i]) - float(y[j])) > 1e-6 for j in achados
+        ):
+            achados.append(i)
+    return achados

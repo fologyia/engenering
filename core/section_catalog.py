@@ -90,6 +90,8 @@ class PerfilCadastrado:
     observacoes: str = ""
     atualizado_em: str = ""
     desenho: tuple[Mapping[str, Any], ...] = ()  # as partes, na seção desenhada no programa
+    #: O esboço com cotas e letras, quando a seção foi feita no esboço: as partes saem dele.
+    esboco: Mapping[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +298,7 @@ def _ler_perfis(caminho: Path, *, editavel: bool) -> dict[str, PerfilCadastrado]
             observacoes=str(item.get("observacoes", "")),
             atualizado_em=str(item.get("atualizado_em", "")),
             desenho=tuple(item.get("desenho") or ()),
+            esboco=item.get("esboco") if isinstance(item.get("esboco"), Mapping) else None,
         )
     return resultado
 
@@ -395,6 +398,7 @@ def salvar_perfil(
     observacoes: str = "",
     substituir: bool = True,
     desenho: tuple[Mapping[str, Any], ...] = (),
+    esboco: Mapping[str, Any] | None = None,
 ) -> PerfilCadastrado:
     """Cadastra ou atualiza um perfil do usuário. ``desenho`` guarda as partes da seção desenhada."""
     perfil = perfil_de_dicionario(dados)
@@ -414,6 +418,8 @@ def salvar_perfil(
     }
     if desenho:
         registro["desenho"] = [dict(parte) for parte in desenho]
+    if esboco:
+        registro["esboco"] = dict(esboco)
     perfis.append(registro)
     perfis.sort(key=lambda item: str(item.get("nome", "")).casefold())
     _gravar_arquivo(
@@ -427,6 +433,7 @@ def salvar_perfil(
         observacoes=observacoes,
         atualizado_em=registro["atualizado_em"],
         desenho=tuple(desenho),
+        esboco=dict(esboco) if esboco else None,
     )
 
 

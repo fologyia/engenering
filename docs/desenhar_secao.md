@@ -1,6 +1,7 @@
 # Desenhar seção
 
 Prancheta para desenhar uma seção qualquer, ver as propriedades e usá-la nos outros cálculos.
+Dois modos: o esboço com cotas (abaixo) e o desenho simples de chapas.
 
 ## Como a conta é feita
 
@@ -193,3 +194,36 @@ isso seria preciso um solver de restrições, que este programa não tem.
   (o Catálogo de perfis desenha).
 - I monossimétrico pelo Anexo G da NBR 8800 não está implementado: esses perfis ficam como forma
   livre.
+
+## Esboço com cotas (o padrão da página)
+
+Arquivos: `core/esboco.py` (modelo, contas com letras, solver), `core/esboco_regioes.py` (contornos,
+aço e furo, contas exatas, validade), `core/esboco_secao.py` (teste do desenho e números do Montador),
+`components/esboco/*.js` (a prancheta) e `components/esboco_ui.py`.
+
+**Como num CAD paramétrico.** Pontos, linhas, arcos e círculos, presos por restrições (juntos,
+horizontal, vertical, paralelas, perpendiculares, tangentes, iguais, no meio, mesmo centro,
+simétricos, fixo) e por cotas que seguram a medida (distância, distância à linha, diâmetro, raio,
+ângulo). O que ainda está livre aparece em azul; totalmente definido fica preto. A cota que já estava
+presa pelo resto vira cota de referência, entre parênteses. Restrição que briga com o resto é
+recusada, dizendo quem briga.
+
+**Letras.** A medida de uma cota aceita número, letra ou conta (`25`, `d`, `2*d`, `L/2 - 10`), lida
+sem `eval`. Letra nova nasce com o valor que a medida já tem. Mudar a letra na tabela refaz o
+desenho.
+
+**Solver.** Newton com o passo de menor norma (`Δ = −Jᵀ(JJᵀ + μI)⁻¹F`), derivada numérica e
+continuação (a cota que muda muito anda aos poucos, para o desenho não pular para outra forma). O
+mesmo método está em Python e em JS, equação por equação; os testes conferem que os dois dão os mesmos
+números. Em Python ele resolve centenas de desenhos de uma vez.
+
+**Regiões.** Linhas e arcos que dividem pontas formam contornos; o círculo é um contorno sozinho;
+contorno dentro de contorno é furo. Contornos não podem se cruzar nem encostar (por ora; aparar e
+juntar contornos vêm depois). Área, centro e inércias saem do contorno pelo teorema de Green, com os
+arcos exatos; J, Cw e o resto continuam na malha da prancheta antiga.
+
+**Testar o desenho.** Para cada letra, até onde ela pode ir sem a forma deixar de existir (furo
+encostando na borda, contorno do avesso, cotas que não cabem), e a parede mais fina de agora.
+
+**Desenho simples.** A prancheta antiga continua no segundo modo, com os modelos e os perfis do
+catálogo. "Trazer do desenho simples" converte as partes em curvas do esboço, sem cotas.

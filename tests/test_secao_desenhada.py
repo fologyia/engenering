@@ -25,9 +25,11 @@ PAGINA = "app_pages/desenhar_secao.py"
 
 
 def _abrir_pagina() -> AppTest:
+    """A página no desenho simples: estes testes são da prancheta de chapas e dos modelos."""
     teste = AppTest.from_file(APP, default_timeout=120)
     teste.run()
     teste.switch_page(PAGINA)
+    teste.session_state["secao_modo"] = "Desenho simples"
     return teste.run()
 
 
@@ -606,6 +608,7 @@ def _estado_com_cotas() -> dict:
     from components import desenhar_secao_ui as ui
 
     return {
+        ui.MODO: ui.MODO_SIMPLES,
         ui.PARTES: [],
         ui.COTAS: [_COTA],
         ui.VERSAO: 0,

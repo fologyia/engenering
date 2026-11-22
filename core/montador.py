@@ -23,6 +23,7 @@ import numpy as np
 import sympy as sp
 
 from core import diagnostico as dg
+from core import esboco_secao as es
 from core import material_catalog as mc
 from core import montador_blocos as mb
 from core import (
@@ -34,6 +35,7 @@ from core import montador_fluidos as mfl
 from core import montador_grandezas as g
 from core import montador_sistema as sm
 from core import montador_termico as mte
+from core.esboco_secao import DoDesenho
 from core.montador_blocos import Condicao, Contexto, ErroDeBloco
 from core.montador_funcoes import DA_BIBLIOTECA, FUNCOES, NUMERICAS
 from core.montador_grandezas import Grandeza
@@ -831,6 +833,8 @@ class Isolada:
     lado: str | None
     independente: bool  # a condição não tem a grandeza pedida
     passa: bool | None  # só na condição independente
+    #: O valor é onde a forma do desenho acaba, e não onde a condição chega ao limite.
+    pela_forma: bool = False
 
 
 @dataclass(frozen=True)
@@ -938,6 +942,10 @@ def _isolar_uma(
         grade = _grade(x)
     raizes = _raizes(f, _na_grade(diferenca, x, numeros), dominio, grade)
     if not raizes:
+        limite = _limite_da_forma(condicao, x, numeros, f, grade)
+        if limite is not None:
+            valor, lado = limite
+            return Isolada(condicao, None, equacao, tensao, "", valor, lado, False, None, True)
         return Isolada(condicao, None, equacao, tensao, "", None, None, False, None)
     lados = [_lado(f, r) for r in raizes]
     minimos = [r for r, lado in zip(raizes, lados, strict=True) if lado == MINIMO]
@@ -946,6 +954,57 @@ def _isolar_uma(
     valor = max(minimos) if minimos else min(raizes)
     lado = MINIMO if minimos else MAXIMO
     return Isolada(condicao, None, equacao, tensao, "", valor, lado, False, None)
+
+
+def _limite_da_forma(
+    condicao: Condicao,
+    x: sp.Symbol,
+    numeros: Mapping[sp.Symbol, sp.Float],
+    f: Callable[[float], float],
+    grade: np.ndarray,
+) -> tuple[float, str] | None:
+    """Na seção desenhada com letras, a condição pode passar até o desenho deixar de existir.
+
+    Aí a resposta é a borda da forma (o furo encostando na chapa), e não uma raiz da condição. A
+    borda é achada por bisseção na validade do desenho; a condição precisa passar logo antes dela.
+    """
+    formas = [
+        v.expressao
+        for v in condicao.validade
+        if v.restringe and v.expressao.has(DoDesenho) and v.expressao.free_symbols <= {x, *numeros}
+    ]
+    if not formas:
+        return None
+    na_grade = [_na_grade(e, x, numeros) for e in formas]
+    escalares = [_funcao(e, x, numeros) for e in formas]
+    with np.errstate(all="ignore"):
+        valido = np.all([np.nan_to_num(fn(grade), nan=-1.0) >= 0.0 for fn in na_grade], axis=0)
+
+    def existe(v: float) -> bool:
+        return all(math.isfinite(e := fn(v)) and e >= 0.0 for fn in escalares)
+
+    achados: list[tuple[float, str]] = []
+    for i in range(len(grade) - 1):
+        if valido[i] == valido[i + 1]:
+            continue
+        bom, ruim = (float(grade[i]), float(grade[i + 1]))
+        if not valido[i]:
+            bom, ruim = ruim, bom
+        for _ in range(60):
+            meio = (bom + ruim) / 2.0
+            if existe(meio):
+                bom = meio
+            else:
+                ruim = meio
+            if abs(bom - ruim) <= 1e-9 * max(abs(bom), 1e-12):
+                break
+        passa = f(bom)
+        if math.isfinite(passa) and passa <= _FOLGA * max(abs(passa), 1.0):
+            achados.append((bom, MAXIMO if bom < ruim else MINIMO))
+    if not achados:
+        return None
+    de_cima = [a for a in achados if a[1] == MAXIMO]
+    return min(de_cima) if de_cima else max(achados)
 
 
 #: Na conta com letras do meio, cada ponto da grade resolve as letras de novo: a grade é mais rala,
@@ -1317,6 +1376,16 @@ def isolar(
                 alertas.append(
                     f"{item.condicao.nome}: {qual} de {grandeza.texto} fecha essa equação."
                 )
+    if manda is not None and manda.pela_forma and valor is not None:
+        alem = valor * (1.0 + 1e-6) if sentido == MAXIMO else valor * (1.0 - 1e-6)
+        motivo = ""
+        for v in manda.condicao.validade:
+            motivo = motivo or es.por_que_acaba(v.expressao, {**numeros, x: alem})
+        alertas.append(
+            f"{grandeza.texto} chega a {_texto_do_numero(valor)} pela forma do desenho, e não pela "
+            f"resistência: {manda.condicao.nome} ainda passa aí. "
+            + (f"Além disso, {motivo}." if motivo else "Além disso, o desenho deixa de existir.")
+        )
     conferencia: tuple[LinhaConferida, ...] = ()
     materiais: tuple[str, ...] = ()
     do_meio: dict[str, float] = {}
@@ -1583,3 +1652,7 @@ __all__ = [
     "valor_final",
     "varrer",
 ]
+
+
+def _texto_do_numero(valor: float) -> str:
+    return f"{valor:.4g}".replace(".", ",")

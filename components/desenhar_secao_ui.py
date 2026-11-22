@@ -1,4 +1,9 @@
-"""Tela de Desenhar seção: modelos, prancheta, propriedades e o caminho até os outros cálculos.
+"""Tela de Desenhar seção: esboço ou desenho simples, propriedades e o caminho até as contas.
+
+Dois modos. No esboço (o padrão), a seção sai de um esboço paramétrico, como num CAD: cotas que
+seguram a medida, restrições, letras nas cotas e o teste de até onde cada letra pode ir. O desenho
+simples é a prancheta antiga, de chapas, círculos e polígonos, com os modelos e os perfis do
+catálogo. Os dois entregam a mesma coisa às contas: a lista de partes.
 
 As partes moram em ``st.session_state`` e três lugares as alteram: a prancheta, os modelos prontos e
 a tabela. Os três entram por callback, antes de o script rodar, e a prancheta recebe o mesmo desenho
@@ -8,6 +13,7 @@ na mesma rodada. ``versao`` conta as alterações: a prancheta ignora um desenho
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 import streamlit as st
@@ -18,6 +24,7 @@ from components.assistente_cargas_ui import (
     enviar_para_mohr,
     tabela_de_verificacoes,
 )
+from components.esboco_ui import prancheta_do_esboco
 from components.figuras import mostrar_figura
 from components.prancheta_ui import prancheta
 from components.project_tools import (
@@ -25,6 +32,9 @@ from components.project_tools import (
     construir_registro_tecnico,
 )
 from components.robustez import secao_protegida
+from core import esboco as eb
+from core import esboco_regioes as er
+from core import esboco_secao as es
 from core import secao_desenhada as sd
 from core import secao_relatorio as sr
 from core import section_catalog as catalogo
@@ -54,6 +64,18 @@ MODELO_INICIAL = "I"
 MODULO = "Desenhar seção"
 MODULO_ID = "desenhar_secao"
 
+MODO = "secao_modo"
+MODO_ESBOCO = "Esboço com cotas"
+MODO_SIMPLES = "Desenho simples"
+MODOS = (MODO_ESBOCO, MODO_SIMPLES)
+ESBOCO = "secao_esboco"
+VERSAO_ESBOCO = "secao_esboco_versao"
+AJUSTE_ESBOCO = "secao_esboco_ajuste"
+PARTES_ESBOCO = "secao_esboco_partes"
+PROBLEMAS = "secao_esboco_problemas"
+CHAVE_ESBOCO = "secao_esboco_prancheta"
+_VOLTA_VISTA = "secao_volta_vista"
+
 _ROTULOS = {modelo.nome: modelo for modelo in sd.MODELOS}
 
 DESTINOS = (
@@ -71,7 +93,73 @@ PAGINAS = (
 
 
 def _partes() -> list[dict[str, Any]]:
+    """As partes do desenho simples."""
     return st.session_state[PARTES]
+
+
+def _no_esboco() -> bool:
+    return st.session_state.get(MODO) != MODO_SIMPLES
+
+
+def _partes_ativas() -> list[dict[str, Any]]:
+    """As partes que vão para as contas: as do esboço, ou as do desenho simples."""
+    return st.session_state.get(PARTES_ESBOCO, []) if _no_esboco() else _partes()
+
+
+def _esboco_vazio() -> dict[str, Any]:
+    return eb.Esboco({eb.ORIGEM: (0.0, 0.0)}).como_dicionario()
+
+
+def _trocar_esboco(esboco: dict[str, Any], *, ajustar: bool = True) -> None:
+    """O Python troca o esboço por fora (abrir, limpar, converter): a versão passa a do navegador."""
+    estado = st.session_state
+    estado[ESBOCO] = esboco
+    estado[VERSAO_ESBOCO] = estado.get(VERSAO_ESBOCO, 0) + 1_000_000
+    if ajustar:
+        estado[AJUSTE_ESBOCO] = estado.get(AJUSTE_ESBOCO, 0) + 1
+    _derivar_partes(esboco)
+
+
+def _derivar_partes(esboco: dict[str, Any]) -> None:
+    """As partes e os problemas que saem do esboço, como o navegador acabou de deixar."""
+    estado = st.session_state
+    partes: list[dict[str, Any]] = []
+    problemas: list[dict[str, Any]] = []
+    try:
+        lido = eb.esboco_de_dicionario(esboco)
+        regioes = er.Regioes(eb.Sistema(lido))
+        for problema in regioes.problemas:
+            if problema.tipo == "vazio" and not lido.curvas:
+                continue
+            problemas.append({"mensagem": problema.mensagem, "onde": problema.onde})
+        if regioes.ok:
+            partes = [p.como_dicionario() for p in regioes.partes(regioes.q_base)]
+    except (eb.ErroDeEsboco, er.ErroDeRegiao, sd.ErroDeSecao, ValueError) as erro:
+        problemas.append({"mensagem": str(erro), "onde": None})
+    estado[PARTES_ESBOCO] = partes
+    estado[PROBLEMAS] = problemas
+
+
+def _ao_editar_no_esboco() -> None:
+    evento = getattr(st.session_state.get(CHAVE_ESBOCO), "edicao", None)
+    if not evento or not isinstance(evento.get("esboco"), dict):
+        return
+    st.session_state[ESBOCO] = evento["esboco"]
+    st.session_state[VERSAO_ESBOCO] = int(evento.get("versao", 0))
+    _derivar_partes(evento["esboco"])
+
+
+def _trazer_do_simples() -> None:
+    try:
+        esboco = eb.esboco_das_partes(sd.partes_de_lista(_partes()))
+    except sd.ErroDeSecao as erro:
+        st.session_state[AVISO] = str(erro)
+        return
+    _trocar_esboco(esboco.como_dicionario())
+    st.session_state[AVISO] = (
+        "O desenho simples virou esboço: as medidas ainda não são cotas. Ponha cotas e restrições "
+        "para prender a forma. Partes que se sobrepunham precisam virar um contorno só."
+    )
 
 
 def _trocar_partes(
@@ -115,6 +203,13 @@ def _aplicar_modelo() -> None:
 
 def _iniciar() -> None:
     estado = st.session_state
+    if ESBOCO not in estado:
+        estado[MODO] = estado.get(MODO) or MODO_ESBOCO
+        estado[ESBOCO] = _esboco_vazio()
+        estado[VERSAO_ESBOCO] = 0
+        estado[AJUSTE_ESBOCO] = 0
+        estado[PARTES_ESBOCO] = []
+        estado[PROBLEMAS] = []
     if PARTES in estado:
         return
     estado[VERSAO] = 0
@@ -164,6 +259,9 @@ def _ao_editar_tabela() -> None:
 
 
 def _limpar() -> None:
+    if _no_esboco():
+        _trocar_esboco(_esboco_vazio())
+        return
     st.session_state[MODELO] = None
     _trocar_partes([], ajustar=True)
 
@@ -200,6 +298,11 @@ def _abrir_salva() -> None:
     item = catalogo.obter(nome)
     st.session_state[MODELO] = None
     st.session_state[NOME] = nome
+    if item.esboco:
+        st.session_state[MODO] = MODO_ESBOCO
+        _trocar_esboco(dict(item.esboco))
+        return
+    st.session_state[MODO] = MODO_SIMPLES
     _trocar_partes(sd.partes_de_lista(item.desenho), ajustar=True)
 
 
@@ -210,10 +313,14 @@ def _salvar(nome: str, analise: sd.Analise) -> str:
         return f"{nome} já é um perfil de referência do catálogo: escolha outro nome."
     try:
         dados = sd.perfil_da_secao(nome, analise)
-        catalogo.salvar_perfil(dados, desenho=tuple(p.como_dicionario() for p in analise.partes))
+        catalogo.salvar_perfil(
+            dados,
+            desenho=tuple(p.como_dicionario() for p in analise.partes),
+            esboco=st.session_state.get(ESBOCO) if _no_esboco() else None,
+        )
     except (sd.ErroDeSecao, catalogo.ErroDeCatalogo) as erro:
         return str(erro)
-    st.session_state[SALVA] = (nome, _impressao(_partes()))
+    st.session_state[SALVA] = (nome, _impressao(_partes_ativas()))
     return ""
 
 
@@ -407,7 +514,7 @@ def _uso(analise: sd.Analise, forma: sd.Forma) -> None:
         )
         nome = digitado.strip() or automatico
         salva = st.session_state.get(SALVA)
-        em_dia = bool(salva) and salva == (nome, _impressao(_partes()))
+        em_dia = bool(salva) and salva == (nome, _impressao(_partes_ativas()))
         pode_usar = p.pedacos == 1
         if st.button(
             "Salva no catálogo" if em_dia else "Salvar no catálogo",
@@ -465,6 +572,15 @@ def _uso(analise: sd.Analise, forma: sd.Forma) -> None:
 
 
 def _tabela() -> None:
+    if _no_esboco():
+        st.caption(
+            "As partes que saem do esboço: o contorno de aço e os furos. Para mudar, mexa no "
+            "esboço, nas cotas ou nas letras."
+        )
+        st.dataframe(
+            [sr.linha_da_parte(p) for p in _partes_ativas()], hide_index=True, width="stretch"
+        )
+        return
     st.caption(
         "Cada linha é uma parte. Medidas em mm, com x e y no centro da parte. No polígono, escreva "
         "os pontos assim: 0 0; 100 0; 100 50. Partes do mesmo grupo andam juntas na prancheta."
@@ -707,7 +823,7 @@ def _tensoes(analise: sd.Analise, impressao: str) -> None:
 
 
 def _registro(analise: sd.Analise) -> None:
-    linhas = tuple(sr.linha_da_parte(p) for p in _partes())
+    linhas = tuple(sr.linha_da_parte(p) for p in _partes_ativas())
     valores: dict[str, Any] = {"partes": linhas, "densidade_kg_m3": 7850.0}
     resultado = sr.resultado_da_secao(analise, 7850.0)
     registro = construir_registro_tecnico(
@@ -762,6 +878,10 @@ def _aviso_de_volta() -> None:
     volta = vs.de_onde_veio()
     if volta is None:
         return
+    marca = repr(sorted(volta.items()))
+    if st.session_state.get(_VOLTA_VISTA) != marca:
+        st.session_state[_VOLTA_VISTA] = marca
+        st.session_state[MODO] = MODO_ESBOCO
     with st.container(border=True):
         colunas = st.columns([4, 1], vertical_alignment="center")
         colunas[0].info(
@@ -787,8 +907,23 @@ def tela() -> None:
     if st.session_state.pop(IR_PARA, False):
         st.switch_page("app_pages/assistente_cargas.py")
     _aviso_de_volta()
+    st.segmented_control(
+        "Prancheta",
+        MODOS,
+        key=MODO,
+        required=True,
+        label_visibility="collapsed",
+        help=(
+            "Esboço com cotas: desenhe como num CAD, com cotas que seguram a medida, restrições e "
+            "letras que o Montador de fórmulas testa. Desenho simples: a prancheta de chapas, com "
+            "os modelos prontos e os perfis do catálogo."
+        ),
+    )
     with secao_protegida("Modelos"):
-        _inicio_do_desenho()
+        if _no_esboco():
+            _inicio_do_esboco()
+        else:
+            _inicio_do_desenho()
     with st.container():
         aviso = st.session_state.pop(AVISO, "")
         if aviso:
@@ -797,40 +932,53 @@ def tela() -> None:
     analise: sd.Analise | None = None
     falha = ""
     try:
-        if _partes():
-            analise = _analisar(_impressao(_partes()))
+        if _partes_ativas():
+            analise = _analisar(_impressao(_partes_ativas()))
     except sd.ErroDeSecao as erro:
         falha = str(erro)
 
-    esquerda, direita = st.columns([5, 2], gap="medium")
-    with esquerda:
-        prancheta(
+    if _no_esboco():
+        # O desenho sozinho na faixa, com a largura toda; o resto vem embaixo.
+        prancheta_do_esboco(
             {
-                "partes": _partes(),
-                "versao": st.session_state[VERSAO],
-                "ajustar": st.session_state[AJUSTE],
+                "esboco": st.session_state[ESBOCO],
+                "versao": st.session_state[VERSAO_ESBOCO],
+                "ajustar": st.session_state[AJUSTE_ESBOCO],
+                "problemas": st.session_state.get(PROBLEMAS, []),
                 "marcas": _marcas(analise),
-                "chapas": list(CHAPAS.valores),
-                "cotas": st.session_state.get(COTAS, []),
             },
-            key=CHAVE_PRANCHETA,
-            ao_editar=_ao_editar_na_prancheta,
+            key=CHAVE_ESBOCO,
+            ao_editar=_ao_editar_no_esboco,
         )
-    with direita:
-        if analise is None:
-            if falha:
-                st.error(falha, icon=":material/error:")
-            else:
-                st.info(
-                    "Desenhe uma chapa ou escolha um modelo: as propriedades aparecem aqui.",
-                    icon=":material/draw:",
-                )
-        else:
-            forma = sd.reconhecer(analise.partes)
-            with secao_protegida("Propriedades"):
-                _quadro(analise, forma)
-            with secao_protegida("Uso"):
-                _uso(analise, forma)
+        propriedades, uso, teste = st.columns([4, 3, 3], gap="medium")
+        with propriedades:
+            _propriedades_ou_aviso(analise, falha)
+        with uso:
+            if analise is not None:
+                with secao_protegida("Uso"):
+                    _uso(analise, sd.reconhecer(analise.partes))
+        with teste, secao_protegida("Testar o desenho"):
+            _teste_do_desenho()
+    else:
+        esquerda, direita = st.columns([5, 2], gap="medium")
+        with esquerda:
+            prancheta(
+                {
+                    "partes": _partes(),
+                    "versao": st.session_state[VERSAO],
+                    "ajustar": st.session_state[AJUSTE],
+                    "marcas": _marcas(analise),
+                    "chapas": list(CHAPAS.valores),
+                    "cotas": st.session_state.get(COTAS, []),
+                },
+                key=CHAVE_PRANCHETA,
+                ao_editar=_ao_editar_na_prancheta,
+            )
+        with direita:
+            _propriedades_ou_aviso(analise, falha)
+            if analise is not None:
+                with secao_protegida("Uso"):
+                    _uso(analise, sd.reconhecer(analise.partes))
 
     abas = st.tabs(["Partes", "Todas as propriedades", "Tensões na seção", "Memorial"])
     with abas[0], secao_protegida("Partes"):
@@ -840,6 +988,108 @@ def tela() -> None:
     with abas[1], secao_protegida("Propriedades da seção"):
         _propriedades(analise)
     with abas[2], secao_protegida("Tensões"):
-        _tensoes(analise, _impressao(_partes()))
+        _tensoes(analise, _impressao(_partes_ativas()))
     with abas[3], secao_protegida("Memorial"):
         _registro(analise)
+
+
+def _propriedades_ou_aviso(analise: sd.Analise | None, falha: str) -> None:
+    if analise is None:
+        if falha:
+            st.error(falha, icon=":material/error:")
+        elif _no_esboco():
+            st.info(
+                "Desenhe um contorno fechado no esboço: Linha (L), Retângulo (R) ou Círculo (C). "
+                "Contorno dentro de contorno vira furo. As propriedades aparecem aqui.",
+                icon=":material/draw:",
+            )
+        else:
+            st.info(
+                "Desenhe uma chapa ou escolha um modelo: as propriedades aparecem aqui.",
+                icon=":material/draw:",
+            )
+        return
+    with secao_protegida("Propriedades"):
+        _quadro(analise, sd.reconhecer(analise.partes))
+
+
+def _inicio_do_esboco() -> None:
+    with st.container(horizontal=True, horizontal_alignment="right"):
+        salvas = sorted(n for n, i in catalogo.listar_cadastrados().items() if i.desenho)
+        with st.popover("Abrir salva", icon=":material/folder_open:"):
+            if salvas:
+                st.selectbox(
+                    "Seção salva",
+                    salvas,
+                    index=None,
+                    key="secao_abrir",
+                    on_change=_abrir_salva,
+                    help="Volta uma seção salva no catálogo. Feita no esboço, volta com as cotas.",
+                )
+            else:
+                st.caption("Nenhuma seção salva ainda.")
+        st.button(
+            "Trazer do desenho simples",
+            on_click=_trazer_do_simples,
+            icon=":material/move_down:",
+            key="secao_trazer",
+            disabled=not _partes(),
+            help=(
+                "As partes do desenho simples viram linhas e círculos do esboço, sem cotas. O que "
+                "está no esboço agora é trocado (o desfazer da prancheta traz de volta)."
+            ),
+        )
+        st.button(
+            "Limpar",
+            on_click=_limpar,
+            icon=":material/delete:",
+            key="secao_limpar_esboco",
+            help="Apaga o esboço. O desfazer da prancheta traz de volta.",
+        )
+
+
+@st.cache_resource(max_entries=16, show_spinner=False)
+def _modelo_do_esboco(impressao: str) -> es.Modelo:
+    """O esboço pronto para ser refeito com outras medidas (um por desenho diferente)."""
+    return es.registrar(json.loads(impressao))[0]
+
+
+@st.cache_data(max_entries=64, show_spinner=False)
+def _faixas_das_letras(impressao: str) -> list[es.FaixaDaLetra]:
+    modelo = _modelo_do_esboco(impressao)
+    return [modelo.faixa(letra) for letra in modelo.letras]
+
+
+def _teste_do_desenho() -> None:
+    """Até onde cada letra pode ir sem o desenho deixar de existir, e a parede mais fina."""
+    if not _partes_ativas():
+        return
+    impressao = es.impressao(st.session_state.get(ESBOCO) or {})
+    with st.container(border=True):
+        st.markdown("**Testar o desenho**")
+        try:
+            modelo = _modelo_do_esboco(impressao)
+        except (eb.ErroDeEsboco, er.ErroDeRegiao, sd.ErroDeSecao, ValueError) as erro:
+            st.warning(str(erro), icon=":material/warning:")
+            return
+        folga = float(modelo.medir({}).avaliacao.folga[0])
+        if math.isfinite(folga) and len(modelo.regioes.lacos) > 1:
+            st.caption(
+                f"Parede mais fina agora: **{_numero(folga, 2)} mm** (a menor distância entre "
+                "contornos: do furo até a borda, ou de um furo a outro)."
+            )
+        if not modelo.letras:
+            st.caption(
+                "Ponha uma letra numa cota (duplo clique na medida, e digite d ou 2*d): aqui "
+                "aparece até onde ela pode ir sem o desenho deixar de existir. Salva no catálogo, "
+                "a seção leva a letra para o Montador de fórmulas como incógnita."
+            )
+            return
+        for faixa in _faixas_das_letras(impressao):
+            st.markdown("- " + faixa.texto())
+        if not modelo.graus.definido:
+            st.caption(
+                f"O esboço ainda tem {modelo.graus.livres} graus livres: no teste, o que está em "
+                "azul pode andar junto. Prenda com cotas e restrições para o teste mexer só na "
+                "letra."
+            )

@@ -18,6 +18,7 @@ import numpy as np
 import sympy as sp
 
 from core import elementos_vigas as ev
+from core import esboco_secao as es
 from core import geometria_da_secao as gs
 from core import montador_grandezas as g
 from core.montador_grandezas import Grandeza
@@ -30,7 +31,6 @@ LADOS = (LADO_H, LADO_B)
 EIXO_XX = "XX"
 EIXO_YY = "YY"
 EIXOS = (EIXO_XX, EIXO_YY)
-_SALTO_DE_LARGURA = 0.2  # acima disso, a mudança de largura é uma junção, como alma e mesa
 _ESFORCOS = {"Mx": "mx", "My": "my", "N": "n", "Vy": "vy", "Vx": "vx", "T": "t"}
 
 
@@ -421,43 +421,23 @@ def perfil_i() -> Secao:
     )
 
 
-def _niveis_de_juncao(y: np.ndarray, b: np.ndarray) -> list[int]:
-    """Onde a largura pula: o lado estreito do salto, que é onde o cortante aperta."""
-    niveis = []
-    for i in range(len(y) - 1):
-        menor, maior = sorted((float(b[i]), float(b[i + 1])))
-        if maior > 0 and menor > 0 and (maior - menor) / maior > _SALTO_DE_LARGURA:
-            niveis.append(i if b[i] < b[i + 1] else i + 1)
-    return niveis
-
-
 def _nivel(faixas: gs.Faixas, posicao: float, inercia: float) -> float:
-    """τ por unidade de cortante na altura pedida. Num salto de largura, vale o lado largo."""
-    distancia = np.abs(faixas.y - posicao)
-    perto = np.flatnonzero(distancia <= distancia.min() + 1e-6 * max(abs(faixas.y_topo), 1.0))
-    valores = [
-        abs(float(faixas.q[i])) / (inercia * float(faixas.b[i]))
-        for i in perto.tolist()
-        if faixas.b[i] > 0
-    ]
-    return min(valores) if valores else 0.0
+    return gs.tau_no_nivel(faixas, posicao, inercia)
 
 
 def _cantos(x: np.ndarray, y: np.ndarray) -> list[tuple[float, float]]:
     """Os pontos da borda que podem mandar com M_x e M_y juntos, em módulo: poucos, sem repetir."""
-    x_max, y_max = float(x.max()), float(y.max())
-    achados: list[tuple[float, float]] = []
-    for peso in (0.25, 0.5, 0.75):
-        nota = peso * x / x_max + (1.0 - peso) * y / y_max
-        i = int(np.argmax(nota))
-        ponto = (float(x[i]), float(y[i]))
-        if all(abs(ponto[0] - a) + abs(ponto[1] - b) > 1e-6 for a, b in achados):
-            achados.append(ponto)
-    return achados
+    return [(float(x[i]), float(y[i])) for i in gs.cantos_que_mandam(x, y)]
 
 
 def desenhada(nome: str) -> Secao:
-    """A seção da prancheta só tem números: o que varia é a escala ``s`` do desenho inteiro."""
+    """A seção da prancheta. Feita no esboço com letras nas cotas, as letras são as incógnitas;
+    sem letras, só tem números, e o que varia é a escala ``s`` do desenho inteiro."""
+    esboco = ev.esboco_salvo(nome)
+    if esboco is not None:
+        modelo, indice = es.registrar(esboco, nome)
+        if modelo.letras:
+            return _desenhada_com_letras(nome, modelo, indice)
     desenho = ev.desenho_salvo(nome)
     p = desenho.analise.prop
     fx, fy = desenho.faixas_x, desenho.faixas_y
@@ -509,7 +489,7 @@ def desenhada(nome: str) -> Secao:
         )
     ]
     vistos = set()
-    for i in _niveis_de_juncao(fx.y, fx.b):
+    for i in gs.niveis_de_juncao(fx.y, fx.b):
         y = float(fx.y[i])
         if round(abs(y), 6) in vistos or abs(y) < 1e-9:
             continue
@@ -557,4 +537,104 @@ def desenhada(nome: str) -> Secao:
         None,
         avisos,
         inercia_y=numero(p.iy) * s**4,
+    )
+
+
+_LETRAS_DOS_SOLIDOS = g.letras_conhecidas(g.SISTEMA_SOLIDOS.chave)
+
+
+def _chave_da_letra(letra: str) -> str:
+    """A letra do esboço, ou com sobrenome quando o Montador já usa o nome para outra coisa.
+
+    Medida de seção (d, b, h) pode ficar: outra seção na mesma montagem é raro. Mas um ``n`` do
+    esboço que virasse o fator de segurança, ou um ``L`` que virasse o braço da força, daria uma conta
+    errada sem aviso.
+    """
+    outra = _LETRAS_DOS_SOLIDOS.get(letra)
+    if outra is None or outra.dimensao == g.MEDIDA:
+        return letra
+    return f"{letra}_sec"
+
+
+_TEXTO_DO_LIMITE = (
+    "O desenho deixa de existir com estas medidas: um furo encosta na borda ou em outro furo, um "
+    "contorno vira do avesso, ou as cotas deixam de caber juntas."
+)
+
+
+def _desenhada_com_letras(nome: str, modelo: es.Modelo, indice: int) -> Secao:
+    """A seção do esboço com as letras soltas: cada número vem do esboço refeito com elas."""
+    chaves = {letra: _chave_da_letra(letra) for letra in modelo.letras}
+    simbolos = tuple(g.simbolo_de(chaves[letra]) for letra in modelo.letras)
+
+    def f(codigo: int) -> sp.Expr:
+        return es.DoDesenho(sp.Integer(indice), sp.Integer(codigo), *simbolos)
+
+    area, ix, iy = f(es.AREA), f(es.IX), f(es.IY)
+    por_t = 1 / f(es.WT)
+    pontos = []
+    for p, ponto in enumerate(modelo.pontos, start=1):
+        base = 100 * p
+        y, x = f(base + es.Y), f(base + es.X)
+        tvy, tvx = f(base + es.TVY), f(base + es.TVX)
+        pontos.append(
+            Ponto(
+                ponto.nome,
+                y / ix if ponto.tipo not in ("neutra", "neutra_yy") else ZERO,
+                1 / area,
+                tvy if ponto.tipo in ("juncao", "neutra", "fibra_yy") else ZERO,
+                por_t if ponto.torque else ZERO,
+                x / iy if ponto.tipo in ("fibra", "fibra_yy", "canto") else ZERO,
+                tvx if ponto.tipo in ("fibra", "neutra_yy") else ZERO,
+                exige=ponto.exige,
+            )
+        )
+    grandezas = tuple(
+        Grandeza(
+            chaves[letra],
+            letra if chaves[letra] == letra else f"{letra} (desenho)",
+            f"{letra} do desenho",
+            g.MEDIDA,
+            f"Medida {letra} da seção desenhada {nome}: o esboço é refeito com cada valor.",
+            modelo.base[letra],
+        )
+        for letra in modelo.letras
+    )
+    hipoteses = [
+        "Na seção desenhada com letras, cada valor testado refaz o esboço pelas cotas: só muda o "
+        "que as letras mexem.",
+        "Na torção da seção desenhada, o τ máximo vale em todos os pontos, a favor da segurança.",
+        "A tensão é a nominal na seção líquida (furos descontados). A concentração de tensão na "
+        "borda do furo (K_t) não entra: na fadiga, ela precisa entrar à parte.",
+    ]
+    if not modelo.graus.definido:
+        hipoteses.append(
+            f"O esboço tem {modelo.graus.livres} graus livres: o que está solto pode andar junto "
+            "quando a letra muda."
+        )
+    avisos: list[str] = []
+    medicao = modelo.medir({}).avaliacao.exatas
+    if abs(float(medicao.ixy[0])) > 1e-6 * float(medicao.ix[0] + medicao.iy[0]):
+        avisos.append("Seção sem simetria: M·c/I não vê a flexão no outro eixo.")
+    for letra, chave in chaves.items():
+        if chave != letra:
+            outra = _LETRAS_DOS_SOLIDOS[letra]
+            avisos.append(
+                f"A letra {letra} do desenho virou {chave} aqui: {letra} já é {outra.nome.lower()} "
+                "no Montador. Para não ver o sobrenome, troque o nome da letra no esboço."
+            )
+    return Secao(
+        f"Seção desenhada: {nome}",
+        area,
+        ix,
+        f(es.IMIN),
+        f(es.FIBRA),
+        f(es.J),
+        tuple(pontos),
+        grandezas,
+        (Validade(f(es.FOLGA), _TEXTO_DO_LIMITE),),
+        tuple(hipoteses),
+        None,
+        tuple(avisos),
+        inercia_y=iy,
     )

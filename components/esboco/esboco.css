@@ -1,0 +1,437 @@
+.es {
+  --es-livre: #1c7ed6;
+  --es-definido: var(--st-text-color);
+  --es-construcao: #868e96;
+  --es-sel: #f08c00;
+  --es-ruim: #e03131;
+  --es-aco: rgba(28, 126, 214, 0.1);
+  --es-cota: #2b8a3e;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--st-font);
+  font-size: 13px;
+  color: var(--st-text-color);
+  background: var(--st-background-color);
+}
+.es:fullscreen {
+  padding: 10px;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* ---- barra de ícones, numa linha, como num CAD ---- */
+.es-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  background: var(--st-secondary-background-color);
+}
+.es button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.es-barra > button,
+.es-grupo > button[data-principal] {
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.es-barra svg.icone {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.es-barra button:hover {
+  background: var(--st-background-color);
+}
+.es-barra button.ativo {
+  background: var(--st-primary-color);
+  color: #fff;
+}
+.es-barra button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.es-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 5px;
+  background: var(--st-border-color);
+}
+.es-vao {
+  flex: 1;
+}
+.es-grupo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.es-grupo > button.es-seta {
+  width: 14px;
+  height: 32px;
+  padding: 0;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.es-grupo > button.es-seta svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+.es-menu {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  background: var(--st-background-color);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}
+.es-menu[hidden] {
+  display: none;
+}
+.es-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+.es-menu button:hover,
+.es-menu button.ativo {
+  background: var(--st-secondary-background-color);
+  color: inherit;
+}
+.es-menu kbd {
+  margin-left: auto;
+  font-family: var(--st-code-font, monospace);
+  font-size: 11px;
+  opacity: 0.65;
+}
+.es-menu svg.icone {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- o desenho sozinho na faixa ---- */
+.es-area {
+  position: relative;
+  height: 620px;
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--st-background-color);
+}
+.es:fullscreen .es-area {
+  flex: 1;
+  height: auto;
+}
+.es-area svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+.es-area svg.selecionar {
+  cursor: default;
+}
+
+/* ---- informações embaixo ---- */
+.es-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.es-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+.es-situacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.es-chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+.es-chip.livre {
+  color: var(--es-livre);
+}
+.es-chip.definido {
+  color: var(--es-cota);
+}
+.es-chip.ruim {
+  color: var(--es-ruim);
+}
+.es-msg {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--st-secondary-background-color);
+  line-height: 1.35;
+}
+.es-msg.ruim {
+  color: var(--es-ruim);
+  border-left: 3px solid var(--es-ruim);
+}
+.es-msg.aviso {
+  border-left: 3px solid var(--es-sel);
+}
+.es-chave {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.es select {
+  font: inherit;
+  color: inherit;
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+.es-rotulo {
+  font-weight: 600;
+}
+.es-letra {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--st-border-color);
+  border-radius: 999px;
+}
+.es-letra b {
+  font-family: var(--st-code-font, monospace);
+}
+.es-letra input,
+.es-nova input {
+  width: 64px;
+  font: inherit;
+  color: inherit;
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.es-nova input[data-nova-nome] {
+  width: 44px;
+}
+.es-letra button,
+.es-nova button {
+  padding: 0 5px;
+  border-radius: 4px;
+}
+.es-letra button:hover,
+.es-nova button:hover {
+  background: var(--st-secondary-background-color);
+}
+.es-letra button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.es-nova {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.es-ajuda {
+  opacity: 0.7;
+}
+.es-status {
+  opacity: 0.85;
+  gap: 16px;
+}
+.es-status [data-i="xy"] {
+  font-family: var(--st-code-font, monospace);
+  min-width: 170px;
+}
+
+/* ---- desenho ---- */
+.es svg .grade-fina {
+  stroke: var(--st-border-color);
+  stroke-width: 0.5;
+  opacity: 0.5;
+}
+.es svg .grade-eixo {
+  stroke: var(--st-border-color);
+  stroke-width: 1;
+}
+.es svg .aco {
+  fill: var(--es-aco);
+  stroke: none;
+  fill-rule: evenodd;
+}
+.es svg .curva {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.es svg .curva.livre {
+  stroke: var(--es-livre);
+}
+.es svg .curva.definida {
+  stroke: var(--es-definido);
+}
+.es svg .curva.construcao {
+  stroke: var(--es-construcao);
+  stroke-dasharray: 6 4;
+  stroke-width: 1.2;
+}
+.es svg .curva.sel {
+  stroke: var(--es-sel);
+  stroke-width: 3;
+}
+.es svg .curva.perto {
+  stroke-width: 3;
+}
+.es svg .curva.ruim {
+  stroke: var(--es-ruim);
+}
+.es svg .ponto {
+  stroke: var(--st-background-color);
+  stroke-width: 1;
+}
+.es svg .ponto.livre {
+  fill: var(--es-livre);
+}
+.es svg .ponto.definido {
+  fill: var(--es-definido);
+}
+.es svg .ponto.sel {
+  fill: var(--es-sel);
+}
+.es svg .ponto.origem {
+  fill: none;
+  stroke: var(--es-definido);
+  stroke-width: 1.2;
+}
+.es svg .previa {
+  stroke: var(--es-sel);
+  stroke-dasharray: 5 4;
+  fill: none;
+  stroke-width: 1.5;
+}
+.es svg .guia {
+  stroke: var(--es-sel);
+  stroke-dasharray: 2 4;
+  stroke-width: 1;
+  opacity: 0.8;
+}
+.es svg .encaixe {
+  fill: none;
+  stroke: var(--es-sel);
+  stroke-width: 1.5;
+}
+.es svg .janela {
+  fill: rgba(28, 126, 214, 0.08);
+  stroke: var(--es-livre);
+  stroke-width: 1;
+}
+.es svg .janela.cruza {
+  fill: rgba(43, 138, 62, 0.08);
+  stroke: var(--es-cota);
+  stroke-dasharray: 5 3;
+}
+.es svg .cota line,
+.es svg .cota path {
+  stroke: var(--es-cota);
+  stroke-width: 1;
+  fill: none;
+}
+.es svg .cota .seta {
+  fill: var(--es-cota);
+  stroke: none;
+}
+.es svg .cota text {
+  fill: var(--es-cota);
+  font-size: 12px;
+  font-family: var(--st-font);
+  paint-order: stroke;
+  stroke: var(--st-background-color);
+  stroke-width: 3px;
+  cursor: text;
+}
+.es svg .cota.letra text {
+  font-weight: 600;
+}
+.es svg .cota.referencia text,
+.es svg .cota.referencia line {
+  opacity: 0.6;
+}
+.es svg .cota.sel text {
+  fill: var(--es-sel);
+}
+.es svg .cota.sel line,
+.es svg .cota.sel path {
+  stroke: var(--es-sel);
+}
+.es svg .sinal rect {
+  fill: var(--st-secondary-background-color);
+  stroke: var(--st-border-color);
+  stroke-width: 0.8;
+}
+.es svg .sinal text {
+  font-size: 10px;
+  fill: var(--st-text-color);
+  font-family: var(--st-font);
+  cursor: pointer;
+}
+.es svg .sinal.sel rect {
+  stroke: var(--es-sel);
+  stroke-width: 1.6;
+}
+.es svg .problema {
+  fill: none;
+  stroke: var(--es-ruim);
+  stroke-width: 2;
+}
+.es svg .centro {
+  stroke: var(--es-ruim);
+  stroke-width: 1.2;
+  fill: none;
+}

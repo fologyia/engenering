@@ -54,7 +54,12 @@ def test_desenhar_e_voltar_com_a_secao_no_bloco(catalogo_vazio):
     # O AppTest só segue o st.switch_page na rodada em que ele roda: daqui em diante, a página é
     # Desenhar seção.
     at.switch_page(vs.PAGINA_DESENHAR)
-    # A seção do começo (o I) com um nome; Salvar e voltar grava e volta.
+    at.run()
+    # Quem vem do Montador cai no esboço; aqui o teste usa a seção do começo do desenho simples
+    # (o I), com um nome. Salvar e voltar grava e volta.
+    assert at.session_state["secao_modo"] == "Esboço com cotas"
+    at.session_state["secao_modo"] = "Desenho simples"
+    at.run()
     at.text_input(key="secao_nome").set_value("Minha seção").run()
     assert "Minha seção" not in ev.nomes_dos_desenhos()
     at.button(key="secao_salvar_e_voltar").click().run()

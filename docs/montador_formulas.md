@@ -235,7 +235,17 @@ medida comercial. Resposta encostada na borda recebe aviso, porque ampliar a fai
 
 ## Seção desenhada
 
-A seção da prancheta só tem números, então a letra é a escala `s`: multiplica todas as medidas juntas.
+**Feita no esboço com letras nas cotas** (`core/esboco_secao.py`): as letras do esboço são as
+incógnitas. Um furo cotado com `d` vira a letra d do Montador, e "Em função de d" acha o maior furo
+que a seção aguenta. Cada valor testado refaz o esboço pelo solver e confere se a forma continua a
+mesma; fora disso a conta não existe (a validade `folga ≥ 0`). Quando a condição ainda passa no ponto
+em que o furo encosta na borda, a resposta é esse ponto, com o aviso "pela forma do desenho" e o
+motivo. Na fórmula, cada número é `DoDesenho(modelo, código, letras)`: A, I, fibra e, em cada ponto,
+|y|, |x| e τ por cortante. As faixas (cortante) só são montadas quando há cortante, e a malha (J e τ
+de torção) só quando há torção. A busca em faixas aceita até 4 mil combinações com a seção desenhada,
+e a bisseção testa 8 pontos por vez. A tensão é a nominal na seção líquida: o K_t do furo não entra.
+
+**Sem letras**, a seção só tem números, então a letra é a escala `s`: multiplica todas as medidas juntas.
 Os pontos são a fibra, a linha neutra e toda altura onde a largura pula mais de 20 %. Com M_y entram a
 fibra de YY e os cantos, escolhidos entre os pontos da borda, em módulo: seção sem simetria fica a favor
 da segurança. Em torção vale o τ máximo em todos os pontos, a favor da segurança.

@@ -19,6 +19,7 @@ import numpy as np
 import sympy as sp
 
 from core import montador_grandezas as g
+from core.esboco_secao import DoDesenho
 from core.montador import Montagem, conferir_valores, letras_zeradas, remontar
 from core.montador_funcoes import FUNCOES
 
@@ -27,6 +28,8 @@ NO_LIMITE = "limite"
 MAIOR = "maior"
 MENOR = "menor"
 MAX_COMBINACOES = 250_000
+#: Na seção desenhada com letras, cada combinação refaz o esboço.
+MAX_COMBINACOES_DESENHADA = 4_000
 _PONTOS_DO_REFINO = 9
 _RODADAS = 80
 _ENCOLHE = 0.6
@@ -35,6 +38,11 @@ _FOLGA_DO_USO = 1e-9
 _LADO_DO_MAPA = 45
 _AMOSTRAS_DO_FECHO = 41
 _PASSOS_DA_BISSECAO = 45
+#: Conta cara (a seção desenhada refaz o esboço a cada ponto): a bisseção testa vários pontos
+#: por vez, e o refino para antes. Cada rodada divide o intervalo por 9, e não por 2.
+_PONTOS_POR_CORTE = 8
+_CORTES_DA_CONTA_CARA = 15
+_TOLERANCIA_DA_CONTA_CARA = 1e-6
 
 
 def _milhar(valor: int) -> str:
@@ -126,6 +134,7 @@ class _Conta:
     dependem: tuple[bool, ...]
     validades: tuple[Callable[..., np.ndarray], ...]
     area: Callable[..., np.ndarray] | None
+    cara: bool = False  # cada ponto refaz um esboço
 
 
 @lru_cache(maxsize=32)
@@ -158,12 +167,14 @@ def _preparar(
         expressao = montagem.area.subs(numeros)
         if expressao.free_symbols <= conhecidos:
             area = funcao(expressao)
+    cara = any(c.esquerda.has(DoDesenho) or c.direita.has(DoDesenho) for c in montagem.condicoes)
     return _Conta(
         tuple(c.nome for c in montagem.condicoes),
         tuple(usos),
         tuple(dependem),
         tuple(validades),
         area,
+        cara,
     )
 
 
@@ -309,6 +320,13 @@ def _fechar(
         pontos.insert(indice, valores)
         return _passa(conta, pontos)
 
+    def teste_varios(valores: np.ndarray) -> np.ndarray:
+        """(combinações, pontos): os pontos de cada combinação numa chamada só."""
+        n = valores.shape[1]
+        pontos = [np.repeat(np.asarray(p), n) for p in livres]
+        pontos.insert(indice, valores.ravel())
+        return _passa(conta, pontos).reshape(valores.shape)
+
     if livres:
         repetidos = [np.repeat(p, amostras.size) for p in livres]
         pontos = list(repetidos)
@@ -325,6 +343,24 @@ def _fechar(
         limite = amostras.size - 1 - passou[:, ::-1].argmax(axis=1)
         bom = amostras[limite]
         ruim = amostras[np.minimum(limite + 1, amostras.size - 1)]
+    if conta.cara:
+        fracoes = np.arange(1, _PONTOS_POR_CORTE + 1) / (_PONTOS_POR_CORTE + 1)
+        for _ in range(_CORTES_DA_CONTA_CARA):
+            meios = bom[:, None] + (ruim - bom)[:, None] * fracoes[None, :]
+            ok = teste_varios(meios)
+            # O último ainda bom, andando de ``bom`` para ``ruim``: o intervalo cai para 1/9.
+            ruins = ~ok
+            primeiro = np.where(ruins.any(axis=1), ruins.argmax(axis=1), _PONTOS_POR_CORTE)
+            novo_bom = np.where(
+                primeiro > 0, meios[np.arange(len(bom)), np.maximum(primeiro - 1, 0)], bom
+            )
+            novo_ruim = np.where(
+                primeiro < _PONTOS_POR_CORTE,
+                meios[np.arange(len(bom)), np.minimum(primeiro, _PONTOS_POR_CORTE - 1)],
+                ruim,
+            )
+            bom, ruim = novo_bom, novo_ruim
+        return np.where(existe, bom, np.nan)
     for _ in range(_PASSOS_DA_BISSECAO):
         meio = (bom + ruim) / 2.0
         ok = teste(meio)
@@ -390,7 +426,7 @@ def _refinar(
             else 0.0  # uma incógnita só: a bisseção já fechou
         )
         rodadas.append(Rodada(numero, relativa, atual.uso, atual.area))
-        if relativa < _TOLERANCIA:
+        if relativa < (_TOLERANCIA_DA_CONTA_CARA if conta.cara else _TOLERANCIA):
             break
     return atual, tuple(rodadas)
 
@@ -443,6 +479,13 @@ def procurar(
     if faltam:
         raise ErroDeBusca(f"Preencha {', '.join(faltam)}, ou ponha como incógnita.")
     combinacoes = math.prod(len(f.valores()) for f in faixas)
+    if combinacoes > MAX_COMBINACOES_DESENHADA and any(
+        c.esquerda.has(DoDesenho) or c.direita.has(DoDesenho) for c in montagem.condicoes
+    ):
+        raise ErroDeBusca(
+            f"São {_milhar(combinacoes)} combinações, e com a seção desenhada o limite é "
+            f"{_milhar(MAX_COMBINACOES_DESENHADA)}, porque cada uma refaz o esboço: aumente o passo."
+        )
     if combinacoes > MAX_COMBINACOES:
         raise ErroDeBusca(
             f"São {_milhar(combinacoes)} combinações, e o limite é {_milhar(MAX_COMBINACOES)}: "

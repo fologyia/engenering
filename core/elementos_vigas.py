@@ -227,6 +227,17 @@ def _viga_do_desenho(nome: str, d: _Desenho, eixo: str) -> bs.SecaoViga:
     )
 
 
+def esboco_salvo(nome: str) -> Mapping[str, Any] | None:
+    """O esboço com cotas e letras da seção salva, quando ela foi feita no esboço."""
+    if nome == SEM_DESENHO:
+        return None
+    try:
+        item = sc.obter(nome)
+    except (KeyError, sc.ErroDeCatalogo):
+        return None
+    return item.esboco if item.esboco else None
+
+
 def desenho_salvo(nome: str) -> _Desenho:
     """A seção salva em Desenhar seção, já analisada."""
     exigir(
