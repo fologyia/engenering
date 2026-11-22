@@ -227,3 +227,31 @@ encostando na borda, contorno do avesso, cotas que não cabem), e a parede mais 
 
 **Desenho simples.** A prancheta antiga continua no segundo modo, com os modelos e os perfis do
 catálogo. "Trazer do desenho simples" converte as partes em curvas do esboço, sem cotas.
+
+## Edição como num CAD (marco 2)
+
+Arquivo: `components/esboco/edicao.js` (funções puras, testadas no Node com o solver).
+
+- **Aparar (X), estender (W), dividir.** Aparar tira o trecho entre os cortes em volta do clique; o
+  ponto novo do corte fica preso à curva que cortou, ou reaproveita o ponto que já está ali. É assim
+  que dois contornos que se cruzam viram um só: apara-se um lado, depois o outro. Círculo aparado
+  vira arco.
+- **Filete (G) e chanfro.** No canto de duas linhas; o raio (ou a distância) aceita letra. O canto
+  continua como ponto virtual nas duas retas, para as cotas que apontavam para ele.
+- **Deslocar (O).** Uma fila de linhas e arcos, para o lado do clique: cada reta nova é paralela com
+  a distância em cota (letra t = espessura), cada arco novo é concêntrico, com o raio pela cota do
+  original ± t ou pela tangência às retas vizinhas.
+- **Espelhar (S).** Com simetria viva: cada ponto copiado fica simétrico ao original pela linha.
+- **Padrões em fila e em círculo.** Passo em letra; as cotas repetidas ficam escondidas.
+
+## Testar o desenho (marco 2)
+
+Embaixo do esboço, em quatro abas:
+
+- **Até onde vai:** a faixa em que cada letra mantém a forma, e a faixa de teste (de, até, passo), que
+  vai junto da seção salva e é a faixa padrão da busca do Montador.
+- **Varredura:** área, inércias, W ou parede mais fina ao longo de uma letra.
+- **Regras de projeto:** desigualdades com as letras e as medidas `parede`, `area`, `largura` e
+  `altura` (por exemplo `parede >= 1,5*d`). O desenho que fura uma regra deixa de existir no teste e no
+  Montador, com o motivo.
+- **Configurações:** a tabela de projeto, com uma linha por conjunto de valores e a conta de cada uma.

@@ -21,7 +21,7 @@ import json
 import math
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -84,12 +84,12 @@ class FaixaDaLetra:
 
         partes = []
         if self.minimo is not None and self.minimo > 0.0:
-            partes.append(f"de {numero(self.minimo)} mm ({er.MOTIVOS.get(self.motivo_minimo, '')})")
+            partes.append(f"de {numero(self.minimo)} mm ({er.motivo_em_texto(self.motivo_minimo)})")
         else:
             partes.append("de quase zero")
         if self.maximo is not None:
             partes.append(
-                f"até {numero(self.maximo)} mm ({er.MOTIVOS.get(self.motivo_maximo, '')})"
+                f"até {numero(self.maximo)} mm ({er.motivo_em_texto(self.motivo_maximo)})"
             )
         else:
             partes.append("sem limite para cima pela forma")
@@ -122,6 +122,8 @@ class Modelo:
             letra for letra in self.esboco.letras_usadas() if tipos.get(letra) != "angulo"
         )
         self.base = {letra: float(self.esboco.valores()[letra]) for letra in self.letras}
+        self.regras = tuple(eb.ler_regra(r) for r in self.esboco.regras)
+        self._faixas: dict[str, FaixaDaLetra] = {}
         self.graus = eb.graus_de_liberdade(self.sistema)
         self._guardados: OrderedDict[tuple[float, ...], dict[Any, Any]] = OrderedDict()
         self._pares = self._ligacoes()
@@ -171,7 +173,34 @@ class Modelo:
             q[indices] = solucao.q
             convergiu[indices] = solucao.convergiu
             self._lembrar(parte, solucao)
-        return Medicao(q, self.regioes.avaliar(q, convergiu))
+        return Medicao(q, self._com_regras(self.regioes.avaliar(q, convergiu), vetores, k))
+
+    def _com_regras(
+        self, avaliacao: er.Avaliacao, vetores: Mapping[str, np.ndarray], k: int
+    ) -> er.Avaliacao:
+        """As regras de projeto: o desenho que fura uma delas não existe para o teste."""
+        if not self.regras:
+            return avaliacao
+        e = avaliacao.exatas
+        valores: dict[str, Any] = {**self.esboco.valores(), **vetores}
+        valores.update(
+            parede=avaliacao.folga,
+            area=e.area,
+            largura=e.x_max - e.x_min,
+            altura=e.y_max - e.y_min,
+        )
+        valido = avaliacao.valido.copy()
+        motivo = list(avaliacao.motivo)
+        folga = avaliacao.folga.copy()
+        for regra in self.regras:
+            with np.errstate(all="ignore"):
+                margem = np.broadcast_to(np.asarray(eb.folga_da_regra(regra, valores), float), (k,))
+            furou = valido & ~(margem >= -1e-9 * self.sistema.tamanho)
+            for i in np.flatnonzero(furou):
+                motivo[i] = er.REGRA + regra.texto
+            valido &= ~furou
+        folga = np.where(valido, folga, -1.0)
+        return replace(avaliacao, valido=valido, motivo=tuple(motivo), folga=folga)
 
     def _partida(
         self, parte: Mapping[str, np.ndarray]
@@ -219,6 +248,14 @@ class Modelo:
 
     def faixa(self, letra: str, valores: Mapping[str, float] | None = None) -> FaixaDaLetra:
         """De quanto a quanto ``letra`` pode ir, com as outras letras em ``valores`` (ou como estão)."""
+        if valores is None and letra in self._faixas:
+            return self._faixas[letra]
+        faixa = self._faixa(letra, valores)
+        if valores is None:
+            self._faixas[letra] = faixa
+        return faixa
+
+    def _faixa(self, letra: str, valores: Mapping[str, float] | None) -> FaixaDaLetra:
         fixos = {**self.base, **(valores or {})}
         v0 = float(fixos[letra])
 
@@ -259,6 +296,21 @@ class Modelo:
         return FaixaDaLetra(letra, v0, minimo, maximo, motivo_min, motivo_max)
 
     # -- números da seção --------------------------------------------------------------------------
+
+    def faixa_de_teste(self, letra: str) -> tuple[float, float, float]:
+        """De, até e passo para testar a letra: os do esboço, ou a faixa em que o desenho existe."""
+        variavel = next(v for v in self.esboco.variaveis if v.nome == letra)
+        v0 = self.base[letra]
+        if variavel.de is not None and variavel.ate is not None and variavel.ate > variavel.de:
+            de, ate = variavel.de, variavel.ate
+        else:
+            existe = self.faixa(letra)
+            de = max(v0 / 4.0, (existe.minimo or 0.0) * 1.001)
+            ate = min(v0 * 3.0, existe.maximo * 0.999) if existe.maximo else v0 * 3.0
+            if ate <= de:
+                de, ate = v0 * 0.9, v0 * 1.1
+        passo = variavel.passo if variavel.passo and variavel.passo > 0 else (ate - de) / 20.0
+        return float(de), float(ate), float(passo)
 
     def _vertices(self, q: np.ndarray) -> np.ndarray:
         return np.concatenate(self.regioes.poligonos(q), axis=1)
@@ -319,7 +371,7 @@ class Modelo:
         av, q = medicao.avaliacao, medicao.q
         e = av.exatas
         saida: list[dict[Any, Any]] = []
-        vertices = self._vertices(q) if av.valido.any() else None
+        vertices = self._vertices(q) if av.valido.any() else np.zeros((k, 0, 2))
         for i in range(k):
             if not bool(av.valido[i]):
                 saida.append({FOLGA: -1.0})
@@ -496,7 +548,7 @@ def por_que_acaba(expressao: sp.Expr, valores: Mapping[sp.Symbol, float]) -> str
         letras = {str(s): float(valores[s]) for s in atomo.args[2:] if s in valores}
         motivo = m.medir(letras).avaliacao.motivo[0]
         if motivo:
-            return er.MOTIVOS.get(motivo, motivo)
+            return er.motivo_em_texto(motivo)
     return ""
 
 

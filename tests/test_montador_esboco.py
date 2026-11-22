@@ -153,7 +153,7 @@ def test_pagina_abre_o_esboco_salvo_e_testa_a_letra(catalogo_vazio):
     assert at.session_state["secao_esboco_partes"]
     textos = " ".join(m.value for m in at.markdown)
     assert "Testar o desenho" in textos
-    assert "d: de quase zero, até 20 mm" in textos
+    assert "de quase zero, até 20 mm" in textos
     assert any("Parede mais fina agora" in c.value for c in at.caption)
 
 

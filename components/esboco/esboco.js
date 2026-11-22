@@ -32,15 +32,34 @@ const ES_ICONES = {
   tela: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="M4 4l5 5M20 4l-5 5M20 20l-5-5M4 20l5-5"/>',
   sair_da_tela: '<path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/>',
   seta: '<path d="m2 4 3 3 3-3"/>',
+  aparar: '<circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.2 8.4 20 17M8.2 15.6 20 7"/>',
+  estender: '<path d="M4 16h10" /><path d="M14 16h3" stroke-dasharray="1.5 2"/><path d="M20 6v14"/><path d="m15 13 3 3-3 3"/>',
+  dividir: '<path d="M4 18 10.5 11.5M13.5 8.5 20 2"/><circle cx="12" cy="10" r="1.8"/><circle cx="4" cy="18" r="1.4"/>',
+  filete: '<path d="M5 20V12a7 7 0 0 1 7-7h8"/><path d="M5 5h3M5 5v3" stroke-dasharray="1.5 1.5"/>',
+  chanfro: '<path d="M5 20v-9l6-6h9"/><path d="M5 5h3M5 5v3" stroke-dasharray="1.5 1.5"/>',
+  deslocar: '<path d="M4 18V8a4 4 0 0 1 4-4h12"/><path d="M8 20v-9a3 3 0 0 1 3-3h9" stroke-dasharray="2.5 2"/>',
+  espelhar: '<path d="M12 3v18" stroke-dasharray="2.5 2"/><path d="M9 7 4 17h5zM15 7l5 10h-5z"/>',
+  padrao_linear: '<circle cx="5" cy="12" r="2.4"/><circle cx="12" cy="12" r="2.4"/><circle cx="19" cy="12" r="2.4"/><path d="M5 18h14" stroke-dasharray="1.5 2"/>',
+  padrao_circular: '<circle cx="12" cy="12" r="7" stroke-dasharray="1.5 2"/><circle cx="12" cy="5" r="2"/><circle cx="18" cy="15.5" r="2"/><circle cx="6" cy="15.5" r="2"/>',
 }
 const esIcone = (nome) => `<svg class="icone" viewBox="0 0 24 24" aria-hidden="true">${ES_ICONES[nome] ?? ""}</svg>`
-const ES_GRUPOS = { ret: ["retangulo", "retangulo_centro"], arco: ["arco", "arco_tangente"] }
+const ES_GRUPOS = {
+  ret: ["retangulo", "retangulo_centro"],
+  arco: ["arco", "arco_tangente"],
+  aparar: ["aparar", "estender", "dividir"],
+  canto: ["filete", "chanfro"],
+  padrao: ["padrao_linear", "padrao_circular"],
+}
+// As ferramentas que editam o que já está desenhado (e não desenham curva nova do zero).
+const ES_EDICAO = new Set(["aparar", "estender", "dividir", "filete", "chanfro", "deslocar", "espelhar", "padrao_linear", "padrao_circular"])
 
 const ES_ESTADOS = new WeakMap()
 const ES_PERTO_PX = 7
 const ES_ENCAIXE_PX = 11
 const ES_INFERE_GRAUS = 3
 const ES_ARRASTO_PX = 3
+const ES_DUPLO_MS = 450
+const ES_TEMPO_DO_AVISO_MS = 5000
 
 const esCopiar = (v) => JSON.parse(JSON.stringify(v))
 const esNum = (v, casas = 4) => (Number.isFinite(v) ? String(Number(v.toFixed(casas))).replace(".", ",") : "—")
@@ -58,6 +77,15 @@ const ES_DICAS = {
   arco_tangente: "Comece na ponta de uma linha ou de um arco: o arco sai tangente a ela.",
   ponto: "Clique onde o ponto fica.",
   cota: "Clique uma curva (comprimento, diâmetro, raio), ou dois pontos ou curvas, e depois onde a cota fica.",
+  aparar: "Clique no trecho que sai: ele some até os cortes com as outras curvas. Para juntar dois contornos que se cruzam, apare os dois lados.",
+  estender: "Clique perto da ponta da linha: ela anda até a primeira curva no caminho.",
+  dividir: "Clique onde a curva se parte em duas.",
+  filete: "Clique no canto de duas linhas. O raio fica na faixa de baixo (aceita letra).",
+  chanfro: "Clique no canto de duas linhas. A distância fica na faixa de baixo (aceita letra).",
+  deslocar: "Clique nas curvas (uma fila ligada) e depois no vazio, do lado em que a cópia fica.",
+  espelhar: "Clique nas curvas que vão ser espelhadas e depois, com elas escolhidas, na linha do espelho (Shift junta curvas sem espelhar).",
+  padrao_linear: "Clique nas curvas que se repetem e depois em Criar, na faixa de baixo.",
+  padrao_circular: "Clique nas curvas que se repetem e depois no ponto do centro.",
 }
 const ES_SINAIS = {
   horizontal: "H",
@@ -106,6 +134,13 @@ const ES_TITULOS = {
   retangulo_centro: "Retângulo pelo centro (Shift+R): o centro e um canto.",
   arco: "Arco por 3 pontos (A): início, fim e um ponto do arco.",
   arco_tangente: "Arco tangente (T): comece na ponta de uma linha ou de um arco; ele sai tangente a ela.",
+  aparar: "Aparar (X): clique no trecho que sai; ele vai até os cortes com as outras curvas.",
+  estender: "Estender (W): clique perto da ponta da linha; ela anda até a primeira curva no caminho.",
+  dividir: "Dividir: clique onde a curva se parte em duas.",
+  filete: "Filete (G): clique no canto de duas linhas. O raio fica na faixa de baixo, e aceita letra.",
+  chanfro: "Chanfro: clique no canto de duas linhas. A distância fica na faixa de baixo, e aceita letra.",
+  padrao_linear: "Padrão em fila: escolha as curvas, ponha a quantidade e o passo (aceita letra) e clique em Criar.",
+  padrao_circular: "Padrão em círculo: escolha as curvas e clique no ponto do centro.",
 }
 
 function esCriar(raiz) {
@@ -115,6 +150,7 @@ function esCriar(raiz) {
   const caixaSituacao = raiz.querySelector("[data-situacao]")
   const caixaLetras = raiz.querySelector("[data-letras]")
   const caixaSelecao = raiz.querySelector("[data-selecao]")
+  const caixaOpcoes = raiz.querySelector("[data-opcoes]")
   const infoXY = raiz.querySelector('[data-i="xy"]')
   const infoDica = raiz.querySelector('[data-i="dica"]')
   const chaveSinais = raiz.querySelector('[data-c="sinais"]')
@@ -144,6 +180,10 @@ function esCriar(raiz) {
     problemas: [],
     marcas: null,
     espaco: false,
+    abrirNoSoltar: null, // a cota cuja caixinha abre quando o botão do mouse sobe
+    ultimaCota: null,
+    // Os campos das ferramentas de edição: texto, para aceitar letra e conta.
+    opcoes: { raio: "5", chanfro: "5", distancia: "3", quantos: "4", passo: "20", direcao: "h", quantosCirc: "6", angulo: "360" },
   }
 
   // ---- vista ------------------------------------------------------------------------------------
@@ -224,6 +264,20 @@ function esCriar(raiz) {
 
   function avisar(texto, tipo = "aviso") {
     e.mensagem = texto ? { texto, tipo } : null
+    // Também em cima do desenho, por uns segundos: a faixa de baixo fica fora da vista.
+    const caixaAviso = raiz.querySelector("[data-aviso]")
+    if (!caixaAviso) return
+    clearTimeout(e.tempoDoAviso)
+    if (!texto) {
+      caixaAviso.hidden = true
+      return
+    }
+    caixaAviso.textContent = texto
+    caixaAviso.classList.toggle("ruim", tipo === "ruim")
+    caixaAviso.hidden = false
+    e.tempoDoAviso = setTimeout(() => {
+      caixaAviso.hidden = true
+    }, ES_TEMPO_DO_AVISO_MS)
   }
 
   // ---- histórico e envio ------------------------------------------------------------------------
@@ -757,7 +811,8 @@ function esCriar(raiz) {
     const fim = c.tipo === "angulo" ? "°" : ""
     if (c.referencia) return `(${prefixo}${esNum(valor, 2)}${fim})`
     if (ehNumero(c.expressao)) return `${prefixo}${esNum(valor, 3)}${fim}`
-    return `${prefixo}${c.expressao.replace(/\./g, ",")} = ${esNum(valor, 3)}${fim}`
+    const separa = prefixo ? " " : "" // "R r = 5": o R da cota não gruda na letra
+    return `${prefixo}${separa}${c.expressao.replace(/\./g, ",")} = ${esNum(valor, 3)}${fim}`
   }
 
   // O que a cota mede pelos itens escolhidos, ou null se não serve.
@@ -840,7 +895,7 @@ function esCriar(raiz) {
     depoisDeMudar()
     avisar(aviso, "aviso")
     montarPainel()
-    if (!c.referencia) editarCota(c.id)
+    if (!c.referencia) e.abrirNoSoltar = c.id
   }
 
   function lerCotaDigitada(texto, c) {
@@ -902,6 +957,7 @@ function esCriar(raiz) {
       nome: nomeDaCota(c),
       texto: c.referencia ? esNumConta(medida(c)).replace(".", ",") : c.expressao.replace(/\./g, ","),
       dica: "Número, letra ou conta: 25, d, 2*d, L/2-10",
+      selecionarTudo: true,
       ler: (texto) => lerCotaDigitada(texto, c),
       aplicar: (lido) => aplicarCota(id, lido),
       acoes: [
@@ -1201,6 +1257,179 @@ function esCriar(raiz) {
     depoisDeMudar()
   }
 
+
+  // ---- edição: aparar, estender, dividir, filete, chanfro, deslocar, espelhar, padrões -----------
+  // O texto de um campo (raio, distância, passo) vira conta; letra nova nasce com `padrao`.
+  function contaDoCampo(texto, padrao) {
+    const numero = lerValorDigitado(texto, padrao, "mm")
+    if (!numero.erro) return { expressao: esNumConta(numero.valor), novas: [] }
+    let no
+    try {
+      no = lerConta(texto)
+    } catch (erro) {
+      return { erro: erro.message }
+    }
+    const conhecidas = new Set(e.esboco.variaveis.map((v) => v.nome))
+    const novas = [...letrasDaConta(no)].filter((l) => !conhecidas.has(l))
+    for (const l of novas) if (!nomeValido(l)) return { erro: `“${l}” não serve de letra.` }
+    if (novas.length > 1) return { erro: `Crie uma letra de cada vez: ${novas.join(", ")} são novas.` }
+    return { expressao: String(texto).trim().replace(/,/g, "."), novas: novas.map((nome) => ({ nome, valor: padrao })) }
+  }
+  function comCampo(texto, padrao) {
+    const conta = contaDoCampo(texto, padrao)
+    if (conta.erro) return conta
+    const novo = esCopiar(e.esboco)
+    for (const v of conta.novas) novo.variaveis.push({ nome: v.nome, valor: v.valor, tipo: "comprimento" })
+    return { novo, expressao: conta.expressao, valores: esValores(novo) }
+  }
+  function aplicarEdicao(resultado, aposSucesso = null) {
+    if (resultado.erro) return avisar(resultado.erro, "ruim")
+    const erro = tentar(resultado.esboco)
+    if (erro) return avisar(erro, "ruim")
+    avisar("")
+    e.picks = []
+    aposSucesso?.(resultado)
+  }
+  const curvasEscolhidas = () => {
+    const lista = e.picks.length ? e.picks : [...e.sel]
+    return lista.filter((k) => k.startsWith("c:")).map((k) => k.slice(2))
+  }
+  function alternarPick(chave) {
+    const i = e.picks.indexOf(chave)
+    if (i >= 0) e.picks.splice(i, 1)
+    else e.picks.push(chave)
+  }
+  function pontoNoMouse(u, v) {
+    let melhor = null
+    let dist = ES_PERTO_PX
+    for (const [pid, [x, y]] of Object.entries(e.esboco.pontos)) {
+      const [a, b] = px(x, y)
+      const d = Math.hypot(a - u, b - v)
+      if (d <= dist) {
+        dist = d
+        melhor = pid
+      }
+    }
+    return melhor
+  }
+  function curvaNoMouse(u, v) {
+    let melhor = null
+    let dist = ES_PERTO_PX
+    for (const c of e.esboco.curvas) {
+      const d = distCurvaPx(c, u, v)
+      if (d <= dist) {
+        dist = d
+        melhor = c.id
+      }
+    }
+    return melhor
+  }
+  function cliqueDeEdicao(u, v, mundo, ev) {
+    const f = e.ferramenta
+    // Aqui a curva vale mais que o ponto: clicar perto da ponta de uma linha ainda é clicar nela.
+    const curvaAqui = curvaNoMouse(u, v)
+    const pontoAqui = pontoNoMouse(u, v)
+    if (f === "aparar" || f === "estender" || f === "dividir") {
+      if (!curvaAqui) return avisar("Clique numa curva.", "aviso")
+      const op = { aparar: edAparar, estender: edEstender, dividir: edDividir }[f]
+      return aplicarEdicao(op(e.esboco, curvaAqui, mundo[0], mundo[1]))
+    }
+    if (f === "filete" || f === "chanfro") {
+      const canto = pontoAqui ?? null
+      if (!canto) return avisar("Clique no canto (o ponto onde as duas linhas se encontram).", "aviso")
+      const texto = f === "filete" ? e.opcoes.raio : e.opcoes.chanfro
+      const campo = comCampo(texto, 5)
+      if (campo.erro) return avisar(campo.erro, "ruim")
+      const op = f === "filete" ? edFilete : edChanfro
+      return aplicarEdicao(op(campo.novo, canto, campo.expressao, campo.valores))
+    }
+    if (f === "deslocar") {
+      if (curvaAqui) return alternarPick(`c:${curvaAqui}`)
+      const ids = curvasEscolhidas()
+      if (!ids.length) return avisar("Clique antes nas curvas que vão ser deslocadas.", "aviso")
+      const campo = comCampo(e.opcoes.distancia, 3)
+      if (campo.erro) return avisar(campo.erro, "ruim")
+      return aplicarEdicao(edDeslocar(campo.novo, ids, mundo, campo.expressao, campo.valores))
+    }
+    if (f === "espelhar") {
+      const ids = curvasEscolhidas()
+      const linha = curvaAqui && curva(curvaAqui)?.tipo === "linha"
+      if (linha && ids.length && !ev.shiftKey && !ids.includes(curvaAqui)) {
+        return aplicarEdicao(edEspelhar(e.esboco, ids, curvaAqui))
+      }
+      if (curvaAqui) return alternarPick(`c:${curvaAqui}`)
+      return avisar("Clique nas curvas e depois na linha do espelho.", "aviso")
+    }
+    if (f === "padrao_linear") {
+      if (curvaAqui) return alternarPick(`c:${curvaAqui}`)
+      return
+    }
+    if (f === "padrao_circular") {
+      if (pontoAqui && curvasEscolhidas().length) {
+        return aplicarEdicao(edPadraoCircular(e.esboco, curvasEscolhidas(), pontoAqui, e.opcoes.quantosCirc, e.opcoes.angulo))
+      }
+      if (curvaAqui) return alternarPick(`c:${curvaAqui}`)
+      return avisar("Clique nas curvas e depois no ponto do centro.", "aviso")
+    }
+  }
+  function criarPadraoLinear() {
+    const ids = curvasEscolhidas()
+    if (!ids.length) return avisar("Escolha as curvas que se repetem.", "aviso")
+    const campo = comCampo(e.opcoes.passo, 20)
+    if (campo.erro) return avisar(campo.erro, "ruim")
+    aplicarEdicao(edPadraoLinear(campo.novo, ids, e.opcoes.quantos, campo.expressao, e.opcoes.direcao, campo.valores))
+    montarPainel()
+    desenhar()
+  }
+  // Os campos da ferramenta, na faixa de baixo.
+  function montarOpcoes() {
+    const f = e.ferramenta
+    const campos = {
+      filete: [["raio", "Raio", "Número, letra ou conta: 5, r, t/2"]],
+      chanfro: [["chanfro", "Distância", "Número, letra ou conta: 5, c"]],
+      deslocar: [["distancia", "Distância", "Número, letra ou conta: 3, t (a espessura)"]],
+      padrao_linear: [
+        ["quantos", "Quantidade", "Quantas cópias no total, contando a original"],
+        ["passo", "Passo", "Distância entre duas cópias: número, letra ou conta"],
+      ],
+      padrao_circular: [
+        ["quantosCirc", "Quantidade", "Quantas no total, contando a original"],
+        ["angulo", "Ângulo total (°)", "360 espalha numa volta inteira"],
+      ],
+    }[f]
+    if (!campos) {
+      caixaOpcoes.hidden = true
+      caixaOpcoes.innerHTML = ""
+      return
+    }
+    const foco = raiz.getRootNode().activeElement
+    if (foco && caixaOpcoes.contains(foco) && caixaOpcoes.dataset.f === f) return
+    caixaOpcoes.dataset.f = f
+    caixaOpcoes.hidden = false
+    let html = campos
+      .map(([chave, rotulo, titulo]) => `<label title="${esc(titulo)}">${rotulo} <input data-opcao="${chave}" value="${esc(e.opcoes[chave])}"></label>`)
+      .join("")
+    if (f === "padrao_linear") {
+      html += `<label>Direção <select data-opcao="direcao"><option value="h"${e.opcoes.direcao === "h" ? " selected" : ""}>Deitada (x)</option><option value="v"${e.opcoes.direcao === "v" ? " selected" : ""}>Em pé (y)</option></select></label>`
+      html += `<button type="button" data-criar-padrao>Criar</button>`
+    }
+    const n = curvasEscolhidas().length
+    if (["deslocar", "espelhar", "padrao_linear", "padrao_circular"].includes(f)) {
+      html += `<span class="es-ajuda">${n ? `${n} ${n === 1 ? "curva escolhida" : "curvas escolhidas"}` : "nenhuma curva escolhida"}</span>`
+    }
+    caixaOpcoes.innerHTML = html
+    caixaOpcoes.querySelectorAll("[data-opcao]").forEach((campo) => {
+      campo.addEventListener("keydown", (ev) => ev.stopPropagation())
+      campo.addEventListener("change", () => {
+        e.opcoes[campo.dataset.opcao] = campo.value
+      })
+      campo.addEventListener("input", () => {
+        e.opcoes[campo.dataset.opcao] = campo.value
+      })
+    })
+    caixaOpcoes.querySelector("[data-criar-padrao]")?.addEventListener("click", criarPadraoLinear)
+  }
+
   // ---- painel -----------------------------------------------------------------------------------
   function montarPainel() {
     const g = e.graus
@@ -1235,6 +1464,7 @@ function esCriar(raiz) {
       texto += " Delete apaga."
     }
     caixaSelecao.textContent = texto
+    montarOpcoes()
     raiz.querySelectorAll("[data-r]").forEach((b) => b.classList.toggle("ativo", e.ferramenta === `r:${b.dataset.r}`))
   }
   function montarLetras() {
@@ -1545,6 +1775,7 @@ function esCriar(raiz) {
     }
     if (chaveSinais.checked) partes.push(sinaisDasRestricoes())
     for (const c of e.esboco.cotas) {
+      if (c.oculta) continue
       try {
         partes.push(svgDaCota(c))
       } catch {
@@ -1624,8 +1855,11 @@ function esCriar(raiz) {
       if (item) principal.setAttribute("aria-label", item.textContent.trim())
     }
     fecharMenus()
+    // Quem entra numa edição com curvas já escolhidas fica com elas.
+    if (ES_EDICAO.has(nome)) e.picks = [...e.sel].filter((k) => k.startsWith("c:"))
     raiz.querySelectorAll("[data-f]").forEach((b) => b.classList.toggle("ativo", b.dataset.f === nome))
     raiz.querySelectorAll("[data-r]").forEach((b) => b.classList.toggle("ativo", nome === `r:${b.dataset.r}`))
+    if (e.sistema !== undefined) montarPainel()
     desenhar()
   }
   function digitarMedida(tecla) {
@@ -1785,6 +2019,17 @@ function esCriar(raiz) {
     if (ev.button !== 0) return
     const cotaAlvo = ev.target.closest?.("[data-cota]")
     const sinalAlvo = ev.target.closest?.("[data-sinal]")
+    // Duplo clique numa cota, em qualquer ferramenta: a caixinha abre ao soltar o botão. O dblclick
+    // do navegador não serve: o desenho é refeito no primeiro clique, e o texto clicado já é outro.
+    if (cotaAlvo && cotaAlvo.dataset.cota !== "_") {
+      const id = cotaAlvo.dataset.cota
+      const agora = performance.now()
+      if (e.ultimaCota?.id === id && agora - e.ultimaCota.t < ES_DUPLO_MS) {
+        e.ultimaCota = null
+        e.abrirNoSoltar = id
+        if (e.ferramenta !== "selecionar") return
+      } else e.ultimaCota = { id, t: agora }
+    }
     if (e.ferramenta === "selecionar") {
       if (cotaAlvo && cotaAlvo.dataset.cota !== "_") {
         const chave = `d:${cotaAlvo.dataset.cota}`
@@ -1852,6 +2097,12 @@ function esCriar(raiz) {
       desenhar()
       return
     }
+    if (ES_EDICAO.has(e.ferramenta)) {
+      cliqueDeEdicao(u, v, mundo, ev)
+      montarPainel()
+      desenhar()
+      return
+    }
     cliqueDeDesenho(u, v)
     montarPainel()
     desenhar()
@@ -1897,7 +2148,7 @@ function esCriar(raiz) {
       desenhar()
       return
     }
-    if (e.ferramenta === "selecionar" || e.ferramenta === "cota" || e.ferramenta.startsWith("r:")) {
+    if (e.ferramenta === "selecionar" || e.ferramenta === "cota" || e.ferramenta.startsWith("r:") || ES_EDICAO.has(e.ferramenta)) {
       const antes = e.perto
       e.perto = oQueTemAqui(u, v)
       e.encaixe = null
@@ -1912,6 +2163,12 @@ function esCriar(raiz) {
   svg.addEventListener("pointerup", (ev) => {
     const gesto = e.gesto
     e.gesto = null
+    if (e.abrirNoSoltar) {
+      const id = e.abrirNoSoltar
+      e.abrirNoSoltar = null
+      // Depois do clique inteiro: o foco já parou na prancheta e não volta a sair da caixinha.
+      setTimeout(() => editarCota(id), 0)
+    }
     if (!gesto) return
     soltar(ev)
     if (gesto.tipo === "janela") {
@@ -1940,10 +2197,8 @@ function esCriar(raiz) {
       depoisDeMudar()
     }
   })
-  svg.addEventListener("dblclick", (ev) => {
-    const alvo = ev.target.closest?.("[data-cota]")
-    if (alvo && alvo.dataset.cota !== "_") editarCota(alvo.dataset.cota)
-    else if (e.desenho) {
+  svg.addEventListener("dblclick", () => {
+    if (e.desenho) {
       e.desenho = null
       desenhar()
     }
@@ -1991,10 +2246,13 @@ function esCriar(raiz) {
       montarPainel()
       desenhar()
     } else if (ev.key === "Delete" || ev.key === "Backspace") apagar()
+    else if (ev.key === "Enter" && e.sel.size === 1 && [...e.sel][0].startsWith("d:")) {
+      editarCota([...e.sel][0].slice(2))
+    }
     else if (!ctrl && /^[0-9.,]$/.test(ev.key) && digitarMedida(ev.key)) {
       // abriu a caixinha com o número
     } else if (!ctrl && !ev.altKey) {
-      const ferramentas = { l: "linha", c: "circulo", a: "arco", t: "arco_tangente", p: "ponto", d: "cota" }
+      const ferramentas = { l: "linha", c: "circulo", a: "arco", t: "arco_tangente", p: "ponto", d: "cota", x: "aparar", w: "estender", g: "filete", o: "deslocar", s: "espelhar" }
       const restricoes = { h: "horizontal", v: "vertical", i: "coincidente", e: "igual", m: "ponto_medio" }
       if (tecla === "r") trocarFerramenta(ev.shiftKey ? "retangulo_centro" : "retangulo")
       else if (ferramentas[tecla]) trocarFerramenta(ferramentas[tecla])
@@ -2032,7 +2290,12 @@ function esCriar(raiz) {
     if (!ev.target.closest?.(".es-grupo")) fecharMenus()
   })
   raiz.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => trocarFerramenta(b.dataset.f)))
-  raiz.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => botaoDeRestricao(b.dataset.r)))
+  raiz.querySelectorAll("[data-r]").forEach((b) =>
+    b.addEventListener("click", () => {
+      fecharMenus()
+      botaoDeRestricao(b.dataset.r)
+    }),
+  )
   const acoes = {
     desfazer,
     refazer,

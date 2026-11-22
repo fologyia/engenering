@@ -16,6 +16,7 @@ import json
 import math
 from typing import Any
 
+import numpy as np
 import streamlit as st
 
 from components import volta_da_secao as vs
@@ -75,6 +76,9 @@ PARTES_ESBOCO = "secao_esboco_partes"
 PROBLEMAS = "secao_esboco_problemas"
 CHAVE_ESBOCO = "secao_esboco_prancheta"
 _VOLTA_VISTA = "secao_volta_vista"
+CONFIGURACOES = "secao_configuracoes"
+REGRAS = "secao_regras"
+AVISO_DO_TESTE = "secao_aviso_do_teste"
 
 _ROTULOS = {modelo.nome: modelo for modelo in sd.MODELOS}
 
@@ -300,7 +304,10 @@ def _abrir_salva() -> None:
     st.session_state[NOME] = nome
     if item.esboco:
         st.session_state[MODO] = MODO_ESBOCO
-        _trocar_esboco(dict(item.esboco))
+        esboco = dict(item.esboco)
+        st.session_state[CONFIGURACOES] = list(esboco.pop("configuracoes", None) or [])
+        st.session_state.pop(REGRAS, None)
+        _trocar_esboco(esboco)
         return
     st.session_state[MODO] = MODO_SIMPLES
     _trocar_partes(sd.partes_de_lista(item.desenho), ajustar=True)
@@ -316,7 +323,7 @@ def _salvar(nome: str, analise: sd.Analise) -> str:
         catalogo.salvar_perfil(
             dados,
             desenho=tuple(p.como_dicionario() for p in analise.partes),
-            esboco=st.session_state.get(ESBOCO) if _no_esboco() else None,
+            esboco=_esboco_para_salvar() if _no_esboco() else None,
         )
     except (sd.ErroDeSecao, catalogo.ErroDeCatalogo) as erro:
         return str(erro)
@@ -950,14 +957,14 @@ def tela() -> None:
             key=CHAVE_ESBOCO,
             ao_editar=_ao_editar_no_esboco,
         )
-        propriedades, uso, teste = st.columns([4, 3, 3], gap="medium")
+        propriedades, uso = st.columns([3, 2], gap="medium")
         with propriedades:
             _propriedades_ou_aviso(analise, falha)
         with uso:
             if analise is not None:
                 with secao_protegida("Uso"):
                     _uso(analise, sd.reconhecer(analise.partes))
-        with teste, secao_protegida("Testar o desenho"):
+        with secao_protegida("Testar o desenho"):
             _teste_do_desenho()
     else:
         esquerda, direita = st.columns([5, 2], gap="medium")
@@ -1048,6 +1055,71 @@ def _inicio_do_esboco() -> None:
         )
 
 
+def _esboco_para_salvar() -> dict[str, Any]:
+    """O esboço como está, com as configurações da tabela (que não passam pela prancheta)."""
+    esboco = dict(st.session_state.get(ESBOCO) or {})
+    configuracoes = st.session_state.get(CONFIGURACOES) or []
+    if configuracoes:
+        esboco["configuracoes"] = configuracoes
+    return esboco
+
+
+def _mudar_o_esboco(mudanca: Any) -> None:
+    """O Python mexe nos dados do esboço (faixas, regras): a prancheta recebe e guarda junto."""
+    esboco = json.loads(json.dumps(st.session_state.get(ESBOCO) or {}))
+    mudanca(esboco)
+    _trocar_esboco(esboco, ajustar=False)
+
+
+def _mudar_faixa(letra: str) -> None:
+    estado = st.session_state
+    de, ate, passo = (
+        estado.get(f"secao_faixa_{letra}_{campo}") for campo in ("de", "ate", "passo")
+    )
+    if de is None or ate is None or passo is None or not (ate > de) or not (passo > 0):
+        estado[AVISO_DO_TESTE] = (
+            f"Na faixa de {letra}, o até precisa passar do de, com passo acima de zero."
+        )
+        return
+
+    def mudar(esboco: dict[str, Any]) -> None:
+        for variavel in esboco.get("variaveis", []):
+            if variavel.get("nome") == letra:
+                variavel.update(de=float(de), ate=float(ate), passo=float(passo))
+
+    _mudar_o_esboco(mudar)
+
+
+def _aplicar_regras() -> None:
+    estado = st.session_state
+    linhas = [
+        linha.strip() for linha in str(estado.get(REGRAS) or "").splitlines() if linha.strip()
+    ]
+    esboco = estado.get(ESBOCO) or {}
+    letras = {v.get("nome") for v in esboco.get("variaveis", [])}
+    for linha in linhas:
+        try:
+            regra = eb.ler_regra(linha)
+        except eb.ErroDeEsboco as erro:
+            estado[AVISO_DO_TESTE] = str(erro)
+            return
+        faltam = eb.letras_da_regra(regra) - letras - set(eb.MEDIDAS_DA_REGRA)
+        if faltam:
+            estado[AVISO_DO_TESTE] = (
+                f"A regra “{linha}” usa {', '.join(sorted(faltam))}, que não é letra do esboço nem "
+                f"medida ({', '.join(eb.MEDIDAS_DA_REGRA)})."
+            )
+            return
+
+    def mudar(dados: dict[str, Any]) -> None:
+        if linhas:
+            dados["regras"] = linhas
+        else:
+            dados.pop("regras", None)
+
+    _mudar_o_esboco(mudar)
+
+
 @st.cache_resource(max_entries=16, show_spinner=False)
 def _modelo_do_esboco(impressao: str) -> es.Modelo:
     """O esboço pronto para ser refeito com outras medidas (um por desenho diferente)."""
@@ -1060,36 +1132,262 @@ def _faixas_das_letras(impressao: str) -> list[es.FaixaDaLetra]:
     return [modelo.faixa(letra) for letra in modelo.letras]
 
 
+_MEDIDAS_DA_VARREDURA = {
+    "Área (mm²)": "area",
+    "Ix (mm⁴)": "ix",
+    "Iy (mm⁴)": "iy",
+    "W em x (mm³)": "wx",
+    "Parede mais fina (mm)": "parede",
+}
+
+
+@st.cache_data(max_entries=64, show_spinner=False)
+def _varredura(impressao: str, letra: str, de: float, ate: float) -> dict[str, list[float]]:
+    """As medidas da seção ao longo da letra, com as outras paradas. Onde o desenho não existe, nada."""
+    modelo = _modelo_do_esboco(impressao)
+    valores = np.linspace(de, ate, 61)
+    numeros = modelo.numeros({letra: valores}, (es.AREA, es.IX, es.IY, es.FIBRA, es.FOLGA))
+    existe = numeros[es.FOLGA] >= 0.0
+    nada = np.full(valores.shape, np.nan)
+    with np.errstate(all="ignore"):
+        saida = {
+            "valor": valores,
+            "area": np.where(existe, numeros[es.AREA], nada),
+            "ix": np.where(existe, numeros[es.IX], nada),
+            "iy": np.where(existe, numeros[es.IY], nada),
+            "wx": np.where(existe, numeros[es.IX] / numeros[es.FIBRA], nada),
+            "parede": np.where(existe & np.isfinite(numeros[es.FOLGA]), numeros[es.FOLGA], nada),
+        }
+    return {chave: [float(v) for v in vetor] for chave, vetor in saida.items()}
+
+
 def _teste_do_desenho() -> None:
-    """Até onde cada letra pode ir sem o desenho deixar de existir, e a parede mais fina."""
+    """O desenho testado pelas letras: até onde vai, varredura, regras e configurações."""
     if not _partes_ativas():
         return
-    impressao = es.impressao(st.session_state.get(ESBOCO) or {})
+    esboco = st.session_state.get(ESBOCO) or {}
+    impressao = es.impressao(esboco)
     with st.container(border=True):
         st.markdown("**Testar o desenho**")
+        aviso = st.session_state.pop(AVISO_DO_TESTE, "")
+        if aviso:
+            st.warning(aviso, icon=":material/warning:")
         try:
             modelo = _modelo_do_esboco(impressao)
         except (eb.ErroDeEsboco, er.ErroDeRegiao, sd.ErroDeSecao, ValueError) as erro:
             st.warning(str(erro), icon=":material/warning:")
             return
-        folga = float(modelo.medir({}).avaliacao.folga[0])
-        if math.isfinite(folga) and len(modelo.regioes.lacos) > 1:
+        agora = modelo.medir({}).avaliacao
+        folga = float(agora.folga[0])
+        if not bool(agora.valido[0]):
+            st.error(
+                f"O desenho de agora já não passa: {er.motivo_em_texto(agora.motivo[0])}.",
+                icon=":material/error:",
+            )
+        elif math.isfinite(folga) and len(modelo.regioes.lacos) > 1:
             st.caption(
                 f"Parede mais fina agora: **{_numero(folga, 2)} mm** (a menor distância entre "
                 "contornos: do furo até a borda, ou de um furo a outro)."
             )
-        if not modelo.letras:
-            st.caption(
-                "Ponha uma letra numa cota (duplo clique na medida, e digite d ou 2*d): aqui "
-                "aparece até onde ela pode ir sem o desenho deixar de existir. Salva no catálogo, "
-                "a seção leva a letra para o Montador de fórmulas como incógnita."
-            )
-            return
-        for faixa in _faixas_das_letras(impressao):
-            st.markdown("- " + faixa.texto())
         if not modelo.graus.definido:
             st.caption(
                 f"O esboço ainda tem {modelo.graus.livres} graus livres: no teste, o que está em "
                 "azul pode andar junto. Prenda com cotas e restrições para o teste mexer só na "
                 "letra."
             )
+        abas = st.tabs(["Até onde vai", "Varredura", "Regras de projeto", "Configurações"])
+        with abas[0]:
+            _ate_onde_vai(modelo, impressao)
+        with abas[1]:
+            _aba_da_varredura(modelo, impressao)
+        with abas[2]:
+            _aba_das_regras(modelo, esboco)
+        with abas[3]:
+            _aba_das_configuracoes(modelo)
+
+
+def _sem_letras() -> None:
+    st.caption(
+        "Ponha uma letra numa cota (duplo clique na medida, e digite d ou 2*d): aqui aparece até "
+        "onde ela pode ir sem o desenho deixar de existir. Salva no catálogo, a seção leva a "
+        "letra para o Montador de fórmulas como incógnita."
+    )
+
+
+def _ate_onde_vai(modelo: es.Modelo, impressao: str) -> None:
+    if not modelo.letras:
+        _sem_letras()
+        return
+    if not bool(modelo.medir({}).avaliacao.valido[0]):
+        st.caption(
+            "Com o desenho de agora fora, não há de onde partir: ajuste as letras ou as regras."
+        )
+        return
+    for faixa in _faixas_das_letras(impressao):
+        letra = faixa.letra
+        st.markdown(
+            f"**{letra}** = {faixa.valor:.4g} mm: ".replace(".", ",")
+            + faixa.texto().split(": ", 1)[1]
+        )
+        de, ate, passo = modelo.faixa_de_teste(letra)
+        colunas = st.columns(3)
+        for coluna, campo, rotulo, valor, ajuda in (
+            (colunas[0], "de", "de", de, "O menor valor do teste e da busca do Montador."),
+            (colunas[1], "ate", "até", ate, "O maior valor do teste e da busca do Montador."),
+            (colunas[2], "passo", "passo", passo, "A distância entre dois valores testados."),
+        ):
+            coluna.number_input(
+                f"{letra}: {rotulo} (mm)",
+                value=float(f"{valor:.4g}"),
+                format="%g",
+                step=None,
+                key=f"secao_faixa_{letra}_{campo}",
+                on_change=_mudar_faixa,
+                args=(letra,),
+                help=ajuda,
+            )
+    st.caption("A faixa vai junto com a seção salva: a busca em faixas do Montador começa por ela.")
+
+
+def _aba_da_varredura(modelo: es.Modelo, impressao: str) -> None:
+    if not modelo.letras:
+        _sem_letras()
+        return
+    import altair as alt
+    import pandas as pd
+
+    colunas = st.columns(2)
+    letra = colunas[0].selectbox(
+        "Letra", modelo.letras, key="secao_varredura_letra", help="A letra que vai variar."
+    )
+    rotulo = colunas[1].selectbox(
+        "Medida",
+        list(_MEDIDAS_DA_VARREDURA),
+        key="secao_varredura_medida",
+        help="O que a curva mostra. Onde ela some, o desenho deixa de existir.",
+    )
+    de, ate, _ = modelo.faixa_de_teste(letra)
+    dados = _varredura(impressao, letra, de, ate)
+    tabela = pd.DataFrame({letra: dados["valor"], rotulo: dados[_MEDIDAS_DA_VARREDURA[rotulo]]})
+    linha = (
+        alt.Chart(tabela)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X(f"{letra}:Q", title=f"{letra} (mm)", scale=alt.Scale(zero=False)),
+            y=alt.Y(f"{rotulo}:Q", title=rotulo, scale=alt.Scale(zero=False)),
+            tooltip=[letra, rotulo],
+        )
+    )
+    agora = (
+        alt.Chart(pd.DataFrame({letra: [modelo.base[letra]]}))
+        .mark_rule(strokeDash=[4, 4])
+        .encode(x=f"{letra}:Q")
+    )
+    st.altair_chart((linha + agora).properties(height=260), width="stretch")
+    st.caption(
+        f"As outras letras ficam como estão; o tracejado é o {letra} de agora. Onde a curva "
+        "some, a forma deixa de existir (furo na borda, regra de projeto furada)."
+    )
+
+
+def _aba_das_regras(modelo: es.Modelo, esboco: dict[str, Any]) -> None:
+    if REGRAS not in st.session_state:
+        st.session_state[REGRAS] = "\n".join(esboco.get("regras") or [])
+    medidas = "; ".join(f"**{nome}**: {texto}" for nome, texto in eb.MEDIDAS_DA_REGRA.items())
+    st.caption(
+        "Uma regra por linha, com as letras e as medidas do desenho. O desenho que fura uma regra "
+        "deixa de existir no teste e no Montador, como o furo que encosta na borda. "
+        f"Medidas: {medidas}."
+    )
+    st.text_area(
+        "Regras de projeto",
+        key=REGRAS,
+        placeholder="parede >= 1,5*d\nd <= 0,6*h",
+        height=110,
+        help="Exemplos: parede >= 1,5*d (a parede em volta do furo), area <= 2500, d <= 0,6*h.",
+    )
+    st.button(
+        "Aplicar as regras",
+        key="secao_aplicar_regras",
+        on_click=_aplicar_regras,
+        icon=":material/rule:",
+        help="As regras passam a valer no teste e na seção salva.",
+    )
+    if modelo.regras:
+        agora = modelo.medir({}).avaliacao
+        valores = {
+            **modelo.esboco.valores(),
+            "parede": float(agora.folga[0]),
+            "area": float(agora.exatas.area[0]),
+            "largura": float(agora.exatas.x_max[0] - agora.exatas.x_min[0]),
+            "altura": float(agora.exatas.y_max[0] - agora.exatas.y_min[0]),
+        }
+        for regra in modelo.regras:
+            try:
+                margem = float(eb.folga_da_regra(regra, valores))
+            except eb.ErroDeEsboco:
+                continue
+            situacao = "vale agora" if margem >= 0 else "furada agora"
+            st.markdown(f"- `{regra.texto}`: {situacao} (folga de {_numero(margem, 2)})")
+
+
+def _aba_das_configuracoes(modelo: es.Modelo) -> None:
+    if not modelo.letras:
+        _sem_letras()
+        return
+    import pandas as pd
+
+    letras = list(modelo.letras)
+    padrao = [{"Nome": "Agora", **{letra: modelo.base[letra] for letra in letras}}]
+    linhas = st.session_state.get(CONFIGURACOES) or padrao
+    base = pd.DataFrame(
+        [{coluna: linha.get(coluna) for coluna in ["Nome", *letras]} for linha in linhas]
+    )
+    st.caption(
+        "Como a tabela de projeto de um CAD: cada linha é um jeito de pôr as letras. A conta de "
+        "cada linha sai embaixo; a tabela vai junto com a seção salva."
+    )
+    editada = st.data_editor(
+        base,
+        key="secao_configuracoes_editor",
+        num_rows="dynamic",
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Nome": st.column_config.TextColumn("Nome", help="Um nome para a configuração."),
+            **{
+                letra: st.column_config.NumberColumn(f"{letra} (mm)", help=f"O valor de {letra}.")
+                for letra in letras
+            },
+        },
+    )
+    registros = [
+        {chave: (None if pd.isna(valor) else valor) for chave, valor in linha.items()}
+        for linha in editada.to_dict("records")
+    ]
+    if st.session_state.get(CONFIGURACOES) or registros != padrao:
+        st.session_state[CONFIGURACOES] = registros  # só o que a pessoa mexeu vai junto da seção
+    validas = [r for r in registros if all(isinstance(r.get(l), int | float) for l in letras)]
+    if not validas:
+        return
+    vetores = {letra: np.array([float(r[letra]) for r in validas]) for letra in letras}
+    numeros = modelo.numeros(vetores, (es.AREA, es.IX, es.IY, es.FIBRA, es.FOLGA))
+    motivos = modelo.medir(vetores).avaliacao.motivo
+    resultado = []
+    for i, r in enumerate(validas):
+        existe = numeros[es.FOLGA][i] >= 0.0
+        resultado.append(
+            {
+                "Nome": r.get("Nome") or f"{i + 1}",
+                **{letra: _numero(float(r[letra]), 2) for letra in letras},
+                "Área (cm²)": _numero(numeros[es.AREA][i] / 100, 2) if existe else "—",
+                "Ix (cm⁴)": _numero(numeros[es.IX][i] / 1e4, 2) if existe else "—",
+                "Iy (cm⁴)": _numero(numeros[es.IY][i] / 1e4, 2) if existe else "—",
+                "W em x (cm³)": (
+                    _numero(numeros[es.IX][i] / numeros[es.FIBRA][i] / 1e3, 2) if existe else "—"
+                ),
+                "Parede (mm)": _numero(numeros[es.FOLGA][i], 2) if existe else "—",
+                "Existe": "sim" if existe else er.motivo_em_texto(motivos[i]),
+            }
+        )
+    st.dataframe(resultado, hide_index=True, width="stretch")

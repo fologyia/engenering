@@ -21,6 +21,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -52,6 +53,16 @@ MOTIVOS = {
     ENCOSTOU: "dois contornos encostam (um furo chega na borda ou em outro furo)",
     SAIU: "um furo sai de dentro do contorno",
 }
+
+
+REGRA = "regra:"  # o motivo traz o texto da regra: "regra:parede >= 1,5*d"
+
+
+def motivo_em_texto(motivo: str) -> str:
+    """O motivo de um desenho não existir, em palavras."""
+    if motivo.startswith(REGRA):
+        return f"a regra de projeto “{motivo[len(REGRA) :]}” deixa de valer"
+    return MOTIVOS.get(motivo, motivo)
 
 
 class ErroDeRegiao(ValueError):
@@ -106,7 +117,9 @@ def _uniao(esboco: eb.Esboco) -> dict[str, str]:
 
 
 def _pontas(curva: eb.Curva) -> tuple[str, str]:
-    return (curva.pontos[0], curva.pontos[1]) if curva.tipo == eb.LINHA else curva.pontos[1:3]
+    if curva.tipo == eb.LINHA:
+        return curva.pontos[0], curva.pontos[1]
+    return curva.pontos[1], curva.pontos[2]
 
 
 def contornos(esboco: eb.Esboco) -> tuple[list[Laco], list[Problema]]:
@@ -195,14 +208,14 @@ class _Trecho:
     tipo: str  # "s" reta, "a" arco
     inicio: str = ""
     fim: str = ""
-    p: np.ndarray | None = None
-    q: np.ndarray | None = None
-    c: np.ndarray | None = None
-    r: np.ndarray | None = None
-    ta: np.ndarray | None = None  # ângulo de partida, no sentido anti-horário natural
-    sw: np.ndarray | None = None  # varredura anti-horária natural, de 0 a 2π
-    t0: np.ndarray | None = None  # ângulo de partida no sentido do contorno
-    dt: np.ndarray | None = None  # varredura com sinal, no sentido do contorno
+    p: Any = None
+    q: Any = None
+    c: Any = None
+    r: Any = None
+    ta: Any = None  # ângulo de partida, no sentido anti-horário natural
+    sw: Any = None  # varredura anti-horária natural, de 0 a 2π
+    t0: Any = None  # ângulo de partida no sentido do contorno
+    dt: Any = None  # varredura com sinal, no sentido do contorno
 
 
 def _trechos(q: np.ndarray, sistema: eb.Sistema, laco: Laco) -> list[_Trecho]:
@@ -611,7 +624,7 @@ class Regioes:
                     Problema(
                         "ilha",
                         "Há uma peça solta dentro de um furo: a seção precisa ser uma peça só.",
-                        tuple(float(v) for v in _ponta_a(trechos[i][0])[0]),
+                        _onde(_ponta_a(trechos[i][0])[0]),
                     )
                 )
         avaliacao = self.avaliar(q, np.ones(1, dtype=bool))
@@ -802,7 +815,9 @@ class Regioes:
         """
         um = np.atleast_2d(q)[i : i + 1]
         trechos = self.trechos(um)
-        cheios, vazados, circulos = [], [], []
+        cheios: list[Any] = []
+        vazados: list[Any] = []
+        circulos: list[tuple[float, float, float, bool]] = []
         for laco, lista, n, profundidade in zip(
             self.lacos, trechos, self.divisoes, self.profundidade, strict=True
         ):
@@ -814,6 +829,10 @@ class Regioes:
             contorno = _poligono(lista, n)[0] - np.array([xc, yc])
             (vazados if furo else cheios).append(contorno)
         return gs.Geometria(tuple(cheios), tuple(vazados), (), tuple(circulos))
+
+
+def _onde(ponto: np.ndarray) -> tuple[float, float]:
+    return float(ponto[0]), float(ponto[1])
 
 
 def _extremos(trechos: list[list[_Trecho]]) -> tuple[np.ndarray, ...]:

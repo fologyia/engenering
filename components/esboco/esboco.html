@@ -24,6 +24,34 @@
     </div>
     <button type="button" data-f="ponto" data-icone="ponto" title="Ponto (P): um ponto solto, para cotas e restrições."></button>
     <span class="es-sep"></span>
+    <div class="es-grupo" data-grupo="aparar">
+      <button type="button" data-f="aparar" data-icone="aparar" data-principal title="Aparar (X): clique no trecho que sai; ele vai até os cortes com as outras curvas."></button>
+      <button type="button" class="es-seta" data-abre="aparar" title="Estender e dividir" aria-label="Estender e dividir"></button>
+      <div class="es-menu" data-menu="aparar" hidden>
+        <button type="button" data-f="aparar" data-icone="aparar">Aparar <kbd>X</kbd></button>
+        <button type="button" data-f="estender" data-icone="estender">Estender <kbd>W</kbd></button>
+        <button type="button" data-f="dividir" data-icone="dividir">Dividir</button>
+      </div>
+    </div>
+    <div class="es-grupo" data-grupo="canto">
+      <button type="button" data-f="filete" data-icone="filete" data-principal title="Filete (G): clique no canto de duas linhas. O raio fica na faixa de baixo, e aceita letra."></button>
+      <button type="button" class="es-seta" data-abre="canto" title="Chanfro" aria-label="Chanfro"></button>
+      <div class="es-menu" data-menu="canto" hidden>
+        <button type="button" data-f="filete" data-icone="filete">Filete <kbd>G</kbd></button>
+        <button type="button" data-f="chanfro" data-icone="chanfro">Chanfro</button>
+      </div>
+    </div>
+    <button type="button" data-f="deslocar" data-icone="deslocar" title="Deslocar, offset (O): escolha as curvas e clique do lado da cópia. A distância fica na faixa de baixo, e aceita letra (espessura t)."></button>
+    <button type="button" data-f="espelhar" data-icone="espelhar" title="Espelhar (S): escolha as curvas (Shift junta) e clique na linha do espelho. O espelho fica vivo: mudou um lado, muda o outro."></button>
+    <div class="es-grupo" data-grupo="padrao">
+      <button type="button" data-f="padrao_linear" data-icone="padrao_linear" data-principal title="Padrão em fila: escolha as curvas, ponha a quantidade e o passo (aceita letra) e clique em Criar."></button>
+      <button type="button" class="es-seta" data-abre="padrao" title="Padrão em círculo" aria-label="Padrão em círculo"></button>
+      <div class="es-menu" data-menu="padrao" hidden>
+        <button type="button" data-f="padrao_linear" data-icone="padrao_linear">Padrão em fila</button>
+        <button type="button" data-f="padrao_circular" data-icone="padrao_circular">Padrão em círculo</button>
+      </div>
+    </div>
+    <span class="es-sep"></span>
     <button type="button" data-a="construcao" data-icone="construcao" title="Construção (Q): a curva vira guia e não aço. Com curvas escolhidas, troca só elas."></button>
     <button type="button" data-f="cota" data-icone="cota" title="Cota (D): uma curva, ou dois pontos ou curvas, e depois onde a cota fica. A medida aceita número, letra ou conta: 25, d, 2*d, L/2-10."></button>
     <span class="es-sep"></span>
@@ -34,16 +62,23 @@
     <button type="button" data-r="perpendicular" data-icone="perpendicular" title="Perpendiculares: duas linhas."></button>
     <button type="button" data-r="tangente" data-icone="tangente" title="Tangentes: uma linha e um arco ou círculo, ou dois arcos."></button>
     <button type="button" data-r="igual" data-icone="igual" title="Iguais (E): linhas do mesmo comprimento, ou círculos e arcos do mesmo raio."></button>
-    <button type="button" data-r="ponto_medio" data-icone="ponto_medio" title="No meio (M): o ponto no meio da linha."></button>
-    <button type="button" data-r="concentrico" data-icone="concentrico" title="Mesmo centro: dois círculos ou arcos."></button>
-    <button type="button" data-r="simetrico" data-icone="simetrico" title="Simétricos: dois pontos e a linha do espelho."></button>
-    <button type="button" data-r="fixo" data-icone="fixo" title="Fixo: o ponto não sai do lugar."></button>
+    <div class="es-grupo" data-grupo="mais">
+      <button type="button" data-r="ponto_medio" data-icone="ponto_medio" data-principal title="No meio (M): o ponto no meio da linha."></button>
+      <button type="button" class="es-seta" data-abre="mais" title="Mais restrições" aria-label="Mais restrições"></button>
+      <div class="es-menu" data-menu="mais" hidden>
+        <button type="button" data-r="ponto_medio" data-icone="ponto_medio">No meio <kbd>M</kbd></button>
+        <button type="button" data-r="concentrico" data-icone="concentrico">Mesmo centro</button>
+        <button type="button" data-r="simetrico" data-icone="simetrico">Simétricos</button>
+        <button type="button" data-r="fixo" data-icone="fixo">Fixo</button>
+      </div>
+    </div>
     <span class="es-vao"></span>
     <button type="button" data-a="enquadrar" data-icone="enquadrar" title="Ver o desenho inteiro (F)"></button>
     <button type="button" data-a="tela" data-icone="tela" title="Tela cheia (Esc sai)"></button>
   </div>
-  <div class="es-area"><svg tabindex="0" aria-label="Esboço da seção"></svg></div>
+  <div class="es-area"><svg tabindex="0" aria-label="Esboço da seção"></svg><div class="es-aviso" data-aviso role="status" hidden></div></div>
   <div class="es-info">
+    <div class="es-linha es-opcoes" data-opcoes hidden></div>
     <div class="es-linha">
       <div class="es-situacao" data-situacao></div>
       <span class="es-vao"></span>

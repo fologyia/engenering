@@ -299,8 +299,50 @@ def _potencia(a: float, b: float) -> float:
     return valor if isinstance(valor, float | int) else math.nan
 
 
+#: O que uma regra de projeto pode medir no desenho, além das letras.
+MEDIDAS_DA_REGRA = {
+    "parede": "a menor distância entre contornos (furo até a borda, furo até furo)",
+    "area": "a área da seção, em mm²",
+    "largura": "a largura total, em x",
+    "altura": "a altura total, em y",
+}
+_COMPARACOES = (">=", "<=", ">", "<")
+
+
+@dataclass(frozen=True)
+class Regra:
+    texto: str
+    esquerda: No
+    comparacao: str  # ">=" ou "<="
+    direita: No
+
+
+def ler_regra(texto: str) -> Regra:
+    """``parede >= 1,5*d``, ``d <= 0,6*h``: duas contas e uma comparação."""
+    texto = str(texto).strip()
+    for comparacao in _COMPARACOES:
+        if comparacao in texto:
+            esquerda, direita = texto.split(comparacao, 1)
+            if any(c in direita for c in "<>"):
+                break
+            normal = ">=" if comparacao.startswith(">") else "<="
+            return Regra(texto, ler_conta(esquerda), normal, ler_conta(direita))
+    raise ErroDeEsboco(f"A regra “{texto}” precisa de >= ou <=, como parede >= 1,5*d.")
+
+
+def letras_da_regra(regra: Regra) -> set[str]:
+    return letras_da_conta(regra.esquerda) | letras_da_conta(regra.direita)
+
+
+def folga_da_regra(regra: Regra, valores: Mapping[str, Any]) -> Any:
+    """Positiva (ou zero) quando a regra vale: esquerda − direita, ou o contrário."""
+    a = avaliar_conta(regra.esquerda, valores)
+    b = avaliar_conta(regra.direita, valores)
+    return a - b if regra.comparacao == ">=" else b - a
+
+
 def nome_valido(nome: str) -> bool:
-    return bool(_NOME.fullmatch(nome)) and nome not in RESERVADAS
+    return bool(_NOME.fullmatch(nome)) and nome not in RESERVADAS and nome not in MEDIDAS_DA_REGRA
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +385,7 @@ class Cota:
     expressao: str = "0"
     referencia: bool = False
     lugar: tuple[float, float] | None = None
+    oculta: bool = False  # as repetidas de um padrão: prendem, mas não se desenham
 
 
 @dataclass(frozen=True)
@@ -351,6 +394,10 @@ class Variavel:
     valor: float
     #: O que a letra é: "comprimento" (mm) ou "angulo" (graus). Sai da cota que a usa.
     tipo: str = "comprimento"
+    #: A faixa em que a letra vai ser testada (no teste do desenho e na busca do Montador).
+    de: float | None = None
+    ate: float | None = None
+    passo: float | None = None
 
 
 @dataclass(frozen=True)
@@ -360,6 +407,8 @@ class Esboco:
     restricoes: tuple[Restricao, ...] = ()
     cotas: tuple[Cota, ...] = ()
     variaveis: tuple[Variavel, ...] = ()
+    #: Regras de projeto: desigualdades que limitam o teste, como ``parede >= 1,5*d``.
+    regras: tuple[str, ...] = ()
 
     def curva(self, cid: str) -> Curva:
         for curva in self.curvas:
@@ -423,12 +472,24 @@ class Esboco:
                     "expressao": c.expressao,
                     **({"referencia": True} if c.referencia else {}),
                     **({"lugar": list(c.lugar)} if c.lugar is not None else {}),
+                    **({"oculta": True} if c.oculta else {}),
                 }
                 for c in self.cotas
             ],
             "variaveis": [
-                {"nome": v.nome, "valor": v.valor, "tipo": v.tipo} for v in self.variaveis
+                {
+                    "nome": v.nome,
+                    "valor": v.valor,
+                    "tipo": v.tipo,
+                    **{
+                        k: getattr(v, k)
+                        for k in ("de", "ate", "passo")
+                        if getattr(v, k) is not None
+                    },
+                }
+                for v in self.variaveis
             ],
+            **({"regras": list(self.regras)} if self.regras else {}),
         }
 
 
@@ -546,6 +607,7 @@ def esboco_de_dicionario(dados: Mapping[str, Any]) -> Esboco:
                 expressao,
                 bool(bruta.get("referencia", False)),
                 lugar_xy,
+                bool(bruta.get("oculta", False)),
             )
         )
 
@@ -559,7 +621,14 @@ def esboco_de_dicionario(dados: Mapping[str, Any]) -> Esboco:
             raise ErroDeEsboco(f"A letra {nome} aparece duas vezes na tabela.")
         nomes.add(nome)
         tipo = "angulo" if bruta.get("tipo") == "angulo" else "comprimento"
-        variaveis.append(Variavel(nome, _numero(bruta.get("valor"), f"A letra {nome}"), tipo))
+        faixa = {
+            k: _numero(bruta[k], f"A faixa de {nome}")
+            for k in ("de", "ate", "passo")
+            if bruta.get(k) is not None
+        }
+        variaveis.append(
+            Variavel(nome, _numero(bruta.get("valor"), f"A letra {nome}"), tipo, **faixa)
+        )
     for cota in cotas:
         if cota.referencia:
             continue
@@ -568,14 +637,23 @@ def esboco_de_dicionario(dados: Mapping[str, Any]) -> Esboco:
             raise ErroDeEsboco(
                 f"A cota {cota.id} usa {', '.join(sorted(faltam))}, que não está na tabela de letras."
             )
-    return Esboco(pontos, tuple(curvas), tuple(restricoes), tuple(cotas), tuple(variaveis))
+    regras = tuple(str(r).strip() for r in dados.get("regras") or () if str(r).strip())
+    for regra in regras:
+        faltam = letras_da_regra(ler_regra(regra)) - nomes - set(MEDIDAS_DA_REGRA)
+        if faltam:
+            raise ErroDeEsboco(
+                f"A regra “{regra}” usa {', '.join(sorted(faltam))}, que não é letra do esboço "
+                f"nem medida ({', '.join(MEDIDAS_DA_REGRA)})."
+            )
+    return Esboco(pontos, tuple(curvas), tuple(restricoes), tuple(cotas), tuple(variaveis), regras)
 
 
 # ---------------------------------------------------------------------------
 # Sistema de equações
 # ---------------------------------------------------------------------------
 
-Funcao = Callable[[np.ndarray, np.ndarray], np.ndarray]
+#: (V de (k, colunas), alvo de (k,)) → (k,); as de cota levam parâmetros fixos por padrão.
+Funcao = Callable[..., np.ndarray]
 
 
 @dataclass(frozen=True)
@@ -641,7 +719,7 @@ class Sistema:
         """Colunas, e como tirar delas o centro e o raio: (cx, cy, r) no círculo, (cx, cy, ax, ay) no arco."""
         curva = self._por_id[cid]
         if curva.tipo == CIRCULO:
-            colunas = (*self._ponto(curva.pontos[0]), self.raios[cid])
+            colunas: tuple[int, ...] = (*self._ponto(curva.pontos[0]), self.raios[cid])
 
             def raio_c(v: np.ndarray, o: int) -> np.ndarray:
                 return v[:, o + 2]
@@ -754,8 +832,8 @@ class Sistema:
         elif t == IGUAL:
             primeira = self._por_id[r.curvas[0]]
             for cid in r.curvas[1:]:
-                outra = self._por_id[cid]
-                if primeira.tipo == LINHA and outra.tipo == LINHA:
+                segunda = self._por_id[cid]
+                if primeira.tipo == LINHA and segunda.tipo == LINHA:
                     cols = (*self._linha(primeira.id), *self._linha(cid))
                     self._juntar(
                         r.id,
@@ -765,7 +843,7 @@ class Sistema:
                             - _hyp(v[:, 6] - v[:, 4], v[:, 7] - v[:, 5])
                         ),
                     )
-                elif primeira.tipo != LINHA and outra.tipo != LINHA:
+                elif primeira.tipo != LINHA and segunda.tipo != LINHA:
                     c1, r1, _ = self._circular(primeira.id)
                     c2, r2, _ = self._circular(cid)
                     n1 = len(c1)
@@ -837,6 +915,7 @@ class Sistema:
         conta = ler_conta(cota.expressao)
         t = cota.tipo
         q = self.q0
+        cols: tuple[int, ...]
         if t == DISTANCIA:
             ids = list(cota.pontos)
             if len(ids) < 2 and cota.curvas:  # comprimento de uma linha
@@ -1167,12 +1246,14 @@ def descrever(esboco: Esboco, origem: str) -> str:
     for r in esboco.restricoes:
         if r.id == origem:
             return f"a restrição “{NOME_DA_RESTRICAO.get(r.tipo, r.tipo)}” ({r.id})"
-    for c in esboco.cotas:
-        if c.id == origem:
-            return f"a cota de {NOME_DA_COTA.get(c.tipo, c.tipo)} {c.expressao} ({c.id})"
-    for c in esboco.curvas:
-        if c.id == origem:
-            return f"o arco {c.id}"
+    for cota in esboco.cotas:
+        if cota.id == origem:
+            return (
+                f"a cota de {NOME_DA_COTA.get(cota.tipo, cota.tipo)} {cota.expressao} ({cota.id})"
+            )
+    for curva in esboco.curvas:
+        if curva.id == origem:
+            return f"o arco {curva.id}"
     return origem
 
 

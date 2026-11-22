@@ -40,8 +40,8 @@
 }
 .es-barra > button,
 .es-grupo > button[data-principal] {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   padding: 4px;
   border-radius: 6px;
   display: inline-flex;
@@ -49,8 +49,8 @@
   justify-content: center;
 }
 .es-barra svg.icone {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.6;
@@ -72,7 +72,7 @@
 .es-sep {
   width: 1px;
   height: 22px;
-  margin: 0 5px;
+  margin: 0 3px;
   background: var(--st-border-color);
 }
 .es-vao {
@@ -84,8 +84,8 @@
   align-items: center;
 }
 .es-grupo > button.es-seta {
-  width: 14px;
-  height: 32px;
+  width: 12px;
+  height: 30px;
   padding: 0;
   border-radius: 4px;
   display: inline-flex;
@@ -101,7 +101,7 @@
 }
 .es-menu {
   position: absolute;
-  top: 36px;
+  top: 34px;
   left: 0;
   z-index: 20;
   min-width: 220px;
@@ -434,4 +434,60 @@
   stroke: var(--es-ruim);
   stroke-width: 1.2;
   fill: none;
+}
+
+/* ---- campos da ferramenta (raio, distância, quantidade) ---- */
+.es-opcoes {
+  padding: 6px 8px;
+  border: 1px solid var(--st-primary-color);
+  border-radius: 8px;
+}
+.es-opcoes[hidden] {
+  display: none;
+}
+.es-opcoes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.es-opcoes input,
+.es-opcoes select {
+  width: 72px;
+  font: inherit;
+  color: inherit;
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+.es-opcoes button {
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--st-primary-color);
+  color: #fff;
+}
+
+/* ---- aviso em cima do desenho: o que acabou de acontecer, onde se está olhando ---- */
+.es-aviso {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 70%;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--es-sel);
+  background: var(--st-background-color);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  z-index: 5;
+}
+.es-aviso[hidden] {
+  display: none;
+}
+.es-aviso.ruim {
+  border-left-color: var(--es-ruim);
+  color: var(--es-ruim);
 }

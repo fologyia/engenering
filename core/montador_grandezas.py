@@ -599,6 +599,8 @@ class Grandeza:
     teto: float | None = None  # o maior valor que faz sentido, como q = 1
     #: Pode ser negativo ou zero: calor que sai, trabalho, ΔT, entalpia abaixo da referência.
     sinal_livre: bool = False
+    #: De, até e passo que a busca em faixas propõe (na base). Sem isso, de ¼ a 3 vezes o valor.
+    faixa: tuple[float, float, float] | None = None
 
     def __post_init__(self) -> None:
         if self.sinal_livre:

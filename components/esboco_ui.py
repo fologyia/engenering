@@ -18,7 +18,7 @@ _PASTA = Path(__file__).parent / "esboco"
 _COMUM = Path(__file__).parent / "editor_numerico"
 _NOME = "mecanica_toolkit_esboco_secao"
 #: A ordem importa: o CCv2 não importa módulos, os arquivos são colados um depois do outro.
-ARQUIVOS_JS = ("conta.js", "solver.js", "contornos.js", "esboco.js")
+ARQUIVOS_JS = ("conta.js", "solver.js", "contornos.js", "edicao.js", "esboco.js")
 
 
 def _registrar() -> Any:

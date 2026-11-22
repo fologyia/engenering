@@ -267,7 +267,8 @@ function criarEditorVivo(area, opcoes = {}) {
     caixa.hidden = false
     mostrarResposta(d.resposta ?? null)
     entrada.focus()
-    if (d.texto) entrada.setSelectionRange(d.texto.length, d.texto.length)
+    // `selecionarTudo`: o texto vem marcado, e o que se digita troca o valor inteiro (como num CAD).
+    if (d.texto && !d.selecionarTudo) entrada.setSelectionRange(d.texto.length, d.texto.length)
     else entrada.select()
   }
   // Devolve falso se o valor não serve: a caixinha fica aberta, com o motivo.

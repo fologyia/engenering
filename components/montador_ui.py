@@ -2879,6 +2879,11 @@ def _campos_da_faixa(p: Parte, grandeza: Grandeza, centro: float, u: Unidades) -
     de_padrao = _arredondar(u.da_base(dimensao, centro / 4.0))
     ate_padrao = _arredondar(u.da_base(dimensao, centro * 3.0))
     passo_padrao = _arredondar((ate_padrao - de_padrao) / _DIVISOES)
+    if grandeza.faixa is not None:  # a letra do esboço traz a faixa dela
+        de, ate, passo = grandeza.faixa
+        de_padrao = _arredondar(u.da_base(dimensao, de))
+        ate_padrao = _arredondar(u.da_base(dimensao, ate))
+        passo_padrao = _arredondar(passo / fator)
     revisao = estado[p.k("revisao")]
     colunas = st.columns(3)
     de = colunas[0].number_input(

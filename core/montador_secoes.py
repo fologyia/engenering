@@ -597,6 +597,7 @@ def _desenhada_com_letras(nome: str, modelo: es.Modelo, indice: int) -> Secao:
             g.MEDIDA,
             f"Medida {letra} da seção desenhada {nome}: o esboço é refeito com cada valor.",
             modelo.base[letra],
+            faixa=modelo.faixa_de_teste(letra),
         )
         for letra in modelo.letras
     )
