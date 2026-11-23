@@ -1,0 +1,23 @@
+<div class="pa">
+  <div class="pa-barra" role="toolbar" aria-label="Ferramentas da análise sobre o desenho">
+    <button type="button" data-f="mover" title="Mover (Esc): arraste uma marca para trocar de lugar; no vazio, arraste para andar pelo desenho. Roda do mouse aproxima.">Mover</button>
+    <button type="button" data-f="marcar" title="Marcar (M): clique na parte do desenho que vai ser analisada. A análise da marca fica embaixo.">Marcar</button>
+    <button type="button" data-f="escala" title="Escala (E): clique nas duas pontas de uma medida conhecida do desenho e digite quanto ela vale.">Escala</button>
+    <button type="button" data-f="medir" title="Medir (D): clique em dois pontos; com a escala posta, mostra a distância real.">Medir</button>
+    <span class="pa-vao"></span>
+    <button type="button" data-a="enquadrar" title="Ver o desenho inteiro (F)">Enquadrar</button>
+    <button type="button" data-a="tela" title="Tela cheia (Esc sai)">Tela cheia</button>
+  </div>
+  <div class="pa-area">
+    <svg tabindex="0" aria-label="Desenho com as marcas de análise"></svg>
+    <div class="pa-aviso" data-aviso role="status" hidden></div>
+    <div class="pa-pergunta" data-pergunta hidden>
+      <label><span data-pergunta-texto>Quanto vale essa medida?</span>
+        <input data-pergunta-valor inputmode="decimal" aria-label="Valor da medida em mm">
+        <span>mm</span></label>
+      <button type="button" data-pergunta-ok>Pôr a escala</button>
+      <button type="button" data-pergunta-nao>Cancelar</button>
+    </div>
+  </div>
+  <div class="pa-linha"><span data-dica></span><span class="pa-vao"></span><span data-escala></span></div>
+</div>

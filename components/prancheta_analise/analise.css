@@ -1,0 +1,194 @@
+.pa {
+  --pa-passou: #2b8a3e;
+  --pa-nao: #e03131;
+  --pa-limite: #1c7ed6;
+  --pa-falta: #868e96;
+  --pa-sel: #f08c00;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--st-font);
+  font-size: 13px;
+  color: var(--st-text-color);
+  background: var(--st-background-color);
+}
+.pa:fullscreen {
+  padding: 10px;
+  height: 100vh;
+  box-sizing: border-box;
+}
+.pa-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  background: var(--st-secondary-background-color);
+}
+.pa-barra button,
+.pa-pergunta button {
+  font: inherit;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--st-border-color);
+  background: var(--st-background-color);
+  color: inherit;
+  cursor: pointer;
+}
+.pa-barra button.ativo {
+  background: var(--st-primary-color);
+  border-color: var(--st-primary-color);
+  color: #fff;
+}
+.pa-vao {
+  flex: 1;
+}
+.pa-area {
+  position: relative;
+}
+.pa svg {
+  display: block;
+  width: 100%;
+  height: 560px;
+  border: 1px solid var(--st-border-color);
+  border-radius: 8px;
+  background: var(--st-background-color);
+  outline: none;
+  touch-action: none;
+  cursor: grab;
+}
+.pa:fullscreen svg {
+  height: calc(100vh - 110px);
+}
+.pa svg.marcando,
+.pa svg.medindo {
+  cursor: crosshair;
+}
+.pa svg .dxf {
+  stroke: var(--st-text-color);
+  stroke-width: 1.2;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.pa svg .marca circle {
+  stroke: #fff;
+  stroke-width: 2;
+}
+.pa svg .marca text.numero {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--st-font);
+  pointer-events: none;
+}
+.pa svg .marca .etiqueta rect {
+  fill: var(--st-background-color);
+  stroke-width: 1.5;
+  opacity: 0.94;
+}
+.pa svg .marca .etiqueta text {
+  font-size: 12px;
+  font-family: var(--st-font);
+  fill: var(--st-text-color);
+  pointer-events: none;
+}
+.pa svg .marca.passou circle,
+.pa svg .marca.passou .etiqueta rect {
+  fill: var(--pa-passou);
+  stroke: var(--pa-passou);
+}
+.pa svg .marca.nao circle,
+.pa svg .marca.nao .etiqueta rect {
+  fill: var(--pa-nao);
+  stroke: var(--pa-nao);
+}
+.pa svg .marca.limite circle,
+.pa svg .marca.limite .etiqueta rect {
+  fill: var(--pa-limite);
+  stroke: var(--pa-limite);
+}
+.pa svg .marca.falta circle,
+.pa svg .marca.falta .etiqueta rect {
+  fill: var(--pa-falta);
+  stroke: var(--pa-falta);
+}
+.pa svg .marca .etiqueta rect {
+  fill: var(--st-background-color) !important;
+}
+.pa svg .marca.sel circle {
+  stroke: var(--pa-sel);
+  stroke-width: 4;
+}
+.pa svg .medida line {
+  stroke: var(--pa-sel);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+.pa svg .medida circle {
+  fill: var(--pa-sel);
+}
+.pa svg .medida text {
+  fill: var(--pa-sel);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--st-font);
+  paint-order: stroke;
+  stroke: var(--st-background-color);
+  stroke-width: 4px;
+}
+.pa svg .vazio {
+  fill: var(--st-text-color);
+  opacity: 0.55;
+  font-size: 14px;
+  font-family: var(--st-font);
+}
+.pa-aviso {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 70%;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--pa-sel);
+  background: var(--st-background-color);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  pointer-events: none;
+}
+.pa-aviso[hidden],
+.pa-pergunta[hidden] {
+  display: none;
+}
+.pa-pergunta {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--st-primary-color);
+  background: var(--st-background-color);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.pa-pergunta input {
+  width: 90px;
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid var(--st-border-color);
+  border-radius: 4px;
+  background: var(--st-background-color);
+  color: inherit;
+}
+.pa-linha {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  opacity: 0.8;
+}

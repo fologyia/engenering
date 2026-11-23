@@ -82,8 +82,9 @@ OUTRAS_PAGINAS = (
     ("app_pages/estruturas_aco.py", "Barras, treliças e pórticos", ":material/domain:"),
 )
 RECENTES = 6
-#: Onde a página Desenhar seção guarda a seção aberta.
-PARTES_DA_SECAO_ABERTA = "secao_partes"
+#: Onde a página Desenhar seção guarda a seção aberta: as partes que saem do esboço, e o esboço.
+PARTES_DA_SECAO_ABERTA = "secao_esboco_partes"
+ESBOCO_DA_SECAO_ABERTA = "secao_esboco"
 NOME_DA_SECAO_ABERTA = "secao_nome"
 
 
@@ -665,9 +666,11 @@ def _trazer_secao(caso: Caso) -> None:
         return
     try:
         analise = sd.analisar(sd.partes_de_lista(st.session_state[PARTES_DA_SECAO_ABERTA]))
+        esboco = st.session_state.get(ESBOCO_DA_SECAO_ABERTA)
         catalogo.salvar_perfil(
             sd.perfil_da_secao(nome, analise),
             desenho=tuple(parte.como_dicionario() for parte in analise.partes),
+            esboco=esboco if isinstance(esboco, dict) else None,
         )
     except (sd.ErroDeSecao, catalogo.ErroDeCatalogo) as erro:
         st.session_state[aviso] = str(erro)

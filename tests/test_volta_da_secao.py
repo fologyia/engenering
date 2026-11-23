@@ -55,11 +55,10 @@ def test_desenhar_e_voltar_com_a_secao_no_bloco(catalogo_vazio):
     # Desenhar seção.
     at.switch_page(vs.PAGINA_DESENHAR)
     at.run()
-    # Quem vem do Montador cai no esboço; aqui o teste usa a seção do começo do desenho simples
-    # (o I), com um nome. Salvar e voltar grava e volta.
-    assert at.session_state["secao_modo"] == "Esboço com cotas"
-    at.session_state["secao_modo"] = "Desenho simples"
-    at.run()
+    # Quem vem do Montador cai no esboço vazio; aqui o teste começa do modelo I, com um nome.
+    # Salvar e voltar grava e volta.
+    assert not at.session_state["secao_esboco_partes"]
+    at.selectbox(key="secao_modelo").set_value("I").run()
     at.text_input(key="secao_nome").set_value("Minha seção").run()
     assert "Minha seção" not in ev.nomes_dos_desenhos()
     at.button(key="secao_salvar_e_voltar").click().run()

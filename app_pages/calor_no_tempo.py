@@ -14,7 +14,7 @@ import streamlit as st
 
 from components.animacao_ui import tocador
 from components.calor_no_tempo_help import AJUDA
-from components.desenhar_secao_ui import PARTES as PARTES_DESENHADAS
+from components.desenhar_secao_ui import PARTES_ESBOCO as PARTES_DESENHADAS
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina

@@ -200,7 +200,7 @@ def _abrir_flexao(partes: list[sd.Parte] | None) -> AppTest:
     at.run()
     at.switch_page("app_pages/assistente_cargas.py")
     if partes is not None:
-        at.session_state["secao_partes"] = [p.como_dicionario() for p in partes]
+        at.session_state["secao_esboco_partes"] = [p.como_dicionario() for p in partes]
         at.session_state["secao_nome"] = "Da prancheta"
     at.session_state["assistente_geometria"] = FLEXAO
     at.session_state[chave_do_campo(FLEXAO, "tipo_secao")] = ev.DESENHADA
@@ -234,8 +234,8 @@ def test_botao_da_pagina_de_desenho_abre_a_flexao_com_a_forma_real():
     at = AppTest.from_file(APP, default_timeout=180)
     at.run()
     at.switch_page("app_pages/desenhar_secao.py")
-    at.session_state["secao_modo"] = "Desenho simples"  # o I do começo
     at.run()
+    at.selectbox(key="secao_modelo").set_value("I").run()
     at.button(key=f"secao_usar_{FLEXAO}").click().run()
     assert not at.exception
     assert at.session_state["assistente_geometria"] == FLEXAO

@@ -24,12 +24,13 @@ APP = str(Path(__file__).resolve().parent.parent / "app.py")
 PAGINA = "app_pages/desenhar_secao.py"
 
 
-def _abrir_pagina() -> AppTest:
-    """A página no desenho simples: estes testes são da prancheta de chapas e dos modelos."""
+def _abrir_pagina(modelo: str = "I") -> AppTest:
+    """A página com um modelo pronto no esboço (a prancheta de chapas foi aposentada)."""
     teste = AppTest.from_file(APP, default_timeout=120)
     teste.run()
     teste.switch_page(PAGINA)
-    teste.session_state["secao_modo"] = "Desenho simples"
+    teste.run()
+    teste.selectbox(key="secao_modelo").set_value(modelo)
     return teste.run()
 
 
@@ -391,15 +392,18 @@ def test_trocar_modelo_e_medida_na_pagina(tmp_path):
         at = _abrir_pagina()
         at.number_input(key="secao_m_i_d").set_value(400.0).run()
         assert not at.exception
-        assert sd.partes_de_lista(at.session_state["secao_partes"])[0].y == pytest.approx(194.0)
+        partes = sd.partes_de_lista(at.session_state["secao_esboco_partes"])
+        assert sd.analisar(partes).prop.altura == pytest.approx(400.0)
+        # O modelo entra como um contorno só: nada se cruza no esboço.
+        assert not at.session_state["secao_esboco_problemas"]
         at.number_input(key="secao_m_i_tf").set_value(250.0).run()
         assert not at.exception
         assert any("cabem" in e.value for e in at.error)
         at.number_input(key="secao_m_i_tf").set_value(12.0).run()
         at.button(key="secao_limpar").click().run()
         assert not at.exception
-        assert at.session_state["secao_partes"] == []
-        assert any("Desenhe uma chapa" in i.value for i in at.info)
+        assert at.session_state["secao_esboco_partes"] == []
+        assert any("contorno fechado" in i.value for i in at.info)
 
 
 def test_salvar_na_pagina_grava_e_recusa_nome_de_referencia(tmp_path):
@@ -486,71 +490,6 @@ def test_forma_livre_nao_mostra_aproveitamento_infinito(tmp_path):
     assert "não tem rotina" in resultado.resumo
 
 
-def _estado_da_tela(partes):
-    from components import desenhar_secao_ui as ui
-
-    dicionarios = [p.como_dicionario() for p in partes]
-    return {
-        ui.PARTES: dicionarios,
-        ui.VERSAO: 5,
-        ui.AJUSTE: 0,
-        ui.REVISAO_TABELA: 2,
-        ui.BASE_TABELA: [sr.linha_da_parte(p) for p in dicionarios],
-        ui.MODELO: "I",
-        ui.ERRO_TABELA: "",
-    }
-
-
-def test_edicao_da_tabela_vale_sobre_a_base_e_acumula():
-    from components import desenhar_secao_ui as ui
-
-    estado = _estado_da_tela([_ret(0, 0, 100, 10), _ret(0, 20, 50, 10), _ret(0, 40, 30, 10)])
-    estado["secao_tabela_2"] = {
-        "edited_rows": {"0": {"b": 200.0}, "2": {"tipo": sr.FURO}},
-        "deleted_rows": [1],
-        "added_rows": [{"forma": "Círculo", "x": 5.0, "y": 6.0, "b": 8.0}],
-    }
-    with mock.patch.object(ui.st, "session_state", estado):
-        ui._ao_editar_tabela()
-    partes = sd.partes_de_lista(estado[ui.PARTES])
-    assert [p.forma for p in partes] == [R, R, C]
-    assert partes[0].b == 200.0
-    assert partes[1].furo
-    assert (partes[2].x, partes[2].b) == (5.0, 8.0)
-    # A base e a chave ficam: o editor guarda as mudanças sobre elas.
-    assert estado[ui.REVISAO_TABELA] == 2
-    assert estado[ui.VERSAO] == 6
-    assert estado[ui.MODELO] is None
-
-
-def test_tabela_com_medida_ruim_avisa_e_nao_mexe_no_desenho():
-    from components import desenhar_secao_ui as ui
-
-    original = [_ret(0, 0, 100, 10)]
-    estado = _estado_da_tela(original)
-    estado["secao_tabela_2"] = {"edited_rows": {"0": {"b": -5.0}}}
-    with mock.patch.object(ui.st, "session_state", estado):
-        ui._ao_editar_tabela()
-    assert estado[ui.ERRO_TABELA]
-    assert sd.partes_de_lista(estado[ui.PARTES]) == original
-    assert estado[ui.MODELO] == "I"
-
-
-def test_gesto_na_prancheta_entra_e_gesto_invalido_nao_derruba():
-    from components import desenhar_secao_ui as ui
-
-    estado = _estado_da_tela([_ret(0, 0, 100, 10)])
-    boa = _ret(0, 50, 80, 8).como_dicionario()
-    ruim = {"forma": "poli", "pontos": [[0, 0], [1, 1]]}
-    estado[ui.CHAVE_PRANCHETA] = mock.Mock(edicao={"partes": [boa, ruim], "versao": 9})
-    with mock.patch.object(ui.st, "session_state", estado):
-        ui._ao_editar_na_prancheta()
-    assert sd.partes_de_lista(estado[ui.PARTES]) == [_ret(0, 50, 80, 8)]
-    assert estado[ui.VERSAO] == 9
-    assert estado[ui.REVISAO_TABELA] == 3  # a tabela ganha uma base nova
-    assert estado[ui.MODELO] is None
-
-
 def test_botao_usar_salva_e_abre_o_caso_preenchido(tmp_path):
     from components.assistente_cargas_ui import chave_do_campo
 
@@ -595,69 +534,6 @@ def test_csv_do_catalogo_nao_perde_os_dados_da_secao_desenhada(tmp_path):
     assert perfil.x0_mm == pytest.approx(dados["x0_mm"])
     assert perfil.y0_mm == pytest.approx(dados["y0_mm"])
     assert perfil.i_min_mm4 == pytest.approx(dados["i_min_mm4"])
-
-
-# ---------------------------------------------------------------------------
-# Cotas de um ponto a outro
-# ---------------------------------------------------------------------------
-
-_COTA = {"a": {"i": 0, "t": "v", "k": 0}, "b": {"i": 0, "t": "v", "k": 1}, "modo": "h", "folga": 20}
-
-
-def _estado_com_cotas() -> dict:
-    from components import desenhar_secao_ui as ui
-
-    return {
-        ui.MODO: ui.MODO_SIMPLES,
-        ui.PARTES: [],
-        ui.COTAS: [_COTA],
-        ui.VERSAO: 0,
-        ui.AJUSTE: 0,
-        ui.REVISAO_TABELA: 0,
-        ui.BASE_TABELA: [],
-    }
-
-
-def test_cotas_vem_junto_com_o_gesto_na_prancheta():
-    from components import desenhar_secao_ui as ui
-
-    estado = _estado_com_cotas()
-    parte = {"forma": "ret", "x": 0, "y": 0, "b": 100, "h": 10, "giro": 0, "pontos": [], "grupo": 0}
-    estado[ui.CHAVE_PRANCHETA] = mock.Mock(
-        edicao={"partes": [parte], "cotas": [_COTA], "versao": 3}
-    )
-    with mock.patch.object(ui.st, "session_state", estado):
-        ui._ao_editar_na_prancheta()
-    assert estado[ui.COTAS] == [_COTA]
-
-
-def test_gesto_antigo_sem_cotas_nao_quebra():
-    from components import desenhar_secao_ui as ui
-
-    estado = _estado_com_cotas()
-    estado[ui.CHAVE_PRANCHETA] = mock.Mock(edicao={"partes": [], "versao": 3})
-    with mock.patch.object(ui.st, "session_state", estado):
-        ui._ao_editar_na_prancheta()
-    assert estado[ui.COTAS] == []
-
-
-def test_secao_nova_tira_as_cotas_da_antiga():
-    from components import desenhar_secao_ui as ui
-
-    estado = _estado_com_cotas()
-    with mock.patch.object(ui.st, "session_state", estado):
-        ui._limpar()
-    assert estado[ui.COTAS] == []
-
-
-def test_editar_a_tabela_nao_apaga_as_cotas():
-    from components import desenhar_secao_ui as ui
-
-    estado = _estado_com_cotas()
-    estado[ui.ERRO_TABELA] = ""
-    with mock.patch.object(ui.st, "session_state", estado):
-        ui._ao_editar_tabela()
-    assert estado[ui.COTAS] == [_COTA]
 
 
 # ---------------------------------------------------------------------------
@@ -906,8 +782,7 @@ def test_tela_de_tensoes_mostra_o_cortante_e_a_norma():
 
 
 def test_tela_avisa_a_torcao_da_carga_fora_do_centro_de_cisalhamento():
-    pagina = _abrir_pagina()
-    pagina.session_state["secao_modelo"] = "U"
+    pagina = _abrir_pagina("U")
     pagina.number_input(key="secao_vy").set_value(100.0)
     pagina.selectbox(key="secao_pelo").set_value("Centro de gravidade").run()
     assert not pagina.exception
@@ -917,7 +792,7 @@ def test_tela_com_pedacos_soltos_avisa_e_nao_quebra():
     from components import desenhar_secao_ui as ui
 
     pagina = _abrir_pagina()
-    pagina.session_state[ui.PARTES] = [
+    pagina.session_state[ui.PARTES_ESBOCO] = [
         _r(0, 0, 50, 50).como_dicionario(),
         _r(200, 0, 50, 50).como_dicionario(),
     ]

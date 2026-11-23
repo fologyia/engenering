@@ -1318,18 +1318,12 @@ class _Montador:
 
 
 def esboco_das_partes(partes: Sequence[Any]) -> Esboco:
-    """As partes da prancheta antiga (retângulo, círculo, polígono) viram curvas do esboço.
+    """As partes da prancheta antiga (retângulo, círculo, polígono) viram o contorno do esboço.
 
-    Vira geometria solta, só com horizontal e vertical: as medidas antigas não eram cotas. Partes que
-    se sobrepõem continuam se sobrepondo, e o esboço avisa onde.
+    As partes que se encostam ou se sobrepõem viram um contorno só, e os furos tiram o aço de
+    baixo (``core.esboco_uniao``). Sai geometria sem cotas, só com horizontal e vertical: as medidas
+    antigas não eram cotas.
     """
-    from core import secao_desenhada as sd
+    from core import esboco_uniao as eu
 
-    m = _Montador()
-    for parte in partes:
-        if parte.forma == sd.CIRC:
-            centro = m.ponto(parte.x, parte.y)
-            m.curva(CIRCULO, (centro,), parte.b / 2.0)
-        else:
-            m.contorno(parte.cantos)
-    return Esboco(m.pontos, tuple(m.curvas), tuple(m.restricoes))
+    return eu.esboco_unido(eu.formas_das_partes(partes))

@@ -141,7 +141,7 @@ def _pagina() -> AppTest:
 def test_pagina_abre_no_esboco_vazio(catalogo_vazio):
     at = _pagina()
     assert not at.exception, [str(e.value) for e in at.exception]
-    assert at.session_state["secao_modo"] == "Esboço com cotas"
+    assert not at.session_state["secao_esboco_partes"]
     assert any("contorno fechado" in i.value for i in at.info)
 
 

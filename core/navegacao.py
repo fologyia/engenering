@@ -302,6 +302,13 @@ MENU: tuple[GrupoMenu, ...] = (
                 secao=PECAS,
             ),
             ItemMenu(
+                "app_pages/analise_sobre_desenho.py",
+                "Análise sobre o desenho",
+                ":material/ads_click:",
+                "Marcar as partes de um desenho e analisar cada uma no Montador: pino, chapa, eixo",
+                secao=PECAS,
+            ),
+            ItemMenu(
                 "app_pages/vigas_eixos.py",
                 "Vigas e eixos",
                 ":material/linear_scale:",

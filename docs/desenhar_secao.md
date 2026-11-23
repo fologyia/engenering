@@ -225,8 +225,9 @@ arcos exatos; J, Cw e o resto continuam na malha da prancheta antiga.
 **Testar o desenho.** Para cada letra, até onde ela pode ir sem a forma deixar de existir (furo
 encostando na borda, contorno do avesso, cotas que não cabem), e a parede mais fina de agora.
 
-**Desenho simples.** A prancheta antiga continua no segundo modo, com os modelos e os perfis do
-catálogo. "Trazer do desenho simples" converte as partes em curvas do esboço, sem cotas.
+**A prancheta antiga (Desenho simples) foi aposentada.** O que ela fazia entra no esboço: os
+modelos ("Começar de um modelo", com as medidas logo abaixo), os perfis do catálogo e as seções salvas
+por ela, que abrem como esboço de um contorno só, sem cotas.
 
 ## Edição como num CAD (marco 2)
 
@@ -294,3 +295,27 @@ Embaixo do esboço, em quatro abas:
 - **Arcos na tela.** O sentido do arco no SVG estava trocado (o filete aparecia "para dentro"); as
   contas não mudam, só o desenho na tela.
 - Depois de clicar num botão da barra ou da faixa, as teclas voltam para o desenho.
+
+## O que entra no esboço (marco 3)
+
+Arquivos: `core/esboco_uniao.py` e `core/esboco_dxf.py`.
+
+- **União das formas.** Modelos, perfis do catálogo e seções antigas são feitos de chapas que se
+  encostam (o I são três). Antes de virar esboço, as bordas são partidas onde se encontram e fica só
+  o trecho que separa aço de vazio: aço é estar dentro de alguma forma cheia e fora de todo furo. As
+  retas que ficaram em fila viram uma só. Os 17 modelos antigos saem com a mesma área da conta antiga
+  (nos círculos, a conta antiga usava polígono) e com o mesmo reconhecimento de forma (I soldado, U,
+  T, tubo...), menos "2 cantoneiras em T", que tem folga entre as duas e por isso são dois pedaços.
+- **Perfil do catálogo.** Com o desenho vazio, entra sozinho; com algo desenhado, encosta no lado
+  escolhido, como contorno à parte, e o aviso lembra o Unir (U) para virar uma peça só.
+- **DXF.** Pelo `ezdxf` (MIT): retas, arcos, círculos, polilinhas com os trechos curvos (bulge) e
+  blocos explodidos; elipses e splines entram como filas de retas, com aviso. Textos, cotas e
+  hachuras ficam de fora e são contados. A unidade vem do cabeçalho ($INSUNITS) e tudo vira mm; sem
+  unidade, lê como mm. Escolhem-se as camadas, e o meio do desenho pode ir para a origem. Pontas que
+  caem no mesmo lugar (1e-5 do tamanho) viram um ponto só, e é assim que as retas soltas formam
+  contornos. Até 600 curvas: acima disso, a prancheta pede para tirar camadas. DWG não entra (formato
+  fechado): a mensagem manda salvar como DXF no próprio CAD.
+- **Cisalhamento nas junções.** Sem chapas separadas, o q da solda sai de V·Q/I nas alturas em que a
+  largura pula (alma e mesa), pelas faixas da seção (`core/geometria_da_secao.py`).
+- O "Trazer a seção aberta" do Cálculo de peças e a página Calor no tempo passaram a ler a seção do
+  esboço (antes liam a da prancheta antiga, mesmo com o esboço aberto).

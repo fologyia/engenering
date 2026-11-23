@@ -1,13 +1,14 @@
-"""Tela de Desenhar seção: esboço ou desenho simples, propriedades e o caminho até as contas.
+"""Tela de Desenhar seção: o esboço, as propriedades e o caminho até as contas.
 
-Dois modos. No esboço (o padrão), a seção sai de um esboço paramétrico, como num CAD: cotas que
-seguram a medida, restrições, letras nas cotas e o teste de até onde cada letra pode ir. O desenho
-simples é a prancheta antiga, de chapas, círculos e polígonos, com os modelos e os perfis do
-catálogo. Os dois entregam a mesma coisa às contas: a lista de partes.
+A seção sai de um esboço paramétrico, como num CAD: cotas que seguram a medida, restrições, letras nas
+cotas e o teste de até onde cada letra pode ir. Os modelos prontos, os perfis do catálogo, as seções
+antigas (salvas pela prancheta de chapas, que foi aposentada) e os desenhos em DXF entram como esboço
+de um contorno só (``core.esboco_uniao``, ``core.esboco_dxf``). Às contas vai a lista de partes que
+sai das regiões do esboço.
 
-As partes moram em ``st.session_state`` e três lugares as alteram: a prancheta, os modelos prontos e
-a tabela. Os três entram por callback, antes de o script rodar, e a prancheta recebe o mesmo desenho
-na mesma rodada. ``versao`` conta as alterações: a prancheta ignora um desenho mais velho que o dela.
+O esboço mora em ``st.session_state``; a prancheta manda cada gesto por callback e o Python só manda
+um esboço de volta quando troca o desenho por fora (modelo, perfil, DXF, abrir, limpar): para isso a
+versão sobe, e a prancheta ignora um desenho mais velho que o dela.
 """
 
 from __future__ import annotations
@@ -27,15 +28,17 @@ from components.assistente_cargas_ui import (
 )
 from components.esboco_ui import prancheta_do_esboco
 from components.figuras import mostrar_figura
-from components.prancheta_ui import prancheta
 from components.project_tools import (
     botao_registrar_calculo,
     construir_registro_tecnico,
 )
 from components.robustez import secao_protegida
 from core import esboco as eb
+from core import esboco_dxf as ed
 from core import esboco_regioes as er
 from core import esboco_secao as es
+from core import esboco_uniao as eu
+from core import geometria_da_secao as gs
 from core import secao_desenhada as sd
 from core import secao_relatorio as sr
 from core import section_catalog as catalogo
@@ -44,38 +47,28 @@ from core.elementos_base import Resultado, dados_do_registro
 from core.elementos_vigas import DESENHADA
 from core.elementos_word import gerar_word_do_caso
 from core.load_to_stress import EstadoPlanoCalculado
-from core.medidas_comerciais import CHAPAS
 from core.project_store import obter_projeto_ativo
 
-PARTES = "secao_partes"
-COTAS = "secao_cotas"
-VERSAO = "secao_versao"
-AJUSTE = "secao_ajuste"
 MODELO = "secao_modelo"
-REVISAO_TABELA = "secao_tabela_rev"
-BASE_TABELA = "secao_tabela_base"
 ERRO_MODELO = "secao_erro_modelo"
-ERRO_TABELA = "secao_erro_tabela"
 NOME = "secao_nome"
 SALVA = "secao_salva"
 IR_PARA = "secao_ir_para"
 AVISO = "secao_aviso"
-CHAVE_PRANCHETA = "secao_prancheta"
-MODELO_INICIAL = "I"
 MODULO = "Desenhar seção"
 MODULO_ID = "desenhar_secao"
 
-MODO = "secao_modo"
-MODO_ESBOCO = "Esboço com cotas"
-MODO_SIMPLES = "Desenho simples"
-MODOS = (MODO_ESBOCO, MODO_SIMPLES)
+DXF_ARQUIVO = "secao_dxf_arquivo"
+DXF_CAMADAS = "secao_dxf_camadas"  # as camadas com geometria do arquivo escolhido
+DXF_USAR = "secao_dxf_usar"
+DXF_ORIGEM = "secao_dxf_origem"
+DXF_ERRO = "secao_dxf_erro"
 ESBOCO = "secao_esboco"
 VERSAO_ESBOCO = "secao_esboco_versao"
 AJUSTE_ESBOCO = "secao_esboco_ajuste"
 PARTES_ESBOCO = "secao_esboco_partes"
 PROBLEMAS = "secao_esboco_problemas"
 CHAVE_ESBOCO = "secao_esboco_prancheta"
-_VOLTA_VISTA = "secao_volta_vista"
 CONFIGURACOES = "secao_configuracoes"
 REGRAS = "secao_regras"
 AVISO_DO_TESTE = "secao_aviso_do_teste"
@@ -96,18 +89,9 @@ PAGINAS = (
 )
 
 
-def _partes() -> list[dict[str, Any]]:
-    """As partes do desenho simples."""
-    return st.session_state[PARTES]
-
-
-def _no_esboco() -> bool:
-    return st.session_state.get(MODO) != MODO_SIMPLES
-
-
 def _partes_ativas() -> list[dict[str, Any]]:
-    """As partes que vão para as contas: as do esboço, ou as do desenho simples."""
-    return st.session_state.get(PARTES_ESBOCO, []) if _no_esboco() else _partes()
+    """As partes que vão para as contas: as que saem das regiões do esboço."""
+    return st.session_state.get(PARTES_ESBOCO, [])
 
 
 def _esboco_vazio() -> dict[str, Any]:
@@ -153,37 +137,11 @@ def _ao_editar_no_esboco() -> None:
     _derivar_partes(evento["esboco"])
 
 
-def _trazer_do_simples() -> None:
-    try:
-        esboco = eb.esboco_das_partes(sd.partes_de_lista(_partes()))
-    except sd.ErroDeSecao as erro:
-        st.session_state[AVISO] = str(erro)
-        return
-    _trocar_esboco(esboco.como_dicionario())
-    st.session_state[AVISO] = (
-        "O desenho simples virou esboço: as medidas ainda não são cotas. Ponha cotas e restrições "
-        "para prender a forma. Partes que se sobrepunham precisam virar um contorno só."
-    )
-
-
-def _trocar_partes(
-    novas: list[sd.Parte],
-    *,
-    ajustar: bool = False,
-    tabela: bool = True,
-    versao: int | None = None,
-    cotas: list[dict[str, Any]] | None = None,
-) -> None:
-    """``cotas`` só fica de fora quando a seção é outra: uma cota aponta para pontos de uma parte."""
-    estado = st.session_state
-    estado[PARTES] = [parte.como_dicionario() for parte in novas]
-    estado[COTAS] = [] if cotas is None else cotas
-    estado[VERSAO] = estado[VERSAO] + 1 if versao is None else versao
-    if ajustar:
-        estado[AJUSTE] += 1
-    if tabela:  # base nova na tabela: a edição guardada nela valia para a base antiga
-        estado[REVISAO_TABELA] += 1
-        estado[BASE_TABELA] = [sr.linha_da_parte(p) for p in estado[PARTES]]
+def _esboco_novo(esboco: dict[str, Any]) -> None:
+    """Uma seção que chega de fora (modelo, DXF, seção antiga): sem configurações nem regras velhas."""
+    st.session_state[CONFIGURACOES] = []
+    st.session_state.pop(REGRAS, None)
+    _trocar_esboco(esboco)
 
 
 def _medidas(modelo: sd.Modelo) -> dict[str, float]:
@@ -200,99 +158,66 @@ def _aplicar_modelo() -> None:
         return
     modelo = _ROTULOS[rotulo]
     try:
-        _trocar_partes(sd.partes_do_modelo(modelo.id, _medidas(modelo)), ajustar=True)
+        partes = sd.partes_do_modelo(modelo.id, _medidas(modelo))
     except sd.ErroDeSecao as erro:
         st.session_state[ERRO_MODELO] = str(erro)
+        return
+    _esboco_novo(eb.esboco_das_partes(partes).como_dicionario())
 
 
 def _iniciar() -> None:
     estado = st.session_state
-    if ESBOCO not in estado:
-        estado[MODO] = estado.get(MODO) or MODO_ESBOCO
-        estado[ESBOCO] = _esboco_vazio()
-        estado[VERSAO_ESBOCO] = 0
-        estado[AJUSTE_ESBOCO] = 0
-        estado[PARTES_ESBOCO] = []
-        estado[PROBLEMAS] = []
-    if PARTES in estado:
+    if ESBOCO in estado:
         return
-    estado[VERSAO] = 0
-    estado[AJUSTE] = 0
-    estado[REVISAO_TABELA] = 0
-    estado[ERRO_TABELA] = ""
+    estado[ESBOCO] = _esboco_vazio()
+    estado[VERSAO_ESBOCO] = 0
+    estado[AJUSTE_ESBOCO] = 0
+    estado[PARTES_ESBOCO] = []
+    estado[PROBLEMAS] = []
     estado[ERRO_MODELO] = ""
-    estado[MODELO] = MODELO_INICIAL
-    modelo = _ROTULOS[MODELO_INICIAL]
-    _trocar_partes(sd.partes_do_modelo(modelo.id, _medidas(modelo)), ajustar=True)
-
-
-def _ao_editar_na_prancheta() -> None:
-    evento = getattr(st.session_state.get(CHAVE_PRANCHETA), "edicao", None)
-    if not evento:
-        return
-    validas: list[sd.Parte] = []
-    for bruta in evento.get("partes", []):
-        try:
-            validas.append(sd.parte_de_dicionario(bruta))
-        except sd.ErroDeSecao:
-            continue  # um gesto que não formou parte (polígono sem área) não derruba o desenho
-    # O modelo deixa de mandar: mudar uma medida agora apagaria o que foi feito à mão.
-    st.session_state[MODELO] = None
-    _trocar_partes(validas, versao=int(evento.get("versao", 0)), cotas=evento.get("cotas") or [])
-
-
-def _ao_editar_tabela() -> None:
-    estado = st.session_state
-    chave = f"secao_tabela_{estado[REVISAO_TABELA]}"
-    mudancas = estado.get(chave) or {}
-    linhas = [dict(linha) for linha in estado[BASE_TABELA]]
-    for indice, campos in mudancas.get("edited_rows", {}).items():
-        linhas[int(indice)].update(campos)
-    apagadas = {int(i) for i in mudancas.get("deleted_rows", [])}
-    linhas = [linha for i, linha in enumerate(linhas) if i not in apagadas]
-    for nova in mudancas.get("added_rows", []):
-        linhas.append({"forma": sr.FORMA_ROTULO[sd.RET], "tipo": sr.CHEIO, **nova})
-    estado[ERRO_TABELA] = ""
-    try:
-        partes = sd.partes_de_lista(sr.parte_da_linha(linha) for linha in linhas)
-    except (sd.ErroDeSecao, ValueError, TypeError) as erro:
-        estado[ERRO_TABELA] = str(erro)
-        return
-    estado[MODELO] = None
-    _trocar_partes(partes, tabela=False, cotas=estado.get(COTAS, []))
+    estado.setdefault(MODELO, None)
 
 
 def _limpar() -> None:
-    if _no_esboco():
-        _trocar_esboco(_esboco_vazio())
-        return
     st.session_state[MODELO] = None
-    _trocar_partes([], ajustar=True)
+    _trocar_esboco(_esboco_vazio())
 
 
 def _por_perfil() -> None:
+    """O perfil entra encostado no desenho, no lado escolhido, como um contorno à parte."""
     nome = st.session_state.get("secao_add_perfil")
     lado = st.session_state.get("secao_add_lado") or sd.LADOS[0]
     if not nome:
         return
     perfil = catalogo.obter_perfil(nome)
-    atuais = sd.partes_de_lista(_partes())
-    grupo = max((p.grupo for p in atuais), default=0) + 1
+    atuais = sd.partes_de_lista(_partes_ativas())
     try:
-        novas = sd.encostar(sd.partes_do_perfil(perfil, grupo=grupo), atuais, lado)
+        novas = sd.partes_do_perfil(perfil, grupo=1)
+        if atuais:
+            novas = sd.encostar(novas, atuais, lado)
     except sd.ErroDeSecao as erro:
         st.session_state[AVISO] = str(erro)
         return
     st.session_state[MODELO] = None
-    _trocar_partes([*atuais, *novas], ajustar=True, cotas=st.session_state.get(COTAS, []))
+    contorno = eb.esboco_das_partes(novas).como_dicionario()
+    base = st.session_state.get(ESBOCO) or _esboco_vazio()
+    _trocar_esboco(eu.anexar(base, contorno) if atuais else contorno)
+    avisos = []
+    if atuais:
+        avisos.append(
+            f"{nome} entrou encostado no desenho: para virar uma peça só com o resto, use Unir "
+            "(tecla U, no menu do Aparar)."
+        )
     area = sd.analisar(novas).prop.area
     diferenca = (1.0 - area / perfil.area_mm2) * 100.0
     if abs(diferenca) >= 0.5:
-        st.session_state[AVISO] = (
-            f"{nome} entrou como chapas, com {abs(diferenca):.1f} % "
-            f"{'menos' if diferenca > 0 else 'mais'} de área que o catálogo: os raios de "
-            "concordância do laminado não entram no desenho."
+        menos_ou_mais = "menos" if diferenca > 0 else "mais"
+        avisos.append(
+            f"{nome} entrou com {abs(diferenca):.1f} % {menos_ou_mais} de área que o catálogo: os "
+            "raios de concordância do laminado não entram no desenho."
         )
+    if avisos:
+        st.session_state[AVISO] = " ".join(avisos)
 
 
 def _abrir_salva() -> None:
@@ -303,14 +228,87 @@ def _abrir_salva() -> None:
     st.session_state[MODELO] = None
     st.session_state[NOME] = nome
     if item.esboco:
-        st.session_state[MODO] = MODO_ESBOCO
         esboco = dict(item.esboco)
         st.session_state[CONFIGURACOES] = list(esboco.pop("configuracoes", None) or [])
         st.session_state.pop(REGRAS, None)
         _trocar_esboco(esboco)
         return
-    st.session_state[MODO] = MODO_SIMPLES
-    _trocar_partes(sd.partes_de_lista(item.desenho), ajustar=True)
+    # Salva pela prancheta antiga, de chapas: vira esboço de um contorno só, sem cotas.
+    try:
+        esboco_antigo = eb.esboco_das_partes(sd.partes_de_lista(item.desenho))
+    except sd.ErroDeSecao as erro:
+        st.session_state[AVISO] = str(erro)
+        return
+    _esboco_novo(esboco_antigo.como_dicionario())
+    st.session_state[AVISO] = (
+        f"{nome} foi desenhada na prancheta antiga, de chapas: virou esboço de um contorno só, "
+        "sem cotas. Ponha cotas e letras para testar as medidas."
+    )
+
+
+def _ao_escolher_dxf() -> None:
+    """Lê as camadas do arquivo escolhido: todas entram, até a pessoa tirar alguma."""
+    estado = st.session_state
+    estado[DXF_ERRO] = ""
+    arquivo = estado.get(DXF_ARQUIVO)
+    if arquivo is None:
+        estado[DXF_CAMADAS] = []
+        return
+    try:
+        camadas = list(ed.camadas(arquivo.getvalue()))
+    except ed.ErroDeDxf as erro:
+        estado[DXF_CAMADAS] = []
+        estado[DXF_ERRO] = str(erro)
+        return
+    estado[DXF_CAMADAS] = camadas
+    estado[DXF_USAR] = camadas
+
+
+def _abrir_dxf() -> None:
+    estado = st.session_state
+    estado[DXF_ERRO] = ""
+    arquivo = estado.get(DXF_ARQUIVO)
+    if arquivo is None:
+        estado[DXF_ERRO] = "Escolha um arquivo .dxf."
+        return
+    usar = estado.get(DXF_USAR) or []
+    if not usar:
+        estado[DXF_ERRO] = "Escolha ao menos uma camada."
+        return
+    try:
+        leitura = ed.ler_dxf(
+            arquivo.getvalue(), usar=usar, levar_para_origem=bool(estado.get(DXF_ORIGEM, True))
+        )
+    except ed.ErroDeDxf as erro:
+        estado[DXF_ERRO] = str(erro)
+        return
+    estado[MODELO] = None
+    estado[NOME] = ""
+    _esboco_novo(leitura.esboco.como_dicionario())
+    estado[AVISO] = _resumo_do_dxf(arquivo.name, leitura)
+
+
+def _resumo_do_dxf(nome: str, leitura: ed.LeituraDxf) -> str:
+    lidas = sum(leitura.lidas.values())
+    entrou = "entidade entrou" if lidas == 1 else "entidades entraram"
+    escala = "" if leitura.fator_mm == 1.0 else f" (× {_numero(leitura.fator_mm, 4)} para mm)"
+    partes = [
+        f"{nome}: {lidas} {entrou} ({len(leitura.esboco.curvas)} curvas), em "
+        f"{leitura.unidade}{escala}."
+    ]
+    if leitura.ignoradas:
+        nomes = ed.NOMES_DAS_IGNORADAS
+        fora = ", ".join(
+            f"{n} {nomes.get(t, (t.lower(), t.lower()))[0 if n == 1 else 1]}"
+            for t, n in sorted(leitura.ignoradas.items())
+        )
+        partes.append(f"Ficaram de fora: {fora}.")
+    partes += list(leitura.avisos)
+    partes.append(
+        "Sem cotas: ponha cotas e restrições para prender a forma. Se um contorno não fechar, junte "
+        "as pontas arrastando uma sobre a outra."
+    )
+    return " ".join(partes)
 
 
 def _salvar(nome: str, analise: sd.Analise) -> str:
@@ -323,7 +321,7 @@ def _salvar(nome: str, analise: sd.Analise) -> str:
         catalogo.salvar_perfil(
             dados,
             desenho=tuple(p.como_dicionario() for p in analise.partes),
-            esboco=_esboco_para_salvar() if _no_esboco() else None,
+            esboco=_esboco_para_salvar(),
         )
     except (sd.ErroDeSecao, catalogo.ErroDeCatalogo) as erro:
         return str(erro)
@@ -371,72 +369,6 @@ def _cartao(coluna: Any, rotulo: str, valor: str, unidade: str, ajuda: str) -> N
 # ---------------------------------------------------------------------------
 # Blocos da tela
 # ---------------------------------------------------------------------------
-
-
-def _inicio_do_desenho() -> None:
-    esquerda, direita = st.columns([2, 3], vertical_alignment="bottom")
-    esquerda.selectbox(
-        "Começar de um modelo",
-        list(_ROTULOS),
-        index=None,
-        placeholder="Desenho à mão",
-        key=MODELO,
-        on_change=_aplicar_modelo,
-        help=(
-            "Escolha a forma e ajuste as medidas. Depois é só mexer na prancheta: a seção pode "
-            "receber chapas, furos e outros perfis."
-        ),
-    )
-    with direita, st.container(horizontal=True, horizontal_alignment="right"):
-        with st.popover("Perfil do catálogo", icon=":material/add:"):
-            st.selectbox(
-                "Perfil",
-                sorted(catalogo.listar_perfis()),
-                index=None,
-                placeholder="W 310, U 200, tubo…",
-                key="secao_add_perfil",
-                help="O perfil entra como chapas e encosta no desenho, centrado no lado escolhido.",
-            )
-            st.pills(
-                "Onde encostar",
-                sd.LADOS,
-                default=sd.LADOS[0],
-                key="secao_add_lado",
-                help="Lado do desenho em que o perfil vai encostar.",
-            )
-            st.button(
-                "Pôr no desenho",
-                on_click=_por_perfil,
-                icon=":material/add:",
-                width="stretch",
-                key="secao_add_botao",
-                help="Junta o perfil ao que já está desenhado.",
-            )
-        salvas = sorted(n for n, i in catalogo.listar_cadastrados().items() if i.desenho)
-        with st.popover("Abrir salva", icon=":material/folder_open:"):
-            if salvas:
-                st.selectbox(
-                    "Seção salva",
-                    salvas,
-                    index=None,
-                    key="secao_abrir",
-                    on_change=_abrir_salva,
-                    help="Volta à prancheta uma seção desenhada e salva no catálogo.",
-                )
-            else:
-                st.caption("Nenhuma seção salva ainda.")
-        st.button(
-            "Limpar",
-            on_click=_limpar,
-            icon=":material/delete:",
-            key="secao_limpar",
-            help="Apaga o desenho. O botão de desfazer da prancheta traz de volta.",
-        )
-
-    # Sempre o mesmo número de blocos antes da prancheta: se um bloco some, o Streamlit monta a
-    # prancheta de novo, e ela perde a seleção e o desfazer.
-    with st.container():
-        _medidas_do_modelo()
 
 
 def _medidas_do_modelo() -> None:
@@ -579,51 +511,11 @@ def _uso(analise: sd.Analise, forma: sd.Forma) -> None:
 
 
 def _tabela() -> None:
-    if _no_esboco():
-        st.caption(
-            "As partes que saem do esboço: o contorno de aço e os furos. Para mudar, mexa no "
-            "esboço, nas cotas ou nas letras."
-        )
-        st.dataframe(
-            [sr.linha_da_parte(p) for p in _partes_ativas()], hide_index=True, width="stretch"
-        )
-        return
     st.caption(
-        "Cada linha é uma parte. Medidas em mm, com x e y no centro da parte. No polígono, escreva "
-        "os pontos assim: 0 0; 100 0; 100 50. Partes do mesmo grupo andam juntas na prancheta."
+        "As partes que saem do esboço: o contorno de aço e os furos. Para mudar, mexa no esboço, nas "
+        "cotas ou nas letras."
     )
-    st.data_editor(
-        st.session_state[BASE_TABELA],
-        key=f"secao_tabela_{st.session_state[REVISAO_TABELA]}",
-        num_rows="dynamic",
-        hide_index=True,
-        width="stretch",
-        placeholder="—",
-        on_change=_ao_editar_tabela,
-        column_config={
-            "forma": st.column_config.SelectboxColumn(
-                "Forma",
-                options=list(sr.FORMA_DO_ROTULO),
-                required=True,
-                help="Retângulo, círculo ou polígono.",
-            ),
-            "tipo": st.column_config.SelectboxColumn(
-                "Tipo",
-                options=[sr.CHEIO, sr.FURO],
-                required=True,
-                help="Furo tira o aço de tudo o que estiver embaixo dele.",
-            ),
-            "x": st.column_config.NumberColumn("x (mm)", help="Centro da parte em x."),
-            "y": st.column_config.NumberColumn("y (mm)", help="Centro da parte em y."),
-            "b": st.column_config.NumberColumn("b ou Ø (mm)", help="Largura ou diâmetro."),
-            "h": st.column_config.NumberColumn("h (mm)", help="Altura do retângulo."),
-            "giro": st.column_config.NumberColumn("Giro (°)", help="Giro da chapa, anti-horário."),
-            "pontos": st.column_config.TextColumn("Pontos", help="Só no polígono: x y; x y; x y."),
-            "grupo": st.column_config.NumberColumn("Grupo", step=1, help="Zero = parte solta."),
-        },
-    )
-    if st.session_state.get(ERRO_TABELA):
-        st.error(st.session_state[ERRO_TABELA], icon=":material/error:")
+    st.dataframe([sr.linha_da_parte(p) for p in _partes_ativas()], hide_index=True, width="stretch")
 
 
 def _propriedades(analise: sd.Analise) -> None:
@@ -713,26 +605,43 @@ def _esforcos_da_secao() -> dict[str, Any]:
     }
 
 
-def _ligacoes(analise: sd.Analise, mapa: sd.MapaDeTensoes) -> None:
-    fluxos = sd.fluxos_nas_ligacoes(analise, mapa)
-    if not fluxos:
+def _geometria_das_partes(analise: sd.Analise) -> gs.Geometria:
+    cheios = tuple(tuple(p.cantos) for p in analise.partes if p.forma != sd.CIRC and not p.furo)
+    vazados = tuple(tuple(p.cantos) for p in analise.partes if p.forma != sd.CIRC and p.furo)
+    circulos = tuple((p.x, p.y, p.b / 2.0, p.furo) for p in analise.partes if p.forma == sd.CIRC)
+    return gs.Geometria(cheios, vazados, circulos=circulos)
+
+
+def _juncoes(analise: sd.Analise, vx: float, vy: float) -> None:
+    """q nas junções (onde a largura pula, como alma e mesa): o que a solda precisa levar."""
+    geometria = _geometria_das_partes(analise)
+    linhas = []
+    for cortante, eixo, geo in ((vy, "y", geometria), (vx, "x", geometria.deitada())):
+        if not cortante:
+            continue
+        try:
+            faixas = gs.faixas_da_secao(geo)
+        except ValueError:
+            continue
+        for i in gs.niveis_de_juncao(faixas.y, faixas.b):
+            q = abs(cortante) * 1e3 * abs(float(faixas.q[i])) / faixas.inercia  # N/mm = kN/m
+            posicao = float(faixas.y[i]) + faixas.y_centro
+            linhas.append(
+                {
+                    "Junção": f"{eixo} = {_numero(posicao)} mm",
+                    "Largura (mm)": _numero(float(faixas.b[i])),
+                    "q (kN/m)": _numero(q),
+                }
+            )
+    if not linhas:
         return
-    st.markdown("**Cisalhamento nas ligações entre as chapas**")
-    st.dataframe(
-        [
-            {
-                "Ligação": f"Parte {f.parte_a + 1} com parte {f.parte_b + 1}",
-                "Contato (mm)": _numero(f.comprimento),
-                "q (kN/m)": _numero(f.q),
-            }
-            for f in fluxos
-        ],
-        hide_index=True,
-        width="stretch",
-    )
+    st.markdown("**Cisalhamento nas junções (para a solda)**")
+    st.dataframe(linhas, hide_index=True, width="stretch")
     st.caption(
-        "q é a força que a ligação precisa levar por metro de barra, e é com ela que se dimensiona a "
-        "solda: num par de filetes, cada um leva a metade. A perna sai em Ligações soldadas."
+        "Nas alturas em que a largura pula (alma e mesa, por exemplo), q = V·Q/I é a força que a "
+        "ligação precisa levar por metro de barra, e é com ela que se dimensiona a solda: num par de "
+        "filetes, cada um leva a metade. A perna sai em Ligações soldadas. A posição é medida da "
+        "origem do desenho."
     )
 
 
@@ -803,8 +712,8 @@ def _tensoes(analise: sd.Analise, impressao: str) -> None:
     tabela_de_verificacoes(Resultado("", verificacoes=tuple(linhas)))
     for aviso in avisos:
         st.warning(aviso, icon=":material/warning:")
-    if vx or vy or e["t"]:
-        _ligacoes(analise, mapa)
+    if vx or vy:
+        _juncoes(analise, vx, vy)
     if mapa.mises > 0 and st.button(
         "Ver o ponto crítico no Círculo de Mohr",
         key="secao_mohr",
@@ -885,10 +794,6 @@ def _aviso_de_volta() -> None:
     volta = vs.de_onde_veio()
     if volta is None:
         return
-    marca = repr(sorted(volta.items()))
-    if st.session_state.get(_VOLTA_VISTA) != marca:
-        st.session_state[_VOLTA_VISTA] = marca
-        st.session_state[MODO] = MODO_ESBOCO
     with st.container(border=True):
         colunas = st.columns([4, 1], vertical_alignment="center")
         colunas[0].info(
@@ -914,23 +819,8 @@ def tela() -> None:
     if st.session_state.pop(IR_PARA, False):
         st.switch_page("app_pages/assistente_cargas.py")
     _aviso_de_volta()
-    st.segmented_control(
-        "Prancheta",
-        MODOS,
-        key=MODO,
-        required=True,
-        label_visibility="collapsed",
-        help=(
-            "Esboço com cotas: desenhe como num CAD, com cotas que seguram a medida, restrições e "
-            "letras que o Montador de fórmulas testa. Desenho simples: a prancheta de chapas, com "
-            "os modelos prontos e os perfis do catálogo."
-        ),
-    )
     with secao_protegida("Modelos"):
-        if _no_esboco():
-            _inicio_do_esboco()
-        else:
-            _inicio_do_desenho()
+        _inicio_do_esboco()
     with st.container():
         aviso = st.session_state.pop(AVISO, "")
         if aviso:
@@ -944,48 +834,27 @@ def tela() -> None:
     except sd.ErroDeSecao as erro:
         falha = str(erro)
 
-    if _no_esboco():
-        # O desenho sozinho na faixa, com a largura toda; o resto vem embaixo.
-        prancheta_do_esboco(
-            {
-                "esboco": st.session_state[ESBOCO],
-                "versao": st.session_state[VERSAO_ESBOCO],
-                "ajustar": st.session_state[AJUSTE_ESBOCO],
-                "problemas": st.session_state.get(PROBLEMAS, []),
-                "marcas": _marcas(analise),
-            },
-            key=CHAVE_ESBOCO,
-            ao_editar=_ao_editar_no_esboco,
-        )
-        propriedades, uso = st.columns([3, 2], gap="medium")
-        with propriedades:
-            _propriedades_ou_aviso(analise, falha)
-        with uso:
-            if analise is not None:
-                with secao_protegida("Uso"):
-                    _uso(analise, sd.reconhecer(analise.partes))
-        with secao_protegida("Testar o desenho"):
-            _teste_do_desenho()
-    else:
-        esquerda, direita = st.columns([5, 2], gap="medium")
-        with esquerda:
-            prancheta(
-                {
-                    "partes": _partes(),
-                    "versao": st.session_state[VERSAO],
-                    "ajustar": st.session_state[AJUSTE],
-                    "marcas": _marcas(analise),
-                    "chapas": list(CHAPAS.valores),
-                    "cotas": st.session_state.get(COTAS, []),
-                },
-                key=CHAVE_PRANCHETA,
-                ao_editar=_ao_editar_na_prancheta,
-            )
-        with direita:
-            _propriedades_ou_aviso(analise, falha)
-            if analise is not None:
-                with secao_protegida("Uso"):
-                    _uso(analise, sd.reconhecer(analise.partes))
+    # O desenho sozinho na faixa, com a largura toda; o resto vem embaixo.
+    prancheta_do_esboco(
+        {
+            "esboco": st.session_state[ESBOCO],
+            "versao": st.session_state[VERSAO_ESBOCO],
+            "ajustar": st.session_state[AJUSTE_ESBOCO],
+            "problemas": st.session_state.get(PROBLEMAS, []),
+            "marcas": _marcas(analise),
+        },
+        key=CHAVE_ESBOCO,
+        ao_editar=_ao_editar_no_esboco,
+    )
+    propriedades, uso = st.columns([3, 2], gap="medium")
+    with propriedades:
+        _propriedades_ou_aviso(analise, falha)
+    with uso:
+        if analise is not None:
+            with secao_protegida("Uso"):
+                _uso(analise, sd.reconhecer(analise.partes))
+    with secao_protegida("Testar o desenho"):
+        _teste_do_desenho()
 
     abas = st.tabs(["Partes", "Todas as propriedades", "Tensões na seção", "Memorial"])
     with abas[0], secao_protegida("Partes"):
@@ -1004,15 +873,11 @@ def _propriedades_ou_aviso(analise: sd.Analise | None, falha: str) -> None:
     if analise is None:
         if falha:
             st.error(falha, icon=":material/error:")
-        elif _no_esboco():
-            st.info(
-                "Desenhe um contorno fechado no esboço: Linha (L), Retângulo (R) ou Círculo (C). "
-                "Contorno dentro de contorno vira furo. As propriedades aparecem aqui.",
-                icon=":material/draw:",
-            )
         else:
             st.info(
-                "Desenhe uma chapa ou escolha um modelo: as propriedades aparecem aqui.",
+                "Desenhe um contorno fechado no esboço: Linha (L), Retângulo (R) ou Círculo (C). "
+                "Contorno dentro de contorno vira furo. Ou comece de um modelo, de um perfil do "
+                "catálogo ou de um DXF. As propriedades aparecem aqui.",
                 icon=":material/draw:",
             )
         return
@@ -1021,7 +886,46 @@ def _propriedades_ou_aviso(analise: sd.Analise | None, falha: str) -> None:
 
 
 def _inicio_do_esboco() -> None:
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    esquerda, direita = st.columns([2, 3], vertical_alignment="bottom")
+    esquerda.selectbox(
+        "Começar de um modelo",
+        list(_ROTULOS),
+        index=None,
+        placeholder="Desenho à mão",
+        key=MODELO,
+        on_change=_aplicar_modelo,
+        help=(
+            "Escolha a forma e ajuste as medidas: ela entra no esboço como um contorno só, sem "
+            "cotas. Depois é só mexer: cotas, letras, furos e chapas."
+        ),
+    )
+    with direita, st.container(horizontal=True, horizontal_alignment="right"):
+        with st.popover("Perfil do catálogo", icon=":material/add:"):
+            st.selectbox(
+                "Perfil",
+                sorted(catalogo.listar_perfis()),
+                index=None,
+                placeholder="W 310, U 200, tubo…",
+                key="secao_add_perfil",
+                help="O perfil entra como contorno. Com algo já desenhado, encosta no lado escolhido.",
+            )
+            st.pills(
+                "Onde encostar",
+                sd.LADOS,
+                default=sd.LADOS[0],
+                key="secao_add_lado",
+                help="Lado do desenho em que o perfil vai encostar.",
+            )
+            st.button(
+                "Pôr no desenho",
+                on_click=_por_perfil,
+                icon=":material/add:",
+                width="stretch",
+                key="secao_add_botao",
+                help="Junta o perfil ao que já está desenhado (depois, Unir faz uma peça só).",
+            )
+        with st.popover("Importar DXF", icon=":material/upload_file:"):
+            _importar_dxf()
         salvas = sorted(n for n, i in catalogo.listar_cadastrados().items() if i.desenho)
         with st.popover("Abrir salva", icon=":material/folder_open:"):
             if salvas:
@@ -1031,28 +935,62 @@ def _inicio_do_esboco() -> None:
                     index=None,
                     key="secao_abrir",
                     on_change=_abrir_salva,
-                    help="Volta uma seção salva no catálogo. Feita no esboço, volta com as cotas.",
+                    help=(
+                        "Volta uma seção salva no catálogo. Feita no esboço, volta com as cotas; "
+                        "feita na prancheta antiga, de chapas, volta como contorno sem cotas."
+                    ),
                 )
             else:
                 st.caption("Nenhuma seção salva ainda.")
         st.button(
-            "Trazer do desenho simples",
-            on_click=_trazer_do_simples,
-            icon=":material/move_down:",
-            key="secao_trazer",
-            disabled=not _partes(),
-            help=(
-                "As partes do desenho simples viram linhas e círculos do esboço, sem cotas. O que "
-                "está no esboço agora é trocado (o desfazer da prancheta traz de volta)."
-            ),
-        )
-        st.button(
             "Limpar",
             on_click=_limpar,
             icon=":material/delete:",
-            key="secao_limpar_esboco",
+            key="secao_limpar",
             help="Apaga o esboço. O desfazer da prancheta traz de volta.",
         )
+    # Sempre o mesmo número de blocos antes da prancheta: se um bloco some, o Streamlit monta a
+    # prancheta de novo, e ela perde a seleção e o desfazer.
+    with st.container():
+        _medidas_do_modelo()
+
+
+def _importar_dxf() -> None:
+    st.file_uploader(
+        "Desenho em DXF",
+        type=["dxf", "dwg"],
+        key=DXF_ARQUIVO,
+        on_change=_ao_escolher_dxf,
+        help=(
+            "Retas, arcos, círculos e polilinhas viram o esboço, em mm pela unidade do arquivo. "
+            "DWG é formato fechado: salve como DXF no seu CAD."
+        ),
+    )
+    camadas = st.session_state.get(DXF_CAMADAS) or []
+    if camadas:
+        st.multiselect(
+            "Camadas que entram",
+            camadas,
+            key=DXF_USAR,
+            help="Tire as camadas de cotas, textos e molduras: só a peça entra no esboço.",
+        )
+    st.checkbox(
+        "Levar o desenho para a origem",
+        value=True,
+        key=DXF_ORIGEM,
+        help="O meio do desenho vai para o ponto (0, 0); sem isso, ficam as coordenadas do DXF.",
+    )
+    st.button(
+        "Abrir no esboço",
+        on_click=_abrir_dxf,
+        icon=":material/draw:",
+        width="stretch",
+        key="secao_dxf_abrir",
+        disabled=not camadas,
+        help="Troca o que está no esboço pelo desenho do DXF (o desfazer da prancheta traz de volta).",
+    )
+    if st.session_state.get(DXF_ERRO):
+        st.error(st.session_state[DXF_ERRO], icon=":material/error:")
 
 
 def _esboco_para_salvar() -> dict[str, Any]:

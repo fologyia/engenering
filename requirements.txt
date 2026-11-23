@@ -12,3 +12,5 @@ sympy>=1.14,<1.15
 CoolProp>=8.0,<9
 scipy>=1.14
 fluids>=1.3,<2
+ezdxf>=1.4,<2
+pypdfium2>=4.30

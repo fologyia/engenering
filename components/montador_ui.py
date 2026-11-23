@@ -327,6 +327,26 @@ def _aplicar(p: Parte, modelo: Modelo) -> None:
     _outra_montagem(p)
 
 
+def abrir_com_valores(
+    p: Parte,
+    nome_do_modelo: str,
+    valores: Mapping[str, float],
+    alvo: str,
+    adotado: float | None = None,
+) -> None:
+    """Outra página abre o Montador num modelo, com os números dela (na base do sistema).
+
+    É o caminho da Análise sobre o desenho: a marca leva o modelo e os números da parte, e aqui a
+    conta continua com tudo o que o Montador tem (busca, casos de carga, memorial).
+    """
+    _aplicar(p, p.por_nome[nome_do_modelo])
+    estado = st.session_state
+    estado[p.k("valores")] = dict(valores)
+    estado[p.k("origens")] = dict.fromkeys(valores, _DO_MODELO)
+    estado[p.k("alvo")] = alvo
+    estado[p.k("adotado")] = adotado
+
+
 def _outra_montagem(p: Parte) -> None:
     """Os valores chegaram junto com os blocos: não há letra de antes para acompanhar."""
     estado = st.session_state

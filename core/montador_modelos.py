@@ -12,6 +12,7 @@ from core import montador_blocos as mb
 from core import montador_conjuntos as mc
 from core import (
     montador_eixo,  # noqa: F401  (registra o eixo com trechos)
+    montador_ligacoes,  # noqa: F401  (registra o pino e a chapa com furo)
     montador_pecas,  # noqa: F401  (registra os blocos de peça)
     montador_processos,  # noqa: F401  (registra a ponte entre térmico e fluidos)
     montador_termico,  # noqa: F401  (registra os blocos do térmico)
@@ -462,6 +463,58 @@ MODELOS: tuple[Modelo, ...] = (
             ("e1", "T", "n1", "t1"),
             ("m1", "saida", "n1", "material"),
         ),
+    ),
+    Modelo(
+        "Pino: força máxima",
+        "Pino de 20 mm em corte duplo, garfo de 10 mm e chapa de 16 mm: corte, flexão do pino, "
+        "esmagamento, rasgamento e seção líquida.",
+        "F_lig",
+        {
+            "n_pi": 1.0,
+            "d_p": 20.0,
+            "t_a": 10.0,
+            "t_b": 16.0,
+            "c_f": 1.0,
+            "w_c": 60.0,
+            "e_c": 40.0,
+            "S_y": 350.0,
+            "S_y_c": 250.0,
+            "n": 2.0,
+        },
+        ("pino", _R),
+    ),
+    Modelo(
+        "Pino: diâmetro mínimo",
+        "A mesma articulação, com a força de 40 kN: o menor pino que passa em tudo.",
+        "d_p",
+        {
+            "F_lig": 40e3,
+            "n_pi": 1.0,
+            "t_a": 10.0,
+            "t_b": 16.0,
+            "c_f": 1.0,
+            "w_c": 60.0,
+            "e_c": 40.0,
+            "S_y": 350.0,
+            "S_y_c": 250.0,
+            "n": 2.0,
+        },
+        ("pino", _R),
+    ),
+    Modelo(
+        "Chapa com furo: espessura mínima",
+        "Chapa de 80 mm de largura com um furo de 22 mm, puxando 60 kN.",
+        "t_c",
+        {
+            "F_lig": 60e3,
+            "w_c": 80.0,
+            "d_f": 22.0,
+            "n_f": 1.0,
+            "S_y": 250.0,
+            "S_ut": 400.0,
+            "n": 1.67,
+        },
+        ("chapa_furo", _R),
     ),
     Modelo(
         "Fórmula própria",

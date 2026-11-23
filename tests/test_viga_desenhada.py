@@ -207,8 +207,7 @@ def test_desenhar_a_secao_e_voltar_com_ela(catalogo_vazio):
     assert at.session_state[vs.VOLTA]["destino"] == "vigas"
     at.switch_page(vs.PAGINA_DESENHAR)
     at.run()
-    at.session_state["secao_modo"] = "Desenho simples"  # quem vem de outra página cai no esboço
-    at.run()
+    at.selectbox(key="secao_modelo").set_value("I").run()
     at.text_input(key="secao_nome").set_value("Seção da viga").run()
     at.button(key="secao_salvar_e_voltar").click().run()
     assert not at.exception, [str(e.value) for e in at.exception]

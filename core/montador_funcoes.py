@@ -187,6 +187,23 @@ tensao_critica_coluna = _em_vetor(ema.tensao_critica_coluna)
 fator_de_lewis = _em_vetor(et.fator_lewis)
 
 
+def _braco_do_pino(planos: float, a: float, b: float, c: float) -> float:
+    """M_máx/V do pino com ``planos`` planos de corte (V = força de um plano), em mm.
+
+    Sai do equilíbrio das chapas alternadas, o mesmo do Cálculo de peças
+    (``core.esforcos_no_pino``): o momento cresce na mesma proporção da força.
+    """
+    from core import esforcos_no_pino as ep
+
+    n = round(planos)
+    if n < 1 or a <= 0 or (n > 1 and b <= 0) or c < 0:
+        raise ValueError("Chapas e folga fora do que existe.")
+    return ep.diagrama_das_chapas(ep.chapas_alternadas(n, float(n), a, b, c)).momento_max
+
+
+braco_do_pino = _em_vetor(_braco_do_pino)
+
+
 class _Numerica(sp.Function):
     """Uma função que a sympy trata como uma letra positiva, com o número vindo de fora."""
 
@@ -207,6 +224,14 @@ class _Numerica(sp.Function):
     def _latex(self, printer: Any, exp: Any = None) -> str:
         texto = self.texto
         return f"{texto}^{{{printer.doprint(exp)}}}" if exp is not None else texto
+
+
+class BracoDoPino(_Numerica):
+    """m_p = M_máx/V: o braço do momento no pino, pelo equilíbrio das chapas."""
+
+    nargs = 4
+    funcao = staticmethod(braco_do_pino)
+    texto = "m_{p}"
 
 
 class LimiteBase(_Numerica):
@@ -404,6 +429,7 @@ NUMERICAS: tuple[type[sp.Function], ...] = (
     TensaoCritica,
     KCrane,
     CoeficienteOrificio,
+    BracoDoPino,
 )
 #: As que vêm de tabela ou de escolha: a planilha leva o valor calculado, e não uma fórmula.
 TABELADAS: tuple[type[sp.Function], ...] = (
@@ -424,6 +450,7 @@ DA_BIBLIOTECA: tuple[type[sp.Function], ...] = (
     KCrane,
     CoeficienteOrificio,
     es.DoDesenho,
+    BracoDoPino,
 )
 #: O que o ``lambdify`` precisa para calcular estas funções em número.
 FUNCOES: dict[str, Any] = {
@@ -448,4 +475,5 @@ FUNCOES: dict[str, Any] = {
     "KCrane": k_do_crane,
     "CoeficienteOrificio": coeficiente_do_orificio,
     "DoDesenho": es.numero,
+    "BracoDoPino": braco_do_pino,
 }
