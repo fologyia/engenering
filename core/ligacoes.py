@@ -1939,6 +1939,8 @@ def figura_solda(e: EntradaSolda, giro_graus: float = 0.0) -> ImagemDiagrama:
 CHAPA_NO_APOIO = "chapa_no_apoio"
 BARRA_SOLDADA = "barra_soldada"
 TIPOS_SOLDADOS = (CHAPA_NO_APOIO, BARRA_SOLDADA)
+#: O perfil soldado em todo o contorno mora em :mod:`core.ligacao_contorno`.
+PERFIL_NO_CONTORNO = "perfil_no_contorno"
 #: As ligações cujo desenho pode girar (só o desenho: o cálculo não muda).
 TIPOS_QUE_GIRAM = (SOLDA, CHAPA_NO_APOIO, BARRA_SOLDADA)
 
@@ -1951,6 +1953,10 @@ _ENTRADAS: dict[str, type] = {
 
 
 def _classe_da_entrada(tipo: str) -> type:
+    if tipo == PERFIL_NO_CONTORNO:
+        from core import ligacao_contorno as lc
+
+        return lc.EntradaPerfilNoContorno
     if tipo in TIPOS_SOLDADOS:
         from core import ligacoes_soldadas as ls
 
@@ -1960,6 +1966,10 @@ def _classe_da_entrada(tipo: str) -> type:
 
 def figura(r: ResultadoLigacao, giro_graus: float = 0.0) -> ImagemDiagrama:
     """O desenho da ligação; ``giro_graus`` gira o das soldas (os outros não giram)."""
+    if r.tipo == PERFIL_NO_CONTORNO:
+        from core import ligacao_contorno as lc
+
+        return lc.figura(r.adotada if r.adotada is not None else r.entrada)
     if r.tipo in TIPOS_SOLDADOS:
         from core import ligacoes_soldadas as ls
 
@@ -1991,6 +2001,10 @@ def calcular(entrada: Any) -> ResultadoLigacao:
         return calcular_perfil_frio(entrada)
     if isinstance(entrada, EntradaSolda):
         return calcular_solda(entrada)
+    if type(entrada).__name__ == "EntradaPerfilNoContorno":
+        from core import ligacao_contorno as lc
+
+        return lc.calcular(entrada)
     from core import ligacoes_soldadas as ls
 
     return ls.calcular(entrada)
@@ -2097,9 +2111,26 @@ _REFERENCIAS = [
     "(elementos de ligação), Anexo A.",
     "ABNT NBR 14762:2010 — 9.6 (tração), 10.2 (soldas), 10.3 (parafusos), 10.4 (colapso por rasgamento).",
     "AISC 360-16 — J2.4 (centro instantâneo de rotação dos filetes).",
+    "AISC 360-22 — J1.4 a) (compressão por contato na ponta faceada).",
     "AISC Steel Construction Manual — Parte 9 (vigas recortadas, seção de Whitmore) e Parte 10 "
     "(chapa simples).",
 ]
+
+
+def _metodo_do_tipo(tipo: str) -> str:
+    if tipo == PERFIL_NO_CONTORNO:
+        from core import ligacao_contorno as lc
+
+        return lc.METODO
+    return _METODO[tipo]
+
+
+def _premissas_do_tipo(tipo: str) -> list[str]:
+    if tipo == PERFIL_NO_CONTORNO:
+        from core import ligacao_contorno as lc
+
+        return list(lc.PREMISSAS)
+    return list(_PREMISSAS[tipo])
 
 
 def _entradas_do_registro(e: Any) -> dict[str, Any]:
@@ -2108,6 +2139,10 @@ def _entradas_do_registro(e: Any) -> dict[str, Any]:
         dados["arranjo"] = ARRANJOS.get(e.arranjo, e.arranjo)
         dados["metodo"] = METODOS_SOLDA.get(e.metodo, e.metodo)
         dados["combinacao"] = sd.COMBINACOES.get(e.combinacao, e.combinacao)
+    elif type(e).__name__ == "EntradaPerfilNoContorno":
+        from core import ligacao_contorno as lc
+
+        dados = lc.campos_do_registro(e)
     elif type(e).__name__ in ("EntradaChapaNoApoio", "EntradaBarraSoldada"):
         from core import ligacoes_soldadas as ls
 
@@ -2142,10 +2177,17 @@ def registro_ligacao(
     entradas.update(dict(contexto or {}))
     alertas = [f"{v.nome}: {v.formula}" for v in r.verificacoes if v.status in ("NÃO OK", "ALERTA")]
     alertas.extend(r.avisos)
-    alertas.append(
-        "Não faz: ligações rígidas (com momento), chapa de extremidade, enrijecedores, efeito de "
-        "alavanca e a verificação do apoio como um todo — casos específicos ficam com o projetista."
-    )
+    if r.tipo == PERFIL_NO_CONTORNO:
+        alertas.append(
+            "Não faz: a flexão da chapa onde o perfil é soldado, enrijecedores e o perfil fora da "
+            "ligação — casos específicos ficam com o projetista."
+        )
+    else:
+        alertas.append(
+            "Não faz: ligações rígidas (com momento), chapa de extremidade, enrijecedores, efeito "
+            "de alavanca e a verificação do apoio como um todo — casos específicos ficam com o "
+            "projetista."
+        )
     desenho = r.adotada if r.adotada is not None else r.entrada
     figura_ligacao: dict[str, Any] = {"tipo": r.tipo, "entrada": asdict(desenho)}
     giro = angulo_do_giro(giro_graus) if r.tipo in TIPOS_QUE_GIRAM else 0.0
@@ -2165,8 +2207,8 @@ def registro_ligacao(
             "destaque_memorial": texto,
             "figura_ligacao": figura_ligacao,
         },
-        metodo=_METODO[r.tipo],
-        premissas=list(_PREMISSAS[r.tipo]),
+        metodo=_metodo_do_tipo(r.tipo),
+        premissas=_premissas_do_tipo(r.tipo),
         alertas=alertas,
         referencias=list(_REFERENCIAS),
         conclusao=texto,
@@ -2382,6 +2424,23 @@ def _detalhes_do_tipo(r: ResultadoLigacao) -> list[tuple[str, str]]:
         linhas.append(("Solda", f"{solda}, em {_mm(e.comprimento_mm)} de junta"))
         linhas.append(("Chapa", f"{_mm(e.t_chapa_mm, 1)} ({e.aco_chapa})"))
         return linhas
+    if r.tipo == PERFIL_NO_CONTORNO:
+        from core import ligacao_contorno as lc
+
+        sec = lc.secao(e)
+        return [
+            ("Perfil", f"{sec.nome} ({e.aco_perfil})"),
+            ("Chapa", f"{_mm(e.t_chapa_mm, 1)} ({e.aco_chapa})"),
+            ("Eletrodo", e.eletrodo),
+            (
+                "Filete em todo o contorno",
+                f"perna {_mm(g.get('perna_mm', e.perna_mm), 0)}"
+                + (" (automática)" if r.entrada.perna_mm <= 0 else "")
+                + f", {_mm(g.get('comprimento_total_mm', 0.0))} de solda em {len(sec.trechos)} "
+                "trechos",
+            ),
+            ("Perna mínima estimada pela resistência", _mm(g.get("perna_estimada_mm", 0.0), 1)),
+        ]
     if r.tipo == CHAPA_SIMPLES:
         return [
             (

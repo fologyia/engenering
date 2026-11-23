@@ -168,6 +168,24 @@ penetração total ou parcial. Forças por mm pelo método elástico na linha de
 | Apoio | metal-base junto à solda (a parcela ao longo da solda); na mesa de perfil I/H: flexão local da mesa (dispensada com atuação < 0,15·b_f), escoamento local e enrugamento da alma, k = t_f | 6.5.5; 5.7.2 a 5.7.4 |
 | Intermitente | só quando a contínua de perna mínima já sobra; segmento ≥ 4·perna e 40 mm; os segmentos cabem na junta | 6.2.6.2.4 |
 
+## 6. Perfil soldado em todo o contorno
+
+Perfil W, HP, I (catálogo), U laminado ou cantoneira de abas iguais com a ponta numa chapa e filete
+de pernas iguais em volta da seção inteira: faces externas, pontas das mesas (abas) e faces internas,
+descontado o raio de concordância (estimado na espessura da mesa ou da aba; o trecho do raio fica
+fora da conta). Esforços N, V_x, V_y, M_x, M_y e T no centro da seção, levados ao centro do grupo de
+solda (no U e na cantoneira eles não coincidem). Código em `core/ligacao_contorno.py`.
+
+| Verificação | Fórmula | Item |
+|---|---|---|
+| Filete | f_n = N/L + a·x + b·y (flexão oblíqua das linhas, com I_xy), f_vx = V_x/L − T·y/J, f_vy = V_y/L + T·x/J; √(f_n² + f_vx² + f_vy²) ≤ 0,60·f_w·0,707·d_w/γ_w2 nas pontas dos trechos, sem o aumento pela direção; com ponta faceada, só a tração de f_n | Tabela 9, 6.2.5; AISC 360-22 J1.4 a) |
+| Metal-base do perfil | filetes nas duas faces de cada parede: √((2f_n/(f_y·t/γ_a1))² + (2f_v/R_v)²) ≤ 1 | 6.5.5 |
+| Metal-base da chapa | a maior f_v na espessura da chapa | 6.5.5 |
+| Limites | perna mínima pela parte menos espessa; perna máxima na ponta da mesa (aba); L do contorno ≥ 4·d_w e 40 mm | 6.2.6.2.1 a 6.2.6.2.3 |
+
+Perna 0 = automática (a menor comercial que passa). A flexão da chapa onde o perfil é soldado fica
+com o projetista.
+
 ## Casos de aceite
 
 Quatro exercícios de solda (talas sobrepostas, filete intermitente, penetração total e a cantoneira

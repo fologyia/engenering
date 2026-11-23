@@ -2824,6 +2824,11 @@ elif modulo == "Ligações estruturais":
               de penetração total ou parcial; força normal ao apoio, cortante ao longo da solda e
               momento no plano da chapa; a chapa junto à solda e o apoio — e, na mesa de um perfil
               I ou H, a flexão local da mesa, o escoamento local e o enrugamento da alma (5.7).
+            - **Perfil soldado em todo o contorno:** W, HP, I, U ou cantoneira com a ponta numa
+              chapa e filete em volta da seção inteira (por fora, nas pontas e por dentro). Leva
+              N, V_x, V_y, M_x, M_y e torção pelo método elástico, com o ponto mais solicitado no
+              desenho; metal-base do perfil e da chapa (6.5.5), perna mínima e máxima; perna
+              automática, compressão por contato com a ponta faceada.
             - **Casos de aceite:** quatro exercícios de solda (talas sobrepostas, filete
               intermitente, penetração total e a cantoneira de contraventamento no pilar) são
               conferidos na Validação do projeto.

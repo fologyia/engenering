@@ -13,6 +13,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_verificacoes_resumidas, texto_markdown
 from core import bolted_connection as bc
 from core import cantoneiras as ct
+from core import ligacao_contorno as lc
 from core import ligacoes as lg
 from core import ligacoes_soldadas as ls
 from core import section_catalog as sc
@@ -37,13 +38,15 @@ with st.expander("Escopo, premissas e casos não verificados", icon=":material/i
         "pilar (NBR 8800) e a ligação de perfil formado a frio (NBR 14762). A chapa simples "
         "também verifica a solda dela no apoio.\n"
         "- **Ligações soldadas:** grupo de filetes no plano, barra (cantoneira ou tala) soldada na "
-        "chapa de nó e chapa soldada no apoio, com filete, penetração total ou parcial "
+        "chapa de nó, chapa soldada no apoio, com filete, penetração total ou parcial, e perfil "
+        "(W, HP, I, U ou cantoneira) soldado numa chapa em todo o contorno, com N, V, M e torção "
         "(NBR 8800:2025; a 2008 para conferir projetos antigos).\n"
         "- **Premissas:** forças de cálculo (combinação ELU) informadas; ligações flexíveis "
         "(rotuladas); o apoio é verificado só junto à ligação — o perfil do apoio como um todo é "
         "do cálculo dele. As premissas de cada caso vão no memorial.\n"
         "- **Não verificados aqui (ficam com o projetista):** ligação rígida (com momento na "
-        "viga), chapa de extremidade, enrijecedores, efeito de alavanca em ligação soldada, "
+        "viga), a flexão da chapa de extremidade (no perfil soldado no contorno, só a solda e o "
+        "metal-base junto a ela), enrijecedores, efeito de alavanca em ligação soldada, "
         "fadiga e a flambagem da barra (só a da chapa de nó entra)."
     )
 
@@ -59,6 +62,7 @@ TIPOS_SOLDADOS = {
     lg.SOLDA: "Grupo de filetes no plano",
     lg.BARRA_SOLDADA: "Barra soldada na chapa de nó",
     lg.CHAPA_NO_APOIO: "Chapa soldada no apoio",
+    lg.PERFIL_NO_CONTORNO: "Perfil soldado em todo o contorno",
 }
 FAMILIAS_DE_VIGA = ("W (mesa larga)", "I duplamente simétrico", "U (canal laminado)")
 PERFIS_DE_VIGA = [n for n, p in sc.listar_perfis().items() if p.familia in FAMILIAS_DE_VIGA]
@@ -72,6 +76,13 @@ PADRAO_FRIO = lg.EntradaPerfilFrio()
 PADRAO_SOLDA = lg.EntradaSolda()
 PADRAO_BARRA = ls.EntradaBarraSoldada()
 PADRAO_T = ls.EntradaChapaNoApoio()
+PADRAO_K = lc.EntradaPerfilNoContorno()
+#: O perfil de partida de cada forma, quando ainda não há um guardado.
+PERFIL_INICIAL = {
+    lc.FORMA_I: PADRAO_K.perfil,
+    lc.FORMA_U: lc.perfis_da_forma(lc.FORMA_U)[4],  # U 6" x 12,20
+    lc.FORMA_L: lc.perfis_da_forma(lc.FORMA_L)[18],  # L 2" × 1/4"
+}
 PERFIS_DE_APOIO = ls.perfis_de_apoio()
 CANTONEIRAS = list(ct.CATALOGO_CANTONEIRAS)
 LADOS = {2: "Dos dois lados", 1: "De um lado só"}
@@ -1139,6 +1150,96 @@ elif tipo == lg.BARRA_SOLDADA:
         perna_apoio_mm=float(perna_apoio),
         excentricidade_mm=float(excentricidade),
         **apoio_b,  # type: ignore[arg-type]
+    )
+elif tipo == lg.PERFIL_NO_CONTORNO:
+    K = PADRAO_K
+    with st.container(border=True), secao_protegida("1. O perfil e a chapa"):
+        st.subheader("1. O perfil e a chapa", help=AJUDA["sec_contorno"])
+        c = st.columns(3)
+        norma_k, comb_k = _norma_e_combinacao(c[:2], "lig_k")
+        formas = list(lc.FORMAS)
+        forma_k = c[2].selectbox(
+            "Tipo de perfil", formas, format_func=lc.FORMAS.get, key="lig_k_forma",
+            persist_state="session", help=AJUDA["forma_contorno"],
+        )  # fmt: skip
+        c = st.columns(4)
+        perfis_k = lc.perfis_da_forma(forma_k)
+        perfil_k = c[0].selectbox(
+            "Perfil", perfis_k, index=_indice(perfis_k, PERFIL_INICIAL[forma_k]),
+            key=f"lig_k_perfil_{forma_k}", persist_state="session", help=AJUDA["perfil_contorno"],
+        )  # fmt: skip
+        acos_k = list(lg.ACOS)
+        aco_perfil_k = c[1].selectbox(
+            "Aço do perfil", acos_k, index=_indice(acos_k, K.aco_perfil), key="lig_k_aco",
+            persist_state="session", help=AJUDA["aco_perfil_contorno"],
+        )  # fmt: skip
+        t_chapa_k = c[2].number_input(
+            "Espessura da chapa (mm)", 1.0, 200.0, K.t_chapa_mm, 0.5, key="lig_k_t",
+            persist_state="session", help=AJUDA["t_chapa_contorno"],
+        )  # fmt: skip
+        aco_chapa_k = c[3].selectbox(
+            "Aço da chapa", acos_k, index=_indice(acos_k, K.aco_chapa), key="lig_k_aco_chapa",
+            persist_state="session", help=AJUDA["aco_chapa_contorno"],
+        )  # fmt: skip
+        c = st.columns(4)
+        eletrodos = list(lg.ELETRODOS)
+        eletrodo_k = c[0].selectbox(
+            "Eletrodo", eletrodos, index=_indice(eletrodos, K.eletrodo), key="lig_k_eletrodo",
+            persist_state="session", help=AJUDA["eletrodo"],
+        )  # fmt: skip
+        perna_k = c[1].number_input(
+            "Perna do filete (mm, 0 = automática)", 0.0, 25.0, K.perna_mm, 1.0, key="lig_k_perna",
+            persist_state="session", help=AJUDA["perna_contorno"],
+        )  # fmt: skip
+    with st.container(border=True), secao_protegida("2. Esforços de cálculo"):
+        st.subheader("2. Esforços de cálculo (no centro da seção)", help=AJUDA["sec_esforcos_contorno"])  # fmt: skip
+        c = st.columns(3)
+        n_k = c[0].number_input(
+            "N_Sd (kN, tração +)", -20000.0, 20000.0, K.n_sd_kN, 1.0, key="lig_k_n",
+            persist_state="session", help=AJUDA["n_contorno"],
+        )  # fmt: skip
+        vx_k = c[1].number_input(
+            "V_x,Sd (kN)", -20000.0, 20000.0, K.vx_sd_kN, 1.0, key="lig_k_vx",
+            persist_state="session", help=AJUDA["vx_contorno"],
+        )  # fmt: skip
+        vy_k = c[2].number_input(
+            "V_y,Sd (kN)", -20000.0, 20000.0, K.vy_sd_kN, 1.0, key="lig_k_vy",
+            persist_state="session", help=AJUDA["vy_contorno"],
+        )  # fmt: skip
+        c = st.columns(3)
+        mx_k = c[0].number_input(
+            "M_x,Sd (kN·m)", -5000.0, 5000.0, K.mx_sd_kNm, 0.1, key="lig_k_mx",
+            persist_state="session", help=AJUDA["mx_contorno"],
+        )  # fmt: skip
+        my_k = c[1].number_input(
+            "M_y,Sd (kN·m)", -5000.0, 5000.0, K.my_sd_kNm, 0.1, key="lig_k_my",
+            persist_state="session", help=AJUDA["my_contorno"],
+        )  # fmt: skip
+        t_k = c[2].number_input(
+            "T_Sd, torção (kN·m)", -5000.0, 5000.0, K.t_sd_kNm, 0.1, key="lig_k_tor",
+            persist_state="session", help=AJUDA["t_contorno"],
+        )  # fmt: skip
+        contato_k = st.toggle(
+            "Ponta faceada: a compressão passa por contato", key="lig_k_contato",
+            persist_state="session", help=AJUDA["contato_contorno"],
+        )  # fmt: skip
+    entrada = lc.EntradaPerfilNoContorno(
+        norma=norma_k,
+        combinacao=comb_k,
+        forma=forma_k,
+        perfil=perfil_k,
+        aco_perfil=aco_perfil_k,
+        t_chapa_mm=float(t_chapa_k),
+        aco_chapa=aco_chapa_k,
+        eletrodo=eletrodo_k,
+        perna_mm=float(perna_k),
+        n_sd_kN=float(n_k),
+        vx_sd_kN=float(vx_k),
+        vy_sd_kN=float(vy_k),
+        mx_sd_kNm=float(mx_k),
+        my_sd_kNm=float(my_k),
+        t_sd_kNm=float(t_k),
+        contato=bool(contato_k),
     )
 else:
     T = PADRAO_T

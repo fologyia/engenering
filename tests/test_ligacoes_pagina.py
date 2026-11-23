@@ -9,6 +9,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from components.ligacoes_help import AJUDA
+from core import ligacao_contorno as lc
 from core import ligacoes as lg
 from core import ligacoes_soldadas as ls
 from core.project_store import obter_projeto_ativo
@@ -18,7 +19,7 @@ from tests.test_esforcos_modelo_pagina import TIPOS_COM_AJUDA, _ajuda, _rotulo
 RAIZ = Path(__file__).resolve().parent.parent
 APP = str(RAIZ / "app.py")
 PAGINA = "app_pages/ligacoes_estruturais.py"
-SOLDADAS = (lg.SOLDA, lg.BARRA_SOLDADA, lg.CHAPA_NO_APOIO)
+SOLDADAS = (lg.SOLDA, lg.BARRA_SOLDADA, lg.CHAPA_NO_APOIO, lg.PERFIL_NO_CONTORNO)
 PARAFUSADAS = (lg.CHAPA_SIMPLES, lg.CANTONEIRA_DUPLA, lg.PERFIL_FRIO)
 
 
@@ -72,6 +73,9 @@ def test_modulo_registrado_em_dimensionamento_complementar():
         {"tipo": lg.CHAPA_NO_APOIO},
         {"tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_PARCIAL},
         {"tipo": lg.CHAPA_NO_APOIO, "lig_c2_tipo": ls.TIPO_TOTAL},
+        {"tipo": lg.PERFIL_NO_CONTORNO},
+        {"tipo": lg.PERFIL_NO_CONTORNO, "lig_k_forma": lc.FORMA_U, "lig_k_tor": 0.5},
+        {"tipo": lg.PERFIL_NO_CONTORNO, "lig_k_forma": lc.FORMA_L, "lig_k_contato": True},
     ],
 )
 def test_cada_tipo_abre_com_ajuda_em_tudo_e_figura(banco_isolado, estado):
@@ -256,3 +260,25 @@ def test_memorial_da_ligacao_na_pagina(banco_isolado):
     chaves = {b.proto.id.split("-")[-1] for b in t.get("download_button")}
     assert any("lig_memorial_word" in b.proto.id for b in t.get("download_button")), chaves
     assert any("lig_memorial_pdf" in b.proto.id for b in t.get("download_button")), chaves
+
+
+def test_perfil_no_contorno_igual_ao_nucleo_e_registra(banco_com_projeto):
+    t = abrir(lg.PERFIL_NO_CONTORNO, lig_k_perna=6.0, lig_k_mx=20.0)
+    esperado = lc.calcular(lc.EntradaPerfilNoContorno(perna_mm=6.0, mx_sd_kNm=20.0))
+    metricas = {m.label: m.value for m in t.metric}
+    assert metricas["Status"] == esperado.status
+    assert metricas["Aproveitamento"] == f"{100 * esperado.aproveitamento_maximo:.0f} %"
+    detalhes = _detalhamento(t)
+    assert (
+        "Filete em todo o contorno" in detalhes and "6 mm" in detalhes["Filete em todo o contorno"]
+    )
+    assert any("lig_memorial_word" in b.proto.id for b in t.get("download_button"))
+    t.button(key="registrar_ligacao").click().run()
+    assert not t.exception, [str(e.value) for e in t.exception]
+    registros = [
+        r for r in obter_projeto_ativo()["registros_tecnicos"] if r["modulo_id"] == lg.MODULO_ID
+    ]
+    assert len(registros) == 1
+    assert registros[0]["titulo"].startswith("W 250 x 32,7 soldado em todo o contorno")
+    assert registros[0]["resultados"]["figura_ligacao"]["tipo"] == lg.PERFIL_NO_CONTORNO
+    assert lg.figura_gravada(registros[0]["resultados"]["figura_ligacao"]).png

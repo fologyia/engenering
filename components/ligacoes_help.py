@@ -13,7 +13,8 @@ AJUDA: dict[str, str] = {
     ),
     "tipo_soldada": (
         "Qual ligação soldada calcular: um grupo de filetes no plano, a barra (cantoneira ou tala) "
-        "soldada na chapa de nó, ou uma chapa soldada num apoio com filete ou solda de penetração."
+        "soldada na chapa de nó, uma chapa soldada num apoio com filete ou solda de penetração, ou "
+        "um perfil (W, HP, I, U ou cantoneira) soldado numa chapa em todo o contorno."
     ),
     "norma": (
         "Versão da NBR 8800. A 2025 é a vigente; a 2008 serve para conferir projetos antigos. "
@@ -403,4 +404,44 @@ AJUDA: dict[str, str] = {
     ),
     "btn_memorial_pdf": "Gera o memorial desta ligação em PDF, pronto para enviar.",
     "reg_registrar": "Grava esta ligação no projeto ativo; ela entra no memorial com a figura e as verificações.",
+    # ------------------------------------------------------------------ perfil em todo o contorno
+    "sec_contorno": (
+        "A ponta do perfil encosta numa chapa e um filete corre em volta da seção inteira: por fora, "
+        "nas pontas das mesas (ou das abas) e por dentro. Escolha o perfil, a chapa e a solda."
+    ),
+    "forma_contorno": (
+        "O tipo de perfil soldado: I ou H (W, HP e I do catálogo), U laminado ou cantoneira de abas "
+        "iguais. O desenho do contorno de solda muda com ele."
+    ),
+    "perfil_contorno": "O perfil do catálogo. As medidas dele (altura, largura, espessuras) dão o contorno da solda.",
+    "aco_perfil_contorno": "Aço do perfil: entra no metal-base do perfil junto à solda.",
+    "t_chapa_contorno": (
+        "Espessura da chapa onde o perfil é soldado (chapa de extremidade, de base, de topo), em "
+        "mm. Entra na perna mínima e no metal-base da chapa."
+    ),
+    "aco_chapa_contorno": "Aço da chapa onde o perfil é soldado.",
+    "perna_contorno": (
+        "Perna do filete, em mm, igual em todo o contorno. Deixe 0 para o programa escolher a menor "
+        "perna comercial que aguenta os esforços."
+    ),
+    "sec_esforcos_contorno": (
+        "Os esforços de cálculo (já majorados) na ponta do perfil, no centro da seção. x é a "
+        "direção das mesas (na cantoneira, da aba deitada) e y a da alma."
+    ),
+    "n_contorno": "Força ao longo do perfil, em kN: positiva puxa o perfil da chapa (tração), negativa empurra.",
+    "vx_contorno": "Cortante na direção x (paralela às mesas), em kN.",
+    "vy_contorno": "Cortante na direção y (paralela à alma), em kN.",
+    "mx_contorno": (
+        "Momento em torno do eixo x (o eixo forte no W e no U), em kN·m. Positivo traciona o lado "
+        "de cima (+y) da seção."
+    ),
+    "my_contorno": "Momento em torno do eixo y, em kN·m. Positivo traciona o lado direito (+x) da seção.",
+    "t_contorno": (
+        "Torção em torno do eixo do perfil, em kN·m: gira a seção no plano da chapa. Positiva no "
+        "sentido anti-horário, olhando do lado do perfil."
+    ),
+    "contato_contorno": (
+        "Ligue se a ponta do perfil for faceada (cortada no esquadro e encostada na chapa): aí a "
+        "compressão passa pelo contato e só a tração vai para a solda."
+    ),
 }
