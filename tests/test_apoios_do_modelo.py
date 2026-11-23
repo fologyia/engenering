@@ -107,6 +107,18 @@ def test_reconhece_e_le_os_dois_arquivos():
     assert fix.nomes == ("Fixo-1",) and fix.entidades[2].ponto == PES[103]
 
 
+def test_hifen_do_solidworks_vira_o_menos_do_plano():
+    """O SolidWorks grava "T-" (só aceita o hífen); o plano usa "T−". Sem casar os dois, o
+    painel dizia que as forças do T− eram as "do T-" e que faltava o arquivo de apoios do T−."""
+    lido = am.ler_apoios(arquivo_de_apoios("T-", PE), "T--apoios.csv")
+    assert lido.caso == "T−"
+    assert am.codigo_do_plano("T+") == "T+" and am.codigo_do_plano("W0") == "W0"
+    gravado = am.para_dicionario(am.com_caso(am.ApoiosDoModelo(), lido, "T-"))
+    assert list(gravado["casos"]) == ["T−"]
+    gravado["casos"] = {"T-": gravado["casos"]["T−"]}  # projeto gravado antes da correção
+    assert list(am.de_dicionario(gravado).casos) == ["T−"]
+
+
 def test_arquivo_sem_caso_ou_sem_nos_vira_erro_claro():
     sem_caso = arquivo_de_apoios("PE", PE).replace(b"Caso de carga: PE", b"")
     with pytest.raises(am.ArquivoDeApoiosInvalido, match="caso de carga"):

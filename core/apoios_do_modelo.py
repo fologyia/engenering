@@ -127,7 +127,7 @@ def ler_apoios(
     conteudo: bytes, nome_arquivo: str = "", *, virgula_decimal: bool | None = None
 ) -> ApoiosDoCaso:
     linhas = _linhas(conteudo)
-    caso = em._caso_de_carga(linhas)
+    caso = codigo_do_plano(em._caso_de_carga(linhas))
     if not caso:
         raise ArquivoDeApoiosInvalido(
             'Sem o caso de carga no cabeçalho ("Caso de carga: PP"): use o arquivo da macro.'
@@ -215,8 +215,17 @@ class ApoiosDoModelo:
     fixacoes: FixacoesDoEstudo | None = None
 
 
+def codigo_do_plano(codigo: str) -> str:
+    """O código como o plano o escreve: o SolidWorks só aceita o hífen ("T-"), o plano usa o
+    sinal de menos ("T−"). Sem isso o arquivo de apoios do T- fica sem o caso T− dos esforços."""
+    codigo = (codigo or "").strip()
+    if len(codigo) > 1 and codigo[-1] in "-–—":
+        return codigo[:-1] + "−"
+    return codigo
+
+
 def com_caso(dados: ApoiosDoModelo, apoios: ApoiosDoCaso, codigo: str = "") -> ApoiosDoModelo:
-    codigo = codigo or apoios.caso
+    codigo = codigo_do_plano(codigo or apoios.caso)
     return replace(dados, casos={**dados.casos, codigo: replace(apoios, caso=codigo)})
 
 
@@ -301,8 +310,8 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> ApoiosDoModelo:
                 if all(x is not None for x in v):
                     por_fixacao.append((str(linha[0]), tuple(float(x) for x in v)))  # type: ignore[arg-type]
         if nos:
-            casos[str(codigo)] = ApoiosDoCaso(
-                str(codigo),
+            casos[codigo_do_plano(str(codigo))] = ApoiosDoCaso(
+                codigo_do_plano(str(codigo)),
                 str(c.get("estudo") or ""),
                 str(c.get("arquivo") or ""),
                 tuple(nos),

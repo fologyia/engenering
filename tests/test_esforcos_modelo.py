@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -381,6 +382,32 @@ def test_reacao_zero_e_modelo_sem_fixacao():
     assert "PP: as reações somam zero" in r[pc.NIVEL_ERRO]
     assert "W0: as reações somam zero" in r[pc.NIVEL_ERRO]
     assert "mola macia" in r[pc.NIVEL_ERRO] and pc.NIVEL_OK not in r
+
+
+def test_temperatura_soma_zero_nas_reacoes_e_esta_certo():
+    """Na dilatação não há carga de fora: as reações se equilibram entre si (soma zero). Isso
+    não é modelo sem fixação; o que se confere é o esforço nas barras."""
+    plano = pc.com_acao(pc.PlanoDeCargas(), pc.nova_acao("T+"))
+    plano = pc.com_acao(plano, pc.nova_acao("T−"))
+    dados = em.EsforcosDoModelo()
+    for caso in ("T+", "T−"):  # forças quaisquer nas barras (as do SC)
+        arquivo = em.ler_arquivo(sw.csv_forcas_da_viga("SC"), f"{caso}.csv")
+        dados = em.com_caso(dados, em.caso_do_arquivo(arquivo, caso))
+    for caso in ("T+", "T−"):
+        dados = em.com_reacoes(dados, caso, em.Reacoes(modelo=(0.0, 0.0, 1e-9)), f"{caso}.csv")
+    r = niveis(em.conferir_reacoes(dados, plano))
+    assert pc.NIVEL_ERRO not in r and pc.NIVEL_ATENCAO not in r
+    assert "T+: caso de temperatura — as reações se equilibram entre si" in r[pc.NIVEL_OK]
+    assert "T−: caso de temperatura" in r[pc.NIVEL_OK]
+    # Sem esforço nas barras: a temperatura não entrou no estudo.
+    vazio = replace(dados.casos["T+"], membros={})
+    dados = replace(dados, casos={**dados.casos, "T+": vazio})
+    r = niveis(em.conferir_reacoes(dados, plano))
+    assert "T+: caso de temperatura sem esforço nas barras" in r[pc.NIVEL_ATENCAO]
+    # Com resultante: ficou carga ligada no caso de temperatura.
+    dados = em.com_reacoes(dados, "T−", em.Reacoes(modelo=(0.0, 4.0, 0.0)), "T−.csv")
+    r = niveis(em.conferir_reacoes(dados, plano))
+    assert "T−: caso de temperatura com reação resultante" in r[pc.NIVEL_ATENCAO]
 
 
 def _arquivo_da_macro(convencao_interna: bool) -> bytes:

@@ -1461,6 +1461,50 @@ def trocar_codigos(dados: EsforcosDoModelo, mapa: Mapping[str, str]) -> Esforcos
     return replace(dados, casos=casos)
 
 
+def e_caso_de_temperatura(codigo: str, plano: pc.PlanoDeCargas | None = None) -> bool:
+    """T+ e T− (ou outra ação da categoria temperatura no plano)."""
+    acao = plano.acao(codigo) if plano is not None else None
+    if acao is not None:
+        return acao.categoria == pc.CATEGORIA_TEMPERATURA
+    return codigo.strip().upper().rstrip("+-−–—") == "T" and codigo.strip() != "T"
+
+
+def _maior_esforco(caso: CasoImportado) -> float:
+    return max(
+        (max(abs(x) for x in p.vetor()) for pontos in caso.membros.values() for p in pontos),
+        default=0.0,
+    )
+
+
+def _conferir_temperatura(
+    codigo: str, caso: CasoImportado, resultante_kN: float
+) -> pc.ItemDeConferencia:
+    """Num caso de temperatura não há carga de fora: a soma das reações é zero (os apoios se
+    equilibram entre si, um empurra e o outro segura). O que se confere é se a dilatação
+    travada pelos apoios deu esforço nas barras."""
+    maior = _maior_esforco(caso)
+    if resultante_kN > max(0.05, 0.02 * maior):
+        return pc.ItemDeConferencia(
+            pc.NIVEL_ATENCAO,
+            f"{codigo}: caso de temperatura com reação resultante de {_n(resultante_kN)} kN — "
+            "a dilatação sozinha não dá resultante nas bases. Veja se não ficou carga ou gravidade "
+            "ligada neste caso no gerenciador de casos de carga.",
+        )
+    if maior < 0.01:
+        return pc.ItemDeConferencia(
+            pc.NIVEL_ATENCAO,
+            f"{codigo}: caso de temperatura sem esforço nas barras — a temperatura não entrou "
+            "no estudo (confira a temperatura do caso e a de referência nas propriedades do "
+            "estudo) ou nada trava a dilatação. Se a estrutura dilata livre, o caso não muda as "
+            "combinações.",
+        )
+    return pc.ItemDeConferencia(
+        pc.NIVEL_OK,
+        f"{codigo}: caso de temperatura — as reações se equilibram entre si (soma zero, como "
+        f"deve ser) e a dilatação travada dá até {_n(maior)} kN (ou kN·m) nas barras.",
+    )
+
+
 def conferir_reacoes(
     dados: EsforcosDoModelo,
     plano: pc.PlanoDeCargas,
@@ -1488,6 +1532,9 @@ def conferir_reacoes(
             continue
         rx, ry, rz = para_o_plano(caso.reacoes.modelo, dados.eixo_vertical)
         horizontal = math.hypot(rx, ry)
+        if e_caso_de_temperatura(codigo, plano):
+            itens.append(_conferir_temperatura(codigo, caso, math.hypot(rx, ry, rz)))
+            continue
         if math.hypot(rx, ry, rz) < REACAO_NULA_kN:
             itens.append(
                 pc.ItemDeConferencia(
