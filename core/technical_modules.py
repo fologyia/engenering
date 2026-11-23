@@ -556,6 +556,21 @@ def _registrar_padrao() -> None:
             ),
         ),
         ModuloTecnico(
+            id="emenda_pilar",
+            titulo="Emenda de pilar",
+            versao="1.0",
+            pagina="app_pages/emenda_pilar.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=30,
+            icone=":material/vertical_split:",
+            descricao=(
+                "Emenda de pilar W/HP com uma tala externa em cada mesa e duas talas na alma: "
+                "distribuição de N, M e V pelo SCI P207, esforço mínimo da NBR 8800 6.1.6.2, "
+                "parafusos, talas, contato usinado, deslizamento e disposições construtivas."
+            ),
+            aliases=("Emenda de coluna", "Column splice", "Talas de emenda", "Emenda parafusada"),
+        ),
+        ModuloTecnico(
             id="ligacao_contraventamento",
             titulo="Ligação de contraventamento",
             versao="1.0",

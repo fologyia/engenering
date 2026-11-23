@@ -244,6 +244,14 @@ MENU: tuple[GrupoMenu, ...] = (
                 outros_nomes=("Juntas parafusadas",),
             ),
             ItemMenu(
+                "app_pages/emenda_pilar.py",
+                "Emenda de pilar",
+                ":material/vertical_split:",
+                "Dimensionar a emenda de pilar com talas parafusadas nas mesas e na alma",
+                secao=LIGACOES,
+                outros_nomes=("Emenda de coluna", "Column splice", "Talas de emenda"),
+            ),
+            ItemMenu(
                 "app_pages/ligacao_contraventamento.py",
                 "Ligação de contraventamento",
                 ":material/hub:",
