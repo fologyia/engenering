@@ -508,6 +508,131 @@ def _registrar_padrao() -> None:
             aliases=("Viga de piso", "Viga da plataforma", "Viga de grade"),
         ),
         ModuloTecnico(
+            id="forcas_localizadas",
+            titulo="Forças localizadas na alma",
+            versao="1.0",
+            pagina="app_pages/forcas_localizadas.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=10,
+            icone=":material/vertical_align_bottom:",
+            descricao=(
+                "Mesa e alma de perfil I/H sob reação de apoio, pé de equipamento ou viga que "
+                "apoia (NBR 8800:2025, 5.7): flexão local da mesa, escoamento, enrugamento, "
+                "flambagem lateral e instabilidade da alma, e os enrijecedores (5.7.9)."
+            ),
+            aliases=(
+                "Enrijecedores",
+                "Enrugamento da alma",
+                "Escoamento local da alma",
+                "Web crippling",
+            ),  # fmt: skip
+        ),
+        ModuloTecnico(
+            id="monovia",
+            titulo="Viga de monovia",
+            versao="1.0",
+            pagina="app_pages/monovia.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=10,
+            icone=":material/conveyor_belt:",
+            descricao=(
+                "Viga de talha com rodas na mesa inferior: impacto, força lateral, flexão vertical "
+                "e lateral, cortante, flexão local da mesa sob as rodas (EN 1993-6), flechas e a "
+                "mesa no apoio."
+            ),
+            aliases=("Monovia", "Viga de talha", "Monorail"),
+        ),
+        ModuloTecnico(
+            id="viga_mista",
+            titulo="Viga mista",
+            versao="1.0",
+            pagina="app_pages/viga_mista.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=10,
+            icone=":material/layers:",
+            descricao=(
+                "Viga mista biapoiada com conectores tipo pino com cabeça (NBR 8800:2025, Anexo "
+                "L): largura efetiva, interação completa ou parcial, grau mínimo de interação, "
+                "construção não escorada, flecha com I efetivo e espaçamento dos conectores."
+            ),
+            aliases=("Viga mista de aço e concreto", "Conectores de cisalhamento", "Stud bolt"),
+        ),
+        ModuloTecnico(
+            id="contencao_lateral",
+            titulo="Contenção lateral (travamentos)",
+            versao="1.0",
+            pagina="app_pages/contencao_lateral.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=10,
+            icone=":material/fence:",
+            descricao=(
+                "Força e rigidez mínimas dos travamentos (NBR 8800:2025, 4.12): pilares, vigas "
+                "com contenção de translação e de torção (nodal ou contínua), comparadas com a "
+                "barra de travamento ou a viga transversal."
+            ),
+            aliases=("Travamentos", "Contenção de torção", "Bracing"),
+        ),
+        ModuloTecnico(
+            id="aberturas_alma",
+            titulo="Aberturas na alma",
+            versao="1.0",
+            pagina="app_pages/aberturas_alma.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=10,
+            icone=":material/radio_button_unchecked:",
+            descricao=(
+                "Furos circulares ou retangulares na alma de vigas (NBR 8800:2025, Anexo F): "
+                "dispensa de F.3 e, fora dela, momento e cortante na abertura com interação e "
+                "limites de proporção do AISC Design Guide 2."
+            ),
+            aliases=("Furo na alma", "Web openings"),
+        ),
+        ModuloTecnico(
+            id="tercas_formadas_a_frio",
+            titulo="Terças e travessas",
+            versao="1.0",
+            pagina="app_pages/tercas.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=10,
+            icone=":material/roofing:",
+            descricao=(
+                "Terças e travessas em perfil U enrijecido formado a frio (NBR 14762:2010): seção "
+                "efetiva, FLT entre linhas de corrente, distorcional, sucção do vento pelo Anexo "
+                "F, cortante, flexão oblíqua e flechas."
+            ),
+            aliases=("Terça", "Travessa de fechamento", "Perfil formado a frio", "NBR 14762"),
+        ),
+        ModuloTecnico(
+            id="fadiga_estrutural",
+            titulo="Fadiga da estrutura",
+            versao="1.0",
+            pagina="app_pages/fadiga_estrutural.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=40,
+            icone=":material/cyclone:",
+            descricao=(
+                "Fadiga de estruturas de aço pela categoria do detalhe (NBR 8800:2025, Anexo H): "
+                "número de ciclos, faixa de variação de tensões e faixa admissível da Tabela H.1, "
+                "inclusive soldas de penetração parcial (C', C''), cisalhamento na solda e parafusos."
+            ),
+            aliases=("Fadiga de estruturas metálicas", "Categoria de detalhe", "Anexo H"),
+        ),
+        ModuloTecnico(
+            id="incendio",
+            titulo="Estrutura em incêndio",
+            versao="1.0",
+            pagina="app_pages/incendio.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=40,
+            icone=":material/local_fire_department:",
+            descricao=(
+                "Método simplificado da NBR 14323: temperatura do aço pela curva-padrão com ou sem "
+                "proteção, fatores de redução e resistência a quente de pilar, tirante e viga na "
+                "combinação de incêndio, para o TRRF da NBR 14432."
+            ),
+            aliases=("Situação de incêndio", "TRRF", "Proteção contra fogo", "NBR 14323"),
+        ),
+        ModuloTecnico(
             id="ligacoes_estruturais",
             titulo="Ligações estruturais",
             versao="1.0",
@@ -569,6 +694,41 @@ def _registrar_padrao() -> None:
                 "parafusos, talas, contato usinado, deslizamento e disposições construtivas."
             ),
             aliases=("Emenda de coluna", "Column splice", "Talas de emenda", "Emenda parafusada"),
+        ),
+        ModuloTecnico(
+            id="ligacao_rigida",
+            titulo="Ligação rígida viga–pilar",
+            versao="1.0",
+            pagina="app_pages/ligacao_rigida.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=30,
+            icone=":material/join_inner:",
+            descricao=(
+                "Chapa de extremidade estendida com 4 parafusos na mesa tracionada (4E): "
+                "parafusos, linhas de plastificação da chapa e da mesa do pilar (AISC 358), "
+                "soldas, alma e painel de alma do pilar e enrijecedores (NBR 8800:2025, 5.7)."
+            ),
+            aliases=(
+                "Ligação de momento",
+                "Chapa de extremidade",
+                "End plate",
+                "Ligação engastada",
+            ),  # fmt: skip
+        ),
+        ModuloTecnico(
+            id="nos_tubulares",
+            titulo="Nós de treliça tubular",
+            versao="1.0",
+            pagina="app_pages/nos_tubulares.py",
+            grupo_navegacao="Estrutura metálica",
+            ordem=30,
+            icone=":material/hive:",
+            descricao=(
+                "Ligações soldadas entre tubos de treliça (EN 1993-1-8, capítulo 7; NBR 16239): "
+                "nós T, Y, X e K/N com afastamento em tubos circulares ou retangulares, com a "
+                "faixa de validade e os modos de falha do banzo e da diagonal."
+            ),
+            aliases=("Ligação de tubos", "Treliça tubular", "NBR 16239"),
         ),
         ModuloTecnico(
             id="ligacao_contraventamento",

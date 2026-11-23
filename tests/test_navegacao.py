@@ -54,7 +54,7 @@ def test_submenus_ficam_juntos_e_nao_se_repetem():
         # Ou o grupo inteiro tem submenus, ou nenhum item tem.
         assert all(nomes) or nomes == [""], grupo.nome
     estrutura = next(g for g in nv.MENU if g.nome == "Estrutura metálica")
-    assert [s for s, _ in estrutura.secoes()] == [nv.BARRAS, nv.LIGACOES]
+    assert [s for s, _ in estrutura.secoes()] == [nv.BARRAS, nv.LIGACOES, nv.COMPLEMENTOS]
     mecanica = next(g for g in nv.MENU if g.nome == "Mecânica")
     assert [s for s, _ in mecanica.secoes()] == [nv.PECAS, nv.TENSOES, nv.FLUIDOS, nv.TERMICA]
 

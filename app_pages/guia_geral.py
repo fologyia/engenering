@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from components.figuras import mostrar_figura
+from components.guia_verificacoes import CAPITULOS, mostrar_capitulo
 from components.ui import cabecalho_pagina, configurar_pagina
 
 
@@ -105,6 +106,16 @@ opcoes = [
     "Ligação de contraventamento",
     "Emenda de pilar",
     "Placas de base",
+    "Forças localizadas na alma",
+    "Viga de monovia",
+    "Contenção lateral (travamentos)",
+    "Viga mista",
+    "Aberturas na alma",
+    "Terças e travessas",
+    "Ligação rígida viga–pilar",
+    "Nós de treliça tubular",
+    "Fadiga da estrutura",
+    "Estrutura em incêndio",
     "Normas técnicas",
     "Barras, treliças e pórticos",
 ]
@@ -251,6 +262,56 @@ if modulo == "Comece aqui":
                 "Pilar W, HP ou U que precisa ser emendado com talas parafusadas",
                 "Emenda de pilar",
                 "Talas das mesas (externas e internas) e da alma, parafusos e disposições",
+            ],
+            [
+                "Reação de apoio, pé de equipamento ou viga que apoia na mesa de um perfil I",
+                "Forças localizadas na alma",
+                "Mesa e alma (NBR 8800 5.7) e os enrijecedores",
+            ],
+            [
+                "Viga em que corre uma talha (monovia)",
+                "Viga de monovia",
+                "Impacto, força lateral, mesa de baixo sob as rodas e flechas",
+            ],
+            [
+                "Conferir se o travamento de pilar ou viga é forte e rígido o bastante",
+                "Contenção lateral (travamentos)",
+                "Força e rigidez mínimas da NBR 8800 4.12",
+            ],
+            [
+                "Viga de mezanino com laje de concreto e conectores",
+                "Viga mista",
+                "Interação, conectores, construção sem escoras e flecha (Anexo L)",
+            ],
+            [
+                "Furo na alma para tubulação ou eletrocalha",
+                "Aberturas na alma",
+                "Dispensa da NBR 8800 F.3 ou verificação pelo AISC Design Guide 2",
+            ],
+            [
+                "Terça ou travessa de chapa dobrada (perfil Ue)",
+                "Terças e travessas",
+                "Seção efetiva, FLT, distorcional, sucção do vento e flechas (NBR 14762)",
+            ],
+            [
+                "Ligação de momento viga–pilar com chapa de extremidade",
+                "Ligação rígida viga–pilar",
+                "Parafusos, chapa, mesa e painel de alma do pilar, enrijecedores",
+            ],
+            [
+                "Treliça de tubo com diagonais soldadas no banzo",
+                "Nós de treliça tubular",
+                "Nós T, Y, X e K pelo EN 1993-1-8 (NBR 16239)",
+            ],
+            [
+                "Estrutura sob carga repetida (talha, peneira, britador)",
+                "Fadiga da estrutura",
+                "Faixa de tensões por categoria de detalhe (NBR 8800 Anexo H)",
+            ],
+            [
+                "Edificação com tempo requerido de resistência ao fogo",
+                "Estrutura em incêndio",
+                "Temperatura do aço, proteção e resistência a quente (NBR 14323)",
             ],
             [
                 "Geometria, apoios e ações de uma estrutura",
@@ -3020,6 +3081,10 @@ elif modulo == "Contraventamento":
         icon=":material/warning:",
     )
     link_modulo("app_pages/contraventamento_estrutura.py", "Abrir Contraventamento")
+
+
+elif modulo in CAPITULOS:
+    mostrar_capitulo(modulo, mostrar_tabela_campos, mostrar_exemplo, link_modulo)
 
 
 elif modulo == "Emenda de pilar":

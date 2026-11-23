@@ -65,7 +65,16 @@ ETAPAS: tuple[Etapa, ...] = (
     Etapa(
         "Vigas, eixos e pisos",
         "app_pages/viga_de_piso.py",
-        (("viga_de_piso", ""), ("vigas_eixos", "")),
+        (
+            ("viga_de_piso", ""),
+            ("vigas_eixos", ""),
+            ("forcas_localizadas", ""),
+            ("monovia", ""),
+            ("contencao_lateral", ""),
+            ("viga_mista", ""),
+            ("aberturas_alma", ""),
+            ("tercas_formadas_a_frio", ""),
+        ),
     ),
     Etapa(
         "Escadas e acessos",
@@ -79,6 +88,8 @@ ETAPAS: tuple[Etapa, ...] = (
             ("ligacoes_estruturais", ""),
             ("projeto_parafusos", ""),
             ("emenda_pilar", ""),
+            ("ligacao_rigida", ""),
+            ("nos_tubulares", ""),
             ("ligacao_contraventamento", ""),
         ),
     ),
@@ -93,6 +104,11 @@ ETAPAS: tuple[Etapa, ...] = (
         "app_pages/reacoes_nas_bases.py",
         (("esforcos_modelo", "Quadro de cargas"), ("reacoes_nas_bases", "")),
         do_modelo=True,
+    ),
+    Etapa(
+        "Fadiga e incêndio",
+        "app_pages/fadiga_estrutural.py",
+        (("fadiga_estrutural", ""), ("incendio", "")),
     ),
     Etapa("Modelo em 3D", "app_pages/modelo_3d.py", (("modelo_3d", ""),)),
 )

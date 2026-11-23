@@ -47,6 +47,7 @@ VISAO_GERAL = ItemMenu(
 
 BARRAS = "Barras e vigas"
 LIGACOES = "Ligações e bases"
+COMPLEMENTOS = "Fadiga e incêndio"
 PECAS = "Peças de máquinas"
 TENSOES = "Tensões e fadiga"
 FLUIDOS = "Fluidos"
@@ -229,6 +230,63 @@ MENU: tuple[GrupoMenu, ...] = (
                 outros_nomes=("Estruturas de aço",),
             ),
             ItemMenu(
+                "app_pages/forcas_localizadas.py",
+                "Forças localizadas na alma",
+                ":material/vertical_align_bottom:",
+                "Verificar a alma e a mesa sob reação de apoio ou carga concentrada; enrijecedores",
+                secao=BARRAS,
+                outros_nomes=("Enrijecedores", "Enrugamento da alma", "Escoamento local da alma"),
+            ),
+            ItemMenu(
+                "app_pages/monovia.py",
+                "Viga de monovia",
+                ":material/conveyor_belt:",
+                "Verificar a viga da talha: flexão, mesa de baixo sob as rodas e flechas",
+                secao=BARRAS,
+                outros_nomes=("Monovia", "Viga de talha", "Monorail"),
+            ),
+            ItemMenu(
+                "app_pages/viga_mista.py",
+                "Viga mista",
+                ":material/layers:",
+                "Verificar a viga com laje de concreto e conectores (stud)",
+                secao=BARRAS,
+                outros_nomes=(
+                    "Viga mista de aço e concreto",
+                    "Conectores de cisalhamento",
+                    "Stud bolt",
+                ),  # fmt: skip
+            ),
+            ItemMenu(
+                "app_pages/contencao_lateral.py",
+                "Contenção lateral (travamentos)",
+                ":material/fence:",
+                "Conferir a força e a rigidez do travamento de pilares e vigas",
+                secao=BARRAS,
+                outros_nomes=("Travamentos", "Contenção de torção", "Bracing"),
+            ),
+            ItemMenu(
+                "app_pages/aberturas_alma.py",
+                "Aberturas na alma",
+                ":material/radio_button_unchecked:",
+                "Conferir furos na alma da viga para tubulação ou eletrocalha",
+                secao=BARRAS,
+                outros_nomes=("Furo na alma", "Web openings"),
+            ),
+            ItemMenu(
+                "app_pages/tercas.py",
+                "Terças e travessas",
+                ":material/roofing:",
+                "Verificar terça ou travessa de perfil formado a frio (NBR 14762)",
+                secao=BARRAS,
+                outros_nomes=(
+                    "Terça",
+                    "Travessa de fechamento",
+                    "Perfil formado a frio",
+                    "NBR 14762",
+                ),  # fmt: skip
+            ),
+            ItemMenu(
                 "app_pages/ligacoes_estruturais.py",
                 "Ligações estruturais",
                 ":material/link:",
@@ -252,6 +310,22 @@ MENU: tuple[GrupoMenu, ...] = (
                 outros_nomes=("Emenda de coluna", "Column splice", "Talas de emenda"),
             ),
             ItemMenu(
+                "app_pages/ligacao_rigida.py",
+                "Ligação rígida viga–pilar",
+                ":material/join_inner:",
+                "Verificar a ligação de momento com chapa de extremidade estendida e o pilar",
+                secao=LIGACOES,
+                outros_nomes=("Ligação de momento", "Chapa de extremidade", "End plate"),
+            ),
+            ItemMenu(
+                "app_pages/nos_tubulares.py",
+                "Nós de treliça tubular",
+                ":material/hive:",
+                "Verificar o nó soldado entre tubos de treliça (T, Y, X, K e N)",
+                secao=LIGACOES,
+                outros_nomes=("Ligação de tubos", "Treliça tubular", "NBR 16239"),
+            ),
+            ItemMenu(
                 "app_pages/ligacao_contraventamento.py",
                 "Ligação de contraventamento",
                 ":material/hub:",
@@ -264,6 +338,22 @@ MENU: tuple[GrupoMenu, ...] = (
                 ":material/anchor:",
                 "Dimensionar a placa de base e os chumbadores de um pilar",
                 secao=LIGACOES,
+            ),
+            ItemMenu(
+                "app_pages/fadiga_estrutural.py",
+                "Fadiga da estrutura",
+                ":material/cyclone:",
+                "Verificar a fadiga dos detalhes sob carga repetida (talhas, peneiras, britadores)",
+                secao=COMPLEMENTOS,
+                outros_nomes=("Fadiga de estruturas metálicas", "Categoria de detalhe"),
+            ),
+            ItemMenu(
+                "app_pages/incendio.py",
+                "Estrutura em incêndio",
+                ":material/local_fire_department:",
+                "Verificar pilar, tirante ou viga no tempo de incêndio exigido (NBR 14323)",
+                secao=COMPLEMENTOS,
+                outros_nomes=("Situação de incêndio", "TRRF", "Proteção contra fogo", "NBR 14323"),
             ),
         ),
     ),
