@@ -103,6 +103,7 @@ opcoes = [
     "Vento em estruturas abertas",
     "Contraventamento",
     "Ligação de contraventamento",
+    "Emenda de pilar",
     "Placas de base",
     "Normas técnicas",
     "Barras, treliças e pórticos",
@@ -245,6 +246,11 @@ if modulo == "Comece aqui":
                 "Contraventamento vertical chegando ao canto viga–coluna por chapa de nó",
                 "Ligação de contraventamento",
                 "Forças nas interfaces pelo Método das Forças Uniformes e verificações do AISC 360-16",
+            ],
+            [
+                "Pilar W, HP ou U que precisa ser emendado com talas parafusadas",
+                "Emenda de pilar",
+                "Talas das mesas (externas e internas) e da alma, parafusos e disposições",
             ],
             [
                 "Geometria, apoios e ações de uma estrutura",
@@ -3009,6 +3015,62 @@ elif modulo == "Contraventamento":
         icon=":material/warning:",
     )
     link_modulo("app_pages/contraventamento_estrutura.py", "Abrir Contraventamento")
+
+
+elif modulo == "Emenda de pilar":
+    from core import emenda_pilar as _ep
+
+    st.header("Emenda de pilar")
+    st.markdown(
+        "Use para a **emenda de pilar com talas parafusadas**: uma tala externa em cada mesa "
+        "(corte simples) e duas talas na alma (corte duplo). O programa divide N, M e V entre as "
+        "mesas e a alma pelo modelo do **SCI P207** (seção 5), acrescenta o esforço mínimo da "
+        "**NBR 8800 6.1.6.2** e verifica parafusos, talas e pilar pelas resistências da **ABNT "
+        "NBR 8800:2025**, mais as disposições do **critério Anglo** e a continuidade do P207. Com "
+        "as pontas usinadas em contato, a compressão passa pelo contato."
+    )
+    mostrar_tabela_campos(
+        [
+            ["Família e perfis", "W e HP (todos os do catálogo Gerdau) ou U laminado; os dois "
+             "trechos da mesma família. Pilar inferior mais alto vira enchimento",
+             "Desenho do pilar"],
+            ["Parafusos", "Diâmetro (todos os da tabela; o critério Anglo prefere 5/8\" a 1\"), "
+             "grau ASTM F3125, rosca no plano de corte e, se houver inversão de esforços, a "
+             "ligação por atrito", "Critério do cliente (Anglo 9.1)"],
+            ["Pilar", "L_x, L_y, K e a altura da emenda acima do apoio (ou o N_c,Rd da Flambagem "
+             "de colunas — obrigatório no U)", "Modelo da estrutura"],
+            ["Esforços", "N (+ compressão), M_x, V e M_y por caso, na cota da emenda",
+             "Análise da estrutura"],
+            ["Talas das mesas", "Externa: largura, espessura, linhas, fileiras por lado, g, s, "
+             "e_p e e_c. No U, x1 (do dorso da alma à 1ª linha) e o raio de concordância",
+             "Desenho da ligação"],
+            ["Talas internas", "Opcional: duas por mesa no W (n_l par), uma no U, encostadas na "
+             "ponta da mesa; os parafusos passam a corte duplo e a força da mesa se divide pela "
+             "área", "Desenho da ligação"],
+            ["Talas da alma", "Largura, espessura, colunas, fileiras, s_h, s_v, e_wv e e_wc",
+             "Desenho da ligação"],
+        ]
+    )  # fmt: skip
+    _r = _ep.calcular(_ep.EntradaEmenda())
+    mostrar_exemplo(
+        [
+            ["Pilares", "W 200 x 46,1 (H) nos dois trechos, A572 Gr 50; talas em A36"],
+            ["Parafusos", '3/4" A325, rosca no plano; extremidades usinadas em contato'],
+            ["Esforços", "N = 600 e −80 kN, com M_x = 25 kN·m e V = 20 kN"],
+            ["Talas", "mesa 200 × 12,5 com 2 × 2 parafusos por lado; alma 2 × 150 × 8 com 2 × 2"],
+        ],
+        f"Resultado esperado: resistência {_r.situacao.lower()}, utilização máxima de "
+        f"{100 * _r.utilizacao_maxima:.0f} % (corte dos parafusos da mesa), "
+        f"{_r.total_de_parafusos} parafusos e {len(_r.itens_a_verificar)} disposição a verificar "
+        "(a extensão da tala, 155 mm, é menor que os 225 mm do SCI P207 5.2.4; com 3 fileiras "
+        "passa).",
+    )
+    st.markdown(
+        "Na página: **Memorial desta emenda** baixa o trecho em Word (para colar no documento "
+        "oficial) ou o PDF; **Registrar no projeto** leva a emenda ao Memorial de cálculo do "
+        "projeto, no capítulo das ligações."
+    )
+    link_modulo("app_pages/emenda_pilar.py", "Abrir Emenda de pilar")
 
 
 elif modulo == "Ligação de contraventamento":

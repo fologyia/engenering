@@ -171,4 +171,18 @@ AJUDA: dict[str, str] = {
         "à alma."
     ),
     "ti": "Espessura de cada tala interna, em mm. Mínimo de 8 mm (Anglo 8.8).",
+    # memorial e registro
+    "sec_memorial": (
+        "O memorial só desta emenda. O Word é um trecho para colar no documento oficial (sem capa "
+        "nem numeração fixa); o PDF segue o padrão do memorial do projeto."
+    ),
+    "btn_memorial_word": (
+        "Trecho em Word: normas, dados, esforços por caso, desenhos, hipóteses, as verificações "
+        "que se aplicam, o resumo do que passou e do que não passou, e a conclusão."
+    ),
+    "btn_memorial_pdf": "O mesmo conteúdo em PDF, no padrão do memorial do projeto.",
+    "reg_registrar": (
+        "Grava a emenda no projeto ativo. Ela entra no Memorial de cálculo do projeto, no capítulo "
+        "das ligações, com os desenhos e as verificações."
+    ),
 }

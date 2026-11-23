@@ -396,3 +396,93 @@ def test_pagina_com_u_e_talas_internas(banco_isolado):
         (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
     } - {("text_input", "Nome do novo projeto")}
     assert not sem_ajuda, sorted(sem_ajuda)
+
+
+# ------------------------------------------------------------------ registro, memorial e guia
+def _textos_svg(desenho) -> str:
+    from components.cena_3d_svg import svg_da_cena
+
+    return " ".join(re.findall(r">([^<>]+)</text>", svg_da_cena(desenho)))
+
+
+def test_cota_x1_so_no_u():
+    from core import desenho_emenda_pilar as de
+
+    assert "x1 =" not in _textos_svg(de.vista_da_mesa(ep.calcular(ep.com(P, talas_internas=True))))
+    assert "x1 = 45" in _textos_svg(de.vista_da_mesa(ep.calcular(U)))
+
+
+def test_registro_leva_so_as_linhas_que_se_aplicam_e_os_desenhos(r):
+    import json
+
+    from core import desenho_emenda_pilar as de
+    from core.record_charts import imagens_do_registro
+
+    registro = json.loads(json.dumps(ep.registro(r, figuras=de.figuras_para_o_registro(r))))
+    assert registro["modulo_id"] == ep.MODULO_ID and registro["status"] == "Atenção"
+    nomes = [v["verificação"] for v in registro["resultados"]["verificações"]]
+    assert not [v for v in registro["resultados"]["verificações"] if v["status"] == "N/A"]
+    assert nomes[0].startswith("1. Corte") and "Continuidade: extensão de cada lado" in nomes
+    assert len(registro["resultados"]["combinacoes"]) == 3  # 2 casos + o mínimo b
+    imagens, aviso = imagens_do_registro(registro, {})
+    assert aviso == "" and len(imagens) == 2
+    assert any("SCI P207" in x for x in registro["referencias"])
+    assert registro["entradas"]["total_de_parafusos"] == 24
+
+
+def test_memorial_word_e_pdf():
+    import io
+
+    import docx
+
+    from core import desenho_emenda_pilar as de
+
+    r = ep.calcular(ep.com(P, talas_internas=True))
+    w = ep.memorial_da_emenda(r, figuras=de.figuras_para_o_registro(r))
+    d = docx.Document(io.BytesIO(w))
+    titulos = [p.text for p in d.paragraphs if p.style.name.startswith("Heading")]
+    assert titulos[0] == "Emenda de pilar — W 200 x 46,1 (H) (talas internas)"
+    assert "Esforços de cálculo" in titulos and "Conclusão" in titulos
+    texto = " ".join(p.text for p in d.paragraphs).lower()
+    assert "não avaliad" not in texto and "página" not in texto
+    assert "valor normativo" not in texto
+    pdf = ep.memorial_da_emenda(r, figuras=de.figuras_para_o_registro(r), formato="pdf")
+    assert pdf[:4] == b"%PDF"
+
+
+def test_entra_no_capitulo_das_ligacoes_do_memorial_do_projeto():
+    from core import memorial_do_projeto as mp
+    from core import memorial_verificacoes as mv
+
+    registro = {"modulo_id": ep.MODULO_ID, "titulo": "Emenda de pilar — W 200 x 46,1 (H)"}
+    assert mp.ETAPAS[mp.indice_da_etapa(registro)].nome == "Ligações"
+    entradas = ep.registro(ep.calcular(P))["entradas"]
+    curadas = {c for c, *_ in mv.ENTRADAS_CURADAS[ep.MODULO_ID]}
+    assert set(entradas) <= curadas, set(entradas) - curadas
+
+
+def test_pagina_registra_no_projeto(banco_com_projeto):
+    from core.project_store import obter_projeto_ativo
+
+    t = abrir()
+    assert {b.label for b in t.get("download_button")} >= {
+        "Baixar o memorial (Word)",
+        "Baixar o memorial (PDF)",
+    }
+    t.button(key="registrar_emenda_pilar").click().run()
+    assert not t.exception
+    registros = [
+        x for x in obter_projeto_ativo()["registros_tecnicos"] if x["modulo_id"] == ep.MODULO_ID
+    ]
+    assert len(registros) == 1 and registros[0]["status"] == "Atenção"
+
+
+def test_guia_tem_o_capitulo_com_o_exemplo(banco_isolado):
+    r = ep.calcular(P)
+    t = abrir()
+    t.switch_page("app_pages/guia_geral.py")
+    t.session_state["guia_modulo"] = "Emenda de pilar"
+    t.run()
+    assert "Emenda de pilar" in [h.value for h in t.header]
+    esperado = next(c.value for c in t.caption if "Resultado esperado" in c.value)
+    assert f"{100 * r.utilizacao_maxima:.0f} %" in esperado and "24 parafusos" in esperado

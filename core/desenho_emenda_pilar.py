@@ -49,7 +49,7 @@ def _vista(
     d_h: float,
     nomes: tuple[str, str, str, str],
     internas: Sequence[Faixa] = (),
-    x1: float | None = None,
+    cota_x1: float | None = None,
 ) -> c3.Desenho2D:
     """Uma vista: pilares, tala, furos dos dois lados e as cotas (passo_h, passo_v, e_pilar, e_tala)."""
     meia = gap / 2 + e_pilar + (n_fileiras - 1) * passo_v + e_tala
@@ -101,9 +101,9 @@ def _vista(
     if len(xs) > 1:
         y_c = meia + 25
         itens += d2.cota(p(xs[0], y_c), p(xs[1], y_c), f"{nomes[0]} = {d2.n(xs[1] - xs[0], 0)}")
-    if x1 is not None:  # U: do dorso da alma (x = 0) à primeira linha de furos
-        y_c = meia + 25
-        itens += d2.cota(p(0.0, y_c), p(x1, y_c), f"x1 = {d2.n(x1, 0)}")
+    if cota_x1 is not None:  # U: do dorso da alma (x = 0) à primeira linha de furos
+        y_c = meia + 45  # abaixo da cota de g
+        itens += d2.cota(p(0.0, y_c), p(cota_x1, y_c), f"x1 = {d2.n(cota_x1, 0)}")
     return c3.Desenho2D(LARGURA, ALTURA, tuple(itens), titulo=titulo)
 
 
@@ -124,7 +124,7 @@ def vista_da_mesa(r: ep.ResultadoEmenda) -> c3.Desenho2D:
         if e.talas_internas:
             b = p["bf_min"] / 2
             internas = [(-b, -b + e.bi), (b - e.bi, b)]
-    titulo = f"Mesa: tala {ep._n(e.bp)} × {ep._n(e.tp)} × {ep._n(p['Lp'])}"
+    titulo = f"Vista da mesa — tala {ep._n(e.bp)} × {ep._n(e.tp)} × {ep._n(p['Lp'])}"
     if e.talas_internas:
         titulo += f" + {p['n_int']} internas {ep._n(e.bi)} × {ep._n(e.ti)}"
     return _vista(
@@ -140,8 +140,22 @@ def vista_da_alma(r: ep.ResultadoEmenda) -> c3.Desenho2D:
     larg_s = sup.h - 2 * p["R"] if sup.familia == ep.FAMILIA_U else sup.d_linha
     larg_i = inf.h - 2 * p["R"] if inf.familia == ep.FAMILIA_U else inf.d_linha
     return _vista(
-        f"Alma: 2 talas {ep._n(e.bw)} × {ep._n(e.twp)} × {ep._n(p['Lw'])} mm",
+        f"Vista da alma — 2 talas {ep._n(e.bw)} × {ep._n(e.twp)} × {ep._n(p['Lw'])} mm",
         (-larg_s / 2, larg_s / 2), (-larg_i / 2, larg_i / 2), (-e.bw / 2, e.bw / 2),
         ep.posicoes_dos_furos(e.nc, e.sh), e.m, e.sv, e.ewc, e.ewv, e.gap, p["dh"],
         ("s_h", "s_v", "e_wc", "e_wv"),
     )  # fmt: skip
+
+
+def figuras_para_o_registro(r: ep.ResultadoEmenda) -> list[dict[str, object]]:
+    """A vista da mesa e a da alma, prontas para o memorial desenhar."""
+    return [
+        c3.desenho_para_dicionario(
+            vista_da_mesa(r),
+            legenda="Emenda de pilar: vista da mesa, com a tala externa, os furos e as cotas"
+            + (" (talas internas tracejadas)." if r.entrada.talas_internas else "."),
+        ),
+        c3.desenho_para_dicionario(
+            vista_da_alma(r), legenda="Emenda de pilar: vista da alma, com as talas e os furos."
+        ),
+    ]

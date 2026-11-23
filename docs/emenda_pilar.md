@@ -72,6 +72,20 @@ externa e as internas pela área (simplificação; AISC Manual Parte 14). Muda:
 Todos os diâmetros de `core.bolted_connection.PARAFUSOS` (1/2" a 1 1/4", M16 a M30); as
 disposições marcam os que saem da faixa 5/8"–1" do critério Anglo.
 
+## Registro, memorial e guia
+
+- **Registrar no projeto** (`ep.registro`): grava só as verificações que se aplicam (as N/A
+  ficam fora), os dados de entrada (rótulos em `ENTRADAS_CURADAS["emenda_pilar"]` de
+  `core/memorial_verificacoes.py`), os esforços por caso (`tabelas_memorial` para o memorial do
+  projeto e `combinacoes` para o trecho) e as duas vistas (`figuras_para_o_registro`). Status:
+  "Atenção" quando há disposição a verificar.
+- No **Memorial de cálculo** do projeto, a emenda entra na etapa "Ligações"
+  (`core/memorial_do_projeto.py`).
+- **Memorial desta emenda** (`ep.memorial_da_emenda`): Word = trecho para colar no documento
+  oficial (`core.memorial_trecho`); PDF = padrão do memorial do projeto.
+- **Guia geral**: capítulo "Emenda de pilar", com o exemplo do caso de validação (o "?" do
+  cabeçalho da página abre o capítulo).
+
 ## Fora do escopo (extensível)
 
 Emenda soldada, chapa de topo, perfis I/L/T, montagem, division plate (SCI P206/P212) e AISC 341.

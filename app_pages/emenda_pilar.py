@@ -10,11 +10,13 @@ import streamlit as st
 from components.cena_3d_svg import svg_da_cena
 from components.emenda_pilar_help import AJUDA
 from components.figuras import mostrar_figura
+from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import COR_STATUS, mostrar_tabela_verificacoes
 from core import desenho_emenda_pilar as de
 from core import emenda_pilar as ep
+from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Emenda de pilar", ":material/vertical_split:")
 cabecalho_pagina(
@@ -24,6 +26,7 @@ cabecalho_pagina(
     categoria="Dimensionamento",
     icone=":material/vertical_split:",
     cor="blue",
+    ajuda_modulo="Emenda de pilar",
     modulo_id=ep.MODULO_ID,
 )
 st.caption(
@@ -344,3 +347,32 @@ with st.container(border=True), secao_protegida("Exportar"):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         icon=":material/table:", key="emp_xlsx", on_click="ignore", help=AJUDA["btn_xlsx"],
     )  # fmt: skip
+
+with st.container(border=True), secao_protegida("Memorial desta emenda"):
+    st.subheader("Memorial desta emenda", help=AJUDA["sec_memorial"])
+    projeto_ativo = obter_projeto_ativo()
+    figuras = de.figuras_para_o_registro(r)
+    botoes = st.columns(2)
+    botoes[0].download_button(
+        "Baixar o memorial (Word)",
+        data=lambda: ep.memorial_da_emenda(r, projeto=projeto_ativo, figuras=figuras),
+        file_name="memorial_emenda_de_pilar.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        icon=":material/description:", width="stretch", on_click="ignore",
+        key="emp_memorial_word", help=AJUDA["btn_memorial_word"],
+    )  # fmt: skip
+    botoes[1].download_button(
+        "Baixar o memorial (PDF)",
+        data=lambda: ep.memorial_da_emenda(r, projeto=projeto_ativo, figuras=figuras, formato="pdf"),
+        file_name="memorial_emenda_de_pilar.pdf", mime="application/pdf",
+        icon=":material/picture_as_pdf:", width="stretch", on_click="ignore",
+        key="emp_memorial_pdf", help=AJUDA["btn_memorial_pdf"],
+    )  # fmt: skip
+
+with st.container(border=True), secao_protegida("Registrar no projeto"):
+    st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
+    botao_registrar_calculo(
+        ep.registro(r, figuras=figuras),
+        key="registrar_emenda_pilar",
+        rotulo="Registrar a emenda no projeto ativo",
+    )

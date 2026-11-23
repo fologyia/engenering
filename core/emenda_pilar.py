@@ -25,7 +25,7 @@ import csv
 import io
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -33,11 +33,19 @@ from typing import Any
 from core import bolted_connection as bc
 from core import perfis_gerdau_k as gk
 from core.nbr8800 import fator_chi
-from core.verificacao import Verificacao, linhas_para_registro, status_geral
+from core.technical_records import criar_registro_tecnico
+from core.verificacao import (
+    STATUS_REGISTRO,
+    Verificacao,
+    linhas_para_registro,
+    numero_json,
+    status_geral,
+)
 
 NORMA = "NBR8800_2024"  # chave interna da ABNT NBR 8800:2025 em core.bolted_connection
 NOME_DA_NORMA = "ABNT NBR 8800:2025"
 MODULO_ID = "emenda_pilar"
+MODULO_TITULO = "Emenda de pilar"
 
 # Coeficientes de ponderação da NBR 8800, Tabela 3 (os mesmos de core.bolted_connection).
 GAMA_A1 = bc._P[NORMA]["g_a1"]
@@ -1126,6 +1134,198 @@ def xlsx_completo(r: ResultadoEmenda) -> bytes:
             linhas += [{"Grupo": grupo, **x} for x in linhas_para_registro(lista)]
         pd.DataFrame(linhas).to_excel(escritor, sheet_name="Verificações", index=False)
     return saida.getvalue()
+
+
+# ---------------------------------------------------------------------------------------------
+# REGISTRO NO PROJETO E MEMORIAL
+# ---------------------------------------------------------------------------------------------
+REFERENCIAS = (
+    "ABNT NBR 8800:2025 — Projeto de estruturas de aço e de estruturas mistas de aço e concreto "
+    "de edifícios (5.2.4, 5.3, 6.1.6, 6.3, 6.5, 6.6.2, 12.3.5).",
+    "Anglo American — Critério de Projeto AA-BR-DPST-DR-0001 (itens 8.8, 9.1 e 12).",
+    "AISC — Steel Construction Manual, Parte 14 (Column Splices).",
+    "Kulak, Fisher e Struik — Guide to Design Criteria for Bolted and Riveted Joints, cap. 13 e 16.",
+    "SCI P207 — Joints in Steel Construction: Moment Connections (SCI/BCSA, 1995), seção 5; só o "
+    "modelo mecânico.",
+)
+
+
+def texto_de_destaque(r: ResultadoEmenda) -> str:
+    g = r.governante
+    n = len(r.itens_a_verificar)
+    a_verificar = "nenhuma disposição a verificar" if n == 0 else f"{n} disposição(ões) a verificar"
+    return (
+        f"Emenda {r.entrada.perfil_superior} / {r.entrada.perfil_inferior}: resistência "
+        f"{'atende' if r.situacao == 'ATENDE' else 'não atende'}, utilização máxima de "
+        f"{100 * r.utilizacao_maxima:.0f} %" + (f" ({g.nome})" if g else "") + f"; {a_verificar}."
+    )
+
+
+def _entradas_do_registro(r: ResultadoEmenda) -> dict[str, object]:
+    e, p = r.entrada, r.propriedades
+    eh_u = r.superior.familia == FAMILIA_U
+    entradas: dict[str, object] = {
+        "perfil_superior": e.perfil_superior,
+        "perfil_inferior": e.perfil_inferior,
+        "aco_dos_perfis": e.aco_perfis,
+        "aco_das_talas": e.aco_talas,
+        "parafuso": f"{e.diametro} {e.grau}",
+        "rosca_no_plano_de_corte": e.rosca_no_plano,
+        "verificar_deslizamento": e.verificar_deslizamento,
+        "superficie": e.superficie if e.verificar_deslizamento else None,
+        "contato": e.contato,
+        "fresta_mm": e.gap,
+        "comprimentos_de_flambagem": f"K_x·L_x = {_n(e.Kx * e.Lx, 0)} mm; K_y·L_y = "
+        f"{_n(e.Ky * e.Ly, 0)} mm",
+        "altura_da_emenda_mm": e.a,
+        "nc_rd": f"{_n(r.Nc_Rd)} kN ({'informado' if e.Nc_Rd_informado else 'estimado'})",
+        "criterio_minimo": e.criterio_minimo,
+        "distribuicao": e.distribuicao,
+        "tala_da_mesa": f"{_n(e.bp)} × {_n(e.tp)} × {_n(p['Lp'])} mm",
+        "parafusos_da_mesa": f"{e.nl} linha(s) × {e.nr} fileira(s) por lado; g = {_n(e.g)}, "
+        f"s = {_n(e.s)}, e_p = {_n(e.ep)}, e_c = {_n(e.ec)} mm",
+        "talas_internas": f"{p['n_int']} × {_n(e.bi)} × {_n(e.ti)} × {_n(p['Lp'])} mm"
+        if e.talas_internas
+        else None,
+        "furacao_do_u": f"x1 = {_n(e.x1_u)} mm; R = {_n(e.raio_u)} mm" if eh_u else None,
+        "talas_da_alma": f"2 × {_n(e.bw)} × {_n(e.twp)} × {_n(p['Lw'])} mm",
+        "parafusos_da_alma": f"{e.nc} coluna(s) × {e.m} fileira(s) por lado; s_h = {_n(e.sh)}, "
+        f"s_v = {_n(e.sv)}, e_wv = {_n(e.ewv)}, e_wc = {_n(e.ewc)} mm",
+        "total_de_parafusos": r.total_de_parafusos,
+    }
+    return {k: v for k, v in entradas.items() if v is not None}
+
+
+def _tabela_de_esforcos_do_memorial(r: ResultadoEmenda) -> dict[str, object]:
+    cabecalhos = ["Caso", "N (kN)", "M_x (kN·m)", "V (kN)", "M_y (kN·m)", "F_f,t (kN)",
+                  "F_f,c (kN)", "N_w (kN)", "R_w (kN)"]  # fmt: skip
+    linhas = [
+        [c.nome, *(_n(v, 2) for v in (c.N, c.Mx, c.V, c.My, c.Fft, c.Ffc, c.Nw, c.Rw))]
+        for c in r.casos
+    ]
+    return {
+        "subtitulo": "Esforços por caso",
+        "legenda": "Esforços de cálculo na cota da emenda e forças nas mesas e na alma (F_f,t: "
+        "mesa mais tracionada; F_f,c: mesa mais comprimida; R_w: parafuso mais solicitado da alma).",
+        "cabecalhos": cabecalhos,
+        "linhas": linhas,
+        "larguras": [1560] + [975] * 8,
+    }
+
+
+def registro(
+    r: ResultadoEmenda, *, figuras: list[dict[str, object]] | None = None
+) -> dict[str, object]:
+    """O registro técnico da emenda para o projeto ativo e o memorial."""
+    e = r.entrada
+    # só as linhas que se aplicam a esta emenda (as N/A não entram no memorial)
+    todas = [v for v in r.mesa + r.alma + r.disposicoes if v.status != "N/A"]
+    geral = status_geral(todas)
+    destaque = texto_de_destaque(r)
+    resultados: dict[str, object] = {
+        "status_geral": geral,
+        "verificações": linhas_para_registro(todas),
+        "utilizacao_maxima": numero_json(r.utilizacao_maxima, 4),
+        "destaque_memorial": destaque,
+        # memorial do projeto: tabela pronta; memorial separado (trecho): "Esforços de cálculo"
+        "tabelas_memorial": [_tabela_de_esforcos_do_memorial(r)],
+        "combinacoes": [
+            {
+                "Caso": c.nome,
+                "N (kN)": c.N,
+                "M_x (kN·m)": c.Mx,
+                "V (kN)": c.V,
+                "M_y (kN·m)": c.My,
+                "F_f,t (kN)": c.Fft,
+                "F_f,c (kN)": c.Ffc,
+                "R_w (kN)": c.Rw,
+            }
+            for c in r.casos
+        ],  # fmt: skip
+    }
+    if figuras:
+        resultados["figuras_2d"] = list(figuras)
+    titulo = f"Emenda de pilar — {e.perfil_superior}"
+    if e.perfil_inferior != e.perfil_superior:
+        titulo += f" / {e.perfil_inferior}"
+    if e.talas_internas:
+        titulo += " (talas internas)"
+    premissas = [
+        "Distribuição dos esforços pelo modelo do SCI P207, seção 5: o momento vira um binário "
+        "nas mesas, de braço d − t_f; a força normal se divide "
+        + ("metade em cada mesa." if e.distribuicao == DISTRIBUICAO_METADE else
+           "pela área (b_f·t_f/A em cada mesa e o restante na alma)."),
+        "Com contato das extremidades usinadas, a compressão passa pelo contato e as talas levam "
+        "tração e cortante." if e.contato else
+        "Sem contato: toda a compressão passa pelas talas e pelos parafusos.",
+        "Parafusos da alma pelo método elástico, com o momento V·e, e = e_wc + (m − 1)·s_v/2 + "
+        "gap/2.",
+        "Esforço mínimo da NBR 8800 6.1.6.2 como mínimo recomendado: situação "
+        f"{r.minimo.adotado or '—'} ({e.criterio_minimo}).",
+        "Resistências pela ABNT NBR 8800:2025; do SCI P207 usa-se só o modelo mecânico, sem os "
+        "fatores da BS 5950.",
+    ]  # fmt: skip
+    if e.talas_internas:
+        premissas.append(
+            "Talas internas: a força da mesa se divide entre a tala externa e as internas pela "
+            "área de cada uma; os parafusos da mesa trabalham em corte duplo."
+        )
+    if r.superior.familia == FAMILIA_U:
+        premissas.append(
+            "Perfil U: a tala externa encosta no dorso da alma; a mesa do pilar rasga em bloco "
+            "em L até a borda livre; a diferença de espessura das almas vai inteira para o lado de "
+            "dentro."
+        )
+    alertas = [f"{v.nome}: {v.formula}" for v in todas if v.status in ("NÃO OK", "ALERTA")] + [
+        a for a in r.avisos if "página" not in a
+    ]
+    if r.superior.familia == FAMILIA_U and e.Nc_Rd_informado is None:
+        alertas.append("Perfil U: o N_c,Rd estimado não considera a flambagem por flexo-torção.")
+    return criar_registro_tecnico(
+        modulo=MODULO_TITULO,
+        modulo_id=MODULO_ID,
+        titulo=titulo,
+        status=STATUS_REGISTRO.get(geral, "Pendente"),
+        resumo=destaque,
+        entradas=_entradas_do_registro(r),
+        resultados=resultados,
+        metodo=(
+            "Emenda de pilar com uma tala externa em cada mesa"
+            + (" e talas internas (corte duplo)" if e.talas_internas else " (corte simples)")
+            + " e duas talas na alma (corte duplo). Forças nas mesas e na alma pelo modelo "
+            "mecânico do SCI P207, seção 5, e resistências pela ABNT NBR 8800:2025."
+        ),
+        premissas=premissas,
+        alertas=alertas,
+        referencias=list(REFERENCIAS),
+        conclusao=destaque,
+    )
+
+
+def memorial_da_emenda(
+    r: ResultadoEmenda,
+    *,
+    projeto: Mapping[str, Any] | None = None,
+    figuras: list[dict[str, object]] | None = None,
+    formato: str = "word",
+) -> bytes:
+    """O memorial só desta emenda: em Word, o trecho para colar no documento oficial
+    (:mod:`core.memorial_trecho`); em PDF, o documento do padrão do memorial do projeto."""
+    import importlib
+
+    from core.technical_records import normalizar_registro_tecnico
+
+    reg = normalizar_registro_tecnico(registro(r, figuras=figuras))
+    if formato != "pdf":
+        from core.memorial_trecho import trecho_de_registro
+
+        return trecho_de_registro(reg, projeto=projeto)
+    # o gerador do memorial está fora da lista do mypy: importado pelo nome (como em base_de_pilar)
+    relatorio = importlib.import_module("core.project_report")
+    base: dict[str, Any] = dict(projeto) if projeto else {"nome": MODULO_TITULO}
+    base["registros_tecnicos"] = [reg]
+    conteudo: bytes = relatorio.gerar_relatorio_industrial_pdf(base, secoes_incluidas=["registros"])
+    return conteudo
 
 
 def com(e: EntradaEmenda, **mudancas: Any) -> EntradaEmenda:

@@ -78,6 +78,7 @@ ETAPAS: tuple[Etapa, ...] = (
         (
             ("ligacoes_estruturais", ""),
             ("projeto_parafusos", ""),
+            ("emenda_pilar", ""),
             ("ligacao_contraventamento", ""),
         ),
     ),
