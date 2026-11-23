@@ -79,7 +79,8 @@ def test_perfil_i_com_euler_esconde_pressao_e_pecas_do_eixo():
 
 
 def test_secao_redonda_esconde_so_a_pressao():
-    assert set(_fora("circular", "flexao", "torcao")) == {"pressao_interna"}
+    # E o limite num ponto, que só existe com os pontos de análise do esboço da seção desenhada.
+    assert set(_fora("circular", "flexao", "torcao")) == {"pressao_interna", "limite_no_ponto"}
 
 
 def test_euler_numa_barra_redonda_esconde_as_pecas_do_eixo():
@@ -110,7 +111,7 @@ def test_tubo_com_pressao_aceita_flambagem():
 def test_duas_secoes_valem_as_duas():
     """A viga em perfil I e o pino redondo que a segura cabem na mesma montagem."""
     fora = _fora("perfil_i", "circular")
-    assert set(fora) == {"pressao_interna"}
+    assert set(fora) == {"pressao_interna", "limite_no_ponto"}
     assert "as seções da montagem são Circular maciça e Perfil I" in fora["pressao_interna"]
 
 
@@ -244,3 +245,8 @@ def test_inspetor_da_ligacao_deixa_de_fora_o_que_nao_serve():
     assert all(nome in opcoes for nome in nomes)
     assert mb.POR_CHAVE["pressao_interna"].nome not in opcoes
     assert any("fica de fora" in c.value for c in at.caption)
+
+
+def test_limite_num_ponto_aparece_com_a_secao_desenhada():
+    assert "limite_no_ponto" not in _fora("desenhada", "flexao")
+    assert "limite_no_ponto" not in _fora("circular", "medida_do_desenho")

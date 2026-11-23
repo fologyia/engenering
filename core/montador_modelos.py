@@ -11,6 +11,7 @@ from core import elementos_eixos as ee
 from core import montador_blocos as mb
 from core import montador_conjuntos as mc
 from core import (
+    montador_desenho,  # noqa: F401  (registra o limite num ponto e a medida do desenho)
     montador_eixo,  # noqa: F401  (registra o eixo com trechos)
     montador_ligacoes,  # noqa: F401  (registra o pino e a chapa com furo)
     montador_pecas,  # noqa: F401  (registra os blocos de peça)

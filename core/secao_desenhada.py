@@ -1145,6 +1145,27 @@ def tensoes(
 
 
 @dataclass(frozen=True, slots=True)
+class TensaoNoPonto:
+    sigma: float  # MPa, tração positiva
+    tau: float  # MPa, cortante e torção juntos
+    mises: float
+
+
+def tensao_no_ponto(analise: Analise, mapa: MapaDeTensoes, x: float, y: float) -> TensaoNoPonto:
+    """As tensões num ponto (x, y) da seção, em mm: σ exato pela flexão; τ do nó da malha mais perto,
+    com o mesmo teto do mapa (o canto reentrante não manda)."""
+    p = analise.prop
+    sigma = mapa.a + mapa.b * (x - p.xc) + mapa.c * (y - p.yc)
+    tau = 0.0
+    if len(mapa.no_x):
+        k = int(np.argmin(np.hypot(mapa.no_x - x, mapa.no_y - y)))
+        tau = float(np.hypot(mapa.no_tau_x[k], mapa.no_tau_y[k]))
+        if mapa.tau_max > 0.0:
+            tau = min(tau, mapa.tau_max)
+    return TensaoNoPonto(float(sigma), tau, float(math.sqrt(sigma**2 + 3.0 * tau**2)))
+
+
+@dataclass(frozen=True, slots=True)
 class FluxoNaLigacao:
     """Cisalhamento longitudinal na emenda de duas chapas: é o que a solda precisa levar."""
 

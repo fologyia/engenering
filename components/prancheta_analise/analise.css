@@ -4,6 +4,7 @@
   --pa-limite: #1c7ed6;
   --pa-falta: #868e96;
   --pa-sel: #f08c00;
+  --pa-nota: #7048e8;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -113,6 +114,21 @@
 .pa svg .marca.falta .etiqueta rect {
   fill: var(--pa-falta);
   stroke: var(--pa-falta);
+}
+.pa svg .marca.nota circle,
+.pa svg .marca.nota .etiqueta rect {
+  fill: var(--pa-nota);
+  stroke: var(--pa-nota);
+}
+/* Onde a marca (ou a ponta da medida) gruda no DXF ou no esboço. */
+.pa svg .alvo circle {
+  fill: none;
+  stroke: var(--pa-sel);
+  stroke-width: 1.6;
+  pointer-events: none;
+}
+.pa svg .alvo circle + circle {
+  fill: var(--pa-sel);
 }
 .pa svg .marca .etiqueta rect {
   fill: var(--st-background-color) !important;

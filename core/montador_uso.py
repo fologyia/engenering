@@ -175,6 +175,10 @@ USOS: dict[str, Uso] = {
     "retangular": Uso(forma=RETANGULAR),
     "perfil_i": Uso(forma=PERFIL_I),
     "desenhada": Uso(forma=DESENHADA),
+    # Os pontos de análise e as medidas com nome são do esboço da seção desenhada: a medida vem de
+    # uma seção desenhada, e o limite num ponto só existe com ela.
+    "medida_do_desenho": Uso(forma=DESENHADA),
+    "limite_no_ponto": Uso(formas=frozenset({DESENHADA})),
     "pressao_interna": Uso(formas=frozenset({TUBO}), familia=VASO),
     "flambagem": Uso(familia=COLUNA),
     # Os entalhes do bloco são os de eixo: ressalto, rasgo de chaveta, canal de anel e cubo prensado.

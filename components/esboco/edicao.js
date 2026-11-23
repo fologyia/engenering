@@ -197,7 +197,7 @@ function edLimpar(esb, soltos = []) {
     vistas.add(chave)
     return true
   })
-  return esb
+  return edReatarAnalises(esb)
 }
 
 // ---- aparar, estender, dividir ------------------------------------------------------------------
@@ -1133,4 +1133,132 @@ function edUnir(esboco, ids = null) {
   }
   esb.restricoes = esb.restricoes.filter((r) => r.tipo !== "coincidente" || new Set(r.pontos).size > 1)
   return { esboco: edLimpar(esb, soltos), novas: novas.map((k) => k.id) }
+}
+
+// ---- pontos de análise ---------------------------------------------------------------------------
+//
+// O ponto de análise fica preso à geometria sem virar incógnita do solver: num ponto do esboço, ou
+// numa curva a uma fração t dela (na reta, de a até b; no arco, do início ao fim; no círculo, a fração
+// da volta a partir do lado direito). Quando a curva some numa edição (aparar, dividir, unir), ele
+// volta a se prender pelo lugar em que estava (xy), na curva ou no ponto que ficou ali.
+
+// O ponto da curva na fração t.
+function edPontoDaCurva(esb, c, t) {
+  const g = edGeo(esb, c)
+  if (g.tipo === "linha") return [g.a[0] + t * (g.b[0] - g.a[0]), g.a[1] + t * (g.b[1] - g.a[1])]
+  const ang = g.ta + t * g.sw
+  return [g.c[0] + g.r * Math.cos(ang), g.c[1] + g.r * Math.sin(ang)]
+}
+
+// O ponto da curva mais perto de (x, y): a fração t e a distância até lá.
+function edProjetarNaCurva(esb, c, x, y) {
+  const g = edGeo(esb, c)
+  if (g.tipo === "linha") {
+    const dx = g.b[0] - g.a[0]
+    const dy = g.b[1] - g.a[1]
+    const t = Math.min(Math.max(((x - g.a[0]) * dx + (y - g.a[1]) * dy) / (dx * dx + dy * dy || 1), 0), 1)
+    return { t, d: Math.hypot(x - g.a[0] - t * dx, y - g.a[1] - t * dy) }
+  }
+  const andou = edAngAnti(g.ta, Math.atan2(y - g.c[1], x - g.c[0]))
+  if (g.tipo === "circulo") return { t: andou / ED_DOIS_PI, d: Math.abs(Math.hypot(x - g.c[0], y - g.c[1]) - g.r) }
+  if (andou <= g.sw) return { t: g.sw > 0 ? andou / g.sw : 0, d: Math.abs(Math.hypot(x - g.c[0], y - g.c[1]) - g.r) }
+  // Fora do arco: a ponta mais perto.
+  const [a, b] = [edPontoDaCurva(esb, c, 0), edPontoDaCurva(esb, c, 1)]
+  const da = Math.hypot(x - a[0], y - a[1])
+  const db = Math.hypot(x - b[0], y - b[1])
+  return da <= db ? { t: 0, d: da } : { t: 1, d: db }
+}
+
+function edPosicaoDaAnalise(esb, a) {
+  if (a.ponto) return esb.pontos[a.ponto] ?? null
+  const c = esb.curvas.find((k) => k.id === a.curva)
+  return c ? edPontoDaCurva(esb, c, a.t ?? 0) : null
+}
+
+// Prende o ponto de análise no ponto ou na curva debaixo de (x, y), até `tolerancia` mm de distância.
+// Devolve { ponto } ou { curva, t }, ou null se não há nada ali.
+function edPrenderAnalise(esb, x, y, tolerancia) {
+  let melhor = null
+  let dist = tolerancia
+  for (const [pid, [px, py]] of Object.entries(esb.pontos)) {
+    if (pid === "O") continue
+    const d = Math.hypot(px - x, py - y)
+    if (d <= dist) {
+      dist = d
+      melhor = { ponto: pid }
+    }
+  }
+  if (melhor) return melhor
+  dist = tolerancia
+  for (const c of esb.curvas) {
+    if (c.construcao) continue
+    const p = edProjetarNaCurva(esb, c, x, y)
+    if (p.d <= dist) {
+      dist = p.d
+      melhor = { curva: c.id, t: Number(p.t.toFixed(6)) }
+    }
+  }
+  return melhor
+}
+
+// Os pontos de análise que perderam a curva ou o ponto voltam a se prender pelo lugar; quem não
+// achar nada perto sai. Guarda o lugar de cada um em xy, para a próxima edição.
+function edReatarAnalises(esb) {
+  if (!esb.analises?.length) return esb
+  const tolerancia = 1e-3 * edTamanho(esb)
+  const curvas = new Set(esb.curvas.map((c) => c.id))
+  // A curva que mudou de pontas (a reta dividida, aparada ou com filete) é outra, mesmo com o
+  // mesmo nome: a fração t de antes cairia em outro lugar.
+  const pontas = (cid) => esb.curvas.find((c) => c.id === cid)?.pontos.join(",")
+  esb.analises = esb.analises.flatMap((a) => {
+    const vale = a.ponto ? a.ponto in esb.pontos : curvas.has(a.curva) && (a.sob === undefined || a.sob === pontas(a.curva))
+    if (vale) {
+      const xy = edPosicaoDaAnalise(esb, a)
+      return [a.ponto ? { ...a, xy } : { ...a, xy, sob: pontas(a.curva) }]
+    }
+    if (!a.xy) return []
+    const preso = edPrenderAnalise(esb, a.xy[0], a.xy[1], tolerancia)
+    if (!preso) return []
+    const { ponto, curva, t, sob, ...resto } = a
+    return [{ ...resto, ...preso, xy: a.xy, ...(preso.curva ? { sob: pontas(preso.curva) } : {}) }]
+  })
+  return esb
+}
+
+// O primeiro nome livre: A, B, ..., Z, A1, B1, ...
+function edNomeDeAnaliseLivre(esb) {
+  const usados = new Set((esb.analises ?? []).map((a) => a.nome))
+  for (let volta = 0; ; volta += 1) {
+    for (let i = 0; i < 26; i += 1) {
+      const nome = String.fromCharCode(65 + i) + (volta ? String(volta) : "")
+      if (!usados.has(nome)) return nome
+    }
+  }
+}
+
+const ED_NOME_DO_PONTO = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 _.-]{0,19}$/
+
+// O ponto de análise novo, preso em (x, y). Devolve { esboco, id } ou { erro }.
+function edNovaAnalise(esboco, x, y, tolerancia) {
+  const esb = edCopiar(esboco)
+  const preso = edPrenderAnalise(esb, x, y, tolerancia)
+  if (!preso) return { erro: "Clique num ponto ou numa curva de aço: o ponto de análise fica preso nela." }
+  esb.analises = esb.analises ?? []
+  const id = edNovoId("a", esb.analises.map((a) => a.id))
+  const a = { id, nome: edNomeDeAnaliseLivre(esb), ...preso }
+  a.xy = edPosicaoDaAnalise(esb, a)
+  if (preso.curva) a.sob = esb.curvas.find((c) => c.id === preso.curva).pontos.join(",")
+  esb.analises.push(a)
+  return { esboco: esb, id }
+}
+
+function edRenomearAnalise(esboco, id, nome) {
+  const limpo = String(nome ?? "").trim()
+  if (!ED_NOME_DO_PONTO.test(limpo)) return { erro: "Nome de até 20 letras ou números, começando por um deles: A, B1, solda 1." }
+  if ((esboco.analises ?? []).some((a) => a.id !== id && a.nome === limpo)) return { erro: `Já existe o ponto ${limpo}.` }
+  const esb = edCopiar(esboco)
+  const a = (esb.analises ?? []).find((x) => x.id === id)
+  if (!a) return { erro: "Esse ponto de análise não existe mais." }
+  a.nome = limpo
+  return { esboco: esb }
 }

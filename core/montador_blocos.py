@@ -463,10 +463,13 @@ def _flexao(
     def calcular(c: Contexto) -> dict[str, Any]:
         estado = c.estado()
         entrada = c.opcoes.get("entrada", MOMENTO_DIRETO)
+        # A distância ligada (uma medida do desenho, por exemplo) já diz que é força × distância.
+        if entrada == MOMENTO_DIRETO and c.ligados.get("distancia") is not None:
+            entrada = FORCA_BRACO
         if entrada == MOMENTO_DIRETO or c.ligados.get("valor") is not None:
             return {"saida": estado.somar(tipo, c.letra(momento, "valor"))}
         f = c.letra(forca)
-        estado = estado.somar(tipo, f * c.letra(distancia))
+        estado = estado.somar(tipo, f * c.letra(distancia, "distancia"))
         if entrada == FORCA_COM_CORTANTE:
             return {"saida": estado.somar(tipo_cortante, f)}
         return {"saida": estado.lembrar_forca(forca.texto)}
@@ -484,7 +487,11 @@ def _flexao(
         GRUPO_ESFORCO,
         f"Soma o momento em {eixo}. Entra pelo valor, ou por força vezes distância.",
         f"σ = {momento.texto}·c/I",
-        (_ENTRADA, Porta("valor", "M", VALOR, g.MOMENTO)),
+        (
+            _ENTRADA,
+            Porta("valor", "M", VALOR, g.MOMENTO),
+            Porta("distancia", distancia.texto, VALOR, g.MEDIDA),
+        ),
         (_SAIDA,),
         calcular,
         (_ENTRADA_DO_MOMENTO,),
@@ -540,7 +547,7 @@ def _principal(t: ms.Tensao) -> sp.Expr:
 
 
 def _no_ponto(criterio: str, ponto: str) -> str:
-    artigo = "no" if ponto.startswith(("canto", "centro", "meio")) else "na"
+    artigo = "no" if ponto.startswith(("canto", "centro", "meio", "ponto")) else "na"
     return f"{criterio} {artigo} {ponto}"
 
 

@@ -44,6 +44,11 @@ Y = 1  # |y| do ponto, do centro de gravidade
 X = 2  # |x| do ponto
 TVY = 3  # τ por unidade de V_y
 TVX = 4  # τ por unidade de V_x
+SX = 5  # σ por unidade de M_x no ponto, com o Ixy: |y·I_y − x·I_xy| / (I_x·I_y − I_xy²)
+SY = 6  # σ por unidade de M_y no ponto: |x·I_x − y·I_xy| / (I_x·I_y − I_xy²)
+#: As medidas com nome (cotas de referência): código MEDIDA + j, da j-ésima delas.
+MEDIDA = 20
+MAX_MEDIDAS = 60
 
 _POSITIVOS = frozenset({AREA, IX, IY, IMIN, FIBRA, J, WT})
 _DA_MALHA = frozenset({J, WT})
@@ -53,18 +58,34 @@ ESCALA_MAXIMA = 1e2
 _GUARDADOS = 20000
 _VIZINHOS = 512  # desenhos recentes de onde o próximo pode partir
 _TEXTOS = {AREA: "A", IX: "I_x", IY: "I_y", IMIN: "I_{min}", FIBRA: "c", J: "J", WT: "W_t"}
-_TEXTOS_DO_PONTO = {Y: "y", X: "x", TVY: "q_y", TVX: "q_x"}
+_TEXTOS_DO_PONTO = {Y: "y", X: "x", TVY: "q_y", TVX: "q_x", SX: "W^{-1}_{x", SY: "W^{-1}_{y"}
+#: Abaixo disso, vezes I_x + I_y, o I_xy é zero: a seção é simétrica em algum eixo.
+SIMETRIA = 1e-6
+MARCADO = "marcado"
 
 
 @dataclass(frozen=True)
 class PontoDaSecao:
-    """Um ponto que pode mandar. ``vertice``: o vértice do contorno que ele acompanha."""
+    """Um ponto que pode mandar. ``vertice``: o vértice do contorno que ele acompanha; no ponto de
+    análise (``marcado``), o índice dele em ``esboco.analises``."""
 
     nome: str
-    tipo: str  # fibra, juncao, neutra, fibra_yy, neutra_yy, canto
+    tipo: str  # fibra, juncao, neutra, fibra_yy, neutra_yy, canto, marcado
     vertice: int = -1
     exige: tuple[str, ...] = ()
     torque: bool = True
+
+
+def _coeficientes(
+    x: np.ndarray, y: np.ndarray, ix: float, iy: float, ixy: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """σ por unidade de M_x e de M_y em (x, y), do centro de gravidade, em módulo.
+
+    É a flexão em torno de eixos que não são os principais: σ = x·(M_y·I_x − M_x·I_xy)/D +
+    y·(M_x·I_y − M_y·I_xy)/D, com D = I_x·I_y − I_xy². Com I_xy = 0, fica y/I_x e x/I_y.
+    """
+    d = ix * iy - ixy * ixy
+    return np.abs(y * iy - x * ixy) / d, np.abs(x * ix - y * ixy) / d
 
 
 @dataclass(frozen=True)
@@ -130,6 +151,8 @@ class Modelo:
         self._memoria_valores: list[np.ndarray] = []
         self._memoria_qs: list[np.ndarray] = []
         self._memoria_suja = False
+        self.medidas = self.esboco.medidas_com_nome()[:MAX_MEDIDAS]
+        self.simetrica = True
         self.pontos = self._pontos_da_secao()
 
     # -- desenhos ----------------------------------------------------------------------------------
@@ -328,9 +351,14 @@ class Modelo:
         q = self.sistema.q0[None, :]
         medicao = self.regioes.avaliar(q, np.ones(1, dtype=bool)).exatas
         xc, yc = float(medicao.xc[0]), float(medicao.yc[0])
+        ix, iy, ixy = float(medicao.ix[0]), float(medicao.iy[0]), float(medicao.ixy[0])
+        self.simetrica = abs(ixy) <= SIMETRIA * (ix + iy)
         fx = gs.faixas_da_secao(self.regioes.geometria(q, 0, xc, yc))
         vertices = self._vertices(q)[0] - np.array([xc, yc])
         pontos = [PontoDaSecao("fibra externa", "fibra")]
+        marcados = [
+            PontoDaSecao(f"ponto {a.nome}", MARCADO, j) for j, a in enumerate(self.esboco.analises)
+        ]
         vistos: set[float] = set()
         for i in gs.niveis_de_juncao(fx.y, fx.b):
             y = float(fx.y[i])
@@ -343,10 +371,18 @@ class Modelo:
         pontos.append(PontoDaSecao("linha neutra", "neutra"))
         pontos.append(PontoDaSecao("fibra externa em YY", "fibra_yy", exige=("my",)))
         pontos.append(PontoDaSecao("linha neutra de YY", "neutra_yy", exige=("vx",)))
-        absolutos = np.abs(vertices)
-        for k, i in enumerate(gs.cantos_que_mandam(absolutos[:, 0], absolutos[:, 1]), start=1):
-            pontos.append(PontoDaSecao(f"canto {k}", "canto", i, ("mx", "my"), False))
-        return tuple(pontos)
+        if self.simetrica:
+            absolutos = np.abs(vertices)
+            pesos = (absolutos[:, 0], absolutos[:, 1])
+        else:
+            # Sem simetria, quem manda com M_x e M_y juntos é quem tem mais σ por unidade de cada
+            # um, com o I_xy: num L, a ponta de uma aba, e não o canto do retângulo que a envolve.
+            sx, sy = _coeficientes(vertices[:, 0], vertices[:, 1], ix, iy, ixy)
+            pesos = (sy, sx)
+        if float(pesos[0].max()) > 0.0 and float(pesos[1].max()) > 0.0:
+            for k, i in enumerate(gs.cantos_que_mandam(*pesos), start=1):
+                pontos.append(PontoDaSecao(f"canto {k}", "canto", i, ("mx", "my"), False))
+        return (*pontos, *marcados)
 
     def _na_fibra(self, rel: np.ndarray, eixo: int, fibra: float) -> float:
         """No nível da fibra, a menor distância ao centro na outra direção (zero se a borda cruza)."""
@@ -372,20 +408,27 @@ class Modelo:
         e = av.exatas
         saida: list[dict[Any, Any]] = []
         vertices = self._vertices(q) if av.valido.any() else np.zeros((k, 0, 2))
+        marcados = [eb.posicao_da_analise(self.sistema, a, q) for a in self.esboco.analises]
+        with np.errstate(all="ignore"):
+            medidas = [
+                eb.medida_da_cota(self.sistema, cota, q, (e.xc, e.yc)) for cota in self.medidas
+            ]
         for i in range(k):
             if not bool(av.valido[i]):
                 saida.append({FOLGA: -1.0})
                 continue
             xc, yc = float(e.xc[i]), float(e.yc[i])
+            ix, iy, ixy = float(e.ix[i]), float(e.iy[i]), float(e.ixy[i])
             rel = vertices[i] - np.array([xc, yc])
             y_fibra = max(float(e.y_max[i]) - yc, yc - float(e.y_min[i]))
             x_fibra = max(float(e.x_max[i]) - xc, xc - float(e.x_min[i]))
             x_na_fibra = self._na_fibra(rel, 1, y_fibra)
             y_na_fibra = self._na_fibra(rel, 0, x_fibra)
+            sx_v, sy_v = _coeficientes(rel[:, 0], rel[:, 1], ix, iy, ixy)
             numeros: dict[Any, Any] = {
                 AREA: float(e.area[i]),
-                IX: float(e.ix[i]),
-                IY: float(e.iy[i]),
+                IX: ix,
+                IY: iy,
                 IMIN: float(e.i2[i]),
                 FIBRA: y_fibra,
                 FOLGA: float(av.folga[i]),
@@ -393,8 +436,24 @@ class Modelo:
                 "_centro": (xc, yc),
                 "_na_fibra": (x_na_fibra, y_na_fibra),
             }
+            for j, medida in enumerate(medidas):
+                numeros[MEDIDA + j] = float(medida[i])
             for p, ponto in enumerate(self.pontos, start=1):
                 y = x = 0.0
+                # Na seção simétrica, os pontos são os de sempre, em módulo; o σ por unidade de
+                # momento leva o I_xy no pior sinal, para o caso de uma letra tirar a simetria.
+                if ponto.tipo == MARCADO:
+                    px, py = marcados[ponto.vertice]
+                    x_rel, y_rel = float(px[i]) - xc, float(py[i]) - yc
+                    sx, sy = _coeficientes(np.array(x_rel), np.array(y_rel), ix, iy, ixy)
+                    numeros[100 * p + SX], numeros[100 * p + SY] = float(sx), float(sy)
+                    numeros[("_xy", p)] = (x_rel, y_rel)
+                    numeros[100 * p + Y] = abs(y_rel)
+                    numeros[100 * p + X] = abs(x_rel)
+                    continue
+                if not self.simetrica and ponto.tipo in ("fibra", "fibra_yy"):
+                    v = int(np.argmax(sx_v if ponto.tipo == "fibra" else sy_v))
+                    numeros[100 * p + SX], numeros[100 * p + SY] = float(sx_v[v]), float(sy_v[v])
                 if ponto.tipo == "fibra":
                     y, x = y_fibra, x_na_fibra
                 elif ponto.tipo == "juncao":
@@ -404,6 +463,14 @@ class Modelo:
                     y, x = y_na_fibra, x_fibra
                 elif ponto.tipo == "canto":
                     x, y = abs(float(rel[ponto.vertice, 0])), abs(float(rel[ponto.vertice, 1]))
+                    if not self.simetrica:
+                        sx, sy = sx_v[ponto.vertice], sy_v[ponto.vertice]
+                        numeros[100 * p + SX], numeros[100 * p + SY] = float(sx), float(sy)
+                if ponto.tipo == "juncao" and not self.simetrica:
+                    sx, sy = sx_v[ponto.vertice], sy_v[ponto.vertice]
+                    numeros[100 * p + SX], numeros[100 * p + SY] = float(sx), float(sy)
+                numeros.setdefault(100 * p + SX, _pior(x, y, ix, iy, ixy)[0])
+                numeros.setdefault(100 * p + SY, _pior(x, y, ix, iy, ixy)[1])
                 numeros[100 * p + Y] = y
                 numeros[100 * p + X] = x
             saida.append(numeros)
@@ -430,6 +497,10 @@ class Modelo:
                 tvy = gs.tau_no_nivel(fx, y_na_fibra, ix)
             elif ponto.tipo == "neutra_yy":
                 tvx = gs.tau_no_nivel(fy, 0.0, iy)
+            elif ponto.tipo == MARCADO:
+                x_rel, y_rel = guardado[("_xy", p)]
+                tvy = gs.tau_no_nivel(fx, y_rel, ix)
+                tvx = gs.tau_no_nivel(fy, x_rel, iy)
             guardado[100 * p + TVY] = tvy
             guardado[100 * p + TVX] = tvx
 
@@ -479,6 +550,12 @@ class Modelo:
 
     def numero(self, codigo: int, valores: Mapping[str, Any]) -> np.ndarray:
         return self.numeros(valores, (codigo,))[codigo]
+
+
+def _pior(x: float, y: float, ix: float, iy: float, ixy: float) -> tuple[float, float]:
+    """σ por unidade de M_x e de M_y no pior dos quatro pontos (±x, ±y), com o I_xy."""
+    d = ix * iy - ixy * ixy
+    return (abs(y) * iy + abs(x) * abs(ixy)) / d, (abs(x) * ix + abs(y) * abs(ixy)) / d
 
 
 def _tau_na_juncao(faixas: gs.Faixas, nivel: float, inercia: float) -> float:
@@ -552,6 +629,14 @@ def por_que_acaba(expressao: sp.Expr, valores: Mapping[sp.Symbol, float]) -> str
     return ""
 
 
+def _nome_da_medida(indice: int, j: int) -> str:
+    m = _MODELOS.get(indice)
+    if m is None or j >= len(m.medidas):
+        return "m"
+    nome = m.medidas[j].nome
+    return nome if len(nome) == 1 else f"\\mathrm{{{nome}}}"
+
+
 class DoDesenho(sp.Function):
     """Uma conta da seção desenhada com letras: ``DoDesenho(modelo, código, d, ...)``."""
 
@@ -566,7 +651,8 @@ class DoDesenho(sp.Function):
 
     def _eval_is_positive(self) -> bool | None:
         codigo = self._codigo()
-        return True if codigo in _POSITIVOS else None
+        medida = MEDIDA <= codigo < MEDIDA + MAX_MEDIDAS
+        return True if codigo in _POSITIVOS or medida else None
 
     def _eval_is_nonnegative(self) -> bool | None:
         return None if self._codigo() == FOLGA else True
@@ -579,8 +665,12 @@ class DoDesenho(sp.Function):
 
     def _latex(self, printer: Any, exp: Any = None) -> str:
         codigo = self._codigo()
-        if codigo >= 100:
+        if codigo >= 100 and codigo % 100 in (SX, SY):
+            texto = f"{_TEXTOS_DO_PONTO[codigo % 100]},{codigo // 100}}}"
+        elif codigo >= 100:
             texto = f"{_TEXTOS_DO_PONTO.get(codigo % 100, '?')}_{{{codigo // 100}}}"
+        elif MEDIDA <= codigo < MEDIDA + MAX_MEDIDAS:
+            texto = _nome_da_medida(int(self.args[0]), codigo - MEDIDA)
         elif codigo == FOLGA:
             texto = r"\mathrm{folga}"
         else:

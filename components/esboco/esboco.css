@@ -6,6 +6,7 @@
   --es-ruim: #e03131;
   --es-aco: rgba(28, 126, 214, 0.1);
   --es-cota: #2b8a3e;
+  --es-analise: #7048e8;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -434,6 +435,40 @@
   stroke: var(--es-ruim);
   stroke-width: 1.2;
   fill: none;
+}
+.es svg .centro.perto {
+  stroke-width: 2.4;
+}
+.es svg .cota.medida-nomeada text {
+  opacity: 1;
+  font-weight: 600;
+}
+/* Ponto de análise: losango roxo, com o nome ao lado. */
+.es svg .analise path {
+  fill: rgba(132, 94, 247, 0.18);
+  stroke: var(--es-analise);
+  stroke-width: 1.6;
+}
+.es svg .analise circle {
+  fill: var(--es-analise);
+}
+.es svg .analise text {
+  fill: var(--es-analise);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--st-font);
+  paint-order: stroke;
+  stroke: var(--st-background-color);
+  stroke-width: 3px;
+  cursor: text;
+}
+.es svg .analise.perto path,
+.es svg .analise.sel path {
+  stroke: var(--es-sel);
+  stroke-width: 2.4;
+}
+.es svg .analise.sel text {
+  fill: var(--es-sel);
 }
 
 /* ---- campos da ferramenta (raio, distância, quantidade) ---- */

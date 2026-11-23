@@ -714,6 +714,7 @@ def _tensoes(analise: sd.Analise, impressao: str) -> None:
         st.warning(aviso, icon=":material/warning:")
     if vx or vy:
         _juncoes(analise, vx, vy)
+    _nos_pontos_de_analise(analise, mapa)
     if mapa.mises > 0 and st.button(
         "Ver o ponto crítico no Círculo de Mohr",
         key="secao_mohr",
@@ -735,6 +736,55 @@ def _tensoes(analise: sd.Analise, impressao: str) -> None:
         "Tensão elástica, com o cortante pela flexão de Saint-Venant, calculado para a forma "
         "desenhada. Compressão pode flambar antes: verifique em Flambagem de colunas. Os cantos "
         "vivos reentrantes concentram tensão, e o valor aqui não inclui isso."
+    )
+
+
+def posicoes_dos_pontos_de_analise(esboco: Any) -> list[tuple[str, float, float]]:
+    """Nome, x e y de cada ponto de análise do esboço, como está desenhado agora."""
+    try:
+        lido = eb.esboco_de_dicionario(esboco or {})
+        sistema = eb.Sistema(lido)
+    except (eb.ErroDeEsboco, ValueError):
+        return []
+    q = sistema.q0[None, :]
+    saida = []
+    for a in lido.analises:
+        x, y = eb.posicao_da_analise(sistema, a, q)
+        saida.append((a.nome, float(x[0]), float(y[0])))
+    return saida
+
+
+def _nos_pontos_de_analise(analise: sd.Analise, mapa: sd.MapaDeTensoes) -> None:
+    """σ, τ e von Mises da malha em cada ponto de análise do esboço: a conferência do Montador."""
+    pontos = posicoes_dos_pontos_de_analise(st.session_state.get(ESBOCO))
+    if not pontos or not len(mapa.no_x):
+        return
+    linhas = []
+    for nome, x, y in pontos:
+        p = sd.tensao_no_ponto(analise, mapa, x, y)
+        linhas.append(
+            {
+                "Ponto": nome,
+                "x (mm)": x,
+                "y (mm)": y,
+                "σ (MPa)": p.sigma,
+                "τ (MPa)": p.tau,
+                "von Mises (MPa)": p.mises,
+            }
+        )
+    st.markdown("**Nos pontos de análise**")
+    st.dataframe(
+        linhas,
+        hide_index=True,
+        column_config={
+            k: st.column_config.NumberColumn(format="%.2f")
+            for k in ("x (mm)", "y (mm)", "σ (MPa)", "τ (MPa)", "von Mises (MPa)")
+        },
+    )
+    st.caption(
+        "Os pontos marcados no esboço (ferramenta Ponto de análise). σ exato pela flexão; τ do nó da "
+        "malha mais perto, com cortante e torção. No Montador, o τ do ponto é V·Q/(I·b) na altura "
+        "dele, a favor da segurança: pode dar mais que aqui."
     )
 
 

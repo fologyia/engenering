@@ -12,6 +12,7 @@ compõem como vetores, e a fibra mais tensa fica na direção da resultante.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -438,6 +439,8 @@ def desenhada(nome: str) -> Secao:
         modelo, indice = es.registrar(esboco, nome)
         if modelo.letras:
             return _desenhada_com_letras(nome, modelo, indice)
+        if modelo.esboco.analises or not modelo.simetrica:
+            return _desenhada_pela_escala(nome, modelo)
     desenho = ev.desenho_salvo(nome)
     p = desenho.analise.prop
     fx, fy = desenho.faixas_x, desenho.faixas_y
@@ -562,33 +565,13 @@ _TEXTO_DO_LIMITE = (
 )
 
 
-def _desenhada_com_letras(nome: str, modelo: es.Modelo, indice: int) -> Secao:
-    """A seção do esboço com as letras soltas: cada número vem do esboço refeito com elas."""
+def letras_do_desenho(
+    nome: str, modelo: es.Modelo
+) -> tuple[dict[str, str], tuple[sp.Symbol, ...], tuple[Grandeza, ...]]:
+    """As letras do esboço no Montador: o nome de cada uma (com sobrenome, se preciso), os
+    símbolos, na ordem do modelo, e as grandezas, com o valor do desenho e a faixa de teste."""
     chaves = {letra: _chave_da_letra(letra) for letra in modelo.letras}
     simbolos = tuple(g.simbolo_de(chaves[letra]) for letra in modelo.letras)
-
-    def f(codigo: int) -> sp.Expr:
-        return es.DoDesenho(sp.Integer(indice), sp.Integer(codigo), *simbolos)
-
-    area, ix, iy = f(es.AREA), f(es.IX), f(es.IY)
-    por_t = 1 / f(es.WT)
-    pontos = []
-    for p, ponto in enumerate(modelo.pontos, start=1):
-        base = 100 * p
-        y, x = f(base + es.Y), f(base + es.X)
-        tvy, tvx = f(base + es.TVY), f(base + es.TVX)
-        pontos.append(
-            Ponto(
-                ponto.nome,
-                y / ix if ponto.tipo not in ("neutra", "neutra_yy") else ZERO,
-                1 / area,
-                tvy if ponto.tipo in ("juncao", "neutra", "fibra_yy") else ZERO,
-                por_t if ponto.torque else ZERO,
-                x / iy if ponto.tipo in ("fibra", "fibra_yy", "canto") else ZERO,
-                tvx if ponto.tipo in ("fibra", "neutra_yy") else ZERO,
-                exige=ponto.exige,
-            )
-        )
     grandezas = tuple(
         Grandeza(
             chaves[letra],
@@ -601,6 +584,18 @@ def _desenhada_com_letras(nome: str, modelo: es.Modelo, indice: int) -> Secao:
         )
         for letra in modelo.letras
     )
+    return chaves, simbolos, grandezas
+
+
+def _desenhada_com_letras(nome: str, modelo: es.Modelo, indice: int) -> Secao:
+    """A seção do esboço com as letras soltas: cada número vem do esboço refeito com elas."""
+    chaves, simbolos, grandezas = letras_do_desenho(nome, modelo)
+
+    def f(codigo: int) -> sp.Expr:
+        return es.DoDesenho(sp.Integer(indice), sp.Integer(codigo), *simbolos)
+
+    area, ix, iy = f(es.AREA), f(es.IX), f(es.IY)
+    pontos = _pontos_do_modelo(modelo, f, 1 / area, 1 / f(es.WT))
     hipoteses = [
         "Na seção desenhada com letras, cada valor testado refaz o esboço pelas cotas: só muda o "
         "que as letras mexem.",
@@ -613,10 +608,8 @@ def _desenhada_com_letras(nome: str, modelo: es.Modelo, indice: int) -> Secao:
             f"O esboço tem {modelo.graus.livres} graus livres: o que está solto pode andar junto "
             "quando a letra muda."
         )
+    hipoteses.extend(_hipoteses_do_modelo(modelo))
     avisos: list[str] = []
-    medicao = modelo.medir({}).avaliacao.exatas
-    if abs(float(medicao.ixy[0])) > 1e-6 * float(medicao.ix[0] + medicao.iy[0]):
-        avisos.append("Seção sem simetria: M·c/I não vê a flexão no outro eixo.")
     for letra, chave in chaves.items():
         if chave != letra:
             outra = _LETRAS_DOS_SOLIDOS[letra]
@@ -638,4 +631,94 @@ def _desenhada_com_letras(nome: str, modelo: es.Modelo, indice: int) -> Secao:
         None,
         tuple(avisos),
         inercia_y=iy,
+    )
+
+
+def _pontos_do_modelo(
+    modelo: es.Modelo,
+    f: Callable[[int], sp.Expr],
+    por_normal: sp.Expr,
+    por_t: sp.Expr,
+    escala: sp.Expr = sp.S.One,
+) -> list[Ponto]:
+    """Os pontos da seção do esboço, com o σ por unidade de momento já com o I_xy.
+
+    ``f(código)``: o número (ou a função das letras) de cada código de :mod:`core.esboco_secao`.
+    ``escala``: a escala ``s`` da seção sem letras; σ por momento cai com s³, e τ por cortante com s².
+    """
+    assimetrica = not modelo.simetrica
+    pontos = []
+    for p, ponto in enumerate(modelo.pontos, start=1):
+        base, tipo = 100 * p, ponto.tipo
+        marcado = tipo == es.MARCADO
+        com_my = (
+            tipo in ("fibra", "fibra_yy", "canto") or marcado or (tipo == "juncao" and assimetrica)
+        )
+        pontos.append(
+            Ponto(
+                ponto.nome,
+                f(base + es.SX) / escala**3 if tipo not in ("neutra", "neutra_yy") else ZERO,
+                por_normal,
+                f(base + es.TVY) / escala**2
+                if tipo in ("juncao", "neutra", "fibra_yy") or marcado
+                else ZERO,
+                por_t if ponto.torque else ZERO,
+                f(base + es.SY) / escala**3 if com_my else ZERO,
+                f(base + es.TVX) / escala**2 if tipo in ("fibra", "neutra_yy") or marcado else ZERO,
+                exige=ponto.exige,
+            )
+        )
+    return pontos
+
+
+def _hipoteses_do_modelo(modelo: es.Modelo) -> list[str]:
+    hipoteses = []
+    if not modelo.simetrica:
+        hipoteses.append(
+            "Seção sem simetria: o σ da flexão é o de eixos que não são os principais, com o I_xy. "
+            "O τ da cortante usa V·Q/(I·b), sem o I_xy: é aproximado."
+        )
+    if modelo.esboco.analises:
+        nomes = ", ".join(a.nome for a in modelo.esboco.analises)
+        hipoteses.append(
+            f"Nos pontos de análise ({nomes}), o τ da cortante é V·Q/(I·b) na altura do ponto (a "
+            "média na largura da seção ali), e as parcelas de τ (cortante nos dois eixos e torção) "
+            "somam em módulo, a favor da segurança."
+        )
+    return hipoteses
+
+
+def _desenhada_pela_escala(nome: str, modelo: es.Modelo) -> Secao:
+    """A seção do esboço sem letras, quando tem pontos de análise ou não tem simetria: os números
+    saem do esboço (com o I_xy), e o que varia é a escala ``s`` do desenho inteiro."""
+    s = g.ESCALA.simbolo
+    codigos = [es.AREA, es.IX, es.IY, es.IMIN, es.FIBRA, es.J, es.WT]
+    for p in range(1, len(modelo.pontos) + 1):
+        codigos += [100 * p + c for c in (es.Y, es.X, es.TVY, es.TVX, es.SX, es.SY)]
+    numeros = {c: float(v[0]) for c, v in modelo.numeros({}, codigos).items()}
+
+    def f(codigo: int) -> sp.Expr:
+        return sp.Float(numeros[codigo], 6)
+
+    por_t = (1 / f(es.WT)) / s**3 if numeros[es.WT] > 0 else ZERO
+    pontos = _pontos_do_modelo(modelo, f, (1 / f(es.AREA)) / s**2, por_t, s)
+    hipoteses = [
+        "Na seção desenhada, a escala muda todas as medidas juntas, furos e chapas inclusive.",
+        "Na torção da seção desenhada, o τ máximo vale em todos os pontos, a favor da segurança.",
+        *_hipoteses_do_modelo(modelo),
+    ]
+    return Secao(
+        f"Seção desenhada: {nome}",
+        f(es.AREA) * s**2,
+        f(es.IX) * s**4,
+        f(es.IMIN) * s**4,
+        f(es.FIBRA) * s,
+        f(es.J) * s**4,
+        tuple(pontos),
+        (g.ESCALA,),
+        (),
+        tuple(hipoteses),
+        None,
+        (),
+        inercia_y=f(es.IY) * s**4,
     )

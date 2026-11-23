@@ -21,12 +21,17 @@ from core import montador as mt
 from core import montador_grandezas as g
 from core import montador_modelos as mm
 
+#: A marca que só anota (apoia na viga, transmite a força): vai ao desenho e ao memorial, sem conta.
+NOTA = "Só nota, sem conta"
 #: Os modelos que uma marca pode usar: primeiro os de pinos e chapas, depois as outras peças.
 _PRIMEIROS = ("Pino: força máxima", "Pino: diâmetro mínimo", "Chapa com furo: espessura mínima")
 ANALISES: tuple[str, ...] = (
     *_PRIMEIROS,
     *(m.nome for m in mm.MODELOS if m.nome not in _PRIMEIROS and m.nome != "Fórmula própria"),
+    NOTA,
 )
+#: As grandezas que se medem no desenho (e que se ligam a uma medida do esboço).
+DE_COMPRIMENTO = frozenset({g.MEDIDA, g.COMPRIMENTO, g.DIAMETRO, g.ALTURA})
 UNIDADES = g.unidades_padrao(g.SISTEMA_SOLIDOS)
 #: Acima disso a imagem de fundo é reduzida: pesa no navegador e não ajuda a marcar.
 LADO_MAXIMO_DA_IMAGEM = 2000
@@ -36,6 +41,7 @@ NAO_PASSOU = "não passou"
 LIMITE = "limite"  # sem o valor da letra principal: a marca diz até onde ela vai
 FALTA = "falta"
 ERRO = "erro"
+ANOTACAO = "nota"
 
 
 class ErroDeDesenho(ValueError):
@@ -54,6 +60,9 @@ class Marca:
     valores: dict[str, float] = field(default_factory=dict)  # na base do sistema
     alvo: str = ""
     conferir: bool = True  # com o valor do alvo: passou ou não. Sem: até onde vai
+    nota: str = ""  # o texto da marca só com nota (e um comentário nas outras)
+    #: Letra da análise → medida do esboço de fundo (uma letra dele ou uma medida com nome).
+    ligacoes: dict[str, str] = field(default_factory=dict)
 
     def como_dicionario(self) -> dict[str, Any]:
         return {
@@ -65,6 +74,8 @@ class Marca:
             "valores": dict(self.valores),
             "alvo": self.alvo,
             "conferir": self.conferir,
+            "nota": self.nota,
+            "ligacoes": dict(self.ligacoes),
         }
 
 
@@ -86,6 +97,8 @@ def marca_de_dicionario(dados: Mapping[str, Any]) -> Marca:
         valores=valores,
         alvo=str(dados.get("alvo") or ""),
         conferir=bool(dados.get("conferir", True)),
+        nota=str(dados.get("nota") or ""),
+        ligacoes={str(k): str(v) for k, v in (dados.get("ligacoes") or {}).items() if v},
     )
 
 
@@ -112,10 +125,15 @@ def _redondo(valor: float, sentido: str | None) -> float:
     return float(f"{passos * escala:.6g}")
 
 
+redondo = _redondo
+
+
 def marca_nova(id_: str, x: float, y: float, analise: str = ANALISES[0]) -> Marca:
     """A marca já vem com os números de exemplo do modelo (e os que os blocos sugerem), mostrando
     até onde a letra principal vai. O valor dela já fica preenchido, arredondado para o lado
     seguro, para quem quiser conferir uma medida."""
+    if analise == NOTA:
+        return Marca(id_, x, y, analise=NOTA, conferir=False)
     modelo = modelo_da_analise(analise)
     montagem = montagem_da_analise(analise)
     alvo = modelo.alvo
@@ -140,6 +158,7 @@ def marca_nova(id_: str, x: float, y: float, analise: str = ANALISES[0]) -> Marc
 def trocar_analise(marca: Marca, analise: str) -> Marca:
     nova = marca_nova(marca.id, marca.x, marca.y, analise)
     nova.nome = marca.nome
+    nova.nota = marca.nota
     return nova
 
 
@@ -182,6 +201,10 @@ def texto_da_letra(montagem: mt.Montagem, chave: str, valor: float) -> str:
 
 def calcular(marca: Marca) -> ResultadoDaMarca:
     """A conta do Montador para a marca."""
+    if marca.analise == NOTA:
+        texto = marca.nota.strip()
+        curto = texto if len(texto) <= 40 else texto[:39].rstrip() + "…"
+        return ResultadoDaMarca(ANOTACAO, curto or "nota", texto or "Nota sem texto.")
     try:
         montagem = montagem_da_analise(marca.analise)
     except (mt.ErroDeMontagem, KeyError) as erro:
@@ -251,14 +274,17 @@ def calcular(marca: Marca) -> ResultadoDaMarca:
 @dataclass(frozen=True)
 class Fundo:
     """O que a prancheta põe atrás das marcas. Imagem: ``imagem`` (data URL) com largura e altura
-    em pixels. DXF: ``curvas`` em mm, e ``escala`` = 1 (o DXF já vem em mm)."""
+    em pixels. DXF e esboço: ``curvas`` em mm, e ``escala`` = 1. No esboço, ``secao`` é a seção
+    salva, e ``medidas`` as letras e as medidas com nome dele, com o valor de agora."""
 
-    tipo: str  # "imagem" ou "dxf"
+    tipo: str  # "imagem", "dxf" ou "esboco"
     nome: str
     imagem: str = ""
     largura: int = 0
     altura: int = 0
     curvas: tuple[Mapping[str, Any], ...] = ()
+    secao: str = ""
+    medidas: tuple[Mapping[str, Any], ...] = ()
 
     def como_dicionario(self) -> dict[str, Any]:
         return {
@@ -268,6 +294,8 @@ class Fundo:
             "largura": self.largura,
             "altura": self.altura,
             "curvas": [dict(c) for c in self.curvas],
+            "secao": self.secao,
+            "medidas": [dict(m) for m in self.medidas],
         }
 
 
@@ -351,6 +379,190 @@ def fundo_do_arquivo(nome: str, conteudo: bytes, pagina: int = 1) -> Fundo:
     return fundo_de_imagem(nome, conteudo)
 
 
+def _curvas_do_esboco(esboco: Any) -> list[dict[str, Any]]:
+    """As curvas de aço de um esboço resolvido, no formato do fundo (mm, y para cima)."""
+    from core import esboco as eb
+
+    pontos = esboco.pontos
+    curvas: list[dict[str, Any]] = []
+    for curva in esboco.curvas:
+        if curva.construcao:
+            continue
+        if curva.tipo == eb.LINHA:
+            a, b = (pontos[p] for p in curva.pontos)
+            curvas.append({"tipo": "linha", "a": list(a), "b": list(b)})
+        elif curva.tipo == eb.CIRCULO:
+            curvas.append({"tipo": "circulo", "c": list(pontos[curva.pontos[0]]), "r": curva.raio})
+        else:
+            c, a, b = (pontos[p] for p in curva.pontos)
+            curvas.append({"tipo": "arco", "c": list(c), "a": list(a), "b": list(b)})
+    return curvas
+
+
+def esbocos_salvos() -> tuple[str, ...]:
+    """As seções salvas em Desenhar seção que têm esboço (com cotas e letras)."""
+    from core import section_catalog as sc
+
+    return tuple(sorted(nome for nome, item in sc.listar_cadastrados().items() if item.esboco))
+
+
+def _modelo_do_esboco(secao: str) -> Any:
+    from core import elementos_vigas as ev
+    from core import esboco_secao as es
+
+    esboco = ev.esboco_salvo(secao)
+    if esboco is None:
+        raise ErroDeDesenho(f"A seção {secao} não está salva com esboço.")
+    try:
+        modelo, _ = es.registrar(esboco, secao)
+    except ValueError as erro:
+        raise ErroDeDesenho(f"O esboço de {secao} não abriu: {erro}") from erro
+    return modelo
+
+
+def _letras_do_esboco(modelo: Any, letras: Mapping[str, float] | None) -> dict[str, float]:
+    dadas = {k: float(v) for k, v in (letras or {}).items() if k in modelo.base}
+    return {**modelo.base, **dadas}
+
+
+def _com_as_medidas(modelo: Any, valores: Mapping[str, float]) -> dict[str, float]:
+    """As letras e, junto, as medidas com nome do esboço refeito com elas (nan se ele não existe)."""
+    from core import esboco_secao as es
+
+    saida = dict(valores)
+    if modelo.medidas:
+        codigos = [es.MEDIDA + j for j in range(len(modelo.medidas))]
+        numeros = modelo.numeros(dict(valores), codigos)
+        for j, cota in enumerate(modelo.medidas):
+            saida[cota.nome] = float(numeros[es.MEDIDA + j][0])
+    return saida
+
+
+def medidas_do_esboco(secao: str, letras: Mapping[str, float] | None = None) -> dict[str, float]:
+    """As letras do esboço e as medidas com nome dele, em mm, com as letras dadas (ou as dele)."""
+    modelo = _modelo_do_esboco(secao)
+    return _com_as_medidas(modelo, _letras_do_esboco(modelo, letras))
+
+
+def fundo_de_esboco(secao: str, letras: Mapping[str, float] | None = None) -> Fundo:
+    """O esboço salvo, desenhado com as letras dadas: as marcas podem ler as medidas dele."""
+    from core import esboco as eb
+    from core import esboco_regioes as er
+
+    modelo = _modelo_do_esboco(secao)
+    valores = _letras_do_esboco(modelo, letras)
+    medicao = modelo.medir(valores)
+    if not bool(medicao.avaliacao.valido[0]):
+        raise ErroDeDesenho(
+            f"Com essas letras o esboço de {secao} não existe: "
+            f"{er.motivo_em_texto(medicao.avaliacao.motivo[0])}."
+        )
+    resolvido = eb.com_q(modelo.esboco, modelo.sistema, medicao.q[0])
+    lista = [
+        {"nome": nome, "valor": valor, "letra": nome in modelo.base}
+        for nome, valor in _com_as_medidas(modelo, valores).items()
+    ]
+    return Fundo(
+        "esboco",
+        f"esboço de {secao}",
+        curvas=tuple(_curvas_do_esboco(resolvido)),
+        secao=secao,
+        medidas=tuple(lista),
+    )
+
+
+def valores_da_marca(marca: Marca, fundo: Mapping[str, Any] | None) -> Marca:
+    """A marca com os números ligados ao esboço de fundo já no lugar (os outros ficam)."""
+    if not marca.ligacoes or not fundo or fundo.get("tipo") != "esboco":
+        return marca
+    medidas = {str(m["nome"]): float(m["valor"]) for m in fundo.get("medidas") or ()}
+    copia = marca_de_dicionario(marca.como_dicionario())
+    for chave, medida in marca.ligacoes.items():
+        if medida in medidas:
+            copia.valores[chave] = medidas[medida]
+    return copia
+
+
+@dataclass(frozen=True)
+class LimiteDoEsboco:
+    letra: str
+    valor: float | None
+    sentido: str  # "mínimo", "máximo", "toda a faixa" ou "nenhum"
+    texto: str
+    de: float = 0.0
+    ate: float = 0.0
+
+
+def limite_pelo_esboco(
+    marca: Marca, secao: str, letras: Mapping[str, float], letra: str
+) -> LimiteDoEsboco:
+    """Até onde a letra do esboço pode ir com a marca passando: o esboço é refeito a cada valor, e
+    as medidas ligadas mudam junto (o Ø do furo, a distância até a borda)."""
+    import numpy as np
+
+    modelo = _modelo_do_esboco(secao)
+    if letra not in modelo.base:
+        raise ErroDeDesenho(f"{letra} não é letra do esboço de {secao}.")
+    de, ate, _ = modelo.faixa_de_teste(letra)
+    base = _letras_do_esboco(modelo, letras)
+
+    def uso(valor: float) -> float:
+        valores = {**base, letra: float(valor)}
+        if not bool(modelo.medir(valores).avaliacao.valido[0]):
+            return math.inf  # o desenho não existe com esse valor
+        medidas = _com_as_medidas(modelo, valores)
+        copia = marca_de_dicionario(marca.como_dicionario())
+        copia.conferir = True
+        for chave, medida in marca.ligacoes.items():
+            if medida in medidas:
+                copia.valores[chave] = medidas[medida]
+        resultado = calcular(copia)
+        return resultado.uso if resultado.uso is not None else math.inf
+
+    grade = np.linspace(de, ate, 21)
+    passa = np.array([uso(float(v)) <= 1.0 + 1e-9 for v in grade])
+    faixa = f"de {numero(de, 4)} a {numero(ate, 4)} mm"
+    if passa.all():
+        return LimiteDoEsboco(
+            letra,
+            None,
+            "toda a faixa",
+            f"Passa com {letra} em toda a faixa testada, {faixa}.",
+            de,
+            ate,
+        )
+    if not passa.any():
+        return LimiteDoEsboco(
+            letra,
+            None,
+            "nenhum",
+            f"Não passa com nenhum {letra} da faixa testada, {faixa}.",
+            de,
+            ate,
+        )
+    # A primeira troca entre passar e não passar: crescer ajuda (mínimo) ou atrapalha (máximo).
+    i = int(np.flatnonzero(passa[1:] != passa[:-1])[0])
+    sentido = "mínimo" if passa[i + 1] else "máximo"
+    bom, ruim = (
+        (float(grade[i + 1]), float(grade[i]))
+        if passa[i + 1]
+        else (float(grade[i]), float(grade[i + 1]))
+    )
+    for _ in range(40):
+        meio = (bom + ruim) / 2
+        if uso(meio) <= 1.0 + 1e-9:
+            bom = meio
+        else:
+            ruim = meio
+        if abs(bom - ruim) <= 1e-6 * max(abs(bom), 1.0):
+            break
+    palavra = "a partir de" if sentido == "mínimo" else "até"
+    texto = f"A marca passa com {letra} {palavra} {numero(bom, 4)} mm (testado {faixa})."
+    if len(np.flatnonzero(passa[1:] != passa[:-1])) > 1:
+        texto += " Mais adiante na faixa a marca volta a mudar: confira valor a valor."
+    return LimiteDoEsboco(letra, bom, sentido, texto, de, ate)
+
+
 def fundo_colado(url: str) -> Fundo:
     """O print colado na prancheta (Ctrl+V): chega como data URL."""
     if not url.startswith("data:image/") or "," not in url:
@@ -363,7 +575,12 @@ def fundo_colado(url: str) -> Fundo:
 # Memorial: o desenho com as marcas e a conta de cada uma
 # ---------------------------------------------------------------------------
 
-_CORES = {PASSOU: (43, 138, 62), NAO_PASSOU: (224, 49, 49), LIMITE: (28, 126, 214)}
+_CORES = {
+    PASSOU: (43, 138, 62),
+    NAO_PASSOU: (224, 49, 49),
+    LIMITE: (28, 126, 214),
+    ANOTACAO: (112, 72, 232),
+}
 _CINZA = (134, 142, 150)
 
 
@@ -450,17 +667,25 @@ def word_da_analise(
     documento.add_heading("Análise sobre o desenho", level=1)
     passou = sum(r.situacao == PASSOU for r in resultados)
     nao = sum(r.situacao == NAO_PASSOU for r in resultados)
+    notas = sum(r.situacao == ANOTACAO for r in resultados)
     origem = (fundo or {}).get("nome") or "sem desenho de fundo"
     documento.add_paragraph(
         f"Desenho: {origem}. {len(marcas)} {'parte analisada' if len(marcas) == 1 else 'partes analisadas'}: "
-        f"{passou} passou, {nao} não passou. Cada análise é um modelo do Montador de fórmulas."
+        f"{passou} passou, {nao} não passou"
+        + (f", {notas} só com nota" if notas else "")
+        + ". Cada análise é um modelo do Montador de fórmulas."
         + (f" Escala do desenho: {numero(escala, 4)} mm por unidade." if escala else "")
     )
     documento.add_picture(io.BytesIO(imagem_com_marcas(fundo, marcas, resultados)), width=Cm(16))
     for indice, (marca, resultado) in enumerate(zip(marcas, resultados, strict=True), start=1):
         titulo = f"{indice} · {marca.nome}" if marca.nome else f"{indice} · {marca.analise}"
         documento.add_heading(titulo, level=2)
+        if marca.analise == NOTA:
+            documento.add_paragraph(f"Nota: {resultado.texto}")
+            continue
         documento.add_paragraph(f"Análise: {marca.analise}. {resultado.texto}")
+        if marca.nota.strip():
+            documento.add_paragraph(f"Observação: {marca.nota.strip()}")
         try:
             montagem = montagem_da_analise(marca.analise)
         except (mt.ErroDeMontagem, KeyError):
@@ -479,6 +704,8 @@ def word_da_analise(
             linha[2].text = (
                 "—" if valor is None else texto_da_letra(montagem, grandeza.chave, valor)
             )
+            if grandeza.chave in marca.ligacoes:
+                linha[2].text += f" (do esboço: {marca.ligacoes[grandeza.chave]})"
         if resultado.linhas:
             documento.add_paragraph("")
             condicoes = documento.add_table(rows=1, cols=4)

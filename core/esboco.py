@@ -386,6 +386,27 @@ class Cota:
     referencia: bool = False
     lugar: tuple[float, float] | None = None
     oculta: bool = False  # as repetidas de um padrão: prendem, mas não se desenham
+    #: Só na de referência: a medida com nome vira uma letra que o Montador lê do desenho.
+    nome: str = ""
+    #: Só na distância de referência: de um ponto até o centro de gravidade da seção.
+    centro: bool = False
+
+
+@dataclass(frozen=True)
+class PontoDeAnalise:
+    """Um ponto que você escolhe na seção, onde o Montador também confere as tensões.
+
+    Fica preso à geometria, sem virar incógnita do solver: num ponto do esboço (``ponto``), ou numa
+    curva (``curva``) a uma fração ``t`` dela. Na linha, ``t`` vai da primeira ponta à segunda; no
+    arco, do início ao fim, no sentido anti-horário; no círculo, é a fração da volta a partir do
+    lado direito (``t = 0,25`` é o topo).
+    """
+
+    id: str
+    nome: str
+    ponto: str = ""
+    curva: str = ""
+    t: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -409,6 +430,8 @@ class Esboco:
     variaveis: tuple[Variavel, ...] = ()
     #: Regras de projeto: desigualdades que limitam o teste, como ``parede >= 1,5*d``.
     regras: tuple[str, ...] = ()
+    #: Os pontos de análise: no Montador, as tensões também são conferidas neles.
+    analises: tuple[PontoDeAnalise, ...] = ()
 
     def curva(self, cid: str) -> Curva:
         for curva in self.curvas:
@@ -418,6 +441,10 @@ class Esboco:
 
     def valores(self) -> dict[str, float]:
         return {v.nome: v.valor for v in self.variaveis}
+
+    def medidas_com_nome(self) -> tuple[Cota, ...]:
+        """As cotas de referência com nome: as medidas que o Montador lê do desenho."""
+        return tuple(c for c in self.cotas if c.referencia and c.nome)
 
     def letras_usadas(self) -> list[str]:
         """As letras que as cotas usam, na ordem da tabela de variáveis."""
@@ -473,6 +500,8 @@ class Esboco:
                     **({"referencia": True} if c.referencia else {}),
                     **({"lugar": list(c.lugar)} if c.lugar is not None else {}),
                     **({"oculta": True} if c.oculta else {}),
+                    **({"nome": c.nome} if c.nome else {}),
+                    **({"centro": True} if c.centro else {}),
                 }
                 for c in self.cotas
             ],
@@ -490,6 +519,20 @@ class Esboco:
                 for v in self.variaveis
             ],
             **({"regras": list(self.regras)} if self.regras else {}),
+            **(
+                {
+                    "analises": [
+                        {
+                            "id": a.id,
+                            "nome": a.nome,
+                            **({"ponto": a.ponto} if a.ponto else {"curva": a.curva, "t": a.t}),
+                        }
+                        for a in self.analises
+                    ]
+                }
+                if self.analises
+                else {}
+            ),
         }
 
 
@@ -596,6 +639,20 @@ def esboco_de_dicionario(dados: Mapping[str, Any]) -> Esboco:
             if isinstance(lugar, Sequence) and len(lugar) == 2
             else None
         )
+        referencia = bool(bruta.get("referencia", False))
+        nome = str(bruta.get("nome", "") or "").strip()
+        centro = bool(bruta.get("centro", False))
+        if centro and not (referencia and tipo == DISTANCIA and len(ids_p) == 1):
+            raise ErroDeEsboco(
+                f"A cota {did} até o centro de gravidade precisa ser de referência, de um ponto só."
+            )
+        if nome:
+            if not referencia:
+                raise ErroDeEsboco(f"A cota {did} prende a medida: só a de referência leva nome.")
+            if tipo == ANGULO:
+                raise ErroDeEsboco(f"A cota {did} é de ângulo: o nome é só para comprimento.")
+            if not nome_valido(nome):
+                raise ErroDeEsboco(f"“{nome}” não serve de nome: comece por letra, sem espaço.")
         cotas.append(
             Cota(
                 did,
@@ -605,9 +662,11 @@ def esboco_de_dicionario(dados: Mapping[str, Any]) -> Esboco:
                 modo,
                 _numero(bruta.get("sinal", 0.0), f"A cota {did}"),
                 expressao,
-                bool(bruta.get("referencia", False)),
+                referencia,
                 lugar_xy,
                 bool(bruta.get("oculta", False)),
+                nome,
+                centro,
             )
         )
 
@@ -637,6 +696,17 @@ def esboco_de_dicionario(dados: Mapping[str, Any]) -> Esboco:
             raise ErroDeEsboco(
                 f"A cota {cota.id} usa {', '.join(sorted(faltam))}, que não está na tabela de letras."
             )
+    vistos_nomes: set[str] = set()
+    for cota in cotas:
+        if not cota.nome:
+            continue
+        if cota.nome in nomes:
+            raise ErroDeEsboco(
+                f"A medida {cota.nome} tem o nome de uma letra das cotas: use outro nome."
+            )
+        if cota.nome in vistos_nomes:
+            raise ErroDeEsboco(f"Duas medidas se chamam {cota.nome}: use outro nome.")
+        vistos_nomes.add(cota.nome)
     regras = tuple(str(r).strip() for r in dados.get("regras") or () if str(r).strip())
     for regra in regras:
         faltam = letras_da_regra(ler_regra(regra)) - nomes - set(MEDIDAS_DA_REGRA)
@@ -645,7 +715,132 @@ def esboco_de_dicionario(dados: Mapping[str, Any]) -> Esboco:
                 f"A regra “{regra}” usa {', '.join(sorted(faltam))}, que não é letra do esboço "
                 f"nem medida ({', '.join(MEDIDAS_DA_REGRA)})."
             )
-    return Esboco(pontos, tuple(curvas), tuple(restricoes), tuple(cotas), tuple(variaveis), regras)
+    analises = _analises(dados.get("analises") or (), pontos, por_id)
+    return Esboco(
+        pontos, tuple(curvas), tuple(restricoes), tuple(cotas), tuple(variaveis), regras, analises
+    )
+
+
+_NOME_DO_PONTO = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 _.\-]{0,19}")
+
+
+def nome_de_ponto_valido(nome: str) -> bool:
+    """Nome de ponto de análise: até 20 letras, números, espaço, ponto, traço ou sublinhado."""
+    return bool(_NOME_DO_PONTO.fullmatch(nome))
+
+
+def _analises(
+    brutas: Any, pontos: Mapping[str, tuple[float, float]], curvas: Mapping[str, Curva]
+) -> tuple[PontoDeAnalise, ...]:
+    """Os pontos de análise. O que perdeu a curva ou o ponto (apagado) sai sem aviso."""
+    saida: list[PontoDeAnalise] = []
+    nomes: set[str] = set()
+    for i, bruta in enumerate(brutas if isinstance(brutas, Sequence) else ()):
+        if not isinstance(bruta, Mapping):
+            continue
+        aid = str(bruta.get("id") or f"a{i + 1}")
+        nome = str(bruta.get("nome", "")).strip()
+        if not nome_de_ponto_valido(nome):
+            raise ErroDeEsboco(
+                f"“{nome}” não serve de nome de ponto: até 20 letras ou números, começando por um deles."
+            )
+        if nome in nomes:
+            raise ErroDeEsboco(f"Dois pontos de análise se chamam {nome}: use outro nome.")
+        ponto = str(bruta.get("ponto", "") or "")
+        curva = str(bruta.get("curva", "") or "")
+        if ponto:
+            if ponto not in pontos:
+                continue
+            saida.append(PontoDeAnalise(aid, nome, ponto=ponto))
+        elif curva:
+            if curva not in curvas:
+                continue
+            t = _numero(bruta.get("t", 0.0), f"O ponto {nome}")
+            t = t % 1.0 if curvas[curva].tipo == CIRCULO else min(max(t, 0.0), 1.0)
+            saida.append(PontoDeAnalise(aid, nome, curva=curva, t=t))
+        else:
+            continue
+        nomes.add(nome)
+    return tuple(saida)
+
+
+def posicao_da_analise(
+    sistema: Sistema, analise: PontoDeAnalise, q: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """x e y do ponto de análise em cada um dos k desenhos ``q`` (matriz k × n)."""
+    q = np.atleast_2d(q)
+    if analise.ponto:
+        i = sistema.colunas[analise.ponto]
+        return q[:, i], q[:, i + 1]
+    curva = sistema.esboco.curva(analise.curva)
+    t = analise.t
+    if curva.tipo == LINHA:
+        i, j = (sistema.colunas[p] for p in curva.pontos)
+        return (
+            q[:, i] + t * (q[:, j] - q[:, i]),
+            q[:, i + 1] + t * (q[:, j + 1] - q[:, i + 1]),
+        )
+    c = sistema.colunas[curva.pontos[0]]
+    cx, cy = q[:, c], q[:, c + 1]
+    if curva.tipo == CIRCULO:
+        r = q[:, sistema.raios[curva.id]]
+        angulo = np.full_like(cx, 2.0 * math.pi * t)
+    else:
+        a, b = (sistema.colunas[p] for p in curva.pontos[1:])
+        r = np.hypot(q[:, a] - cx, q[:, a + 1] - cy)
+        ta = np.arctan2(q[:, a + 1] - cy, q[:, a] - cx)
+        tb = np.arctan2(q[:, b + 1] - cy, q[:, b] - cx)
+        angulo = ta + t * np.mod(tb - ta, 2.0 * math.pi)
+    return cx + r * np.cos(angulo), cy + r * np.sin(angulo)
+
+
+def medida_da_cota(
+    sistema: Sistema, cota: Cota, q: np.ndarray, centro: tuple[np.ndarray, np.ndarray] | None = None
+) -> np.ndarray:
+    """O que a cota mede em cada um dos k desenhos ``q``, em mm (sem sinal) ou graus.
+
+    ``centro``: x e y do centro de gravidade de cada desenho, para a cota que vai até ele.
+    """
+    q = np.atleast_2d(q)
+
+    def xy(pid: str) -> tuple[np.ndarray, np.ndarray]:
+        i = sistema.colunas[pid]
+        return q[:, i], q[:, i + 1]
+
+    t = cota.tipo
+    with np.errstate(all="ignore"):
+        if t == DISTANCIA:
+            if cota.centro:
+                if centro is None:
+                    return np.full(q.shape[0], math.nan)
+                (ax, ay), (bx, by) = xy(cota.pontos[0]), centro
+            else:
+                ids = list(cota.pontos)
+                if len(ids) < 2 and cota.curvas:
+                    ids = list(sistema.esboco.curva(cota.curvas[0]).pontos[:2])
+                (ax, ay), (bx, by) = xy(ids[0]), xy(ids[1])
+            if cota.modo == MODO_H:
+                return np.abs(bx - ax)
+            if cota.modo == MODO_V:
+                return np.abs(by - ay)
+            return np.hypot(bx - ax, by - ay)
+        if t == PONTO_LINHA:
+            a, b = sistema.esboco.curva(cota.curvas[0]).pontos
+            return np.abs(_distancia_com_sinal(*xy(cota.pontos[0]), *xy(a), *xy(b)))
+        if t in (DIAMETRO, RAIO):
+            curva = sistema.esboco.curva(cota.curvas[0])
+            cx, cy = xy(curva.pontos[0])
+            if curva.tipo == CIRCULO:
+                r = q[:, sistema.raios[curva.id]]
+            else:
+                ax, ay = xy(curva.pontos[1])
+                r = np.hypot(ax - cx, ay - cy)
+            return (2.0 if t == DIAMETRO else 1.0) * r
+        if t == ANGULO:
+            l1, l2 = (sistema.esboco.curva(c).pontos for c in cota.curvas)
+            v = np.stack([*xy(l1[0]), *xy(l1[1]), *xy(l2[0]), *xy(l2[1])], axis=1)
+            return np.abs(np.degrees(_angulo_entre(v)))
+    return np.full(q.shape[0], math.nan)
 
 
 # ---------------------------------------------------------------------------

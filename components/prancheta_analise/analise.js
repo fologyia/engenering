@@ -17,6 +17,8 @@ const PA_DICAS = {
   escala: "Clique nas duas pontas de uma medida que você sabe quanto vale.",
   medir: "Clique em dois pontos: a distância aparece (real, se a escala já estiver posta).",
 }
+// O fundo de curvas (DXF ou esboço salvo) já vem em mm, com y para cima.
+const paDeCurvas = (f) => f?.tipo === "dxf" || f?.tipo === "esboco"
 const paNum = (v, casas = 3) => (Number.isFinite(v) ? String(Number(v.toPrecision(casas))).replace(".", ",") : "—")
 const paEsc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
 
@@ -42,6 +44,9 @@ function paCriar(raiz) {
     cliques: [], // os pontos da escala ou da medida
     medida: null,
     mouse: null,
+    alvo: null, // onde a marca (ou a ponta da medida) gruda, no fundo de curvas
+    pedido: null, // o campo da marca que espera uma medida do desenho: { n, id, chave, texto }
+    pedidoFeito: -1,
   }
 
   const tela = () => {
@@ -140,8 +145,108 @@ function paCriar(raiz) {
     return `<path class="dxf" d="${partes.join("")}"/>`
   }
 
+  // ---- grudar no desenho de curvas ---------------------------------------------------------------
+  // No mundo da prancheta (y para baixo). Devolve { x, y, tipo, curva } ou null.
+  function grudar(u, v) {
+    if (!paDeCurvas(e.fundo)) return null
+    const [x, y] = doPx(u, v)
+    const tol = PA_PERTO_PX / e.vista.esc
+    let melhor = null
+    let dist = tol
+    const olhar = (px_, py_, tipo, curva) => {
+      const d = Math.hypot(px_ - x, py_ - y)
+      if (d <= dist) {
+        dist = d
+        melhor = { x: px_, y: py_, tipo, curva }
+      }
+    }
+    // Primeiro as pontas e os centros bem perto do clique.
+    let furo = null
+    for (const c of e.fundo.curvas || []) {
+      if (c.tipo === "linha") {
+        olhar(c.a[0], -c.a[1], "ponta", c)
+        olhar(c.b[0], -c.b[1], "ponta", c)
+        continue
+      }
+      const r = c.r ?? Math.hypot(c.a[0] - c.c[0], c.a[1] - c.c[1])
+      olhar(c.c[0], -c.c[1], "centro", c)
+      if (c.tipo === "arco") {
+        olhar(c.a[0], -c.a[1], "ponta", c)
+        olhar(c.b[0], -c.b[1], "ponta", c)
+      }
+      // Dentro do círculo, ou na borda dele: o centro, do menor que contém o clique.
+      if (Math.hypot(c.c[0] - x, -c.c[1] - y) <= r + tol && (!furo || r < furo.r)) furo = { c, r }
+    }
+    if (melhor) return melhor
+    if (furo) return { x: furo.c.c[0], y: -furo.c.c[1], tipo: "centro", curva: furo.c }
+    for (const c of e.fundo.curvas || []) {
+      if (c.tipo !== "linha") continue
+      const [ax, ay, bx, by] = [c.a[0], -c.a[1], c.b[0], -c.b[1]]
+      const dx = bx - ax
+      const dy = by - ay
+      const t = Math.min(Math.max(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1), 0), 1)
+      olhar(ax + t * dx, ay + t * dy, "linha", c)
+    }
+    return melhor
+  }
+  // A borda de um círculo (ou arco) debaixo do mouse: um clique dá o diâmetro.
+  function circuloNaBorda(u, v) {
+    if (!paDeCurvas(e.fundo)) return null
+    const [x, y] = doPx(u, v)
+    const tol = PA_PERTO_PX / e.vista.esc
+    let melhor = null
+    let dist = tol
+    for (const c of e.fundo.curvas || []) {
+      if (c.tipo === "linha") continue
+      const r = c.r ?? Math.hypot(c.a[0] - c.c[0], c.a[1] - c.c[1])
+      const d = Math.abs(Math.hypot(c.c[0] - x, -c.c[1] - y) - r)
+      if (d <= dist) {
+        dist = d
+        melhor = { c, r }
+      }
+    }
+    return melhor
+  }
+  function svgDoAlvo() {
+    if (!e.alvo) return ""
+    const [u, v] = px(e.alvo.x, e.alvo.y)
+    const titulo = { centro: "Centro do furo", ponta: "Ponta da linha", linha: "Na linha" }[e.alvo.tipo] || ""
+    return `<g class="alvo"><title>${titulo}</title><circle cx="${u}" cy="${v}" r="8"/><circle cx="${u}" cy="${v}" r="2.5"/></g>`
+  }
+
+  // ---- medida pedida por um campo da marca ----------------------------------------------------------
+  function terminarPedido(valor) {
+    const pedido = e.pedido
+    if (!pedido) return
+    e.pedidoFeito = pedido.n
+    e.pedido = null
+    e.cliques = []
+    e.medida = null
+    e.enviar?.("medida", valor === null ? { n: pedido.n, cancelar: true } : { n: pedido.n, id: pedido.id, chave: pedido.chave, valor })
+    trocarFerramenta("mover")
+  }
+  function cliqueDoPedido(u, v, mundo) {
+    const borda = e.cliques.length ? null : circuloNaBorda(u, v)
+    if (borda) {
+      avisar(`Ø ${paNum(2 * borda.r, 4)} mm`)
+      return terminarPedido(2 * borda.r)
+    }
+    const g = grudar(u, v)
+    e.cliques.push(g ? [g.x, g.y] : mundo)
+    if (e.cliques.length < 2) return desenhar()
+    const [a, b] = e.cliques
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1])
+    if (!e.escala) {
+      e.cliques = []
+      avisar("Ponha a escala antes (ferramenta Escala): sem ela não dá para medir em mm.")
+      return desenhar()
+    }
+    avisar(`${paNum(d * e.escala, 4)} mm`)
+    terminarPedido(d * e.escala)
+  }
+
   // ---- marcas -----------------------------------------------------------------------------------
-  const CLASSE = { passou: "passou", "não passou": "nao", limite: "limite", falta: "falta", erro: "falta" }
+  const CLASSE = { passou: "passou", "não passou": "nao", limite: "limite", falta: "falta", erro: "falta", nota: "nota" }
   function svgDaMarca(m) {
     const [u, v] = px(m.x, m.y)
     const classes = ["marca", CLASSE[m.situacao] || "falta"]
@@ -237,16 +342,21 @@ function paCriar(raiz) {
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`)
     svg.classList.toggle("marcando", e.ferramenta === "marcar")
     svg.classList.toggle("medindo", e.ferramenta === "medir" || e.ferramenta === "escala")
-    svg.innerHTML = svgDoFundo() + e.marcas.map(svgDaMarca).join("") + svgDaMedida()
+    svg.innerHTML = svgDoFundo() + e.marcas.map(svgDaMarca).join("") + svgDaMedida() + svgDoAlvo()
     if (e.fundo?.tipo === "dxf") textoEscala.textContent = "DXF em mm"
+    else if (e.fundo?.tipo === "esboco") textoEscala.textContent = "Esboço em mm"
     else textoEscala.textContent = e.escala ? `Escala: ${paNum(e.escala, 4)} mm por pixel` : e.fundo ? "Sem escala: use Escala para medir em mm" : ""
   }
   function trocarFerramenta(nome) {
     e.ferramenta = nome
     e.cliques = []
     e.medida = null
+    e.alvo = null
     pergunta.hidden = true
     dica.textContent = PA_DICAS[nome] || ""
+    if (nome === "pegar" && e.pedido) {
+      dica.textContent = `Medindo ${e.pedido.texto}: clique nas duas pontas${paDeCurvas(e.fundo) ? " (num círculo, um clique na borda dá o diâmetro)" : ""}. Esc cancela.`
+    }
     raiz.querySelectorAll("[data-f]").forEach((b) => b.classList.toggle("ativo", b.dataset.f === nome))
     desenhar()
   }
@@ -261,8 +371,14 @@ function paCriar(raiz) {
       return
     }
     if (ev.button !== 0) return
+    if (e.ferramenta === "pegar" && e.pedido) {
+      cliqueDoPedido(u, v, mundo)
+      return
+    }
     if (e.ferramenta === "marcar") {
-      const m = { id: novoId(), x: mundo[0], y: mundo[1], numero: e.marcas.length + 1, rotulo: "", situacao: "falta" }
+      const g = grudar(u, v)
+      const lugar = g ? [g.x, g.y] : mundo
+      const m = { id: novoId(), x: lugar[0], y: lugar[1], numero: e.marcas.length + 1, rotulo: "", situacao: "falta" }
       e.marcas.push(m)
       e.selecionada = m.id
       enviar()
@@ -274,7 +390,8 @@ function paCriar(raiz) {
         e.medida = null
         e.cliques = []
       }
-      e.cliques.push(mundo)
+      const g = grudar(u, v)
+      e.cliques.push(g ? [g.x, g.y] : mundo)
       if (e.cliques.length === 2) {
         const [a, b] = e.cliques
         e.cliques = []
@@ -314,11 +431,17 @@ function paCriar(raiz) {
       g.moveu = true
       const m = e.marcas.find((x) => x.id === g.id)
       if (m) {
-        m.x = g.base[0] + (e.mouse[0] - g.mundo[0])
-        m.y = g.base[1] + (e.mouse[1] - g.mundo[1])
+        const alvo = grudar(u, v)
+        e.alvo = alvo
+        m.x = alvo ? alvo.x : g.base[0] + (e.mouse[0] - g.mundo[0])
+        m.y = alvo ? alvo.y : g.base[1] + (e.mouse[1] - g.mundo[1])
       }
       desenhar()
       return
+    }
+    if (["marcar", "medir", "escala", "pegar"].includes(e.ferramenta) && paDeCurvas(e.fundo)) {
+      e.alvo = grudar(u, v)
+      return desenhar()
     }
     if (e.cliques.length) desenhar()
   })
@@ -331,6 +454,7 @@ function paCriar(raiz) {
       // nada a soltar
     }
     if (!g) return
+    e.alvo = null
     if (g.tipo === "marca") enviar() // mudou de lugar, ou só foi escolhida
     if (g.tipo === "andar" && g.clique && e.selecionada) {
       e.selecionada = null
@@ -362,7 +486,8 @@ function paCriar(raiz) {
   svg.addEventListener("keydown", (ev) => {
     const tecla = ev.key.toLowerCase()
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return // Ctrl+V chega pelo evento de colar
-    if (ev.key === "Escape") trocarFerramenta("mover")
+    if (ev.key === "Escape" && e.pedido) terminarPedido(null)
+    else if (ev.key === "Escape") trocarFerramenta("mover")
     else if ((ev.key === "Delete" || ev.key === "Backspace") && e.selecionada) {
       e.marcas = e.marcas.filter((m) => m.id !== e.selecionada)
       e.selecionada = null
@@ -416,6 +541,7 @@ function paCriar(raiz) {
   // ---- botões -----------------------------------------------------------------------------------
   raiz.querySelectorAll("[data-f]").forEach((b) =>
     b.addEventListener("click", () => {
+      if (e.pedido) terminarPedido(null) // outra ferramenta: a medida pedida fica para depois
       trocarFerramenta(b.dataset.f)
       svg.focus({ preventScroll: true })
     }),
@@ -432,7 +558,8 @@ function paCriar(raiz) {
 
   // ---- Python → aqui ----------------------------------------------------------------------------
   e.receber = (dados) => {
-    const fundoNovo = JSON.stringify(dados.fundo ?? null) !== JSON.stringify(e.fundo ?? null)
+    const chave = (f) => (f ? `${f.tipo}|${f.nome}|${f.largura}|${f.altura}` : "")
+    const fundoNovo = chave(dados.fundo) !== chave(e.fundo)
     e.fundo = dados.fundo ?? null
     if (dados.versao > e.versao) {
       e.versao = dados.versao
@@ -447,7 +574,16 @@ function paCriar(raiz) {
         if (vinda) Object.assign(m, { numero: vinda.numero, rotulo: vinda.rotulo, situacao: vinda.situacao })
       }
     }
-    if (e.fundo?.tipo === "dxf") e.escala = 1
+    if (paDeCurvas(e.fundo)) e.escala = 1
+    const pedido = dados.pedido ?? null
+    if (pedido && pedido.n > e.pedidoFeito && (!e.pedido || e.pedido.n !== pedido.n)) {
+      e.pedido = pedido
+      trocarFerramenta("pegar")
+      setTimeout(() => svg.focus({ preventScroll: true }), 0)
+    } else if (!pedido && e.pedido) {
+      e.pedido = null
+      if (e.ferramenta === "pegar") trocarFerramenta("mover")
+    }
     if (fundoNovo || e.verAjuste !== dados.ajustar) {
       e.verAjuste = dados.ajustar
       setTimeout(() => enquadrar(), 0)

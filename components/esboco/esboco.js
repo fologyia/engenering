@@ -46,6 +46,7 @@ const ES_ICONES = {
   transformar: '<path d="M12 3v9M12 3 9.5 5.5M12 3l2.5 2.5M3 12h9M3 12l2.5-2.5M3 12l2.5 2.5"/><path d="M14.5 20.5a6.5 6.5 0 0 0 6-6"/><path d="m20.5 14.5-2.2 1.4M20.5 14.5l1.2 2.3"/>',
   medir: '<path d="M3 16 16 3l5 5L8 21z"/><path d="M7.5 11.5l2 2M10.5 8.5l2 2M13.5 5.5l2 2"/>',
   unir: '<path d="M4 4h10v6h6v10H10v-6H4z"/><path d="M10 10h4v4h-4z" stroke-dasharray="1.5 1.5"/>',
+  analise: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>',
 }
 const esIcone = (nome) => `<svg class="icone" viewBox="0 0 24 24" aria-hidden="true">${ES_ICONES[nome] ?? ""}</svg>`
 const ES_GRUPOS = {
@@ -72,7 +73,7 @@ const ES_EDICAO = new Set([
   "padrao_circular",
 ])
 // As que escolhem itens (como a cota) em vez de desenhar.
-const ES_ESCOLHA = new Set(["cota", "medir"])
+const ES_ESCOLHA = new Set(["cota", "medir", "analise"])
 
 const ES_ESTADOS = new WeakMap()
 const ES_PERTO_PX = 7
@@ -113,6 +114,8 @@ const ES_DICAS = {
   transformar:
     "Clique nas curvas que vão andar (ou escolha antes), ponha quanto andam e giram na faixa de baixo e clique em Aplicar. Ctrl+C e Ctrl+V copiam e colam onde o mouse estiver.",
   medir: "Clique uma curva, ou dois pontos ou curvas: a medida aparece sem virar cota.",
+  analise:
+    "Clique num canto, na borda de um furo ou numa linha: o ponto ganha um nome (A, B…) e fica preso ali. No Montador, as tensões também são conferidas nele. Clique num ponto que já existe para trocar o nome.",
 }
 const ES_SINAIS = {
   horizontal: "H",
@@ -214,6 +217,8 @@ function esCriar(raiz) {
     marcas: null,
     espaco: false,
     abrirNoSoltar: null, // a cota cuja caixinha abre quando o botão do mouse sobe
+    renomearNoSoltar: null, // o ponto de análise cujo nome abre quando o botão do mouse sobe
+    ultimaAnalise: null, // para o duplo clique que troca o nome
     ultimaCota: null,
     ultimaCurva: null, // para o duplo clique que escolhe o contorno inteiro
     cotaEditando: null, // a cota da caixinha aberta: Tab vai para a próxima
@@ -354,6 +359,7 @@ function esCriar(raiz) {
   }
   function depoisDeMudar() {
     e.conflito = null
+    edReatarAnalises(e.esboco) // o lugar de cada ponto de análise, para a próxima edição
     e.sel = new Set([...e.sel].filter(existe))
     atualizarSistema()
     enviar()
@@ -370,11 +376,13 @@ function esCriar(raiz) {
     if (tipo === "c") return e.esboco.curvas.some((c) => c.id === id)
     if (tipo === "r") return e.esboco.restricoes.some((r) => r.id === id)
     if (tipo === "d") return e.esboco.cotas.some((c) => c.id === id)
+    if (tipo === "a") return (e.esboco.analises ?? []).some((a) => a.id === id)
     return false
   }
 
   // Tenta o esboço novo: resolve a partir do desenho de agora. Devolve o motivo, ou "" se entrou.
   function tentar(novo, { guardarAntes = true } = {}) {
+    edReatarAnalises(novo)
     let s
     try {
       s = esSistema(esCopiar(novo))
@@ -994,8 +1002,28 @@ function esCriar(raiz) {
 
   // ---- cotas ------------------------------------------------------------------------------------
   function pontosDaCota(c) {
+    if (c.centro) return [c.pontos[0], "CG"]
     if (c.pontos?.length >= 2) return c.pontos.slice(0, 2)
     return curva(c.curvas[0]).pontos.slice(0, 2)
+  }
+  // O centro de gravidade vem do Python (a seção de agora); "CG" é ele nas cotas que vão até ele.
+  const centroXY = () => (e.marcas && Number.isFinite(e.marcas.xc) ? [e.marcas.xc, e.marcas.yc] : null)
+  const PC = (id) => {
+    if (id !== "CG") return P(id)
+    const xy = centroXY()
+    if (!xy) throw new Error("O centro de gravidade ainda não foi calculado.")
+    return xy
+  }
+  // Na cota e no Medir, o centro de gravidade também se escolhe: na frente das curvas, atrás dos pontos.
+  function comCentro(chave, u, v) {
+    if (chave?.startsWith("p:")) return chave
+    return pertoDoCentro(u, v) ? "g:CG" : chave
+  }
+  function pertoDoCentro(u, v) {
+    const xy = centroXY()
+    if (!xy) return false
+    const [a, b] = px(...xy)
+    return Math.hypot(a - u, b - v) <= ES_PERTO_PX + 2
   }
   function raioDe(c) {
     return c.tipo === "circulo" ? c.raio : esArcoInfo(e.esboco, c).r
@@ -1006,7 +1034,9 @@ function esCriar(raiz) {
   }
   function medida(c) {
     if (c.tipo === "distancia") {
-      const [a, b] = pontosDaCota(c).map(P)
+      const [a, b] = pontosDaCota(c).map(PC)
+      if (c.centro && c.modo === "h") return Math.abs(b[0] - a[0])
+      if (c.centro && c.modo === "v") return Math.abs(b[1] - a[1])
       if (c.modo === "h") return (c.sinal || 1) * (b[0] - a[0])
       if (c.modo === "v") return (c.sinal || 1) * (b[1] - a[1])
       return Math.hypot(b[0] - a[0], b[1] - a[1])
@@ -1042,6 +1072,7 @@ function esCriar(raiz) {
     const valor = medida(c)
     const prefixo = c.tipo === "diametro" ? "Ø" : c.tipo === "raio" ? "R" : ""
     const fim = c.tipo === "angulo" ? "°" : ""
+    if (c.referencia && c.nome) return `(${c.nome} = ${prefixo}${esNum(valor, 2)}${fim})`
     if (c.referencia) return `(${prefixo}${esNum(valor, 2)}${fim})`
     if (ehNumero(c.expressao)) return `${prefixo}${esNum(valor, 3)}${fim}`
     const separa = prefixo ? " " : "" // "R r = 5": o R da cota não gruda na letra
@@ -1050,6 +1081,15 @@ function esCriar(raiz) {
 
   // O que a cota mede pelos itens escolhidos, ou null se não serve.
   function cotaDosPicks(picks) {
+    if (picks.includes("g:CG")) {
+      // Até o centro de gravidade: de um ponto, ou do centro de um furo. Só mede.
+      if (picks.length !== 2) return null
+      const outro = picks.find((p) => p !== "g:CG")
+      if (outro.startsWith("p:")) return { tipo: "distancia", pontos: [outro.slice(2)], centro: true }
+      const k = curva(outro.slice(2))
+      if (k && k.tipo !== "linha") return { tipo: "distancia", pontos: [k.pontos[0]], centro: true }
+      return null
+    }
     const pontos = picks.filter((p) => p.startsWith("p:")).map((p) => p.slice(2))
     const curvas = picks.filter((p) => p.startsWith("c:")).map((p) => curva(p.slice(2)))
     const centro = (c) => c.pontos[0]
@@ -1093,7 +1133,7 @@ function esCriar(raiz) {
   function cotaCompleta(base, lugar) {
     const c = { ...base, lugar }
     if (c.tipo === "distancia") {
-      const [a, b] = pontosDaCota(c).map(P)
+      const [a, b] = pontosDaCota(c).map(PC)
       c.modo = modoPeloLugar(a, b, lugar)
       if (c.modo === "h") c.sinal = b[0] - a[0] >= 0 ? 1 : -1
       if (c.modo === "v") c.sinal = b[1] - a[1] >= 0 ? 1 : -1
@@ -1118,7 +1158,10 @@ function esCriar(raiz) {
     novo.cotas.push(c)
     const depois = grausDe(novo)
     let aviso = ""
-    if (antes !== null && depois !== null && depois >= antes) {
+    if (c.centro) {
+      c.referencia = true
+      aviso = "A cota até o centro de gravidade só mede. Clique nela duas vezes e em Dar nome: no Montador, ela vira uma medida que sai do desenho."
+    } else if (antes !== null && depois !== null && depois >= antes) {
       c.referencia = true
       aviso = "Essa medida já estava presa pelo resto do desenho: ficou como cota de referência, entre parênteses (só mede)."
     }
@@ -1176,6 +1219,7 @@ function esCriar(raiz) {
     if (!(valor > 0) && c.tipo !== "angulo") return "A medida precisa dar mais que zero."
     c.expressao = lido.expressao
     c.referencia = false
+    delete c.nome // a cota que prende não leva nome: o nome é da medida que só mede
     const erro = tentar(novo)
     if (!erro) avisar("")
     return erro
@@ -1185,32 +1229,76 @@ function esCriar(raiz) {
     const alvo = svg.querySelector(`[data-cota="${id}"] text`)
     if (!c || !alvo) return
     e.cotaEditando = id
+    const acoes = []
+    if (!c.centro) {
+      acoes.push({
+        rotulo: c.referencia ? "Prender" : "Só medir",
+        titulo: c.referencia
+          ? "A cota passa a prender a medida"
+          : "Vira cota de referência: mostra a medida e não prende nada",
+        ao: () => {
+          const novo = esCopiar(e.esboco)
+          const alvoCota = novo.cotas.find((x) => x.id === id)
+          alvoCota.referencia = !alvoCota.referencia
+          if (!alvoCota.referencia) {
+            alvoCota.expressao = esNumConta(medida(alvoCota))
+            delete alvoCota.nome // o nome é só da cota que mede
+          }
+          editor.fechar()
+          tentarOuAvisar(novo)
+        },
+      })
+    }
+    if (c.referencia && c.tipo !== "angulo") {
+      acoes.push({
+        rotulo: c.nome ? "Trocar nome" : "Dar nome",
+        titulo: "Com nome, a medida vai ao Montador: o bloco Medida do desenho lê o valor dela, que muda junto com as letras",
+        ao: () => {
+          editor.fechar()
+          setTimeout(() => nomearCota(id), 0)
+        },
+      })
+    }
+    acoes.push({ rotulo: "Apagar", titulo: "Tira a cota do desenho", ao: () => (editor.fechar(), apagar(new Set([`d:${id}`]))) })
     editor.abrir(alvo, {
       valor: medida(c),
       unidade: c.tipo === "angulo" ? "°" : "mm",
-      nome: nomeDaCota(c),
+      nome: c.nome ? `${nomeDaCota(c)}: ${c.nome}` : c.centro ? `${nomeDaCota(c)} até o centro de gravidade` : nomeDaCota(c),
       texto: c.referencia ? esNumConta(medida(c)).replace(".", ",") : c.expressao.replace(/\./g, ","),
-      dica: "Número, letra ou conta: 25, d, 2*d, L/2-10",
+      dica: c.centro ? "Esta cota só mede: o centro de gravidade sai da seção." : "Número, letra ou conta: 25, d, 2*d, L/2-10",
       selecionarTudo: true,
-      ler: (texto) => lerCotaDigitada(texto, c),
-      aplicar: (lido) => aplicarCota(id, lido),
-      acoes: [
-        {
-          rotulo: c.referencia ? "Prender" : "Só medir",
-          titulo: c.referencia
-            ? "A cota passa a prender a medida"
-            : "Vira cota de referência: mostra a medida e não prende nada",
-          ao: () => {
-            const novo = esCopiar(e.esboco)
-            const alvoCota = novo.cotas.find((x) => x.id === id)
-            alvoCota.referencia = !alvoCota.referencia
-            if (!alvoCota.referencia) alvoCota.expressao = esNumConta(medida(alvoCota))
-            editor.fechar()
-            tentarOuAvisar(novo)
-          },
-        },
-        { rotulo: "Apagar", titulo: "Tira a cota do desenho", ao: () => (editor.fechar(), apagar(new Set([`d:${id}`]))) },
-      ],
+      ler: (texto) =>
+        c.centro && texto.trim() !== esNumConta(medida(c)).replace(".", ",")
+          ? { erro: "A cota até o centro de gravidade só mede: ela não prende a medida." }
+          : lerCotaDigitada(texto, c),
+      // A medida com nome não vira cota que prende só por um Enter: para isso há o Prender.
+      aplicar: (lido) => (c.centro || (c.nome && lido.expressao === esNumConta(medida(c))) ? "" : aplicarCota(id, lido)),
+      acoes,
+    })
+  }
+  // O nome da cota de referência: no Montador, a medida que sai do desenho (o braço e, por exemplo).
+  function nomearCota(id) {
+    const c = e.esboco.cotas.find((x) => x.id === id)
+    const alvo = svg.querySelector(`[data-cota="${id}"] text`)
+    if (!c || !alvo) return
+    editor.abrir(alvo, {
+      valor: 0,
+      unidade: "",
+      nome: "Nome da medida",
+      texto: c.nome ?? "",
+      dica: "Letra ou nome sem espaço: e, braco, d_furo. Vazio tira o nome.",
+      selecionarTudo: true,
+      ler: (texto) => ({ valor: String(texto).trim() }),
+      aplicar: (nome) => {
+        if (nome && !nomeValido(nome)) return "O nome começa por letra, sem espaço: e, braco, d_furo."
+        if (nome && e.esboco.variaveis.some((v) => v.nome === nome)) return `${nome} já é uma letra das cotas: use outro nome.`
+        if (nome && e.esboco.cotas.some((x) => x.id !== id && x.nome === nome)) return `Outra medida já se chama ${nome}.`
+        const novo = esCopiar(e.esboco)
+        const alvoCota = novo.cotas.find((x) => x.id === id)
+        if (nome) alvoCota.nome = nome
+        else delete alvoCota.nome
+        return tentar(novo)
+      },
     })
   }
 
@@ -1250,6 +1338,7 @@ function esCriar(raiz) {
       vistas.add(chave)
       return true
     })
+    edReatarAnalises(esb)
   }
 
   // As curvas ligadas a `cid` pelas pontas (o contorno, ou a fila aberta), da mesma espécie:
@@ -1429,6 +1518,7 @@ function esCriar(raiz) {
       if (k[0] === "c") tirarCurvas.add(id)
       if (k[0] === "r") novo.restricoes = novo.restricoes.filter((r) => r.id !== id)
       if (k[0] === "d") novo.cotas = novo.cotas.filter((c) => c.id !== id)
+      if (k[0] === "a") novo.analises = (novo.analises ?? []).filter((a) => a.id !== id)
     }
     const soltos = new Set()
     novo.curvas = novo.curvas.filter((c) => {
@@ -1487,7 +1577,11 @@ function esCriar(raiz) {
     novo.variaveis.find((x) => x.nome === nome).valor = lido.valor
     for (const c of novo.cotas) {
       if (c.referencia) continue
-      const valor = avaliarConta(lerConta(c.expressao), esValores(novo))
+      // Só as cotas que usam a letra: uma distância de 0 que já estava lá (o furo na altura da
+      // origem) não tem nada a ver com a letra mudada.
+      const conta = lerConta(c.expressao)
+      if (!letrasDaConta(conta).has(nome)) continue
+      const valor = avaliarConta(conta, esValores(novo))
       if (!(valor > 0) && c.tipo !== "angulo") return avisar(`Com ${nome} = ${esNum(lido.valor)}, uma cota fica sem medida.`, "ruim")
     }
     const erro = tentar(novo)
@@ -1699,6 +1793,75 @@ function esCriar(raiz) {
   }
 
   // ---- medir: a medida sem virar cota -----------------------------------------------------------
+  // ---- pontos de análise ------------------------------------------------------------------------
+  function analiseNoMouse(u, v) {
+    let melhor = null
+    let dist = ES_PERTO_PX + 2
+    for (const a of e.esboco.analises ?? []) {
+      const xy = edPosicaoDaAnalise(e.esboco, a)
+      if (!xy) continue
+      const [pu, pv] = px(...xy)
+      const d = Math.hypot(pu - u, pv - v)
+      if (d <= dist) {
+        dist = d
+        melhor = a.id
+      }
+    }
+    return melhor
+  }
+  // Clique da ferramenta: no ponto que já existe, troca o nome; no desenho, cria um. Devolve o id do
+  // ponto cujo nome abre ao soltar o botão.
+  function marcarAnalise(u, v) {
+    const existente = analiseNoMouse(u, v)
+    if (existente) return existente
+    const [x, y] = doPx(u, v)
+    const r = edNovaAnalise(e.esboco, x, y, ES_PERTO_PX / e.vista.esc)
+    if (r.erro) {
+      avisar(r.erro, "aviso")
+      return null
+    }
+    const erro = tentar(r.esboco)
+    if (erro) {
+      avisar(erro, "ruim")
+      return null
+    }
+    avisar("")
+    return r.id
+  }
+  function renomearAnalise(id) {
+    const a = (e.esboco.analises ?? []).find((x) => x.id === id)
+    const alvo = svg.querySelector(`[data-analise="${id}"] text`)
+    if (!a || !alvo) return
+    editor.abrir(alvo, {
+      valor: 0,
+      unidade: "",
+      nome: "Nome do ponto de análise",
+      texto: a.nome,
+      dica: "Até 20 letras ou números: A, B1, solda 1. No Montador, vira “von Mises no ponto A”.",
+      selecionarTudo: true,
+      ler: (texto) => (String(texto).trim() ? { valor: String(texto).trim() } : { erro: "Dê um nome ao ponto." }),
+      aplicar: (nome) => {
+        if (nome === a.nome) return ""
+        const r = edRenomearAnalise(e.esboco, id, nome)
+        return r.erro ?? tentar(r.esboco)
+      },
+      acoes: [{ rotulo: "Apagar", titulo: "Tira o ponto de análise", ao: () => (editor.fechar(), apagar(new Set([`a:${id}`]))) }],
+    })
+  }
+  function svgDasAnalises() {
+    return (e.esboco.analises ?? [])
+      .map((a) => {
+        const xy = edPosicaoDaAnalise(e.esboco, a)
+        if (!xy) return ""
+        const [u, v] = px(...xy)
+        const classes = ["analise"]
+        if (e.sel.has(`a:${a.id}`)) classes.push("sel")
+        if (e.perto === `a:${a.id}`) classes.push("perto")
+        return `<g class="${classes.join(" ")}" data-analise="${a.id}"><title>Ponto de análise ${esc(a.nome)}: no Montador, as tensões também são conferidas aqui. Duplo clique troca o nome.</title><path d="M${u} ${v - 7}L${u + 7} ${v}L${u} ${v + 7}L${u - 7} ${v}Z"/><circle cx="${u}" cy="${v}" r="1.8"/><text x="${u + 9}" y="${v - 8}">${esc(a.nome)}</text></g>`
+      })
+      .join("")
+  }
+
   function medirPicks() {
     const base = cotaDosPicks(e.picks)
     e.medida = null
@@ -1706,7 +1869,7 @@ function esCriar(raiz) {
     let lugar = null
     let a = null
     let b = null
-    if (base.tipo === "distancia") [a, b] = (base.pontos?.length >= 2 ? base.pontos : curva(base.curvas[0]).pontos).map(P)
+    if (base.tipo === "distancia") [a, b] = pontosDaCota(base).map(PC)
     else if (base.tipo === "ponto_linha") {
       const l = curva(base.curvas[0])
       b = P(base.pontos[0])
@@ -1896,9 +2059,24 @@ function esCriar(raiz) {
           <button type="button" data-tirar="${esc(v.nome)}" title="Apagar a letra" ${usos ? "disabled" : ""}>×</button></span>`
       })
       .join("")
+    const medidas = e.esboco.cotas
+      .filter((c) => c.referencia && c.nome)
+      .map((c) => {
+        let valor = "—"
+        try {
+          valor = esNum(medida(c), 3)
+        } catch {
+          // a cota até o centro de gravidade, antes de o Python mandar o centro
+        }
+        return `<span class="es-letra es-medida" title="Medida do desenho: no Montador, o bloco Medida do desenho lê este valor, que muda com as letras"><b>${esc(c.nome)}</b> = ${valor} mm</span>`
+      })
+      .join("")
+    const pontos = (e.esboco.analises ?? []).map((a) => esc(a.nome)).join(", ")
     caixaLetras.innerHTML = `<span class="es-rotulo">Letras</span>${chips || '<span class="es-ajuda">nenhuma</span>'}
       <span class="es-nova"><input data-nova-nome placeholder="letra" aria-label="Nome da letra nova"><input data-nova-valor placeholder="valor" aria-label="Valor da letra nova"><button type="button" data-nova title="Criar a letra">+</button></span>
-      <span class="es-ajuda">Numa cota, digite a letra (d) ou uma conta (2*d): no Montador, ela vira a incógnita.</span>`
+      <span class="es-ajuda">Numa cota, digite a letra (d) ou uma conta (2*d): no Montador, ela vira a incógnita.</span>
+      ${medidas ? `<span class="es-rotulo">Medidas</span>${medidas}` : ""}
+      ${pontos ? `<span class="es-rotulo">Pontos de análise</span><span class="es-ajuda">${pontos}</span>` : ""}`
     caixaLetras.querySelectorAll("[data-letra]").forEach((campo) => {
       campo.addEventListener("keydown", (ev) => {
         ev.stopPropagation()
@@ -1975,7 +2153,7 @@ function esCriar(raiz) {
       let a
       let b
       if (c.tipo === "distancia") {
-        ;[a, b] = pontosDaCota(c).map(P)
+        ;[a, b] = pontosDaCota(c).map(PC)
       } else {
         const l = curva(c.curvas[0])
         const [ax, ay] = P(l.pontos[0])
@@ -2050,7 +2228,7 @@ function esCriar(raiz) {
     }
     const classes = ["cota"]
     if (c.medida) classes.push("medida")
-    else if (c.referencia) classes.push("referencia")
+    else if (c.referencia) classes.push(c.nome ? "referencia medida-nomeada" : "referencia")
     else if (!ehNumero(c.expressao)) classes.push("letra")
     if (e.sel.has(`d:${c.id}`)) classes.push("sel")
     if (e.conflito?.origens.includes(c.id)) classes.push("conflito")
@@ -2242,6 +2420,7 @@ function esCriar(raiz) {
       const r = sel || e.perto === `p:${pid}` ? 4.5 : 3
       partes.push(`<circle class="${classes.join(" ")}" cx="${u}" cy="${v}" r="${r}"/>`)
     }
+    partes.push(svgDasAnalises())
     const { soltas, bifurcacoes } = esContornos(e.esboco)
     for (const pid of [...soltas, ...bifurcacoes]) {
       const [u, v] = px(...P(pid))
@@ -2255,7 +2434,7 @@ function esCriar(raiz) {
     if (e.marcas && Number.isFinite(e.marcas.xc)) {
       const [u, v] = px(e.marcas.xc, e.marcas.yc)
       partes.push(
-        `<g class="centro"><title>Centro de gravidade</title><circle cx="${u}" cy="${v}" r="5"/><line x1="${u - 8}" y1="${v}" x2="${u + 8}" y2="${v}"/><line x1="${u}" y1="${v - 8}" x2="${u}" y2="${v + 8}"/></g>`,
+        `<g class="centro${e.perto === "g:CG" || e.picks.includes("g:CG") ? " perto" : ""}"><title>Centro de gravidade${e.ferramenta === "cota" ? ": clique para cotar até ele (a cota só mede)" : ""}</title><circle cx="${u}" cy="${v}" r="5"/><line x1="${u - 8}" y1="${v}" x2="${u + 8}" y2="${v}"/><line x1="${u}" y1="${v - 8}" x2="${u}" y2="${v + 8}"/></g>`,
       )
     }
     if (e.gesto?.tipo === "janela" && e.gesto.ativo) {
@@ -2558,7 +2737,27 @@ function esCriar(raiz) {
         if (e.ferramenta !== "selecionar") return
       } else e.ultimaCota = { id, t: agora }
     }
+    if (e.ferramenta === "analise") {
+      e.renomearNoSoltar = marcarAnalise(u, v)
+      montarPainel()
+      desenhar()
+      return
+    }
     if (e.ferramenta === "selecionar") {
+      const analise = analiseNoMouse(u, v)
+      if (analise) {
+        // Um clique escolhe (Delete apaga); duplo clique troca o nome.
+        const agora = performance.now()
+        if (e.ultimaAnalise?.id === analise && agora - e.ultimaAnalise.t < ES_DUPLO_MS) {
+          e.ultimaAnalise = null
+          e.renomearNoSoltar = analise
+        } else e.ultimaAnalise = { id: analise, t: agora }
+        if (!ev.shiftKey) e.sel.clear()
+        e.sel.add(`a:${analise}`)
+        montarPainel()
+        desenhar()
+        return
+      }
       if (cotaAlvo && cotaAlvo.dataset.cota !== "_") {
         const chave = `d:${cotaAlvo.dataset.cota}`
         if (!ev.shiftKey) e.sel.clear()
@@ -2618,7 +2817,7 @@ function esCriar(raiz) {
       return
     }
     if (e.ferramenta === "medir") {
-      const chave = oQueTemAqui(u, v)
+      const chave = comCentro(oQueTemAqui(u, v), u, v)
       if (!chave) {
         e.picks = []
         e.medida = null
@@ -2634,7 +2833,7 @@ function esCriar(raiz) {
       return
     }
     if (e.ferramenta === "cota" || e.ferramenta.startsWith("r:")) {
-      const chave = oQueTemAqui(u, v)
+      const chave = e.ferramenta === "cota" ? comCentro(oQueTemAqui(u, v), u, v) : oQueTemAqui(u, v)
       if (e.ferramenta === "cota") {
         if (chave) {
           if (!e.picks.includes(chave)) e.picks.push(chave)
@@ -2710,7 +2909,9 @@ function esCriar(raiz) {
     }
     if (e.ferramenta === "selecionar" || ES_ESCOLHA.has(e.ferramenta) || e.ferramenta.startsWith("r:") || ES_EDICAO.has(e.ferramenta)) {
       const antes = e.perto
-      e.perto = oQueTemAqui(u, v)
+      const analise = e.ferramenta === "selecionar" || e.ferramenta === "analise" ? analiseNoMouse(u, v) : null
+      const ate = e.ferramenta === "cota" || e.ferramenta === "medir"
+      e.perto = analise ? `a:${analise}` : ate ? comCentro(oQueTemAqui(u, v), u, v) : oQueTemAqui(u, v)
       e.encaixe = null
       if (antes !== e.perto || e.ferramenta === "cota") desenhar()
       else if (e.mouse) infoXY.textContent = `x ${esNum(e.mouse[0], 2)}   y ${esNum(e.mouse[1], 2)} mm`
@@ -2728,6 +2929,11 @@ function esCriar(raiz) {
       e.abrirNoSoltar = null
       // Depois do clique inteiro: o foco já parou na prancheta e não volta a sair da caixinha.
       setTimeout(() => editarCota(id), 0)
+    }
+    if (e.renomearNoSoltar) {
+      const id = e.renomearNoSoltar
+      e.renomearNoSoltar = null
+      setTimeout(() => renomearAnalise(id), 0)
     }
     if (!gesto) return
     soltar(ev)
@@ -2813,11 +3019,13 @@ function esCriar(raiz) {
     } else if (ev.key === "Delete" || ev.key === "Backspace") apagar()
     else if (ev.key === "Enter" && e.sel.size === 1 && [...e.sel][0].startsWith("d:")) {
       editarCota([...e.sel][0].slice(2))
+    } else if (ev.key === "Enter" && e.sel.size === 1 && [...e.sel][0].startsWith("a:")) {
+      renomearAnalise([...e.sel][0].slice(2))
     }
     else if (!ctrl && /^[0-9.,]$/.test(ev.key) && digitarMedida(ev.key)) {
       // abriu a caixinha com o número
     } else if (!ctrl && !ev.altKey) {
-      const ferramentas = { l: "linha", c: "circulo", a: "arco", t: "arco_tangente", p: "ponto", d: "cota", x: "aparar", w: "estender", g: "filete", o: "deslocar", s: "espelhar" }
+      const ferramentas = { l: "linha", c: "circulo", a: "arco", t: "arco_tangente", p: "ponto", d: "cota", x: "aparar", w: "estender", g: "filete", o: "deslocar", s: "espelhar", k: "analise" }
       const restricoes = { h: "horizontal", v: "vertical", i: "coincidente", e: "igual", m: "ponto_medio" }
       if (tecla === "r") trocarFerramenta(ev.shiftKey ? "retangulo_centro" : "retangulo")
       else if (ferramentas[tecla]) trocarFerramenta(ferramentas[tecla])

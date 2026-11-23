@@ -319,3 +319,40 @@ Arquivos: `core/esboco_uniao.py` e `core/esboco_dxf.py`.
   largura pula (alma e mesa), pelas faixas da seção (`core/geometria_da_secao.py`).
 - O "Trazer a seção aberta" do Cálculo de peças e a página Calor no tempo passaram a ler a seção do
   esboço (antes liam a da prancheta antiga, mesmo com o esboço aberto).
+
+## Pontos de análise e medidas com nome (marco 4)
+
+Arquivos: `core/esboco.py` (`PontoDeAnalise`, `posicao_da_analise`, `medida_da_cota`),
+`core/esboco_secao.py`, `core/montador_secoes.py`, `core/montador_desenho.py` e, na prancheta,
+`components/esboco/edicao.js` (`edNovaAnalise`, `edReatarAnalises`) e `esboco.js`.
+
+- **Ponto de análise (K).** Um clique num ponto do esboço, numa linha, num arco ou na borda de um
+  círculo. O ponto ganha um nome (A, B… ou "solda 1") e fica preso à geometria sem virar incógnita
+  do solver: guarda o ponto, ou a curva e a fração `t` dela (no círculo, a fração da volta a partir
+  do lado direito). Quando uma letra muda, ele anda junto. Numa edição que troca as pontas da curva
+  (dividir, aparar, filete, unir), ele volta a se prender pelo lugar em que estava (`xy`); se nada
+  ficou ali, sai. Duplo clique (ou Enter) troca o nome; Delete apaga.
+- **No Montador.** Cada ponto entra no bloco Seção desenhada ao lado dos automáticos (fibra, junções,
+  linha neutra, cantos), como "ponto A". σ pela força normal e pela flexão nos dois eixos; τ da
+  cortante por V·Q/(I·b) na altura do ponto (a média na largura ali); torção pelo τ máximo. As
+  parcelas de τ somam em módulo, a favor da segurança. Von Mises, Tresca e a maior principal já
+  conferem esses pontos.
+- **I_xy.** O σ por unidade de momento é o da flexão em eixos que não são os principais:
+  `|y·I_y − x·I_xy|/D` e `|x·I_x − y·I_xy|/D`, com `D = I_x·I_y − I_xy²`. Na seção simétrica dá
+  `y/I_x` e `x/I_y` (a conta de antes); se uma letra tira a simetria, os pontos de sempre levam o I_xy
+  no pior sinal. Na seção sem simetria, a fibra, a fibra de YY e os cantos passam a ser os vértices
+  com mais σ por unidade de cada momento (num L, a ponta da aba). A seção sem letras com pontos de
+  análise, ou sem simetria, sai do esboço (`_desenhada_pela_escala`) e continua com a escala `s`.
+- **Limite num ponto** (bloco do grupo Critério). Um ponto de análise, a tensão (von Mises, σ ou τ) e
+  o limite `σ_lp`, como numa solda. A seção ligada precisa ter o ponto com o nome escolhido.
+- **Medida com nome.** A cota de referência ganha nome pela caixinha (Dar nome). No Montador, o bloco
+  **Medida do desenho** (grupo Seção) dá o valor dela, como fórmula das letras do esboço (`DoDesenho`,
+  código 20 + j): não é incógnita e muda junto. Ligada na porta de distância da flexão, vira o braço
+  da força (M = F·e). Na seção sem letras, a medida anda com a escala `s`.
+- **Cota até o centro de gravidade.** Na ferramenta Cota (e no Medir), o centro de gravidade se
+  escolhe: na frente das curvas, atrás dos pontos (quando ele cai na origem, vale a origem). A cota
+  só mede.
+- **Tensões na seção:** a tabela "Nos pontos de análise" dá σ, τ e von Mises de cada ponto pela
+  malha, para conferir o Montador.
+- Mudar uma letra não é mais recusado por uma cota de valor zero que nem usa a letra (a altura 0
+  entre o centro do furo e a origem).

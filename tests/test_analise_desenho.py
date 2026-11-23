@@ -107,7 +107,7 @@ def test_chapa_com_furo_do_montador_da_a_mesma_capacidade():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("analise", ad.ANALISES)
+@pytest.mark.parametrize("analise", [a for a in ad.ANALISES if a != ad.NOTA])
 def test_toda_analise_do_montador_funciona_como_marca(analise):
     marca = ad.marca_nova("m1", 10.0, 20.0, analise)
     resultado = ad.calcular(marca)

@@ -116,6 +116,26 @@ def nomes_dos_desenhos() -> tuple[str, ...]:
     return (SEM_DESENHO, *salvas)
 
 
+def medidas_dos_desenhos() -> tuple[tuple[str, str], ...]:
+    """(medida, seção) de cada cota de referência com nome nas seções salvas com esboço."""
+    achadas = []
+    for nome, item in sc.listar_cadastrados().items():
+        for cota in (item.esboco or {}).get("cotas") or ():
+            if isinstance(cota, Mapping) and cota.get("referencia") and cota.get("nome"):
+                achadas.append((str(cota["nome"]), nome))
+    return tuple(sorted(achadas, key=lambda par: (par[1], par[0])))
+
+
+def pontos_dos_desenhos() -> tuple[str, ...]:
+    """Os nomes dos pontos de análise marcados nas seções salvas com esboço, sem repetir."""
+    nomes = set()
+    for item in sc.listar_cadastrados().values():
+        for ponto in (item.esboco or {}).get("analises") or ():
+            if isinstance(ponto, Mapping) and str(ponto.get("nome", "")).strip():
+                nomes.add(str(ponto["nome"]).strip())
+    return tuple(sorted(nomes))
+
+
 # ---------------------------------------------------------------------------
 # Seção escolhida
 # ---------------------------------------------------------------------------
