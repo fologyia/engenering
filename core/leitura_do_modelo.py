@@ -27,18 +27,20 @@ Sem Streamlit.
 
 from __future__ import annotations
 
+import functools
 import math
 import re
 import statistics
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
 from core import cantoneiras as ct
 from core import esforcos_modelo as em
 from core import lista_de_material as lm
+from core import malha_do_modelo as mm
 from core import papel_pelo_nome as pn
 from core import plano_de_cargas as pc
 from core import section_catalog as sc
@@ -154,6 +156,13 @@ class GeometriaDoModelo:
     #: As trocas de nome feitas pela página Nomes das barras (gravadas no projeto, não no
     #: arquivo): um estudo rodado antes da troca ainda acha cada corpo (:func:`correspondencia`).
     renomeacoes: tuple[pn.Renomeacao, ...] = ()
+    #: O centro de cada elemento das vigas na malha do estudo (``<estudo>-malha.csv`` da macro dos
+    #: casos de carga, gravado no projeto à parte, não no arquivo), nas unidades da malha: com ele
+    #: cada viga do Simulation acha o corpo pela posição, qualquer que seja o nome
+    #: (:func:`casar_pela_malha`).
+    centros_da_malha: Mapping[str, tuple[float, float, float]] = field(
+        default_factory=dict, hash=False
+    )
 
     def corpo(self, nome: str) -> CorpoDoModelo | None:
         return next((c for c in self.corpos if c.nome == nome), None)
@@ -639,12 +648,23 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> GeometriaDoModelo:
 
 
 def geometria_do_projeto(projeto: Mapping[str, Any] | None) -> GeometriaDoModelo:
-    """O esqueleto gravado no projeto, com as trocas de nome da página Nomes das barras."""
+    """O esqueleto gravado no projeto, com a malha do estudo e as trocas de nome da página Nomes
+    das barras."""
     if not isinstance(projeto, Mapping):
         return GeometriaDoModelo()
     g = de_dicionario(projeto.get("geometria_do_modelo"))
     renomeacoes = pn.renomeacoes_do_projeto(projeto)
-    return replace(g, renomeacoes=renomeacoes) if renomeacoes else g
+    if renomeacoes:
+        g = replace(g, renomeacoes=renomeacoes)
+    malha = mm.malha_do_projeto(projeto)
+    return com_malha(g, malha)
+
+
+def com_malha(g: GeometriaDoModelo, malha: mm.MalhaDoEstudo | None) -> GeometriaDoModelo:
+    """O esqueleto com os centros dos elementos da malha (para casar as vigas pela posição)."""
+    if malha is None or malha.vazia:
+        return g
+    return replace(g, centros_da_malha=dict(malha.centros))
 
 
 def nome_do_corpo(nome_da_viga: str) -> str:
@@ -680,6 +700,8 @@ class Correspondencia:
     renomeados: Mapping[str, str]  # prefixo antigo (no Simulation) → prefixo novo (no esqueleto)
     #: Vigas do Simulation casadas pelas trocas de nome da página Nomes das barras.
     pelos_nomes_trocados: tuple[str, ...] = ()
+    #: Vigas casadas pela posição dos elementos na malha do estudo (sem olhar o nome).
+    pelas_coordenadas: tuple[str, ...] = ()
 
     @property
     def pela_renomeacao(self) -> int:
@@ -697,8 +719,11 @@ def correspondencia(
 ) -> Correspondencia:
     """Cada viga do Simulation no seu corpo do esqueleto.
 
-    Primeiro pelo nome. As que sobram são de corpos renomeados depois do estudo (o Simulation
-    guarda o nome de quando a malha foi feita): o membro estrutural renomeado mantém a numeração
+    Primeiro pela posição, quando o projeto tem a malha do estudo (``<estudo>-malha.csv``): os
+    elementos de cada viga ficam sobre o eixo de um corpo do esqueleto (:func:`casar_pela_malha`),
+    e o nome não conta. Depois pelo nome, para as que sobraram. As que ainda sobram são de corpos
+    renomeados depois do estudo (o Simulation guarda o nome de quando a viga foi criada, e
+    rodar o estudo de novo não o muda): o membro estrutural renomeado mantém a numeração
     ``[n]`` dos corpos, então cada grupo antigo ("Canal c C8X13.75(1)") vai para o grupo novo
     ("U 8"x17,1 - Plataforma") que tem os mesmos números, o perfil do item da lista de corte no
     nome antigo e — com o caso PP — a mesma inclinação que o peso próprio mostra. Um grupo novo
@@ -706,9 +731,19 @@ def correspondencia(
     """
     nomes = list(nomes_das_vigas)
     mapa: dict[str, CorpoDoModelo] = {}
+    pelas_coordenadas: list[str] = []
+    if g.centros_da_malha and g.corpos and dados is not None:
+        pedidas = set(nomes)
+        for viga, achado_na_malha in casar_pela_malha(g, dados).items():
+            if viga in pedidas:
+                mapa[viga] = achado_na_malha
+                pelas_coordenadas.append(viga)
+    pela_posicao = {c.nome for c in mapa.values()}
     for viga in nomes:
+        if viga in mapa:
+            continue
         corpo = corpo_da_viga(g, viga) if g.corpos else None
-        if corpo is not None:
+        if corpo is not None and corpo.nome not in pela_posicao:
             mapa[viga] = corpo
     usados = {c.nome for c in mapa.values()}
     # Pelas trocas de nome da página Nomes das barras: o estudo rodado antes da troca (ou o
@@ -741,7 +776,7 @@ def correspondencia(
             if indice:
                 novos.setdefault(prefixo, {})[indice] = corpo
     if not antigos or not novos:
-        return Correspondencia(mapa, {}, tuple(pelos_nomes))
+        return Correspondencia(mapa, {}, tuple(pelos_nomes), tuple(pelas_coordenadas))
     eixo = dados.eixo_vertical if dados is not None else "Y"
     angulos = (
         {
@@ -780,7 +815,120 @@ def correspondencia(
         renomeados[antigo] = novo
         for indice in set(antigos[antigo]) & set(novos[novo]):
             mapa[antigos[antigo][indice]] = novos[novo][indice]
-    return Correspondencia(mapa, renomeados, tuple(pelos_nomes))
+    return Correspondencia(mapa, renomeados, tuple(pelos_nomes), tuple(pelas_coordenadas))
+
+
+#: Distância de um centro de elemento ao eixo do corpo para contar como dele: a linha da viga no
+#: Simulation passa pelo centro da seção e a do esqueleto pela caixa do corpo (num U, ~1 cm de
+#: diferença); fica uma folga de 3/4 da seção, nunca menos de 3 cm.
+FOLGA_MINIMA_DA_MALHA_M = 0.03
+FOLGA_DA_SECAO = 0.75
+FOLGA_SEM_SECAO_M = 0.10
+ESCALAS_DA_MALHA = (1.0, 0.001, 1000.0)
+AMOSTRA_DA_ESCALA = 300  # centros usados para achar a escala (o resto não muda a resposta)
+
+
+def _folga_da_malha(corpo: CorpoDoModelo) -> float:
+    if corpo.secao_mm:
+        return max(FOLGA_MINIMA_DA_MALHA_M, FOLGA_DA_SECAO * corpo.secao_mm[0] / 1000.0)
+    return FOLGA_SEM_SECAO_M
+
+
+def _distancia_e_posicao(
+    p: Sequence[float], a: Sequence[float], b: Sequence[float]
+) -> tuple[float, float]:
+    """Distância de ``p`` à reta ``a``–``b`` e onde ele cai nela (m a partir de ``a``)."""
+    ab = [b[i] - a[i] for i in range(3)]
+    ap = [p[i] - a[i] for i in range(3)]
+    comprimento = math.sqrt(sum(v * v for v in ab))
+    if comprimento == 0:
+        return math.dist(p, a), 0.0
+    s = sum(ap[i] * ab[i] for i in range(3)) / comprimento
+    pe = [a[i] + s * ab[i] / comprimento for i in range(3)]
+    return math.dist(p, pe), s
+
+
+def _escala_da_malha(
+    pontos: Mapping[str, Sequence[tuple[float, float, float]]], corpos: Sequence[CorpoDoModelo]
+) -> float:
+    """1, 0,001 ou 1000: a que põe mais centros sobre algum corpo (o esqueleto está em m)."""
+    todos = [p for lista in pontos.values() for p in lista]
+    if len(todos) > AMOSTRA_DA_ESCALA:
+        passo = len(todos) / AMOSTRA_DA_ESCALA
+        todos = [todos[int(i * passo)] for i in range(AMOSTRA_DA_ESCALA)]
+    melhor, acertos = 1.0, -1
+    for escala in ESCALAS_DA_MALHA:
+        n = 0
+        for p in todos:
+            q = [c * escala for c in p]
+            if any(
+                _distancia_ponto_segmento(q, c.inicio, c.fim) <= _folga_da_malha(c) for c in corpos
+            ):
+                n += 1
+        if n > acertos:
+            melhor, acertos = escala, n
+    return melhor
+
+
+def casar_pela_malha(g: GeometriaDoModelo, dados: em.EsforcosDoModelo) -> dict[str, CorpoDoModelo]:
+    """Viga do Simulation → corpo do esqueleto, pela posição dos elementos dela na malha.
+
+    Um corpo serve a uma viga quando **todos** os centros dos elementos dela ficam sobre o eixo
+    dele (até a folga da seção) e dentro do comprimento, e eles cobrem o corpo de ponta a ponta
+    (com n elementos iguais, os centros cobrem (n − 1)/n do comprimento). Entre os que servem, fica
+    o mais justo; cada corpo serve a uma viga só. O nome da viga não entra em nada: a viga que não
+    cabe em corpo nenhum fica sem corpo (e o nome tenta depois, em :func:`correspondencia`).
+    """
+    corpos = tuple(c for c in g.corpos if c.forma != FORMA_CHAPA and c.comprimento_m > 0)
+    pontos = mm.pontos_das_vigas(g.centros_da_malha, dados)
+    if not corpos or not pontos:
+        return {}
+    chave = tuple((viga, tuple(lista)) for viga, lista in pontos.items())
+    return dict(_casar_pela_malha(corpos, chave))
+
+
+@functools.lru_cache(maxsize=16)
+def _casar_pela_malha(
+    corpos: tuple[CorpoDoModelo, ...],
+    chave: tuple[tuple[str, tuple[tuple[float, float, float], ...]], ...],
+) -> tuple[tuple[str, CorpoDoModelo], ...]:
+    """A conta de :func:`casar_pela_malha`, guardada: a página pergunta muitas vezes por tela."""
+    pontos = dict(chave)
+    escala = _escala_da_malha(pontos, corpos)
+    candidatos: list[tuple[float, str, CorpoDoModelo]] = []
+    for viga, lista in pontos.items():
+        centros = [tuple(c * escala for c in p) for p in lista]
+        n = len(centros)
+        esperado = (n - 1) / n
+        for corpo in corpos:
+            folga = _folga_da_malha(corpo)
+            comprimento = math.dist(corpo.inicio, corpo.fim)
+            if comprimento <= 0:
+                continue
+            maior_distancia = 0.0
+            posicoes = []
+            for p in centros:
+                distancia, s = _distancia_e_posicao(p, corpo.inicio, corpo.fim)
+                if distancia > folga or s < -folga or s > comprimento + folga:
+                    break
+                maior_distancia = max(maior_distancia, distancia)
+                posicoes.append(s)
+            else:
+                cobertura = (max(posicoes) - min(posicoes)) / comprimento if n > 1 else 0.0
+                if n > 1 and cobertura < 0.6 * esperado:
+                    continue  # os elementos ocupam só um pedaço do corpo: a viga é outra
+                candidatos.append(
+                    (maior_distancia / folga + abs(cobertura - esperado), viga, corpo)
+                )
+    candidatos.sort(key=lambda item: item[0])
+    casados: dict[str, CorpoDoModelo] = {}
+    usados: set[str] = set()
+    for _, viga, corpo in candidatos:
+        if viga in casados or corpo.nome in usados:
+            continue
+        casados[viga] = corpo
+        usados.add(corpo.nome)
+    return tuple(casados.items())
 
 
 def _indice_vertical(eixo_vertical: str) -> int:
@@ -1740,6 +1888,20 @@ def diagnosticar(
     achados: list[Achado] = []
     if esqueleto_de_outro_modelo(g, dados):
         achadas = len(correspondencia(g, dados.nomes_dos_membros, dados).corpos)
+        if g.centros_da_malha:
+            causa = (
+                "nem pela posição dos elementos na malha do estudo: o esqueleto é de outra peça "
+                "ou de outra versão (ou a malha é de outro estudo). Rode a macro da lista de "
+                "corte na peça do estudo e envie o …_esqueleto.csv dela."
+            )
+        else:
+            causa = (
+                "pelo nome. Se o esqueleto é desta peça, os corpos foram renomeados depois de as "
+                "vigas serem criadas no estudo: o “Listar forças da viga” continua com o nome "
+                "antigo, mesmo rodando o estudo de novo. Rode a macro dos casos de carga (v18 ou "
+                "mais nova) e envie o …-malha.csv que ela grava: o programa liga cada viga ao "
+                "corpo pela posição, sem depender do nome."
+            )
         achados.append(
             Achado(
                 pc.NIVEL_ERRO,
@@ -1747,12 +1909,40 @@ def diagnosticar(
                 f"Só {achadas} das {len(dados.nomes_dos_membros)} barras do Simulation acham o "
                 f"corpo no esqueleto ({g.arquivo}"
                 + (f", {g.origem}" if g.origem else "")
-                + "): ele é de outra peça ou de outra versão. O programa não usa esse esqueleto "
-                "— tipo, perfil, peso e bases das barras saem só dos esforços. Rode a macro da "
-                "lista de corte na peça do estudo e envie o …_esqueleto.csv dela.",
+                + f"), {causa} Enquanto isso o programa não usa o esqueleto — tipo, perfil, peso e "
+                "bases das barras saem só dos esforços.",
             )
         )
         g = GeometriaDoModelo()
+    elif g.centros_da_malha and g.corpos:
+        casamento = correspondencia(g, dados.nomes_dos_membros, dados)
+        ligadas_pela_malha = len(casamento.pelas_coordenadas)
+        com_posicao = len(mm.pontos_das_vigas(g.centros_da_malha, dados))
+        fora_da_malha = [
+            nome_do_corpo(v)
+            for v in mm.pontos_das_vigas(g.centros_da_malha, dados)
+            if v not in casamento.pelas_coordenadas
+        ]
+        if fora_da_malha:
+            achados.append(
+                Achado(
+                    pc.NIVEL_ATENCAO,
+                    "Barras que a malha não põe em corpo nenhum",
+                    f"{len(fora_da_malha)} das {com_posicao} barras com posição na malha não caem "
+                    f"sobre o eixo de nenhum corpo do esqueleto: {_lista(sorted(fora_da_malha))}. "
+                    "Confira se o esqueleto é desta versão da peça (gere de novo pela macro da "
+                    "lista de corte) — essas barras ficam com o nome, se ele bater, ou sem corpo.",
+                )
+            )
+        elif ligadas_pela_malha:
+            achados.append(
+                Achado(
+                    pc.NIVEL_OK,
+                    "Barras ligadas pela posição",
+                    f"{ligadas_pela_malha} barra(s) do Simulation acharam o corpo no esqueleto pela "
+                    "posição dos elementos na malha do estudo, sem depender do nome.",
+                )
+            )
     casos = list(dados.casos.values())
 
     # Valores fora de escala: unidade errada no SolidWorks ou no arquivo.

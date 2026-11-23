@@ -65,6 +65,13 @@
 ' A macro guarda essa selecao e le as forcas de cada viga por ela. Se duas vigas derem os mesmos
 ' numeros, a selecao nao serviu: a macro nao grava os -forcas e o aviso diz o que fazer.
 '
+' A v18 grava tambem <estudo>-malha.csv: o centro de cada elemento da malha (numero do elemento e
+' X, Y, Z). O "Listar forcas da viga" guarda o nome que o corpo tinha quando a viga foi criada no
+' estudo - renomear o corpo depois nao muda esse nome -, e o programa precisa saber que corpo e cada
+' viga. Com a malha, ele liga cada viga ao corpo do esqueleto pela posicao dos elementos dela (os
+' numeros dos elementos estao no -forcas), sem depender do nome. Envie o -malha.csv junto com os
+' CSV de forcas na pagina Esforcos do modelo.
+'
 ' Robustez: se algo der errado, a macro diz em que etapa parou e por que (arquivo aberto no Excel,
 ' pasta sem permissao...) e fecha os arquivos. Uma viga ou um caso sem resultados fica de fora e e
 ' listado no aviso final; os outros saem normalmente. Se a leitura de todas as vigas juntas nao
@@ -72,7 +79,7 @@
 ' configuracao regional do Windows.
 Option Explicit
 
-Const VERSAO_DA_MACRO As String = "v17"
+Const VERSAO_DA_MACRO As String = "v18"
 Const PECA As Long = 1          ' swDocPART
 Const CORPO_SOLIDO As Long = 0  ' swSolidBody
 Const UNIDADES_SI As Long = 0   ' swsUnitSI: N e N.m
@@ -135,6 +142,7 @@ Sub main()
     Dim reacaoAgora As String, reacaoAnterior As String, casoAnterior As String
     Dim nosComReacao As Variant, apoiosGravados As Long
     Dim selecionadas() As Object, totalSelecionadas As Long, tipoDaSelecao As String
+    Dim elementosDaMalha As Long, falhaDaMalha As String
 
     On Error GoTo Falha
     ' Um arquivo que ficou aberto numa execucao interrompida trava a proxima: fecha tudo antes.
@@ -260,6 +268,14 @@ Sub main()
         Close #arquivo
         arquivo = 0
     End If
+
+    ' v18: a malha do estudo (o centro de cada elemento), para o programa ligar cada viga ao corpo
+    ' do esqueleto pela posicao - o nome no Listar forcas da viga pode ser o de antes de renomear.
+    etapa = "gravar a malha do estudo"
+    falhaDaMalha = ""
+    elementosDaMalha = GravarMalha(estudo, pasta & NomeDeArquivo(nomeDoEstudo & "-malha") & ".csv", _
+        nomeDoEstudo, quando, falhaDaMalha)
+    If elementosDaMalha = 0 Then Problema "malha do estudo (" & falhaDaMalha & ")"
     pelosCorpos = (totalDeVigas < 1)
     If pelosCorpos Then
         etapa = "usar os corpos da peca como vigas"
@@ -499,6 +515,9 @@ Sub main()
             "arquivos junto com os -reacoes desta macro."
     End If
     texto = texto & vbCrLf & vbCrLf & "Envie os arquivos -forcas e -reacoes na pagina Esforcos do modelo."
+    If elementosDaMalha > 0 Then texto = texto & vbCrLf & "Malha: " & elementosDaMalha & _
+        " elemento(s) em " & NomeDeArquivo(nomeDoEstudo & "-malha") & ".csv - envie junto: o programa " & _
+        "liga cada viga ao corpo pela posicao."
     If apoiosGravados > 0 Then texto = texto & vbCrLf & "Reacoes por apoio: " & apoiosGravados & _
         " caso(s) (-apoios.csv) e " & totalDeFixacoes & " fixacao(oes) (-fixacoes.csv)."
     texto = texto & vbCrLf & "Diagnostico: " & NomeDeArquivo(nomeDoEstudo & "-diagnostico-da-macro") & ".txt"
@@ -522,6 +541,8 @@ Sub main()
         "nenhuma (forcas pelos corpos da peca)") & vbCrLf & _
         "Fixacoes: " & totalDeFixacoes & "; apoios gravados em " & apoiosGravados & " caso(s); " & _
         "fator da malha " & fatorDaMalha & vbCrLf & _
+        "Malha: " & IIf(elementosDaMalha > 0, elementosDaMalha & " elemento(s) gravados", _
+        "nao gravada (" & falhaDaMalha & ")") & vbCrLf & _
         "Tempo: " & Segundos(Timer - inicio)
     If totalProblemas > 0 Then
         texto = texto & vbCrLf & vbCrLf & "ATENCAO: " & totalProblemas & " item(ns) ficaram de fora: " & problemas
@@ -1109,6 +1130,77 @@ Sub GravarNos(estudo As CosmosWorksLib.CWStudy, nos As Variant)
         Err.Clear
     Next k
 End Sub
+
+Function GravarMalha(estudo As CosmosWorksLib.CWStudy, caminho As String, nomeDoEstudo As String, _
+    quando As String, motivo As String) As Long
+    ' O centro de cada elemento da malha, como a malha devolve. GetElements: 16 valores por
+    ' elemento (numero, 10 nos, X, Y, Z do centro, razao de aspecto, jacobiano). Se nao responder,
+    ' elemento a elemento pelo GetElementLocation. Malha com o tipo do Simulation (pelo Object as
+    ' saidas ByRef nao voltaram no GetNodeLocation). Devolve quantos elementos gravou.
+    Dim malha As CosmosWorksLib.CWMesh, lista As Variant, b As Long, k As Long, n As Long
+    Dim quantos As Long, elemento As Long, x As Double, y As Double, z As Double, erroDaMalha As Long
+    Dim f As Integer
+    On Error Resume Next
+    GravarMalha = 0
+    motivo = ""
+    Set malha = Nothing
+    Set malha = estudo.Mesh
+    If malha Is Nothing Then
+        motivo = "o estudo nao tem malha: Executar o estudo antes"
+        Exit Function
+    End If
+    lista = Empty
+    lista = malha.GetElements()
+    Err.Clear
+    f = FreeFile
+    Open caminho For Output As #f
+    If Err.Number <> 0 Then
+        motivo = "nao deu para gravar " & caminho & " (" & Err.Description & ")"
+        Err.Clear
+        Exit Function
+    End If
+    Print #f, "sep=;"
+    Print #f, quando
+    Print #f, "Nome do estudo:" & nomeDoEstudo
+    Print #f, "Macro: Mecanica Toolkit - exportar_casos_de_carga " & VERSAO_DA_MACRO
+    Print #f, ""
+    Print #f, "Centros dos elementos da malha (como a malha devolve)"
+    Print #f, "Elemento;X;Y;Z"
+    n = 0
+    If TemItens(lista) Then
+        b = LBound(lista)
+        If (UBound(lista) - b + 1) Mod 16 = 0 Then
+            For k = 0 To (UBound(lista) - b + 1) \ 16 - 1
+                Print #f, Inteiro(lista(b + 16 * k)) & ";" & NumLivre(lista(b + 16 * k + 11)) & ";" & _
+                    NumLivre(lista(b + 16 * k + 12)) & ";" & NumLivre(lista(b + 16 * k + 13))
+                n = n + 1
+            Next k
+        Else
+            motivo = "GetElements com " & (UBound(lista) - b + 1) & " valores (nao multiplo de 16)"
+        End If
+    Else
+        motivo = "GetElements vazio"
+    End If
+    If n = 0 Then
+        quantos = 0
+        quantos = malha.ElementCount
+        Err.Clear
+        For elemento = 1 To quantos
+            x = 0: y = 0: z = 0
+            erroDaMalha = -1
+            erroDaMalha = malha.GetElementLocation(elemento, x, y, z)
+            If Err.Number = 0 And erroDaMalha = 0 Then
+                Print #f, elemento & ";" & NumLivre(x) & ";" & NumLivre(y) & ";" & NumLivre(z)
+                n = n + 1
+            End If
+            Err.Clear
+        Next elemento
+        If n = 0 Then motivo = motivo & "; GetElementLocation sem resposta em " & quantos & " elemento(s)"
+    End If
+    Close #f
+    GravarMalha = n
+    Err.Clear
+End Function
 
 Sub GravarPorFixacao(resultados As CosmosWorksLib.CWResults)
     ' A soma das reacoes nas entidades de cada fixacao (o primeiro bloco do segundo retorno).

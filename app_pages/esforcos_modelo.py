@@ -30,6 +30,7 @@ from core import gerenciador_solidworks as gs
 from core import leitura_do_modelo as ld
 from core import lista_de_material as lm
 from core import load_combinations as comb
+from core import malha_do_modelo as mm
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import reacoes_nas_bases as rb
@@ -175,6 +176,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
     apoios_lidos: list[am.ApoiosDoCaso] = []
     fixacoes_lidas: am.FixacoesDoEstudo | None = None
     sensores_lidos: sm.QuadroDeSensores | None = None
+    malha_nova: mm.MalhaDoEstudo | None = None
     # Os arquivos de uma remessa saem do mesmo computador: o formato dos números (vírgula ou
     # ponto decimal) que um prova vale para o que não prova o dele.
     formato = em.formato_do_lote(e.getvalue() for e in enviados or [])
@@ -192,6 +194,12 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
                         conteudo, enviado.name, virgula_decimal=formato
                     )
             except am.ArquivoDeApoiosInvalido as erro:
+                st.error(f"{enviado.name}: {erro}", icon=":material/error:")
+            continue
+        if mm.e_arquivo_da_malha(conteudo):
+            try:
+                malha_nova = mm.ler_malha(conteudo, enviado.name)
+            except mm.MalhaInvalida as erro:
                 st.error(f"{enviado.name}: {erro}", icon=":material/error:")
             continue
         tipo_da_macro = ld.tipo_do_arquivo(conteudo)
@@ -220,15 +228,70 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
             lidos.append(em.ler_arquivo(conteudo, enviado.name, virgula_decimal=formato))
         except em.ArquivoInvalido as erro:
             st.error(f"{enviado.name}: {erro}", icon=":material/error:")
+    # As forças desta remessa já entram nas conferências da malha e do esqueleto (antes de gravar).
+    dados_do_envio = dados
+    for a in lidos:
+        if a.tipo == em.TIPO_VIGAS:
+            try:
+                dados_do_envio = em.com_caso(
+                    dados_do_envio, em.caso_do_arquivo(a, f"envio:{a.nome_arquivo}")
+                )
+            except em.ArquivoInvalido:
+                pass
+    malha_gravada = mm.malha_do_projeto(projeto)
+    malha_para_ligar = mm.juntar(malha_gravada, malha_nova) if malha_nova else malha_gravada
+    if malha_nova is not None:
+        conferencia_da_malha = mm.conferir(malha_nova, dados_do_envio)
+        if not dados_do_envio.casos:
+            st.info(
+                f"{malha_nova.arquivo}: malha com {len(malha_nova.centros)} elemento(s). Envie "
+                "junto os CSV de forças das vigas: o projeto guarda só os elementos das vigas.",
+                icon=":material/grid_on:",
+            )
+        elif not conferencia_da_malha.serve:
+            st.error(
+                f"{malha_nova.arquivo}: nenhum elemento das vigas importadas está nesta malha — "
+                "ela é de outro estudo (ou a malha foi refeita depois de listar as forças). Rode "
+                "o estudo, liste as forças de novo e rode a macro dos casos de carga.",
+                icon=":material/error:",
+            )
+        else:
+            st.success(
+                f"{malha_nova.arquivo}: malha do estudo"
+                + (f" {malha_nova.estudo}" if malha_nova.estudo else "")
+                + f" — {conferencia_da_malha.vigas_com_posicao} das {conferencia_da_malha.vigas} "
+                "barras com posição: cada uma acha o corpo do esqueleto pela posição dos "
+                "elementos, sem depender do nome.",
+                icon=":material/grid_on:",
+            )
+            if not conferencia_da_malha.completa:
+                st.warning(
+                    f"{malha_nova.arquivo}: {conferencia_da_malha.elementos_achados} dos "
+                    f"{conferencia_da_malha.elementos} elementos das vigas estão na malha. A malha "
+                    "foi refeita depois de algum CSV de forças? Liste as forças de novo em todos "
+                    "os casos e rode a macro dos casos de carga.",
+                    icon=":material/warning:",
+                )
+    elif lidos and not malha_gravada.vazia:
+        st.caption(
+            f":material/grid_on: As barras continuam ligadas aos corpos pela malha gravada "
+            f"({malha_gravada.arquivo}). Se a malha do estudo foi refeita, envie o …-malha.csv novo "
+            "junto com estes arquivos."
+        )
     if geometria_nova is not None:
-        ligadas = len(ld.correspondencia(geometria_nova, dados.nomes_dos_membros, dados).corpos)
+        ligadas = len(
+            ld.correspondencia(
+                ld.com_malha(geometria_nova, malha_para_ligar),
+                dados_do_envio.nomes_dos_membros,
+                dados_do_envio,
+            ).corpos
+        )
         st.success(
             f"{geometria_nova.arquivo}: esqueleto com {_corpos_e_formas(geometria_nova)}"
             + (f" ({geometria_nova.origem})" if geometria_nova.origem else "")
             + (
-                f" — {ligadas} das {len(dados.nomes_dos_membros)} barras já importadas acharam "
-                "o corpo."
-                if dados.nomes_dos_membros
+                f" — {ligadas} das {len(dados_do_envio.nomes_dos_membros)} barras acharam o corpo."
+                if dados_do_envio.nomes_dos_membros
                 else "."
             ),
             icon=":material/account_tree:",
@@ -307,6 +370,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
     if (
         lidos
         or geometria_nova is not None
+        or malha_nova is not None
         or apoios_lidos
         or fixacoes_lidas is not None
         or sensores_lidos is not None
@@ -333,11 +397,21 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
                     novos = em.com_reacoes(novos, caso, a.reacoes, a.nome_arquivo)
             except em.ArquivoInvalido as erro:
                 problemas.append(f"{a.nome_arquivo}: {erro}")
+        malha_para_gravar = None
+        if malha_nova is not None:
+            malha_para_gravar = mm.so_das_vigas(mm.juntar(malha_gravada, malha_nova), novos)
+            if malha_para_gravar.vazia:
+                problemas.append(
+                    f"{malha_nova.arquivo}: nenhum elemento das vigas importadas está nesta malha "
+                    "— envie a malha junto com os CSV de forças do mesmo estudo."
+                )
         for problema in problemas:
             st.error(problema, icon=":material/error:")
         campos = campos_dos_esforcos(novos)
         if geometria_nova is not None:
             campos["geometria_do_modelo"] = ld.para_dicionario(geometria_nova)
+        if malha_para_gravar is not None and not malha_para_gravar.vazia:
+            campos[mm.CAMPO_DO_PROJETO] = mm.para_dicionario(malha_para_gravar)
         if apoios_lidos or fixacoes_lidas is not None:
             apoios_novos = tratado.apoios_para_gravar or tratado.apoios_brutos
             for apoios_do_caso in apoios_lidos:
@@ -352,7 +426,13 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         ):
             st.session_state["em_versao"] = versao + 1
             st.rerun()
-    elif not lidos and geometria_nova is None and eixo != dados.eixo_vertical and dados.casos:
+    elif (
+        not lidos
+        and geometria_nova is None
+        and malha_nova is None
+        and eixo != dados.eixo_vertical
+        and dados.casos
+    ):
         if gravar(replace(dados, eixo_vertical=eixo), "Eixo vertical do modelo"):
             st.rerun()
 
