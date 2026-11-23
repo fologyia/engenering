@@ -41,22 +41,44 @@ const ES_ICONES = {
   espelhar: '<path d="M12 3v18" stroke-dasharray="2.5 2"/><path d="M9 7 4 17h5zM15 7l5 10h-5z"/>',
   padrao_linear: '<circle cx="5" cy="12" r="2.4"/><circle cx="12" cy="12" r="2.4"/><circle cx="19" cy="12" r="2.4"/><path d="M5 18h14" stroke-dasharray="1.5 2"/>',
   padrao_circular: '<circle cx="12" cy="12" r="7" stroke-dasharray="1.5 2"/><circle cx="12" cy="5" r="2"/><circle cx="18" cy="15.5" r="2"/><circle cx="6" cy="15.5" r="2"/>',
+  rasgo: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z"/><path d="M8 12h8" stroke-dasharray="1.5 2"/><circle cx="8" cy="12" r="1.3"/><circle cx="16" cy="12" r="1.3"/>',
+  poligono: '<path d="M12 3.5 19.4 7.8v8.4L12 20.5 4.6 16.2V7.8z"/><circle cx="12" cy="12" r="1.3"/><path d="M12 12l7.4-4.2" stroke-dasharray="1.5 2"/>',
+  transformar: '<path d="M12 3v9M12 3 9.5 5.5M12 3l2.5 2.5M3 12h9M3 12l2.5-2.5M3 12l2.5 2.5"/><path d="M14.5 20.5a6.5 6.5 0 0 0 6-6"/><path d="m20.5 14.5-2.2 1.4M20.5 14.5l1.2 2.3"/>',
+  medir: '<path d="M3 16 16 3l5 5L8 21z"/><path d="M7.5 11.5l2 2M10.5 8.5l2 2M13.5 5.5l2 2"/>',
+  unir: '<path d="M4 4h10v6h6v10H10v-6H4z"/><path d="M10 10h4v4h-4z" stroke-dasharray="1.5 1.5"/>',
 }
 const esIcone = (nome) => `<svg class="icone" viewBox="0 0 24 24" aria-hidden="true">${ES_ICONES[nome] ?? ""}</svg>`
 const ES_GRUPOS = {
   ret: ["retangulo", "retangulo_centro"],
   arco: ["arco", "arco_tangente"],
+  forma: ["rasgo", "poligono"],
   aparar: ["aparar", "estender", "dividir"],
   canto: ["filete", "chanfro"],
+  deslocar: ["deslocar", "transformar"],
   padrao: ["padrao_linear", "padrao_circular"],
+  cota: ["cota", "medir"],
 }
 // As ferramentas que editam o que já está desenhado (e não desenham curva nova do zero).
-const ES_EDICAO = new Set(["aparar", "estender", "dividir", "filete", "chanfro", "deslocar", "espelhar", "padrao_linear", "padrao_circular"])
+const ES_EDICAO = new Set([
+  "aparar",
+  "estender",
+  "dividir",
+  "filete",
+  "chanfro",
+  "deslocar",
+  "transformar",
+  "espelhar",
+  "padrao_linear",
+  "padrao_circular",
+])
+// As que escolhem itens (como a cota) em vez de desenhar.
+const ES_ESCOLHA = new Set(["cota", "medir"])
 
 const ES_ESTADOS = new WeakMap()
 const ES_PERTO_PX = 7
 const ES_ENCAIXE_PX = 11
 const ES_INFERE_GRAUS = 3
+const ES_INFERE_PERTO_PX = 120 // paralela e perpendicular só com linha a até isso do traço
 const ES_ARRASTO_PX = 3
 const ES_DUPLO_MS = 450
 const ES_TEMPO_DO_AVISO_MS = 5000
@@ -86,6 +108,11 @@ const ES_DICAS = {
   espelhar: "Clique nas curvas que vão ser espelhadas e depois, com elas escolhidas, na linha do espelho (Shift junta curvas sem espelhar).",
   padrao_linear: "Clique nas curvas que se repetem e depois em Criar, na faixa de baixo.",
   padrao_circular: "Clique nas curvas que se repetem e depois no ponto do centro.",
+  rasgo: "Clique o centro de uma ponta, o centro da outra e depois a largura.",
+  poligono: "Clique o centro e depois um vértice. O número de lados fica na faixa de baixo.",
+  transformar:
+    "Clique nas curvas que vão andar (ou escolha antes), ponha quanto andam e giram na faixa de baixo e clique em Aplicar. Ctrl+C e Ctrl+V copiam e colam onde o mouse estiver.",
+  medir: "Clique uma curva, ou dois pontos ou curvas: a medida aparece sem virar cota.",
 }
 const ES_SINAIS = {
   horizontal: "H",
@@ -141,6 +168,12 @@ const ES_TITULOS = {
   chanfro: "Chanfro: clique no canto de duas linhas. A distância fica na faixa de baixo, e aceita letra.",
   padrao_linear: "Padrão em fila: escolha as curvas, ponha a quantidade e o passo (aceita letra) e clique em Criar.",
   padrao_circular: "Padrão em círculo: escolha as curvas e clique no ponto do centro.",
+  rasgo: "Rasgo (oblongo): o centro de uma ponta, o da outra e a largura. Sai com as tangentes e os raios iguais.",
+  poligono: "Polígono regular: o centro e um vértice. Os lados ficam na faixa de baixo.",
+  deslocar: "Deslocar, offset (O): escolha as curvas e clique do lado da cópia. A distância fica na faixa de baixo, e aceita letra (espessura t).",
+  transformar: "Mover e girar: escolha as curvas, ponha o deslocamento e o giro na faixa de baixo e clique em Aplicar (com ou sem cópia).",
+  cota: "Cota (D): uma curva, ou dois pontos ou curvas, e depois onde a cota fica. A medida aceita número, letra ou conta: 25, d, 2*d, L/2-10.",
+  medir: "Medir: clique uma curva, ou dois pontos ou curvas. Mostra a medida sem criar cota.",
 }
 
 function esCriar(raiz) {
@@ -182,8 +215,28 @@ function esCriar(raiz) {
     espaco: false,
     abrirNoSoltar: null, // a cota cuja caixinha abre quando o botão do mouse sobe
     ultimaCota: null,
+    ultimaCurva: null, // para o duplo clique que escolhe o contorno inteiro
+    cotaEditando: null, // a cota da caixinha aberta: Tab vai para a próxima
+    recorte: null, // o que Ctrl+C guardou
+    medida: null, // o que a ferramenta Medir achou: { base, texto }
+    conflito: null, // a mudança que não fechou: { tentativa, origens }
     // Os campos das ferramentas de edição: texto, para aceitar letra e conta.
-    opcoes: { raio: "5", chanfro: "5", distancia: "3", quantos: "4", passo: "20", direcao: "h", quantosCirc: "6", angulo: "360" },
+    opcoes: {
+      raio: "5",
+      chanfro: "5",
+      distancia: "3",
+      quantos: "4",
+      passo: "20",
+      direcao: "h",
+      quantosCirc: "6",
+      angulo: "360",
+      lados: "6",
+      dx: "0",
+      dy: "0",
+      giro: "90",
+      copiar: false,
+      centroGiro: "meio",
+    },
   }
 
   // ---- vista ------------------------------------------------------------------------------------
@@ -288,6 +341,7 @@ function esCriar(raiz) {
   }
   function desfazer() {
     if (!e.passado.length) return
+    e.conflito = null
     e.futuro.push(JSON.stringify(e.esboco))
     e.esboco = JSON.parse(e.passado.pop())
     depoisDeMudar()
@@ -299,6 +353,7 @@ function esCriar(raiz) {
     depoisDeMudar()
   }
   function depoisDeMudar() {
+    e.conflito = null
     e.sel = new Set([...e.sel].filter(existe))
     atualizarSistema()
     enviar()
@@ -327,11 +382,68 @@ function esCriar(raiz) {
       return erro.message
     }
     const r = esResolver(s, {}, { alvosIniciais: esAlvosAtuais(s, s.q0) })
-    if (!r.convergiu) return mensagemDeConflito(novo, esConflitos(s, r.q))
+    // Fechar encolhendo uma curva até sumir (deitada e em pé na mesma linha, por exemplo) não vale:
+    // é a conta achando a única saída degenerada. Vira conflito, com quem prende a curva.
+    const sumiram = r.convergiu ? curvasQueSumiram(novo, esComQ(s, r.q)) : []
+    if (sumiram.length) {
+      const tocam = (x) =>
+        (x.curvas ?? []).some((c) => sumiram.includes(c)) ||
+        (x.pontos ?? []).some((p) => novo.curvas.some((c) => sumiram.includes(c.id) && c.pontos.includes(p)))
+      const origens = [...novo.restricoes.filter(tocam), ...novo.cotas.filter((c) => !c.referencia && tocam(c))].map((x) => x.id)
+      e.conflito = origens.length ? { tentativa: esCopiar(novo), origens } : null
+      setTimeout(() => {
+        montarPainel()
+        desenhar()
+      }, 0)
+      const nomes = origens.slice(0, 3).map((id) => descrever(novo, id))
+      return `Assim uma curva some (fica com tamanho zero)${nomes.length ? `: ${nomes.join(", ")} brigam` : ""}. Apague uma restrição ou deixe uma cota só medindo.`
+    }
+    if (!r.convergiu) {
+      const conflitos = esConflitos(s, r.q)
+      // Quem briga fica marcado no desenho, com o jeito de sair: apagar a restrição ou deixar a cota
+      // só medindo. A mudança tentada fica guardada para ser refeita sem quem briga.
+      const origens = conflitos.filter((id) => novo.restricoes.some((x) => x.id === id) || novo.cotas.some((x) => x.id === id && !x.referencia))
+      e.conflito = origens.length ? { tentativa: esCopiar(novo), origens } : null
+      setTimeout(() => {
+        montarPainel()
+        desenhar()
+      }, 0)
+      return mensagemDeConflito(novo, conflitos)
+    }
+    e.conflito = null
     if (guardarAntes) guardar()
     e.esboco = esComQ(s, r.q)
     depoisDeMudar()
     return ""
+  }
+  // Refaz a mudança que não fechou, sem quem brigava: a cota vira referência ou a restrição sai.
+  function resolverConflito(id, como) {
+    const c = e.conflito
+    if (!c) return
+    const novo = esCopiar(c.tentativa)
+    if (como === "referencia") {
+      const cota = novo.cotas.find((x) => x.id === id)
+      if (cota) cota.referencia = true
+    } else novo.restricoes = novo.restricoes.filter((x) => x.id !== id)
+    editor.fechar()
+    const erro = tentar(novo)
+    avisar(erro, "ruim")
+  }
+  // As curvas de aço que tinham tamanho em `antes` e ficaram com tamanho zero em `depois`.
+  function curvasQueSumiram(antes, depois) {
+    const tam = esTamanho(antes)
+    const tamanhoDe = (esb, c) => {
+      if (c.tipo === "circulo") return c.raio
+      const [a, b] = (c.tipo === "linha" ? c.pontos : c.pontos.slice(0, 2)).map((p) => esb.pontos[p])
+      return a && b ? Math.hypot(b[0] - a[0], b[1] - a[1]) : 1
+    }
+    const porId = new Map(antes.curvas.map((c) => [c.id, c]))
+    return depois.curvas
+      .filter((c) => {
+        const velha = porId.get(c.id)
+        return velha && tamanhoDe(depois, c) < 1e-6 * tam && tamanhoDe(antes, velha) >= 1e-6 * tam
+      })
+      .map((c) => c.id)
   }
   function grausDe(esb) {
     try {
@@ -532,21 +644,94 @@ function esCriar(raiz) {
   }
 
   // ---- desenhar à mão ---------------------------------------------------------------------------
-  function inferirDirecao(de, enc) {
-    // A linha quase deitada ou quase em pé vira horizontal ou vertical, como no CAD.
-    if (enc.ponto) return { enc, restricao: null }
+  // A direção que a linha nova "quer" ter, como no CAD: deitada, em pé, tangente ao arco de onde
+  // sai, perpendicular à linha de onde sai, ou paralela ou perpendicular a outra linha do desenho.
+  // Devolve { dir: [dx, dy] unitário, restricao, com } (com = a curva de referência), ou null.
+  function direcaoInferida(de, x, y) {
     const [x0, y0] = P(de)
-    const dx = enc.x - x0
-    const dy = enc.y - y0
-    const ang = (Math.abs(Math.atan2(dy, dx)) * 180) / Math.PI
-    if (Math.hypot(dx, dy) * e.vista.esc < 10) return { enc, restricao: null }
-    if (ang < ES_INFERE_GRAUS || ang > 180 - ES_INFERE_GRAUS) {
-      return { enc: { ...enc, y: y0, curva: undefined, meio: undefined }, restricao: "horizontal" }
+    const dx = x - x0
+    const dy = y - y0
+    const l = Math.hypot(dx, dy)
+    if (l * e.vista.esc < 10) return null
+    const ang = Math.atan2(dy, dx)
+    const graus = (Math.abs(ang) * 180) / Math.PI
+    if (graus < ES_INFERE_GRAUS || graus > 180 - ES_INFERE_GRAUS) return { dir: [Math.sign(dx) || 1, 0], restricao: "horizontal" }
+    if (Math.abs(graus - 90) < ES_INFERE_GRAUS) return { dir: [0, Math.sign(dy) || 1], restricao: "vertical" }
+    const perto = (alvo) => {
+      // a diferença de ângulo entre a direção do mouse e a reta `alvo` (sem sentido), em graus
+      let d = Math.abs(((ang - alvo) % Math.PI) + Math.PI) % Math.PI
+      d = Math.min(d, Math.PI - d)
+      return (d * 180) / Math.PI
     }
-    if (Math.abs(ang - 90) < ES_INFERE_GRAUS) {
-      return { enc: { ...enc, x: x0, curva: undefined, meio: undefined }, restricao: "vertical" }
+    const naReta = (alvo) => {
+      const u = [Math.cos(alvo), Math.sin(alvo)]
+      const s = dx * u[0] + dy * u[1] >= 0 ? 1 : -1
+      return [s * u[0], s * u[1]]
     }
-    return { enc, restricao: null }
+    const candidatos = []
+    // Saindo da ponta de um arco: a tangente dele ali. Saindo da ponta de uma linha: a perpendicular.
+    for (const c of e.esboco.curvas) {
+      if (c.construcao || c.tipo === "circulo" || !esPontas(c).includes(de)) continue
+      if (c.tipo === "arco") {
+        const [cx, cy] = P(c.pontos[0])
+        const alvo = Math.atan2(y0 - cy, x0 - cx) + Math.PI / 2
+        candidatos.push({ alvo, restricao: "tangente", com: c.id, peso: 0 })
+      } else {
+        const [a, b] = c.pontos.map(P)
+        const alvo = Math.atan2(b[1] - a[1], b[0] - a[0]) + Math.PI / 2
+        candidatos.push({ alvo, restricao: "perpendicular", com: c.id, peso: 0 })
+      }
+    }
+    // As outras linhas: paralela ou perpendicular, só as de perto do traço (como num CAD, a linha
+    // do outro lado do desenho não prende nada). As mais perto ganham no empate.
+    const ateLinha = (a, b, p) => {
+      const ux = b[0] - a[0]
+      const uy = b[1] - a[1]
+      const t = Math.min(Math.max(((p[0] - a[0]) * ux + (p[1] - a[1]) * uy) / (ux * ux + uy * uy || 1), 0), 1)
+      return Math.hypot(a[0] + t * ux - p[0], a[1] + t * uy - p[1]) * e.vista.esc
+    }
+    for (const c of e.esboco.curvas) {
+      if (c.tipo !== "linha" || c.pontos.includes(de)) continue
+      const [a, b] = c.pontos.map(P)
+      const base = Math.atan2(b[1] - a[1], b[0] - a[0])
+      const horizontal = Math.abs(Math.sin(base)) < 1e-9 || Math.abs(Math.cos(base)) < 1e-9
+      if (horizontal) continue // deitada e em pé já foram vistas
+      const longe = Math.min(ateLinha(a, b, [x0, y0]), ateLinha(a, b, [x, y]))
+      if (longe > ES_INFERE_PERTO_PX) continue
+      candidatos.push({ alvo: base, restricao: "paralela", com: c.id, peso: longe })
+      candidatos.push({ alvo: base + Math.PI / 2, restricao: "perpendicular", com: c.id, peso: longe })
+    }
+    let melhor = null
+    for (const k of candidatos) {
+      const d = perto(k.alvo)
+      if (d >= ES_INFERE_GRAUS) continue
+      if (!melhor || d + k.peso * 0.01 < melhor.d + melhor.peso * 0.01) melhor = { ...k, d }
+    }
+    if (!melhor) return null
+    return { dir: naReta(melhor.alvo), restricao: melhor.restricao, com: melhor.com }
+  }
+  function inferirDirecao(de, enc) {
+    if (enc.ponto) return { enc, restricao: null }
+    const inferida = direcaoInferida(de, enc.x, enc.y)
+    if (!inferida) return { enc, restricao: null }
+    const [x0, y0] = P(de)
+    const L = (enc.x - x0) * inferida.dir[0] + (enc.y - y0) * inferida.dir[1]
+    const certo = { ...enc, x: x0 + L * inferida.dir[0], y: y0 + L * inferida.dir[1], curva: undefined, meio: undefined }
+    return { enc: certo, restricao: inferida.restricao, com: inferida.com ?? null }
+  }
+  // A restrição inferida na linha nova `cid` (que vai de `de` até a ponta).
+  function prenderInferida(novo, cid, restricao, com) {
+    if (!restricao) return
+    if (!com) return novaRestricao(novo, restricao, { curvas: [cid] })
+    if (restricao === "tangente") {
+      const arco = novo.curvas.find((c) => c.id === com)
+      const linha = novo.curvas.find((c) => c.id === cid)
+      const [cx, cy] = novo.pontos[arco.pontos[0]]
+      const [a, b] = linha.pontos.map((p) => novo.pontos[p])
+      const lado = esDistSinal(cx, cy, a[0], a[1], b[0], b[1]) >= 0 ? 1 : -1
+      return novaRestricao(novo, "tangente", { curvas: [cid, com], valores: [lado] })
+    }
+    return novaRestricao(novo, restricao, { curvas: [com, cid] })
   }
 
   function cliqueDeDesenho(u, v) {
@@ -574,11 +759,11 @@ function esCriar(raiz) {
       }
       const novo = esCopiar(e.esboco)
       const bruto = encaixar(u, v, new Set([d.de]))
-      const { enc, restricao } = inferirDirecao(d.de, bruto)
+      const { enc, restricao, com } = inferirDirecao(d.de, bruto)
       const ate = pontoDoEncaixe(novo, enc)
       if (ate === d.de) return
       const cid = novaCurva(novo, "linha", [d.de, ate])
-      if (restricao) novaRestricao(novo, restricao, { curvas: [cid] })
+      prenderInferida(novo, cid, restricao, com)
       const erro = tentar(novo)
       if (erro) return avisar(erro, "ruim")
       if (ate === d.primeiro || (enc.ponto && enc.ponto !== d.de && ehPonta(ate, cid))) {
@@ -601,6 +786,35 @@ function esCriar(raiz) {
       novaCurva(novo, "circulo", [c], { raio: r })
       e.desenho = null
       tentarOuAvisar(novo)
+      return
+    }
+    if (f === "rasgo") {
+      if (!d) {
+        e.desenho = { tipo: "rasgo", a: encaixar(u, v) }
+        return
+      }
+      if (!d.b) {
+        const b = encaixar(u, v)
+        if (Math.hypot(b.x - d.a.x, b.y - d.a.y) * e.vista.esc < 3) return
+        e.desenho = { ...d, b }
+        return
+      }
+      const r = larguraDoRasgo(d, doPx(u, v))
+      if (r * e.vista.esc < 2) return avisar("Afaste o mouse da linha dos centros para dar a largura.", "aviso")
+      e.desenho = null
+      aplicarEdicao(edRasgo(e.esboco, [d.a.x, d.a.y], [d.b.x, d.b.y], r))
+      return
+    }
+    if (f === "poligono") {
+      if (!d) {
+        e.desenho = { tipo: "poligono", centro: encaixar(u, v) }
+        return
+      }
+      const fim = encaixar(u, v)
+      if (Math.hypot(fim.x - d.centro.x, fim.y - d.centro.y) * e.vista.esc < 3) return
+      e.desenho = null
+      const lados = String(e.opcoes.lados).replace(",", ".")
+      aplicarEdicao(edPoligono(e.esboco, [d.centro.x, d.centro.y], [fim.x, fim.y], lados))
       return
     }
     if (f === "retangulo" || f === "retangulo_centro") {
@@ -726,6 +940,25 @@ function esCriar(raiz) {
     if (Math.abs(h) * e.vista.esc < 2) return null
     const r = (dx * dx + dy * dy) / (2 * h)
     return { cx: x0 - d.ty * r, cy: y0 + d.tx * r, r: Math.abs(r), esquerda: h > 0 }
+  }
+  // A meia largura do rasgo: a distância do mouse à linha dos dois centros.
+  function larguraDoRasgo(d, mouse) {
+    const l = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y)
+    if (!(l > 0)) return 0
+    return Math.abs(esDistSinal(mouse[0], mouse[1], d.a.x, d.a.y, d.b.x, d.b.y))
+  }
+  function contornoDoRasgo(a, b, r) {
+    const l = Math.hypot(b.x - a.x, b.y - a.y)
+    if (!(l > 0)) return ""
+    const n = [(-(b.y - a.y) / l) * r, ((b.x - a.x) / l) * r]
+    const [p1, p2, p3, p4] = [
+      [a.x + n[0], a.y + n[1]],
+      [b.x + n[0], b.y + n[1]],
+      [b.x - n[0], b.y - n[1]],
+      [a.x - n[0], a.y - n[1]],
+    ].map((p) => px(...p))
+    const R = r * e.vista.esc
+    return `M${p1.join(" ")}L${p2.join(" ")}A${R} ${R} 0 0 1 ${p3.join(" ")}L${p4.join(" ")}A${R} ${R} 0 0 1 ${p1.join(" ")}Z`
   }
   function montarRetangulo(esb, a, b, pelo_centro) {
     let canto1
@@ -951,6 +1184,7 @@ function esCriar(raiz) {
     const c = e.esboco.cotas.find((x) => x.id === id)
     const alvo = svg.querySelector(`[data-cota="${id}"] text`)
     if (!c || !alvo) return
+    e.cotaEditando = id
     editor.abrir(alvo, {
       valor: medida(c),
       unidade: c.tipo === "angulo" ? "°" : "mm",
@@ -1018,6 +1252,27 @@ function esCriar(raiz) {
     })
   }
 
+  // As curvas ligadas a `cid` pelas pontas (o contorno, ou a fila aberta), da mesma espécie:
+  // aço com aço, construção com construção.
+  function contornoDe(cid) {
+    const inicio = curva(cid)
+    if (!inicio) return []
+    const mesma = (c) => Boolean(c.construcao) === Boolean(inicio.construcao)
+    const pontas = (c) => (c.tipo === "circulo" ? [] : esPontas(c))
+    const vistas = new Set([cid])
+    const fila = [inicio]
+    while (fila.length) {
+      const atual = fila.pop()
+      for (const p of pontas(atual)) {
+        for (const c of e.esboco.curvas) {
+          if (vistas.has(c.id) || !mesma(c) || !pontas(c).includes(p)) continue
+          vistas.add(c.id)
+          fila.push(c)
+        }
+      }
+    }
+    return [...vistas]
+  }
   function escolhidos(lista = [...e.sel]) {
     const pontos = lista.filter((k) => k.startsWith("p:")).map((k) => k.slice(2))
     const curvas = lista.filter((k) => k.startsWith("c:")).map((k) => curva(k.slice(2))).filter(Boolean)
@@ -1360,7 +1615,7 @@ function esCriar(raiz) {
       if (curvaAqui) return alternarPick(`c:${curvaAqui}`)
       return avisar("Clique nas curvas e depois na linha do espelho.", "aviso")
     }
-    if (f === "padrao_linear") {
+    if (f === "padrao_linear" || f === "transformar") {
       if (curvaAqui) return alternarPick(`c:${curvaAqui}`)
       return
     }
@@ -1381,6 +1636,137 @@ function esCriar(raiz) {
     montarPainel()
     desenhar()
   }
+  const escolherCurvas = (ids) => {
+    e.sel = new Set(ids.map((id) => `c:${id}`))
+  }
+  // Mover e girar com números: o que estiver preso por cota volta ao lugar (o solver manda).
+  function aplicarTransformar() {
+    const ids = curvasEscolhidas()
+    if (!ids.length) return avisar("Escolha as curvas que vão andar.", "aviso")
+    const lidos = [
+      lerValorDigitado(e.opcoes.dx, 0, "mm"),
+      lerValorDigitado(e.opcoes.dy, 0, "mm"),
+      lerValorDigitado(e.opcoes.giro, 0, "°"),
+    ]
+    const ruim = lidos.find((l) => l.erro)
+    if (ruim) return avisar(ruim.erro, "ruim")
+    const [dx, dy, giro] = lidos.map((l) => l.valor)
+    const centro = e.opcoes.centroGiro === "origem" ? [0, 0] : edCentroDe(e.esboco, ids)
+    const antes = esCopiar(e.esboco.pontos)
+    const copiar = Boolean(e.opcoes.copiar)
+    aplicarEdicao(edTransformar(e.esboco, ids, dx, dy, giro, centro, copiar), (r) => {
+      escolherCurvas(r.novas)
+      e.picks = [...e.sel]
+      if (copiar) return
+      const andou = edPontosDe(e.esboco, ids).some((p) => {
+        const [x0, y0] = antes[p] ?? [NaN, NaN]
+        const [x1, y1] = e.esboco.pontos[p]
+        return Math.hypot(x1 - x0, y1 - y0) > 1e-6 * edTamanho(e.esboco)
+      })
+      if (!andou) avisar("Nada andou: as cotas e restrições seguram essas curvas no lugar. Use a cópia, ou solte uma cota.", "aviso")
+    })
+    montarPainel()
+    desenhar()
+  }
+  function copiarEscolha() {
+    const ids = escolhidos().curvas.map((c) => c.id)
+    if (!ids.length) return avisar("Escolha as curvas que vão ser copiadas.", "aviso")
+    e.recorte = edRecorte(e.esboco, ids)
+    avisar(`${ids.length} ${ids.length === 1 ? "curva copiada" : "curvas copiadas"}: Ctrl+V cola onde o mouse estiver.`, "aviso")
+  }
+  function colarRecorte() {
+    if (!e.recorte) return avisar("Nada copiado ainda: escolha curvas e use Ctrl+C.", "aviso")
+    const meio = edCentroDe(e.recorte, e.recorte.curvas.map((c) => c.id))
+    const para = e.mouse ?? [meio[0] + 0.1 * edTamanho(e.esboco), meio[1]]
+    const levar = ([x, y]) => [x + para[0] - meio[0], y + para[1] - meio[1]]
+    aplicarEdicao(edColar(e.esboco, e.recorte, levar), (r) => escolherCurvas(r.novas))
+    montarPainel()
+    desenhar()
+  }
+  function unirContornos() {
+    const ids = escolhidos().curvas.map((c) => c.id)
+    const cotasAntes = e.esboco.cotas.length
+    aplicarEdicao(edUnir(e.esboco, ids.length ? ids : null), (r) => {
+      escolherCurvas(r.novas)
+      const perdidas = cotasAntes - e.esboco.cotas.length
+      avisar(
+        perdidas > 0
+          ? `Contornos unidos. ${perdidas} ${perdidas === 1 ? "cota era" : "cotas eram"} de trechos que saíram: refaça no contorno novo.`
+          : "Contornos unidos num só.",
+        "aviso",
+      )
+    })
+  }
+
+  // ---- medir: a medida sem virar cota -----------------------------------------------------------
+  function medirPicks() {
+    const base = cotaDosPicks(e.picks)
+    e.medida = null
+    if (!base) return
+    let lugar = null
+    let a = null
+    let b = null
+    if (base.tipo === "distancia") [a, b] = (base.pontos?.length >= 2 ? base.pontos : curva(base.curvas[0]).pontos).map(P)
+    else if (base.tipo === "ponto_linha") {
+      const l = curva(base.curvas[0])
+      b = P(base.pontos[0])
+      const [la, lb] = l.pontos.map(P)
+      const dx = lb[0] - la[0]
+      const dy = lb[1] - la[1]
+      const t = ((b[0] - la[0]) * dx + (b[1] - la[1]) * dy) / (dx * dx + dy * dy || 1)
+      a = [la[0] + t * dx, la[1] + t * dy]
+    }
+    if (a && b) {
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
+      const o = 14 / e.vista.esc
+      lugar = [(a[0] + b[0]) / 2 - ((b[1] - a[1]) / l) * o, (a[1] + b[1]) / 2 + ((b[0] - a[0]) / l) * o]
+    }
+    const c = cotaCompleta(base, lugar ?? [0, 0])
+    if (!lugar) c.lugar = null
+    const valor = medida(c)
+    let rotulo = esNum(valor, 3)
+    let texto = ""
+    if (base.tipo === "distancia" && base.curvas?.length) {
+      const ang = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI
+      texto = `Comprimento ${esNum(valor, 3)} mm · ângulo com o eixo x ${esNum(((ang % 180) + 180) % 180, 2)}°`
+    } else if (base.tipo === "distancia") {
+      const d = Math.hypot(b[0] - a[0], b[1] - a[1])
+      rotulo = esNum(d, 3)
+      texto = `Distância ${esNum(d, 3)} mm · na horizontal ${esNum(Math.abs(b[0] - a[0]), 3)} · na vertical ${esNum(Math.abs(b[1] - a[1]), 3)}`
+    } else if (base.tipo === "ponto_linha") {
+      rotulo = esNum(Math.abs(valor), 3)
+      texto = `Distância à linha ${esNum(Math.abs(valor), 3)} mm`
+    } else if (base.tipo === "diametro") {
+      rotulo = `Ø${esNum(valor, 3)}`
+      texto = `Diâmetro ${esNum(valor, 3)} mm · raio ${esNum(valor / 2, 3)} · perímetro ${esNum(Math.PI * valor, 3)}`
+    } else if (base.tipo === "raio") {
+      const info = esArcoInfo(e.esboco, curva(base.curvas[0]))
+      rotulo = `R${esNum(valor, 3)}`
+      texto = `Raio ${esNum(valor, 3)} mm · arco de ${esNum((info.sw * 180) / Math.PI, 2)}° · comprimento ${esNum(info.r * info.sw, 3)}`
+    } else if (base.tipo === "angulo") {
+      rotulo = `${esNum(Math.abs(valor), 2)}°`
+      texto = `Ângulo ${esNum(Math.abs(valor), 2)}° (o outro lado: ${esNum(180 - Math.abs(valor), 2)}°)`
+    }
+    e.medida = { base, lugar, rotulo, texto }
+    avisar(`Medida: ${texto}`, "aviso")
+  }
+
+  // ---- conflito: quem briga, e o jeito de sair --------------------------------------------------
+  function conflitoNoPainel() {
+    const c = e.conflito
+    if (!c) return ""
+    const itens = c.origens.map((id) => {
+      const cota = c.tentativa.cotas.find((x) => x.id === id)
+      if (cota) {
+        const nome = `${nomeDaCota(cota)} ${cota.expressao.replace(/\./g, ",")}`
+        return `<button type="button" data-conflito="${esc(id)}" data-como="referencia" title="A cota passa a só medir (entre parênteses) e a mudança entra">${esc(nome)}: só medir</button>`
+      }
+      const r = c.tentativa.restricoes.find((x) => x.id === id)
+      const nome = ES_NOMES_DAS_RESTRICOES[r?.tipo] ?? r?.tipo ?? id
+      return `<button type="button" data-conflito="${esc(id)}" data-como="apagar" title="A restrição sai e a mudança entra">Apagar “${esc(nome)}”</button>`
+    })
+    return `<span class="es-conflito"><b>Brigam (em vermelho):</b> ${itens.join("")}<button type="button" data-conflito-fechar title="Deixa como estava">Deixar como estava</button></span>`
+  }
   // Os campos da ferramenta, na faixa de baixo.
   function montarOpcoes() {
     const f = e.ferramenta
@@ -1395,6 +1781,12 @@ function esCriar(raiz) {
       padrao_circular: [
         ["quantosCirc", "Quantidade", "Quantas no total, contando a original"],
         ["angulo", "Ângulo total (°)", "360 espalha numa volta inteira"],
+      ],
+      poligono: [["lados", "Lados", "De 3 a 24"]],
+      transformar: [
+        ["dx", "Anda em x", "Quanto anda na horizontal, em mm (negativo vai para a esquerda)"],
+        ["dy", "Anda em y", "Quanto anda na vertical, em mm (negativo desce)"],
+        ["giro", "Gira (°)", "Graus no sentido anti-horário (negativo, horário)"],
       ],
     }[f]
     if (!campos) {
@@ -1413,8 +1805,13 @@ function esCriar(raiz) {
       html += `<label>Direção <select data-opcao="direcao"><option value="h"${e.opcoes.direcao === "h" ? " selected" : ""}>Deitada (x)</option><option value="v"${e.opcoes.direcao === "v" ? " selected" : ""}>Em pé (y)</option></select></label>`
       html += `<button type="button" data-criar-padrao>Criar</button>`
     }
+    if (f === "transformar") {
+      html += `<label title="Gira em volta do meio das curvas escolhidas, ou da origem">Em volta de <select data-opcao="centroGiro"><option value="meio"${e.opcoes.centroGiro === "meio" ? " selected" : ""}>meio da escolha</option><option value="origem"${e.opcoes.centroGiro === "origem" ? " selected" : ""}>origem</option></select></label>`
+      html += `<label title="O original fica, e a cópia vai"><input type="checkbox" data-copiar${e.opcoes.copiar ? " checked" : ""}> Cópia</label>`
+      html += `<button type="button" data-aplicar-transformar>Aplicar</button>`
+    }
     const n = curvasEscolhidas().length
-    if (["deslocar", "espelhar", "padrao_linear", "padrao_circular"].includes(f)) {
+    if (["deslocar", "transformar", "espelhar", "padrao_linear", "padrao_circular"].includes(f)) {
       html += `<span class="es-ajuda">${n ? `${n} ${n === 1 ? "curva escolhida" : "curvas escolhidas"}` : "nenhuma curva escolhida"}</span>`
     }
     caixaOpcoes.innerHTML = html
@@ -1428,6 +1825,10 @@ function esCriar(raiz) {
       })
     })
     caixaOpcoes.querySelector("[data-criar-padrao]")?.addEventListener("click", criarPadraoLinear)
+    caixaOpcoes.querySelector("[data-aplicar-transformar]")?.addEventListener("click", aplicarTransformar)
+    caixaOpcoes.querySelector("[data-copiar]")?.addEventListener("change", (ev) => {
+      e.opcoes.copiar = ev.target.checked
+    })
   }
 
   // ---- painel -----------------------------------------------------------------------------------
@@ -1444,8 +1845,22 @@ function esCriar(raiz) {
       )
     }
     if (e.mensagem?.texto) partes.push(`<span class="es-msg ${e.mensagem.tipo}">${esc(e.mensagem.texto)}</span>`)
+    partes.push(conflitoNoPainel())
     for (const p of e.problemas ?? []) partes.push(`<span class="es-msg ruim">${esc(p.mensagem)}</span>`)
     caixaSituacao.innerHTML = partes.join("")
+    caixaSituacao.querySelectorAll("[data-conflito]").forEach((b) =>
+      b.addEventListener("click", () => {
+        resolverConflito(b.dataset.conflito, b.dataset.como)
+        svg.focus({ preventScroll: true })
+      }),
+    )
+    caixaSituacao.querySelector("[data-conflito-fechar]")?.addEventListener("click", () => {
+      e.conflito = null
+      avisar("")
+      montarPainel()
+      desenhar()
+      svg.focus({ preventScroll: true })
+    })
     montarLetras()
     // O que está escolhido, e com o que dá para prender.
     const sel = escolhidos()
@@ -1538,7 +1953,8 @@ function esCriar(raiz) {
     const [ax, ay] = px(...P(c.pontos[1]))
     const [bx, by] = px(...P(c.pontos[2]))
     const r = info.r * e.vista.esc
-    return `<path class="${classe}" d="M${ax} ${ay}A${r} ${r} 0 ${info.sw > Math.PI ? 1 : 0} 1 ${bx} ${by}"/>`
+    // Anti-horário no mundo é anti-horário na tela, que no SVG (y para baixo) é varre = 0.
+    return `<path class="${classe}" d="M${ax} ${ay}A${r} ${r} 0 ${info.sw > Math.PI ? 1 : 0} 0 ${bx} ${by}"/>`
   }
   function seta(x, y, ang) {
     const a = 8
@@ -1633,11 +2049,14 @@ function esCriar(raiz) {
       if (lugar) texto = px(...L)
     }
     const classes = ["cota"]
-    if (c.referencia) classes.push("referencia")
+    if (c.medida) classes.push("medida")
+    else if (c.referencia) classes.push("referencia")
     else if (!ehNumero(c.expressao)) classes.push("letra")
     if (e.sel.has(`d:${c.id}`)) classes.push("sel")
+    if (e.conflito?.origens.includes(c.id)) classes.push("conflito")
     const ancora = c.tipo === "diametro" || c.tipo === "raio" ? "start" : "middle"
-    return `<g class="${classes.join(" ")}" data-cota="${c.id}">${corpo}<text x="${texto[0]}" y="${texto[1]}" text-anchor="${ancora}">${esc(rotuloDaCota(c))}</text></g>`
+    const rotulo = c.medida ? e.medida.rotulo : rotuloDaCota(c)
+    return `<g class="${classes.join(" ")}" data-cota="${c.id}">${corpo}<text x="${texto[0]}" y="${texto[1]}" text-anchor="${ancora}">${esc(rotulo)}</text></g>`
   }
   function sinaisDasRestricoes() {
     const contagem = new Map()
@@ -1671,7 +2090,7 @@ function esCriar(raiz) {
           if (p) lugares.push(lugar(`p:${pid}`, px(...p), [0.75, -0.75]))
         }
       }
-      const sel = e.sel.has(`r:${r.id}`) ? " sel" : ""
+      const sel = (e.sel.has(`r:${r.id}`) ? " sel" : "") + (e.conflito?.origens.includes(r.id) ? " conflito" : "")
       for (const [x, y] of lugares) {
         saida.push(
           `<g class="sinal${sel}" data-sinal="${r.id}"><title>${ES_NOMES_DAS_RESTRICOES[r.tipo] ?? r.tipo}</title><rect x="${x - 6.5}" y="${y - 6.5}" width="13" height="13" rx="3"/><text x="${x}" y="${y + 3.5}" text-anchor="middle">${sinal}</text></g>`,
@@ -1701,12 +2120,41 @@ function esCriar(raiz) {
     if (!d) return partes.join("")
     const alvo = enc ?? { x: m[0], y: m[1] }
     if (d.tipo === "linha") {
-      const { enc: certo } = inferirDirecao(d.de, alvo)
+      const { enc: certo, restricao, com } = inferirDirecao(d.de, alvo)
       const [a, b] = px(...P(d.de))
       const [u, v] = px(certo.x, certo.y)
       partes.push(`<line class="previa" x1="${a}" y1="${b}" x2="${u}" y2="${v}"/>`)
       const l = Math.hypot(certo.x - P(d.de)[0], certo.y - P(d.de)[1])
       partes.push(`<text x="${u + 10}" y="${v - 10}" font-size="11" fill="currentColor">${esNum(l, 2)}</text>`)
+      // A inferência aparece: a curva de referência acesa e o sinal ao lado do mouse.
+      if (restricao) {
+        const referencia = com ? curva(com) : null
+        if (referencia) partes.push(svgDaCurva(referencia, "inferida"))
+        partes.push(
+          `<g class="sinal inferido"><rect x="${u + 8}" y="${v + 4}" width="15" height="15" rx="3"/><text x="${u + 15.5}" y="${v + 15}" text-anchor="middle">${ES_SINAIS[restricao]}</text></g>`,
+        )
+      }
+    } else if (d.tipo === "rasgo") {
+      const [a, b] = px(d.a.x, d.a.y)
+      if (!d.b) {
+        const [u, v] = px(alvo.x, alvo.y)
+        partes.push(`<line class="previa" x1="${a}" y1="${b}" x2="${u}" y2="${v}"/>`)
+      } else {
+        const r = larguraDoRasgo(d, m)
+        const contorno = r > 0 ? contornoDoRasgo(d.a, d.b, r) : ""
+        if (contorno) partes.push(`<path class="previa" d="${contorno}"/>`)
+        partes.push(`<text x="${px(...m)[0] + 10}" y="${px(...m)[1] - 10}" font-size="11" fill="currentColor">largura ${esNum(2 * r, 2)}</text>`)
+      }
+    } else if (d.tipo === "poligono") {
+      const n = Math.round(Number(String(e.opcoes.lados).replace(",", ".")))
+      if (n >= 3 && n <= 24) {
+        const r = Math.hypot(alvo.x - d.centro.x, alvo.y - d.centro.y)
+        const a0 = Math.atan2(alvo.y - d.centro.y, alvo.x - d.centro.x)
+        const vertices = Array.from({ length: n }, (_, k) =>
+          px(d.centro.x + r * Math.cos(a0 + (2 * Math.PI * k) / n), d.centro.y + r * Math.sin(a0 + (2 * Math.PI * k) / n)),
+        )
+        partes.push(`<path class="previa" d="M${vertices.map((p) => p.join(" ")).join("L")}Z"/>`)
+      }
     } else if (d.tipo === "circulo") {
       const [cx, cy] = px(d.centro.x, d.centro.y)
       const r = Math.hypot(m[0] - d.centro.x, m[1] - d.centro.y)
@@ -1738,7 +2186,7 @@ function esCriar(raiz) {
           const [u0, v0] = px(ini.x, ini.y)
           const [u1, v1] = px(fim.x, fim.y)
           const r = circ.r * e.vista.esc
-          partes.push(`<path class="previa" d="M${u0} ${v0}A${r} ${r} 0 ${sw > Math.PI ? 1 : 0} 1 ${u1} ${v1}"/>`)
+          partes.push(`<path class="previa" d="M${u0} ${v0}A${r} ${r} 0 ${sw > Math.PI ? 1 : 0} 0 ${u1} ${v1}"/>`)
         }
       }
     } else if (d.tipo === "arco_tangente") {
@@ -1818,6 +2266,11 @@ function esCriar(raiz) {
         `<rect class="janela${cruza}" x="${Math.min(u0, u1)}" y="${Math.min(v0, v1)}" width="${Math.abs(u1 - u0)}" height="${Math.abs(v1 - v0)}"/>`,
       )
     }
+    if (e.gesto?.tipo === "arrastar" && e.gesto.alvo) {
+      const [u, v] = px(e.gesto.alvo.x, e.gesto.alvo.y)
+      const titulo = e.gesto.alvo.ponto ? "Solte para juntar os pontos" : "Solte para prender o ponto na curva"
+      partes.push(`<g class="juntar"><title>${titulo}</title><circle cx="${u}" cy="${v}" r="9"/><circle cx="${u}" cy="${v}" r="3.5"/></g>`)
+    }
     if (e.ferramenta === "cota" && e.picks.length && e.mouse) {
       const base = cotaDosPicks(e.picks)
       if (base) {
@@ -1828,9 +2281,44 @@ function esCriar(raiz) {
         }
       }
     }
+    if (e.ferramenta === "medir" && e.medida) {
+      try {
+        partes.push(svgDaCota({ id: "_", expressao: "0", medida: true, ...cotaCompleta(e.medida.base, e.medida.lugar) }))
+      } catch {
+        // o que foi medido sumiu
+      }
+    }
     partes.push(previa())
     svg.innerHTML = partes.join("")
+    arrumarCotas()
     if (e.mouse) infoXY.textContent = `x ${esNum(e.mouse[0], 2)}   y ${esNum(e.mouse[1], 2)} mm`
+  }
+  // Os textos das cotas não se cobrem: o que bate em outro desce (ou sobe) até ficar livre. Só na
+  // tela: o lugar guardado da cota não muda.
+  function arrumarCotas() {
+    const textos = [...svg.querySelectorAll("[data-cota] text")]
+    if (textos.length < 2) return
+    const caixas = []
+    const bate = (a, b) => a.x < b.x + b.w + 2 && b.x < a.x + a.w + 2 && a.y < b.y + b.h + 1 && b.y < a.y + a.h + 1
+    for (const t of textos) {
+      let b
+      try {
+        b = t.getBBox()
+      } catch {
+        return // fora da tela (aba escondida): fica como está
+      }
+      if (!(b.width > 0)) continue
+      const y0 = Number(t.getAttribute("y"))
+      const base = { x: b.x, y: b.y, w: b.width, h: b.height }
+      let caixa = base
+      // desce uma linha, sobe uma, desce duas, sobe duas...
+      for (let k = 1; k <= 12 && caixas.some((o) => bate(caixa, o)); k += 1) {
+        const passo = (k % 2 === 1 ? 1 : -1) * Math.ceil(k / 2) * (base.h + 2)
+        caixa = { ...base, y: base.y + passo }
+        t.setAttribute("y", String(y0 + passo))
+      }
+      caixas.push(caixa)
+    }
   }
 
   // ---- ferramentas ------------------------------------------------------------------------------
@@ -1844,6 +2332,7 @@ function esCriar(raiz) {
     e.desenho = null
     e.picks = []
     e.encaixe = null
+    e.medida = null
     infoDica.textContent = nome.startsWith("r:") ? `Escolha ${ES_PEDE[nome.slice(2)]}. Esc cancela.` : ES_DICAS[nome] ?? ""
     for (const [grupo, variantes] of Object.entries(ES_GRUPOS)) {
       if (!variantes.includes(nome)) continue
@@ -1914,23 +2403,14 @@ function esCriar(raiz) {
     const l = Math.hypot(dx, dy) || 1
     dx /= l
     dy /= l
-    let restricao = null
-    const ang = (Math.abs(Math.atan2(dy, dx)) * 180) / Math.PI
-    if (ang < ES_INFERE_GRAUS || ang > 180 - ES_INFERE_GRAUS) {
-      dy = 0
-      dx = Math.sign(dx) || 1
-      restricao = "horizontal"
-    } else if (Math.abs(ang - 90) < ES_INFERE_GRAUS) {
-      dx = 0
-      dy = Math.sign(dy) || 1
-      restricao = "vertical"
-    }
+    const inferida = direcaoInferida(d.de, mouse[0], mouse[1])
+    if (inferida) [dx, dy] = inferida.dir
     const novo = esCopiar(e.esboco)
     comLetrasNovas(novo, lido, lido.valor)
     const pid = idPonto(novo)
     novo.pontos[pid] = [x0 + dx * lido.valor, y0 + dy * lido.valor]
     const cid = novaCurva(novo, "linha", [d.de, pid])
-    if (restricao) novaRestricao(novo, restricao, { curvas: [cid] })
+    prenderInferida(novo, cid, inferida?.restricao, inferida?.com)
     novo.cotas.push({ id: idCota(novo), tipo: "distancia", curvas: [cid], pontos: [d.de, pid], modo: "d", sinal: 1, expressao: lido.expressao, lugar: null })
     const erro = tentar(novo)
     if (!erro) e.desenho = { ...d, de: pid }
@@ -1967,6 +2447,54 @@ function esCriar(raiz) {
     const pontos = pontosDe(chave).map((p) => px(...p))
     const dentro = (p) => p[0] >= r[0] && p[0] <= r[2] && p[1] >= r[1] && p[1] <= r[3]
     return cruzando ? pontos.some(dentro) : pontos.length > 0 && pontos.every(dentro)
+  }
+  // Onde o ponto `pid` arrastado cairia: outro ponto (que não seja vizinho dele numa curva, senão a
+  // curva sumiria) ou uma curva que não é dele. { ponto, x, y } ou { curva, x, y }, ou null.
+  function alvoDoSoltar(u, v, pid) {
+    const donas = e.esboco.curvas.filter((c) => c.pontos.includes(pid))
+    const vizinhos = new Set(donas.flatMap((c) => c.pontos))
+    let melhor = null
+    let dist = ES_ENCAIXE_PX
+    for (const [q, [x, y]] of Object.entries(e.esboco.pontos)) {
+      if (q === pid || vizinhos.has(q)) continue
+      const [a, b] = px(x, y)
+      const d = Math.hypot(a - u, b - v)
+      if (d < dist) {
+        dist = d
+        melhor = { ponto: q, x, y }
+      }
+    }
+    if (melhor) return melhor
+    dist = ES_PERTO_PX
+    const ja = (cid) => e.esboco.restricoes.some((r) => r.tipo === "na_curva" && r.pontos?.[0] === pid && r.curvas?.[0] === cid)
+    for (const c of e.esboco.curvas) {
+      if (donas.includes(c) || ja(c.id)) continue
+      const d = distCurvaPx(c, u, v)
+      if (d < dist) {
+        dist = d
+        const [x, y] = projetar(c, ...doPx(u, v))
+        melhor = { curva: c.id, x, y }
+      }
+    }
+    return melhor
+  }
+  // Junta o ponto solto no alvo. Devolve falso se não fechou (o arrasto fica como estava).
+  function juntarAoSoltar(pid, alvo) {
+    const novo = esCopiar(e.esboco)
+    if (alvo.ponto) {
+      novo.pontos[pid] = [...novo.pontos[alvo.ponto]]
+      juntarPontos(novo, alvo.ponto, pid)
+    } else {
+      novo.pontos[pid] = [alvo.x, alvo.y]
+      novaRestricao(novo, "na_curva", { pontos: [pid], curvas: [alvo.curva] })
+    }
+    const erro = tentar(novo, { guardarAntes: false })
+    if (erro) {
+      avisar(`Não deu para juntar: ${erro}`, "ruim")
+      return false
+    }
+    avisar(alvo.ponto ? "Os dois pontos viraram um só." : "O ponto ficou preso na curva.", "aviso")
+    return true
   }
   function colunasDoArrasto(chave, inicio) {
     const id = chave.slice(2)
@@ -2050,6 +2578,20 @@ function esCriar(raiz) {
         return
       }
       const chave = oQueTemAqui(u, v)
+      // Duplo clique numa curva: escolhe o contorno inteiro (as curvas ligadas pelas pontas).
+      if (chave?.startsWith("c:")) {
+        const agora = performance.now()
+        if (e.ultimaCurva?.chave === chave && agora - e.ultimaCurva.t < ES_DUPLO_MS) {
+          e.ultimaCurva = null
+          const ligadas = contornoDe(chave.slice(2)).map((id) => `c:${id}`)
+          if (ev.shiftKey || ev.ctrlKey) for (const k of ligadas) e.sel.add(k)
+          else e.sel = new Set(ligadas)
+          montarPainel()
+          desenhar()
+          return
+        }
+        e.ultimaCurva = { chave, t: agora }
+      }
       if (chave) {
         if (ev.shiftKey || ev.ctrlKey) e.sel.has(chave) ? e.sel.delete(chave) : e.sel.add(chave)
         else if (!e.sel.has(chave)) e.sel = new Set([chave])
@@ -2071,6 +2613,22 @@ function esCriar(raiz) {
       if (!ev.shiftKey) e.sel.clear()
       e.gesto = { tipo: "janela", inicio: [u, v], atual: [u, v], ativo: false }
       capturar(ev)
+      montarPainel()
+      desenhar()
+      return
+    }
+    if (e.ferramenta === "medir") {
+      const chave = oQueTemAqui(u, v)
+      if (!chave) {
+        e.picks = []
+        e.medida = null
+        avisar("")
+      } else {
+        // Terceiro clique (ou um par que não se mede) começa de novo.
+        if (e.picks.length >= 2 || (e.picks.length === 1 && e.picks[0] !== chave && !cotaDosPicks([...e.picks, chave]))) e.picks = []
+        if (!e.picks.includes(chave)) e.picks.push(chave)
+        medirPicks()
+      }
       montarPainel()
       desenhar()
       return
@@ -2145,10 +2703,12 @@ function esCriar(raiz) {
       })
       gesto.q = esArrastar(e.sistema, gesto.q, alvos)
       e.esboco = esComQ(e.sistema, gesto.q)
+      // Ponto arrastado até outro ponto ou curva: ao soltar, junta (ou fica preso na curva).
+      gesto.alvo = gesto.chave.startsWith("p:") ? alvoDoSoltar(u, v, gesto.chave.slice(2)) : null
       desenhar()
       return
     }
-    if (e.ferramenta === "selecionar" || e.ferramenta === "cota" || e.ferramenta.startsWith("r:") || ES_EDICAO.has(e.ferramenta)) {
+    if (e.ferramenta === "selecionar" || ES_ESCOLHA.has(e.ferramenta) || e.ferramenta.startsWith("r:") || ES_EDICAO.has(e.ferramenta)) {
       const antes = e.perto
       e.perto = oQueTemAqui(u, v)
       e.encaixe = null
@@ -2194,6 +2754,7 @@ function esCriar(raiz) {
     }
     if (gesto.tipo === "arrastar" && gesto.moveu) {
       guardar(gesto.foto)
+      if (gesto.alvo && juntarAoSoltar(gesto.chave.slice(2), gesto.alvo)) return
       depoisDeMudar()
     }
   })
@@ -2236,10 +2797,14 @@ function esCriar(raiz) {
     }
     if (ctrl && tecla === "z" && !ev.shiftKey) desfazer()
     else if (ctrl && (tecla === "y" || (tecla === "z" && ev.shiftKey))) refazer()
+    else if (ctrl && tecla === "c") copiarEscolha()
+    else if (ctrl && tecla === "v") colarRecorte()
     else if (ev.key === "Escape") {
-      if (e.desenho || e.picks.length) {
+      if (e.conflito) e.conflito = null
+      else if (e.desenho || e.picks.length) {
         e.desenho = null
         e.picks = []
+        e.medida = null
       } else if (e.ferramenta !== "selecionar") trocarFerramenta("selecionar")
       else e.sel.clear()
       avisar("")
@@ -2257,7 +2822,11 @@ function esCriar(raiz) {
       if (tecla === "r") trocarFerramenta(ev.shiftKey ? "retangulo_centro" : "retangulo")
       else if (ferramentas[tecla]) trocarFerramenta(ferramentas[tecla])
       else if (restricoes[tecla]) botaoDeRestricao(restricoes[tecla])
-      else if (tecla === "q") alternarConstrucao()
+      else if (tecla === "u") {
+        unirContornos()
+        montarPainel()
+        desenhar()
+      } else if (tecla === "q") alternarConstrucao()
       else if (tecla === "f") enquadrar()
       else return
     } else return
@@ -2268,7 +2837,28 @@ function esCriar(raiz) {
   })
 
   // ---- botões -----------------------------------------------------------------------------------
-  const editor = criarEditorVivo(area, { depoisDoTeclado: () => svg.focus({ preventScroll: true }) })
+  // Tab confirma a medida e passa para a próxima cota (Shift+Tab, para a anterior), como num CAD.
+  function cotaVizinha(id, paraTras) {
+    const lista = e.esboco.cotas.filter((c) => !c.oculta).map((c) => c.id)
+    if (!lista.length) return null
+    const i = lista.indexOf(id)
+    const n = lista.length
+    return lista[(((i < 0 ? 0 : i + (paraTras ? -1 : 1)) % n) + n) % n]
+  }
+  function tabNaCota(paraTras) {
+    const id = e.cotaEditando
+    if (!id) return
+    if (!editor.confirmar()) return // a medida não serve: a caixinha fica, com o motivo
+    const seguinte = cotaVizinha(id, paraTras)
+    if (seguinte) setTimeout(() => editarCota(seguinte), 0)
+  }
+  const editor = criarEditorVivo(area, {
+    depoisDoTeclado: () => svg.focus({ preventScroll: true }),
+    aoTab: (paraTras) => tabNaCota(paraTras),
+    aoFechar: () => {
+      e.cotaEditando = null
+    },
+  })
   // Os ícones entram nos botões; o título vira o nome lido por leitor de tela.
   raiz.querySelectorAll("[data-icone]").forEach((b) => {
     const rotulo = b.textContent.trim()
@@ -2289,11 +2879,19 @@ function esCriar(raiz) {
   caixa.addEventListener("pointerdown", (ev) => {
     if (!ev.target.closest?.(".es-grupo")) fecharMenus()
   })
-  raiz.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => trocarFerramenta(b.dataset.f)))
+  // Depois de um botão, as teclas voltam para o desenho (L, R, D... seguem funcionando).
+  const focarDesenho = () => svg.focus({ preventScroll: true })
+  raiz.querySelectorAll("[data-f]").forEach((b) =>
+    b.addEventListener("click", () => {
+      trocarFerramenta(b.dataset.f)
+      focarDesenho()
+    }),
+  )
   raiz.querySelectorAll("[data-r]").forEach((b) =>
     b.addEventListener("click", () => {
       fecharMenus()
       botaoDeRestricao(b.dataset.r)
+      focarDesenho()
     }),
   )
   const acoes = {
@@ -2301,6 +2899,10 @@ function esCriar(raiz) {
     refazer,
     enquadrar,
     construcao: alternarConstrucao,
+    unir: () => {
+      fecharMenus()
+      unirContornos()
+    },
     tela: () => {
       if (document.fullscreenElement) document.exitFullscreen?.()
       else caixa.requestFullscreen?.()
@@ -2311,6 +2913,7 @@ function esCriar(raiz) {
       acoes[b.dataset.a]()
       montarPainel()
       desenhar()
+      if (b.dataset.a !== "tela") focarDesenho()
     }),
   )
   chaveSinais.addEventListener("change", () => desenhar())

@@ -877,6 +877,21 @@ class Sistema:
         if c1.tipo == LINHA:
             linha = self._linha(c1.id)
             cols, raio, _ = self._circular(c2.id)
+            comum = [
+                i for i, p in enumerate(c1.pontos[:2]) if c2.tipo == ARCO and p in c2.pontos[1:]
+            ]
+            if comum:
+                # Ponta comum: o raio até ela fica de pé sobre a reta. "Distância ao centro = raio"
+                # dá a mesma tangente, mas tem derivada zero ao longo da reta e deixaria a ponta
+                # solta para a contagem de graus de liberdade.
+                k = 2 * comum[0]
+
+                def em_pe(v: np.ndarray, a: np.ndarray, k=k) -> np.ndarray:
+                    dx, dy = v[:, 2] - v[:, 0], v[:, 3] - v[:, 1]
+                    return ((v[:, k] - v[:, 4]) * dx + (v[:, k + 1] - v[:, 5]) * dy) / _hyp(dx, dy)
+
+                self._juntar(r.id, (*linha, *cols), em_pe)
+                return
             lado = r.valores[0] if r.valores else self._lado_da_tangente(linha, cols, raio)
 
             def f(v: np.ndarray, a: np.ndarray, raio=raio, lado=lado) -> np.ndarray:

@@ -218,8 +218,8 @@ mesmo método está em Python e em JS, equação por equação; os testes confer
 números. Em Python ele resolve centenas de desenhos de uma vez.
 
 **Regiões.** Linhas e arcos que dividem pontas formam contornos; o círculo é um contorno sozinho;
-contorno dentro de contorno é furo. Contornos não podem se cruzar nem encostar (por ora; aparar e
-juntar contornos vêm depois). Área, centro e inércias saem do contorno pelo teorema de Green, com os
+contorno dentro de contorno é furo. Contornos não podem se cruzar nem encostar: apare os dois lados ou
+use Unir (U). Área, centro e inércias saem do contorno pelo teorema de Green, com os
 arcos exatos; J, Cw e o resto continuam na malha da prancheta antiga.
 
 **Testar o desenho.** Para cada letra, até onde ela pode ir sem a forma deixar de existir (furo
@@ -255,3 +255,42 @@ Embaixo do esboço, em quatro abas:
   `altura` (por exemplo `parede >= 1,5*d`). O desenho que fura uma regra deixa de existir no teste e no
   Montador, com o motivo.
 - **Configurações:** a tabela de projeto, com uma linha por conjunto de valores e a conta de cada uma.
+
+## Núcleo do desenho, mais perto de um CAD
+
+- **Arrastar e juntar.** Ponto arrastado até outro ponto vira um ponto só; até uma curva, fica preso
+  nela ("ponto na curva"). Um anel laranja mostra onde vai juntar antes de soltar. Pontos vizinhos na
+  mesma curva não se juntam (a curva sumiria).
+- **Tab entre cotas.** Com a caixinha de uma cota aberta, Tab confirma e abre a próxima (Shift+Tab, a
+  anterior).
+- **Inferências ao desenhar linha.** Além de deitada e em pé: tangente ao arco de onde a linha sai,
+  perpendicular à linha de onde sai, e paralela ou perpendicular a uma linha próxima (até 120 px do
+  traço). O sinal aparece ao lado do mouse e a linha de referência fica acesa; ao clicar, a restrição
+  entra.
+- **Duplo clique numa curva** escolhe o contorno inteiro (as curvas ligadas pelas pontas).
+- **Copiar, colar, mover e girar.** Ctrl+C e Ctrl+V colam onde o mouse estiver, com as restrições e
+  cotas de dentro (o "fixo" não vai junto). "Mover e girar" (menu do Deslocar) anda em x e y e gira em
+  volta do meio da escolha ou da origem, com ou sem cópia. No giro, deitada e em pé trocam entre si de
+  90° em 90°; noutro ângulo viram paralelas e perpendiculares, e as cotas horizontais e verticais viram
+  alinhadas, para a peça não deformar.
+- **Medir** (menu da Cota): uma curva, ou dois pontos ou curvas, mostra a medida sem criar cota
+  (distância com as projeções, comprimento e ângulo da linha, diâmetro e perímetro, raio e arco,
+  ângulo).
+- **Conflito no desenho.** Quando uma mudança não fecha, quem briga fica em vermelho (cotas e sinais) e
+  a faixa de baixo oferece "só medir" (a cota vira referência) ou "Apagar" (a restrição sai); a mudança
+  é refeita sem quem brigava. Fechar encolhendo uma curva até o tamanho zero (deitada e em pé na mesma
+  linha, por exemplo) também conta como conflito.
+- **Rasgo e polígono regular** (menu ao lado do arco): o rasgo sai com as quatro tangências e os dois
+  raios iguais; o polígono, com os vértices num círculo de construção e os lados iguais (3 a 24 lados).
+- **Unir contornos (U, no menu do Aparar).** Contornos que se encostam ou se cruzam viram uma peça só,
+  sem aparar à mão: as curvas são partidas nos encontros e sai o que ficou com aço dos dois lados (de
+  dentro) ou repetido (a borda comum). Contorno que não encosta em nada fica como está, e furo solto
+  continua furo. Cotas de trechos que saíram são avisadas.
+- **Cotas que se arrumam.** Texto de cota que cai em cima de outro desce (ou sobe) até ficar livre; só
+  na tela, o lugar guardado não muda.
+- **Tangente com ponta comum.** Reta e arco que dividem a ponta usam "raio em pé na reta" em vez de
+  "distância ao centro = raio": a forma é a mesma, mas a ponta deixa de aparecer como grau livre (o
+  filete e o rasgo saem com a conta certa de graus livres). Igual no Python e no JS.
+- **Arcos na tela.** O sentido do arco no SVG estava trocado (o filete aparecia "para dentro"); as
+  contas não mudam, só o desenho na tela.
+- Depois de clicar num botão da barra ou da faixa, as teclas voltam para o desenho.

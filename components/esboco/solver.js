@@ -222,6 +222,17 @@ function esTangente(s, r) {
   if (c1.tipo === "linha") {
     const linha = esLinha(s, c1.id)
     const { colunas, raio } = esCircular(s, c2.id)
+    const comum = c2.tipo === "arco" ? c1.pontos.slice(0, 2).findIndex((p) => c2.pontos.slice(1).includes(p)) : -1
+    if (comum >= 0) {
+      // Ponta comum: o raio até ela fica de pé sobre a reta (igual ao Python, core/esboco.py).
+      const k = 2 * comum
+      esJuntar(s, r.id, [...linha, ...colunas], (v) => {
+        const dx = v[2] - v[0]
+        const dy = v[3] - v[1]
+        return ((v[k] - v[4]) * dx + (v[k + 1] - v[5]) * dy) / esHyp(dx, dy)
+      })
+      return
+    }
     let lado = r.valores?.length ? r.valores[0] : null
     if (lado === null) {
       const d = esDistSinal(q[colunas[0]], q[colunas[1]], ...linha.map((i) => q[i]))

@@ -660,8 +660,8 @@ class Regioes:
                 return [
                     Problema(
                         "cruzam",
-                        "Dois contornos se cruzam ou encostam: separe, ou desenhe como um contorno "
-                        "só.",
+                        "Dois contornos se cruzam ou encostam: use Unir (U, no menu do Aparar) "
+                        "para virar uma peça só, ou separe.",
                         (float(onde[0]), float(onde[1])),
                         nomes,
                     )

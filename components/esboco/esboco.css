@@ -460,6 +460,12 @@
   border-radius: 4px;
   padding: 2px 4px;
 }
+.es-opcoes input[type="checkbox"] {
+  width: auto;
+}
+.es-opcoes select {
+  width: auto;
+}
 .es-opcoes button {
   padding: 3px 10px;
   border-radius: 6px;
@@ -490,4 +496,79 @@
 .es-aviso.ruim {
   border-left-color: var(--es-ruim);
   color: var(--es-ruim);
+}
+
+/* ---- o que briga, o que se infere, o que se mede, o que vai juntar ---- */
+.es svg .cota.conflito line,
+.es svg .cota.conflito path {
+  stroke: var(--es-ruim);
+  stroke-width: 1.6;
+}
+.es svg .cota.conflito .seta,
+.es svg .cota.conflito text {
+  fill: var(--es-ruim);
+}
+.es svg .sinal.conflito rect {
+  stroke: var(--es-ruim);
+  stroke-width: 2;
+}
+.es svg .sinal.conflito text {
+  fill: var(--es-ruim);
+}
+.es svg .inferida {
+  stroke: var(--es-sel);
+  stroke-width: 2.5;
+  stroke-dasharray: 6 3;
+  fill: none;
+  opacity: 0.75;
+}
+.es svg .sinal.inferido rect {
+  fill: var(--es-sel);
+  stroke: none;
+}
+.es svg .sinal.inferido text {
+  fill: #fff;
+  font-weight: 700;
+}
+.es svg .juntar circle {
+  fill: none;
+  stroke: var(--es-sel);
+  stroke-width: 2;
+}
+.es svg .juntar circle + circle {
+  fill: var(--es-sel);
+}
+.es svg .cota.medida line,
+.es svg .cota.medida path {
+  stroke: var(--es-livre);
+  stroke-dasharray: 4 3;
+}
+.es svg .cota.medida .seta,
+.es svg .cota.medida text {
+  fill: var(--es-livre);
+}
+.es-conflito {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--es-ruim);
+}
+.es-conflito button {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--es-ruim);
+  background: var(--st-background-color);
+  color: var(--es-ruim);
+  cursor: pointer;
+}
+.es-conflito button:hover {
+  background: var(--es-ruim);
+  color: #fff;
+}
+.es-conflito button[data-conflito-fechar] {
+  border-color: var(--st-border-color);
+  color: var(--st-text-color);
 }

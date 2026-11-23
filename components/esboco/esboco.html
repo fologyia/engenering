@@ -22,6 +22,14 @@
         <button type="button" data-f="arco_tangente" data-icone="arco_tangente">Arco tangente <kbd>T</kbd></button>
       </div>
     </div>
+    <div class="es-grupo" data-grupo="forma">
+      <button type="button" data-f="rasgo" data-icone="rasgo" data-principal title="Rasgo (oblongo): o centro de uma ponta, o da outra e a largura. Sai com as tangentes e os raios iguais."></button>
+      <button type="button" class="es-seta" data-abre="forma" title="Rasgo e polígono" aria-label="Rasgo e polígono"></button>
+      <div class="es-menu" data-menu="forma" hidden>
+        <button type="button" data-f="rasgo" data-icone="rasgo">Rasgo (oblongo)</button>
+        <button type="button" data-f="poligono" data-icone="poligono">Polígono regular</button>
+      </div>
+    </div>
     <button type="button" data-f="ponto" data-icone="ponto" title="Ponto (P): um ponto solto, para cotas e restrições."></button>
     <span class="es-sep"></span>
     <div class="es-grupo" data-grupo="aparar">
@@ -31,6 +39,7 @@
         <button type="button" data-f="aparar" data-icone="aparar">Aparar <kbd>X</kbd></button>
         <button type="button" data-f="estender" data-icone="estender">Estender <kbd>W</kbd></button>
         <button type="button" data-f="dividir" data-icone="dividir">Dividir</button>
+        <button type="button" data-a="unir" data-icone="unir" title="Junta os contornos que se encostam ou se cruzam numa peça só (as curvas escolhidas, ou todas)">Unir contornos <kbd>U</kbd></button>
       </div>
     </div>
     <div class="es-grupo" data-grupo="canto">
@@ -41,7 +50,14 @@
         <button type="button" data-f="chanfro" data-icone="chanfro">Chanfro</button>
       </div>
     </div>
-    <button type="button" data-f="deslocar" data-icone="deslocar" title="Deslocar, offset (O): escolha as curvas e clique do lado da cópia. A distância fica na faixa de baixo, e aceita letra (espessura t)."></button>
+    <div class="es-grupo" data-grupo="deslocar">
+      <button type="button" data-f="deslocar" data-icone="deslocar" data-principal title="Deslocar, offset (O): escolha as curvas e clique do lado da cópia. A distância fica na faixa de baixo, e aceita letra (espessura t)."></button>
+      <button type="button" class="es-seta" data-abre="deslocar" title="Mover e girar" aria-label="Mover e girar"></button>
+      <div class="es-menu" data-menu="deslocar" hidden>
+        <button type="button" data-f="deslocar" data-icone="deslocar">Deslocar (offset) <kbd>O</kbd></button>
+        <button type="button" data-f="transformar" data-icone="transformar">Mover e girar <kbd>Ctrl+C/V</kbd></button>
+      </div>
+    </div>
     <button type="button" data-f="espelhar" data-icone="espelhar" title="Espelhar (S): escolha as curvas (Shift junta) e clique na linha do espelho. O espelho fica vivo: mudou um lado, muda o outro."></button>
     <div class="es-grupo" data-grupo="padrao">
       <button type="button" data-f="padrao_linear" data-icone="padrao_linear" data-principal title="Padrão em fila: escolha as curvas, ponha a quantidade e o passo (aceita letra) e clique em Criar."></button>
@@ -53,7 +69,14 @@
     </div>
     <span class="es-sep"></span>
     <button type="button" data-a="construcao" data-icone="construcao" title="Construção (Q): a curva vira guia e não aço. Com curvas escolhidas, troca só elas."></button>
-    <button type="button" data-f="cota" data-icone="cota" title="Cota (D): uma curva, ou dois pontos ou curvas, e depois onde a cota fica. A medida aceita número, letra ou conta: 25, d, 2*d, L/2-10."></button>
+    <div class="es-grupo" data-grupo="cota">
+      <button type="button" data-f="cota" data-icone="cota" data-principal title="Cota (D): uma curva, ou dois pontos ou curvas, e depois onde a cota fica. A medida aceita número, letra ou conta: 25, d, 2*d, L/2-10. Tab passa de uma cota para a outra."></button>
+      <button type="button" class="es-seta" data-abre="cota" title="Medir" aria-label="Medir"></button>
+      <div class="es-menu" data-menu="cota" hidden>
+        <button type="button" data-f="cota" data-icone="cota">Cota <kbd>D</kbd></button>
+        <button type="button" data-f="medir" data-icone="medir">Medir (sem criar cota)</button>
+      </div>
+    </div>
     <span class="es-sep"></span>
     <button type="button" data-r="coincidente" data-icone="coincidente" title="Juntos (I): dois pontos viram um só, ou o ponto fica sobre a curva."></button>
     <button type="button" data-r="horizontal" data-icone="horizontal" title="Horizontal (H): a linha, ou dois pontos na mesma altura."></button>

@@ -208,6 +208,134 @@ def test_espelho_vivo_e_padroes():
 
 
 # ---------------------------------------------------------------------------
+# Formas prontas, mover e girar, copiar e colar, unir
+# ---------------------------------------------------------------------------
+
+
+def _area(esboco: dict) -> float:
+    regioes = _regioes(esboco)
+    assert regioes.ok, [p.mensagem for p in regioes.problemas]
+    return float(regioes.avaliar(regioes.q_base[None, :], np.ones(1, bool)).exatas.area[0])
+
+
+def _livres(esboco: dict) -> int:
+    return eb.graus_de_liberdade(eb.Sistema(eb.esboco_de_dicionario(esboco))).livres
+
+
+@precisa_do_node
+def test_rasgo_sai_com_tangentes_raios_iguais_e_area_certa():
+    r = _node(_esboco(), "passo(edRasgo(e, [10, 0], [50, 0], 5))")
+    assert r["convergiu"] and r["lacos"] == 1 and r["soltas"] == 0
+    assert _area(r["esboco"]) == pytest.approx(40 * 10 + math.pi * 25, rel=1e-9)
+    # os dois centros (4) e o raio (1): a tangente com ponta comum não deixa a ponta solta
+    assert _livres(r["esboco"]) == 5
+
+
+@precisa_do_node
+def test_filete_tambem_prende_a_ponta_da_tangente():
+    """A tangente de reta e arco com ponta comum é "raio em pé na reta": o filete não sobra solto."""
+    esboco = _esboco(_ret("a", 0, 0, 100, 40))
+    antes = _livres(esboco)
+    r = _node(esboco, 'passo(edFilete(e, "a3", "5", {}))')
+    # o filete troca um canto por um arco de raio cotado: some o grau do canto e nada sobra
+    assert _livres(r["esboco"]) == antes
+
+
+@precisa_do_node
+def test_poligono_regular_de_seis_lados():
+    r = _node(_esboco(), "passo(edPoligono(e, [20, 10], [30, 10], 6))")
+    assert r["convergiu"] and r["lacos"] == 1 and len(r["novas"]) == 6
+    assert _area(r["esboco"]) == pytest.approx(3 * math.sqrt(3) / 2 * 100, rel=1e-9)
+    assert _livres(r["esboco"]) == 4  # centro, raio e giro
+    r = _node(
+        _esboco(), "r = edPoligono(e, [0, 0], [10, 0], 2)\nif (!r.erro) throw new Error('aceitou')"
+    )
+
+
+@precisa_do_node
+def test_unir_dois_retangulos_que_se_cruzam_vira_um_t():
+    esboco = _esboco(_ret("a", -50, -10, 50, 10), _ret("b", -10, -60, 10, 0))
+    r = _node(esboco, "passo(edUnir(e))")
+    assert r["convergiu"] and r["lacos"] == 1 and r["soltas"] == 0 and r["bifurcacoes"] == 0
+    assert _area(r["esboco"]) == pytest.approx(100 * 20 + 20 * 50)
+    assert not any(p.tipo == "cruzam" for p in _regioes(r["esboco"]).problemas)
+
+
+@precisa_do_node
+def test_unir_com_os_nomes_da_prancheta_nao_troca_as_restricoes():
+    """Na prancheta as curvas se chamam c1, c2...: as novas não herdam as restrições das velhas."""
+    esboco = _esboco(
+        _ret("a", -50, -10, 50, 10), _ret("b", -10, -60, 10, 0), _ret("s", 80, 0, 90, 30)
+    )
+    nomes = {c["id"]: f"c{i}" for i, c in enumerate(esboco["curvas"], start=1)}
+    for c in esboco["curvas"]:
+        c["id"] = nomes[c["id"]]
+    for r in esboco["restricoes"]:
+        r["curvas"] = [nomes[c] for c in r["curvas"]]
+    r = _node(esboco, "passo(edUnir(e))")
+    assert r["convergiu"] and r["lacos"] == 2
+    # a chapa solta, que não encosta em nada, fica com as curvas dela
+    assert {"c9", "c10", "c11", "c12"} <= {c["id"] for c in r["esboco"]["curvas"]}
+    assert _area(r["esboco"]) == pytest.approx(100 * 20 + 20 * 50 + 10 * 30)
+
+
+@precisa_do_node
+def test_unir_encostados_tira_a_borda_comum_e_guarda_o_furo():
+    esboco = _esboco(_ret("a", 0, 0, 50, 20), _ret("b", 50, 5, 80, 15))
+    esboco["pontos"]["k"] = [20, 10]
+    esboco["curvas"].append({"id": "furo", "tipo": "circulo", "pontos": ["k"], "raio": 4})
+    r = _node(esboco, "passo(edUnir(e))")
+    assert r["convergiu"] and r["lacos"] == 2 and r["soltas"] == 0
+    assert _area(r["esboco"]) == pytest.approx(50 * 20 + 30 * 10 - math.pi * 16)
+    # o canto que estava na origem não fica preso nela
+    assert "O" not in {p for c in r["esboco"]["curvas"] for p in c["pontos"]}
+
+
+@precisa_do_node
+def test_unir_com_circulo_e_recusar_o_que_nao_encosta():
+    esboco = _esboco(_ret("a", 0, 0, 50, 20))
+    esboco["pontos"]["k"] = [50, 10]
+    esboco["curvas"].append({"id": "bola", "tipo": "circulo", "pontos": ["k"], "raio": 15})
+    r = _node(esboco, "passo(edUnir(e))")
+    sobra = 10 * math.sqrt(125) + 225 * math.asin(2 / 3)  # o pedaço do círculo dentro da chapa
+    assert _area(r["esboco"]) == pytest.approx(1000 + math.pi * 225 - sobra, rel=1e-9)
+    separados = _esboco(_ret("a", 0, 0, 10, 10), _ret("b", 20, 0, 30, 10))
+    r = _node(separados, "r = edUnir(e)\nif (!r.erro) throw new Error('uniu')")
+
+
+@precisa_do_node
+def test_colar_e_girar_a_copia_guardam_a_forma():
+    esboco = _esboco(_ret("a", 0, 0, 50, 20))
+    esboco["cotas"].append(
+        {
+            "id": "d1",
+            "tipo": "distancia",
+            "pontos": ["a1", "a2"],
+            "modo": "h",
+            "sinal": 1,
+            "expressao": "50",
+            "lugar": [25, -5],
+        }
+    )
+    todas = '["al0", "al1", "al2", "al3"]'
+    r = _node(esboco, f"passo(edColar(e, edRecorte(e, {todas}), ([x, y]) => [x + 100, y]))")
+    assert r["convergiu"] and r["lacos"] == 2 and len(r["esboco"]["cotas"]) == 2
+    # girar 90° troca deitada e em pé (e a cota horizontal vira vertical); 30° vira paralelas,
+    # perpendiculares e cota alinhada; 180° vira o sinal da cota: a peça copiada não deforma
+    for graus in (90, 30, 180):
+        r = _node(
+            esboco,
+            f"passo(edTransformar(e, {todas}, 100, 0, {graus}, edCentroDe(e, {todas}), true))",
+        )
+        assert r["convergiu"] and r["lacos"] == 2
+        assert _area(r["esboco"]) == pytest.approx(2 * 50 * 20, rel=1e-9)
+    # mover sem cópia leva a cota junto
+    r = _node(esboco, f"passo(edTransformar(e, {todas}, 10, 5, 0, [0, 0], false))")
+    assert r["esboco"]["pontos"]["a1"] == pytest.approx([10, 5])
+    assert r["esboco"]["cotas"][0]["lugar"] == pytest.approx([35, 0])
+
+
+# ---------------------------------------------------------------------------
 # A parte de testar: regras de projeto e faixas
 # ---------------------------------------------------------------------------
 

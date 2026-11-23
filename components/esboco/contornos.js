@@ -95,8 +95,9 @@ function esCaminhoDoAco(esboco, px) {
         const [x1] = px(info.cx + info.r, info.cy)
         const r = Math.abs(x1 - x0)
         const grande = info.sw > Math.PI ? 1 : 0
-        // No mundo o arco é anti-horário de a para b; na tela, com y para baixo, vira horário (1).
-        const varre = sentido === 1 ? 1 : 0
+        // No mundo o arco é anti-horário de a para b, e na tela continua anti-horário (o desenho não
+        // é espelhado): no SVG, com y para baixo, isso é o sentido negativo, varre = 0.
+        const varre = sentido === 1 ? 0 : 1
         d += `A${r.toFixed(2)} ${r.toFixed(2)} 0 ${grande} ${varre} ${x.toFixed(2)} ${y.toFixed(2)}`
       }
     })

@@ -727,3 +727,410 @@ function edPadraoCircular(esboco, ids, centro, quantos, anguloTotal = 360) {
   }
   return { esboco: edLimpar(esb), novas: criadas }
 }
+
+// ---- formas prontas: rasgo (oblongo) e polígono regular -------------------------------------------
+
+// Rasgo de centro P1 a centro P2 e raio r: duas retas e dois meios círculos tangentes, de raios iguais.
+function edRasgo(esboco, P1, P2, r) {
+  const esb = edCopiar(esboco)
+  const dx = P2[0] - P1[0]
+  const dy = P2[1] - P1[1]
+  const L = Math.hypot(dx, dy)
+  if (!(L > 0) || !(r > 0)) return { erro: "O rasgo precisa de comprimento e de largura." }
+  const n = [-dy / L, dx / L]
+  const lado = (base, s) => [base[0] + s * r * n[0], base[1] + s * r * n[1]]
+  const c1 = edPontoEm(esb, P1[0], P1[1])
+  const c2 = edPontoEm(esb, P2[0], P2[1])
+  const novo = (xy) => {
+    const pid = edIdPonto(esb)
+    esb.pontos[pid] = xy
+    return pid
+  }
+  const a1 = novo(lado(P1, 1))
+  const a2 = novo(lado(P2, 1))
+  const b2 = novo(lado(P2, -1))
+  const b1 = novo(lado(P1, -1))
+  const curva = (tipo, pontos, extra = {}) => {
+    const id = edIdCurva(esb)
+    esb.curvas.push({ id, tipo, pontos, ...extra })
+    return id
+  }
+  const topo = curva("linha", [a1, a2])
+  const base = curva("linha", [b2, b1])
+  const k2 = curva("arco", [c2, b2, a2])
+  const k1 = curva("arco", [c1, a1, b1])
+  curva("linha", [c1, c2], { construcao: true })
+  for (const linha of [topo, base]) {
+    const [p, q] = esb.curvas.find((c) => c.id === linha).pontos.map((pid) => esb.pontos[pid])
+    for (const [arco, centro] of [
+      [k1, P1],
+      [k2, P2],
+    ]) {
+      const sinal = esDistSinal(centro[0], centro[1], p[0], p[1], q[0], q[1]) >= 0 ? 1 : -1
+      esb.restricoes.push({ id: edIdRestricao(esb), tipo: "tangente", curvas: [linha, arco], valores: [sinal] })
+    }
+  }
+  esb.restricoes.push({ id: edIdRestricao(esb), tipo: "igual", curvas: [k1, k2] })
+  return { esboco: edLimpar(esb), novas: [topo, base, k1, k2] }
+}
+
+// Polígono regular de n lados no círculo de centro C que passa por V (o primeiro vértice).
+function edPoligono(esboco, C, V, quantos) {
+  const esb = edCopiar(esboco)
+  const n = Math.round(Number(quantos))
+  if (!(n >= 3 && n <= 24)) return { erro: "O polígono vai de 3 a 24 lados." }
+  const r = Math.hypot(V[0] - C[0], V[1] - C[1])
+  if (!(r > 0)) return { erro: "Afaste o vértice do centro." }
+  const a0 = Math.atan2(V[1] - C[1], V[0] - C[0])
+  const centro = edPontoEm(esb, C[0], C[1])
+  const circulo = edIdCurva(esb)
+  esb.curvas.push({ id: circulo, tipo: "circulo", pontos: [centro], raio: r, construcao: true })
+  const vertices = []
+  for (let k = 0; k < n; k += 1) {
+    const a = a0 + (2 * Math.PI * k) / n
+    const pid = edIdPonto(esb)
+    esb.pontos[pid] = [C[0] + r * Math.cos(a), C[1] + r * Math.sin(a)]
+    vertices.push(pid)
+    esb.restricoes.push({ id: edIdRestricao(esb), tipo: "na_curva", pontos: [pid], curvas: [circulo] })
+  }
+  const lados = vertices.map((p, k) => {
+    const id = edIdCurva(esb)
+    esb.curvas.push({ id, tipo: "linha", pontos: [p, vertices[(k + 1) % n]] })
+    return id
+  })
+  esb.restricoes.push({ id: edIdRestricao(esb), tipo: "igual", curvas: lados })
+  return { esboco: edLimpar(esb), novas: lados }
+}
+
+// ---- copiar, colar, mover e girar ---------------------------------------------------------------
+
+// O pedaço do esboço com as curvas escolhidas e o que só depende delas (restrições e cotas de dentro).
+function edRecorte(esboco, ids) {
+  const curvas = esboco.curvas.filter((c) => ids.includes(c.id))
+  // A origem vai junto como ponto comum: a cópia de uma linha que sai da origem não fica presa nela.
+  const pontos = new Set(curvas.flatMap((c) => c.pontos))
+  const idsCurvas = new Set(curvas.map((c) => c.id))
+  const dentro = (lista, conjunto) => (lista ?? []).every((x) => conjunto.has(x))
+  const solta = (c) => (c.pontos ?? []).length + (c.curvas ?? []).length > 0
+  return edCopiar({
+    pontos: Object.fromEntries([...pontos].map((p) => [p, esboco.pontos[p]])),
+    curvas,
+    // Fixo não vai junto: a cópia presa no lugar do original nunca sairia de lá.
+    restricoes: esboco.restricoes.filter(
+      (r) => r.tipo !== "fixo" && solta(r) && dentro(r.curvas, idsCurvas) && dentro(r.pontos, pontos),
+    ),
+    cotas: esboco.cotas.filter((c) => solta(c) && dentro(c.curvas, idsCurvas) && dentro(c.pontos, pontos)),
+  })
+}
+
+// Cola o recorte no esboço, cada ponto levado por `levar([x, y])`, com nomes novos.
+function edColar(esboco, recorte, levar) {
+  if (!recorte?.curvas?.length) return { erro: "Não há nada copiado." }
+  const esb = edCopiar(esboco)
+  const mapaP = new Map()
+  const mapaC = new Map()
+  for (const [pid, xy] of Object.entries(recorte.pontos)) {
+    const novo = edIdPonto(esb)
+    esb.pontos[novo] = levar(xy)
+    mapaP.set(pid, novo)
+  }
+  const ponto = (p) => mapaP.get(p) ?? p
+  for (const c of recorte.curvas) {
+    const id = edIdCurva(esb)
+    mapaC.set(c.id, id)
+    esb.curvas.push({ ...edCopiar(c), id, pontos: c.pontos.map(ponto) })
+  }
+  const trocar = (x) => ({
+    ...edCopiar(x),
+    pontos: (x.pontos ?? []).map(ponto),
+    curvas: (x.curvas ?? []).map((c) => mapaC.get(c)),
+  })
+  for (const r of recorte.restricoes) esb.restricoes.push({ ...trocar(r), id: edIdRestricao(esb) })
+  for (const c of recorte.cotas) esb.cotas.push({ ...trocar(c), id: edIdCota(esb), lugar: c.lugar ? levar(c.lugar) : null })
+  return { esboco: edLimpar(esb), novas: [...mapaC.values()] }
+}
+
+// Move e gira as curvas escolhidas: gira `graus` em volta de `centro`, depois desloca (dx, dy).
+// Com `copiar`, o original fica e a cópia vai. Sem copiar, o que estiver preso por cota volta ao
+// lugar: quem decide é o solver, como num CAD.
+function edTransformar(esboco, ids, dx, dy, graus, centro, copiar) {
+  if (!ids.length) return { erro: "Escolha as curvas que vão andar." }
+  const ang = (Number(graus) * Math.PI) / 180
+  const cos = Math.cos(ang)
+  const sen = Math.sin(ang)
+  if (![dx, dy, ang].every((v) => Number.isFinite(Number(v)))) return { erro: "Os números do movimento estão errados." }
+  const levar = ([x, y]) => {
+    const u = x - centro[0]
+    const v = y - centro[1]
+    return [centro[0] + u * cos - v * sen + Number(dx), centro[1] + u * sen + v * cos + Number(dy)]
+  }
+  if (copiar) {
+    const colado = edColar(esboco, edRecorte(esboco, ids), levar)
+    if (colado.erro) return colado
+    edGirarDirecoes(colado.esboco, colado.novas, graus)
+    return colado
+  }
+  const esb = edCopiar(esboco)
+  const pontos = new Set(edPontosDe(esb, ids))
+  pontos.delete("O")
+  for (const p of pontos) esb.pontos[p] = levar(esb.pontos[p])
+  const curvas = new Set(ids)
+  for (const c of esb.cotas) {
+    const vai = (c.pontos ?? []).every((p) => pontos.has(p)) && (c.curvas ?? []).every((k) => curvas.has(k))
+    if (vai && c.lugar) c.lugar = levar(c.lugar)
+  }
+  edGirarDirecoes(esb, ids, graus)
+  return { esboco: edLimpar(esb), novas: ids }
+}
+
+// Deitada e em pé depois do giro: de quarto em quarto de volta trocam entre si; noutro ângulo
+// viram paralelas e perpendiculares entre as curvas que giraram (a forma fica, o giro também).
+function edGirarDirecoes(esb, ids, graus) {
+  const quartos = Number(graus) / 90
+  const redondo = Math.abs(quartos - Math.round(quartos)) < 1e-9
+  const volta = redondo ? ((Math.round(quartos) % 4) + 4) % 4 : null
+  const giraram = new Set(ids)
+  const pontos = new Set(edPontosDe(esb, ids))
+  // As cotas na horizontal e na vertical também giram: de quarto em quarto trocam entre si (com o
+  // sinal do lado novo); noutro ângulo viram cotas alinhadas, que medem o mesmo em qualquer giro.
+  for (const c of esb.cotas) {
+    if (c.tipo !== "distancia" || (c.modo !== "h" && c.modo !== "v")) continue
+    const vai = (c.pontos ?? []).every((p) => pontos.has(p)) && (c.curvas ?? []).every((k) => giraram.has(k))
+    if (!vai) continue
+    if (volta === null) {
+      c.modo = "d"
+      c.sinal = 1
+      continue
+    }
+    if (volta % 2 === 1) c.modo = c.modo === "h" ? "v" : "h"
+    const nomes = (c.pontos ?? []).length >= 2 ? c.pontos : esb.curvas.find((k) => k.id === c.curvas[0]).pontos
+    const [a, b] = nomes.slice(0, 2).map((p) => esb.pontos[p])
+    const eixo = c.modo === "h" ? 0 : 1
+    c.sinal = b[eixo] - a[eixo] >= 0 ? 1 : -1
+  }
+  if (redondo && volta % 2 === 0) return
+  const grupos = { horizontal: [], vertical: [] }
+  const ficam = []
+  for (const r of esb.restricoes) {
+    if (r.tipo !== "horizontal" && r.tipo !== "vertical") {
+      ficam.push(r)
+      continue
+    }
+    const outro = r.tipo === "horizontal" ? "vertical" : "horizontal"
+    if (!(r.curvas ?? []).length) {
+      const vai = (r.pontos ?? []).every((p) => pontos.has(p))
+      if (!vai) ficam.push(r)
+      else if (redondo) ficam.push({ ...r, tipo: outro })
+      continue
+    }
+    const dentro = r.curvas.filter((c) => giraram.has(c))
+    const fora = r.curvas.filter((c) => !giraram.has(c))
+    if (fora.length) ficam.push({ ...r, curvas: fora })
+    if (!dentro.length) continue
+    if (redondo) ficam.push({ id: edIdRestricao({ restricoes: [...esb.restricoes, ...ficam] }), tipo: outro, curvas: dentro })
+    else grupos[r.tipo].push(...dentro)
+  }
+  esb.restricoes = ficam
+  const nova = (tipo, curvas) => esb.restricoes.push({ id: edIdRestricao(esb), tipo, curvas })
+  const { horizontal: h, vertical: v } = grupos
+  if (h.length > 1) nova("paralela", h)
+  if (v.length > 1) nova("paralela", v)
+  if (h.length && v.length) nova("perpendicular", [h[0], v[0]])
+}
+
+// O meio da caixa das curvas: o centro do giro quando ninguém escolhe outro.
+function edCentroDe(esb, ids) {
+  const xs = []
+  const ys = []
+  for (const c of esb.curvas.filter((k) => ids.includes(k.id))) {
+    const g = edGeo(esb, c)
+    if (g.tipo === "linha") {
+      xs.push(g.a[0], g.b[0])
+      ys.push(g.a[1], g.b[1])
+    } else {
+      xs.push(g.c[0] - g.r, g.c[0] + g.r)
+      ys.push(g.c[1] - g.r, g.c[1] + g.r)
+    }
+  }
+  if (!xs.length) return [0, 0]
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2]
+}
+
+// ---- unir contornos que se encostam ou se cruzam -------------------------------------------------
+
+function edPoligonoDoLaco(esb, laco) {
+  const porId = new Map(esb.curvas.map((c) => [c.id, c]))
+  const pontos = []
+  for (const { curva, sentido } of laco) {
+    const g = edGeo(esb, porId.get(curva))
+    if (g.tipo === "linha") {
+      pontos.push(sentido === 1 ? g.a : g.b)
+      continue
+    }
+    for (let i = 0; i < 48; i += 1) pontos.push(edNoParam(g, sentido === 1 ? (g.sw * i) / 48 : g.sw * (1 - i / 48)))
+  }
+  return pontos
+}
+function edDentroDoPoligono([x, y], poligono) {
+  let dentro = false
+  for (let i = 0, j = poligono.length - 1; i < poligono.length; j = i++) {
+    const [xi, yi] = poligono[i]
+    const [xj, yj] = poligono[j]
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) dentro = !dentro
+  }
+  return dentro
+}
+
+// Junta num só os contornos escolhidos (ou todos) que se encostam ou se cruzam, como uma união: as
+// curvas são partidas onde se encontram e sai o que ficou com aço dos dois lados (de dentro) ou
+// repetido (a borda comum). Contorno solto dentro de outro continua furo.
+function edUnir(esboco, ids = null) {
+  const esb = edCopiar(esboco)
+  const escolhidas = esb.curvas.filter((c) => !c.construcao && (!ids?.length || ids.includes(c.id)))
+  const { lacos, circulos } = esContornos({ ...esb, curvas: escolhidas })
+  const todos = [...lacos, ...circulos.map((id) => [{ curva: id, sentido: 1 }])]
+  if (todos.length < 2) return { erro: "Unir pede dois ou mais contornos fechados que se encostam ou se cruzam." }
+  const tamanho = edTamanho(esb)
+  const tol = 1e-7 * tamanho
+  const doLaco = new Map()
+  todos.forEach((laco, i) => laco.forEach(({ curva }) => doLaco.set(curva, i)))
+  const noLaco = new Set(doLaco.keys())
+  const usadas = escolhidas.filter((c) => noLaco.has(c.id))
+  const poligonos = todos.map((laco) => edPoligonoDoLaco(esb, laco))
+  const grupos = todos.map((_, i) => i)
+  const raiz = (i) => (grupos[i] === i ? i : (grupos[i] = raiz(grupos[i])))
+  // Os cortes de cada curva: os encontros com as outras e as pontas das outras em cima dela.
+  const cortes = new Map(usadas.map((c) => [c.id, []]))
+  for (const c of usadas) {
+    const g = edGeo(esb, c)
+    for (const outra of usadas) {
+      if (outra.id === c.id) continue
+      const h = edGeo(esb, outra)
+      const achados = []
+      for (const [x, y] of edEncontros(g, h)) {
+        if (edDentro(g, edParam(g, x, y), 1e-9) && edDentro(h, edParam(h, x, y), 1e-9)) achados.push([x, y])
+      }
+      for (const p of outra.tipo === "circulo" ? [] : esPontas(outra)) {
+        const [x, y] = esb.pontos[p]
+        const t = edParam(g, x, y)
+        const [px, py] = edNoParam(g, t)
+        if (edDentro(g, t, 1e-9) && Math.hypot(px - x, py - y) <= tol) achados.push([x, y])
+      }
+      for (const [x, y] of achados) {
+        cortes.get(c.id).push(edParam(g, x, y))
+        const [i, j] = [raiz(doLaco.get(c.id)), raiz(doLaco.get(outra.id))]
+        if (i !== j) grupos[i] = j
+      }
+    }
+  }
+  if (new Set(todos.map((_, i) => raiz(i))).size === todos.length) {
+    return { erro: "Esses contornos não se encostam nem se cruzam: não há o que unir." }
+  }
+  // Aço num ponto: dentro de um número ímpar de grupos (cada grupo é uma peça só).
+  const temAco = (p) => {
+    const dentro = new Map()
+    poligonos.forEach((pol, i) => {
+      if (edDentroDoPoligono(p, pol)) dentro.set(raiz(i), (dentro.get(raiz(i)) ?? 0) + 1)
+    })
+    // Num grupo, o ponto é do grupo se está dentro de algum contorno dele que não é furo de outro
+    // do mesmo grupo: na prática, os contornos de um grupo se tocam por fora, então basta um.
+    return dentro.size % 2 === 1
+  }
+  const pedacos = []
+  const inteiros = new Set()
+  // Contorno que não encosta em nenhum outro (um furo solto, uma chapa à parte) fica como está.
+  const membros = new Map()
+  todos.forEach((_, i) => membros.set(raiz(i), (membros.get(raiz(i)) ?? 0) + 1))
+  for (const c of usadas) {
+    if (membros.get(raiz(doLaco.get(c.id))) === 1) {
+      inteiros.add(c.id)
+      continue
+    }
+    const g = edGeo(esb, c)
+    const limite = g.tipo === "linha" ? 1 : g.sw
+    let ts = cortes.get(c.id).map((t) => (g.tipo === "circulo" ? ((t % ED_DOIS_PI) + ED_DOIS_PI) % ED_DOIS_PI : t))
+    if (g.tipo !== "circulo") ts = ts.filter((t) => t > 1e-9 * limite && t < limite * (1 - 1e-9))
+    ts = [...new Set(ts.map((t) => Math.round(t * 1e9) / 1e9))].sort((a, b) => a - b)
+    let trechos
+    if (g.tipo === "circulo") {
+      if (!ts.length) {
+        inteiros.add(c.id)
+        continue
+      }
+      trechos = ts.map((t, i) => [t, i + 1 < ts.length ? ts[i + 1] : ts[0] + ED_DOIS_PI])
+    } else {
+      const marcas = [0, ...ts, limite]
+      trechos = marcas.slice(0, -1).map((t, i) => [t, marcas[i + 1]])
+    }
+    for (const [t0, t1] of trechos) {
+      const tm = (t0 + t1) / 2
+      const meio = edNoParam(g, tm)
+      const antes = edNoParam(g, tm - 1e-4 * (t1 - t0))
+      const depois = edNoParam(g, tm + 1e-4 * (t1 - t0))
+      const d = [depois[0] - antes[0], depois[1] - antes[1]]
+      const l = Math.hypot(...d) || 1
+      const eps = 1e-4 * tamanho
+      const n = [(-d[1] / l) * eps, (d[0] / l) * eps]
+      if (temAco([meio[0] + n[0], meio[1] + n[1]]) === temAco([meio[0] - n[0], meio[1] - n[1]])) continue
+      if (pedacos.some((q) => Math.hypot(q.meio[0] - meio[0], q.meio[1] - meio[1]) <= 10 * tol)) continue
+      pedacos.push({ curva: c, g, t0, t1, meio })
+    }
+  }
+  const soltos = usadas.flatMap((c) => c.pontos)
+  const tirar = new Set(usadas.filter((c) => !inteiros.has(c.id)).map((c) => c.id))
+  esb.curvas = esb.curvas.filter((c) => !tirar.has(c.id))
+  // O que falava das curvas que saem sai antes de nascerem as novas: elas podem herdar o mesmo nome
+  // (c1, c2...), e uma restrição velha passaria a valer para a curva nova errada.
+  const daQueSai = (x) => (x.curvas ?? []).some((c) => tirar.has(c))
+  esb.restricoes = esb.restricoes.filter((r) => !daQueSai(r))
+  esb.cotas = esb.cotas.filter((c) => !daQueSai(c))
+  // Cada lugar ganha um ponto só: o da ponta que já estava ali (a origem só quando já era ela) ou
+  // um novo. Os outros pontos do mesmo lugar passam para ele nas restrições e nas cotas.
+  const lugares = []
+  const trocados = new Map()
+  const pontoDaUniao = (xy, preferido) => {
+    const achado = lugares.find(([q]) => Math.hypot(q[0] - xy[0], q[1] - xy[1]) <= 10 * tol)
+    if (achado) {
+      if (preferido && preferido !== achado[1]) trocados.set(preferido, achado[1])
+      return achado[1]
+    }
+    let pid = preferido
+    if (!pid) {
+      pid = soltos.find((p) => p !== "O" && Math.hypot(esb.pontos[p][0] - xy[0], esb.pontos[p][1] - xy[1]) <= 10 * tol)
+    }
+    if (!pid) {
+      pid = edIdPonto(esb)
+      esb.pontos[pid] = [...xy]
+    }
+    lugares.push([xy, pid])
+    return pid
+  }
+  const pontaDe = (p, t) => {
+    const [i, f] = p.g.tipo === "linha" ? p.curva.pontos : p.curva.tipo === "arco" ? p.curva.pontos.slice(1) : [null, null]
+    const limite = p.g.tipo === "linha" ? 1 : p.g.sw
+    if (Math.abs(t) <= 1e-9 * limite) return i
+    if (Math.abs(t - limite) <= 1e-9 * limite) return f
+    return null
+  }
+  const novas = []
+  for (const p of pedacos) {
+    const pa = pontoDaUniao(edNoParam(p.g, p.t0), pontaDe(p, p.t0))
+    const pb = pontoDaUniao(edNoParam(p.g, p.t1), pontaDe(p, p.t1))
+    if (pa === pb) continue
+    const id = edIdCurva(esb)
+    if (p.g.tipo === "linha") esb.curvas.push({ id, tipo: "linha", pontos: [pa, pb] })
+    else esb.curvas.push({ id, tipo: "arco", pontos: [p.curva.pontos[0], pa, pb] })
+    novas.push({ id, de: p.curva.id })
+  }
+  // As retas que eram deitadas ou em pé continuam assim.
+  for (const r of esboco.restricoes) {
+    if (r.tipo !== "horizontal" && r.tipo !== "vertical") continue
+    const filhas = novas.filter((k) => (r.curvas ?? []).includes(k.de)).map((k) => k.id)
+    if (filhas.length) esb.restricoes.push({ id: edIdRestricao(esb), tipo: r.tipo, curvas: filhas })
+  }
+  for (const x of [...esb.restricoes, ...esb.cotas]) {
+    if (x.pontos) x.pontos = x.pontos.map((p) => trocados.get(p) ?? p)
+  }
+  esb.restricoes = esb.restricoes.filter((r) => r.tipo !== "coincidente" || new Set(r.pontos).size > 1)
+  return { esboco: edLimpar(esb, soltos), novas: novas.map((k) => k.id) }
+}
