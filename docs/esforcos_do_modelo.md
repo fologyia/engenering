@@ -69,10 +69,11 @@ Para cada caso importado, nos eixos do plano (Z para cima; o Y do SolidWorks é 
   comparação: até 5 % bate; reação γ vezes o peso (γ usual da NBR 8800 a ± 2 %: 1,25; 1,30; 1,35;
   1,40; 1,50) é **erro — estudo majorado**; mais pesado que isso é **erro — o estudo PP leva só a
   gravidade** (sobrecarga, equipamentos e o não modelado vão nos estudos deles); mais leve é aviso.
-* **Estudo majorado**: forças concentradas do plano recebidas γ vezes também viram erro. No
-  SolidWorks cada caso leva as cargas características — os coeficientes estão nas combinações do
-  programa; com o estudo majorado a verificação majoraria duas vezes e o quadro das fundações, que
-  pede cargas sem majorar (Anglo 5.9), sairia errado. Não há modo de importar estudo combinado.
+* **Forças do plano recebidas outro número de vezes** (no mesmo sentido): aviso com a razão e o
+  que conferir ("Por item", carga que o plano não tem, valor no gerenciador). Não é chamado de
+  estudo majorado: uma razão perto de 1,35 aparece por acaso (no PE do modelo es_v2, 3 140 N =
+  1 700 + 4 × 360 "por item"). A suspeita de majoração fica só no PP contra o peso da estrutura.
+  Não há modo de importar estudo combinado.
 * Casos do plano ainda sem esforços e casos importados fora do plano são avisados.
 
 ## Tratamento automático da leitura (`core/tratamento_do_modelo.py`)

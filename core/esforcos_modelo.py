@@ -896,6 +896,9 @@ class EsforcosDoModelo:
     norma: str = NORMA_PADRAO
     #: Placa de base padrão dos pilares (lida por :mod:`core.placa_base_pilares`).
     placa: Mapping[str, Any] = field(default_factory=dict)
+    #: Emendas dos pilares: as informadas e as achadas que o usuário tirou (lidas por
+    #: :mod:`core.emendas_do_modelo`).
+    emendas: Mapping[str, Any] = field(default_factory=dict)
 
     def parametros_do_tipo(self, tipo: str) -> ParametrosDoTipo:
         return self.parametros.get(tipo, ParametrosDoTipo())
@@ -974,6 +977,10 @@ def com_placa(dados: EsforcosDoModelo, placa: Mapping[str, Any]) -> EsforcosDoMo
     return replace(dados, placa=dict(placa))
 
 
+def com_emendas(dados: EsforcosDoModelo, emendas: Mapping[str, Any]) -> EsforcosDoModelo:
+    return replace(dados, emendas=dict(emendas))
+
+
 def _r(valor: float) -> float:
     return float(f"{valor:.6g}")
 
@@ -1031,6 +1038,7 @@ def para_dicionario(dados: EsforcosDoModelo) -> dict[str, Any]:
         },
         "norma": dados.norma,
         "placa": dict(dados.placa),
+        "emendas": dict(dados.emendas),
     }
 
 
@@ -1151,6 +1159,7 @@ def de_dicionario(dados: Mapping[str, Any] | None) -> EsforcosDoModelo:
         parametros,
         norma if norma in NORMAS else NORMA_PADRAO,
         dict(dados["placa"]) if isinstance(dados.get("placa"), Mapping) else {},
+        dict(dados["emendas"]) if isinstance(dados.get("emendas"), Mapping) else {},
     )
 
 
@@ -1622,20 +1631,25 @@ def conferir_reacoes(
                     f"{_n(esperado[2])}) kN em X, Y e Z, e as reações ({_n(rx)}; {_n(ry)}; "
                     f"{_n(rz)}) kN — diferença de {_n(residuo)} kN."
                 )
-                # Majorado só se a reação é a força do plano, no mesmo sentido, γ vezes maior.
+                # Mesmo sentido do plano, outro tamanho: diz quantas vezes. Não chama de
+                # "majorado": uma razão perto de 1,35 aparece por acaso (uma força "por item" em
+                # várias barras, uma carga que o plano não tem), e o usuário aplica as cargas
+                # características (visto no PE do modelo es_v2: 3 140 N = 1 700 + 4 × 360).
                 paralela = (
                     -(rx * esperado[0] + ry * esperado[1] + rz * esperado[2])
                     >= 0.99 * math.hypot(rx, ry, rz) * referencia
                 )
-                gama = (
-                    coeficiente_aparente(math.hypot(rx, ry, rz) / referencia) if paralela else None
-                )
-                if gama is not None:
+                if paralela and not (
+                    acao.grupo == pc.GRUPO_VENTO and math.hypot(rx, ry) > 0.5 * abs(rz)
+                ):
+                    razao = math.hypot(rx, ry, rz) / referencia
                     itens.append(
                         pc.ItemDeConferencia(
-                            pc.NIVEL_ERRO,
-                            f"{texto} As reações são {_n(gama)} vez as forças: o estudo parece "
-                            f"majorado. {ESTUDO_MAJORADO}",
+                            pc.NIVEL_ATENCAO,
+                            f"{texto} As reações são {_n(razao)} vez as forças do plano, no mesmo "
+                            "sentido. Falta ou sobra carga no modelo: confira as forças “Por "
+                            "item” (o valor entra inteiro em cada barra selecionada), cargas que "
+                            "o plano não tem e o valor de cada carga no gerenciador.",
                         )
                     )
                 elif acao.grupo == pc.GRUPO_VENTO and math.hypot(rx, ry) > 0.5 * abs(rz):

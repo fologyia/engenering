@@ -2360,8 +2360,8 @@ elif modulo == "Esforços do modelo":
         4. Leia a **conferência das reações**: num caso só vertical, a reação horizontal precisa
            dar quase zero; as forças concentradas do plano precisam bater com as reações; o PP
            precisa dar o peso da estrutura (pelo esqueleto ou pela **Lista de material**).
-           Reações γ vezes a carga (1,25; 1,4; 1,5…) denunciam estudo majorado: refaça com as
-           cargas características.
+           O PP com reação γ vezes o peso (1,25; 1,4; 1,5…) denuncia estudo majorado: refaça com
+           as cargas características.
         5. Leia **o que o programa entendeu do modelo**: pilares, vigas e contraventamentos
            reconhecidos e os avisos — ponta solta (junta que faltou), malha grossa, dois casos
            iguais, gravidade esquecida num estudo duplicado, PP com carga a mais, malha ou modelo
@@ -3139,6 +3139,14 @@ elif modulo == "Emenda de pilar":
         "Na página: **Memorial desta emenda** baixa o trecho em Word (para colar no documento "
         "oficial) ou o PDF; **Registrar no projeto** leva a emenda ao Memorial de cálculo do "
         "projeto, no capítulo das ligações."
+    )
+    st.markdown(
+        "**Com o modelo do SolidWorks no projeto:** a seção 9 de **Esforços do modelo** lista as "
+        "emendas (onde dois pilares em pé se encontram, ou as que você informa no meio de um "
+        "pilar) com os esforços de cálculo de cada combinação no ponto da emenda. Na Emenda de "
+        "pilar, **Trazer esta emenda** preenche os perfis, o aço, K·L, o N_c,Rd do pilar e os "
+        "esforços; **Sugerir as talas** monta as talas pelas regras da página; e **Todas as "
+        "emendas do modelo** verifica e registra todas de uma vez."
     )
     link_modulo("app_pages/emenda_pilar.py", "Abrir Emenda de pilar")
 

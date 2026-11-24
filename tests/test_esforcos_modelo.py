@@ -217,11 +217,27 @@ def test_pp_conferido_contra_o_peso_da_estrutura(peso_kN, nivel, trecho):
     assert "Monte a Lista de material" in sem_lista[em.NIVEL_INFO]
 
 
-def test_forcas_recebidas_gama_vezes_denunciam_estudo_majorado():
-    # O modelo recebeu 8 kN de vento; o plano tem 8 ÷ 1,4: o estudo foi majorado por 1,4.
+def test_forcas_recebidas_gama_vezes_nao_viram_estudo_majorado():
+    """Reação no sentido do plano, 1,40 vez maior: diz a razão e o que conferir, sem chamar de
+    "majorado" — no modelo do usuário (PE, 3 140 N = 1 700 + 4 × 360 "por item") o 1,37 era
+    coincidência."""
+    plano = plano_do_portico(vento_kN=8.0 / 1.4)
+    sc = next(a.grupo for a in plano.acoes if a.codigo == "SC")  # um grupo que não é vento
+    plano = replace(
+        plano,
+        acoes=tuple(replace(a, grupo=sc) if a.codigo == "W0" else a for a in plano.acoes),
+    )
+    r = niveis(em.conferir_reacoes(importar("W0"), plano))
+    texto = r[pc.NIVEL_ATENCAO]
+    assert "As reações são 1,40 vez as forças do plano, no mesmo sentido" in texto
+    assert "Falta ou sobra carga" in texto and "Por item" in texto
+    assert "majorado" not in texto and pc.NIVEL_ERRO not in r
+
+
+def test_vento_maior_no_mesmo_sentido_continua_no_diagnostico_do_vento():
     r = niveis(em.conferir_reacoes(importar("W0"), plano_do_portico(vento_kN=8.0 / 1.4)))
-    assert "As reações são 1,40 vez as forças: o estudo parece majorado" in r[pc.NIVEL_ERRO]
-    assert "cargas características" in r[pc.NIVEL_ERRO]
+    assert "majorado" not in r.get(pc.NIVEL_ERRO, "") + r.get(pc.NIVEL_ATENCAO, "")
+    assert "na direção certa; o plano manda" in r[pc.NIVEL_ATENCAO]
 
 
 def test_conferencia_usa_a_quantidade_das_cargas():

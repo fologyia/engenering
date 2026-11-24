@@ -226,12 +226,13 @@ def test_so_a_reacao_a_mais_sem_o_peso_nos_pilares_nao_e_gravidade():
     assert not tratar(dados, apoios, geometria).tratou(tm.T_GRAVIDADE)
 
 
-def test_caso_majorado_nao_e_tratado():
+def test_caso_com_carga_vezes_maior_nao_e_tratado():
     vezes = {"SC": "1.4*SC"}
     dados, apoios, geometria = montar(forcas=vezes, reacoes=vezes, apoios_de=vezes)
     tratado = tratar(dados, apoios, geometria)
     assert tratado.tratamentos == ()
-    assert "SC: problema no estudo" in [a.titulo for a in _painel(tratado).achados]
+    titulos = [a.titulo for a in _painel(tratado).achados]
+    assert "SC: o modelo não recebeu a carga do plano" in titulos
 
 
 def test_gravidade_com_apoios_de_nos_diferentes_sai_pelos_pilares():

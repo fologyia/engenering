@@ -352,13 +352,16 @@ def test_gravidade_esquecida_no_caso_de_vento():
     assert achado.nivel == dm.NIVEL_ERRO and "tire a gravidade do caso W0" in achado.passos[0]
 
 
-def test_sobrecarga_majorada_no_solidworks():
+def test_sobrecarga_14_vez_maior_no_solidworks():
+    """A SC recebida 1,4 vez: o painel diz que o modelo não recebeu a carga do plano e quantas
+    vezes, sem chamar de estudo majorado (a razão perto de um γ aparece por acaso)."""
     dados, apoios, geometria = montar(
         forcas={"SC": "1.4*SC"}, reacoes={"SC": "1.4*SC"}, apoios_de={"SC": "1.4*SC"}
     )
     d = diagnostico(dados, apoios, geometria)
-    achado = _achado(d, "SC: problema no estudo")
-    assert "majorado" in achado.problema
+    achado = _achado(d, "SC: o modelo não recebeu a carga do plano")
+    assert "1,40 vez as forças do plano" in achado.problema
+    assert "majorado" not in achado.problema
     assert not any("forças" in a.titulo for a in d.achados)  # os arquivos são do mesmo caso
 
 
