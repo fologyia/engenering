@@ -12,15 +12,16 @@ geométrico** do U (onde atuam N, M e M_y do modelo), a alma ao longo de ℓx e 
 mesmos da I (m = (ℓx − 0,95·d)/2, mesas nos dois lados); em ℓy, as linhas de engaste ficam no dorso
 da alma e a 0,80·b_f dele (a linha 0,80·(2·b_f)/2 da I equivalente), e n é o maior dos dois
 balanços (o do dorso e o das pontas das mesas); o trecho entre as mesas usa n₀ = √(d·2·b_f)/4 e o
-fator X com 2·b_f. Só a disposição tipo 1 (chumbadores externos às mesas) vale para o U: a tipo 2 e
-as outras contam com chumbadores dos dois lados da alma. A solda do contorno leva os esforços do
+fator X com 2·b_f. Só a tipo 1 e a rotulada em x (chumbadores fora das mesas) valem para o U: a
+tipo 2 e as outras contam com chumbadores dos dois lados da alma. A solda do contorno leva os esforços do
 centro do U ao centro do grupo de filetes (dorso, mesas por fora e por dentro, face interna da
 alma).
 
-Duas disposições comuns fora da Figura 21 (6.7.1.1 admite outras, atendendo 6.1.1.3) vão pelo
-**método geral**, o mesmo da 6.7 com os chumbadores em mais de uma linha: a base **rotulada** (2
-chumbadores internos, um de cada lado da alma, no eixo da placa) e a de chumbadores **internos e
-externos** (4 + 4). Nos casos com momento grande (C3 e T3) a pressão de contato é a mesma da norma
+Três disposições comuns fora da Figura 21 (6.7.1.1 admite outras, atendendo 6.1.1.3) vão pelo
+**método geral**, o mesmo da 6.7 com os chumbadores em mais de uma linha: a base **rotulada em y**
+(2 chumbadores no eixo y, um de cada lado da alma: gira no eixo forte), a **rotulada em x** (2 no
+eixo x, um fora de cada mesa, na linha da alma: gira no eixo fraco; ℓy = máx(2·a₁; perfil + 25 mm))
+e a de chumbadores **internos e externos** (4 + 4). Nos casos com momento grande (C3 e T3) a pressão de contato é a mesma da norma
 (σ_c,Rd no trecho ℓ_c da borda comprimida) e a força em cada chumbador tracionado é proporcional à
 distância dele à borda desse trecho (placa rígida); sem contato (T1 e T2), F_i = N/n − M·x_i/Σx².
 Com um só alinhamento tracionado as duas regras dão exatamente as equações da norma. A espessura
@@ -112,19 +113,22 @@ MODULO_TITULO = "Placas de base"
 
 TIPO_1 = "tipo_1"
 TIPO_2 = "tipo_2"
-TIPO_ROTULADA = "rotulada_2"
+TIPO_ROTULADA = "rotulada_2"  # em y: os 2 chumbadores no eixo y, um de cada lado da alma
+TIPO_ROTULADA_X = "rotulada_x"  # em x: os 2 chumbadores no eixo x, fora das mesas
 TIPO_INTERNOS_E_EXTERNOS = "internos_e_externos"
 TIPOS = {
     TIPO_1: "Tipo 1 — chumbadores externos às mesas",
     TIPO_2: "Tipo 2 — chumbadores internos (entre as mesas)",
-    TIPO_ROTULADA: "Rotulada — 2 chumbadores internos, no eixo da placa",
+    TIPO_ROTULADA: "Rotulada em y — 2 chumbadores no eixo y, um de cada lado da alma",
+    TIPO_ROTULADA_X: "Rotulada em x — 2 chumbadores no eixo x, fora das mesas",
     TIPO_INTERNOS_E_EXTERNOS: "Internos e externos — 4 + 4 chumbadores",
 }
 #: Como a base aparece nas frases ("Base tipo 1 do W …", "Base rotulada do W …").
 NOMES_CURTOS = {
     TIPO_1: "tipo 1",
     TIPO_2: "tipo 2",
-    TIPO_ROTULADA: "rotulada",
+    TIPO_ROTULADA: "rotulada em y",
+    TIPO_ROTULADA_X: "rotulada em x",
     TIPO_INTERNOS_E_EXTERNOS: "com chumbadores internos e externos",
 }
 #: Os tipos da Figura 21; os outros vão pelo método geral (extensão da 6.7).
@@ -134,8 +138,11 @@ QUANTIDADES = {
     TIPO_1: (4, 6, 8),
     TIPO_2: (4,),
     TIPO_ROTULADA: (2,),
+    TIPO_ROTULADA_X: (2,),
     TIPO_INTERNOS_E_EXTERNOS: (8,),
 }
+#: Disposições com chumbadores fora das mesas (a₁ da borda ao furo em ℓx).
+TIPOS_EXTERNOS = (TIPO_1, TIPO_ROTULADA_X, TIPO_INTERNOS_E_EXTERNOS)
 ANCORAGEM_PORCA = "porca_na_ponta"
 ANCORAGEM_GANCHO = "gancho"
 ANCORAGEM_QUIMICO = "quimico"
@@ -192,7 +199,7 @@ FAMILIAS_U = ("U (canal laminado)",)
 FORMA_I = "I"
 FORMA_U = "U"
 #: As disposições que o pilar U admite (a tipo 2 e as outras precisam dos dois lados da alma).
-TIPOS_DO_U = (TIPO_1,)
+TIPOS_DO_U = (TIPO_1, TIPO_ROTULADA_X)
 MU_PADRAO = 0.45  # placa de base × argamassa expansiva (6.7.2.2 a)
 ALFA_V_CHUMBADOR = 0.45  # corte com a rosca no plano, NBR 8800:2025 6.3.3.2 a)
 # Arruela especial (Tabela 18, notas a e c): aço com f_y = 345 MPa — f_u = 450 MPa, o menor dos
@@ -1003,9 +1010,9 @@ def geometria(e: EntradaBase) -> Geometria:
     forma = FORMA_U if perfil.familia in FAMILIAS_U else FORMA_I
     if forma == FORMA_U and e.tipo not in TIPOS_DO_U:
         raise BaseInvalida(
-            "Pilar U: só a disposição tipo 1 (chumbadores externos às mesas). A tipo 2, a "
-            "rotulada e a de internos e externos contam com chumbadores dos dois lados da alma, "
-            "e o U só tem um."
+            "Pilar U: só a tipo 1 ou a rotulada em x (chumbadores fora das mesas). A tipo 2, a "
+            "rotulada em y e a de internos e externos contam com chumbadores dos dois lados da "
+            "alma, e o U só tem um."
         )
     tab = disposicoes(e)
     d, b_f = perfil.altura_mm, perfil.largura_mm
@@ -1020,6 +1027,12 @@ def geometria(e: EntradaBase) -> Geometria:
     lx = d + 4 * a1_x  # a₁ do furo à borda e a₁ do furo à mesa (tipo 1) ou 2·a₁ até a mesa
     if e.tipo in TIPOS_DA_NORMA:
         ly = (0.5 * n_b - 1) * a2 + 2 * a1
+    elif e.tipo == TIPO_ROTULADA_X:  # uma fileira no eixo x: a placa cobre o perfil (+ 12,5 mm)
+        if forma == FORMA_U:
+            meia = max(abs(y_dorso), b_f - abs(y_dorso))
+        else:
+            meia = b_f / 2
+        ly = max(2 * a1, 2 * meia + 25.0)
     else:  # duas fileiras em y, a₂ entre elas
         ly = a2 + 2 * a1
     if e.lx_mm:
@@ -1040,12 +1053,14 @@ def geometria(e: EntradaBase) -> Geometria:
         TIPO_1: None,
         TIPO_2: (0.5 * n_b - 1) * a2 + 1.75 * (a2 - t_w),
         TIPO_ROTULADA: 1.75 * (a2 - t_w),  # um chumbador de cada lado da alma
+        TIPO_ROTULADA_X: None,  # fora das mesas
         TIPO_INTERNOS_E_EXTERNOS: a2 + 1.75 * (a2 - t_w),  # dois de cada lado da alma
     }[e.tipo]
     a = {
         TIPO_1: lx / 2 - a1,
         TIPO_2: a2 / 2,
         TIPO_ROTULADA: 0.0,
+        TIPO_ROTULADA_X: lx / 2 - a1,
         TIPO_INTERNOS_E_EXTERNOS: lx / 2 - a1,
     }[e.tipo]
     m = (lx - 0.95 * d) / 2
@@ -1068,6 +1083,9 @@ def geometria(e: EntradaBase) -> Geometria:
     if e.tipo in TIPOS_DA_NORMA:
         por_linha = max(n_b // 2, 1)
         ys = [(k - (por_linha - 1) / 2) * a2 for k in range(por_linha)]
+        linhas_x = [-a, a]
+    elif e.tipo == TIPO_ROTULADA_X:  # um de cada lado, no eixo x (na linha da alma)
+        ys = [0.0]
         linhas_x = [-a, a]
     else:
         ys = [-a2 / 2, a2 / 2]
@@ -2988,7 +3006,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     regra_n = {
         TIPO_1: "base tipo 1: 4 ≤ n_b ≤ 8, em duas linhas iguais",
         TIPO_2: "base tipo 2: n_b = 4",
-        TIPO_ROTULADA: "base rotulada: 2 chumbadores, um de cada lado da alma",
+        TIPO_ROTULADA: "base rotulada em y: 2 chumbadores no eixo y, um de cada lado da alma",
+        TIPO_ROTULADA_X: "base rotulada em x: 2 chumbadores no eixo x, um fora de cada mesa",
         TIPO_INTERNOS_E_EXTERNOS: "4 chumbadores externos e 4 internos",
     }[e.tipo]
     linhas.append(
@@ -3014,6 +3033,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         if e.ly_mm
         else f"ℓy = (0,5·n_b − 1)·a₂ + 2·a₁ = (0,5·{n_b} − 1)·{_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
         if da_norma
+        else f"ℓy = máx(2·a₁; largura do perfil + 25 mm), 2·a₁ = 2·{_n(g.a1, 0)}"
+        if e.tipo == TIPO_ROTULADA_X
         else f"ℓy = a₂ + 2·a₁ = {_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
     )  # fmt: skip
     if g.e_u:  # a placa centrada no centro geométrico: a folga de 12,5 mm de cada lado do U
@@ -3477,6 +3498,26 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             f"{_n(v_sd / 1e3, 1)} kN foi verificada nos chumbadores (corte do chumbador e flexão na "
             "argamassa). Para os n chumbadores engatarem juntos, use arruelas soldadas ou placa de "
             "cisalhamento."
+        )
+    elif modo_v == CORTANTE_ATRITO and v_sd > v_rd + 1e-6:
+        # compressão pequena: o atrito desta combinação não basta, e a cortante vai aos
+        # chumbadores, como na tração (6.7.2.3: dispositivo; o atrito não se soma a ele)
+        modo_v = CORTANTE_DIRETOS
+        linhas.append(
+            _info(
+                "Cortante: atrito na argamassa não basta",
+                f"V_Sd = {_n(v_sd / 1e3, 1)} kN > V_Rd = {_n(v_rd / 1e3, 1)} kN pelo atrito "
+                f"(μ = {_n(e.mu)} sobre a compressão desta combinação, ÷ γ_a2 = {_n(c.a2)}): "
+                f"precisaria de N_Sd ≥ {_n(v_sd * c.a2 / e.mu / 1e3, 0)} kN. A cortante foi "
+                "verificada nos chumbadores (corte e flexão na argamassa)",
+                ref_caso,
+            )
+        )
+        avisos.append(
+            f"Caso {caso}: a compressão desta combinação é pequena e o atrito na argamassa "
+            f"(V_Rd = {_n(v_rd / 1e3, 1)} kN) não leva V_Sd = {_n(v_sd / 1e3, 1)} kN; a cortante "
+            "foi verificada nos chumbadores, como nas combinações com tração (6.7.2.3). Para os n "
+            "chumbadores engatarem juntos, use arruelas soldadas ou placa de cisalhamento."
         )
     if modo_v == CORTANTE_ATRITO:
         if v_rd <= 0:  # T1 e T2 (ou C3/T3 sem equilíbrio): não há pressão de contato, nem atrito

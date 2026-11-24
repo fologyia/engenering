@@ -29,10 +29,11 @@ def _medidas(nome: str) -> tuple[float, float, float, float]:
     return p.altura_mm, p.largura_mm, p.espessura_alma_mm, p.espessura_mesa_mm
 
 
-def test_os_u_do_catalogo_entram_na_lista_e_so_na_tipo_1():
+def test_os_u_do_catalogo_entram_na_lista_e_so_nas_externas():
     assert U8 in bp.perfis_u() and U8 in bp.perfis_do_pilar()
     assert not set(bp.perfis_u()) & set(bp.perfis_i())
-    assert bp.forma_do_perfil(U8) == bp.FORMA_U and bp.tipos_do_perfil(U8) == (bp.TIPO_1,)
+    assert bp.forma_do_perfil(U8) == bp.FORMA_U
+    assert bp.tipos_do_perfil(U8) == (bp.TIPO_1, bp.TIPO_ROTULADA_X)
     assert bp.forma_do_perfil("W 250 x 32,7") == bp.FORMA_I
     for tipo in (bp.TIPO_2, bp.TIPO_ROTULADA, bp.TIPO_INTERNOS_E_EXTERNOS):
         with pytest.raises(bp.BaseInvalida, match="tipo 1"):
@@ -198,7 +199,7 @@ def test_pagina_com_pilar_u(banco_isolado):
     t.run()
     assert not t.exception, [str(e.value) for e in t.exception]
     radio = next(r for r in t.radio if r.label == "Disposição dos chumbadores")
-    assert list(radio.options) == [bp.TIPOS[bp.TIPO_1]]
+    assert list(radio.options) == [bp.TIPOS[bp.TIPO_1], bp.TIPOS[bp.TIPO_ROTULADA_X]]
     assert t.session_state["pb_tipo"] == bp.TIPO_1
     assert any("Pilar U" in c.value for c in t.caption)
 

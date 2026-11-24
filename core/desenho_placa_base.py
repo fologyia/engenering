@@ -195,7 +195,7 @@ def _planta(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int,
     dg.cota_alinhada(dr, p(-g.lx / 2, -g.ly / 2), p(g.lx / 2, -g.ly / 2), baixo, f"ℓx = {_n(g.lx)}", afastamento_lx, fundo=True)  # fmt: skip
     dg.cota_alinhada(dr, p(-g.lx / 2, -g.ly / 2), p(-g.lx / 2, g.ly / 2), esquerda, f"ℓy = {_n(g.ly)}", 34 * ESC, fundo=True)  # fmt: skip
     x_linha = g.posicoes[0][0]  # a linha mais à esquerda
-    externos = e.tipo in (bp.TIPO_1, bp.TIPO_INTERNOS_E_EXTERNOS)
+    externos = e.tipo in bp.TIPOS_EXTERNOS
     if externos:  # a₁ da borda ao furo
         dg.cota_alinhada(dr, p(-g.lx / 2, g.ly / 2), p(x_linha, g.ly / 2), cima, f"a₁ = {_n(g.a1)}", 14 * ESC, fundo=True)  # fmt: skip
     else:  # internos: 2·a₁ da borda à face da mesa (Figura 21)

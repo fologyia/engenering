@@ -3299,7 +3299,7 @@ elif modulo == "Placas de base":
             ["Pilar", "Perfil W, HP ou I do catálogo", "Desenho da estrutura / modelo"],
             [
                 "Disposição",
-                "Tipo 1 (externos, 4 a 8), tipo 2 (4 internos), rotulada (2 internos) ou 4 + 4",
+                "Tipo 1 (externos, 4 a 8), tipo 2 (4 internos), rotulada em y (2 internos), rotulada em x (2 externos, na linha da alma) ou 4 + 4",
                 "Desenho da base / padrão do cliente",
             ],
             [
@@ -3337,12 +3337,14 @@ elif modulo == "Placas de base":
         st.subheader("Disposições e tipos de chumbador")
         st.markdown(
             """
-            - **Externos (tipo 1)** e **internos (tipo 2)** são os da Figura 21. A **rotulada** (2
-              internos, um de cada lado da alma) e a de **internos e externos** (4 + 4) vão pelo
+            - **Externos (tipo 1)** e **internos (tipo 2)** são os da Figura 21. A **rotulada em y**
+              (2 no eixo y, um de cada lado da alma), a **rotulada em x** (2 no eixo x, um fora de
+              cada mesa) e a de **internos e externos** (4 + 4) vão pelo
               método geral: a mesma pressão σ_c,Rd no trecho ℓ_c e a força em cada chumbador
               proporcional à distância à borda comprimida (placa rígida). Com uma só linha
-              tracionada, dá exatamente a conta da norma. A rotulada quase não tem momento: os
-              chumbadores ficam no eixo e só o concreto faz braço.
+              tracionada, dá exatamente a conta da norma. A rotulada em y quase não segura o momento
+              M (os chumbadores ficam no eixo y e só o concreto faz braço); a rotulada em x segura M
+              e quase não segura M_y.
             - **Reto com porca e chapa na ponta:** o da Tabela 18. Ligando **Verificar a ancoragem
               no concreto**, entram o arrancamento da cabeça (8·A_brg·f_c), o cone de concreto do
               grupo tracionado e o arrancamento lateral junto à borda (ACI 318-19, Capítulo 17).

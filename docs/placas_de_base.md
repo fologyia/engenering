@@ -16,7 +16,7 @@ pelo AISC Design Guide 1 com a pressão de contato da 6.6.5 (2025) e o critério
 | Campo | Uso |
 | --- | --- |
 | Perfil do pilar | W, HP ou I duplamente simétrico do catálogo (6.7.1.1); U e outros são recusados. |
-| Disposição | Tipo 1: externos às mesas, 4 ≤ n_b ≤ 8 em duas linhas; tipo 2: 4 entre as mesas (Figura 21); **rotulada**: 2 internos, um de cada lado da alma, no eixo; **internos e externos**: 4 + 4 (as duas últimas pelo método geral). |
+| Disposição | Tipo 1: externos às mesas, 4 ≤ n_b ≤ 8 em duas linhas; tipo 2: 4 entre as mesas (Figura 21); **rotulada em y**: 2 no eixo y, um de cada lado da alma; **rotulada em x**: 2 no eixo x, um fora de cada mesa; **internos e externos**: 4 + 4 (as três últimas pelo método geral). |
 | Chumbador | Ø 3/4" a 2" (Tabela 18) ou **por fórmula** (qualquer diâmetro, ver abaixo); a₁ e a₂ mínimos ou maiores (o toggle libera os campos); no tipo 2, também o a₁ da direção ℓx, de 10 mm ao da tabela (nota f). |
 | Tipo do chumbador | Reto com porca e chapa na ponta (Tabela 18), **guarda-chuva** (gancho em J ou L, e_h), **químico** ou **parabolt** (pós-instalados, com o N_Rd do fabricante); embutimento h_ef; chapa na ponta; opção de verificar a ancoragem no concreto e de armadura de ancoragem no bloco. |
 | Aço do chumbador | ASTM A36 e F1554 Gr 36 (equivalentes, 6.7.1.5 c), F1554 Gr 55 e Gr 105, A193 B7, SAE 1020. |
@@ -84,8 +84,12 @@ A 6.7.1.1 admite outras configurações desde que atendam 6.1.1.3. Para a **rotu
   (a conta do tipo 1); entre as mesas, de cada lado da alma, t = √(2·n·F_máx·(a₂ − t_w)/(ℓ₀·f_y/γ_a1))
   com ℓ₀ = (n − 1)·s + 1,75·(a₂ − t_w) (a conta do tipo 2). A arruela dos internos precisa caber entre
   a alma e as mesas.
-* A rotulada só aguenta o momento que o concreto faz sozinho (os chumbadores ficam no eixo): no W 250
+* A rotulada (em y) só aguenta o momento que o concreto faz sozinho (os chumbadores ficam no eixo): no W 250
   × 32,7 com N = 300 kN, cerca de 67 kN·m; acima disso, "Equilíbrio possível" reprova.
+* **Rotulada em x** (24/11/2026, `TIPO_ROTULADA_X`): 2 chumbadores no eixo x, a a₁ da borda em ℓx
+  (ℓx = d + 4·a₁, como a tipo 1), um fora de cada mesa; ℓy = máx(2·a₁; largura do perfil + 25 mm).
+  Segura M pelo binário dos chumbadores e gira no eixo fraco (M_y só com o concreto). Vale também
+  para o pilar U.
 
 ## Pilar de perfil U (24/11/2026)
 
@@ -102,8 +106,8 @@ A 6.7 é escrita para o perfil I ou H; o U (canal laminado do catálogo) vai pel
   0,80·(2·b_f)/2 da I equivalente); n = o maior dos dois balanços. Entre as mesas, n₀ =
   √(d·2·b_f)/4 e X = [4·d·(2b_f)/(d + 2b_f)²]·N/(ℓx·ℓy·σ_c,Rd). A espessura pela zona comprimida
   usa a linha de cada lado (`Geometria.engaste_y`).
-- **Disposição**: só a **tipo 1** (`TIPOS_DO_U`); a tipo 2, a rotulada e a de internos e externos
-  contam com chumbadores dos dois lados da alma (`BaseInvalida`).
+- **Disposição**: só a **tipo 1** e a **rotulada em x** (`TIPOS_DO_U`); a tipo 2, a rotulada em y e
+  a de internos e externos contam com chumbadores dos dois lados da alma (`BaseInvalida`).
 - **Largura**: em vez de ℓy ≥ b_f + 25, 12,5 mm de placa além do U de cada lado (a placa é centrada
   no centro geométrico, não no meio de b_f).
 - **Solda do contorno** (`base_de_pilar_soldas.contorno_do_pilar(..., y_dorso=...)`): dorso da alma
@@ -313,6 +317,14 @@ na rosca, M/W.
 
 **Furo justo** (por fórmula, d_f menor que o padrão AISC 14-2): linha INFO, aviso e premissa no
 memorial (locação precisa com gabarito; alternativa: furo padrão + arruelas soldadas).
+
+## Atrito que não basta numa combinação de compressão (24/11/2026)
+
+V_Rd pelo atrito = μ·C/γ_a2 (0,45·N/1,35 = N/3 em C1) depende só da compressão da combinação. Com N
+pequeno (vento) e V grande, a linha dava NÃO OK de centenas de %. Agora, como já era nas combinações
+com tração, a cortante dessa combinação vai aos chumbadores (corte e flexão na argamassa, com o
+alerta do furo), e o atrito vira a linha INFO "Cortante: atrito na argamassa não basta", com o N que
+bastaria. Para os n chumbadores engatarem juntos, arruelas soldadas ou placa de cisalhamento.
 
 ## Exemplo (do guia)
 

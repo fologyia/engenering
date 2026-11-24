@@ -13,18 +13,21 @@ AJUDA: dict[str, str] = {
         "ficam paralelas ao lado ℓy. No U, a placa fica centrada no centro geométrico do perfil "
         "(onde atuam N, M e M_y), e a conta trata o U como meia I de mesa 2·b_f: o balanço da "
         "placa conta do dorso da alma e de 0,80·b_f a partir dele. O U só aceita a base tipo 1 "
-        "(chumbadores fora das mesas)."
+        "e a rotulada em x (chumbadores fora das mesas)."
     ),
     "tipo": (
         "Onde ficam os chumbadores. Tipo 1 (externos, de 4 a 8): fora das mesas, a base que "
         "aguenta momento grande. Tipo 2 (internos, 4): entre as mesas, junto da alma; não cobre o "
-        "chumbador tracionado pelo momento (C3 e T3). Rotulada (2 internos no eixo): um de cada "
-        "lado da alma, quase sem momento. Internos e externos (4 + 4): para momento grande com "
-        "tração alta. Os dois últimos não estão na Figura 21 e vão pelo método geral."
+        "chumbador tracionado pelo momento (C3 e T3). Rotulada em y (2 no eixo y): um de cada "
+        "lado da alma, a base gira no eixo forte (quase não segura o momento M). Rotulada em x "
+        "(2 no eixo x): um fora de cada mesa, na linha da alma, a base gira no eixo fraco (segura "
+        "M, quase não segura M_y). Internos e externos (4 + 4): para momento grande com tração "
+        "alta. As rotuladas e a de internos e externos não estão na Figura 21 e vão pelo método "
+        "geral."
     ),
     "n_chumbadores": (
-        "Quantos chumbadores. Tipo 1: 4, 6 ou 8, metade de cada lado; tipo 2: 4; rotulada: 2; "
-        "internos e externos: 8. A Tabela 18 vale de 4 a 8 chumbadores (nota a): na rotulada, "
+        "Quantos chumbadores. Tipo 1: 4, 6 ou 8, metade de cada lado; tipo 2: 4; rotuladas: 2; "
+        "internos e externos: 8. A Tabela 18 vale de 4 a 8 chumbadores (nota a): nas rotuladas, "
         "ligue a verificação da ancoragem no concreto."
     ),
     "modo_chumbador": (

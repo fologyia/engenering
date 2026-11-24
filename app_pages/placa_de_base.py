@@ -24,7 +24,7 @@ configurar_pagina("Placas de base", ":material/anchor:")
 cabecalho_pagina(
     "Placas de base",
     "Base de pilar de perfil I, H ou U pela ABNT NBR 8800:2025 (6.7): chumbadores externos, "
-    "internos, base rotulada ou internos e externos; o caso pela força normal e pelo momento, a "
+    "internos, base rotulada (em x ou em y) ou internos e externos; o caso pela força normal e pelo momento, a "
     "espessura da placa, os chumbadores (reto com porca, guarda-chuva, químico ou parabolt, com a "
     "ancoragem no concreto pela ACI 318-19), a cortante, a Tabela 18, o desenho e o memorial.",
     categoria="Estrutura metálica",
@@ -164,7 +164,7 @@ with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
     )
     colunas[1].caption(
         "Pilar U: o método da 6.7 estendido (o U como meia I de mesa 2·b_f, placa centrada no "
-        "centro geométrico); só a tipo 1, com os chumbadores fora das mesas."
+        "centro geométrico); só a tipo 1 e a rotulada em x, com os chumbadores fora das mesas."
         if bp.forma_do_perfil(perfil) == bp.FORMA_U
         else "Método da NBR 8800:2025, Figura 21."
         if tipo in bp.TIPOS_DA_NORMA
