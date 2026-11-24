@@ -1012,6 +1012,7 @@ ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
         ("talas_da_alma", "Talas da alma", "se_preenchido"),
         ("parafusos_da_alma", "Parafusos da alma", "se_preenchido"),
         ("total_de_parafusos", "Total de parafusos", "se_preenchido"),
+        ("estados_limites", "Estados-limite", "se_preenchido"),
     ),
     "escada_marinheiro": (
         ("altura_m", "Altura até o piso de chegada [m]", "se_preenchido"),

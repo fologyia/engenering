@@ -24,8 +24,10 @@ from core import cantoneiras as ct
 from core import cargas_aplicadas as ca
 from core import cena_do_modelo as cm
 from core import column_buckling as cbk
+from core import colunas_do_modelo as cdm
 from core import diagnostico_do_modelo as dm
 from core import direcoes_da_secao as ds
+from core import emendas_do_modelo as edm
 from core import esforcos_modelo as em
 from core import exportacao_cargas as ex
 from core import gerenciador_solidworks as gs
@@ -1230,4 +1232,99 @@ with st.container(border=True), secao_protegida("8. Quadro de cargas para as fun
             key="em_csv_apoios",
             help=AJUDA["btn_csv_apoios"],
             width="stretch",
+        )
+
+# ============================================================ 9. emendas dos pilares
+with st.container(border=True), secao_protegida("9. Emendas dos pilares"):
+    st.subheader("9. Emendas dos pilares", help=AJUDA["sec_emendas"])
+    if not geometria.corpos:
+        st.caption("Sem o esqueleto do modelo não há como achar os pilares e as emendas.")
+    else:
+        todas = edm.achar_emendas(dados, leituras, com_as_tiradas=True)
+        tiradas = edm.emendas_tiradas(dados)
+        achadas = [x for x in todas if x.origem != edm.ORIGEM_INFORMADA]
+        pilares = [x.barra for x in cdm.pilares_do_modelo(dados, leituras) if x.corpo]
+        st.caption(
+            f"{len(achadas)} emenda(s) achada(s) no esqueleto, onde dois pilares em pé se "
+            "encontram. Desmarque as que não são emenda e informe as que ficam no meio de um "
+            "pilar. Os esforços saem do pilar de cima, no ponto da emenda."
+        )
+        tabela_achadas = pd.DataFrame(columns=["Usar"])
+        if achadas:
+            tabela_achadas = st.data_editor(
+                pd.DataFrame(
+                    [{"Usar": x.chave not in tiradas, "Emenda": x.nome, "Origem": x.origem,
+                      "Perfis (de cima / de baixo)": f"{x.perfil_superior} / {x.perfil_inferior}"}
+                     for x in achadas],
+                    columns=["Usar", "Emenda", "Origem", "Perfis (de cima / de baixo)"],
+                ),
+                hide_index=True,
+                width="stretch",
+                disabled=["Emenda", "Origem", "Perfis (de cima / de baixo)"],
+                key="em_emendas_achadas",
+                column_config={"Usar": st.column_config.CheckboxColumn(help=AJUDA["emenda_usar"])},
+            )  # fmt: skip
+        st.caption("Emendas no meio de um pilar (o pilar e a altura a partir do pé):")
+        tabela_informadas = st.data_editor(
+            pd.DataFrame(
+                [{"Pilar": b, "Altura a partir do pé (m)": h}
+                 for b, h in edm.emendas_informadas(dados)],
+                columns=["Pilar", "Altura a partir do pé (m)"],
+            ),
+            num_rows="dynamic",
+            hide_index=True,
+            width="stretch",
+            key="em_emendas_informadas",
+            column_config={
+                "Pilar": st.column_config.SelectboxColumn(options=pilares,
+                                                          help=AJUDA["emenda_pilar"]),
+                "Altura a partir do pé (m)": st.column_config.NumberColumn(
+                    min_value=0.0, format="%.3f", help=AJUDA["emenda_altura"]),
+            },
+        )  # fmt: skip
+        if st.button("Gravar as emendas", icon=":material/save:", key="em_gravar_emendas",
+                     help=AJUDA["btn_gravar_emendas"]):  # fmt: skip
+            usar = list(tabela_achadas["Usar"]) if len(tabela_achadas) else []
+            novas_tiradas = [x.chave for x, u in zip(achadas, usar, strict=False) if not u]
+            informadas = [
+                (str(linha["Pilar"]), float(linha["Altura a partir do pé (m)"]))
+                for linha in tabela_informadas.to_dict("records")
+                if linha.get("Pilar") and not pd.isna(linha.get("Altura a partir do pé (m)"))
+            ]
+            if gravar(edm.com_informadas_e_tiradas(dados, informadas, novas_tiradas),
+                      "Esforços do modelo: emendas dos pilares"):  # fmt: skip
+                st.rerun()
+        emendas = edm.achar_emendas(dados, leituras)
+        preparo_emendas = edm.preparar(dados, plano, estados) if emendas else None
+        if emendas and preparo_emendas is None:
+            st.caption("Nenhum caso do plano de cargas foi importado.")
+        elif emendas and preparo_emendas is not None:
+            linhas_emendas = []
+            for lido in edm.ler_esforcos(dados, leituras, preparo_emendas, emendas):
+                for aviso in lido.avisos:
+                    st.warning(aviso, icon=":material/warning:")
+                if not lido.lidos:
+                    linhas_emendas.append({"Emenda": lido.emenda.nome, "Combinação": "—",
+                                           "Como foi lido": lido.motivo})  # fmt: skip
+                    continue
+                for caso in lido.casos:
+                    linhas_emendas.append(
+                        {"Emenda": lido.emenda.nome, "Combinação": caso.nome, "N (kN)": caso.N,
+                         "M_x (kN·m)": caso.Mx, "V (kN)": caso.V, "M_y (kN·m)": caso.My,
+                         "Como foi lido": lido.como}
+                    )  # fmt: skip
+            st.caption(
+                "Esforços de cálculo no ponto de cada emenda, para os estados-limite escolhidos na "
+                "seção 5 (N positivo é compressão; M_x no eixo forte da seção).",
+                help=AJUDA["res_emendas"],
+            )
+            st.dataframe(
+                pd.DataFrame(linhas_emendas), hide_index=True, width="stretch",
+                column_config={c: st.column_config.NumberColumn(format="%.2f")
+                               for c in ("N (kN)", "M_x (kN·m)", "V (kN)", "M_y (kN·m)")},
+            )  # fmt: skip
+        st.page_link(
+            "app_pages/emenda_pilar.py",
+            label="Verificar as emendas na Emenda de pilar (uma a uma ou todas de uma vez)",
+            icon=":material/vertical_split:",
         )

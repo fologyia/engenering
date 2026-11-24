@@ -367,7 +367,11 @@ def abrir(**estado) -> AppTest:
 
 
 def test_todo_texto_de_ajuda_e_usado_e_termina_com_ponto():
-    usadas = set(re.findall(r'"([a-zA-Z_0-9]+)"', (RAIZ / PAGINA).read_text(encoding="utf-8")))
+    texto_das_telas = "".join(
+        (RAIZ / f).read_text(encoding="utf-8")
+        for f in (PAGINA, "components/emendas_do_modelo_ui.py")
+    )
+    usadas = set(re.findall(r'"([a-zA-Z_0-9]+)"', texto_das_telas))
     assert set(AJUDA) <= usadas, set(AJUDA) - usadas
     for chave, texto in AJUDA.items():
         assert texto.strip() == texto and texto[-1] in ".!:", chave

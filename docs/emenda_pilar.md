@@ -86,6 +86,24 @@ disposições marcam os que saem da faixa 5/8"–1" do critério Anglo.
 - **Guia geral**: capítulo "Emenda de pilar", com o exemplo do caso de validação (o "?" do
   cabeçalho da página abre o capítulo).
 
+## Ligada ao modelo do SolidWorks
+
+- `core/emendas_do_modelo.py`: acha as emendas no esqueleto (topo de um pilar em pé a menos de 5 cm
+  do pé de outro; perfis diferentes = troca de perfil), junta as informadas (pilar + altura do pé) e
+  tira as desmarcadas (gravadas em `EsforcosDoModelo.emendas`). Os esforços são os das combinações
+  ELU (`combinados_do_membro`), com o B₂ do tipo Pilar, no pilar de cima: ponta de baixo por
+  `quadro_fundacoes.ponta_da_base`, altura dos pontos pela ordem dos elementos, interpolação linear
+  no meio, o ponto de cima num nó. Eixos como nas Ligações (eixo forte no Momento 2: V = V1,
+  M_x = M2, M_y = M1).
+- `montar_entrada`: perfis e aço da tabela das barras, K·L pelos travamentos do esqueleto, N_c,Rd
+  pela Flambagem de colunas (com flexo-torção), vão e altura da situação b pelo trecho travado em
+  L_x (`EntradaEmenda.vao_b`).
+- `ep.sugerir_talas`: monta as talas pelas regras da página e sobe fileiras/espessuras até atender;
+  o que reprova no próprio pilar (10–12) vira nota, sem engrossar a tala.
+- Telas: seção 9 de Esforços do modelo; na Emenda de pilar, "Trazer do modelo", "Sugerir as
+  talas" e "Todas as emendas do modelo" (`components/emendas_do_modelo_ui.py`). Testes:
+  `tests/test_emendas_do_modelo.py` (contra o pórtico 3D resolvido de `tests/portico_3d_teste01.py`).
+
 ## Fora do escopo (extensível)
 
 Emenda soldada, chapa de topo, perfis I/L/T, montagem, division plate (SCI P206/P212) e AISC 341.

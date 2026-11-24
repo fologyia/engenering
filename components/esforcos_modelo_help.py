@@ -214,4 +214,21 @@ AJUDA: dict[str, str] = {
         "Grava a verificação no projeto ativo: o memorial ganha o capítulo com o resultado, as "
         "barras que passaram e, no fim, as que não passaram."
     ),
+    "sec_emendas": (
+        "As emendas dos pilares do modelo e os esforços em cada uma. Dois pilares em pé que se "
+        "encontram (o topo de um a menos de 5 cm do pé do outro) viram emenda; com perfis "
+        "diferentes, é a emenda da troca de perfil. A página Emenda de pilar lê esta lista."
+    ),
+    "emenda_usar": "Desmarque o encontro que não é emenda (por exemplo, dois pilares soldados na obra).",
+    "emenda_pilar": "O pilar em que fica a emenda informada (uma emenda no meio dele).",
+    "emenda_altura": (
+        "A altura da emenda medida do pé do pilar, em m. Os esforços saem por interpolação entre "
+        "os dois pontos vizinhos do arquivo do SolidWorks."
+    ),
+    "btn_gravar_emendas": "Grava no projeto as emendas desmarcadas e as informadas.",
+    "res_emendas": (
+        "Os esforços saem do pilar de cima, com o B₂ do tipo Pilar. No pé dele, é o próprio ponto "
+        "do arquivo; no meio, a interpolação linear. A ponta de baixo do pilar é a mesma das "
+        "placas de base (pelo peso próprio ou pela coluna Base da tabela das barras)."
+    ),
 }

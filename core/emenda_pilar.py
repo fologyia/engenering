@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from core import bolted_connection as bc
+from core import medidas_comerciais as mc
 from core import perfis_gerdau_k as gk
 from core.nbr8800 import fator_chi
 from core.technical_records import criar_registro_tecnico
@@ -241,6 +242,9 @@ class EntradaEmenda:
     Ly: float = 6000.0
     Ky: float = 1.0
     a: float = 1200.0
+    #: vão da situação b de 6.1.6.2 (o trecho entre travamentos que contém a emenda);
+    #: vazio = L_x. Vem do esqueleto quando a emenda sai do modelo.
+    vao_b: float | None = None
     Nc_Rd_informado: float | None = None  # kN
     criterio_minimo: str = MINIMO_MENOS_SEVERO
     distribuicao: str = DISTRIBUICAO_POR_AREA
@@ -308,8 +312,11 @@ def validar(e: EntradaEmenda) -> list[str]:
             erros.append(f"{nome} precisa ser pelo menos 1.")
     if e.gap < 0:
         erros.append("A fresta não pode ser negativa.")
-    if not 0 < e.a < e.Lx:
-        erros.append("A altura da emenda precisa ficar entre os apoios (0 < a < L_x).")
+    vao = e.vao_b if e.vao_b is not None else e.Lx
+    if e.vao_b is not None and e.vao_b <= 0:
+        erros.append("O vão da situação b precisa ser maior que zero.")
+    elif not 0 <= e.a < vao:
+        erros.append("A altura da emenda precisa ficar dentro do vão (0 ≤ a < L).")
     if e.Nc_Rd_informado is not None and e.Nc_Rd_informado <= 0:
         erros.append("N_c,Rd informado precisa ser maior que zero (ou fique vazio).")
     if not e.casos:
@@ -595,8 +602,9 @@ def caso_minimo(Nc_Rd: float, alfa_f: float, z: float, e: EntradaEmenda) -> Caso
     Na = FRACAO_TRACAO_MINIMA * Nc_Rd
     Ffa = Na / 2 if e.distribuicao == DISTRIBUICAO_METADE else Na * alfa_f
     H = FRACAO_FORCA_TRANSVERSAL * Nc_Rd
-    Mb = H * e.a * (e.Lx - e.a) / e.Lx / 1000  # kN·m
-    Vb = H * max(e.a, e.Lx - e.a) / e.Lx
+    vao = e.vao_b if e.vao_b is not None else e.Lx
+    Mb = H * e.a * (vao - e.a) / vao / 1000  # kN·m
+    Vb = H * max(e.a, vao - e.a) / vao
     Ffb = Mb * 1000 / z
     if e.criterio_minimo == MINIMO_NENHUM:
         adotado = ""
@@ -1134,6 +1142,156 @@ def xlsx_completo(r: ResultadoEmenda) -> bytes:
             linhas += [{"Grupo": grupo, **x} for x in linhas_para_registro(lista)]
         pd.DataFrame(linhas).to_excel(escritor, sheet_name="Verificações", index=False)
     return saida.getvalue()
+
+
+# ---------------------------------------------------------------------------------------------
+# SUGERIR AS TALAS
+# ---------------------------------------------------------------------------------------------
+#: Limites da busca: até onde o programa sobe as fileiras antes de engrossar a tala.
+FILEIRAS_MAXIMAS = 8
+FILEIRAS_MAXIMAS_ALMA = 6
+#: Que verificação reprovada muda o quê: as do pilar (10 a 12) as talas não resolvem.
+DO_PILAR = {"10", "11", "12"}
+PARAFUSOS_DA_MESA = {"1", "2", "2i", "3", "4", "4i", "13"}
+TALA_DA_MESA = {"1b", "5", "6", "7", "8", "9", "5i", "6i", "7i", "8i", "9i"}
+PARAFUSOS_DA_ALMA = {"14", "15", "16", "22"}
+TALAS_DA_ALMA = {"17", "18", "19", "20", "21"}
+
+
+def _acima(valor: float, passo: float = 5.0) -> float:
+    return math.ceil(valor / passo - 1e-9) * passo
+
+
+def _abaixo(valor: float, passo: float = 5.0) -> float:
+    return math.floor(valor / passo + 1e-9) * passo
+
+
+def _chapa_acima(t: float) -> float:
+    """A primeira espessura de chapa comercial ≥ t (core.medidas_comerciais.CHAPAS)."""
+    return next((c for c in mc.CHAPAS.valores if c >= t - 1e-9), mc.CHAPAS.valores[-1])
+
+
+@dataclass(frozen=True)
+class Sugestao:
+    entrada: EntradaEmenda
+    resultado: ResultadoEmenda | None
+    notas: tuple[str, ...]
+    cabe: bool  # False: o parafuso não cabe na mesa ou na alma deste perfil
+
+    @property
+    def atende(self) -> bool:
+        return self.cabe and self.resultado is not None and self.resultado.situacao == "ATENDE"
+
+
+def sugerir_talas(e: EntradaEmenda) -> Sugestao:
+    """As talas montadas pelas regras da página para o perfil e o parafuso de ``e``.
+
+    Mesa: tala da largura da mesa (múltiplo de 5 mm, ≤ b_f) com espessura comercial ≥ t_f e
+    ≥ 8 mm (continuidade e Anglo 8.8); duas linhas no W (uma linha no U) com o gabarito que deixa
+    a folga da porca junto ao raio; passo 3·d_b e bordas de 2·d_b (≥ Tabela 16), arredondados a
+    5 mm; fileiras que dão a extensão de 225 mm do SCI P207 5.2.4. Alma: duas colunas e duas
+    fileiras dentro do d'. Se a resistência não atende, sobe as fileiras (até 8 na mesa e 6 na
+    alma) e, depois, a espessura da tala. Não troca o parafuso: isso é escolha de quem projeta.
+    """
+    erros = [x for x in validar(e) if "tala" not in x.lower() and "furos" not in x.lower()]
+    if erros:
+        raise ValueError(" ".join(erros))
+    sup, inf = PERFIS[e.perfil_superior], PERFIS[e.perfil_inferior]
+    eh_u = sup.familia == FAMILIA_U
+    db = diametro_do_parafuso(e.diametro)
+    borda = float(bc.PARAFUSOS[e.diametro][2])
+    bf, tf = min(sup.bf, inf.bf), min(sup.tf, inf.tf)
+    tw = max(sup.tw, inf.tw)
+    R = e.raio_u if eh_u else sup.R
+    dl = (min(sup.h, inf.h) - 2 * e.raio_u) if eh_u else min(sup.d_linha, inf.d_linha)
+    passo = _acima(ESPACAMENTO_MINIMO_DB * db)
+    ponta = _acima(max(borda, 2 * db))
+    notas: list[str] = []
+    cabe = True
+
+    bp = _abaixo(bf)
+    if eh_u:
+        nl, g = 1, passo
+        x1 = _acima(tw + R + db)
+        if bp - x1 < borda or bf - x1 < borda:
+            cabe = False
+            notas.append(
+                f"O parafuso {e.diametro} não cabe na mesa do {e.perfil_superior}: do dorso à "
+                f"linha de furos são {_n(x1)} mm e sobram {_n(bf - x1)} mm até a borda (mínimo "
+                f"{_n(borda)} mm). Escolha um parafuso menor."
+            )
+    else:
+        nl, x1 = 2, e.x1_u
+        g = _acima(max(passo, 2 * (db + tw / 2 + R)))
+        if (bf - g) / 2 < borda:
+            cabe = False
+            notas.append(
+                f"Duas linhas de {e.diametro} não cabem na mesa de {_n(bf)} mm: o gabarito que "
+                f"deixa a folga da porca é {_n(g)} mm e sobrariam {_n((bf - g) / 2)} mm até a "
+                f"borda (mínimo {_n(borda)} mm). Escolha um parafuso menor."
+            )
+    tp = _chapa_acima(max(ESPESSURA_MINIMA_TALA, bf * tf / bp))
+    extensao = max(bf, EXTENSAO_MINIMA_MM)
+    nr = max(2, math.ceil((extensao - 2 * ponta) / passo - 1e-9) + 1)
+
+    nc, m = 2, 2
+    bw = _abaixo(dl)
+    if bw < passo + 2 * borda:
+        nc = 1
+        if bw < 2 * borda:
+            cabe = False
+            notas.append(
+                f"A alma do {e.perfil_superior} (d' = {_n(dl)} mm) não comporta o parafuso "
+                f"{e.diametro} com as bordas mínimas."
+            )
+    bw = min(bw, _acima((nc - 1) * passo + 2 * ponta))
+    twp = _chapa_acima(max(ESPESSURA_MINIMA_TALA, tw / 2))
+
+    atual = replace(
+        e, bp=bp, tp=tp, nl=nl, nr=nr, g=g, s=passo, ep=ponta, ec=ponta, x1_u=x1, bw=bw,
+        twp=twp, nc=nc, m=m, sh=passo, sv=passo, ewv=ponta, ewc=ponta,
+    )  # fmt: skip
+    if not cabe or validar(atual):
+        notas += validar(atual)
+        return Sugestao(atual, None, tuple(notas), False)
+    r = calcular(atual)
+    for _ in range(40):
+        if r.situacao == "ATENDE":
+            break
+        numeros = {v.nome.split(".")[0] for v in r.resistencia if v.status == "NÃO OK"}
+        do_pilar = numeros & DO_PILAR
+        if do_pilar:
+            notas.append(
+                "Não atende no próprio pilar ("
+                + ", ".join(sorted(do_pilar, key=lambda x: int(x)))
+                + "): a mesa do pilar não resiste a estes esforços, e trocar as talas não resolve. "
+                "Confira o perfil do pilar."
+            )
+            break
+        mudou = False
+        if numeros & PARAFUSOS_DA_MESA and atual.nr < FILEIRAS_MAXIMAS:
+            atual, mudou = replace(atual, nr=atual.nr + 1), True
+        elif numeros & (PARAFUSOS_DA_MESA | TALA_DA_MESA) and atual.tp < mc.CHAPAS.valores[-1]:
+            atual, mudou = replace(atual, tp=_chapa_acima(atual.tp + 0.01)), True
+        if numeros & PARAFUSOS_DA_ALMA and atual.m < FILEIRAS_MAXIMAS_ALMA:
+            atual, mudou = replace(atual, m=atual.m + 1), True
+        elif numeros & (PARAFUSOS_DA_ALMA | TALAS_DA_ALMA) and atual.twp < mc.CHAPAS.valores[-1]:
+            atual, mudou = replace(atual, twp=_chapa_acima(atual.twp + 0.01)), True
+        if not mudou:
+            notas.append(
+                "Mesmo com o máximo de fileiras e chapas mais grossas a emenda não atende: troque "
+                "o parafuso (maior ou A490) ou use talas internas."
+            )
+            break
+        r = calcular(atual)
+    if r.situacao == "ATENDE":
+        notas.insert(
+            0,
+            f"Talas sugeridas: mesa {_n(atual.bp)} × {_n(atual.tp)} com {atual.nl} × {atual.nr} "
+            f"parafusos por lado; alma 2 × {_n(atual.bw)} × {_n(atual.twp)} com {atual.nc} × "
+            f"{atual.m}. Utilização máxima {100 * r.utilizacao_maxima:.0f} %.",
+        )
+    return Sugestao(atual, r, tuple(notas), True)
 
 
 # ---------------------------------------------------------------------------------------------

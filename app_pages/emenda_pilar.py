@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components import emendas_do_modelo_ui as emu
 from components.cena_3d_svg import svg_da_cena
 from components.emenda_pilar_help import AJUDA
 from components.figuras import mostrar_figura
@@ -35,6 +36,7 @@ st.caption(
     "com o item da norma em cada linha."
 )
 P = ep.EntradaEmenda()
+emu.aplicar_pendentes()  # o que veio do modelo ou da sugestão das talas
 
 
 def _numero(rotulo: str, chave: str, padrao: float, ajuda: str, coluna: Any = st, *,
@@ -85,6 +87,12 @@ def _escolha(
         )  # fmt: skip
     )
 
+
+projeto_ativo = obter_projeto_ativo()
+modelo = emu.ModeloDoProjeto(projeto_ativo)
+with st.container(border=True), secao_protegida("Trazer do modelo"):
+    emu.secao_trazer_do_modelo(modelo, P)
+    emu.mostrar_notas_da_origem()
 
 with st.container(border=True), secao_protegida("1. Perfis e materiais"):
     st.subheader("1. Perfis e materiais", help=AJUDA["sec_perfis"])
@@ -153,9 +161,11 @@ with st.container(border=True), secao_protegida("4. Pilar"):
     Ky = _numero(
         "Ky", "emp_Ky", P.Ky, "Ky", c[3], minimo=0.1, maximo=5.0, passo=0.05, formato="%.2f"
     )
-    a = _numero("Altura da emenda, a (mm)", "emp_a", P.a, "a", c[4], minimo=1.0, passo=100.0,
+    a = _numero("Altura da emenda, a (mm)", "emp_a", P.a, "a", c[4], minimo=0.0, passo=100.0,
                 formato="%.0f")  # fmt: skip
-    c = st.columns(4)
+    c = st.columns(5)
+    vao_b = _numero("Vão da situação b (mm)", "emp_vao_b", 0.0, "vao_b", c[4], passo=100.0,
+                    formato="%.0f")  # fmt: skip
     usar_nc = c[0].toggle("Informar N_c,Rd", value=False, key="emp_usar_nc",
                           persist_state="session", help=AJUDA["usar_nc"])  # fmt: skip
     nc_informado = None
@@ -169,7 +179,7 @@ with st.container(border=True), secao_protegida("4. Pilar"):
 
 with st.container(border=True), secao_protegida("5. Esforços na emenda"):
     st.subheader("5. Esforços de cálculo na cota da emenda", help=AJUDA["sec_esforcos"])
-    padrao_casos = pd.DataFrame(
+    padrao_casos = emu.casos_da_tabela(
         [{"Caso": c.nome, "N (kN)": c.N, "M_x (kN·m)": c.Mx, "V (kN)": c.V, "M_y (kN·m)": c.My}
          for c in P.casos]
     )  # fmt: skip
@@ -261,7 +271,10 @@ entrada = ep.EntradaEmenda(
     criterio_minimo=criterio, distribuicao=distribuicao, casos=tuple(casos), bp=bp, tp=tp, nl=nl,
     nr=nr, g=g, s=s, ep=e_p, ec=e_c, bw=bw, twp=twp, nc=nc, m=m, sh=sh, sv=sv, ewv=ewv, ewc=ewc,
     talas_internas=bool(internas), bi=bi, ti=ti, raio_u=raio_u, x1_u=x1_u,
+    vao_b=vao_b if vao_b > 0 else None,
 )  # fmt: skip
+with st.container(border=True), secao_protegida("Sugerir as talas"):
+    emu.botao_sugerir_talas(entrada)
 erros = ep.validar(entrada)
 if erros:
     for erro in erros:
@@ -350,7 +363,6 @@ with st.container(border=True), secao_protegida("Exportar"):
 
 with st.container(border=True), secao_protegida("Memorial desta emenda"):
     st.subheader("Memorial desta emenda", help=AJUDA["sec_memorial"])
-    projeto_ativo = obter_projeto_ativo()
     figuras = de.figuras_para_o_registro(r)
     botoes = st.columns(2)
     botoes[0].download_button(
@@ -376,3 +388,6 @@ with st.container(border=True), secao_protegida("Registrar no projeto"):
         key="registrar_emenda_pilar",
         rotulo="Registrar a emenda no projeto ativo",
     )
+
+with st.container(border=True), secao_protegida("Todas as emendas do modelo"):
+    emu.secao_todas_as_emendas(modelo, entrada)

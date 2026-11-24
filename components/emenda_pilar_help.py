@@ -171,6 +171,45 @@ AJUDA: dict[str, str] = {
         "à alma."
     ),
     "ti": "Espessura de cada tala interna, em mm. Mínimo de 8 mm (Anglo 8.8).",
+    # modelo do SolidWorks
+    "sec_do_modelo": (
+        "Traz uma emenda do modelo gravado no projeto (Esforços do modelo): os perfis e o aço da "
+        "tabela das barras, K·L_x e K·L_y pelos travamentos do esqueleto, o N_c,Rd do pilar de "
+        "cima pela Flambagem de colunas e os esforços de cálculo de cada combinação no ponto da "
+        "emenda. Tudo continua editável."
+    ),
+    "emenda_do_modelo": (
+        "As emendas achadas no esqueleto (onde dois pilares em pé se encontram; com perfis "
+        "diferentes, é a troca de perfil) e as informadas em Esforços do modelo."
+    ),
+    "estados": "Os estados-limite últimos cujas combinações viram os casos da emenda.",
+    "base": (
+        "Como o pé do pilar preso ao apoio do modelo trabalha, para o K dos trechos (o arquivo "
+        "do SolidWorks não diz)."
+    ),
+    "btn_trazer": (
+        "Preenche os perfis, o aço, o pilar e a tabela de esforços com os valores da emenda. As "
+        "talas, o parafuso e o tipo de emenda ficam como estão."
+    ),
+    "vao_b": (
+        "Vão da barra biapoiada da situação b de 6.1.6.2, em mm: o trecho entre os travamentos "
+        "que contém a emenda. Com 0, vale L_x. Vem do esqueleto quando a emenda é trazida do "
+        "modelo."
+    ),
+    "sec_sugerir": (
+        "Monta as talas pelas regras de detalhamento desta página para os perfis, o parafuso e os "
+        "esforços acima. Se a emenda não atende, sobe as fileiras e depois a espessura das talas. "
+        "Não troca o parafuso: isso fica com quem projeta."
+    ),
+    "btn_sugerir": (
+        "Preenche as talas da mesa e da alma (largura, espessura, linhas, fileiras, passos e "
+        "bordas). Confira o resultado e ajuste à mão se quiser."
+    ),
+    "sec_todas": (
+        "Verifica de uma vez todas as emendas do modelo, cada uma com os esforços dela e as talas "
+        "sugeridas, usando o parafuso, os aços das talas e o tipo de emenda desta página."
+    ),
+    "verificar_todas": "Ligue para verificar todas as emendas do modelo (pode levar alguns segundos).",
     # memorial e registro
     "sec_memorial": (
         "O memorial só desta emenda. O Word é um trecho para colar no documento oficial (sem capa "
