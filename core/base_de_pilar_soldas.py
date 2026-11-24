@@ -334,8 +334,8 @@ def solda_do_pilar(
             f"/{_n(c.w2)}; {_texto_perna(perna_informada, perna)}{contato_txt}",
         )
     )
-    # metal-base do pilar: os dois filetes (um de cada face) descarregam na mesma chapa — a força
-    # normal escoa a chapa à tração (f_y·t/γ_a1) e a cortante a cisalha (6.5.5)
+    # metal-base do pilar: os filetes das duas faces (ou o de uma só) descarregam na mesma chapa —
+    # a força normal escoa a chapa à tração (f_y·t/γ_a1) e a cortante a cisalha (6.5.5)
     pior_mb: tuple[float, str] | None = None
     for elemento in sorted({t.elemento for t in trechos}):
         do_elemento = [t for t in trechos if t.elemento == elemento]
@@ -347,12 +347,20 @@ def solda_do_pilar(
         t_el = t_w if elemento == "alma" else t_f
         r_n = fy * t_el / c.a1
         r_v, modo = sd.metal_base_ao_cisalhamento_por_mm(t_el, fy, fu, c)
-        n_el, v_el = 2 * f_n_max, 2 * critico.f_v
+        # as duas faces da chapa soldadas (I: os dois lados da alma; U: dorso e face interna;
+        # mesas por fora e por dentro) ou só uma
+        faces = (
+            2 if len({t.nome for t in do_elemento}) > 1 or (not e_u and elemento == "alma") else 1
+        )
+        n_el, v_el = faces * f_n_max, faces * critico.f_v
         razao = math.hypot(n_el / r_n, v_el / (r_v * 1000.0))
+        k = "2·" if faces == 2 else ""
         texto = (
-            f"na {elemento} (t = {_n(t_el, 1)} mm), dois filetes: normal 2·f_n = "
+            f"na {elemento} (t = {_n(t_el, 1)} mm), "
+            + ("dois filetes, um de cada face" if faces == 2 else "um filete, numa face só")
+            + f": normal {k}f_n = "
             f"{_n(n_el / 1000, 3)} kN/mm frente a f_y·t/γ_a1 = {_n(r_n / 1000, 3)} kN/mm (escoamento "
-            f"à tração) e cortante 2·f_v = {_n(v_el / 1000, 3)} kN/mm frente a {modo} = "
+            f"à tração) e cortante {k}f_v = {_n(v_el / 1000, 3)} kN/mm frente a {modo} = "
             f"{_n(r_v, 3)} kN/mm (6.5.5); √((n/R_n)² + (v/R_v)²) ≤ 1 (f_y = {_n(fy, 0)} MPa, "
             f"f_u = {_n(fu, 0)} MPa)"
         )

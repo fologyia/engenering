@@ -90,13 +90,32 @@ def test_todos_os_casos_rodam_com_o_u(n, m, m_y):
     assert r.t_p_min > 0
 
 
-def test_momento_y_espelhado_da_o_mesmo_resultado():
-    a = bp.calcular(replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=1.5))
-    b = bp.calcular(replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=-1.5))
-    assert a.t_p_min == pytest.approx(b.t_p_min)
-    assert [v.aproveitamento for v in a.verificacoes] == pytest.approx(
-        [v.aproveitamento for v in b.verificacoes], nan_ok=True
+@pytest.mark.parametrize("m_y", [1.5, -1.5])
+def test_sinal_de_m_y_vira_o_u_e_a_solda_segue_a_conta(m_y):
+    """M_y > 0 comprime as pontas das mesas e M_y < 0 o dorso: situações diferentes. Em cada uma, o
+    U fica com as mesas abertas para o lado comprimido (y > 0) e a solda bate com a conta à mão."""
+    r = bp.calcular(replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=m_y))
+    g = r.geometria
+    assert (g.y_dorso < 0) == (m_y > 0)
+    trechos = bs.contorno_do_pilar(
+        g.d, g.b_f, g.t_w, g.t_f, mesas_por_dentro=False, alma=True, y_dorso=g.y_dorso
     )
+    p = bs.propriedades(trechos)
+    n, m, my = 50e3, 3e6, abs(m_y) * 1e6
+    pior = max(
+        math.hypot(
+            -n / p.comprimento - m * x / p.i_x - (my - n * p.y_c) * (y - p.y_c) / p.i_y,
+            5e3 / p.comprimento,
+        )
+        for t in trechos
+        for x, y in ((t.x1, t.y1), (t.x2, t.y2))
+    )
+    filete = next(
+        v
+        for v in r.verificacoes
+        if v.nome == "Solda do pilar na placa: filete no ponto mais solicitado"
+    )
+    assert filete.solicitante == pytest.approx(pior / 1e3)
 
 
 @pytest.mark.parametrize("y_dorso", [-16.4, 16.4])
@@ -182,3 +201,55 @@ def test_pagina_com_pilar_u(banco_isolado):
     assert list(radio.options) == [bp.TIPOS[bp.TIPO_1]]
     assert t.session_state["pb_tipo"] == bp.TIPO_1
     assert any("Pilar U" in c.value for c in t.caption)
+
+
+def _linha(r: bp.ResultadoBase, nome: str):
+    return next(v for v in r.verificacoes if v.nome == nome)
+
+
+@pytest.mark.parametrize(("por_dentro", "alma"), [(True, True), (False, False), (False, True)])
+def test_calculo_da_base_usa_o_contorno_do_u_na_solda(por_dentro, alma):
+    """A solda pela base inteira (não só a função isolada): contorno do U e conta à mão no pior ponto."""
+    e = replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=1.0, v_sd_kN=10, perna_pilar_mm=6,
+                solda_mesas_por_dentro=por_dentro, solda_alma=alma)  # fmt: skip
+    r = bp.calcular(e)
+    g = r.geometria
+    trechos = bs.contorno_do_pilar(
+        g.d, g.b_f, g.t_w, g.t_f, mesas_por_dentro=por_dentro, alma=alma, y_dorso=g.y_dorso
+    )
+    p = bs.propriedades(trechos)
+    n, m, m_y, v = 50e3, 3e6, 1e6, 10e3
+    pior = max(
+        math.hypot(
+            -n / p.comprimento - m * x / p.i_x - (m_y - n * p.y_c) * (y - p.y_c) / p.i_y,
+            v / p.comprimento,
+        )
+        for t in trechos
+        for x, y in ((t.x1, t.y1), (t.x2, t.y2))
+    )
+    filete = _linha(r, "Solda do pilar na placa: filete no ponto mais solicitado")
+    assert filete.solicitante == pytest.approx(pior / 1e3)
+    assert "dorso da alma" in filete.formula and "y_c" in filete.formula
+    assert f"L = {p.comprimento:.0f} mm" in filete.formula
+    metal = _linha(r, "Solda do pilar na placa: metal-base do pilar")
+    assert ("um filete, numa face só" in metal.formula) == (
+        not por_dentro and "na mesa" in metal.formula
+    )
+
+
+def test_metal_base_conta_os_filetes_de_cada_chapa_na_i():
+    c = bp.sd.coeficientes(bp.sd.COMBINACAO_NORMAL)
+    comum = dict(d=258.0, b_f=146.0, t_w=6.1, t_f=9.1, t_placa=25.0, aco_pilar=(345.0, 450.0),
+                 axial=-200e3, momento=0.0, momento_y=0.0, cortante=0.0, perna_informada=8.0,
+                 eletrodo="E70", alma=False, contato=False, c=c)  # fmt: skip
+    uma = bs.solda_do_pilar(mesas_por_dentro=False, **comum).linhas[1]
+    duas = bs.solda_do_pilar(mesas_por_dentro=True, **comum).linhas[1]
+    l1 = bs.propriedades(
+        bs.contorno_do_pilar(258.0, 146.0, 6.1, 9.1, mesas_por_dentro=False, alma=False)
+    )
+    l2 = bs.propriedades(
+        bs.contorno_do_pilar(258.0, 146.0, 6.1, 9.1, mesas_por_dentro=True, alma=False)
+    )
+    r_n = 345.0 * 9.1 / 1.10
+    assert uma.solicitante == pytest.approx(200e3 / l1.comprimento / r_n)
+    assert duas.solicitante == pytest.approx(2 * 200e3 / l2.comprimento / r_n)

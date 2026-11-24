@@ -3696,6 +3696,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         alma=e.solda_alma,
         contato=e.compressao_por_contato,
         c=c,
+        y_dorso=g.y_dorso if g.e_u else None,  # o U: contorno e centro do grupo próprios
     )
     linhas.extend(solda.linhas)
     if e.cortante == CORTANTE_PLACA:
