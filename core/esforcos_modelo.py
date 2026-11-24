@@ -1414,14 +1414,33 @@ def resumo_dos_ventos(
         )
 
     so_nomes = all(any(bate(v, w) for w in programa.values()) for v in estudo.values())
-    conclusao = (
-        "Cada caso do estudo é um caso do programa com outro nome: renomeie os casos no "
-        "gerenciador do SolidWorks (ou envie cada arquivo com o código certo)."
-        if so_nomes
-        else "Não dá para só renomear: há caso com a direção de um vento e o valor de outro (o "
-        "valor do vento muda com a direção — a face que ele vê). Corrija a direção das forças "
-        "no SolidWorks (plano de referência e sentido), rode de novo e envie os arquivos."
+    todos_ao_contrario = len(estudo) >= 2 and all(
+        _angulo(estudo[c], programa[c]) >= 180.0 - ANGULO_IGUAL_GRAUS for c in estudo
     )
+    if todos_ao_contrario:
+        conclusao = (
+            "Todos os ventos empurram no sentido contrário ao do plano — o mesmo engano em cada "
+            "força (no programa, o nome diz para onde o vento empurra: W0 → +X). Confira o "
+            "“Inverter direção” das forças: no gerenciador de casos de carga o valor de cada caso "
+            "vai no sentido da componente; ponha o sentido no sinal do valor."
+        )
+        diferentes = [c for c in estudo if not bate((-estudo[c][0], -estudo[c][1]), programa[c])]
+        if diferentes:
+            conclusao += (
+                f" Além do sentido, o valor também difere em {', '.join(diferentes)}: confira o "
+                "valor de cada caso no gerenciador."
+            )
+    elif so_nomes:
+        conclusao = (
+            "Cada caso do estudo é um caso do programa com outro nome: renomeie os casos no "
+            "gerenciador do SolidWorks (ou envie cada arquivo com o código certo)."
+        )
+    else:
+        conclusao = (
+            "Não dá para só renomear: há caso com a direção de um vento e o valor de outro (o "
+            "valor do vento muda com a direção — a face que ele vê). Corrija a direção das forças "
+            "no SolidWorks (plano de referência e sentido), rode de novo e envie os arquivos."
+        )
     return pc.ItemDeConferencia(
         pc.NIVEL_ATENCAO,
         f"Ventos — no seu estudo: {lista(estudo)}. No programa: {lista(programa)}. {conclusao}",
@@ -1459,6 +1478,55 @@ def mapa_de_nomes_dos_ventos(
     if sorted(mapa.values()) != sorted(mapa) or all(a == b for a, b in mapa.items()):
         return None  # não é uma troca entre os próprios casos (ou já está certo)
     return {a: b for a, b in mapa.items() if a != b}
+
+
+@dataclass(frozen=True)
+class VentoComparado:
+    """Um caso de vento: a força que o estudo aplicou (a reação com o sinal trocado) e a do plano,
+    na planta (kN)."""
+
+    codigo: str
+    estudo: tuple[float, float]
+    plano: tuple[float, float]
+
+    @property
+    def angulo(self) -> float:
+        return _angulo(self.estudo, self.plano)
+
+    @property
+    def ao_contrario(self) -> bool:
+        return self.angulo >= 180.0 - ANGULO_IGUAL_GRAUS
+
+    @property
+    def mesmo_valor(self) -> bool:
+        return abs(math.hypot(*self.estudo) - math.hypot(*self.plano)) <= VALOR_IGUAL * max(
+            math.hypot(*self.plano), 1e-9
+        )
+
+
+def ventos_comparados(dados: EsforcosDoModelo, plano: pc.PlanoDeCargas) -> list[VentoComparado]:
+    """Os casos de vento do plano com reações importadas, lado a lado com o plano."""
+    saida = []
+    for a in plano.acoes:
+        caso = dados.casos.get(a.codigo)
+        esperado = total_esperado(a)
+        if a.grupo != pc.GRUPO_VENTO or caso is None or caso.reacoes is None or esperado is None:
+            continue
+        rx, ry, _ = para_o_plano(caso.reacoes.modelo, dados.eixo_vertical)
+        if math.hypot(rx, ry) <= REACAO_NULA_kN or math.hypot(*esperado[:2]) <= REACAO_NULA_kN:
+            continue
+        saida.append(VentoComparado(a.codigo, (-rx, -ry), (esperado[0], esperado[1])))
+    return saida
+
+
+def ventos_ao_contrario(dados: EsforcosDoModelo, plano: pc.PlanoDeCargas) -> list[VentoComparado]:
+    """Os ventos quando **todos** (dois ou mais) empurram no sentido oposto ao do plano — o mesmo
+    engano em cada força (a seta "Inverter direção" no gerenciador, ou o vento lido como "de onde
+    vem"); vazio se algum caso não for assim."""
+    comparados = ventos_comparados(dados, plano)
+    if len(comparados) >= 2 and all(v.ao_contrario for v in comparados):
+        return comparados
+    return []
 
 
 def trocar_codigos(dados: EsforcosDoModelo, mapa: Mapping[str, str]) -> EsforcosDoModelo:

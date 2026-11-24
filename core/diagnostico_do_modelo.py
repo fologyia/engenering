@@ -935,6 +935,77 @@ def _linha_que_explica(dados: em.EsforcosDoModelo, plano: pc.PlanoDeCargas, codi
     )
 
 
+def _ventos_ao_contrario(
+    dados: em.EsforcosDoModelo, plano: pc.PlanoDeCargas, ventos: Sequence[em.VentoComparado]
+) -> Achado:
+    """Todos os ventos a 180° do plano: o mesmo engano em cada força, dito numa frase — e, à
+    parte, se os valores também diferem."""
+    eixo = dados.eixo_vertical
+
+    def lista(qual: str) -> str:
+        return ", ".join(
+            f"{v.codigo} → {em.sentido_no_modelo(getattr(v, qual), eixo)} "
+            f"({_n(math.hypot(*getattr(v, qual)))} kN)"
+            for v in ventos
+        )
+
+    texto = (
+        f"Os {len(ventos)} ventos do seu estudo empurram no sentido contrário ao do plano. No "
+        f"estudo: {lista('estudo')}. No plano: {lista('plano')}. É o mesmo engano em todas as "
+        "forças, não um erro em uma delas. Com o sentido trocado, cada barra recebe o vento do "
+        "outro lado (a face exposta e as barras na sombra mudam), mesmo que a soma fosse igual."
+    )
+    if all(v.mesmo_valor for v in ventos):
+        texto += " Os valores batem com os do plano: só o sentido está trocado."
+    else:
+        diferentes = [v for v in ventos if not v.mesmo_valor]
+        texto += (
+            " Além do sentido, o valor também difere em "
+            + ", ".join(
+                f"{v.codigo} ({_n(math.hypot(*v.estudo))} kN no estudo, "
+                f"{_n(math.hypot(*v.plano))} kN no plano)"
+                for v in diferentes
+            )
+            + ": confira o valor de cada caso no gerenciador e o que o plano soma (página "
+            "Plano de cargas)."
+        )
+    convencao = (
+        "No programa, o nome diz para onde o vento EMPURRA: W0 → +X, W90 → −Z, W180 → −X, "
+        "W270 → +Z (vista Superior do SolidWorks: X para a direita, Z para baixo; W0 vai da "
+        "esquerda para a direita)."
+        if eixo == "Y"
+        else "No programa, o nome diz para onde o vento EMPURRA: W0 → +X, W90 → +Y, W180 → −X, "
+        "W270 → −Y."
+    )
+    mapa = em.mapa_de_nomes_dos_ventos(dados, plano)
+    passos = [
+        convencao,
+        "Causa mais provável: o “Inverter direção” das forças. No gerenciador de casos de carga, o "
+        "valor de cada caso vai no sentido da componente da força: a seta no desenho pode mostrar "
+        "+X e o cálculo aplicar −X. Para conferir: no estudo base (fora do gerenciador), deixe só "
+        "a força do W0, execute e use Listar forças resultantes; depois rode o caso W0 do "
+        "gerenciador e liste de novo. Se a Soma X mudar de sinal, é isso.",
+        "Como aplicar: desmarque o “Inverter direção” e ponha o sentido no SINAL do valor do "
+        "gerenciador (W0 = +valor e W180 = −valor na mesma componente; o mesmo para W90 e W270) — "
+        "ou carregue no gerenciador o CSV que o programa monta (Plano de cargas › Exportar), que já "
+        "sai assim. Rode, liste e envie os arquivos de novo.",
+    ]
+    if mapa:
+        passos.append(
+            "Só para aproveitar estes resultados (os valores batem com o caso oposto): o botão "
+            "abaixo troca os nomes dos casos importados. Vale só se a força de cada caso foi "
+            "aplicada como o plano distribui; nas próximas, acerte o sentido no SolidWorks."
+        )
+    return Achado(
+        NIVEL_ERRO,
+        "Ventos no sentido contrário ao do plano",
+        texto,
+        tuple(passos),
+        acao=ACAO_TROCAR_NOMES if mapa else "",
+        detalhe={"mapa": dict(mapa)} if mapa else {},
+    )
+
+
 def _plano_e_reacoes(dados: em.EsforcosDoModelo, plano: pc.PlanoDeCargas) -> list[Achado]:
     achados: list[Achado] = []
     da_grade = cpm.cargas_da_grade_no_plano(plano)
@@ -958,7 +1029,10 @@ def _plano_e_reacoes(dados: em.EsforcosDoModelo, plano: pc.PlanoDeCargas) -> lis
             )
         )
     ventos = em.resumo_dos_ventos(dados, plano)
-    if ventos is not None:
+    invertidos = em.ventos_ao_contrario(dados, plano) if ventos is not None else []
+    if invertidos:
+        achados.append(_ventos_ao_contrario(dados, plano, invertidos))
+    elif ventos is not None:
         mapa = em.mapa_de_nomes_dos_ventos(dados, plano)
         if mapa:
             trocas = _lista([f"{a} → {b}" for a, b in mapa.items()])

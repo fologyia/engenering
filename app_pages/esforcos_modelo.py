@@ -8,6 +8,7 @@ from dataclasses import replace
 import pandas as pd
 import streamlit as st
 
+from components import conferencia_das_cargas_ui as cdc
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import (
     gravar_campos_do_projeto,
@@ -20,6 +21,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import mostrar_tabela_verificacoes
 from core import apoios_do_modelo as am
 from core import cantoneiras as ct
+from core import cargas_aplicadas as ca
 from core import cena_do_modelo as cm
 from core import column_buckling as cbk
 from core import diagnostico_do_modelo as dm
@@ -177,6 +179,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
     fixacoes_lidas: am.FixacoesDoEstudo | None = None
     sensores_lidos: sm.QuadroDeSensores | None = None
     malha_nova: mm.MalhaDoEstudo | None = None
+    gerenciador_novo: tuple[str, bytes] | None = None
     # Os arquivos de uma remessa saem do mesmo computador: o formato dos números (vírgula ou
     # ponto decimal) que um prova vale para o que não prova o dele.
     formato = em.formato_do_lote(e.getvalue() for e in enviados or [])
@@ -194,6 +197,19 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
                         conteudo, enviado.name, virgula_decimal=formato
                     )
             except am.ArquivoDeApoiosInvalido as erro:
+                st.error(f"{enviado.name}: {erro}", icon=":material/error:")
+            continue
+        if gs.e_do_gerenciador(conteudo):
+            try:
+                gs.ler(conteudo)
+                gerenciador_novo = (enviado.name, conteudo)
+                st.success(
+                    f"{enviado.name}: gerenciador de casos de carga — ao gravar, a seção 3 diz o "
+                    "valor que entrou em cada caso (uma vez, “Por item” em várias barras ou outro "
+                    "valor que o do plano).",
+                    icon=":material/table:",
+                )
+            except em.ArquivoInvalido as erro:
                 st.error(f"{enviado.name}: {erro}", icon=":material/error:")
             continue
         if mm.e_arquivo_da_malha(conteudo):
@@ -371,6 +387,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         lidos
         or geometria_nova is not None
         or malha_nova is not None
+        or gerenciador_novo is not None
         or apoios_lidos
         or fixacoes_lidas is not None
         or sensores_lidos is not None
@@ -412,6 +429,8 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
             campos["geometria_do_modelo"] = ld.para_dicionario(geometria_nova)
         if malha_para_gravar is not None and not malha_para_gravar.vazia:
             campos[mm.CAMPO_DO_PROJETO] = mm.para_dicionario(malha_para_gravar)
+        if gerenciador_novo is not None:
+            campos[ca.CAMPO_DO_PROJETO] = ca.para_dicionario(*gerenciador_novo)
         if apoios_lidos or fixacoes_lidas is not None:
             apoios_novos = tratado.apoios_para_gravar or tratado.apoios_brutos
             for apoios_do_caso in apoios_lidos:
@@ -430,6 +449,7 @@ with st.container(border=True), secao_protegida("1. Enviar os arquivos do SolidW
         not lidos
         and geometria_nova is None
         and malha_nova is None
+        and gerenciador_novo is None
         and eixo != dados.eixo_vertical
         and dados.casos
     ):
@@ -603,6 +623,7 @@ with st.container(border=True), secao_protegida("3. Conferência das reações")
         peso_conferido_no_esqueleto=no_esqueleto,
     ):
         MOSTRAR.get(item.nivel, st.success)(item.texto, icon=ICONES[item.nivel])
+    cdc.mostrar(projeto, dados, plano, geometria, tratado.apoios, MOSTRAR, ICONES)
     st.subheader("O que o programa entendeu do modelo", help=AJUDA["sec_leitura"])
     contagem = ld.resumo_das_barras(leituras)
     colunas = st.columns(5)

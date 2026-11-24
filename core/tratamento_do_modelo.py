@@ -395,6 +395,7 @@ def _nomes_dos_ventos(e: _Estado) -> None:
     mapa = em.mapa_de_nomes_dos_ventos(e.dados, e.plano)
     if not mapa:
         return
+    ao_contrario = bool(em.ventos_ao_contrario(e.dados, e.plano))
     e.dados = em.trocar_codigos(e.dados, mapa)
     e.apoios = am.trocar_codigos(e.apoios, mapa)
     e.renomeados.update(mapa)
@@ -406,7 +407,16 @@ def _nomes_dos_ventos(e: _Estado) -> None:
             f"Cada vento enviado é, em direção e valor, um vento do plano com outro nome, e a "
             f"troca fecha entre eles ({trocas}). O programa usou cada resultado no caso que ele é "
             "de verdade — forças, reações e apoios. No SolidWorks os nomes continuam trocados: "
-            "renomeie lá para as próximas vezes.",
+            "renomeie lá para as próximas vezes."
+            + (
+                " Todos os ventos estavam no sentido contrário ao do plano (no programa, o nome "
+                "diz para onde o vento empurra: W0 → +X). Causa mais provável: o “Inverter "
+                "direção” das forças — no gerenciador de casos de carga o valor de cada caso vai "
+                "no sentido da componente, e a seta do desenho pode mostrar o outro. Ponha o "
+                "sentido no sinal do valor do gerenciador."
+                if ao_contrario
+                else ""
+            ),
             CERTO,
             tuple(mapa),
         )

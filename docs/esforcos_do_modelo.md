@@ -76,6 +76,32 @@ Para cada caso importado, nos eixos do plano (Z para cima; o Y do SolidWorks é 
   Não há modo de importar estudo combinado.
 * Casos do plano ainda sem esforços e casos importados fora do plano são avisados.
 
+## Onde e como as cargas entraram (seção 3)
+
+`components/conferencia_das_cargas_ui.py`, chamado logo depois da conferência das reações:
+
+* **Ventos ao contrário** (`em.ventos_ao_contrario`): quando todos os ventos (2 ou mais) empurram a
+  180° do plano, o painel diz isso numa frase ("Ventos no sentido contrário ao do plano"), com a
+  convenção (o nome diz para onde o vento EMPURRA: W0 → +X), a causa provável — o "Inverter
+  direção" no gerenciador de casos de carga, que aplica o valor de cada caso no sentido da
+  componente — e o teste para confirmar (estudo base × caso do gerenciador). A diferença de valor
+  vem à parte. Com os valores iguais aos do caso oposto, o tratamento automático troca os nomes e
+  diz o mesmo. Visto no modelo es_v2 do usuário (24/11/2026) e antes na Plataforma singular.
+* **Setas do vento** (`core/setas_do_vento.py`): um quadro por vento, na vista Superior, com a força
+  do plano (azul) e a que o estudo aplicou (laranja, tracejada), na mesma escala.
+* **Onde a resultante atua** (`core/centro_das_cargas.py`): com a reação e a posição de cada pé (os
+  -apoios.csv), o equilíbrio dá a força e o momento das cargas do estudo; o eixo central
+  `q = F × M / |F|²` dá a altura do vento (acima das bases) e o centro dos pesos na planta,
+  comparados com as cargas do plano nas barras do esqueleto (as do Modelo em 3D). Fica de fora o
+  caso sem posição dos pés, com apoios de outra rodada ou com mais de 5 % do plano fora das barras.
+  A divisão entre os pés não é comparada: com quatro ou mais pés ela depende da rigidez. No es_v2,
+  a resultante dos quatro ventos atuava a 2,86 m — as vigas do N3: vento só no topo.
+* **O que o gerenciador aplicou** (`core/cargas_aplicadas.py`): o CSV do gerenciador ("Salvar os
+  dados em um arquivo .csv externo"), aceito no passo 1 e gravado em `gerenciador_do_estudo`, dá o
+  valor de cada carga em cada caso. A reação é comparada com os valores: cada força uma vez, uma
+  força "Por item" em n entidades (`vezes_de_cada_forca`: 3 140 = 1 700 + 4 × 360 no PE do es_v2),
+  ou um valor que não é o do plano. O sentido vem das reações (o arquivo só diz a componente).
+
 ## Tratamento automático da leitura (`core/tratamento_do_modelo.py`)
 
 Entre o que fica gravado no projeto — os arquivos como chegaram e a tabela das barras como o
