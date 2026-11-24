@@ -415,9 +415,11 @@ def solda_do_pilar(
                 menor,
                 "mm",
                 _ref("6.2.6.2.3"),
-                f"cada trecho entre a alma e a ponta da mesa tem {_n(menor, 0)} mm (descontado o "
-                f"raio, estimado em t_f) ≥ máx(4·d_w; 40 mm) = {_n(minimo, 0)} mm; senão, solde só "
-                "por fora das mesas",
+                f"disponível: cada trecho entre a alma e a ponta da mesa tem {_n(menor, 1)} mm ("
+                + ("b_f − t_w − r" if e_u else "b_f/2 − t_w/2 − r")
+                + f", com o raio r estimado em t_f); exigido: máx(4·d_w; 40 mm) = "
+                f"{_n(minimo, 0)} mm (o mínimo de 40 mm é da NBR; o AISC pede só 4·d_w); senão, "
+                "solde só por fora das mesas",
                 status="OK" if menor >= minimo - 1e-9 else "NÃO OK",
                 tipo="limite",
             )

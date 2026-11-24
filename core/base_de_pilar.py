@@ -177,8 +177,16 @@ CORTANTES = {
 }
 #: Os dispositivos em que a cortante passa pelos chumbadores.
 CORTANTE_PELOS_CHUMBADORES = (CORTANTE_ARRUELAS, CORTANTE_DIRETOS)
-#: Chumbadores direto no furo folgado: o engate é desigual e só 2 chumbadores contam.
+#: Chumbadores direto no furo folgado: o engate é desigual e só metade conta (AISC DG1), até 2 —
+#: na base de 2 chumbadores, 1 leva a cortante inteira até o outro encostar.
 ENGATADOS_SEM_ARRUELA = 2
+
+
+def engatados_sem_arruela(n_b: int) -> int:
+    """Quantos chumbadores levam a cortante direto no furo folgado: metade, de 1 a 2."""
+    return max(1, min(ENGATADOS_SEM_ARRUELA, n_b // 2))
+
+
 # Distribuição da pressão de contato sob a placa.
 DISTRIBUICAO_NBR = "bloco_uniforme"
 DISTRIBUICAO_ELASTICA = "elastica"
@@ -1760,6 +1768,16 @@ def distribuicao_elastica(
         q, energia, grad, hess = novo, e_novo, g_novo, h_novo
         if max(abs(v) for v in q) > 1e12:  # sem equilíbrio: a energia cai sem limite
             break
+    # o equilíbrio vale pelos resíduos (∫σ − ΣF − N, ...), não pelo critério de parada do Newton:
+    # perto da solução a busca na linha para por arredondamento com o equilíbrio já satisfeito
+    _, residuo, _ = estado(q)
+    folga = 1e-6 * escala
+    convergiu = convergiu or (
+        max(abs(v) for v in q) < 1e12
+        and abs(residuo[0]) <= folga
+        and abs(residuo[1]) <= folga * lx / 2
+        and abs(residuo[2]) <= folga * ly / 2
+    )
     zona = _zona_do_plano(lx, ly, q)
     w0, a_x, a_y = q
     if len(zona) >= 3:
@@ -3434,7 +3452,14 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             e.t_placa_mm,
             "mm",
             ref_caso,
-            f"{texto_t}; f_y = {_n(fy, 0)} MPa ({e.aco_placa}), γ_a1 = {_n(c.a1)}{sugestao}",
+            f"{texto_t}; f_y = {_n(fy, 0)} MPa ({e.aco_placa}), γ_a1 = {_n(c.a1)}{sugestao}"
+            + (
+                f". Aproveitamento em espessura t_p,min/t_p = {_n(100 * t_min / e.t_placa_mm, 0)} %; "
+                f"em momento resistente (∝ t²), (t_p,min/t_p)² = "
+                f"{_n(100 * (t_min / e.t_placa_mm) ** 2, 0)} % (o programa usa o primeiro, maior)"
+                if 0 < t_min < e.t_placa_mm
+                else ""
+            ),
         )  # fmt: skip
     )
     # ------------------------------------------------------------------ chumbadores
@@ -3629,13 +3654,15 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             razoes_v.append(("aço e contato, 6.7.2.5", v_sd / v_rd if v_rd > 0 else math.inf))
         else:
             folga = max(tab.d_f - tab.d_b, 0.0) / 2
+            contados = engatados_sem_arruela(n_b)
             linhas.append(
                 _alerta(
                     "Chumbadores direto no furo: deslizamento antes do contato",
                     f"{REF} 6.7.2.3 e AISC Design Guide 1",
                     f"furo d_f = {_n(tab.d_f, 1)} mm com chumbador d_b = {_n(tab.d_b, 2)} mm: a placa "
                     f"desliza até (d_f − d_b)/2 = {_n(folga, 1)} mm antes de encostar, e os "
-                    "chumbadores engatam um a um (só 2 contados). A norma e o Design Guide 1 pedem "
+                    f"chumbadores engatam um a um (só {contados} de {n_b} contado"
+                    f"{'s' if contados > 1 else ''}). A norma e o Design Guide 1 pedem "
                     "um dispositivo positivo: arruelas soldadas com furo justo ou placa de "
                     "cisalhamento. O atrito não se soma aos chumbadores (ele age antes do "
                     "deslizamento, eles só depois)",
@@ -3643,19 +3670,19 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             )
             avisos.append(
                 f"Cortante pelos chumbadores direto no furo da placa: a placa desliza até "
-                f"{_n(folga, 1)} mm antes do contato e só 2 chumbadores foram contados (engate "
-                "desigual). Prefira arruelas soldadas (furo d_b + 1,5 mm) ou placa de cisalhamento "
+                f"{_n(folga, 1)} mm antes do contato e só {contados} de {n_b} chumbadores "
+                "foram contados (engate desigual). Prefira arruelas soldadas (furo d_b + 1,5 mm) ou placa de cisalhamento "
                 "(6.7.2.3); registre a hipótese no memorial."
             )
         # aço do chumbador à cortante e à flexão na argamassa (ACI 318-19 17.7.1; DG1)
-        n_eng = n_b if soldadas else min(ENGATADOS_SEM_ARRUELA, n_b)
+        n_eng = n_b if soldadas else engatados_sem_arruela(n_b)
         v_i = v_sd / n_eng
         f_ut = f_uta(aco_ch)
         aco_v = PHI_ACO_CORTANTE * 0.6 * a_se * f_ut * FATOR_ARGAMASSA
         engate = f"V_Sd/n = {_n(v_sd / 1e3, 1)}/{n_eng} = {_n(v_i / 1e3, 2)} kN por chumbador " + (
             "(os n engatam juntos: furo justo da arruela)"
             if soldadas
-            else "(engate desigual: só 2)"
+            else f"(engate desigual: só {n_eng} de {n_b})"
         )
         linhas.append(
             Verificacao(
@@ -4020,6 +4047,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         d_min=d_min,
     )  # fmt: skip
     linhas = [replace(v, equacoes=equacoes[v.nome]) if v.nome in equacoes else v for v in linhas]
+    linhas = _invalidar_sem_equilibrio(linhas, inicios, avisos)
     fins = [inicio for _, inicio in inicios[1:]] + [len(linhas)]
     grupos = tuple(
         (nome, tuple(linhas[inicio:fim]))
@@ -4031,6 +4059,63 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         tuple(linhas), tuple(avisos), detalhamento, grupos, zona,
         disposicoes=tab, por_formula=medidas, diametros=diametros, perna_do_pilar=solda.perna,
     )  # fmt: skip
+
+
+#: Grupos cujas contas dependem da pressão e das forças nos chumbadores do equilíbrio.
+GRUPOS_DO_EQUILIBRIO = (GRUPO_CONCRETO_E_PLACA, GRUPO_CHUMBADORES, GRUPO_CORTANTE)
+SEM_EQUILIBRIO = "Não validado: sem equilíbrio nesta combinação"
+#: Linhas desses grupos que só usam N, V ou a geometria (valem com ou sem equilíbrio).
+NAO_DEPENDEM_DO_EQUILIBRIO = (
+    "Equilíbrio",
+    "Fator X",
+    "Chumbador: aço à cortante",
+    "Cortante: placa de cisalhamento",
+    "Cortante no concreto",
+    "Rosca acima",
+)
+
+
+def _invalidar_sem_equilibrio(
+    linhas: list[Verificacao], inicios: list[tuple[str, int]], avisos: list[str]
+) -> list[Verificacao]:
+    """Sem equilíbrio (a linha "Equilíbrio …" NÃO OK), a pressão, a espessura e as forças nos
+    chumbadores não valem: as linhas que dependem delas saem NÃO OK, sem número, em vez de mostrar
+    valores de uma solução que não existe (t_p,min = 0 "OK", por exemplo)."""
+    if not any(v.nome.startswith("Equilíbrio") and v.status == "NÃO OK" for v in linhas):
+        return linhas
+    fins = [inicio for _, inicio in inicios[1:]] + [len(linhas)]
+    dependentes = {
+        i
+        for (nome, inicio), fim in zip(inicios, fins, strict=True)
+        if nome in GRUPOS_DO_EQUILIBRIO
+        for i in range(inicio, fim)
+    }
+    saida = []
+    for i, v in enumerate(linhas):
+        if (
+            i in dependentes
+            # "Ancoragem no concreto: sem chumbador tracionado" vem das forças nulas
+            and (v.status in ("OK", "NÃO OK") or v.nome == "Ancoragem no concreto")
+            and not v.nome.startswith(NAO_DEPENDEM_DO_EQUILIBRIO)
+        ):
+            v = replace(
+                v,
+                solicitante=None,
+                resistente=None,
+                status="NÃO OK",
+                aproveitamento=None,
+                tipo="limite",
+                formula=f"{SEM_EQUILIBRIO}: o valor desta verificação depende da pressão e das "
+                "forças nos chumbadores, que não existem sem equilíbrio",
+                equacoes=(),
+            )
+        saida.append(v)
+    avisos.append(
+        "Sem equilíbrio em uma combinação: a pressão no concreto, a espessura da placa e as forças "
+        "nos chumbadores dela não foram validadas (saem NÃO OK, sem número). Altere a ligação: "
+        "placa maior, chumbadores mais afastados ou outra disposição."
+    )
+    return saida
 
 
 def _pior_linha(par: tuple[CasoDeCarga, Verificacao]) -> tuple[int, float]:
@@ -4471,8 +4556,8 @@ def registro_base(
                     "juntos"
                     if e.cortante == CORTANTE_ARRUELAS
                     else "chumbadores direto no furo folgado da placa — a placa desliza até "
-                    "(d_f − d_b)/2 antes do contato e só 2 chumbadores foram contados (engate "
-                    "desigual); a NBR 8800 (6.7.2.3) e o AISC Design Guide 1 pedem dispositivo "
+                    "(d_f − d_b)/2 antes do contato e só metade dos chumbadores (1 a 2) foi "
+                    "contada (engate desigual); a NBR 8800 (6.7.2.3) e o AISC Design Guide 1 pedem dispositivo "
                     "positivo"
                 )
                 + "; só eles resistem (o atrito não se soma). Aço pela ACI 318-19 17.7.1 (0,80 "

@@ -309,7 +309,7 @@ def test_registro_tem_os_criterios_novos():
     reg = bp.registro_base(r)
     premissas = " ".join(reg["premissas"])
     assert "45°" in premissas and "face da mesa" in premissas
-    assert "só 2 chumbadores" in premissas
+    assert "só metade dos chumbadores (1 a 2)" in premissas
     assert "Distribuição linear elástica" in reg["metodo"]
     assert reg["entradas"]["distribuicao_da_pressao"] == bp.DISTRIBUICOES[EL]
 
