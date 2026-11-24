@@ -96,14 +96,8 @@ def _retangulo(tela: dg.Tela, x0: float, y0: float, x1: float, y1: float) -> lis
 
 
 def _perfil(d: ImageDraw.ImageDraw, tela: dg.Tela, g: bp.Geometria) -> None:
-    """O perfil I do pilar em planta (mesas paralelas a y)."""
-    for x0, x1 in ((g.d / 2 - g.t_f, g.d / 2), (-g.d / 2, -g.d / 2 + g.t_f)):
-        d.polygon(_retangulo(tela, x0, -g.b_f / 2, x1, g.b_f / 2), fill=_PILAR, outline=_TRACO)
-    d.polygon(
-        _retangulo(tela, -g.d / 2 + g.t_f, -g.t_w / 2, g.d / 2 - g.t_f, g.t_w / 2),
-        fill=_PILAR,
-        outline=_TRACO,
-    )
+    """O perfil do pilar em planta (I com as mesas paralelas a y, ou U)."""
+    d.polygon([tela(x, -y) for x, y in bp.contorno_do_perfil(g)], fill=_PILAR, outline=_TRACO)
 
 
 def _chumbador(

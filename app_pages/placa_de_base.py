@@ -1,4 +1,4 @@
-"""Placas de base: base de pilar de perfil I ou H pela ABNT NBR 8800:2025, Subseção 6.7."""
+"""Placas de base: base de pilar de perfil I, H ou U pela ABNT NBR 8800:2025, Subseção 6.7."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from core.verificacao import csv_verificacoes
 configurar_pagina("Placas de base", ":material/anchor:")
 cabecalho_pagina(
     "Placas de base",
-    "Base de pilar de perfil I ou H pela ABNT NBR 8800:2025 (6.7): chumbadores externos, "
+    "Base de pilar de perfil I, H ou U pela ABNT NBR 8800:2025 (6.7): chumbadores externos, "
     "internos, base rotulada ou internos e externos; o caso pela força normal e pelo momento, a "
     "espessura da placa, os chumbadores (reto com porca, guarda-chuva, químico ou parabolt, com a "
     "ancoragem no concreto pela ACI 318-19), a cortante, a Tabela 18, o desenho e o memorial.",
@@ -120,7 +120,7 @@ def _trocar_casos(linhas: list[dict]) -> None:
 
 def _trazer_do_modelo(perfil: str, linhas: list[dict]) -> None:
     _trocar_casos(linhas)
-    if perfil in bp.perfis_i():  # o pilar do modelo, se for um perfil I do catálogo
+    if perfil in bp.perfis_do_pilar():  # o pilar do modelo, se for um I ou U do catálogo
         st.session_state["pb_perfil"] = perfil
 
 
@@ -146,21 +146,27 @@ with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
     colunas = st.columns([2, 3])
     perfil = colunas[0].selectbox(
         "Perfil do pilar",
-        bp.perfis_i(),
+        bp.perfis_do_pilar(),
         key="pb_perfil",
         persist_state="session",
         help=AJUDA["perfil"],
     )
+    tipos = bp.tipos_do_perfil(perfil)
+    if st.session_state.get("pb_tipo") not in tipos:
+        st.session_state["pb_tipo"] = tipos[0]
     tipo = colunas[1].radio(
         "Disposição dos chumbadores",
-        list(bp.TIPOS),
+        list(tipos),
         format_func=bp.TIPOS.get,
         key="pb_tipo",
         persist_state="session",
         help=AJUDA["tipo"],
     )
     colunas[1].caption(
-        "Método da NBR 8800:2025, Figura 21."
+        "Pilar U: o método da 6.7 estendido (o U como meia I de mesa 2·b_f, placa centrada no "
+        "centro geométrico); só a tipo 1, com os chumbadores fora das mesas."
+        if bp.forma_do_perfil(perfil) == bp.FORMA_U
+        else "Método da NBR 8800:2025, Figura 21."
         if tipo in bp.TIPOS_DA_NORMA
         else "Fora da Figura 21: método geral (o da 6.7 com os chumbadores em mais de uma linha)."
     )
@@ -643,7 +649,7 @@ with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
         )
         m_sd_y = st.number_input(
             "M_Sd,y no eixo de menor inércia (kN·m)",
-            0.0,
+            -20000.0,
             20000.0,
             0.0,
             1.0,

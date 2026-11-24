@@ -3286,7 +3286,8 @@ elif modulo == "Placas de base":
 
     st.header("Placas de base")
     st.markdown(
-        "A base do pilar de perfil I ou H pela **ABNT NBR 8800:2025, Subseção 6.7**: placa "
+        "A base do pilar de perfil I, H ou U pela **ABNT NBR 8800:2025, Subseção 6.7** (o U pelo "
+        "mesmo método, como meia I de mesa 2·b_f): placa "
         "retangular soldada no pilar, chumbadores de aço ASTM A36 e argamassa expansiva por baixo. "
         "A página acha o **caso** da norma pela força normal e pelo momento, calcula a "
         "**espessura mínima da placa**, o **diâmetro mínimo do chumbador** e a **cortante** "

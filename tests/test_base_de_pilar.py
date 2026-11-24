@@ -324,7 +324,7 @@ def test_com_dispositivo_so_ele_resiste():
     "mudanca",
     [
         {"perfil": "nao existe"},
-        {"perfil": 'U 10" x 22,77'},
+        {"perfil": 'L 1/2" x 1/8"'},  # nem I nem U (o U entra desde 24/11/2026)
         {"chumbador": '5/8"'},
         {"aco_placa": "ZAR 250 (NBR 7008)"},
         {"t_placa_mm": 0},

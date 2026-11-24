@@ -6,11 +6,14 @@ AJUDA: dict[str, str] = {
     # 1. Pilar e chumbadores
     "sec_pilar": (
         "O pilar que chega na base, o tipo de base e os chumbadores. A NBR 8800:2025 (6.7) trata "
-        "de pilares de perfil I ou H com placa retangular."
+        "de pilares de perfil I ou H com placa retangular; o programa estende o método ao perfil U."
     ),
     "perfil": (
-        "Perfil do pilar (W, HP ou I do catálogo). A placa é desenhada em volta dele: as mesas "
-        "ficam paralelas ao lado ℓy."
+        "Perfil do pilar (W, HP, I ou U do catálogo). A placa é desenhada em volta dele: as mesas "
+        "ficam paralelas ao lado ℓy. No U, a placa fica centrada no centro geométrico do perfil "
+        "(onde atuam N, M e M_y), e a conta trata o U como meia I de mesa 2·b_f: o balanço da "
+        "placa conta do dorso da alma e de 0,80·b_f a partir dele. O U só aceita a base tipo 1 "
+        "(chumbadores fora das mesas)."
     ),
     "tipo": (
         "Onde ficam os chumbadores. Tipo 1 (externos, de 4 a 8): fora das mesas, a base que "
@@ -173,8 +176,9 @@ AJUDA: dict[str, str] = {
         "nas duas direções, informe a resultante √(V_x² + V_y²)."
     ),
     "m_sd_y": (
-        "Momento em torno do eixo de menor inércia do pilar (kN·m), em valor absoluto: comprime "
-        "o lado de cima da planta. As fórmulas da 6.7 são só do eixo forte; com este momento a "
+        "Momento em torno do eixo de menor inércia do pilar (kN·m): comprime o lado de cima da "
+        "planta. Na I o sinal não importa. No U, positivo comprime o lado das pontas das mesas e "
+        "negativo o lado do dorso da alma (o desenho vira o U). As fórmulas da 6.7 são só do eixo forte; com este momento a "
         "base vai pelo mesmo método em duas direções (flexão oblíqua): a placa aperta o concreto "
         "numa zona limitada por uma linha neutra inclinada e cada chumbador do outro lado puxa "
         "em proporção à distância a ela."

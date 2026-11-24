@@ -28,6 +28,12 @@ não pela solicitação): o momento vira um binário entre os dois filetes, com 
 **Arruelas especiais soldadas (6.7.2.5).** Filete no contorno da arruela (4 lados) para a força
 F_v,Rd,i do chumbador.
 
+**Pilar U.** O contorno é o dorso da alma, as faces externas das mesas, as faces internas (da alma,
+descontado o raio, até a ponta) e a face interna da alma. O grupo não é simétrico em y: o centro
+dele (y_c) não coincide com o centro geométrico do U, onde atuam os esforços, e a força normal vai
+com N levado ao centro do grupo, f_n = −N/L − M·x/I_x,L − (M_y − N·y_c)·(y − y_c)/I_y,L, com I_y,L
+pelo centro do grupo.
+
 Perna 0 = automática: a menor perna comercial que passa, de 3 a 25 mm.
 """
 
@@ -76,12 +82,28 @@ class Trecho:
     def integral_y2(self) -> float:
         return self.comprimento * (self.y1**2 + self.y1 * self.y2 + self.y2**2) / 3
 
+    def integral_y(self) -> float:
+        return self.comprimento * (self.y1 + self.y2) / 2
+
 
 def contorno_do_pilar(
-    d: float, b_f: float, t_w: float, t_f: float, *, mesas_por_dentro: bool, alma: bool
+    d: float,
+    b_f: float,
+    t_w: float,
+    t_f: float,
+    *,
+    mesas_por_dentro: bool,
+    alma: bool,
+    y_dorso: float | None = None,
 ) -> list[Trecho]:
-    """Os filetes do contorno do perfil I (as faces das mesas e os dois lados da alma)."""
+    """Os filetes do contorno do perfil I (as faces das mesas e os dois lados da alma).
+
+    Com ``y_dorso``, o perfil é um U com o dorso da alma em y = y_dorso e as mesas abertas para o
+    lado do centro (y_dorso ≤ 0: para +y); o dorso é sempre soldado e ``alma`` liga a face interna.
+    """
     r = t_f  # raio de concordância estimado (o catálogo não traz)
+    if y_dorso is not None:
+        return _contorno_do_u(d, b_f, t_w, t_f, r, y_dorso, mesas_por_dentro, alma)
     trechos: list[Trecho] = []
     for lado in (1.0, -1.0):
         x = lado * d / 2
@@ -103,18 +125,52 @@ def contorno_do_pilar(
     return trechos
 
 
+def _contorno_do_u(
+    d: float,
+    b_f: float,
+    t_w: float,
+    t_f: float,
+    r: float,
+    y_dorso: float,
+    mesas_por_dentro: bool,
+    alma: bool,
+) -> list[Trecho]:
+    s = 1.0 if y_dorso <= 0 else -1.0  # para onde as mesas abrem
+    ponta = y_dorso + s * b_f
+    trechos = [Trecho("dorso da alma", -d / 2, y_dorso, d / 2, y_dorso, "alma")]
+    for lado in (1.0, -1.0):
+        x = lado * d / 2
+        trechos.append(Trecho("mesa, face externa", x, y_dorso, x, ponta, "mesa"))
+        if mesas_por_dentro and b_f > t_w + r:
+            x_i = lado * (d / 2 - t_f)
+            trechos.append(
+                Trecho("mesa, face interna", x_i, y_dorso + s * (t_w + r), x_i, ponta, "mesa")
+            )
+    meio = d / 2 - t_f - r
+    if alma and meio > 0:
+        y = y_dorso + s * t_w
+        trechos.append(Trecho("alma, face interna", -meio, y, meio, y, "alma"))
+    return trechos
+
+
 @dataclass(frozen=True)
 class GrupoDeSolda:
     comprimento: float  # mm
     i_x: float  # Σ∫x² ds (mm³)
-    i_y: float  # Σ∫y² ds
+    i_y: float  # Σ∫(y − y_c)² ds, pelo centro do grupo
+    y_c: float = 0.0  # centro do grupo em y (0 na I, que é simétrica)
 
 
 def propriedades(trechos: Sequence[Trecho]) -> GrupoDeSolda:
+    comprimento = sum(t.comprimento for t in trechos)
+    y_c = sum(t.integral_y() for t in trechos) / comprimento if comprimento > 0 else 0.0
+    if abs(y_c) < 1e-9:
+        y_c = 0.0
     return GrupoDeSolda(
-        sum(t.comprimento for t in trechos),
+        comprimento,
         sum(t.integral_x2() for t in trechos),
-        sum(t.integral_y2() for t in trechos),
+        sum(t.integral_y2() for t in trechos) - comprimento * y_c**2,
+        y_c,
     )
 
 
@@ -144,8 +200,8 @@ def _normal_no_ponto(
     f_n = -axial / p.comprimento
     if p.i_x > 0:
         f_n -= momento * x / p.i_x
-    if p.i_y > 0:
-        f_n -= momento_y * y / p.i_y
+    if p.i_y > 0:  # N e M_y levados ao centro do grupo (no U ele não é o centro do perfil)
+        f_n -= (momento_y - axial * p.y_c) * (y - p.y_c) / p.i_y
     return max(f_n, 0.0) if contato else abs(f_n)
 
 
@@ -221,15 +277,22 @@ def solda_do_pilar(
     alma: bool,
     contato: bool,
     c: sd.Coeficientes,
+    y_dorso: float | None = None,
 ) -> SoldaDoPilar:
-    """As verificações da solda de contorno do pilar na placa (forças em N e N·mm)."""
-    trechos = contorno_do_pilar(d, b_f, t_w, t_f, mesas_por_dentro=mesas_por_dentro, alma=alma)
+    """As verificações da solda de contorno do pilar na placa (forças em N e N·mm).
+
+    ``y_dorso``: pilar U (ver :func:`contorno_do_pilar`)."""
+    trechos = contorno_do_pilar(
+        d, b_f, t_w, t_f, mesas_por_dentro=mesas_por_dentro, alma=alma, y_dorso=y_dorso
+    )
+    e_u = y_dorso is not None
     f_w = sd.ELETRODOS[eletrodo]
     fy, fu = aco_pilar
     p = propriedades(trechos)
     critico = ponto_critico(trechos, axial, momento, momento_y, cortante, contato=contato)
     minima = max(
-        sd.perna_minima(min(t_f, t_placa)), sd.perna_minima(min(t_w, t_placa)) if alma else 0.0
+        sd.perna_minima(min(t_f, t_placa)),
+        sd.perna_minima(min(t_w, t_placa)) if alma or e_u else 0.0,  # no U, o dorso sempre
     )
     maxima = sd.perna_maxima(t_f)
     internos = [t for t in trechos if t.nome == "mesa, face interna"]
@@ -253,12 +316,20 @@ def solda_do_pilar(
             r_w / 1000.0,
             "kN/mm",
             f"{ref_w} ({sd.tabela(sd.NBR_2025, 'resistencia')}); método elástico",
-            f"f_r = √(f_n² + f_v²), f_n = −N/L − M·x/I_x − M_y·y/I_y = {_n(critico.f_n / 1000, 3)} "
+            "f_r = √(f_n² + f_v²), "
+            + (
+                f"f_n = −N/L − M·x/I_x − (M_y − N·y_c)·(y − y_c)/I_y (U: N levado ao centro do "
+                f"grupo, y_c = {_n(p.y_c, 1)} mm do centro do perfil) = "
+                if e_u
+                else "f_n = −N/L − M·x/I_x − M_y·y/I_y = "
+            )
+            + f"{_n(critico.f_n / 1000, 3)} "
             f"kN/mm em (x; y) = ({_n(critico.x, 0)}; {_n(critico.y, 0)}) mm, f_v = V/L = "
             f"{_n(critico.f_v / 1000, 3)} kN/mm; L = {_n(p.comprimento, 0)} mm de filete "
-            f"({len(trechos)} trechos: mesas por fora"
+            f"({len(trechos)} trechos: "
+            + ("dorso da alma, mesas por fora" if e_u else "mesas por fora")
             + (", mesas por dentro" if mesas_por_dentro else "")
-            + (", os dois lados da alma" if alma else "")
+            + ((", face interna da alma" if e_u else ", os dois lados da alma") if alma else "")
             + f"); F_w,Rd = 0,60·f_w·0,707·d_w/γ_w2 = 0,60 × {_n(f_w, 0)} × 0,707 × {_n(perna, 0)}"
             f"/{_n(c.w2)}; {_texto_perna(perna_informada, perna)}{contato_txt}",
         )
@@ -307,7 +378,7 @@ def solda_do_pilar(
             "mm",
             f"{_ref('6.2.6.2.1')} ({tabela_perna})",
             f"d_w ≥ {_n(minima, 0)} mm pela parte menos espessa (mesa {_n(t_f, 1)}"
-            + (f", alma {_n(t_w, 1)}" if alma else "")
+            + (f", alma {_n(t_w, 1)}" if alma or e_u else "")
             + f" e placa {_n(t_placa, 1)} mm)",
             status="OK" if perna >= minima - 1e-9 else "NÃO OK",
             tipo="limite",

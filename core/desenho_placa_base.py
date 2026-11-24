@@ -156,12 +156,9 @@ def _planta(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int,
         for a, b in zip(cantos, cantos[1:] + cantos[:1], strict=True):
             dg.tracejado(dr, a, b, _CISALHAMENTO, largura=2 * ESC, traco=4 * ESC)
     # o pilar: mesas paralelas a y, alma ao longo de x
-    d, bf, tf, tw = g.d, g.b_f, g.t_f, g.t_w
-    perfil = [
-        (-d / 2, -bf / 2), (-d / 2 + tf, -bf / 2), (-d / 2 + tf, -tw / 2), (d / 2 - tf, -tw / 2),
-        (d / 2 - tf, -bf / 2), (d / 2, -bf / 2), (d / 2, bf / 2), (d / 2 - tf, bf / 2),
-        (d / 2 - tf, tw / 2), (-d / 2 + tf, tw / 2), (-d / 2 + tf, bf / 2), (-d / 2, bf / 2),
-    ]  # fmt: skip
+    d = g.d
+    y_baixo = g.faixa_y[0]  # a borda de baixo do perfil (a I: −b_f/2; o U: o dorso ou as pontas)
+    perfil = bp.contorno_do_perfil(g)
     dr.polygon([p(*q) for q in perfil], fill=_PILAR, outline=dg.COR_LINHA, width=2 * ESC)
     # chumbadores: arruela especial, furo e o chumbador
     lado = tab.lado_da_arruela / 2
@@ -191,7 +188,7 @@ def _planta(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int,
     # cotas
     baixo, esquerda, cima, direita = (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0), (1.0, 0.0)
     # a cota d fica entre a mesa e a borda da placa; se não couber, logo abaixo da placa
-    folga = (g.ly / 2 - bf / 2) * tela.esc
+    folga = (g.ly / 2 + y_baixo) * tela.esc
     cabe = folga >= 26 * ESC
     afastamento_d = 12 * ESC if cabe else folga + 12 * ESC
     afastamento_lx = 34 * ESC if cabe else 40 * ESC
@@ -210,7 +207,7 @@ def _planta(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int,
     ys = sorted({y for _, y in g.posicoes})
     if len(ys) >= 2:
         dg.cota_alinhada(dr, p(g.lx / 2, ys[0]), p(g.lx / 2, ys[1]), direita, f"a₂ = {_n(ys[1] - ys[0])}", 14 * ESC, fundo=True)  # fmt: skip
-    dg.cota_alinhada(dr, p(-d / 2, -bf / 2), p(d / 2, -bf / 2), baixo, f"d = {_n(d)}", afastamento_d, fundo=True)  # fmt: skip
+    dg.cota_alinhada(dr, p(-d / 2, y_baixo), p(d / 2, y_baixo), baixo, f"d = {_n(d)}", afastamento_d, fundo=True)  # fmt: skip
     canto = p(-g.lx / 2, g.ly / 2)
     dr.text(
         (canto[0], canto[1] - 40 * ESC),

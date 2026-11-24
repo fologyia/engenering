@@ -87,6 +87,34 @@ A 6.7.1.1 admite outras configurações desde que atendam 6.1.1.3. Para a **rotu
 * A rotulada só aguenta o momento que o concreto faz sozinho (os chumbadores ficam no eixo): no W 250
   × 32,7 com N = 300 kN, cerca de 67 kN·m; acima disso, "Equilíbrio possível" reprova.
 
+## Pilar de perfil U (24/11/2026)
+
+A 6.7 é escrita para o perfil I ou H; o U (canal laminado do catálogo) vai pelo mesmo método, que a
+6.7.1.1 admite atendendo 6.1.1.3 (aviso e linha INFO no resultado). Decisões:
+
+- **Posição**: a placa é centrada no **centro geométrico** do U (x̄ do dorso da alma, alma d·t_w e
+  duas mesas (b_f − t_w)·t_f), onde atuam N, M e M_y. Assim as contas de equilíbrio (C1 a T3, flexão
+  oblíqua, distribuição elástica) ficam as mesmas da I. A alma corre ao longo de ℓx; as mesas abrem
+  para +y (o lado que M_y > 0 comprime). Com M_y < 0 o U é espelhado (dorso em +x̄) e as contas
+  usam |M_y|.
+- **Balanços**: o U é **meia I de mesa 2·b_f** cortada pela alma. Em ℓx, m = (ℓx − 0,95·d)/2 como
+  na I. Em ℓy, as linhas de engaste ficam no dorso da alma e a 0,80·b_f dele (a linha
+  0,80·(2·b_f)/2 da I equivalente); n = o maior dos dois balanços. Entre as mesas, n₀ =
+  √(d·2·b_f)/4 e X = [4·d·(2b_f)/(d + 2b_f)²]·N/(ℓx·ℓy·σ_c,Rd). A espessura pela zona comprimida
+  usa a linha de cada lado (`Geometria.engaste_y`).
+- **Disposição**: só a **tipo 1** (`TIPOS_DO_U`); a tipo 2, a rotulada e a de internos e externos
+  contam com chumbadores dos dois lados da alma (`BaseInvalida`).
+- **Largura**: em vez de ℓy ≥ b_f + 25, 12,5 mm de placa além do U de cada lado (a placa é centrada
+  no centro geométrico, não no meio de b_f).
+- **Solda do contorno** (`base_de_pilar_soldas.contorno_do_pilar(..., y_dorso=...)`): dorso da alma
+  (sempre), faces externas das mesas, faces internas (opção) e face interna da alma (opção "alma").
+  O grupo não é simétrico em y: f_n = −N/L − M·x/I_x − (M_y − N·y_c)·(y − y_c)/I_y, com I_y pelo
+  centro do grupo; o teste confere ∫f_n ds = −N, ∫f_n·x ds = −M e ∫f_n·y ds = −M_y.
+- **Desenho**: `contorno_do_perfil(g)` dá o polígono da I ou do U para a planta e as figuras das
+  contas.
+
+Testes: `tests/test_base_de_pilar_perfil_u.py`.
+
 ## Flexão oblíqua (momento nos dois eixos, 31/10/2026)
 
 Com M_Sd,y ≠ 0 (`flexao_obliqua`, com cache: o equilíbrio não depende da espessura), qualquer

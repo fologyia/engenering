@@ -1,9 +1,21 @@
-"""Base de pilar de perfil I ou H pela ABNT NBR 8800:2025, Subseção 6.7 (Bases de pilares).
+"""Base de pilar de perfil I, H ou U pela ABNT NBR 8800:2025, Subseção 6.7 (Bases de pilares).
 
 Placa de base retangular soldada ao pilar e presa ao bloco de concreto por chumbadores, com
 argamassa expansiva de assentamento (6.7.1.2). Dois tipos (Figura 21): **tipo 1**, chumbadores
 externos às mesas (4 ≤ n_b ≤ 8), e **tipo 2**, chumbadores internos (n_b = 4). Momento só em torno
 do eixo de maior inércia (6.7.1.3).
+
+**Pilar de perfil U** (canal laminado). A 6.7 é escrita para o perfil I ou H; o U vai pelo mesmo
+método (6.7.1.1 admite outras soluções, atendendo 6.1.1.3), com a placa centrada no **centro
+geométrico** do U (onde atuam N, M e M_y do modelo), a alma ao longo de ℓx e as mesas abertas para
++y. O U é tratado como **meia seção I de mesa 2·b_f** cortada pela alma: os balanços em ℓx são os
+mesmos da I (m = (ℓx − 0,95·d)/2, mesas nos dois lados); em ℓy, as linhas de engaste ficam no dorso
+da alma e a 0,80·b_f dele (a linha 0,80·(2·b_f)/2 da I equivalente), e n é o maior dos dois
+balanços (o do dorso e o das pontas das mesas); o trecho entre as mesas usa n₀ = √(d·2·b_f)/4 e o
+fator X com 2·b_f. Só a disposição tipo 1 (chumbadores externos às mesas) vale para o U: a tipo 2 e
+as outras contam com chumbadores dos dois lados da alma. A solda do contorno leva os esforços do
+centro do U ao centro do grupo de filetes (dorso, mesas por fora e por dentro, face interna da
+alma).
 
 Duas disposições comuns fora da Figura 21 (6.7.1.1 admite outras, atendendo 6.1.1.3) vão pelo
 **método geral**, o mesmo da 6.7 com os chumbadores em mais de uma linha: a base **rotulada** (2
@@ -176,6 +188,11 @@ FATOR_ARGAMASSA = 0.80
 FU_TETO_ACI = 862.0  # f_uta ≤ mín(1,9·f_ya; 862 MPa), ACI 318-19 17.6.1.2
 FY_ARMADURA_DE_ANCORAGEM = 500.0  # CA-50 (NBR 7480); φ 0,75 da ACI 318-19 17.5.2.1
 FAMILIAS_I = ("W (mesa larga)", "HP (perfil de estaca)", "I duplamente simétrico")
+FAMILIAS_U = ("U (canal laminado)",)
+FORMA_I = "I"
+FORMA_U = "U"
+#: As disposições que o pilar U admite (a tipo 2 e as outras precisam dos dois lados da alma).
+TIPOS_DO_U = (TIPO_1,)
 MU_PADRAO = 0.45  # placa de base × argamassa expansiva (6.7.2.2 a)
 ALFA_V_CHUMBADOR = 0.45  # corte com a rosca no plano, NBR 8800:2025 6.3.3.2 a)
 # Arruela especial (Tabela 18, notas a e c): aço com f_y = 345 MPa — f_u = 450 MPa, o menor dos
@@ -397,6 +414,41 @@ class Geometria:
     t_arruela: float
     posicoes: tuple[tuple[float, float], ...]  # chumbadores (x, y) a partir do centro da placa
     a1_x: float = 0.0  # tipo 2: a₁ entre a mesa e a borda em ℓx (nota f); nos outros, = a₁
+    forma: str = FORMA_I  # FORMA_U: pilar U com o dorso da alma em y = y_dorso
+    # U: a placa é centrada no centro geométrico do U; y_dorso = −x̄ (mesas abertas para +y, o
+    # lado que M_y > 0 comprime) ou +x̄ (U espelhado, com M_y < 0: as contas usam |M_y|)
+    y_dorso: float = 0.0
+
+    @property
+    def abertura(self) -> float:
+        """+1 com as mesas do U abertas para +y, −1 para −y (0 na I)."""
+        if not self.e_u:
+            return 0.0
+        return 1.0 if self.y_dorso <= 0 else -1.0
+
+    @property
+    def e_u(self) -> bool:
+        return self.forma == FORMA_U
+
+    @property
+    def b_eq(self) -> float:
+        """A largura de mesa da I equivalente (o U é meia I de mesa 2·b_f)."""
+        return 2 * self.b_f if self.e_u else self.b_f
+
+    @property
+    def faixa_y(self) -> tuple[float, float]:
+        """De onde a onde vai o perfil em y (mm, a partir do centro da placa)."""
+        if self.e_u:
+            return tuple(sorted((self.y_dorso, self.y_dorso + self.abertura * self.b_f)))  # type: ignore[return-value]
+        return -self.b_f / 2, self.b_f / 2
+
+    @property
+    def engaste_y(self) -> tuple[float, float]:
+        """As linhas de engaste do balanço n (y de baixo, y de cima): ±0,80·b_f/2 na I; no U, o
+        dorso da alma e 0,80·b_f a partir dele."""
+        if self.e_u:
+            return tuple(sorted((self.y_dorso, self.y_dorso + self.abertura * 0.80 * self.b_f)))  # type: ignore[return-value]
+        return -0.80 * self.b_f / 2, 0.80 * self.b_f / 2
 
 
 @dataclass(frozen=True)
@@ -470,8 +522,39 @@ def _n(valor: float, casas: int = 2) -> str:
 
 
 def perfis_i() -> list[str]:
-    """Os perfis I e H do catálogo, os únicos que o método cobre (6.7.1.1)."""
+    """Os perfis I e H do catálogo, os do método da 6.7 (6.7.1.1)."""
     return [n for n, p in sc.listar_perfis().items() if p.familia in FAMILIAS_I]
+
+
+def perfis_u() -> list[str]:
+    """Os perfis U do catálogo (método da 6.7 estendido, ver o começo do módulo)."""
+    return [n for n, p in sc.listar_perfis().items() if p.familia in FAMILIAS_U]
+
+
+def perfis_do_pilar() -> list[str]:
+    """Os perfis que a página oferece: os I e H e, depois, os U."""
+    return perfis_i() + perfis_u()
+
+
+def forma_do_perfil(nome: str) -> str:
+    """FORMA_U para um U do catálogo; FORMA_I nos outros (o cálculo recusa o que não for I nem U)."""
+    try:
+        familia = sc.obter_perfil(nome).familia
+    except (KeyError, sc.ErroDeCatalogo):
+        return FORMA_I
+    return FORMA_U if familia in FAMILIAS_U else FORMA_I
+
+
+def tipos_do_perfil(nome: str) -> tuple[str, ...]:
+    """As disposições que o perfil admite."""
+    return TIPOS_DO_U if forma_do_perfil(nome) == FORMA_U else tuple(TIPOS)
+
+
+def centroide_do_u(d: float, b_f: float, t_w: float, t_f: float) -> float:
+    """x̄ do U (mm): distância do dorso da alma ao centro geométrico (alma d·t_w e duas mesas)."""
+    a_alma = d * t_w
+    a_mesas = 2 * (b_f - t_w) * t_f
+    return (a_alma * t_w / 2 + a_mesas * (t_w + (b_f - t_w) / 2)) / (a_alma + a_mesas)
 
 
 def gama_c(combinacao: str) -> float:
@@ -912,11 +995,24 @@ def geometria(e: EntradaBase) -> Geometria:
         perfil = sc.obter_perfil(e.perfil)
     except (KeyError, sc.ErroDeCatalogo):
         raise BaseInvalida(f"Perfil desconhecido: {e.perfil!r}.") from None
-    if perfil.familia not in FAMILIAS_I:
-        raise BaseInvalida("A Subseção 6.7 trata de pilares de perfil I ou H (6.7.1.1).")
+    if perfil.familia not in FAMILIAS_I + FAMILIAS_U:
+        raise BaseInvalida(
+            "A Subseção 6.7 trata de pilares de perfil I ou H (6.7.1.1); o programa estende o "
+            "método ao perfil U. Escolha um W, HP, I ou U do catálogo."
+        )
+    forma = FORMA_U if perfil.familia in FAMILIAS_U else FORMA_I
+    if forma == FORMA_U and e.tipo not in TIPOS_DO_U:
+        raise BaseInvalida(
+            "Pilar U: só a disposição tipo 1 (chumbadores externos às mesas). A tipo 2, a "
+            "rotulada e a de internos e externos contam com chumbadores dos dois lados da alma, "
+            "e o U só tem um."
+        )
     tab = disposicoes(e)
     d, b_f = perfil.altura_mm, perfil.largura_mm
     t_w, t_f = perfil.espessura_alma_mm, perfil.espessura_mesa_mm
+    # o U abre as mesas para o lado que M_y comprime (M_y < 0: o U espelhado, e as contas com |M_y|)
+    sentido = -1.0 if e.m_sd_y_kNm < 0 else 1.0
+    y_dorso = -sentido * centroide_do_u(d, b_f, t_w, t_f) if forma == FORMA_U else 0.0
     a1 = e.a1_mm or tab.a1
     a2 = e.a2_mm or tab.a2
     a1_x = (e.a1_x_mm or tab.a1) if e.tipo == TIPO_2 else a1  # nota f da Tabela 18
@@ -953,8 +1049,13 @@ def geometria(e: EntradaBase) -> Geometria:
         TIPO_INTERNOS_E_EXTERNOS: lx / 2 - a1,
     }[e.tipo]
     m = (lx - 0.95 * d) / 2
-    n = (ly - 0.80 * b_f) / 2
-    n0 = math.sqrt(d * b_f) / 4
+    if forma == FORMA_U:  # o maior dos dois balanços: além do dorso e além de 0,80·b_f
+        x_barra = abs(y_dorso)
+        n = max(ly / 2 - x_barra, ly / 2 - (0.80 * b_f - x_barra))
+        n0 = math.sqrt(d * 2 * b_f) / 4  # a I equivalente, de mesa 2·b_f
+    else:
+        n = (ly - 0.80 * b_f) / 2
+        n0 = math.sqrt(d * b_f) / 4
     momento = abs(e.m_sd_kNm) * 1e6
     axial = abs(e.n_sd_kN) * 1e3
     if momento == 0:
@@ -974,8 +1075,26 @@ def geometria(e: EntradaBase) -> Geometria:
     posicoes = tuple((x, y) for x in linhas_x for y in ys)
     return Geometria(
         d, b_f, t_w, t_f, a1, a2, lx, ly, l0, a, m, n, n0, exc,
-        e.e_n_mm or tab.e_n, e.t_arruela_mm or tab.t_arruela, posicoes, a1_x,
+        e.e_n_mm or tab.e_n, e.t_arruela_mm or tab.t_arruela, posicoes, a1_x, forma, y_dorso,
     )  # fmt: skip
+
+
+def contorno_do_perfil(g: Geometria) -> list[tuple[float, float]]:
+    """O contorno do pilar em planta (mm, do centro da placa): a I com as mesas paralelas a y, ou
+    o U com o dorso da alma em y = y_dorso e as mesas abertas para o lado do centro."""
+    d, bf, tf, tw = g.d, g.b_f, g.t_f, g.t_w
+    if g.e_u:
+        y0, s = g.y_dorso, g.abertura
+        y_alma, y_ponta = y0 + s * tw, y0 + s * bf
+        return [
+            (-d / 2, y0), (d / 2, y0), (d / 2, y_ponta), (d / 2 - tf, y_ponta),
+            (d / 2 - tf, y_alma), (-d / 2 + tf, y_alma), (-d / 2 + tf, y_ponta), (-d / 2, y_ponta),
+        ]  # fmt: skip
+    return [
+        (-d / 2, -bf / 2), (-d / 2 + tf, -bf / 2), (-d / 2 + tf, -tw / 2), (d / 2 - tf, -tw / 2),
+        (d / 2 - tf, -bf / 2), (d / 2, -bf / 2), (d / 2, bf / 2), (d / 2 - tf, bf / 2),
+        (d / 2 - tf, tw / 2), (-d / 2 + tf, tw / 2), (-d / 2 + tf, bf / 2), (-d / 2, bf / 2),
+    ]  # fmt: skip
 
 
 def caso_da_base(e: EntradaBase, g: Geometria, sigma_c_rd: float) -> str:
@@ -1256,7 +1375,8 @@ def espessura_pela_zona(
 ) -> tuple[float, str]:
     """t_p pela pressão na zona comprimida, linha a linha.
 
-    Para cada linha de engaste da 6.7 (x = ±0,95·d/2 para m, y = ±0,80·b_f/2 para n), o momento por
+    Para cada linha de engaste da 6.7 (x = ±0,95·d/2 para m, y = ±0,80·b_f/2 para n; no U, o dorso
+    da alma e 0,80·b_f a partir dele), o momento por
     unidade de largura da pressão além dela é calculado em fatias, q = ∫σ·(s − linha)·ds, e tirado
     na média numa janela da largura do balanço (a placa reparte a carga de borda); t =
     √(4·q/(f_y/γ_a1)). Com a zona numa faixa da largura toda, é exatamente a fórmula da 6.7 (m, n
@@ -1270,16 +1390,18 @@ def espessura_pela_zona(
     poligono = list(zona)
     pressao = "a pressão linear elástica" if plano is not None else "a pressão"
     pior, texto = 0.0, ""
-    casos = (
-        (0, 0.95 * g.d / 2, g.lx / 2, g.ly, "m"),
-        (1, 0.80 * g.b_f / 2, g.ly / 2, g.lx, "n"),
+    y_baixo, y_cima = g.engaste_y
+    casos = (  # (eixo, linha do lado +, linha do lado − medida para fora, borda, lado, nome)
+        (0, 0.95 * g.d / 2, 0.95 * g.d / 2, g.lx / 2, g.ly, "m"),
+        (1, y_cima, -y_baixo, g.ly / 2, g.lx, "n"),
     )
-    for eixo, meio, borda, lado, nome in casos:
-        balanco = borda - meio
-        if balanco <= 0:
-            continue
+    for eixo, meio_mais, meio_menos, borda, lado, nome in casos:
         passo = lado / FATIAS_DA_ZONA
         for sinal in (1.0, -1.0):
+            meio = meio_mais if sinal > 0 else meio_menos
+            balanco = borda - meio
+            if balanco <= 0:
+                continue
             q: list[float] = []
             for k in range(FATIAS_DA_ZONA):
                 valor = -lado / 2 + (k + 0.5) * passo
@@ -2835,7 +2957,28 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             "6.7.1.1 admite outras configurações desde que atendam 6.1.1.3 — registre o método no "
             "memorial."
         )
+    if g.e_u:
+        avisos.append(
+            "Pilar U: a 6.7 é escrita para o perfil I ou H, e o programa trata o U como meia I de "
+            "mesa 2·b_f (placa centrada no centro geométrico do U, linhas de engaste no dorso da "
+            "alma e a 0,80·b_f dele). A 6.7.1.1 admite outras soluções desde que atendam 6.1.1.3 — "
+            "registre o método no memorial."
+        )
     inicios: list[tuple[str, int]] = [(GRUPO_GEOMETRIA, 0)]  # onde começa cada grupo da tela
+    if g.e_u:
+        linhas.append(
+            _info(
+                "Pilar U: método da 6.7 estendido",
+                f"centro geométrico a x̄ = {_n(abs(g.y_dorso), 1)} mm do dorso da alma, no centro "
+                f"da placa, mesas abertas para {'+y' if g.abertura > 0 else '−y (M_Sd,y < 0)'}; "
+                f"balanços em ℓy: {_n(g.ly / 2 - abs(g.y_dorso), 1)} mm além do dorso e "
+                f"{_n(g.ly / 2 - (0.80 * g.b_f - abs(g.y_dorso)), 1)} mm além de 0,80·b_f (n = o "
+                "maior, "
+                f"{_n(g.n, 1)} mm); entre as mesas, a I equivalente de mesa 2·b_f = "
+                f"{_n(g.b_eq, 0)} mm: n₀ = √(d·2·b_f)/4 = {_n(g.n0, 1)} mm",
+                f"{REF} 6.7.1.1 e 6.1.1.3",
+            )
+        )
     ref_cc = f"{REF} 6.6.5"
     texto_sigma = (
         f"σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c = mín(0,85 × {_n(e.fck_MPa, 1)}/"
@@ -2866,21 +3009,36 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                     f"caso {caso}: a base tipo 2 só cobre C1, C2, T1 e T2 — use a base tipo 1",
                 )  # fmt: skip
             )
-    linhas.append(
-        _limite(
-            "Largura da placa ℓy ≥ b_f + 25 mm",
-            g.ly >= g.b_f + 25.0 - 1e-9,
-            f"{REF} 6.7.2.1",
-            (
-                "ℓy informada"
-                if e.ly_mm
-                else f"ℓy = (0,5·n_b − 1)·a₂ + 2·a₁ = (0,5·{n_b} − 1)·{_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
-                if da_norma
-                else f"ℓy = a₂ + 2·a₁ = {_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
+    texto_ly = (
+        "ℓy informada"
+        if e.ly_mm
+        else f"ℓy = (0,5·n_b − 1)·a₂ + 2·a₁ = (0,5·{n_b} − 1)·{_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
+        if da_norma
+        else f"ℓy = a₂ + 2·a₁ = {_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
+    )  # fmt: skip
+    if g.e_u:  # a placa centrada no centro geométrico: a folga de 12,5 mm de cada lado do U
+        y_min, y_max = g.faixa_y
+        folga = g.ly / 2 - max(-y_min, y_max)
+        linhas.append(
+            _limite(
+                "Largura da placa ℓy: 12,5 mm além do U de cada lado",
+                folga >= 12.5 - 1e-9,
+                f"{REF} 6.7.2.1 (b_f + 25 mm, com a placa centrada no centro geométrico)",
+                f"{texto_ly} = {_n(g.ly, 0)} mm; o U vai de y = {_n(y_min, 1)} a "
+                f"{_n(y_max, 1)} mm (do dorso às pontas das mesas): sobra {_n(folga, 1)} mm do "
+                "lado mais curto, ≥ 12,5 mm (senão, aumente a₂ ou a₁)",
             )
-            + f" = {_n(g.ly, 0)} mm; b_f + 25 = {_n(g.b_f + 25.0, 0)} mm (senão, aumente a₂ ou a₁)",
-        )  # fmt: skip
-    )
+        )
+    else:
+        linhas.append(
+            _limite(
+                "Largura da placa ℓy ≥ b_f + 25 mm",
+                g.ly >= g.b_f + 25.0 - 1e-9,
+                f"{REF} 6.7.2.1",
+                f"{texto_ly} = {_n(g.ly, 0)} mm; b_f + 25 = {_n(g.b_f + 25.0, 0)} mm (senão, "
+                "aumente a₂ ou a₁)",
+            )
+        )
     if g.l0 is not None:
         linhas.append(
             _limite(
@@ -2934,7 +3092,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     t_min = 0.0
     d_min: float | None = None
     v_atrito = 0.0
-    x_fator = 4 * g.d * g.b_f / (g.d + g.b_f) ** 2
+    x_fator = 4 * g.d * g.b_eq / (g.d + g.b_eq) ** 2
     lam = 0.0
     if axial > 0:
         x_val = x_fator * axial / (g.lx * g.ly * sigma_rd)
@@ -2945,7 +3103,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 1.0,
                 "—",
                 f"{REF} 6.7.2.1",
-                f"X = [4·d·b_f/(d + b_f)²]·N_Sd/(ℓx·ℓy·σ_c,Rd) = {_n(x_fator, 3)} × "
+                ("X = [4·d·(2b_f)/(d + 2b_f)²]" if g.e_u else "X = [4·d·b_f/(d + b_f)²]")
+                + f"·N_Sd/(ℓx·ℓy·σ_c,Rd) = {_n(x_fator, 3)} × "
                 f"{_n(axial / 1e3, 1)} kN/({_n(g.lx, 0)} × {_n(g.ly, 0)} × {_n(sigma_rd)}) ≤ 1 "
                 "(caso contrário, refazer a ligação)",
             )  # fmt: skip
@@ -4192,7 +4351,7 @@ def registro_base(
             **({"combinacoes": linhas_das_combinacoes(r)} if r.envoltoria else {}),
         },
         metodo=(
-            "Base de pilar de perfil I ou H com placa retangular, chumbadores e argamassa "
+            f"Base de pilar de perfil {'U' if r.geometria.e_u else 'I ou H'} com placa retangular, chumbadores e argamassa "
             "expansiva pela ABNT NBR 8800:2025, Subseção 6.7: caso pela força axial e pela "
             "excentricidade (6.7.1.4), espessura mínima da placa, diâmetro mínimo dos chumbadores "
             "e cortante (6.7.2.2 a 6.7.2.5), "
