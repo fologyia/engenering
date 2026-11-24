@@ -77,7 +77,8 @@ def test_nomes_trocados_com_direcao_e_valor_de_outro_caso():
     assert "é exatamente o W180 do programa" in texto and "nomes dos casos estão trocados" in texto
     so_nomes = {"W0": (1.82, 0.0, 0.0), "W180": (-1.82, 0.0, 0.0)}  # W0 e W180 trocados
     resumo = em.resumo_dos_ventos(dados(so_nomes), plano())
-    assert resumo is not None and "renomeie os casos" in resumo.texto
+    assert resumo is not None and "renomear os casos" in resumo.texto
+    assert "Inverter direção" in resumo.texto  # ao contrário do próprio plano também
 
 
 def test_direcao_certa_com_outro_valor_e_tudo_certo():

@@ -1425,6 +1425,12 @@ def resumo_dos_ventos(
             "vai no sentido da componente; ponha o sentido no sinal do valor."
         )
         diferentes = [c for c in estudo if not bate((-estudo[c][0], -estudo[c][1]), programa[c])]
+        if so_nomes:  # ao contrário, cada caso é outro do programa (W0 ↔ W180): dá no mesmo
+            conclusao += (
+                " Como cada caso ao contrário é, em direção e valor, outro caso do programa, também "
+                "resolve se você renomear os casos no gerenciador do SolidWorks (ou enviar cada "
+                "arquivo com o código certo)."
+            )
         if diferentes:
             conclusao += (
                 f" Além do sentido, o valor também difere em {', '.join(diferentes)}: confira o "
