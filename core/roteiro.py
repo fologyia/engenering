@@ -242,6 +242,9 @@ PASSOS: tuple[Passo, ...] = (
         (
             "Conforme o projeto: degrau e longarina da escada, ligações, contraventamento,"
             " parafusos, vigas de piso.",
+            "As complementares que o projeto pede (aba Verificações complementares):"
+            " forças na alma, monovia, travamentos, viga mista, furos na alma, terças, ligação"
+            " rígida, nós de tubos, fadiga e incêndio.",
             "Registre cada uma no projeto.",
         ),
         "Cada peça do escopo com o seu cálculo registrado.",

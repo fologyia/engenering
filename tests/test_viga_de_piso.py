@@ -122,3 +122,40 @@ def test_registro_e_capitulo_do_memorial():
     assert "Largura de influência" in modelo or "largura" in modelo.lower()
     assert "W 250 x 17,9" in modelo
     assert '"titulo": "Viga de piso biapoiada"' in modelo
+
+
+# ------------------------------------------------------------------ forças localizadas (5.7)
+def test_ligada_pela_alma_sem_equipamento_nao_verifica_a_mesa():
+    r = vp.calcular(vp.EntradaVigaDePiso())
+    assert not [v for v in r.verificacoes if "alma" in v.nome.lower() and ":" in v.nome]
+
+
+def test_apoio_pela_mesa_e_equipamento_verificam_a_alma():
+    from dataclasses import replace
+
+    from core import perfil_i as pi
+
+    e = replace(vp.EntradaVigaDePiso(), apoio_na_mesa=True, concentrada_kN=10.0)
+    r = vp.calcular(e)
+    nomes = {v.nome: v for v in r.verificacoes}
+    p = pi.perfil(e.perfil)
+    esperado = 1.10 * (2.5 * p.k + 100.0) * 345 * p.tw / 1.10 / 1000
+    assert nomes["Apoio: escoamento local da alma"].resistente == pytest.approx(esperado)
+    assert nomes["Apoio: escoamento local da alma"].solicitante == r.cortante_sd_kN
+    assert "Equipamento: flambagem lateral da alma" in nomes
+    assert nomes["Equipamento: enrugamento da alma"].referencia.endswith("5.7.4.2 a)")
+
+
+def test_equipamento_pesado_pede_enrijecedor():
+    from dataclasses import replace
+
+    r = vp.calcular(replace(vp.EntradaVigaDePiso(), concentrada_kN=40.0))
+    nomes = {v.nome: v.status for v in r.verificacoes}
+    assert nomes["Equipamento: enrijecedores necessários"] == "NÃO OK"
+    r2 = vp.calcular(replace(vp.EntradaVigaDePiso(), concentrada_kN=40.0,
+                             mesa_travada_contra_giro=True))  # fmt: skip
+    assert {v.nome: v for v in r2.verificacoes}[
+        "Equipamento: flambagem lateral da alma"
+    ].resistente > [
+        v for v in r.verificacoes if v.nome == "Equipamento: flambagem lateral da alma"
+    ][0].resistente

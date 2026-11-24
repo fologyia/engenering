@@ -70,4 +70,25 @@ AJUDA: dict[str, str] = {
         "Frequência natural do piso, f ≈ 18/√δ, com a flecha total na combinação frequente. Abaixo "
         "de 3 Hz nunca; o mínimo do uso está nas verificações."
     ),
+    "sec_alma": (
+        "Forças que entram pela mesa da viga e podem amassar ou dobrar a alma antes da flexão: a "
+        "reação, quando a viga se apoia por baixo sobre outra viga, e o pé do equipamento na mesa "
+        "de cima (NBR 8800:2025, 5.7). Para enrijecedores, use a página Forças localizadas na alma."
+    ),
+    "apoio_mesa": (
+        "Ligue quando a viga se apoia pela mesa de baixo (sentada sobre outra viga ou console). "
+        "Desligado: a viga é ligada pela alma (chapa ou cantoneira) e a reação não passa pela mesa."
+    ),
+    "comprimento_apoio": (
+        "Comprimento, ao longo da viga, da superfície em que ela se apoia (largura da mesa da viga "
+        "de baixo ou da chapa de apoio), em mm."
+    ),
+    "base_equipamento": (
+        "Comprimento, ao longo da viga, da base do equipamento que apoia na mesa de cima, em mm."
+    ),
+    "mesa_travada": (
+        "Ligue se a grade (ou a base do equipamento) presa à mesa de cima impede a mesa de girar. "
+        "Desligado, a flambagem lateral da alma usa o caso mais severo (5.7.5.2 b). O comprimento ℓ "
+        "dessa verificação é o vão, porque a mesa de baixo fica sem travamento."
+    ),
 }

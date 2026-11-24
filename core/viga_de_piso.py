@@ -34,7 +34,9 @@ from core import cena_3d as c3
 from core import column_buckling as cbk
 from core import criterio_anglo as ca
 from core import desenho_viga_de_piso as dvp
+from core import forcas_localizadas as fl
 from core import load_combinations as comb
+from core import perfil_i as pi
 from core import section_catalog as sc
 from core.contraventamento_barras import ACOS
 from core.technical_records import criar_registro_tecnico
@@ -96,6 +98,11 @@ class EntradaVigaDePiso:
     anglo: bool = False
     uso_vibracao: str = USO_CAMINHAR
     flecha_apoio_mm: float = 0.0  # da viga ou do pilar que apoia esta, na mesma combinação
+    # forças localizadas (NBR 8800:2025, 5.7)
+    apoio_na_mesa: bool = False  # a viga apoia pela mesa de baixo (sobre outra viga)
+    comprimento_apoio_mm: float = 100.0
+    base_equipamento_mm: float = 150.0  # comprimento de apoio do equipamento
+    mesa_travada_contra_giro: bool = False  # a grade impede a mesa de cima de girar
 
 
 @dataclass(frozen=True)
@@ -163,6 +170,12 @@ def validar(e: EntradaVigaDePiso) -> list[str]:
         erros.append(f"Uso do piso desconhecido: {e.uso_vibracao!r}.")
     if not (math.isfinite(e.flecha_apoio_mm) and 0 <= e.flecha_apoio_mm <= 500):
         erros.append("A flecha do apoio precisa estar entre 0 e 500 mm.")
+    for nome, valor in (
+        ("O comprimento de apoio", e.comprimento_apoio_mm),
+        ("A base do equipamento", e.base_equipamento_mm),
+    ):
+        if not (math.isfinite(valor) and valor >= 0):
+            erros.append(f"{nome} não pode ser negativo.")
     return erros
 
 
@@ -312,6 +325,7 @@ def calcular(e: EntradaVigaDePiso) -> ResultadoVigaDePiso:
                 tipo="limite",
             )
         )
+    linhas += forcas_na_alma(e, perfil, fy, v_sd, m_sd, lb)
     reacao_k = q_total * vao / 2 + e.concentrada_kN / 2
     reacao_d = v_sd
     w_rd_total = 8 * m_rd / vao if m_rd else 0.0  # carga uniforme total que a viga resiste
@@ -414,6 +428,40 @@ def calcular(e: EntradaVigaDePiso) -> ResultadoVigaDePiso:
     )
 
 
+def forcas_na_alma(
+    e: EntradaVigaDePiso, perfil: Any, fy: float, v_sd: float, m_sd: float, lb_m: float
+) -> list[Verificacao]:
+    """NBR 8800:2025, 5.7: a reação quando a viga apoia pela mesa e o equipamento na mesa de
+    cima (no meio do vão, a mesa comprimida). Ligada pela alma, a reação não entra pela mesa.
+    """
+    forcas: list[fl.ForcaLocalizada] = []
+    if e.apoio_na_mesa:
+        forcas.append(
+            fl.ForcaLocalizada(
+                "Apoio", v_sd, fl.COMPRESSAO, e.comprimento_apoio_mm,
+                e.comprimento_apoio_mm, 0.0, False, 0.0,
+            )
+        )  # fmt: skip
+    if e.concentrada_kN > 0:
+        gama = comb.categoria_nbr(CATEGORIA_EQ).gamma
+        forcas.append(
+            fl.ForcaLocalizada(
+                "Equipamento", gama * e.concentrada_kN, fl.COMPRESSAO,
+                e.base_equipamento_mm, e.base_equipamento_mm, e.vao_m * 500.0, True, m_sd,
+            )
+        )  # fmt: skip
+    if not forcas:
+        return []
+    return fl.verificar_forcas(
+        pi.de_perfil_aco(perfil),
+        fy,
+        forcas,
+        # 5.7.5: ℓ olha as duas mesas; a de baixo fica solta no vão inteiro
+        comprimento_destravado=max(lb_m, e.vao_m) * 1000,
+        rotacao_impedida=e.mesa_travada_contra_giro,
+    )
+
+
 def decimal(texto: str) -> str:
     from core.memorial_verificacoes import decimal_ptbr
 
@@ -457,6 +505,12 @@ def registro_viga(
         "criterio_do_cliente": f"Anglo American {ca.CODIGO} Rev. {ca.REVISAO}" if e.anglo else None,
         "uso_do_piso_vibracao": e.uso_vibracao,
         "flecha_do_apoio_mm": e.flecha_apoio_mm or None,
+        "apoio_pela_mesa": (
+            f"apoiada pela mesa de baixo, comprimento de apoio {_n(e.comprimento_apoio_mm, 0)} mm"
+            if e.apoio_na_mesa
+            else None
+        ),
+        "base_do_equipamento_mm": e.base_equipamento_mm if e.concentrada_kN > 0 else None,
     }
     entradas.update(contexto or {})
     entradas = {k: v for k, v in entradas.items() if v is not None}

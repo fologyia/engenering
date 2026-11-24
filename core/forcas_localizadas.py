@@ -660,6 +660,52 @@ def sugestao_de_enrijecedor(p: pi.PerfilI) -> tuple[float, float]:
     return bs, ts_min
 
 
+def verificar_forcas(
+    p: pi.PerfilI,
+    fy: float,
+    forcas: Sequence[ForcaLocalizada],
+    *,
+    comprimento_destravado: float,
+    rotacao_impedida: bool = True,
+    deslocamento_lateral_impedido: bool = False,
+    gama_a1: float = pi.GAMA_A1,
+    prefixo: bool = True,
+) -> list[Verificacao]:
+    """As linhas de 5.7 das forças num perfil já escolhido, para outras páginas (Vigas de piso).
+
+    Sem enrijecedores: quando alguma linha não passa, entra a linha "enrijecedores necessários"
+    com a medida sugerida. Com ``prefixo``, cada nome começa com o nome da força.
+    """
+    e = EntradaForcas(
+        gama_a1=gama_a1,
+        comprimento_destravado=comprimento_destravado,
+        rotacao_impedida=rotacao_impedida,
+        deslocamento_lateral_impedido=deslocamento_lateral_impedido,
+    )
+    saida: list[Verificacao] = []
+    for f in forcas:
+        linhas, _, _ = _linhas_da_forca(e, p, fy, f)
+        if any(v.status == "NÃO OK" for v in linhas):
+            bs, ts = sugestao_de_enrijecedor(p)
+            linhas.append(
+                Verificacao(
+                    "Enrijecedores necessários",
+                    None,
+                    None,
+                    "",
+                    "ABNT NBR 8800:2025, 5.7.2.4, 5.7.3.3, 5.7.4.3, 5.7.5.4, 5.7.6.4",
+                    f"a alma precisa de enrijecedores (por exemplo, {bs:g} × "
+                    f"{pi.numero(ts, 1)} mm de cada lado), dimensionados conforme 5.7.9",
+                    status="NÃO OK",
+                    tipo="limite",
+                )
+            )
+        if prefixo:
+            linhas = [replace(v, nome=f"{f.nome}: {v.nome.lower()}") for v in linhas]
+        saida += linhas
+    return saida
+
+
 def calcular(e: EntradaForcas) -> ResultadoForcas:
     p = obter_perfil(e)
     fy = pi.ACOS[e.aco][0]

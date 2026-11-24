@@ -50,6 +50,15 @@ sobrecarga 5,0 kN/m², mesa sem travamento: M_Sd = 16,6 kN·m e M_Rd = 17,2 kN·
 161,8 kN, flecha de 7,1 mm (L/560). Com o critério Anglo, a alma de 4,3 mm fica abaixo dos 4,8 mm do
 item 8.8 e o mais leve que atende passa a ser o W 250 × 17,9.
 
+## Apoio e equipamento na mesa (NBR 8800:2025, 5.7)
+
+A seção "3b" verifica as forças que entram pela mesa: a reação, quando a viga se apoia pela mesa
+de baixo sobre outra viga (escoamento local e enrugamento da alma, a menos da altura da ponta), e
+o equipamento no meio do vão, na mesa de cima comprimida (escoamento, enrugamento e flambagem
+lateral da alma, com o trecho sem travamento). Ligada pela alma e sem equipamento, nada muda. Se
+alguma não passa, aparece "enrijecedores necessários" com a medida sugerida; os enrijecedores em si
+são verificados na página Forças localizadas na alma.
+
 ## Registro
 
 `registro_viga` grava a verificação no projeto (módulo `viga_de_piso`): o memorial ganha o capítulo

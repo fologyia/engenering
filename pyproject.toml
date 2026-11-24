@@ -70,6 +70,7 @@ files = [
     "core/aberturas_alma.py",
     "core/tercas.py",
     "core/incendio.py",
+    "core/verificacoes_do_projeto.py",
     "core/estudo_da_medida.py",
     "core/montador.py",
     "core/montador_blocos.py",

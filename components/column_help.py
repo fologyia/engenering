@@ -644,4 +644,13 @@ AJUDA: dict[str, str] = {
         "flambagem, a tabela de verificações com a fórmula e o item, as paredes da seção, a mesma "
         "coluna nas três normas e as regras adotadas. As tabelas saem como tabelas do Word."
     ),
+    "res_travamentos": (
+        "Cada linha de travamento da coluna precisa resistir a uma força e ter uma rigidez "
+        "mínimas (NBR 8800:2025, 4.12.2), senão não trava de verdade. A tabela mostra o que "
+        "cada eixo pede, com a compressão N_Sd e o maior trecho entre travamentos."
+    ),
+    "btn_travamento": (
+        "Abre a página Contenção lateral (travamentos) já com N_Sd, o maior trecho e o número "
+        "de travamentos, para você informar a barra que trava e conferir."
+    ),
 }

@@ -87,3 +87,12 @@ def test_guia_tem_o_capitulo_com_o_exemplo_que_o_nucleo_calcula(banco_isolado):
     assert f"{r.momento_sd_kNm:.1f}".replace(".", ",") in esperado
     assert f"{r.flecha_mm:.1f}".replace(".", ",") in esperado
     assert "item 8.8" in esperado
+
+
+def test_secao_da_alma_tem_ajuda_com_apoio_e_equipamento(banco_isolado):
+    t = abrir(vp_apoio_mesa=True, vp_concentrada=10.0)
+    sem_ajuda = {
+        (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
+    } - {("text_input", "Nome do novo projeto")}
+    assert not sem_ajuda, sorted(sem_ajuda)
+    assert t.number_input(key="vp_comprimento_apoio").value == 100.0

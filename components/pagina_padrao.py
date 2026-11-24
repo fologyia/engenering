@@ -62,6 +62,13 @@ class Campos:
     def _chave(self, nome: str, sufixo: str = "") -> str:
         return f"{self.prefixo}{nome}{sufixo}"
 
+    @staticmethod
+    def _inicial(chave: str, **valor: Any) -> dict[str, Any]:
+        """O valor de partida só quando a sessão ainda não tem a chave: outra página pode
+        deixar o valor pronto (ex.: Flambagem de colunas → Contenção lateral) sem o aviso do
+        Streamlit de valor dado duas vezes."""
+        return {} if chave in st.session_state else valor
+
     def numero(
         self,
         rotulo: str,
@@ -80,7 +87,7 @@ class Campos:
                 rotulo,
                 min_value=minimo,
                 max_value=maximo,
-                value=float(padrao),
+                **self._inicial(self._chave(nome, sufixo), value=float(padrao)),
                 step=passo,
                 format=formato,
                 key=self._chave(nome, sufixo),
@@ -104,7 +111,7 @@ class Campos:
                 rotulo,
                 min_value=minimo,
                 max_value=maximo,
-                value=int(padrao),
+                **self._inicial(self._chave(nome), value=int(padrao)),
                 step=1,
                 key=self._chave(nome),
                 persist_state="session",
@@ -125,14 +132,18 @@ class Campos:
     ) -> str:
         lista = list(opcoes)
         indice = lista.index(padrao) if padrao in lista else 0
+        chave = self._chave(nome, sufixo)
+        if chave in st.session_state and st.session_state[chave] not in lista:
+            del st.session_state[chave]  # valor de outra versão da lista: volta ao padrão
+        inicial = self._inicial(chave, index=indice)
         if horizontal:
             return str(
                 coluna.radio(
                     rotulo,
                     lista,
-                    index=indice,
+                    **inicial,
                     horizontal=True,
-                    key=self._chave(nome, sufixo),
+                    key=chave,
                     persist_state="session",
                     help=self.ajuda[nome],
                 )
@@ -141,8 +152,8 @@ class Campos:
             coluna.selectbox(
                 rotulo,
                 lista,
-                index=indice,
-                key=self._chave(nome, sufixo),
+                **inicial,
+                key=chave,
                 persist_state="session",
                 help=self.ajuda[nome],
             )
@@ -152,7 +163,7 @@ class Campos:
         return bool(
             coluna.toggle(
                 rotulo,
-                value=padrao,
+                **self._inicial(self._chave(nome), value=padrao),
                 key=self._chave(nome),
                 persist_state="session",
                 help=self.ajuda[nome],
@@ -163,7 +174,7 @@ class Campos:
         return str(
             coluna.text_input(
                 rotulo,
-                value=padrao,
+                **self._inicial(self._chave(nome), value=padrao),
                 key=self._chave(nome),
                 persist_state="session",
                 help=self.ajuda[nome],

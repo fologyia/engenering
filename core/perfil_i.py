@@ -233,6 +233,36 @@ def com(p: PerfilI, **mudancas: Any) -> PerfilI:
     return replace(p, **mudancas)
 
 
+def de_perfil_aco(perfil: PerfilAco) -> PerfilI:
+    """O PerfilI de um perfil de :mod:`core.steel_sections` (o que as outras páginas usam).
+
+    Um W/HP do catálogo da Gerdau leva o raio da tabela; os demais ficam sem raio (k = t_f, a
+    favor da segurança) e são tratados como laminados, a menos que a família diga "soldado".
+    """
+    for do_grupo in catalogo().values():
+        if perfil.nome in do_grupo:
+            return do_grupo[perfil.nome]
+    familia = str(getattr(perfil, "familia", "") or "").casefold()
+    return PerfilI(
+        nome=perfil.nome,
+        tipo=SOLDADO if "sold" in familia else LAMINADO,
+        d=perfil.altura_mm,
+        bf=perfil.largura_mm,
+        tf=perfil.espessura_mesa_mm,
+        tw=perfil.espessura_alma_mm,
+        raio=0.0,
+        A=perfil.area_mm2,
+        Ix=perfil.ix_mm4,
+        Iy=perfil.iy_mm4,
+        Zx=perfil.zx_mm3,
+        Zy=perfil.zy_mm3,
+        J=perfil.j_mm4,
+        Cw=perfil.cw_mm6,
+        massa=perfil.massa_kg_m,
+        raio_conhecido="sold" in familia,
+    )
+
+
 def avisos_do_perfil(p: PerfilI) -> list[str]:
     """O que o usuário deve saber sobre as medidas que o programa adotou."""
     if p.tipo == LAMINADO and not p.raio_conhecido:

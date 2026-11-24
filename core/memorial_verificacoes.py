@@ -837,6 +837,8 @@ ENTRADAS_CURADAS: dict[str, tuple[_Entrada, ...]] = {
         ("sobrecarga_kN_m2", "Sobrecarga [kN/m²]", "sempre"),
         ("carga_linear_extra_kN_m", "Carga linear extra [kN/m]", "se_preenchido"),
         ("carga_concentrada_kN", "Equipamento no meio do vão [kN]", "se_preenchido"),
+        ("base_do_equipamento_mm", "Base do equipamento [mm]", "se_preenchido"),
+        ("apoio_pela_mesa", "Apoio da viga", "se_preenchido"),
         ("norma", "Norma", "sempre"),
         ("criterio_do_cliente", "Critério do cliente", "se_preenchido"),
     ),

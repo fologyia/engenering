@@ -64,3 +64,19 @@ Um arquivo por página (`tests/test_<modulo>.py`) com as contas de mão, os caso
 registro e o memorial, os textos de ajuda e a página aberta pelo AppTest (todo campo com "?").
 `tests/test_guia_verificacoes.py` confere os capítulos do guia e que o exemplo dá o número que a
 página mostra. O apoio comum fica em `tests/apoio_paginas.py`.
+
+## Integração com as páginas que já existiam
+
+- **Vigas de piso** — seção "3b. Apoio e equipamento na mesa": quando a viga se apoia pela mesa de
+  baixo, a reação é verificada pela 5.7 (escoamento local e enrugamento da alma); o equipamento no
+  meio do vão também (com a flambagem lateral da alma, pelo trecho sem travamento e pela opção "a
+  grade impede a mesa de girar"). Se não passar, a linha "enrijecedores necessários" sugere a
+  medida. Núcleo: `core/viga_de_piso.forcas_na_alma`, que usa `core/forcas_localizadas.verificar_forcas`.
+- **Flambagem de colunas** — com os travamentos informados, a seção "Travamentos que a coluna
+  exige (NBR 8800 4.12)" mostra F_br e S_br de cada eixo, e o botão "Verificar a barra de
+  travamento" abre a Contenção lateral com N_Sd, o maior trecho e o número de travamentos.
+- **Roteiro do projeto** — aba nova "Verificações complementares": lê o plano de cargas (monovia,
+  ponte rolante, impacto, equipamentos), a lista de material (tubos, perfis dobrados) e os registros
+  (vigas, pilares) e mostra, para cada uma das dez verificações, se está registrada, se o projeto a
+  indica (com o motivo) ou se vale só quando houver o caso (`core/verificacoes_do_projeto.py`). O
+  passo 12 do roteiro cita as complementares.

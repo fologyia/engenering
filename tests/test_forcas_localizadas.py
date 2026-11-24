@@ -195,3 +195,17 @@ def test_pagina(banco_isolado):
         "Baixar o memorial (Word)",
         "Baixar o memorial (PDF)",
     }
+
+
+def test_perfil_de_outra_pagina_e_verificar_forcas():
+    from core import steel_sections as ss
+
+    idealizado = ss.perfil_i_simetrico("I teste", 300.0, 150.0, 6.0, 10.0)
+    p = pi.de_perfil_aco(idealizado)
+    assert p.raio == 0 and p.k == 10.0 and pi.avisos_do_perfil(p)
+    assert pi.de_perfil_aco(W410.perfil_aco()) == W410
+    linhas = fl.verificar_forcas(W410, FY, (fl.ForcaLocalizada("Pé", 500.0, fl.COMPRESSAO, 100, 100, 2000),),
+                                 comprimento_destravado=3000.0)  # fmt: skip
+    nomes = [v.nome for v in linhas]
+    assert nomes[0] == "Pé: escoamento local da alma"
+    assert "Pé: enrijecedores necessários" in nomes

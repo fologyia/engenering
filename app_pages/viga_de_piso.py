@@ -155,6 +155,54 @@ with st.container(border=True), secao_protegida("3. Cargas (características)"):
         help=AJUDA["concentrada"],
     )
 
+with st.container(border=True), secao_protegida("3b. Apoio e equipamento na mesa"):
+    st.subheader("3b. Apoio e equipamento na mesa (NBR 8800 5.7)", help=AJUDA["sec_alma"])
+    colunas = st.columns(4)
+    apoio_mesa = colunas[0].toggle(
+        "Viga apoiada pela mesa de baixo",
+        key="vp_apoio_mesa",
+        persist_state="session",
+        help=AJUDA["apoio_mesa"],
+    )
+    comprimento_apoio = 100.0
+    if apoio_mesa:
+        comprimento_apoio = colunas[1].number_input(
+            "Comprimento de apoio (mm)",
+            1.0,
+            2000.0,
+            100.0,
+            10.0,
+            format="%.0f",
+            key="vp_comprimento_apoio",
+            persist_state="session",
+            help=AJUDA["comprimento_apoio"],
+        )
+    base_equipamento = 150.0
+    travada = False
+    if concentrada > 0:
+        base_equipamento = colunas[2].number_input(
+            "Base do equipamento (mm)",
+            1.0,
+            5000.0,
+            150.0,
+            10.0,
+            format="%.0f",
+            key="vp_base_equipamento",
+            persist_state="session",
+            help=AJUDA["base_equipamento"],
+        )
+        travada = colunas[3].toggle(
+            "Mesa de cima sem giro (5.7.5)",
+            key="vp_mesa_travada",
+            persist_state="session",
+            help=AJUDA["mesa_travada"],
+        )
+    if not apoio_mesa and concentrada <= 0:
+        st.caption(
+            "Viga ligada pela alma e sem equipamento concentrado: nenhuma força entra pela mesa. "
+            "Para enrijecedores e outros casos, use a página Forças localizadas na alma."
+        )
+
 with st.container(border=True), secao_protegida("4. Critério"):
     st.subheader("4. Critério", help=AJUDA["sec_criterio"])
     colunas = st.columns(2)
@@ -212,6 +260,10 @@ entrada = vp.EntradaVigaDePiso(
     anglo=anglo,
     uso_vibracao=uso,
     flecha_apoio_mm=float(flecha_apoio),
+    apoio_na_mesa=bool(apoio_mesa),
+    comprimento_apoio_mm=float(comprimento_apoio),
+    base_equipamento_mm=float(base_equipamento),
+    mesa_travada_contra_giro=bool(travada),
 )
 erros = vp.validar(entrada)
 if erros:

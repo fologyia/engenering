@@ -2017,6 +2017,57 @@ def _regras(entrada: cb.EntradaColuna) -> None:
             st.markdown("\n".join(f"- {item}" for item in cb.CONFERIDOS_NBR8800_2008))
 
 
+def _travamentos_exigidos(entrada: cb.EntradaColuna, comprimentos: DadosComprimentos) -> None:
+    """NBR 8800:2025, 4.12.2: a força e a rigidez que cada linha de travamento da coluna precisa
+    ter para que os trechos entre travamentos valham como comprimento de flambagem."""
+    from core import contencao_lateral as cl
+
+    eixos = [
+        (rotulo, trechos)
+        for rotulo, trechos in (("x", comprimentos.trechos_x), ("y", comprimentos.trechos_y))
+        if trechos is not None and trechos.alturas_mm
+    ]
+    if entrada.N_Sd_kN <= 0 or not eixos:
+        return
+    linhas = []
+    maior: tuple[float, float, int] | None = None
+    for rotulo, trechos in eixos:
+        n = len(trechos.alturas_mm)
+        L = trechos.maior_trecho_mm
+        F, S = cl.exigencia_pilar(entrada.N_Sd_kN * 1000, L, n)
+        linhas.append(
+            {
+                "Eixo": f"flexão em torno de {rotulo}",
+                "Travamentos": n,
+                "Maior trecho (mm)": round(L),
+                "Força F_br (kN)": round(F / 1000, 2),
+                "Rigidez S_br (kN/mm)": round(S / 1000, 3),
+            }
+        )
+        if maior is None or S > maior[1]:
+            maior = (L, S, n)
+    with st.container(border=True):
+        st.subheader(
+            "Travamentos que a coluna exige (NBR 8800 4.12)", help=AJUDA["res_travamentos"]
+        )
+        st.dataframe(pd.DataFrame(linhas), hide_index=True, width="stretch")
+        st.caption(
+            "F_br = 0,01·N_Sd; S_br = 2·(4 − 2/n)·γ_r·N_Sd/L_bc, γ_r = 1,35. Sem essa força e essa "
+            "rigidez, o travamento não vale e o comprimento de flambagem é maior."
+        )
+        if maior is not None and st.button(
+            "Verificar a barra de travamento",
+            icon=":material/fence:",
+            key="col_ir_contencao",
+            help=AJUDA["btn_travamento"],
+        ):
+            st.session_state["cl_caso"] = cl.PILAR
+            st.session_state["cl_N_Sd"] = float(entrada.N_Sd_kN)
+            st.session_state["cl_L_b"] = float(round(maior[0]))
+            st.session_state["cl_n"] = int(maior[2])
+            st.switch_page("app_pages/contencao_lateral.py")
+
+
 def _registro(
     entrada: cb.EntradaColuna,
     resultado: cb.ResultadoColuna,
@@ -2170,6 +2221,7 @@ def mostrar_flambagem_colunas() -> None:
     _espacadores(entrada)
     _comparar_normas(entrada)
     _regras(entrada)
+    _travamentos_exigidos(entrada, comprimentos)
     fronteira_modelo(list(cb.FORA_DO_ESCOPO))
     contexto = _contexto_do_registro(secao, comprimentos, cargas, flexao, mao_francesa)
     equacoes = _equacoes_de_carga(cargas, mao_francesa)
