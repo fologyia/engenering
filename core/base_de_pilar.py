@@ -824,7 +824,7 @@ def medidas_por_formula(e: EntradaBase, h_ef: float | None = None) -> MedidasPor
     s = 1.5 * d + 3.2  # porca sextavada pesada, entre faces (ASME B18.2.6)
     altura = d  # altura da porca pesada ≈ d_b
     d_f = e.d_f_mm or furo_padrao(d)
-    lado = lado_da_arruela(d, d_f)
+    lado = max(lado_da_arruela(d, d_f), _acima(s))
     t_a = e.t_arruela_mm or espessura_da_arruela(d)
     k_s, k_c = ESPACAMENTO_ACI[e.ancoragem], BORDA_ACI[e.ancoragem]
     a2 = _acima(max(k_s * d, lado))
@@ -883,7 +883,7 @@ def medidas_por_formula(e: EntradaBase, h_ef: float | None = None) -> MedidasPor
         (
             "Arruela especial",
             f"{_mm(lado)} × {_mm(lado)} × {_mm(t_a)} mm",
-            "lado ≥ 2·d_f − d_b: cobre o furo com o chumbador encostado na borda dele; espessura "
+            "lado ≥ máx(2·d_f − d_b; s): cobre o furo e respeita a largura entre faces da porca; espessura "
             + ("informada" if e.t_arruela_mm else "≥ d_b/3, chapa comercial")
             + " (AISC, Design Guide 1)",
         ),
@@ -2107,10 +2107,11 @@ def bloco_minimo(e: EntradaBase, g: Geometria, tab: LinhaTabela18) -> tuple[floa
     tipo 2, a borda da placa a a₃ − a₁ dela (nota g). A altura usa o embutimento (h₁ da tabela).
     """
     folga = max(2 * g.e_n, 2 * (tab.a3 - tab.a1))
-    n_b = max(tab.n_b_min, g.lx + folga)
+    n_b = max(tab.n_b_min, g.lx + folga, 2 * max(abs(x) for x, _ in g.posicoes) + 2 * tab.a3)
+    b_b = max(g.ly + folga, 2 * max(abs(y) for _, y in g.posicoes) + 2 * tab.a3)
     if e.por_formula:  # sem a Tabela 18: a₃ da ACI 318-19 17.9.2 e a altura pelo embutimento
-        return n_b, g.ly + folga, embutimento(e, tab) + 100.0
-    return n_b, g.ly + folga, max(embutimento(e, tab) + 100.0, n_b)
+        return n_b, b_b, embutimento(e, tab) + 100.0
+    return n_b, b_b, max(embutimento(e, tab) + 100.0, n_b)
 
 
 def bloco_para_o_cone(
@@ -2889,7 +2890,9 @@ def ruptura_da_borda_por_cortante(
             v_b = min(v_b1, v_b2)
             phi_v = 0.75 if e.armadura_suplementar else 0.70
             resultante = (e.desloc_x_mm, e.desloc_y_mm)
-            ec = abs(sum(p[1 - eixo] for p in ativos) / len(ativos) - resultante[1 - eixo])
+            # Um único chumbador ativo não tem excentricidade dentro do próprio grupo.
+            # O equilíbrio da torção externa permanece sujeito à verificação independente.
+            ec = 0.0 if len(ativos) == 1 else abs(sum(p[1 - eixo] for p in ativos) / len(ativos) - resultante[1 - eixo])
             psi_ec = 1 / (1 + ec / (1.5 * c1))
             base = phi_v * a_vc / a_vco * psi_h * v_b * psi_ec
             resistente = base * psi_ed
@@ -2908,7 +2911,13 @@ def ruptura_da_borda_por_cortante(
                 f"{_texto_do_bloco(bx, by, h_a, informado, altura)}; ψ_c,V = 1,0 (fissurado)"
             )
             if vt:
-                texto += f". Paralela à face: {vt / 1000:.2f} kN; φV∥ = 2 × φV_cbg, sem fator de borda. Interação elíptica conservadora = {_n(interacao_borda, 3)}."
+                texto += (
+                    f". Componentes simultâneas: V⊥ = {_n(vn / 1000, 3)} kN e "
+                    f"V∥ = {_n(vt / 1000, 3)} kN; φV⊥ = {_n(resistente / 1000, 3)} kN, "
+                    f"φV∥ = {_n(2 * base / 1000, 3)} kN (sem fator de borda). "
+                    f"Interação elíptica = √[({_n(vn / 1000, 3)}/{_n(resistente / 1000, 3)})² + "
+                    f"({_n(vt / 1000, 3)}/{_n(2 * base / 1000, 3)})²] = {_n(interacao_borda, 3)}."
+                )
             if pior is None or demanda / resistente > pior[0] / pior[1]:
                 pior = (demanda, resistente, texto)
     return pior
@@ -3317,6 +3326,7 @@ def calcular(e: EntradaBase) -> ResultadoBase:
 
 
 def _calcular_um(e: EntradaBase) -> ResultadoBase:
+    v_informado = e.v_sd_kN
     if e.vx_kN is not None or e.vy_kN is not None:
         e = replace(e, v_sd_kN=math.hypot(e.vx_kN or 0.0, e.vy_kN or 0.0))
     if e.aco_ductil is None:
@@ -3424,7 +3434,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             _info(
                 "Pilar U: método da 6.7 estendido",
                 f"centro geométrico a x̄ = {_n(abs(g.y_dorso), 1)} mm do dorso da alma, no centro "
-                f"da placa, mesas abertas para +y nos eixos físicos; "
+                f"da placa, mesas abertas para {'+y' if g.abertura > 0 else '−y'} nos eixos internos"
+                + (" (espelhados em relação aos físicos)" if e.m_sd_y_kNm < 0 else "") + "; "
                 f"balanços em ℓy: {_n(g.ly / 2 - abs(g.y_dorso), 1)} mm além do dorso e "
                 f"{_n(g.ly / 2 - (0.80 * g.b_f - abs(g.y_dorso)), 1)} mm além de 0,80·b_f (n = o "
                 "maior, "
@@ -3993,6 +4004,19 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     avisos.extend(avisos_ancoragem)
     # ------------------------------------------------------------------ cortante
     inicios.append((GRUPO_CORTANTE, len(linhas)))
+    if e.vx_kN is not None or e.vy_kN is not None:
+        linhas.append(_info(
+            "Componentes simultâneas do cortante",
+            f"Vx = {_n(e.vx_kN or 0, 4)} kN; Vy = {_n(e.vy_kN or 0, 4)} kN; "
+            f"resultante calculada = {_n(e.v_sd_kN, 4)} kN.",
+        ))
+        if v_informado > 0 and not math.isclose(v_informado, e.v_sd_kN, rel_tol=0.01, abs_tol=0.01):
+            linhas.append(_alerta(
+                "Resultante de cortante divergente",
+                "Consistência dos esforços importados",
+                f"Resultante informada {_n(v_informado, 4)} kN difere de √(Vx² + Vy²) = "
+                f"{_n(e.v_sd_kN, 4)} kN. Conferir a combinação e os eixos de origem.",
+            ))
     v_rd = v_atrito
     modo_v = e.cortante
     if caso.startswith("T"):
@@ -4000,6 +4024,13 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     if modo_v == CORTANTE_AUTO:
         modo_v = CORTANTE_DIRETOS if v_sd > v_rd or e.mz_kNm else CORTANTE_ATRITO
         linhas.append(_info("Mecanismo automático de cortante", CORTANTES[modo_v]))
+    if v_sd and modo_v == CORTANTE_DIRETOS:
+        linhas.append(_alerta(
+            "Equilíbrio do cortante nos chumbadores",
+            "Contato nos furos e equilíbrio de momentos",
+            "A hipótese de engate parcial não determina as reações individuais nem equilibra "
+            "necessariamente a torção. Verificar forças e momentos do conjunto e mecanismos adicionais.",
+        ))
     if e.mz_kNm:
         linhas.append(
             _alerta(
@@ -4455,6 +4486,16 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             )
         )
         altura_porca = medidas.altura_da_porca
+        largura_porca = medidas.lado_da_porca
+        linhas.append(
+            _limite(
+                "Arruela: largura mínima entre faces da porca",
+                tab.lado_da_arruela >= largura_porca - 1e-9,
+                "Geometria da montagem",
+                f"Lado da arruela = {_n(tab.lado_da_arruela, 1)} mm; porca = "
+                f"{_n(largura_porca, 1)} mm entre faces. Conferir também a pressão de contato.",
+            )
+        )
         linhas.append(
             _limite(
                 "Argamassa: cabem a porca de nivelamento e a arruela",
@@ -4528,8 +4569,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "Bloco: N_b ao longo de ℓx",
                 e.bloco_x_mm >= n_b_min + 2 * abs(e.desloc_x_mm) - 1e-9,
                 ref_bloco,
-                f"N_b = {_n(e.bloco_x_mm, 0)} mm ≥ máx({minimo_tabela}ℓx + 2·e_n; ℓx + 2·(a₃ − a₁)) "
-                f"= máx({valor_tabela}{_n(g.lx + 2 * g.e_n, 0)}; {_n(g.lx + 2 * a3_a1, 0)}) "
+                f"N_b = {_n(e.bloco_x_mm, 0)} mm ≥ máx({minimo_tabela}ℓx + 2·e_n; ℓx + 2·(a₃ − a₁); 2·máx|xᵢ| + 2·a₃) "
+                f"= máx({valor_tabela}{_n(g.lx + 2 * g.e_n, 0)}; {_n(g.lx + 2 * a3_a1, 0)}; {_n(2 * max(abs(x) for x, _ in g.posicoes) + 2 * tab.a3, 0)}) "
                 f"= {_n(n_b_min, 0)} mm, mais 2|Δx| = {_n(2 * abs(e.desloc_x_mm))} mm",
             )  # fmt: skip
         )
@@ -4538,8 +4579,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "Bloco: B_b ao longo de ℓy",
                 e.bloco_y_mm >= b_b_min + 2 * abs(e.desloc_y_mm) - 1e-9,
                 ref_bloco,
-                f"B_b = {_n(e.bloco_y_mm, 0)} mm ≥ máx(ℓy + 2·e_n; ℓy + 2·(a₃ − a₁)) = "
-                f"máx({_n(g.ly + 2 * g.e_n, 0)}; {_n(g.ly + 2 * a3_a1, 0)}) = {_n(b_b_min, 0)} mm, mais 2|Δy| = {_n(2 * abs(e.desloc_y_mm))} mm",
+                f"B_b = {_n(e.bloco_y_mm, 0)} mm ≥ máx(ℓy + 2·e_n; ℓy + 2·(a₃ − a₁); 2·máx|yᵢ| + 2·a₃) = "
+                f"máx({_n(g.ly + 2 * g.e_n, 0)}; {_n(g.ly + 2 * a3_a1, 0)}; {_n(2 * max(abs(y) for _, y in g.posicoes) + 2 * tab.a3, 0)}) = {_n(b_b_min, 0)} mm, mais 2|Δy| = {_n(2 * abs(e.desloc_y_mm))} mm",
             )  # fmt: skip
         )
     soldadas = e.cortante == CORTANTE_ARRUELAS
@@ -4634,6 +4675,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 + (" e por dentro" if e.solda_mesas_por_dentro else "")
                 + (" e na alma" if e.solda_alma else "")
             )
+            + "; conferir os trechos efetivos e excluídos na verificação da solda"
             + ("; extremidade do pilar faceada (contato)" if e.compressao_por_contato else ""),
         ),
     )
@@ -5097,8 +5139,12 @@ def _tabelas_das_combinacoes(r: ResultadoBase) -> list[dict[str, Any]]:
         ),
         (
             "Resíduos do equilíbrio por combinação",
-            ["Combinação", "R_N (kN)", "R_M (kN·m)", "R_M,y (kN·m)"],
-            lambda item: [item.caso.nome, *(_n(x, 7) for x in item.resultado.residuos)],
+            ["Combinação", "R_N (kN)", "R_M (kN·m)", "R_M,y (kN·m)", "Equilíbrio"],
+            lambda item: [
+                item.caso.nome,
+                *(_n(x, 7) for x in item.resultado.residuos),
+                "Verificado" if item.resultado.equilibrio_valido else "Não verificado",
+            ],
         ),
         (
             "Verificação por combinação",

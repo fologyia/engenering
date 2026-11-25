@@ -92,3 +92,17 @@ def test_espessura_mostra_a_razao_em_t_e_em_t_ao_quadrado():
     razao = r.t_p_min / 12.7
     assert f"{100 * razao:.0f} %" in linha.formula
     assert f"{100 * razao**2:.0f} %" in linha.formula
+
+
+def test_cortante_divergente_e_equilibrio_parcial_ficam_explicitos():
+    r = bp.calcular(replace(U6, vx_kN=3.0, vy_kN=4.0, v_sd_kN=7.0))
+    linhas = _nomes(r)
+    assert linhas["Resultante de cortante divergente"].status == "ALERTA"
+    assert linhas["Equilíbrio do cortante nos chumbadores"].status == "ALERTA"
+    assert "5,0000" in linhas["Componentes simultâneas do cortante"].formula
+
+
+def test_u_espelhado_identifica_eixos_internos():
+    r = bp.calcular(replace(U6, m_sd_y_kNm=-0.46))
+    texto = _nomes(r)["Pilar U: método da 6.7 estendido"].formula
+    assert "−y" in texto and "espelhados" in texto

@@ -331,7 +331,8 @@ def test_t11_excentricidade_da_fila_ativa_no_modelo_de_borda():
     )
     r = bp.calcular(e)
     borda = linha(r, bp.LINHA_RUPTURA_DA_BORDA)
-    assert "e′_V = 50 mm" in borda.formula
+    assert "e′_V = 0 mm" in borda.formula
+    assert linha(r, "Equilíbrio do cortante nos chumbadores").status == "ALERTA"
 
 
 def test_tabelas_do_memorial_pdf_separam_esforcos_componentes_residuos_e_resultados():
@@ -351,7 +352,7 @@ def test_tabelas_do_memorial_pdf_separam_esforcos_componentes_residuos_e_resulta
         "Espessura e tração por combinação",
     ]
     assert tabelas[1]["linhas"][0][1:] == ["4,00", "-2,00", "0,35"]
-    assert len(tabelas[2]["linhas"][0]) == 4
+    assert tabelas[2]["linhas"][0][-1] == "Verificado"
     assert tabelas[4]["linhas"][0][1] != "—" and tabelas[4]["linhas"][0][2] != "—"
     resultado = bp.calcular(replace(PADRAO, casos=casos))
     assert bp.memorial_da_base(resultado, formato="pdf").startswith(b"%PDF")
