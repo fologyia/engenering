@@ -108,14 +108,23 @@ def test_u_espelhado_identifica_eixos_internos():
     assert "−y" in texto and "espelhados" in texto
 
 
-def test_comparacao_dupla_curvatura_nao_substitui_verificacao():
+def test_graute_aplica_reducao_sem_flexao_separada():
     r = bp.calcular(replace(U6, cortante=bp.CORTANTE_ARRUELAS))
     linhas = _nomes(r)
-    comparacao = linhas["Sensibilidade: dupla curvatura do chumbador"]
-    assert comparacao.status == "INFO"
-    assert "não verificação normativa" in comparacao.formula
-    assert linhas["Compatibilidade dos modelos de cortante"].status == "ALERTA"
-    assert bp.LINHA_FLEXAO_NA_ARGAMASSA in linhas
+    assert bp.LINHA_FLEXAO_NA_ARGAMASSA not in linhas
+    assert "0,80" in linhas["Chumbador: aço à cortante (ACI 318-19)"].formula
+    assert "excepcionalmente" in linhas["Graute: hipótese para o cortante dos chumbadores"].formula
+
+
+def test_tracao_sem_contato_equilibra_forcas_e_momentos():
+    g = bp.geometria(U6)
+    area = bp.area_resistente(U6, bp.disposicoes(U6))
+    d = bp.distribuicao_elastica(g, -100000, 1e6, 0, 25, area)
+    assert d.equilibrio and not d.zona and d.compressao == 0
+    assert sum(d.forcas) == pytest.approx(100000, abs=1e-7)
+    assert -sum(f * x for f, (x, _) in zip(d.forcas, g.posicoes, strict=True)) == pytest.approx(
+        1e6, abs=1e-5
+    )
 
 
 def test_faixa_critica_fora_do_aco_mostra_sensibilidade_sem_afrouxar():
@@ -181,3 +190,50 @@ def test_distribuicao_cortante_equilibra_forcas_e_torcao_com_centro_deslocado():
 def test_distribuicao_nao_inventa_reacao_para_torcao_em_um_chumbador():
     with pytest.raises(bp.BaseInvalida):
         bp.distribuir_cortante_elastico(((0.0, 0.0),), 0.0, 0.0, 1000.0)
+
+
+def test_transicao_do_contato_com_momentos_em_dois_eixos():
+    from tests.test_base_de_pilar_revisao import BASE
+
+    g = bp.geometria(BASE)
+    area = bp.area_resistente(BASE, bp.disposicoes(BASE))
+    normal = -100_000.0
+    sx2 = sum(x * x for x, _ in g.posicoes)
+    sy2 = sum(y * y for _, y in g.posicoes)
+    limite = (-normal / len(g.posicoes)) / (g.lx / (2 * sx2) + 0.4 * g.ly / (2 * sy2))
+    for fator in (0.999, 1.001):
+        mx, my = limite * fator, 0.4 * limite * fator
+        d = bp.distribuicao_elastica(g, normal, mx, my, 25.0, area)
+        assert d.equilibrio
+        if fator < 1:
+            assert d.compressao == 0 and not d.zona
+            for f, (x, y) in zip(d.forcas, g.posicoes, strict=True):
+                esperado = -normal / len(g.posicoes) - mx * x / sx2 - my * y / sy2
+                assert f == pytest.approx(esperado, abs=1e-7)
+        else:
+            assert d.compressao > 0 and d.zona
+        w0, ax, ay = d.plano
+        if d.zona:
+            a, sx, sy, ixx, ixy, iyy = bp._momentos_do_poligono(list(d.zona))
+            c = w0 * a + ax * sx + ay * sy
+            cx = w0 * sx + ax * ixx + ay * ixy
+            cy = w0 * sy + ax * ixy + ay * iyy
+        else:
+            c = cx = cy = 0.0
+        assert c - sum(d.forcas) == pytest.approx(normal, abs=0.1)
+        assert cx - sum(
+            f * x for f, (x, _) in zip(d.forcas, g.posicoes, strict=True)
+        ) == pytest.approx(mx, abs=20)
+        assert cy - sum(
+            f * y for f, (_, y) in zip(d.forcas, g.posicoes, strict=True)
+        ) == pytest.approx(my, abs=20)
+
+
+def test_arruelas_soldadas_exigem_escolha_e_sao_verificadas():
+    direto = _nomes(bp.calcular(U6))
+    soldado = _nomes(bp.calcular(replace(U6, cortante=bp.CORTANTE_ARRUELAS)))
+    chave = "Chumbador: aço à cortante (ACI 318-19)"
+    assert direto[chave].solicitante == pytest.approx(4.65)
+    assert soldado[chave].solicitante == pytest.approx(4.65 / 2)
+    assert any(nome.startswith("Solda das arruelas na placa") for nome in soldado)
+    assert not any(nome.startswith("Solda das arruelas na placa") for nome in direto)

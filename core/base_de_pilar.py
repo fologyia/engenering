@@ -1866,6 +1866,33 @@ def distribuicao_elastica(
             mx / (rho * soma_x) if soma_x > 0 else 0.0,
             my / (rho * soma_y) if soma_y > 0 else 0.0,
         )
+    # Solução sem contato, com todos os chumbadores tracionados.
+    if axial < 0:
+        vetores = [(1.0, x, y) for x, y in pos]
+        matriz = [[rho * sum(v[i] * v[j] for v in vetores) for j in range(3)] for i in range(3)]
+        solucao = _resolver_3x3(matriz, list(carga))
+        if solucao is not None:
+            q_sem = tuple(solucao)
+
+            def pressao(x, y):
+                return q_sem[0] + q_sem[1] * x + q_sem[2] * y
+
+            cantos = [(x, y) for x in (-lx / 2, lx / 2) for y in (-ly / 2, ly / 2)]
+            if all(pressao(x, y) <= 0 for x, y in cantos) and all(
+                pressao(x, y) <= 0 for x, y in pos
+            ):
+                forcas = tuple(-rho * pressao(x, y) for x, y in pos)
+                return DistribuicaoElastica(
+                    "T1" if mx == my == 0 else "T2",
+                    (),
+                    q_sem,
+                    0.0,
+                    0.0,
+                    forcas,
+                    True,
+                    n_mod,
+                    rho,
+                )
     escala = max(abs(axial), (mx + my) / max(lx, ly), 1.0)
     convergiu = False
     energia, grad, hess = estado(q)
@@ -2059,15 +2086,6 @@ def _equacoes_da_base(
             f"φ·V_sa = {_n(0.65 if e.aco_ductil else 0.60)}·0,6·A_se·f_uta·0,80",
             f"φ·V_sa = {_n(0.65 if e.aco_ductil else 0.60)} × 0,6 × {_n(a_se, 0)} × {_n(f_ut, 0)} × 0,80 = {_n(aco_v / 1e3, 2)} kN "
             f"(solicitação V_ua,i = {_n(v_i / 1e3, 2)} kN)",
-        )
-    if "flexao" in contas:
-        fl = contas["flexao"]
-        saida[LINHA_FLEXAO_NA_ARGAMASSA] = (
-            "M = V_i·(e_n + t_p/2 + Δ)",
-            f"M = {_n(fl.v_i, 0)} × {_n(fl.braco, 1)} = {_n(fl.momento, 0)} N·mm",
-            "σ = M/(1,5·W) + F_t/A_se ≤ f_y/γ_a1",
-            f"σ = {_n(fl.momento, 0)}/(1,5 × {_n(fl.w, 0)}) + {_n(fl.f_t, 0)}/{_n(fl.a_se, 0)} = "
-            f"{_n(fl.sigma, 1)} MPa (limite {_n(fl.limite, 1)} MPa)",
         )
     return saida
 
@@ -4373,57 +4391,13 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         razoes_v.append(("aço do chumbador, 17.7.1", v_i / aco_v if aco_v > 0 else math.inf))
         contas["cortante_aco"] = (v_i, n_eng, f_ut)
         if v_i > 0:
-            acrescimo = tab.d_b / 2 + ((e.t_placa_mm + g.t_arruela) / 2 if soldadas else 0.0)
-            flexoes = (
-                flexao_na_argamassa(
-                    vi * n_eng,
-                    n_eng,
-                    ft,
-                    g.e_n,
-                    e.t_placa_mm,
-                    a_se,
-                    aco_ch.f_y,
-                    c.a1,
-                    acrescimo_mm=acrescimo,
-                )
-                for vi, ft in zip(cortes, forcas, strict=True)
-            )
-            flexao = max(flexoes, key=lambda fl: fl.sigma)
-            contas["flexao"] = flexao
-            if soldadas:
-                braco_dupla = (e.t_placa_mm + g.t_arruela / 2) / 2
-                comparacoes = [
-                    (vi * braco_dupla / (FATOR_PLASTICO_REDONDO * flexao.w) + ft / a_se)
-                    / flexao.limite
-                    for vi, ft in zip(cortes, forcas, strict=True)
-                ]
-                linhas.append(
-                    _info(
-                        "Sensibilidade: dupla curvatura do chumbador",
-                        f"Para comparação, b = (t_p + t_arruela/2)/2 = {_n(braco_dupla, 2)} mm; "
-                        f"índice máximo = {_n(max(comparacoes), 3)}, usando a mesma interação simplificada. "
-                        "Resultado paramétrico, não verificação normativa nem alternativa aprovada; "
-                        "exige comprovar apoio do graute, contato, soldas e restrições de rotação.",
-                        "AISC Design Guide 1: hipótese de dupla curvatura; comparação paramétrica",
-                    )
-                )
             linhas.append(
-                Verificacao(
-                    LINHA_FLEXAO_NA_ARGAMASSA,
-                    flexao.sigma,
-                    flexao.limite,
-                    "MPa",
-                    "Braço conforme EN 1992-4 §6.2.2.3, α_M = 1, a₃ = d_b/2. Resistência da barra pela NBR 8800 5.4.2.2",
-                    flexao.texto(),
-                )
-            )
-        if v_i > 0:
-            linhas.append(
-                _alerta(
-                    "Compatibilidade dos modelos de cortante",
-                    "ACI 318-19, EN 1992-4 e NBR 8800",
-                    "As verificações combinam referências distintas e hipóteses de apoio do graute. "
-                    "Validar a metodologia completa e a aplicação conjunta dos fatores antes da aprovação.",
+                _info(
+                    "Graute: hipótese para o cortante dos chumbadores",
+                    "O fator 0,80 considera a camada de graute. Sua aplicação pressupõe graute "
+                    "e apoio adequados; para camada excepcionalmente espessa, folgas ou condições "
+                    "de apoio incomuns, avaliar cálculos adicionais pelo responsável técnico.",
+                    "ACI 318-19 17.7.1.2.1",
                 )
             )
         if not soldadas:
@@ -4433,7 +4407,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 (LINHA_RUPTURA_DA_BORDA, ruptura_da_borda_por_cortante, "17.7.2"),
                 (LINHA_ALAVANCA, arrancamento_por_alavanca, "17.7.3"),
             ):
-                valor = conta(e, g, tab, v_sd)
+                valor = conta(replace(e, cortante=modo_v), g, tab, v_sd)
                 if valor is None:
                     if nome == LINHA_ALAVANCA and v_sd > 0 and e.ancoragem == ANCORAGEM_QUIMICO:
                         linhas.append(
@@ -4726,7 +4700,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 f"máx({_n(g.ly + 2 * g.e_n, 0)}; {_n(g.ly + 2 * a3_a1, 0)}; {_n(2 * max(abs(y) for _, y in g.posicoes) + 2 * tab.a3, 0)}) = {_n(b_b_min, 0)} mm, mais 2|Δy| = {_n(2 * abs(e.desloc_y_mm))} mm",
             )  # fmt: skip
         )
-    soldadas = e.cortante == CORTANTE_ARRUELAS
+    soldadas = modo_v == CORTANTE_ARRUELAS
     arruelas_texto = (
         f"{tab.arruela} mm, espessura {_n(g.t_arruela, 1)} mm, aço com f_y = 345 MPa, furo "
         f"d_b + 1,5 = {_n(tab.d_b + FOLGA_DO_FURO_DA_ARRUELA, 1)} mm; uma também entre a placa "
@@ -5547,8 +5521,8 @@ def registro_base(
                     "positivo"
                 )
                 + "; só eles resistem (o atrito não se soma). Aço pela ACI 318-19 17.7.1 (0,80 "
-                "pela argamassa de assentamento), flexão do chumbador na argamassa com braço "
-                "e_n + t_p/2 + Δ, ruptura da borda (17.7.2), pryout (17.7.3) e interação 17.8."
+                "pela argamassa de assentamento), ruptura da borda (17.7.2), pryout (17.7.3) "
+                "e interação 17.8. Graute excepcionalmente espesso pode exigir cálculo adicional."
             ]
             if e.cortante in CORTANTE_PELOS_CHUMBADORES
             else []

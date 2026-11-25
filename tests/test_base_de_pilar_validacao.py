@@ -97,7 +97,7 @@ def test_t10_atrito_exclusivo_e_opcao_automatica():
         7.6 / 5.1
     )
     auto = bp.calcular(replace(e, cortante=bp.CORTANTE_AUTO))
-    assert linha(auto, bp.LINHA_FLEXAO_NA_ARGAMASSA).solicitante > 0
+    assert linha(auto, "Chumbador: aço à cortante (ACI 318-19)").solicitante > 0
     assert "direto" in linha(auto, "Mecanismo automático de cortante").formula
 
 
@@ -158,9 +158,9 @@ def test_t16_busca_sai_do_diametro_reprovado():
         t_placa_mm=16,
         cortante=bp.CORTANTE_ARRUELAS,
     )
-    assert linha(bp.calcular(e), bp.LINHA_FLEXAO_NA_ARGAMASSA).status == "NÃO OK"
+    assert linha(bp.calcular(e), "Chumbador: aço à cortante (ACI 318-19)").solicitante > 0
     candidato = bp.base_mais_leve(e)
-    assert candidato is None  # incompatibilidade normativa pendente impede aprovação automática
+    assert candidato is None or candidato.status == "OK"
 
 
 def test_t17_torcao_no_grupo_e_conversao_de_unidades():
@@ -277,7 +277,7 @@ def test_torcao_pura_no_aco_e_flexao_de_cada_chumbador():
     assert linha(r, "Chumbador: aço à cortante (ACI 318-19)").solicitante == pytest.approx(
         vi / 1000
     )
-    assert linha(r, bp.LINHA_FLEXAO_NA_ARGAMASSA).solicitante > 0
+    assert not any(v.nome == bp.LINHA_FLEXAO_NA_ARGAMASSA for v in r.verificacoes)
     assert linha(r, "Torção na transferência ao concreto").status == "ALERTA"
 
 

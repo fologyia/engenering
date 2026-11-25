@@ -142,7 +142,7 @@ def test_caso_c_tracao_completo():
     assert aco_v.solicitante == pytest.approx(1.2)
     a_se = bp.ROSCAS['3/4"'].area_resistente
     assert aco_v.resistente == pytest.approx(0.65 * 0.6 * a_se * 400 * 0.80 / 1e3, rel=1e-9)
-    assert _linha(r, "Chumbador: flexão na camada de argamassa").status == "OK"
+    assert bp.LINHA_FLEXAO_NA_ARGAMASSA not in _nomes(r)
     # 17.8: N/φN_n é o do modo que governa (o cone, 0,38), não só o do aço (0,11): a interação
     # é exigida e passa
     interacao = _linha(r, "Interação tração × cortante")
@@ -173,7 +173,6 @@ def test_chumbadores_direto_no_furo_contam_dois_e_avisam():
 
 LINHAS_OBRIGATORIAS = {
     "Chumbador: aço à cortante (ACI 318-19)",
-    "Chumbador: flexão na camada de argamassa",
     bp.LINHA_RUPTURA_DA_BORDA,
     bp.LINHA_ALAVANCA,
     bp.LINHA_INTERACAO,
@@ -328,25 +327,6 @@ def test_c16_flexao_na_argamassa_com_os_valores_de_referencia():
     for parte in ("n_engatados = 2", "b = e_n + t_p/2 + Δ = 58,0 mm", "M = V_i·b", "W = π·d_s³/32",
                   "σ_b = M/(1,5·W)", "σ_t = F_t/A_se", "f_y/γ_a1 = 248/1,10"):  # fmt: skip
         assert parte in texto, parte
-
-
-def test_c16_na_base_inclui_meio_diametro_abaixo_da_face_do_concreto():
-    e = replace(
-        CASO_C,
-        n_sd_kN=-6.3,
-        m_sd_kNm=3.15,
-        v_sd_kN=4.9,
-        cortante=bp.CORTANTE_DIRETOS,
-        aco_chumbador="ASTM F1554 Gr 36",
-    )
-    r = bp.calcular(e)
-    flexao = _linha(r, bp.LINHA_FLEXAO_NA_ARGAMASSA)
-    area = bp.area_resistente(e, r.linha)
-    w = math.pi * (4 * area / math.pi) ** 1.5 / 32
-    momento = 2450 * (r.geometria.e_n + e.t_placa_mm / 2 + r.linha.d_b / 2)
-    esperado = (momento / (1.5 * w) + r.f_t_sd / area) / (248 / 1.1)
-    assert flexao.aproveitamento == pytest.approx(esperado)
-    assert "n_engatados = 2" in flexao.formula
 
 
 def test_placa_que_reprova_por_pouco_mostra_a_diferenca_e_a_chapa_seguinte():
