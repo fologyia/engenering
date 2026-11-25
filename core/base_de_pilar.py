@@ -89,8 +89,9 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields, replace
+from itertools import combinations
 from typing import Any
 
 from core import base_de_pilar_soldas as bs
@@ -169,11 +170,13 @@ CORTANTE_ATRITO = "atrito"
 CORTANTE_PLACA = "placa_de_cisalhamento"
 CORTANTE_ARRUELAS = "arruelas_soldadas"
 CORTANTE_DIRETOS = "chumbadores_diretos"
+CORTANTE_AUTO = "automatico"
 CORTANTES = {
     CORTANTE_ATRITO: "Só o atrito da placa na argamassa",
     CORTANTE_PLACA: "Placa de cisalhamento (6.7.2.4)",
     CORTANTE_ARRUELAS: "Arruelas especiais soldadas à placa (6.7.2.5)",
     CORTANTE_DIRETOS: "Chumbadores direto no furo da placa (com aviso)",
+    CORTANTE_AUTO: "Automático (atrito ou chumbadores diretos)",
 }
 #: Os dispositivos em que a cortante passa pelos chumbadores.
 CORTANTE_PELOS_CHUMBADORES = (CORTANTE_ARRUELAS, CORTANTE_DIRETOS)
@@ -324,6 +327,9 @@ class CasoDeCarga:
     m_sd_kNm: float = 0.0
     m_sd_y_kNm: float = 0.0
     v_sd_kN: float = 0.0
+    vx_kN: float | None = None
+    vy_kN: float | None = None
+    mz_kNm: float = 0.0
 
 
 def caso_de_dicionario(dados: Mapping[str, Any] | CasoDeCarga) -> CasoDeCarga:
@@ -335,6 +341,9 @@ def caso_de_dicionario(dados: Mapping[str, Any] | CasoDeCarga) -> CasoDeCarga:
         float(dados.get("m_sd_kNm") or 0.0),
         float(dados.get("m_sd_y_kNm") or 0.0),
         float(dados.get("v_sd_kN") or 0.0),
+        None if dados.get("vx_kN") is None else float(dados["vx_kN"]),
+        None if dados.get("vy_kN") is None else float(dados["vy_kN"]),
+        float(dados.get("mz_kNm") or 0.0),
     )
 
 
@@ -407,6 +416,25 @@ class EntradaBase:
     ly_mm: float = 0.0
     # como a pressão de contato se distribui: o bloco uniforme da 6.7 ou a linear elástica
     distribuicao: str = DISTRIBUICAO_NBR
+    vx_kN: float | None = None
+    vy_kN: float | None = None
+    mz_kNm: float = 0.0
+    modo_bloco: str = "pre_dimensionamento"
+    desloc_x_mm: float = 0.0  # centro da placa em relação ao centro do bloco
+    desloc_y_mm: float = 0.0
+    sistema_ancoragem: str = ""  # certificado, barra, condições de instalação
+    categoria_aci: int = 0  # 0 = qualificação desconhecida
+    aco_ductil: bool | None = None  # entradas antigas não declaram a ductilidade
+    armadura_suplementar: bool = False
+    tau_cr_MPa: float = 0.0
+    tau_uncr_MPa: float = 0.0
+    n_sustentada_kN: float | None = None  # maior demanda sustentada individual
+    s_min_produto_mm: float = 0.0
+    c_min_produto_mm: float = 0.0
+    h_min_produto_mm: float = 0.0
+    graute_rd_MPa: float = 0.0
+    folga_servico_mm: float | None = None
+    chapa_ponta_esp_mm: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -493,6 +521,9 @@ class ResultadoBase:
     # várias combinações: o resultado de cada uma e o nome da que governa
     casos: tuple[ResultadoDoCaso, ...] = field(default=())
     combinacao_governante: str = ""
+    plano_pressao: tuple[float, float, float] = (0, 0, 0)
+    residuos: tuple[float, float, float] = (0, 0, 0)  # kN e kN·m
+    centro_pressao: tuple[float, float] | None = None
     perna_do_pilar: float = 0.0  # mm, a perna adotada na solda do pilar (a maior das combinações)
 
     @property
@@ -503,6 +534,20 @@ class ResultadoBase:
     @property
     def status(self) -> str:
         return status_geral(list(self.verificacoes))
+
+    @property
+    def situacao(self) -> str:
+        if self.status == "ALERTA":
+            return "Inconclusivo"
+        if self.status == "OK" and self.entrada.modo_bloco == "pre_dimensionamento":
+            return "Pré-dimensionado"
+        return self.status
+
+    @property
+    def equilibrio_valido(self) -> bool:
+        return not any(
+            v.nome.startswith("Equilíbrio") and v.status == "NÃO OK" for v in self.verificacoes
+        )
 
     @property
     def massa_da_placa_kg(self) -> float:
@@ -590,7 +635,10 @@ def razao_de_areas(e: EntradaBase, lx: float, ly: float) -> float:
     e concêntrica que cabe no bloco (6.6.5 b; a regra da ACI 318 e da AISC J8). Placa centrada.
     """
     if e.bloco_x_mm > 0 and e.bloco_y_mm > 0:
-        k = min(e.bloco_x_mm / lx, e.bloco_y_mm / ly)
+        k = min(
+            (e.bloco_x_mm - 2 * abs(e.desloc_x_mm)) / lx,
+            (e.bloco_y_mm - 2 * abs(e.desloc_y_mm)) / ly,
+        )
         return max(k, 1.0) ** 2
     return max(e.razao_a2_a1, 1.0)
 
@@ -790,7 +838,9 @@ def medidas_por_formula(e: EntradaBase, h_ef: float | None = None) -> MedidasPor
     calculado = h_ef is None
     h = e.h_ef_mm or (h_ef if h_ef is not None else EMBUTIMENTO_MINIMO_EM_D * d)
     ponta = {
-        ANCORAGEM_PORCA: altura + fios,  # a porca da ponta e a rosca abaixo dela
+        ANCORAGEM_PORCA: e.chapa_ponta_esp_mm
+        + altura
+        + fios,  # a porca da ponta e a rosca abaixo dela
         ANCORAGEM_GANCHO: e.e_h_mm or 4.5 * d,  # o gancho (a curva não entra)
     }.get(e.ancoragem, 0.0)
     comprimento = h + h2 + ponta
@@ -914,7 +964,14 @@ def ancoragem_verificada(e: EntradaBase) -> bool:
         e.verificar_concreto
         or e.ancoragem != ANCORAGEM_PORCA
         or e.por_formula
-        or e.cortante == CORTANTE_DIRETOS  # fora da 6.7: a cortante vai toda pela ACI 318-19
+        or e.tipo not in TIPOS_DA_NORMA
+        or not ACOS_CHUMBADOR[e.aco_chumbador].equivalente_a36
+        or forma_do_perfil(e.perfil) == FORMA_U
+        or e.cortante
+        in (
+            *CORTANTE_PELOS_CHUMBADORES,
+            CORTANTE_AUTO,
+        )  # fora da 6.7: a cortante vai toda pela ACI 318-19
     )
 
 
@@ -954,6 +1011,33 @@ def _validar(e: EntradaBase) -> None:
         raise BaseInvalida(
             "Escolha a disposição, a ancoragem, a combinação e o dispositivo da lista."
         )
+    if e.modo_bloco not in ("verificacao", "pre_dimensionamento") or e.categoria_aci not in (
+        0,
+        1,
+        2,
+        3,
+    ):
+        raise BaseInvalida("Modo do bloco ou categoria da ancoragem inválida.")
+    for dados in (e, *e.casos):
+        if any(isinstance(v, float) and not math.isfinite(v) for v in vars(dados).values()):
+            raise BaseInvalida("Os valores informados devem ser finitos.")
+    if (
+        min(
+            e.tau_cr_MPa,
+            e.tau_uncr_MPa,
+            e.n_sustentada_kN or 0,
+            e.folga_servico_mm or 0,
+            e.s_min_produto_mm,
+            e.c_min_produto_mm,
+            e.h_min_produto_mm,
+            e.graute_rd_MPa,
+            e.chapa_ponta_esp_mm,
+        )
+        < 0
+    ):
+        raise BaseInvalida("Resistências, distâncias e tração sustentada devem ser não negativas.")
+    if e.n_chumbadores < 2:
+        raise BaseInvalida("Número de chumbadores incompatível com a disposição.")
     if e.aco_chumbador not in ACOS_CHUMBADOR:
         raise BaseInvalida(f"Aço do chumbador desconhecido: {e.aco_chumbador!r}.")
     if e.por_formula:
@@ -986,6 +1070,8 @@ def _validar(e: EntradaBase) -> None:
         raise BaseInvalida("Medidas da base não podem ser negativas.")
     if e.v_sd_kN < 0:
         raise BaseInvalida("Informe a cortante de cálculo em valor absoluto (V_Sd ≥ 0).")
+    if not e.bloco_x_mm and e.desloc_x_mm or not e.bloco_y_mm and e.desloc_y_mm:
+        raise BaseInvalida("Informe a dimensão real do bloco na direção do deslocamento.")
     if e.cortante == CORTANTE_PLACA and min(e.b_v_mm, e.b_h_mm, e.t_pv_mm) <= 0:
         raise BaseInvalida("Placa de cisalhamento: altura, largura e espessura positivas.")
     if e.aco_pilar not in ACOS:
@@ -1025,9 +1111,8 @@ def geometria(e: EntradaBase) -> Geometria:
     tab = disposicoes(e)
     d, b_f = perfil.altura_mm, perfil.largura_mm
     t_w, t_f = perfil.espessura_alma_mm, perfil.espessura_mesa_mm
-    # o U abre as mesas para o lado que M_y comprime (M_y < 0: o U espelhado, e as contas com |M_y|)
-    sentido = -1.0 if e.m_sd_y_kNm < 0 else 1.0
-    y_dorso = -sentido * centroide_do_u(d, b_f, t_w, t_f) if forma == FORMA_U else 0.0
+    # Geometria física: dorso em −y, independente do sinal dos esforços.
+    y_dorso = -centroide_do_u(d, b_f, t_w, t_f) if forma == FORMA_U else 0.0
     a1 = e.a1_mm or tab.a1
     a2 = e.a2_mm or tab.a2
     a1_x = (e.a1_x_mm or tab.a1) if e.tipo == TIPO_2 else a1  # nota f da Tabela 18
@@ -1376,7 +1461,7 @@ def _area_e_centro(poligono: list[Ponto]) -> tuple[float, float, float]:
 
 
 def _intervalo_na_reta(
-    poligono: list[Ponto], eixo: int, valor: float
+    poligono: Sequence[Ponto], eixo: int, valor: float
 ) -> tuple[float, float] | None:
     """O trecho do polígono convexo sobre a reta coordenada[1 − eixo] = valor, em coordenada[eixo]."""
     outro = 1 - eixo
@@ -1389,9 +1474,6 @@ def _intervalo_na_reta(
     return (min(pontos), max(pontos)) if pontos else None
 
 
-FATIAS_DA_ZONA = 240
-
-
 def espessura_pela_zona(
     g: Geometria,
     zona: tuple[Ponto, ...],
@@ -1399,72 +1481,77 @@ def espessura_pela_zona(
     fy_d: float,
     plano: tuple[float, float, float] | None = None,
 ) -> tuple[float, str]:
-    """t_p pela pressão na zona comprimida, linha a linha.
+    """Máximo do momento integrado em faixas unitárias independentes.
 
-    Para cada linha de engaste da 6.7 (x = ±0,95·d/2 para m, y = ±0,80·b_f/2 para n; no U, o dorso
-    da alma e 0,80·b_f a partir dele), o momento por
-    unidade de largura da pressão além dela é calculado em fatias, q = ∫σ·(s − linha)·ds, e tirado
-    na média numa janela da largura do balanço (a placa reparte a carga de borda); t =
-    √(4·q/(f_y/γ_a1)). Com a zona numa faixa da largura toda, é exatamente a fórmula da 6.7 (m, n
-    ou p = √(ℓ_c·(2m − ℓ_c))); com um canto só comprimido, o canto não pede a placa toda.
-
-    A pressão é σ constante ou, com ``plano`` = (σ₀, a_x, a_y), a linear σ = σ₀ + a_x·x + a_y·y
-    (distribuição elástica), integrada exatamente em cada fatia.
+    Entre vértices e cruzamentos do polígono com o engaste os limites da
+    integral são afins. Para pressão afim, q é um polinômio de grau até três.
+    Avalia os extremos de cada intervalo e as raízes internas de dq/dy.
     """
     if not zona:
         return 0.0, "sem zona comprimida"
-    poligono = list(zona)
-    pressao = "a pressão linear elástica" if plano is not None else "a pressão"
-    pior, texto = 0.0, ""
-    y_baixo, y_cima = g.engaste_y
-    casos = (  # (eixo, linha do lado +, linha do lado − medida para fora, borda, lado, nome)
-        (0, 0.95 * g.d / 2, 0.95 * g.d / 2, g.lx / 2, g.ly, "m"),
-        (1, y_cima, -y_baixo, g.ly / 2, g.lx, "n"),
+    w0, ax, ay = plano or (sigma, 0.0, 0.0)
+    linhas = (
+        (0, 0.475 * g.d, 1),
+        (0, -0.475 * g.d, -1),
+        (1, g.engaste_y[1], 1),
+        (1, g.engaste_y[0], -1),
     )
-    for eixo, meio_mais, meio_menos, borda, lado, nome in casos:
-        passo = lado / FATIAS_DA_ZONA
-        for sinal in (1.0, -1.0):
-            meio = meio_mais if sinal > 0 else meio_menos
-            balanco = borda - meio
-            if balanco <= 0:
-                continue
-            q: list[float] = []
-            for k in range(FATIAS_DA_ZONA):
-                valor = -lado / 2 + (k + 0.5) * passo
-                trecho = _intervalo_na_reta(poligono, eixo, valor)
-                momento = 0.0
-                if trecho is not None:
-                    perto, longe = sorted(sinal * v - meio for v in trecho)
-                    perto, longe = max(perto, 0.0), max(longe, 0.0)
-                    if plano is None:
-                        momento = sigma * (longe**2 - perto**2) / 2
-                    else:  # σ(u) = α + β·u, u medido da linha de engaste
-                        w0, a_x, a_y = plano
-                        a_eixo, a_outro = (a_x, a_y) if eixo == 0 else (a_y, a_x)
-                        alfa = w0 + a_eixo * sinal * meio + a_outro * valor
-                        beta = a_eixo * sinal
-                        momento = max(
-                            alfa * (longe**2 - perto**2) / 2 + beta * (longe**3 - perto**3) / 3,
-                            0.0,
-                        )
-                q.append(momento)
-            janela = max(1, min(FATIAS_DA_ZONA, round(balanco / passo)))
-            soma = sum(q[:janela])
-            maior = soma
-            for k in range(janela, FATIAS_DA_ZONA):
-                soma += q[k] - q[k - janela]
-                maior = max(maior, soma)
-            q_medio = maior / janela
-            t = math.sqrt(4 * q_medio / fy_d)
-            if t > pior:
-                pior = t
-                texto = (
-                    f"balanço {nome} = {_n(balanco, 1)} mm: momento d{pressao} além da linha "
-                    f"de engaste, por fatias, na média de uma janela de largura {nome} = "
-                    f"{_n(min(balanco, lado), 0)} mm: q = {_n(q_medio / 1e3, 2)} kN·m/m, "
-                    f"t = √(4·q/(f_y/γ_a1)) = {_n(t, 1)} mm"
+    pior, descricao = 0.0, "a zona comprimida não passa das linhas de engaste"
+    for eixo, linha, sinal in linhas:
+        outro = 1 - eixo
+        cortes = {p[outro] for p in zona}
+        for p, r in zip(zona, zona[1:] + zona[:1], strict=True):
+            if (p[eixo] - linha) * (r[eixo] - linha) < 0:
+                cortes.add(
+                    p[outro] + (r[outro] - p[outro]) * (linha - p[eixo]) / (r[eixo] - p[eixo])
                 )
-    return pior, texto or "a zona comprimida não passa das linhas de engaste"
+        ordenados = sorted(cortes)
+
+        def momento(v, eixo=eixo, sinal=sinal, linha=linha):
+            limites = _intervalo_na_reta(zona, eixo, v)
+            if limites is None:
+                return 0.0
+            a, b = sorted(max(0.0, sinal * (u - linha)) for u in limites)
+            grad, transv = (ax, ay) if eixo == 0 else (ay, ax)
+            return max(
+                0.0,
+                (w0 + grad * linha + transv * v) * (b * b - a * a) / 2
+                + sinal * grad * (b**3 - a**3) / 3,
+            )
+
+        for ini, fim in zip(ordenados, ordenados[1:], strict=False):
+            h = (fim - ini) / 3
+            q0, q1, q2, q3 = [momento(v) for v in (ini, ini + h, ini + 2 * h, fim)]
+            d1, d2, d3 = q1 - q0, q2 - 2 * q1 + q0, q3 - 3 * q2 + 3 * q1 - q0
+            a, b, c = d3 / 6, (d2 - d3) / 2, d1 - d2 / 2 + d3 / 3
+            candidatos = [(q0, ini), (q3, fim)]
+            disc = b * b - 3 * a * c
+            if abs(a) > 1e-12 * max(1, abs(b), abs(c)) and disc >= 0:
+                raizes = [(-b + s * math.sqrt(disc)) / (3 * a) for s in (-1, 1)]
+            else:
+                raizes = [-c / (2 * b)] if b else []
+            candidatos.extend((momento(ini + h * u), ini + h * u) for u in raizes if 0 < u < 3)
+            q, v = max(candidatos)
+            if q > pior:
+                pior = q
+                descricao = (
+                    f"Faixa unitária em {'y' if eixo == 0 else 'x'} = {_n(v)} mm, "
+                    f"engaste em {_n(linha)} mm. q = ∫p·u du = {_n(q / 1000)} kN·m/m."
+                )
+    return math.sqrt(4 * pior / fy_d), descricao
+
+
+def corte_de_pressao(r: ResultadoBase) -> tuple[float, float, float, float, float] | None:
+    """Corte x na ordenada do centro de pressão, com a pressão nas duas pontas."""
+    if not r.zona_comprimida or r.centro_pressao is None:
+        return None
+    y = r.centro_pressao[1]
+    trecho = _intervalo_na_reta(r.zona_comprimida, 0, y)
+    if trecho is None:
+        return None
+    w, ax, ay = r.plano_pressao
+    a, b = trecho
+    return a, b, max(0, w + ax * a + ay * y), max(0, w + ax * b + ay * y), y
 
 
 def _bissecao(funcao: Any, a: float, b: float, vezes: int) -> float:
@@ -1896,6 +1983,8 @@ def _equacoes_da_base(
             f"t_p,min1 = {_n(l_max, 1)} × √(2 × {_n(sigma_rd, 2)}/({_n(fy, 0)}/{_n(gama_a1, 2)})) "
             f"= {_n(t1, 2)} mm",
         ]
+    if "zona" in contas:
+        placa.extend(contas["zona"])
     if "linha" in contas and g.m > g.a1:
         f_linha = contas["linha"]
         n_b = e.n_chumbadores
@@ -1914,7 +2003,9 @@ def _equacoes_da_base(
             f"{_n(gama_a1, 2)})) = {_n(t45, 2)} mm",
         ]
     if placa:
-        placa.append(f"t_p = {_n(e.t_placa_mm, 2)} mm")
+        placa.append(
+            f"t_p,min = {_n(contas['t_min'], 2)} mm. Chapa adotada t_p = {_n(e.t_placa_mm, 2)} mm"
+        )
         saida["Placa de base: espessura t_p ≥ t_p,min"] = tuple(placa)
     if d_min is not None and f_t > 0:
         saida["Chumbador: diâmetro d_b ≥ d_b,min"] = (
@@ -1924,21 +2015,23 @@ def _equacoes_da_base(
         )
     if "cortante_aco" in contas:
         v_i, n_eng, f_ut = contas["cortante_aco"]
-        aco_v = PHI_ACO_CORTANTE * 0.6 * a_se * f_ut * FATOR_ARGAMASSA
+        aco_v = (PHI_ACO_CORTANTE if e.aco_ductil else 0.60) * 0.6 * a_se * f_ut * FATOR_ARGAMASSA
         saida["Chumbador: aço à cortante (ACI 318-19)"] = (
-            "V_ua,i = V_Sd/n_eng",
-            "φ·V_sa = 0,65·0,6·A_se·f_uta·0,80",
-            f"φ·V_sa = 0,65 × 0,6 × {_n(a_se, 0)} × {_n(f_ut, 0)} × 0,80 = {_n(aco_v / 1e3, 2)} kN "
-            f"≥ V_ua,i = {_n(v_i / 1e3, 2)} kN",
+            "V_ua,i = |V/n + M_z·(−y_i, x_i)/Σr²|"
+            if e.mz_kNm and e.cortante == CORTANTE_ARRUELAS
+            else "V_ua,i = V_Sd/n_eng",
+            f"φ·V_sa = {_n(0.65 if e.aco_ductil else 0.60)}·0,6·A_se·f_uta·0,80",
+            f"φ·V_sa = {_n(0.65 if e.aco_ductil else 0.60)} × 0,6 × {_n(a_se, 0)} × {_n(f_ut, 0)} × 0,80 = {_n(aco_v / 1e3, 2)} kN "
+            f"(solicitação V_ua,i = {_n(v_i / 1e3, 2)} kN)",
         )
     if "flexao" in contas:
         fl = contas["flexao"]
         saida[LINHA_FLEXAO_NA_ARGAMASSA] = (
-            "M = (V_Sd/n_eng)·(e_n/2 + t_p/2)",
+            "M = V_i·(e_n + t_p/2 + Δ)",
             f"M = {_n(fl.v_i, 0)} × {_n(fl.braco, 1)} = {_n(fl.momento, 0)} N·mm",
             "σ = M/(1,5·W) + F_t/A_se ≤ f_y/γ_a1",
             f"σ = {_n(fl.momento, 0)}/(1,5 × {_n(fl.w, 0)}) + {_n(fl.f_t, 0)}/{_n(fl.a_se, 0)} = "
-            f"{_n(fl.sigma, 1)} MPa ≤ {_n(fl.limite, 1)} MPa",
+            f"{_n(fl.sigma, 1)} MPa (limite {_n(fl.limite, 1)} MPa)",
         )
     return saida
 
@@ -1950,13 +2043,14 @@ def _comprimento_da_barra(e: EntradaBase, g: Geometria, tab: LinhaTabela18) -> s
     acima_minimo = g.e_n + e.t_placa_mm + g.t_arruela + tab.d_b + FIOS_ALEM_DA_PORCA * passo
     h2 = max(tab.h2, acima_minimo)
     ponta = {
-        ANCORAGEM_PORCA: tab.d_b + FIOS_ALEM_DA_PORCA * passo,
+        ANCORAGEM_PORCA: e.chapa_ponta_esp_mm + tab.d_b + FIOS_ALEM_DA_PORCA * passo,
         ANCORAGEM_GANCHO: e.e_h_mm or 4.5 * tab.d_b,
     }.get(e.ancoragem, 0.0)
     total = h_ef + h2 + ponta
     massa = math.pi * tab.d_b**2 / 4 * total * 1e-9 * DENSIDADE_ACO
     nome_ponta = {
-        ANCORAGEM_PORCA: "porca da ponta + 3 fios",
+        ANCORAGEM_PORCA: ("chapa de ponta + " if e.chapa_ponta_esp_mm else "")
+        + "porca da ponta + 3 fios",
         ANCORAGEM_GANCHO: "gancho e_h",
     }.get(e.ancoragem, "")
     return (
@@ -2026,7 +2120,7 @@ def bloco_para_o_cone(
     if e.bloco_x_mm > 0 and e.bloco_y_mm > 0:
         return e.bloco_x_mm, e.bloco_y_mm, True
     n_b, b_b, _ = bloco_minimo(e, g, tab)
-    return n_b, b_b, False
+    return e.bloco_x_mm or n_b, e.bloco_y_mm or b_b, False
 
 
 def area_de_apoio_da_ponta(e: EntradaBase, tab: LinhaTabela18) -> float:
@@ -2034,6 +2128,73 @@ def area_de_apoio_da_ponta(e: EntradaBase, tab: LinhaTabela18) -> float:
     s = 1.5 * tab.d_b + 3.2
     cabeca = e.chapa_na_ponta_mm**2 if e.chapa_na_ponta_mm > s else math.sqrt(3) / 2 * s**2
     return cabeca - math.pi * tab.d_b**2 / 4
+
+
+def limites_bloco(e: EntradaBase, bx: float, by: float) -> tuple[float, float, float, float]:
+    return (
+        -bx / 2 - e.desloc_x_mm,
+        bx / 2 - e.desloc_x_mm,
+        -by / 2 - e.desloc_y_mm,
+        by / 2 - e.desloc_y_mm,
+    )
+
+
+def phi_tracao_concreto(e: EntradaBase) -> float:
+    if e.ancoragem in CONCRETADOS:
+        return 0.75 if e.armadura_suplementar else PHI_CONCRETADO
+    categoria = e.categoria_aci or 3
+    return (0.65, 0.55, 0.45)[categoria - 1] + (0.10 if e.armadura_suplementar else 0.0)
+
+
+def area_projetada(
+    pontos: Iterable[Ponto], raio: float, limites: tuple[float, float, float, float]
+) -> float:
+    """União exata dos quadrados recortados nas faces do bloco, em mm²."""
+    x0, x1, y0, y1 = limites
+    retangulos = [
+        (max(x0, x - raio), min(x1, x + raio), max(y0, y - raio), min(y1, y + raio))
+        for x, y in pontos
+    ]
+    cortes = sorted({x for a, b, _, _ in retangulos for x in (a, b)})
+    area = 0.0
+    for a, b in zip(cortes, cortes[1:], strict=False):
+        fim = y0
+        for baixo, alto in sorted((c, d) for l, r, c, d in retangulos if l <= a and b <= r):
+            area += (b - a) * max(0.0, alto - max(baixo, fim))
+            fim = max(fim, alto)
+    return area
+
+
+def aderencia(
+    e: EntradaBase, g: Geometria, tab: LinhaTabela18, forcas: tuple[float, ...]
+) -> tuple[float, float, str] | None:
+    """N_ba e N_ag nominais (N), concreto fissurado de peso normal."""
+    ativos = [(p, f) for p, f in zip(g.posicoes, forcas, strict=True) if f > 0]
+    if not ativos or min(e.tau_cr_MPa, e.tau_uncr_MPa) <= 0:
+        return None
+    limites = limites_bloco(e, *bloco_para_o_cone(e, g, tab)[:2])
+    x0, x1, y0, y1 = limites
+    pontos = [p for p, _ in ativos]
+    c_na = 10 * tab.d_b * math.sqrt(e.tau_uncr_MPa / 7.6)
+    a0 = 4 * c_na**2
+    area = area_projetada(pontos, c_na, limites)
+    c_min = min(min(x - x0, x1 - x, y - y0, y1 - y) for x, y in pontos)
+    total = sum(f for _, f in ativos)
+    ecc = [
+        abs(sum(p[k] * f for p, f in ativos) / total - sum(p[k] for p in pontos) / len(pontos))
+        for k in (0, 1)
+    ]
+    psi_ec = 1 / ((1 + ecc[0] / c_na) * (1 + ecc[1] / c_na))
+    psi_ed = min(1.0, 0.7 + 0.3 * max(0.0, c_min) / c_na)
+    nba = e.tau_cr_MPa * math.pi * tab.d_b * embutimento(e, tab)
+    nag = nba * area / a0 * psi_ed * psi_ec
+    texto = (
+        f"N_ba = τ_cr·π·d_a·h_ef = {_n(nba / 1000)} kN. c_Na = {_n(c_na)} mm. "
+        f"A_Na/A_Na0 = {_n(area, 1)}/{_n(a0, 1)}. ψ_ec = {_n(psi_ec, 4)}, "
+        f"ψ_ed = {_n(psi_ed, 4)}, ψ_cp = λ_a = 1 (concreto fissurado de peso normal). "
+        f"N_ag = {_n(nag / 1000)} kN, φ = {_n(phi_tracao_concreto(e))}."
+    )
+    return nba, nag, texto
 
 
 @dataclass(frozen=True)
@@ -2049,6 +2210,7 @@ class AreaDoCone:
     bordas: tuple[float, float, float, float]  # c à face −x, +x, −y, +y
     retangulo: tuple[float, float, float, float]  # x0, x1, y0, y1 de A_Nc, dentro do bloco
     a_nco: float
+    area_uniao: float
 
     @property
     def reduzido(self) -> bool:
@@ -2056,8 +2218,7 @@ class AreaDoCone:
 
     @property
     def a_nc(self) -> float:
-        x0, x1, y0, y1 = self.retangulo
-        return min((x1 - x0) * (y1 - y0), len(self.tracionados) * self.a_nco)
+        return self.area_uniao
 
 
 def area_do_cone(
@@ -2070,19 +2231,32 @@ def area_do_cone(
     bx, by, informado = bloco_para_o_cone(e, g, tab)
     xs = [x for x, _, _ in tracionados]
     ys = [y for _, y, _ in tracionados]
-    bordas = (bx / 2 + min(xs), bx / 2 - max(xs), by / 2 + min(ys), by / 2 - max(ys))
+    limites = limites_bloco(e, bx, by)
+    x0, x1, y0, y1 = limites
+    bordas = (min(xs) - x0, x1 - max(xs), min(ys) - y0, y1 - max(ys))
     h_informado = h = embutimento(e, tab)
     s_max = max(max(xs) - min(xs), max(ys) - min(ys))
     proximas = [c for c in bordas if c < 1.5 * h]
     if len(proximas) >= 3:
         h = min(h, max(max(proximas) / 1.5, s_max / 3))
     retangulo = (
-        max(min(xs) - 1.5 * h, -bx / 2),
-        min(max(xs) + 1.5 * h, bx / 2),
-        max(min(ys) - 1.5 * h, -by / 2),
-        min(max(ys) + 1.5 * h, by / 2),
+        max(min(xs) - 1.5 * h, x0),
+        min(max(xs) + 1.5 * h, x1),
+        max(min(ys) - 1.5 * h, y0),
+        min(max(ys) + 1.5 * h, y1),
     )
-    return AreaDoCone(tracionados, bx, by, informado, h_informado, h, bordas, retangulo, 9 * h * h)
+    return AreaDoCone(
+        tracionados,
+        bx,
+        by,
+        informado,
+        h_informado,
+        h,
+        bordas,
+        retangulo,
+        9 * h * h,
+        area_projetada(zip(xs, ys, strict=True), 1.5 * h, limites),
+    )
 
 
 def cone_de_concreto(
@@ -2125,7 +2299,7 @@ def cone_de_concreto(
         k_c = 10 if concretado else 7
         n_b = k_c * raiz * h**1.5
         formula = f"N_b = {k_c}·√f_c·h_ef^1,5"
-    phi = PHI_CONCRETADO if concretado else PHI_POS_INSTALADO
+    phi = phi_tracao_concreto(e)
     resistente = phi * a_nc / a_nco * psi_ec * psi_ed * n_b
     bloco = (
         f"bloco {_n(bx, 0)} × {_n(by, 0)} mm"
@@ -2136,7 +2310,7 @@ def cone_de_concreto(
         f"φ·N_cbg = φ·(A_Nc/A_Nco)·ψ_ec,N·ψ_ed,N·N_b = {_n(phi)} × "
         f"({_n(a_nc / 1e3, 1)}/{_n(a_nco / 1e3, 1)}) × {_n(psi_ec, 3)} × {_n(psi_ed, 3)} × "
         f"{_n(n_b / 1e3, 1)} kN; {formula}, h_ef = {_n(h, 0)} mm{reducao}; {bloco}, placa "
-        f"centrada; ψ_c,N = 1,0 (fissurado)"
+        f"com centro em ({_n(e.desloc_x_mm)}, {_n(e.desloc_y_mm)}) mm no bloco; ψ_c,N = 1,0 (fissurado)"
     )
     return total, resistente, texto
 
@@ -2151,7 +2325,8 @@ def cone_truncado(
     bx, by, _ = bloco_para_o_cone(e, g, tab)
     xs = [x for x, _ in tracionados]
     ys = [y for _, y in tracionados]
-    bordas = [bx / 2 + min(xs), bx / 2 - max(xs), by / 2 + min(ys), by / 2 - max(ys)]
+    x0, x1, y0, y1 = limites_bloco(e, bx, by)
+    bordas = [min(xs) - x0, x1 - max(xs), min(ys) - y0, y1 - max(ys)]
     h = embutimento(e, tab)
     c_min = max(min(bordas), 0.0)
     if 1.5 * h <= c_min + 1e-9:
@@ -2204,6 +2379,8 @@ def arrancamento_lateral(
         grupos: dict[float, list[tuple[float, float, float]]] = {}
         for (x, y), f in zip(g.posicoes, forcas, strict=True):
             if f > 0:
+                x += e.desloc_x_mm
+                y += e.desloc_y_mm
                 chave = x if eixo == 0 else y
                 grupos.setdefault(chave, []).append((x, y, f))
         for chave, membros in grupos.items():
@@ -2219,10 +2396,10 @@ def arrancamento_lateral(
                 n_grupo = (1 + espacamento / (6 * c1)) * n_sb * fator_c2
             else:
                 n_grupo = len(membros) * n_sb * fator_c2
-            resistente = PHI_CONCRETADO * n_grupo
+            resistente = phi_tracao_concreto(e) * n_grupo
             forca = sum(f for _, _, f in membros)
             texto = (
-                f"φ·N_sbg = 0,70 × (1 + s/(6·c_a1))·13·c_a1·√A_brg·√f_c × fator de c_a2 = "
+                f"φ·N_sbg = {_n(phi_tracao_concreto(e))} × (1 + s/(6·c_a1))·13·c_a1·√A_brg·√f_c × fator de c_a2 = "
                 f"{_n(resistente / 1e3, 1)} kN; c_a1 = {_n(c1, 0)} mm < 0,4·h_ef = "
                 f"{_n(0.4 * h, 0)} mm, c_a2 = {_n(c2, 0)} mm, s = {_n(espacamento, 0)} mm, "
                 f"A_brg = {_n(a_brg, 0)} mm², {len(membros)} chumbador(es)"
@@ -2324,7 +2501,7 @@ def verificar_ancoragem(
             )
     n_min, n_max = N_DA_TABELA_18
     fora_da_faixa = not n_min <= e.n_chumbadores <= n_max
-    if e.ancoragem == ANCORAGEM_PORCA and not e.por_formula and fora_da_faixa:
+    if not e.por_formula and fora_da_faixa:
         nome = f"Tabela 18 com {e.n_chumbadores} chumbadores"
         ref_a = f"{REF} Tabela 18, nota a"
         texto = (
@@ -2348,6 +2525,74 @@ def verificar_ancoragem(
         )
     if not verificar:
         return linhas, avisos
+    if e.ancoragem in POS_INSTALADOS:
+        faltam = []
+        if not e.sistema_ancoragem.strip() or not e.categoria_aci:
+            faltam.append("certificado, identificação da barra e categoria de instalação")
+        if not e.h_ef_mm:
+            faltam.append("embutimento qualificado para o produto")
+        bx, by, _ = bloco_para_o_cone(e, g, tab)
+        x0, x1, y0, y1 = limites_bloco(e, bx, by)
+        for nome, real, minimo in (
+            (
+                "espaçamento",
+                min(math.dist(a, b) for a, b in combinations(g.posicoes, 2)),
+                e.s_min_produto_mm,
+            ),
+            (
+                "distância à borda",
+                min(min(x - x0, x1 - x, y - y0, y1 - y) for x, y in g.posicoes),
+                e.c_min_produto_mm,
+            ),
+            ("espessura do concreto", altura_do_bloco(e, g, tab)[0], e.h_min_produto_mm),
+        ):
+            if minimo:
+                linhas.append(
+                    _limite(
+                        "Produto: " + nome,
+                        real >= minimo,
+                        "Certificado do produto",
+                        f"{_n(real)} mm disponíveis, mínimo {_n(minimo)} mm.",
+                    )
+                )
+            else:
+                faltam.append(nome + " mínimo do certificado")
+        if faltam:
+            linhas.append(
+                _alerta(
+                    "Qualificação da ancoragem pós-instalada",
+                    ref + " 17.5 e 17.9",
+                    "Inconclusivo. Informar " + ", ".join(faltam) + ".",
+                )
+            )
+        else:
+            linhas.append(
+                _info(
+                    "Qualificação da ancoragem pós-instalada",
+                    e.sistema_ancoragem + f", categoria {e.categoria_aci}.",
+                )
+            )
+    if e.ancoragem == ANCORAGEM_QUIMICO:
+        if e.n_sustentada_kN is None or not e.tau_cr_MPa:
+            linhas.append(
+                _alerta(
+                    "Tração sustentada da resina",
+                    ref + " 17.5.2.2",
+                    "Informar τ_cr e a maior tração sustentada individual de cálculo.",
+                )
+            )
+        else:
+            nba = e.tau_cr_MPa * math.pi * tab.d_b * embutimento(e, tab)
+            linhas.append(
+                Verificacao(
+                    "Tração sustentada da resina",
+                    e.n_sustentada_kN,
+                    0.55 * phi_tracao_concreto(e) * nba / 1000,
+                    "kN",
+                    ref + " 17.5.2.2",
+                    f"0,55·φ·N_ba, φ = {_n(phi_tracao_concreto(e))}, N_ba = {_n(nba / 1000)} kN.",
+                )
+            )
     tracionados = [f for f in forcas if f > 0]
     if not tracionados:
         linhas.append(
@@ -2366,15 +2611,15 @@ def verificar_ancoragem(
         Verificacao(
             LINHA_ACO_TRACAO_ACI,
             f_max / 1e3,
-            PHI_ACO_TRACAO * a_se * f_ut / 1e3,
+            (PHI_ACO_TRACAO if e.aco_ductil else 0.65) * a_se * f_ut / 1e3,
             "kN",
             f"{ref} 17.6.1",
-            f"φ·N_sa = 0,75·A_se·f_uta = 0,75 × {_n(a_se, 0)} mm² × {_n(f_ut, 0)} MPa, f_uta = "
+            f"φ·N_sa = {_n(0.75 if e.aco_ductil else 0.65)}·A_se·f_uta = {_n(0.75 if e.aco_ductil else 0.65)} × {_n(a_se, 0)} mm² × {_n(f_ut, 0)} MPa, f_uta = "
             "mín(f_u; 1,9·f_y; 862 MPa), no chumbador mais tracionado",
             equacoes=(
-                "φ·N_sa = 0,75·A_se·f_uta",
-                f"φ·N_sa = 0,75 × {_n(a_se, 0)} × {_n(f_ut, 0)} = "
-                f"{_n(PHI_ACO_TRACAO * a_se * f_ut / 1e3, 1)} kN ≥ N_ua = {_n(f_max / 1e3, 2)} kN",
+                f"φ·N_sa = {_n(0.75 if e.aco_ductil else 0.65)}·A_se·f_uta",
+                f"φ·N_sa = {_n(0.75 if e.aco_ductil else 0.65)} × {_n(a_se, 0)} × {_n(f_ut, 0)} = "
+                f"{_n((PHI_ACO_TRACAO if e.aco_ductil else 0.65) * a_se * f_ut / 1e3, 1)} kN (N_ua = {_n(f_max / 1e3, 2)} kN)",
             ),
         )
     )
@@ -2426,6 +2671,57 @@ def verificar_ancoragem(
             avisos.append(
                 "O gancho (guarda-chuva) arranca antes do aço: troque por chumbador reto com "
                 "porca e chapa na ponta, que resiste bem mais ao arrancamento."
+            )
+    elif e.ancoragem == ANCORAGEM_QUIMICO:
+        bond = aderencia(e, g, tab, forcas)
+        if bond is None:
+            linhas.append(
+                _alerta(
+                    "Aderência da resina",
+                    ref + " 17.6.5",
+                    "Inconclusivo. Informar as tensões características τ_cr e τ_uncr do sistema.",
+                )
+            )
+        else:
+            phi = phi_tracao_concreto(e)
+            linhas.append(
+                Verificacao(
+                    "Aderência da resina no grupo",
+                    sum(tracionados) / 1000,
+                    phi * bond[1] / 1000,
+                    "kN",
+                    ref + " 17.6.5",
+                    bond[2],
+                )
+            )
+            individuais = []
+            for i, f in enumerate(forcas):
+                if f > 0:
+                    isolado = aderencia(
+                        e, g, tab, tuple(f if j == i else 0 for j in range(len(forcas)))
+                    )
+                    assert isolado is not None
+                    individuais.append(
+                        Verificacao(
+                            "Aderência individual da resina",
+                            f / 1000,
+                            phi * isolado[1] / 1000,
+                            "kN",
+                            ref + " 17.6.5",
+                            f"Chumbador {i + 1}. " + isolado[2],
+                        )
+                    )
+            linhas.append(max(individuais, key=lambda v: v.aproveitamento or 0.0))
+        if e.n_rd_fabricante_kN:
+            linhas.append(
+                Verificacao(
+                    "Limite individual adicional do fabricante",
+                    f_max / 1000,
+                    e.n_rd_fabricante_kN,
+                    "kN",
+                    "Certificado do produto",
+                    "Limite complementar informado para a barra adotada.",
+                )
             )
     elif e.n_rd_fabricante_kN > 0:
         linhas.append(
@@ -2550,43 +2846,71 @@ def ruptura_da_borda_por_cortante(
     raiz = math.sqrt(e.fck_MPa)
     l_e = min(embutimento(e, tab), 8 * d_a)
     pior: tuple[float, float, str] | None = None
-    for eixo in (0, 1):
-        ao_longo = [p[eixo] for p in g.posicoes]
-        frente = max(ao_longo)
-        fila = [p[1 - eixo] for p in g.posicoes if abs(p[eixo] - frente) < 1e-6]
-        meia_l = (bx if eixo == 0 else by) / 2
-        meia_t = (by if eixo == 0 else bx) / 2
-        c1 = meia_l - frente
-        if c1 <= 0:
-            continue
-        c2 = meia_t - max(abs(t) for t in fila)
-        s = max(fila) - min(fila)
-        reducao = ""
-        if c2 < 1.5 * c1 and h_a < 1.5 * c1:  # 17.7.2.1.2: bloco estreito e baixo
-            limite = max(c2 / 1.5, h_a / 1.5, s / 3)
-            if limite < c1:
-                reducao = f" (c_a1 reduzido de {_n(c1, 0)} mm pela 17.7.2.1.2)"
-                c1 = limite
-        largura = min(max(fila) + 1.5 * c1, meia_t) - max(min(fila) - 1.5 * c1, -meia_t)
-        a_vco = 4.5 * c1 * c1
-        a_vc = min(largura * min(1.5 * c1, h_a), len(fila) * a_vco)
-        psi_ed = 1.0 if c2 >= 1.5 * c1 else 0.7 + 0.3 * c2 / (1.5 * c1)
-        psi_h = max(1.0, math.sqrt(1.5 * c1 / h_a))
-        v_b1 = 0.6 * (l_e / d_a) ** 0.2 * math.sqrt(d_a) * raiz * c1**1.5
-        v_b2 = 3.7 * raiz * c1**1.5
-        v_b = min(v_b1, v_b2)
-        resistente = PHI_CORTANTE_CONCRETO * a_vc / a_vco * psi_ed * psi_h * v_b
-        direcao = "ℓx" if eixo == 0 else "ℓy"
-        texto = (
-            f"cortante ao longo de {direcao}, toda na fila da frente ({len(fila)} chumbador(es)): "
-            f"φ·V_cbg = 0,70 × (A_Vc/A_Vco)·ψ_ed,V·ψ_h,V·V_b = 0,70 × ({_n(a_vc / 1e3, 1)}/"
-            f"{_n(a_vco / 1e3, 1)}) × {_n(psi_ed, 3)} × {_n(psi_h, 3)} × {_n(v_b / 1e3, 1)} kN; "
-            f"V_b = mín(0,6·(ℓ_e/d_a)^0,2·√d_a·√f_c·c_a1^1,5; 3,7·√f_c·c_a1^1,5), c_a1 = "
-            f"{_n(c1, 0)} mm{reducao}, c_a2 = {_n(c2, 0)} mm, ℓ_e = {_n(l_e, 0)} mm; "
-            f"{_texto_do_bloco(bx, by, h_a, informado, altura)}; ψ_c,V = 1,0 (fissurado)"
-        )
-        if pior is None or resistente < pior[1]:
-            pior = (v_sd, resistente, texto)
+    componentes = (e.vx_kN, e.vy_kN)
+    orientada = any(v is not None for v in componentes)
+    n_eng = (
+        len(g.posicoes)
+        if e.cortante == CORTANTE_ARRUELAS
+        else engatados_sem_arruela(len(g.posicoes))
+    )
+    pos_bloco = [(x + e.desloc_x_mm, y + e.desloc_y_mm) for x, y in g.posicoes]
+    for indices in combinations(range(len(pos_bloco)), n_eng):
+        ativos = [pos_bloco[i] for i in indices]
+        for eixo, sinal in ((0, 1), (0, -1), (1, 1), (1, -1)):
+            vn = max(0.0, sinal * (componentes[eixo] or 0.0) * 1000) if orientada else v_sd
+            vt = abs(componentes[1 - eixo] or 0.0) * 1000 if orientada else 0.0
+            if not (vn or vt):
+                continue
+            ao_longo = [sinal * p[eixo] for p in ativos]
+            frente = max(ao_longo)
+            fila = [p[1 - eixo] for p in ativos if abs(sinal * p[eixo] - frente) < 1e-6]
+            meia_l = (bx if eixo == 0 else by) / 2
+            meia_t = (by if eixo == 0 else bx) / 2
+            c1 = meia_l - frente
+            if c1 <= 0:
+                continue
+            distancias_laterais = (meia_t + min(fila), meia_t - max(fila))
+            c2 = min(distancias_laterais)
+            c2_max = max(distancias_laterais)
+            s = max(fila) - min(fila)
+            reducao = ""
+            if c2_max < 1.5 * c1 and h_a < 1.5 * c1:  # 17.7.2.1.2: bloco estreito e baixo
+                limite = max(c2_max / 1.5, h_a / 1.5, s / 3)
+                if limite < c1:
+                    reducao = f" (c_a1 reduzido de {_n(c1, 0)} mm pela 17.7.2.1.2)"
+                    c1 = limite
+            largura = min(max(fila) + 1.5 * c1, meia_t) - max(min(fila) - 1.5 * c1, -meia_t)
+            a_vco = 4.5 * c1 * c1
+            a_vc = min(largura * min(1.5 * c1, h_a), len(fila) * a_vco)
+            psi_ed = 1.0 if c2 >= 1.5 * c1 else 0.7 + 0.3 * c2 / (1.5 * c1)
+            psi_h = max(1.0, math.sqrt(1.5 * c1 / h_a))
+            v_b1 = 0.6 * (l_e / d_a) ** 0.2 * math.sqrt(d_a) * raiz * c1**1.5
+            v_b2 = 3.7 * raiz * c1**1.5
+            v_b = min(v_b1, v_b2)
+            phi_v = 0.75 if e.armadura_suplementar else 0.70
+            resultante = (e.desloc_x_mm, e.desloc_y_mm)
+            ec = abs(sum(p[1 - eixo] for p in ativos) / len(ativos) - resultante[1 - eixo])
+            psi_ec = 1 / (1 + ec / (1.5 * c1))
+            base = phi_v * a_vc / a_vco * psi_h * v_b * psi_ec
+            resistente = base * psi_ed
+            razao_normal = vn / resistente if resistente > 0 else math.inf if vn > 0 else 0.0
+            razao_paralela = vt / (2 * base) if base > 0 else math.inf if vt > 0 else 0.0
+            interacao_borda = math.hypot(razao_normal, razao_paralela)
+            demanda = interacao_borda * resistente
+            paralelo = vt > 0 and vt / (2 * base) > vn / resistente
+            direcao = "ℓx" if eixo == 0 else "ℓy"
+            texto = (
+                f"face {direcao}{' +' if sinal > 0 else ' −'}, componente {'paralela' if paralelo else 'normal'}, toda na fila da frente ({len(fila)} chumbador(es)): "
+                f"φ·V_cbg = φ × (A_Vc/A_Vco)·ψ_ed,V·ψ_h,V·ψ_ec,V·V_b = {_n(phi_v)} × ({_n(a_vc / 1e3, 1)}/"
+                f"{_n(a_vco / 1e3, 1)}) × {_n(psi_ed, 3)} × {_n(psi_h, 3)} × {_n(psi_ec, 3)} × {_n(v_b / 1e3, 1)} kN; "
+                f"V_b = mín(0,6·(ℓ_e/d_a)^0,2·√d_a·√f_c·c_a1^1,5; 3,7·√f_c·c_a1^1,5), c_a1 = "
+                f"{_n(c1, 0)} mm{reducao}, c_a2,min = {_n(c2, 0)} mm, ℓ_e = {_n(l_e, 0)} mm, e′_V = {_n(ec, 0)} mm; "
+                f"{_texto_do_bloco(bx, by, h_a, informado, altura)}; ψ_c,V = 1,0 (fissurado)"
+            )
+            if vt:
+                texto += f". Paralela à face: {vt / 1000:.2f} kN; φV∥ = 2 × φV_cbg, sem fator de borda. Interação elíptica conservadora = {_n(interacao_borda, 3)}."
+            if pior is None or demanda / resistente > pior[0] / pior[1]:
+                pior = (demanda, resistente, texto)
     return pior
 
 
@@ -2596,21 +2920,34 @@ def arrancamento_por_alavanca(
     """(V_Sd, φ·V_cpg, conta) do arrancamento por alavanca do grupo (pryout, ACI 17.7.3)."""
     if v_sd <= 0:
         return None
-    cone = cone_de_concreto(e, g, tab, tuple(1.0 for _ in g.posicoes))
-    if cone is None:
-        return None
-    _, resistente_t, _ = cone
-    phi_t = PHI_CONCRETADO if e.ancoragem in CONCRETADOS else PHI_POS_INSTALADO
-    n_cbg = resistente_t / phi_t
+    n = len(g.posicoes)
+    eng = n if e.cortante == CORTANTE_ARRUELAS else engatados_sem_arruela(n)
+    pior = None
     h = embutimento(e, tab)
     k_cp = 1.0 if h < 65.0 else 2.0
-    resistente = PHI_CORTANTE_CONCRETO * k_cp * n_cbg
-    texto = (
-        f"φ·V_cpg = 0,70 × k_cp·N_cbg = 0,70 × {_n(k_cp, 0)} × {_n(n_cbg / 1e3, 1)} kN; N_cbg é o "
-        f"cone do grupo inteiro ({len(g.posicoes)} chumbadores, ψ_ec,N = 1,0) sem o φ; k_cp = "
-        f"{'1 (h_ef < 65 mm)' if k_cp == 1 else '2 (h_ef ≥ 65 mm)'}"
-    )
-    return v_sd, resistente, texto
+    for indices in combinations(range(n), eng):
+        forcas = tuple(float(i in indices) for i in range(n))
+        cone = cone_de_concreto(e, g, tab, forcas)
+        assert cone is not None
+        ncb = cone[1] / phi_tracao_concreto(e)
+        nominal = ncb
+        texto = f"N_cb(g) = {_n(ncb / 1000)} kN"
+        if e.ancoragem == ANCORAGEM_QUIMICO:
+            bond = aderencia(e, g, tab, forcas)
+            if bond is None:
+                return None
+            nominal = min(ncb, bond[1])
+            texto += f", N_a(g) = {_n(bond[1] / 1000)} kN. Governa o menor"
+        rd = PHI_CORTANTE_CONCRETO * k_cp * nominal
+        if pior is None or rd < pior[1]:
+            ids = ", ".join(str(i + 1) for i in indices)
+            pior = (
+                v_sd,
+                rd,
+                f"{eng} de {n} chumbadores mobilizados ({ids}). {texto}. "
+                f"φ·V_cp(g) = 0,70 × {_n(k_cp, 0)} × {_n(nominal / 1000)} kN.",
+            )
+    return pior
 
 
 def ruptura_a_frente_da_placa_de_cisalhamento(
@@ -2629,7 +2966,23 @@ def ruptura_a_frente_da_placa_de_cisalhamento(
     h_sl = max(e.b_v_mm - g.e_n, 0.0)
     raiz = math.sqrt(e.fck_MPa)
     pior: tuple[float, float, str] | None = None
-    for meia_l, meia_t, direcao in ((bx / 2, by / 2, "ℓx"), (by / 2, bx / 2, "ℓy")):
+    orientacoes = [
+        (bx / 2 - abs(e.desloc_x_mm), by / 2 - abs(e.desloc_y_mm), "ℓx"),
+        (by / 2 - abs(e.desloc_y_mm), bx / 2 - abs(e.desloc_x_mm), "ℓy"),
+    ]
+    if e.vx_kN is not None or e.vy_kN is not None:
+        if not e.vx_kN:
+            return None
+        v_sd = abs(e.vx_kN) * 1000
+        sinal = 1 if e.vx_kN > 0 else -1
+        orientacoes = [
+            (
+                bx / 2 - sinal * e.desloc_x_mm,
+                by / 2 - abs(e.desloc_y_mm),
+                "ℓx +" if sinal > 0 else "ℓx −",
+            )
+        ]
+    for meia_l, meia_t, direcao in orientacoes:
         c1 = meia_l - e.t_pv_mm / 2
         if c1 <= 0:
             continue
@@ -2666,7 +3019,7 @@ class FlexaoNaArgamassa:
 
     n_engatados: int
     v_i: float  # N, cortante de um chumbador
-    braco: float  # mm, e_n/2 + t_p/2
+    braco: float  # mm
     momento: float  # N·mm
     d_s: float  # mm, diâmetro da área resistente da rosca
     w: float  # mm³, módulo elástico π·d_s³/32
@@ -2688,13 +3041,13 @@ class FlexaoNaArgamassa:
     def texto(self) -> str:
         return (
             f"n_engatados = {self.n_engatados} (os mesmos do aço à cortante): V_i = "
-            f"{_n(self.v_i / 1e3, 2)} kN; braço b = e_n/2 + t_p/2 = {_n(self.braco, 1)} mm (a "
-            "pressão da argamassa no meio da camada, seção crítica no meio da placa); M = V_i·b = "
+            f"{_n(self.v_i / 1e3, 2)} kN; braço b = e_n + t_p/2 + Δ = {_n(self.braco, 1)} mm (a "
+            "força no meio da chapa em contato, sem restrição à rotação, sem apoio lateral do graute); M = V_i·b = "
             f"{_n(self.momento / 1e3, 1)} kN·mm; na rosca, d_s = √(4·A_se/π) = {_n(self.d_s, 2)} mm, "
             f"W = π·d_s³/32 = {_n(self.w, 0)} mm³ e M_Rd pela plastificação da barra redonda, "
             f"Z·f_y ≤ 1,5·W·f_y (NBR 8800 5.4.2.2): σ_b = M/(1,5·W) = {_n(self.sigma_b, 1)} MPa; "
             f"σ_t = F_t/A_se = {_n(self.f_t / 1e3, 2)} kN/{_n(self.a_se, 0)} mm² = "
-            f"{_n(self.sigma_t, 1)} MPa; σ = σ_b + σ_t = {_n(self.sigma, 1)} MPa ≤ f_y/γ_a1 = "
+            f"{_n(self.sigma_t, 1)} MPa; σ = σ_b + σ_t = {_n(self.sigma, 1)} MPa. Limite f_y/γ_a1 = "
             f"{_n(self.f_y, 0)}/{_n(self.gama_a1)} = {_n(self.limite, 1)} MPa (o mesmo que "
             "M/M_Rd + N/N_Rd ≤ 1)"
         )
@@ -2709,6 +3062,8 @@ def flexao_na_argamassa(
     a_se: float,
     f_y: float,
     gama_a1: float,
+    *,
+    acrescimo_mm: float = 0.0,
 ) -> FlexaoNaArgamassa:
     """Flexão do chumbador na argamassa com a tração dele (N, mm, MPa).
 
@@ -2718,7 +3073,7 @@ def flexao_na_argamassa(
     """
     n = max(n_engatados, 1)
     v_i = v_sd / n
-    braco = e_n / 2 + t_p / 2
+    braco = e_n + t_p / 2 + acrescimo_mm
     momento = v_i * braco
     d_s = math.sqrt(4 * a_se / math.pi)
     w = math.pi * d_s**3 / 32
@@ -2735,6 +3090,9 @@ LINHAS_DE_TRACAO_ACI = (
     "Arrancamento da cabeça (porca ou chapa na ponta)",
     "Guarda-chuva: arrancamento do gancho",
     "Pós-instalado: tração resistente do fabricante",
+    "Aderência da resina no grupo",
+    "Aderência individual da resina",
+    "Limite individual adicional do fabricante",
     "Cone de concreto dos chumbadores tracionados",
     "Arrancamento lateral da cabeça junto à borda",
 )
@@ -2894,13 +3252,13 @@ LINHAS_DO_BLOCO = (
 
 
 def chumbadores_passam(r: ResultadoBase) -> bool:
-    """Nenhuma verificação dos chumbadores (nem a cortante pelas arruelas) reprova, fora o cone."""
-    for nome, linhas in r.grupos:
-        for v in linhas:
-            dos_chumbadores = nome == GRUPO_CHUMBADORES or v.nome.startswith("Cortante: arruelas")
-            if dos_chumbadores and v.nome not in LINHAS_DO_BLOCO and v.status == "NÃO OK":
-                return False
-    return True
+    """Inclui o aço, a flexão, a ancoragem e o mecanismo de cortante."""
+    return all(
+        v.status not in ("NÃO OK", "ALERTA")
+        for grupo, linhas in r.grupos
+        if grupo in (GRUPO_CHUMBADORES, GRUPO_CORTANTE)
+        for v in linhas
+    )
 
 
 def passa_fora_o_cone(r: ResultadoBase) -> bool:
@@ -2935,6 +3293,11 @@ def menor_diametro_que_atende(e: EntradaBase) -> ResultadoBase | None:
     """
     if not e.por_formula:
         return None
+    if e.ancoragem in POS_INSTALADOS and (
+        e.n_rd_fabricante_kN or e.sistema_ancoragem or e.tau_cr_MPa or e.tau_uncr_MPa
+    ):
+        atual = calcular(e)
+        return atual if chumbadores_passam(atual) else None
     for rosca in roscas_da_familia(rosca_do_chumbador(e).familia):
         try:
             r = calcular(replace(e, chumbador=rosca.nome, d_b_mm=0.0, passo_mm=0.0, d_f_mm=0.0))
@@ -2954,7 +3317,18 @@ def calcular(e: EntradaBase) -> ResultadoBase:
 
 
 def _calcular_um(e: EntradaBase) -> ResultadoBase:
+    if e.vx_kN is not None or e.vy_kN is not None:
+        e = replace(e, v_sd_kN=math.hypot(e.vx_kN or 0.0, e.vy_kN or 0.0))
+    if e.aco_ductil is None:
+        # O padrão conservador para uma barra sem identificação acompanha o da tela.
+        e = replace(
+            e,
+            aco_ductil=e.ancoragem in CONCRETADOS
+            and ACOS_CHUMBADOR[e.aco_chumbador].equivalente_a36,
+        )
     g = geometria(e)
+    if e.m_sd_y_kNm < 0 and g.e_u:
+        g = replace(g, y_dorso=-g.y_dorso)  # eixos internos do solver com momentos positivos
     tab = disposicoes(e)
     c = sd.coeficientes(e.combinacao)
     fy = ACOS[e.aco_placa][0]
@@ -3001,12 +3375,56 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             "registre o método no memorial."
         )
     inicios: list[tuple[str, int]] = [(GRUPO_GEOMETRIA, 0)]  # onde começa cada grupo da tela
+    if (
+        e.bloco_x_mm
+        and e.bloco_x_mm + 1e-6 < g.lx + 2 * abs(e.desloc_x_mm)
+        or e.bloco_y_mm
+        and e.bloco_y_mm + 1e-6 < g.ly + 2 * abs(e.desloc_y_mm)
+    ):
+        raise BaseInvalida(
+            "A placa deve caber inteiramente no bloco, incluindo o deslocamento informado."
+        )
+    if g.e_u and not e.por_formula:
+        linhas.append(
+            _info(
+                "Aplicação da Tabela 18 ao perfil U",
+                "Dimensões de montagem tomadas como referência. A geometria e a resistência do U exigem verificação própria.",
+            )
+        )
+    if e.chapa_na_ponta_mm and not e.chapa_ponta_esp_mm:
+        linhas.append(
+            _alerta(
+                "Montagem da chapa na ponta",
+                "Detalhamento da barra",
+                "Informar a espessura da chapa para o comprimento de corte.",
+            )
+        )
+    if min(e.bloco_x_mm, e.bloco_y_mm, e.bloco_z_mm) == 0:
+        texto_bloco = "Dimensões estimadas do bloco. Resistências condicionadas à execução e à verificação do bloco indicado."
+        if e.modo_bloco == "verificacao":
+            linhas.append(
+                _alerta(
+                    "Geometria real do bloco",
+                    "Geometria da obra",
+                    "Verificação inconclusiva. Informar largura, comprimento e altura reais.",
+                )
+            )
+        else:
+            linhas.append(_info("Pré-dimensionamento do bloco", texto_bloco))
+    if g.e_u or momento_y:
+        linhas.append(
+            _alerta(
+                "Validação do modelo de placa",
+                "Campo de aplicação da NBR 8800, 6.7",
+                "Conferir o modelo de faixas e a compatibilidade da ligação com análise independente para esta geometria e carregamento.",
+            )
+        )
     if g.e_u:
         linhas.append(
             _info(
                 "Pilar U: método da 6.7 estendido",
                 f"centro geométrico a x̄ = {_n(abs(g.y_dorso), 1)} mm do dorso da alma, no centro "
-                f"da placa, mesas abertas para {'+y' if g.abertura > 0 else '−y (M_Sd,y < 0)'}; "
+                f"da placa, mesas abertas para +y nos eixos físicos; "
                 f"balanços em ℓy: {_n(g.ly / 2 - abs(g.y_dorso), 1)} mm além do dorso e "
                 f"{_n(g.ly / 2 - (0.80 * g.b_f - abs(g.y_dorso)), 1)} mm além de 0,80·b_f (n = o "
                 "maior, "
@@ -3051,7 +3469,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         if e.ly_mm
         else f"ℓy = (0,5·n_b − 1)·a₂ + 2·a₁ = (0,5·{n_b} − 1)·{_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
         if da_norma
-        else f"ℓy = máx(2·a₁; largura do perfil + 25 mm), 2·a₁ = 2·{_n(g.a1, 0)}"
+        else f"ℓy = máx(2·a₁; 2·máx|y_perfil| + 25) = máx({_n(2*g.a1, 1)}; {_n(2*max(map(abs,g.faixa_y))+25, 1)})"
         if e.tipo == TIPO_ROTULADA_X
         else f"ℓy = a₂ + 2·a₁ = {_n(g.a2, 0)} + 2·{_n(g.a1, 0)}"
     )  # fmt: skip
@@ -3375,24 +3793,66 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             t_min = math.sqrt(n_b * f_t * max(g.a2 - g.t_w, 0.0) / (g.l0 * fy_d))
             texto_t = "t_p,min = √(n_b·F_t,Sd·(a₂ − t_w)/(ℓ₀·(f_y/γ_a1))) (base tipo 2)"
         v_atrito = 0.0  # sem pressão de contato, sem atrito (6.7.2.3)
+    contas["t_min"] = t_min
+    if (dist or obliqua) and zona:
+        contas["zona"] = (
+            "q = ∫ p(u)·u du por unidade de largura. t_faixa = √(4·q_máx/f_yd).",
+            texto_t,
+        )
+    # Passagem dos eixos de solução (momentos positivos) aos eixos da placa.
+    sx = -1 if e.m_sd_kNm < 0 else 1
+    sy = -1 if e.m_sd_y_kNm < 0 else 1
+    if not zona and l_c and dist is None and obliqua is None:
+        x0, x1 = g.lx / 2 - l_c, g.lx / 2
+        zona = ((x0, -g.ly / 2), (x1, -g.ly / 2), (x1, g.ly / 2), (x0, g.ly / 2))
+    zona = tuple((sx * x, sy * y) for x, y in zona)
+    if sx * sy < 0:
+        zona = zona[::-1]
+    mapa = {(sx * x, sy * y): f for (x, y), f in zip(g.posicoes, forcas, strict=True)}
+    forcas = [mapa[p] for p in g.posicoes]
+    g = replace(g, y_dorso=g.y_dorso * sy)
+    w0, ax, ay = dist.plano if dist else (sigma_sd if sigma_sd is not None else sigma_rd, 0, 0)
+    plano_pressao = (w0, ax * sx, ay * sy)
+    a, s1, s2, i11, i12, i22 = _momentos_do_poligono(list(zona))
+    w0, ax, ay = plano_pressao
+    comp = w0 * a + ax * s1 + ay * s2
+    m1 = w0 * s1 + ax * i11 + ay * i12
+    m2 = w0 * s2 + ax * i12 + ay * i22
+    centro_pressao = (m1 / comp, m2 / comp) if comp > 1e-8 else None
+    rn = (comp - sum(forcas) - axial) / 1000
+    rm1 = (
+        m1 - sum(f * x for f, (x, _) in zip(forcas, g.posicoes, strict=True)) - sx * momento
+    ) / 1e6
+    rm2 = (
+        m2 - sum(f * y for f, (_, y) in zip(forcas, g.posicoes, strict=True)) - sy * momento_y
+    ) / 1e6
+    tol_n = 1e-7 * max(1.0, abs(axial) / 1000, comp / 1000)
+    tol_m = 1e-7 * max(1.0, momento / 1e6, momento_y / 1e6, comp * max(g.lx, g.ly) / 1e6)
+    linhas.append(
+        _limite(
+            "Equilíbrio dos esforços aplicados",
+            abs(rn) <= tol_n and max(abs(rm1), abs(rm2)) <= tol_m,
+            "Integração da pressão e forças individuais nos eixos da placa",
+            f"A_c = {_n(a, 2)} mm², C = {_n(comp / 1000, 4)} kN. "
+            f"R_N = {_n(rn, 7)} kN, R_M = {_n(rm1, 8)} e R_M,y = {_n(rm2, 8)} kN·m. "
+            "Momentos positivos comprimem x e y positivos, respectivamente.",
+        )
+    )
     item_caso = {"C1": "a", "C2": "b", "C3": "c", "T1": "d", "T2": "e", "T3": "f"}[caso]
     ref_caso = f"{REF} 6.7.2.2 {item_caso})"
     if obliqua is not None:
         ref_caso = f"{REF} 6.7.2.2 {item_caso}) e 6.7.1.1 (flexão oblíqua)"
     if dist is not None:
-        ref_caso = f"método elástico da placa rígida ({REF} 6.7.1.1)"
-    elif caso == "C2" and momento > 0 and axial > 0 and momento / axial > g.lx / 6 + 1e-9:
-        linhas.append(
-            _info(
-                "Excentricidade fora do núcleo central (e > ℓx/6)",
-                f"e = M/N = {_n(momento / axial, 0)} mm > ℓx/6 = {_n(g.lx / 6, 0)} mm: o lado oposto "
-                "da placa levanta. Pelo bloco uniforme da 6.7 (C2), N passa todo pela pressão na "
-                "borda, com o centro na resultante, sem tração nos chumbadores — um equilíbrio "
-                "possível, aceito pela norma. Pela distribuição linear elástica da pressão, "
-                "a compatibilidade da placa rígida traciona os chumbadores do lado que levanta",
-                f"{REF} 6.7.1.4",
+        if axial > 0:
+            indice = 6 * (momento / g.lx + momento_y / g.ly) / axial
+            linhas.append(
+                _info(
+                    "Núcleo central no modelo linear",
+                    f"6|e_x|/ℓx + 6|e_y|/ℓy = {_n(indice, 4)}. "
+                    + ("Contato integral." if indice <= 1 else "Contato parcial."),
+                )
             )
-        )
+        ref_caso = f"método elástico da placa rígida ({REF} 6.7.1.1)"
     # ------------------------------------------------------------------ concreto e placa
     if dist is not None and sigma_sd is not None:
         linhas.append(
@@ -3456,12 +3916,32 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             + (
                 f". Aproveitamento em espessura t_p,min/t_p = {_n(100 * t_min / e.t_placa_mm, 0)} %; "
                 f"em momento resistente (∝ t²), (t_p,min/t_p)² = "
-                f"{_n(100 * (t_min / e.t_placa_mm) ** 2, 0)} % (o programa usa o primeiro, maior)"
-                if 0 < t_min < e.t_placa_mm
+                f"{_n(100 * (t_min / e.t_placa_mm) ** 2, 0)} % (o indicador da tabela é o de espessura)"
+                if 0 < t_min
                 else ""
             ),
         )  # fmt: skip
     )
+    if zona and e.graute_rd_MPa:
+        pico = max(w0 + ax * x + ay * y for x, y in zona)
+        linhas.append(
+            Verificacao(
+                "Compressão no graute",
+                pico,
+                e.graute_rd_MPa,
+                "MPa",
+                "Resistência de cálculo informada",
+                "Pico de pressão na superfície de contato.",
+            )
+        )
+    elif zona and e.modo_bloco == "verificacao":
+        linhas.append(
+            _alerta(
+                "Compressão no graute",
+                "Material da obra",
+                "Informar a resistência de cálculo do graute.",
+            )
+        )
     # ------------------------------------------------------------------ chumbadores
     inicios.append((GRUPO_CHUMBADORES, len(linhas)))
     medidas: MedidasPorFormula | None = None
@@ -3515,34 +3995,28 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     inicios.append((GRUPO_CORTANTE, len(linhas)))
     v_rd = v_atrito
     modo_v = e.cortante
-    # Com tração (T1, T2, T3) ou sem pressão de contato não há atrito: a cortante vai aos chumbadores.
-    if modo_v == CORTANTE_ATRITO and v_sd > 0 and (caso.startswith("T") or v_rd <= 0):
-        modo_v = CORTANTE_DIRETOS
-        avisos.append(
-            f"Caso {caso}: com tração não há atrito na argamassa (6.7.2.3); a cortante V_Sd = "
-            f"{_n(v_sd / 1e3, 1)} kN foi verificada nos chumbadores (corte do chumbador e flexão na "
-            "argamassa). Para os n chumbadores engatarem juntos, use arruelas soldadas ou placa de "
-            "cisalhamento."
-        )
-    elif modo_v == CORTANTE_ATRITO and v_sd > v_rd + 1e-6:
-        # compressão pequena: o atrito desta combinação não basta, e a cortante vai aos
-        # chumbadores, como na tração (6.7.2.3: dispositivo; o atrito não se soma a ele)
-        modo_v = CORTANTE_DIRETOS
+    if caso.startswith("T"):
+        v_rd = 0.0
+    if modo_v == CORTANTE_AUTO:
+        modo_v = CORTANTE_DIRETOS if v_sd > v_rd or e.mz_kNm else CORTANTE_ATRITO
+        linhas.append(_info("Mecanismo automático de cortante", CORTANTES[modo_v]))
+    if e.mz_kNm:
         linhas.append(
-            _info(
-                "Cortante: atrito na argamassa não basta",
-                f"V_Sd = {_n(v_sd / 1e3, 1)} kN > V_Rd = {_n(v_rd / 1e3, 1)} kN pelo atrito "
-                f"(μ = {_n(e.mu)} sobre a compressão desta combinação, ÷ γ_a2 = {_n(c.a2)}): "
-                f"precisaria de N_Sd ≥ {_n(v_sd * c.a2 / e.mu / 1e3, 0)} kN. A cortante foi "
-                "verificada nos chumbadores (corte e flexão na argamassa)",
-                ref_caso,
+            _alerta(
+                "Torção na transferência ao concreto",
+                "Modelo do dispositivo de cortante",
+                f"M_z = {_n(e.mz_kNm)} kN·m. Verificar a distribuição torsional no dispositivo e no concreto.",
             )
         )
-        avisos.append(
-            f"Caso {caso}: a compressão desta combinação é pequena e o atrito na argamassa "
-            f"(V_Rd = {_n(v_rd / 1e3, 1)} kN) não leva V_Sd = {_n(v_sd / 1e3, 1)} kN; a cortante "
-            "foi verificada nos chumbadores, como nas combinações com tração (6.7.2.3). Para os n "
-            "chumbadores engatarem juntos, use arruelas soldadas ou placa de cisalhamento."
+    if modo_v == CORTANTE_PLACA and (
+        e.vy_kN or (e.vx_kN is None and v_sd > 0 and e.modo_bloco == "verificacao")
+    ):
+        linhas.append(
+            _alerta(
+                "Orientação da placa de cisalhamento",
+                "Geometria do dispositivo",
+                "A placa resiste normal à sua face (ℓx). Verificar a componente paralela e a orientação real.",
+            )
         )
     if modo_v == CORTANTE_ATRITO:
         if v_rd <= 0:  # T1 e T2 (ou C3/T3 sem equilíbrio): não há pressão de contato, nem atrito
@@ -3571,9 +4045,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             linhas.append(Verificacao("Cortante: atrito na argamassa", v_sd / 1e3, v_rd / 1e3, "kN", ref_caso, texto_v))  # fmt: skip
         if v_sd > v_rd + 1e-6:
             avisos.append(
-                "A cortante passa do atrito: use placa de cisalhamento ou arruelas soldadas "
-                "(6.7.2.3) — ou, com o aviso do deslizamento, os chumbadores direto no furo; com o "
-                "dispositivo, só ele resiste à cortante (o atrito não se soma)."
+                "O atrito é insuficiente para a cortante de cálculo. Sem compressão admissível não há atrito."
             )
     elif modo_v == CORTANTE_PLACA:
         sigma4 = tensao_resistente_do_concreto(e.fck_MPa, 4.0, e.combinacao)
@@ -3652,7 +4124,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 )  # fmt: skip
             )
             razoes_v.append(("aço e contato, 6.7.2.5", v_sd / v_rd if v_rd > 0 else math.inf))
-        else:
+        elif v_sd > 0 or e.mz_kNm:
             folga = max(tab.d_f - tab.d_b, 0.0) / 2
             contados = engatados_sem_arruela(n_b)
             linhas.append(
@@ -3668,6 +4140,14 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                     "deslizamento, eles só depois)",
                 )
             )
+            if e.folga_servico_mm is not None:
+                linhas[-1] = _limite(
+                    linhas[-1].nome,
+                    folga <= e.folga_servico_mm,
+                    linhas[-1].referencia,
+                    linhas[-1].formula
+                    + f". Limite admissível de serviço: {_n(e.folga_servico_mm)} mm.",
+                )
             avisos.append(
                 f"Cortante pelos chumbadores direto no furo da placa: a placa desliza até "
                 f"{_n(folga, 1)} mm antes do contato e só {contados} de {n_b} chumbadores "
@@ -3677,13 +4157,74 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         # aço do chumbador à cortante e à flexão na argamassa (ACI 318-19 17.7.1; DG1)
         n_eng = n_b if soldadas else engatados_sem_arruela(n_b)
         v_i = v_sd / n_eng
+        cortes = (v_i,) * n_b
+        if soldadas and e.mz_kNm:
+            # As disposições são centradas na origem da placa e os chumbadores têm a mesma rigidez.
+            polar = sum(x * x + y * y for x, y in g.posicoes)
+            k_t = e.mz_kNm * 1e6 / polar
+            if e.vx_kN is None and e.vy_kN is None:
+                cortes = tuple(v_i + abs(k_t) * math.hypot(x, y) for x, y in g.posicoes)
+            else:
+                vx_i = (e.vx_kN or 0) * 1000 / n_b
+                vy_i = (e.vy_kN or 0) * 1000 / n_b
+                cortes = tuple(math.hypot(vx_i - k_t * y, vy_i + k_t * x) for x, y in g.posicoes)
+            v_i = max(cortes)
+            for i, (solicitacao, tracao) in enumerate(zip(cortes, forcas, strict=True), 1):
+                capacidade = cortante_das_arruelas(
+                    tab.d_b,
+                    tab.lado_da_arruela,
+                    g.t_arruela,
+                    e.t_placa_mm,
+                    (tracao,),
+                    aco_ch.f_u,
+                    fy,
+                    c,
+                    sigma_rd,
+                ).v_rd
+                linhas.append(
+                    Verificacao(
+                        f"Arruela {i}: translação e torção",
+                        solicitacao / 1000,
+                        capacidade / 1000,
+                        "kN",
+                        f"{REF} 6.7.2.5 e equilíbrio do grupo",
+                        "V_i = |V/n + M_z·(−y_i, x_i)/Σr²|. Com direção desconhecida, soma dos módulos.",
+                    )
+                )
+                razoes_v.append(
+                    (f"arruela {i}", solicitacao / capacidade if capacidade else math.inf)
+                )
+        if not soldadas and v_sd:
+            borda = min(min(g.lx / 2 - abs(x), g.ly / 2 - abs(y)) for x, y in g.posicoes)
+            passo_real = min(math.dist(a, b) for a, b in combinations(g.posicoes, 2))
+            lf = max(0.0, min(borda - tab.d_f / 2, passo_real - tab.d_f))
+            k1, k2 = coeficientes_contato()
+            fu_placa = ACOS[e.aco_placa][1]
+            for nome, fator in (
+                ("Rasgamento da placa no furo", k1 * lf),
+                ("Esmagamento da placa no furo", k2 * tab.d_b),
+            ):
+                linhas.append(
+                    Verificacao(
+                        nome,
+                        v_i / 1000,
+                        fator * e.t_placa_mm * fu_placa / c.a2 / 1000,
+                        "kN",
+                        f"{REF} 6.3.3.3",
+                        f"ℓ_f = {_n(lf)} mm, f_u = {_n(fu_placa)} MPa.",
+                    )
+                )
         f_ut = f_uta(aco_ch)
-        aco_v = PHI_ACO_CORTANTE * 0.6 * a_se * f_ut * FATOR_ARGAMASSA
+        aco_v = (PHI_ACO_CORTANTE if e.aco_ductil else 0.60) * 0.6 * a_se * f_ut * FATOR_ARGAMASSA
         engate = f"V_Sd/n = {_n(v_sd / 1e3, 1)}/{n_eng} = {_n(v_i / 1e3, 2)} kN por chumbador " + (
             "(os n engatam juntos: furo justo da arruela)"
             if soldadas
             else f"(engate desigual: só {n_eng} de {n_b})"
         )
+        if soldadas and e.mz_kNm:
+            engate = (
+                f"Translação e torção nos {n_eng} chumbadores. V_i,máx = {_n(v_i / 1000, 2)} kN"
+            )
         linhas.append(
             Verificacao(
                 "Chumbador: aço à cortante (ACI 318-19)",
@@ -3691,17 +4232,30 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 aco_v / 1e3,
                 "kN",
                 "ACI 318-19 17.7.1.2 e 17.7.1.2.1",
-                f"{engate}; φ·V_sa = 0,65 × 0,6·A_se·f_uta × 0,80 = 0,65 × 0,6 × {_n(a_se, 0)} × "
+                f"{engate}; φ·V_sa = {_n(0.65 if e.aco_ductil else 0.60)} × 0,6·A_se·f_uta × 0,80 = {_n(0.65 if e.aco_ductil else 0.60)} × 0,6 × {_n(a_se, 0)} × "
                 f"{_n(f_ut, 0)} × 0,80 (0,80 pela argamassa de assentamento, 17.7.1.2.1; f_uta = "
                 f"mín(f_u; 1,9·f_y; 862 MPa))",
             )
         )
         razoes_v.append(("aço do chumbador, 17.7.1", v_i / aco_v if aco_v > 0 else math.inf))
         contas["cortante_aco"] = (v_i, n_eng, f_ut)
-        if v_sd > 0:
-            flexao = flexao_na_argamassa(
-                v_sd, n_eng, f_t, g.e_n, e.t_placa_mm, a_se, aco_ch.f_y, c.a1
+        if v_i > 0:
+            acrescimo = tab.d_b / 2 + ((e.t_placa_mm + g.t_arruela) / 2 if soldadas else 0.0)
+            flexoes = (
+                flexao_na_argamassa(
+                    vi * n_eng,
+                    n_eng,
+                    ft,
+                    g.e_n,
+                    e.t_placa_mm,
+                    a_se,
+                    aco_ch.f_y,
+                    c.a1,
+                    acrescimo_mm=acrescimo,
+                )
+                for vi, ft in zip(cortes, forcas, strict=True)
             )
+            flexao = max(flexoes, key=lambda fl: fl.sigma)
             contas["flexao"] = flexao
             linhas.append(
                 Verificacao(
@@ -3709,7 +4263,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                     flexao.sigma,
                     flexao.limite,
                     "MPa",
-                    "AISC Design Guide 1 (chumbador fletido pela cortante); NBR 8800:2025 5.4.2.2",
+                    "Braço conforme EN 1992-4 §6.2.2.3, α_M = 1, a₃ = d_b/2. Resistência da barra pela NBR 8800 5.4.2.2",
                     flexao.texto(),
                 )
             )
@@ -3722,6 +4276,14 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             ):
                 valor = conta(e, g, tab, v_sd)
                 if valor is None:
+                    if nome == LINHA_ALAVANCA and v_sd > 0 and e.ancoragem == ANCORAGEM_QUIMICO:
+                        linhas.append(
+                            _alerta(
+                                nome,
+                                "ACI 318-19 17.7.3",
+                                "Inconclusivo. Faltam os dados de aderência da resina para o grupo mobilizado.",
+                            )
+                        )
                     continue
                 linhas.append(
                     Verificacao(
@@ -3734,7 +4296,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                     )
                 )
                 razoes_v.append((ref_aci, valor[0] / valor[1] if valor[1] > 0 else math.inf))
-            if f_t > 0 and v_sd > 0:  # com tração nos chumbadores, a 17.8 é obrigatória
+            if f_t > 0 and v_i > 0:  # com tração nos chumbadores, a 17.8 é obrigatória
                 aco_t = 0.75 * math.pi * tab.d_b**2 / 4 * aco_ch.f_u / c.a2
                 razoes_n = [("aço", f_t / aco_t)]
                 razoes_n += [
@@ -3755,9 +4317,13 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         t_placa=e.t_placa_mm,
         aco_pilar=ACOS[e.aco_pilar],
         axial=axial,
-        momento=momento,
-        momento_y=momento_y,
+        momento=sx * momento,
+        momento_y=sy * momento_y,
         cortante=v_sd,
+        vx=e.vx_kN * 1000 if e.vx_kN is not None else None,
+        vy=e.vy_kN * 1000 if e.vy_kN is not None else None,
+        mz=e.mz_kNm * 1e6,
+        aco_placa=ACOS[e.aco_placa],
         perna_informada=e.perna_pilar_mm,
         eletrodo=e.eletrodo,
         mesas_por_dentro=e.solda_mesas_por_dentro,
@@ -3799,7 +4365,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             "com mesas mais grossas ou marque a compressão por contato, se a extremidade do pilar "
             "for faceada."
         )
-    elif e.cortante == CORTANTE_ARRUELAS:
+    if modo_v == CORTANTE_ARRUELAS:
         _, linhas_arruela = bs.solda_das_arruelas(
             f_v=f_v,
             lado=tab.lado_da_arruela,
@@ -3810,27 +4376,43 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             c=c,
         )
         linhas.extend(linhas_arruela)
+    if f_t:
+        d_in = tab.d_b + FOLGA_DO_FURO_DA_ARRUELA
+        balanco = max(0.0, (tab.d_f - d_in) / 2)
+        q_arr = f_t * balanco / (math.pi * d_in)
+        linhas.append(
+            Verificacao(
+                "Arruela: flexão sobre o furo da placa",
+                q_arr,
+                (345 / c.a1) * g.t_arruela**2 / 6,
+                "N·mm/mm",
+                "Faixas radiais elásticas",
+                f"Reação uniformemente distribuída no perímetro interno. F_t·(d_f − d_in)/(2π·d_in), balanço {_n(balanco)} mm. Resistência f_yd·t_a²/6.",
+            )
+        )
     # ------------------------------------------------------------------ disposições construtivas
     ref_18 = f"{REF} Tabela 18"
     ref_formula = "por fórmula"
     inicios.append((GRUPO_CONSTRUTIVAS_FORMULA if medidas else GRUPO_CONSTRUTIVAS, len(linhas)))
+    espacamento = min(math.dist(a, b) for a, b in combinations(g.posicoes, 2))
+    borda_placa = min(min(g.lx / 2 - abs(x), g.ly / 2 - abs(y)) for x, y in g.posicoes)
     # disposições construtivas: limites (OK ou NÃO OK), não aproveitamento
     if medidas is not None:
         linhas.append(
             _limite(
                 "Distância a₁ (furo à borda da placa)",
-                g.a1 >= tab.a1 - 1e-9,
+                borda_placa >= tab.a1 - 1e-9,
                 f"{ref_formula} (Tabela 18 e AISC)",
-                f"a₁ = {_n(g.a1, 0)} mm ≥ {_n(tab.a1, 0)} mm, o mínimo calculado para Ø "
+                f"borda efetiva = {_n(borda_placa, 1)} mm ≥ {_n(tab.a1, 0)} mm, o mínimo calculado para Ø "
                 f"{tab.polegada}: máx(a₂/2; arruela/2; d_f/2 + 6,4 mm)",
             )
         )
         linhas.append(
             _limite(
                 "Espaçamento a₂ entre chumbadores",
-                g.a2 >= tab.a2 - 1e-9,
+                espacamento >= tab.a2 - 1e-9,
                 "ACI 318-19 17.9.2",
-                f"a₂ = {_n(g.a2, 0)} mm ≥ {_n(tab.a2, 0)} mm = máx({_mm(ESPACAMENTO_ACI[e.ancoragem])}"
+                f"s_real = {_n(espacamento, 1)} mm ≥ {_n(tab.a2, 0)} mm = máx({_mm(ESPACAMENTO_ACI[e.ancoragem])}"
                 f"·d_b; lado da arruela) para Ø {tab.polegada}",
             )
         )
@@ -3838,17 +4420,17 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         linhas.append(
             _limite(
                 "Distância a₁ (furo à borda da placa)",
-                g.a1 >= tab.a1 - 1e-9,
+                borda_placa >= tab.a1 - 1e-9,
                 ref_18,
-                f"a₁ = {_n(g.a1, 0)} mm ≥ {_n(tab.a1, 0)} mm para Ø {tab.polegada}",
+                f"borda efetiva = {_n(borda_placa, 1)} mm ≥ {_n(tab.a1, 0)} mm para Ø {tab.polegada}",
             )  # fmt: skip
         )
         linhas.append(
             _limite(
                 "Espaçamento a₂ entre chumbadores",
-                g.a2 >= tab.a2 - 1e-9,
+                espacamento >= tab.a2 - 1e-9,
                 ref_18,
-                f"a₂ = {_n(g.a2, 0)} mm ≥ {_n(tab.a2, 0)} mm para Ø {tab.polegada}",
+                f"s_real = {_n(espacamento, 1)} mm ≥ {_n(tab.a2, 0)} mm para Ø {tab.polegada}",
             )  # fmt: skip
         )
     if e.tipo == TIPO_2:
@@ -3924,6 +4506,15 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             )  # fmt: skip
         )
     n_b_min, b_b_min, a_b_min = bloco_minimo(e, g, tab)
+    if e.bloco_z_mm:
+        linhas.append(
+            _limite(
+                "Altura do bloco para o embutimento",
+                e.bloco_z_mm >= embutimento(e, tab),
+                "Geometria",
+                f"h_a = {_n(e.bloco_z_mm)} mm, h_ef = {_n(embutimento(e, tab))} mm.",
+            )
+        )
     if e.bloco_x_mm > 0 and e.bloco_y_mm > 0:
         a3_a1 = tab.a3 - tab.a1
         if medidas is not None:
@@ -3935,20 +4526,20 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         linhas.append(
             _limite(
                 "Bloco: N_b ao longo de ℓx",
-                e.bloco_x_mm >= n_b_min - 1e-9,
+                e.bloco_x_mm >= n_b_min + 2 * abs(e.desloc_x_mm) - 1e-9,
                 ref_bloco,
                 f"N_b = {_n(e.bloco_x_mm, 0)} mm ≥ máx({minimo_tabela}ℓx + 2·e_n; ℓx + 2·(a₃ − a₁)) "
                 f"= máx({valor_tabela}{_n(g.lx + 2 * g.e_n, 0)}; {_n(g.lx + 2 * a3_a1, 0)}) "
-                f"= {_n(n_b_min, 0)} mm, com a placa centrada no bloco",
+                f"= {_n(n_b_min, 0)} mm, mais 2|Δx| = {_n(2 * abs(e.desloc_x_mm))} mm",
             )  # fmt: skip
         )
         linhas.append(
             _limite(
                 "Bloco: B_b ao longo de ℓy",
-                e.bloco_y_mm >= b_b_min - 1e-9,
+                e.bloco_y_mm >= b_b_min + 2 * abs(e.desloc_y_mm) - 1e-9,
                 ref_bloco,
                 f"B_b = {_n(e.bloco_y_mm, 0)} mm ≥ máx(ℓy + 2·e_n; ℓy + 2·(a₃ − a₁)) = "
-                f"máx({_n(g.ly + 2 * g.e_n, 0)}; {_n(g.ly + 2 * a3_a1, 0)}) = {_n(b_b_min, 0)} mm",
+                f"máx({_n(g.ly + 2 * g.e_n, 0)}; {_n(g.ly + 2 * a3_a1, 0)}) = {_n(b_b_min, 0)} mm, mais 2|Δy| = {_n(2 * abs(e.desloc_y_mm))} mm",
             )  # fmt: skip
         )
     soldadas = e.cortante == CORTANTE_ARRUELAS
@@ -4021,6 +4612,16 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "dimensionado pela NBR 6118 (nota e)",
             ),  # fmt: skip
         )
+    if e.ancoragem in POS_INSTALADOS and not e.por_formula:
+        detalhamento = tuple(
+            (nome, valor) for nome, valor in detalhamento if nome != "Armadura mínima do bloco"
+        )
+        detalhamento += (
+            (
+                "Armadura do bloco",
+                "Dimensionar no projeto de concreto para o sistema pós-instalado.",
+            ),
+        )
     detalhamento = (
         *detalhamento,
         (
@@ -4047,7 +4648,77 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         d_min=d_min,
     )  # fmt: skip
     linhas = [replace(v, equacoes=equacoes[v.nome]) if v.nome in equacoes else v for v in linhas]
+    if e.modo_bloco == "verificacao":
+        linhas.append(
+            _info(
+                "Resistência global do bloco e fundação",
+                "Verificação externa. O resultado da ligação pressupõe o bloco, sua armadura e seus apoios dimensionados no projeto de fundação.",
+            )
+        )
+        if f_t > 0:
+            linhas.append(
+                _alerta(
+                    "Efeito de alavanca na tração dos chumbadores",
+                    "Compatibilidade da placa",
+                    "A tração calculada parte da placa rígida. Conferir o acréscimo por prying na placa deformável.",
+                )
+            )
+        if momento or momento_y:
+            linhas.append(
+                _info(
+                    "Rigidez rotacional da base",
+                    "Se o modelo global pressupõe engaste ou mola, confrontar a rigidez da ligação com a adotada no modelo.",
+                )
+            )
+    if e.modo_bloco == "verificacao" and min(e.bloco_x_mm, e.bloco_y_mm, e.bloco_z_mm) == 0:
+        for i, v in enumerate(linhas):
+            if v.nome in (
+                *LINHAS_DO_BLOCO,
+                "Arrancamento lateral da cabeça junto à borda",
+                "Aderência da resina no grupo",
+                "Aderência individual da resina",
+                "Produto: distância à borda",
+                "Produto: espessura do concreto",
+            ):
+                linhas[i] = _alerta(
+                    v.nome, v.referencia, "Inconclusivo. Informar as três dimensões reais do bloco."
+                )
+    if not e.por_formula and (
+        e.ancoragem != ANCORAGEM_PORCA
+        or not ACOS_CHUMBADOR[e.aco_chumbador].equivalente_a36
+        or e.n_chumbadores not in range(4, 9)
+        or g.e_u
+    ):
+        for i, v in enumerate(linhas):
+            if v.referencia.startswith(ref_18) and v.nome.startswith(
+                ("Bloco:", "Distância a₁", "Espaçamento a₂")
+            ):
+                linhas[i] = _info(
+                    v.nome,
+                    "Referência construtiva da Tabela 18. " + v.formula,
+                    "Medidas de referência, fora do campo da Tabela 18",
+                )
+    if any(
+        v.status == "ALERTA"
+        and (
+            v.nome.startswith(("Aderência", "Qualificação", "Geometria real"))
+            or v.nome == LINHA_ALAVANCA
+        )
+        for v in linhas
+    ):
+        linhas = [
+            _alerta(
+                v.nome,
+                v.referencia,
+                "Inconclusivo. Faltam resistências de tração ou cortante para a interação.",
+            )
+            if v.nome == LINHA_INTERACAO and v.status == "OK"
+            else v
+            for v in linhas
+        ]
     linhas = _invalidar_sem_equilibrio(linhas, inicios, avisos)
+    if any(v.nome.startswith("Equilíbrio") and v.status == "NÃO OK" for v in linhas):
+        zona, centro_pressao, l_c, sigma_sd = (), None, None, None
     fins = [inicio for _, inicio in inicios[1:]] + [len(linhas)]
     grupos = tuple(
         (nome, tuple(linhas[inicio:fim]))
@@ -4058,6 +4729,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         e, caso, g, sigma_rd, sigma_sd, l_c, f_t, tuple(forcas), t_min, d_min, v_rd,
         tuple(linhas), tuple(avisos), detalhamento, grupos, zona,
         disposicoes=tab, por_formula=medidas, diametros=diametros, perna_do_pilar=solda.perna,
+        plano_pressao=plano_pressao, centro_pressao=centro_pressao, residuos=(rn,rm1,rm2),
     )  # fmt: skip
 
 
@@ -4095,7 +4767,10 @@ def _invalidar_sem_equilibrio(
         if (
             i in dependentes
             # "Ancoragem no concreto: sem chumbador tracionado" vem das forças nulas
-            and (v.status in ("OK", "NÃO OK") or v.nome == "Ancoragem no concreto")
+            and (
+                v.status in ("OK", "NÃO OK")
+                or v.nome in ("Ancoragem no concreto", "Concreto: pressão de contato")
+            )
             and not v.nome.startswith(NAO_DEPENDEM_DO_EQUILIBRIO)
         ):
             v = replace(
@@ -4137,6 +4812,9 @@ def _com_os_esforcos(e: EntradaBase, caso: CasoDeCarga) -> EntradaBase:
         m_sd_kNm=caso.m_sd_kNm,
         m_sd_y_kNm=caso.m_sd_y_kNm,
         v_sd_kN=caso.v_sd_kN,
+        vx_kN=caso.vx_kN,
+        vy_kN=caso.vy_kN,
+        mz_kNm=caso.mz_kNm,
     )
 
 
@@ -4229,7 +4907,10 @@ def _envoltoria(e: EntradaBase) -> ResultadoBase:
             n_sd_kN=governa.caso.n_sd_kN,
             m_sd_kNm=governa.caso.m_sd_kNm,
             m_sd_y_kNm=governa.caso.m_sd_y_kNm,
-            v_sd_kN=governa.caso.v_sd_kN,
+            v_sd_kN=r_gov.entrada.v_sd_kN,
+            vx_kN=governa.caso.vx_kN,
+            vy_kN=governa.caso.vy_kN,
+            mz_kNm=governa.caso.mz_kNm,
         ),
         verificacoes=todas,
         grupos=tuple(grupos),
@@ -4250,18 +4931,14 @@ def _envoltoria(e: EntradaBase) -> ResultadoBase:
 def base_mais_leve(e: EntradaBase) -> ResultadoBase | None:
     """A base que atende com a placa mais leve, trocando o chumbador e a espessura (comercial).
 
-    O resto fica como está (perfil, tipo, número de chumbadores, a₁/a₂ informados, concreto,
-    esforços e dispositivo de cortante). None quando nenhuma combinação atende — então o que
-    reprova não depende da placa nem do chumbador (por exemplo a cortante ou o concreto). O N_Rd
-    do fabricante de um pós-instalado vale só para o diâmetro informado: então só a espessura muda.
-
-    Por fórmula, troca entre os diâmetros comerciais da mesma família (o digitado fica) e não olha o
-    cone de concreto, que depende do bloco, do embutimento e da armadura, não do diâmetro. A solda
-    do pilar na placa também fica de fora da busca: ela depende do perfil e dos esforços, e trocar
-    a placa ou o chumbador não a resolve (a tela avisa quando ela reprova).
+    Recalcula a ligação completa para cada candidato. Dados de produto valem
+    somente para a barra qualificada. A primeira espessura que atende para um
+    mesmo diâmetro minimiza a massa daquela placa.
     """
     melhor: ResultadoBase | None = None
-    fixo = e.ancoragem in POS_INSTALADOS and e.n_rd_fabricante_kN > 0
+    fixo = e.ancoragem in POS_INSTALADOS and bool(
+        e.n_rd_fabricante_kN or e.sistema_ancoragem or e.tau_cr_MPa or e.tau_uncr_MPa
+    )
     if fixo or (e.por_formula and e.chumbador == CHUMBADOR_LIVRE):  # o diâmetro digitado fica
         candidatos = [e]
     elif e.por_formula:  # os comerciais da mesma família, com o furo pela regra
@@ -4274,8 +4951,8 @@ def base_mais_leve(e: EntradaBase) -> ResultadoBase | None:
             try:
                 r = calcular(replace(candidato, t_placa_mm=t))
             except BaseInvalida:
-                break
-            if not (passa_fora_o_cone(r) if e.por_formula else passa_fora_a_solda_do_pilar(r)):
+                continue
+            if r.status != "OK":
                 continue
             if melhor is None or r.massa_da_placa_kg < melhor.massa_da_placa_kg - 1e-9:
                 melhor = r
@@ -4297,6 +4974,8 @@ def categoria_da_trava(v: Verificacao, grupo: str) -> str:
     nome = v.nome
     if grupo == GRUPO_SOLDAS or da_solda_do_pilar(v):
         return TRAVA_SOLDA
+    if nome == LINHA_FLEXAO_NA_ARGAMASSA:
+        return TRAVA_CHUMBADOR
     if grupo == GRUPO_CORTANTE:
         return TRAVA_CORTANTE
     if nome.startswith(("Placa de base", "Equilíbrio")):
@@ -4347,11 +5026,16 @@ def destaque(r: ResultadoBase) -> str:
             f"envoltória de {len(r.casos)} combinações (governa «{r.combinacao_governante}»: "
             f"{esforcos})"
         )
+    espessura = (
+        f"t_p,min = {_n(r.t_p_min, 2)} mm"
+        if r.equilibrio_valido
+        else "espessura indeterminada por falta de equilíbrio"
+    )
     solda = f", filete do pilar d_w = {_n(r.perna_do_pilar, 0)} mm" if r.perna_do_pilar else ""
     return (
         f"Base {tipo} do {e.perfil}: placa {_n(g.lx, 0)} × {_n(g.ly, 0)} × "
         f"{_n(e.t_placa_mm, 1)} mm ({e.aco_placa}), {e.n_chumbadores} chumbadores Ø {nome}"
-        f"{solda}; {esforcos} — caso {r.caso}, t_p,min = {_n(r.t_p_min, 2)} mm{gov}."
+        f"{solda}; {esforcos} — caso {r.caso}, {espessura}{gov}."
     )
 
 
@@ -4367,16 +5051,88 @@ def linhas_das_combinacoes(r: ResultadoBase) -> list[dict[str, Any]]:
                 "N_Sd (kN)": c.n_sd_kN,
                 "M_Sd (kN·m)": c.m_sd_kNm,
                 "M_Sd,y (kN·m)": c.m_sd_y_kNm,
-                "V_Sd (kN)": c.v_sd_kN,
+                "V_Sd (kN)": rc.entrada.v_sd_kN,
+                "Vx (kN)": c.vx_kN,
+                "Vy (kN)": c.vy_kN,
+                "Mz (kN·m)": c.mz_kNm,
+                "R_N (kN)": rc.residuos[0],
+                "R_M (kN·m)": rc.residuos[1],
+                "R_M,y (kN·m)": rc.residuos[2],
                 "Caso": rc.caso,
-                "Status": rc.status,
+                "Status": rc.situacao,
                 "Aproveitamento": numero_json(rc.aproveitamento_maximo, 4),
                 "Governa": gov.nome if gov is not None else "",
-                "t_p,min (mm)": round(rc.t_p_min, 2),
-                "F_t máx (kN)": round(rc.f_t_sd / 1e3, 1),
+                "t_p,min (mm)": round(rc.t_p_min, 2) if rc.equilibrio_valido else None,
+                "F_t máx (kN)": round(rc.f_t_sd / 1e3, 1) if rc.equilibrio_valido else None,
             }
         )
     return saida
+
+
+def _tabelas_das_combinacoes(r: ResultadoBase) -> list[dict[str, Any]]:
+    """Tabelas curtas do relatório PDF: esforços, equilíbrio e resultados por combinação."""
+    itens = r.casos
+    tabelas: list[dict[str, Any]] = []
+    especificacoes = (
+        (
+            "Esforços aplicados por combinação",
+            ["Combinação", "N_Sd (kN)", "M_Sd (kN·m)", "M_Sd,y (kN·m)", "V_Sd (kN)"],
+            lambda item: [
+                item.caso.nome,
+                _n(item.caso.n_sd_kN, 2),
+                _n(item.caso.m_sd_kNm, 2),
+                _n(item.caso.m_sd_y_kNm, 2),
+                _n(item.resultado.entrada.v_sd_kN, 2),
+            ],
+        ),
+        (
+            "Componentes e torção por combinação",
+            ["Combinação", "Vx (kN)", "Vy (kN)", "Mz (kN·m)"],
+            lambda item: [
+                item.caso.nome,
+                "—" if item.caso.vx_kN is None else _n(item.caso.vx_kN, 2),
+                "—" if item.caso.vy_kN is None else _n(item.caso.vy_kN, 2),
+                _n(item.caso.mz_kNm, 2),
+            ],
+        ),
+        (
+            "Resíduos do equilíbrio por combinação",
+            ["Combinação", "R_N (kN)", "R_M (kN·m)", "R_M,y (kN·m)"],
+            lambda item: [item.caso.nome, *(_n(x, 7) for x in item.resultado.residuos)],
+        ),
+        (
+            "Verificação por combinação",
+            ["Combinação", "Caso", "Situação", "Aproveitamento", "Verificação governante"],
+            lambda item: [
+                item.caso.nome,
+                item.resultado.caso,
+                item.resultado.situacao,
+                f"{100 * item.resultado.aproveitamento_maximo:.1f} %",
+                item.resultado.governante.nome if item.resultado.governante else "—",
+            ],
+        ),
+        (
+            "Espessura e tração por combinação",
+            ["Combinação", "t_p,min (mm)", "F_t máx (kN)"],
+            lambda item: [
+                item.caso.nome,
+                _n(item.resultado.t_p_min, 2)
+                if item.resultado.equilibrio_valido
+                else "Indeterminada",
+                _n(item.resultado.f_t_sd / 1e3, 2) if item.resultado.equilibrio_valido else "—",
+            ],
+        ),
+    )
+    for legenda, cabecalhos, linha in especificacoes:
+        tabelas.append(
+            {
+                "legenda": legenda,
+                "cabecalhos": cabecalhos,
+                "linhas": [linha(item) for item in itens],
+                "fonte": 7.2,
+            }
+        )
+    return tabelas
 
 
 def entrada_de_dicionario(dados: Mapping[str, Any]) -> EntradaBase:
@@ -4397,6 +5153,19 @@ def registro_base(
     geral = r.status
     texto = destaque(r)
     entradas: dict[str, Any] = {
+        "finalidade": r.situacao if r.situacao == "Pré-dimensionado" else e.modo_bloco,
+        "τ_cr_MPa": e.tau_cr_MPa or None,
+        "τ_uncr_MPa": e.tau_uncr_MPa or None,
+        "tração_sustentada_por_barra_kN": e.n_sustentada_kN,
+        "graute_resistência_de_cálculo_MPa": e.graute_rd_MPa or None,
+        "deslocamento_do_centro_da_placa_mm": f"({_n(e.desloc_x_mm)}, {_n(e.desloc_y_mm)})",
+        "sistema_de_ancoragem": e.sistema_ancoragem or None,
+        "categoria_da_ancoragem": e.categoria_aci or None,
+        "aco_ductil": e.aco_ductil,
+        "armadura_suplementar": e.armadura_suplementar,
+        "Vx_kN": e.vx_kN,
+        "Vy_kN": e.vy_kN,
+        "Mz_kNm": e.mz_kNm,
         "perfil": e.perfil,
         "tipo_de_base": TIPOS[e.tipo],
         "chumbadores": f"{e.n_chumbadores} × Ø {nome_do_chumbador(e)} ({e.aco_chumbador})"
@@ -4418,7 +5187,7 @@ def registro_base(
         "a2_mm": g.a2,
         "fck_MPa": e.fck_MPa,
         "razao_A2_A1": round(razao_de_areas(e, g.lx, g.ly), 3),
-        "bloco_mm": f"{_n(e.bloco_x_mm, 0)} × {_n(e.bloco_y_mm, 0)}"
+        "bloco_mm": f"{_n(e.bloco_x_mm, 0)} × {_n(e.bloco_y_mm, 0)} × {_n(e.bloco_z_mm, 0) if e.bloco_z_mm else 'altura pendente'}"
         if e.bloco_x_mm > 0 and e.bloco_y_mm > 0
         else None,
         "N_Sd_kN": e.n_sd_kN,
@@ -4451,13 +5220,15 @@ def registro_base(
     }
     entradas.update(dict(contexto or {}))
     entradas = {k: v for k, v in entradas.items() if v is not None}
-    alertas = [f"{v.nome}: {v.formula}" for v in r.verificacoes if v.status in ("NÃO OK", "ALERTA")]
+    alertas = [v.nome for v in r.verificacoes if v.status in ("NÃO OK", "ALERTA")]
     alertas.extend(r.avisos)
     return criar_registro_tecnico(
         modulo=MODULO_TITULO,
         modulo_id=MODULO_ID,
         titulo=f"Base de pilar {e.perfil} — placa {_n(g.lx, 0)} × {_n(g.ly, 0)} × {_n(e.t_placa_mm, 1)} mm",  # fmt: skip
-        status=STATUS_REGISTRO.get(geral, "Pendente"),
+        status=r.situacao
+        if r.situacao in ("Pré-dimensionado", "Inconclusivo")
+        else STATUS_REGISTRO.get(geral, "Pendente"),
         resumo=texto,
         entradas=entradas,
         resultados={
@@ -4476,6 +5247,7 @@ def registro_base(
             "detalhamento": [list(par) for par in r.detalhamento],
             "simbolos": [list(par) for par in simbolos_usados(r)],
             **({"combinacoes": linhas_das_combinacoes(r)} if r.envoltoria else {}),
+            **({"tabelas_memorial": _tabelas_das_combinacoes(r)} if r.envoltoria else {}),
         },
         metodo=(
             f"Base de pilar de perfil {'U' if r.geometria.e_u else 'I ou H'} com placa retangular, chumbadores e argamassa "
@@ -4522,7 +5294,7 @@ def registro_base(
                 if e.m_sd_y_kNm or any(c.m_sd_y_kNm for c in e.casos)
                 else "momento só em torno do eixo de maior inércia do pilar."
             ),
-            f"Placa centrada no bloco; chumbadores de {e.aco_chumbador} com porca sextavada "
+            f"Centro da placa em ({_n(e.desloc_x_mm)}, {_n(e.desloc_y_mm)}) mm a partir do centro do bloco; chumbadores de {e.aco_chumbador} com porca sextavada "
             f"pesada; ancoragem: {ANCORAGENS[e.ancoragem].lower()}.",
             "Pressão de contato resistente pela 6.6.5: 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c.",
             "Espessura da placa: compressão pelo balanço sob a pressão (com a zona comprimida "
@@ -4540,7 +5312,7 @@ def registro_base(
                 if furo_justo(e, tab)
                 else []
             ),
-            "Solda do pilar na placa pelo método elástico (filetes como linhas, N, M, M_y e V), "
+            "Solda do pilar na placa pelo método elástico (trechos válidos, N, M, M_y, Vx, Vy e Mz), "
             "resistência do filete pela 6.2.5 sem o fator de direção; "
             + (
                 "compressão transmitida por contato na extremidade faceada do pilar."
@@ -4562,7 +5334,7 @@ def registro_base(
                 )
                 + "; só eles resistem (o atrito não se soma). Aço pela ACI 318-19 17.7.1 (0,80 "
                 "pela argamassa de assentamento), flexão do chumbador na argamassa com braço "
-                "e_n/2 + t_p/2, ruptura da borda (17.7.2), pryout (17.7.3) e interação 17.8."
+                "e_n + t_p/2 + Δ, ruptura da borda (17.7.2), pryout (17.7.3) e interação 17.8."
             ]
             if e.cortante in CORTANTE_PELOS_CHUMBADORES
             else []
@@ -4596,7 +5368,7 @@ def registro_base(
         + (
             [
                 "ACI 318-19, 17.7.1 (aço do chumbador à cortante, com argamassa de assentamento); "
-                "AISC Design Guide 1 (flexão do chumbador na argamassa)."
+                "EN 1992-4:2018, 6.2.2.3 (braço da cortante), e NBR 8800, 5.4.2.2 (seção resistente)."
             ]
             if e.cortante in CORTANTE_PELOS_CHUMBADORES
             else []

@@ -298,15 +298,14 @@ def _utilizacao(linhas: Sequence[Verificacao]) -> tuple[float, str]:
     return pior.aproveitamento or 0.0, pior.nome
 
 
-def _cargas_combinadas(
+def _componentes_combinadas(
     pilar: qf.PilarDoQuadro, preparo: em.PreparoDasCombinacoes
-) -> list[tuple[str, float, float, float, float]]:
-    """(combinação, N, M forte, M fraco, V) com os fatores ELU, compressão positiva."""
+) -> list[tuple[str, float, float, float, float, float, float]]:
+    """Componentes no sistema local original do modelo, combinadas com sinal."""
     por_caso = {c.caso: c for c in pilar.cargas}
-    forte_e_m2 = pilar.eixo_forte == em.EIXO_M2
     saida = []
     for nome, fatores in zip(preparo.nomes, preparo.fatores, strict=True):
-        n = v1 = v2 = m1 = m2 = 0.0
+        n = v1 = v2 = m1 = m2 = torcao = 0.0
         for caso, f in zip(preparo.importados, fatores, strict=True):
             c = por_caso.get(caso)
             if c is None or f == 0:
@@ -316,9 +315,22 @@ def _cargas_combinadas(
             v2 += f * c.v2
             m1 += f * c.m1
             m2 += f * c.m2
-        forte, fraco = (m2, m1) if forte_e_m2 else (m1, m2)
-        saida.append((nome, n, forte, fraco, math.hypot(v1, v2)))
+            torcao += f * c.t
+        saida.append((nome, n, v1, v2, m1, m2, torcao))
     return saida
+
+
+def _cargas_combinadas(pilar, preparo):
+    return [
+        (
+            nome,
+            n,
+            m2 if pilar.eixo_forte == em.EIXO_M2 else m1,
+            m1 if pilar.eixo_forte == em.EIXO_M2 else m2,
+            math.hypot(v1, v2),
+        )
+        for nome, n, v1, v2, m1, m2, _ in _componentes_combinadas(pilar, preparo)
+    ]
 
 
 def verificar_placas(
@@ -516,7 +528,43 @@ class CombinacoesDoPilar:
 
     pilar: str
     perfil: str
-    combinacoes: tuple[tuple[str, float, float, float, float], ...]  # (nome, N, M, M_y, V)
+    componentes: tuple[tuple[str, float, float, float, float, float, float], ...]
+    eixo_forte: str
+
+    @property
+    def combinacoes(self):
+        return tuple(
+            (
+                nome,
+                n,
+                m2 if self.eixo_forte == em.EIXO_M2 else m1,
+                m1 if self.eixo_forte == em.EIXO_M2 else m2,
+                math.hypot(v1, v2),
+            )
+            for nome, n, v1, v2, m1, m2, _ in self.componentes
+        )
+
+    def entradas_placa(self):
+        linhas = []
+        for nome, n, v1, v2, m1, m2, t in self.componentes:
+            # x acompanha a altura da seção. Rotação própria mantém o sentido de T.
+            # M e M_y do motor são primeiros momentos de pressão em x e y.
+            mx, my, vx, vy = (
+                (m2, -m1, v1, v2) if self.eixo_forte == em.EIXO_M2 else (m1, m2, -v2, v1)
+            )
+            linhas.append(
+                dict(
+                    nome=nome,
+                    n_sd_kN=n,
+                    m_sd_kNm=mx,
+                    m_sd_y_kNm=my,
+                    vx_kN=vx,
+                    vy_kN=vy,
+                    v_sd_kN=math.hypot(vx, vy),
+                    mz_kNm=t,
+                )
+            )
+        return linhas
 
 
 def combinacoes_dos_pilares(
@@ -536,7 +584,12 @@ def combinacoes_dos_pilares(
     if preparo is None:
         return []
     return [
-        CombinacoesDoPilar(pilar.pilar, pilar.perfil, tuple(_cargas_combinadas(pilar, preparo)))
+        CombinacoesDoPilar(
+            pilar.pilar,
+            pilar.perfil,
+            tuple(_componentes_combinadas(pilar, preparo)),
+            pilar.eixo_forte,
+        )
         for pilar in quadro.pilares
         if pilar.base is not None
     ]

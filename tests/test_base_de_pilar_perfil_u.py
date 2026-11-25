@@ -58,10 +58,10 @@ def test_balancos_do_u_como_meia_i_de_mesa_dupla():
     assert g.n0 == pytest.approx(math.sqrt(d * 2 * b_f) / 4)
     assert g.engaste_y == pytest.approx((-x_barra, 0.80 * b_f - x_barra))
     assert g.faixa_y == pytest.approx((-x_barra, b_f - x_barra))
-    # M_y < 0: o U espelhado, com as mesmas contas
+    # A orientação física do U é a mesma ao inverter o momento aplicado.
     h = bp.geometria(replace(BASE, m_sd_y_kNm=-1.0))
-    assert h.y_dorso == pytest.approx(x_barra) and h.n == pytest.approx(g.n)
-    assert h.engaste_y == pytest.approx((-(0.80 * b_f - x_barra), x_barra))
+    assert h.y_dorso == pytest.approx(-x_barra) and h.n == pytest.approx(g.n)
+    assert h.engaste_y == pytest.approx(g.engaste_y)
 
 
 def test_compressao_pura_pela_formula_com_o_maior_balanco():
@@ -95,14 +95,14 @@ def test_todos_os_casos_rodam_com_o_u(n, m, m_y):
 def test_sinal_de_m_y_vira_o_u_e_a_solda_segue_a_conta(m_y):
     """M_y > 0 comprime as pontas das mesas e M_y < 0 o dorso: situações diferentes. Em cada uma, o
     U fica com as mesas abertas para o lado comprimido (y > 0) e a solda bate com a conta à mão."""
-    r = bp.calcular(replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=m_y))
+    r = bp.calcular(replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=m_y, vy_kN=5))
     g = r.geometria
-    assert (g.y_dorso < 0) == (m_y > 0)
+    assert g.y_dorso < 0
     trechos = bs.contorno_do_pilar(
         g.d, g.b_f, g.t_w, g.t_f, mesas_por_dentro=False, alma=True, y_dorso=g.y_dorso
     )
     p = bs.propriedades(trechos)
-    n, m, my = 50e3, 3e6, abs(m_y) * 1e6
+    n, m, my = 50e3, 3e6, m_y * 1e6
     pior = max(
         math.hypot(
             -n / p.comprimento - m * x / p.i_x - (my - n * p.y_c) * (y - p.y_c) / p.i_y,
@@ -211,7 +211,7 @@ def _linha(r: bp.ResultadoBase, nome: str):
 @pytest.mark.parametrize(("por_dentro", "alma"), [(True, True), (False, False), (False, True)])
 def test_calculo_da_base_usa_o_contorno_do_u_na_solda(por_dentro, alma):
     """A solda pela base inteira (não só a função isolada): contorno do U e conta à mão no pior ponto."""
-    e = replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=1.0, v_sd_kN=10, perna_pilar_mm=6,
+    e = replace(BASE, n_sd_kN=50, m_sd_kNm=3, m_sd_y_kNm=1.0, vy_kN=10, perna_pilar_mm=6,
                 solda_mesas_por_dentro=por_dentro, solda_alma=alma)  # fmt: skip
     r = bp.calcular(e)
     g = r.geometria

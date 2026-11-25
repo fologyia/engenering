@@ -62,7 +62,7 @@ def test_pagina_padrao_tem_ajuda_em_tudo_e_os_numeros_do_nucleo(banco_isolado):
     t = abrir()
     r = bp.calcular(bp.EntradaBase())
     metricas = _metricas(t)
-    assert metricas["Status"] == "OK"
+    assert metricas["Status"] == "Pré-dimensionado"
     assert metricas["Caso"] == "C1"
     assert metricas["Aproveitamento"] == f"{100 * r.aproveitamento_maximo:.0f} %"
     assert metricas["t_p,min (mm)"] == f"{r.t_p_min:.2f}".replace(".", ",")
@@ -103,14 +103,37 @@ def test_guarda_chuva_tracionado_mostra_o_arrancamento(banco_isolado):
 def test_quimico_com_a_resistencia_do_fabricante(banco_isolado):
     t = abrir(pb_m_sd=150.0, pb_n=6, pb_t=40.0, pb_ancoragem=bp.ANCORAGEM_QUIMICO)
     assert _metricas(t)["Status"] == "NÃO OK"  # cone sem armadura e sem o N_Rd do fabricante
-    t.number_input(key="pb_nrd_fab").set_value(150.0).run()
+    chave_nrd = next(w.key for w in t.number_input if w.key.startswith("pb_nrd_fab_"))
+    t.number_input(key=chave_nrd).set_value(150.0).run()
     t.toggle(key="pb_armadura").set_value(True).run()
     assert not t.exception
-    # o que ainda reprova é só a solda do pilar: M = 150 kN·m é quase o momento de plastificação
-    # do W 250 x 32,7 (a ancoragem, assunto deste teste, passou)
-    nao_passou = next(e.value for e in t.error if e.value.startswith("Não passou:"))
-    itens = nao_passou.removeprefix("Não passou: ").rstrip(".").split("; ")
-    assert itens and all(item.startswith("Solda do pilar na placa") for item in itens)
+    # A armadura de ancoragem dispensa o cone. A resina continua inconclusiva até informar
+    # categoria, sistema qualificado, tensões de aderência e demanda sustentada da obra.
+    assert (
+        next(
+            v
+            for v in bp.calcular(
+                replace(
+                    bp.EntradaBase(),
+                    n_chumbadores=6,
+                    m_sd_kNm=150,
+                    t_placa_mm=40,
+                    ancoragem=bp.ANCORAGEM_QUIMICO,
+                    n_rd_fabricante_kN=150,
+                    armadura_de_ancoragem=True,
+                )
+            ).verificacoes
+            if v.nome == "Tração sustentada da resina"
+        ).status
+        == "ALERTA"
+    )
+    pendencias = " ".join(w.value for w in t.info)
+    assert "Qualificação da ancoragem pós-instalada" in pendencias
+    assert "Tração sustentada da resina" in pendencias
+    assert any(
+        "Cone de concreto: armadura" in c.value or c.value.startswith("Não passou:")
+        for c in (*t.info, *t.error)
+    )
 
 
 def test_disposicoes_novas_e_momento_no_eixo_fraco(banco_isolado):
@@ -152,18 +175,18 @@ def test_tracao_sem_dispositivo_avisa_que_nao_ha_atrito(banco_isolado):
 
 
 def test_adotar_a_base_mais_leve_e_registrar(banco_com_projeto):
-    t = abrir(pb_n_sd=100.0, pb_m_sd=30.0, pb_v_sd=60.0, pb_cortante=bp.CORTANTE_ARRUELAS)
+    t = abrir(pb_n_sd=100.0, pb_m_sd=10.0, pb_v_sd=10.0, pb_t=6.3, pb_cortante=bp.CORTANTE_ARRUELAS)
     assert _metricas(t)["Status"] == "NÃO OK"
     t.button(key="pb_adotar").click().run()
     assert not t.exception
-    assert _metricas(t)["Status"] == "OK"
+    assert _metricas(t)["Status"] == "Pré-dimensionado"
     assert t.number_input(key="pb_t").value in bp.ESPESSURAS_COMERCIAIS
     t.button(key="registrar_placa_de_base").click().run()
     assert not t.exception
     registros = [
         r for r in obter_projeto_ativo()["registros_tecnicos"] if r["modulo_id"] == bp.MODULO_ID
     ]
-    assert len(registros) == 1 and registros[0]["status"] == "Atende"
+    assert len(registros) == 1 and registros[0]["status"] == "Pré-dimensionado"
     assert "figura_base_de_pilar" in registros[0]["resultados"]
 
 
@@ -198,7 +221,14 @@ def test_tipo_2_tem_o_a1_da_direcao_lx_da_nota_f(banco_isolado):
 
 
 def test_modo_por_formula_mostra_as_medidas_e_adota_o_menor_diametro(banco_isolado):
-    t = abrir(pb_modo_ch="formula", pb_chumbador_f="M12", pb_n_sd=-300.0, pb_m_sd=20.0)
+    t = abrir(
+        pb_modo_ch="formula",
+        pb_chumbador_f="M12",
+        pb_n_sd=-300.0,
+        pb_m_sd=20.0,
+        pb_armadura=True,
+        pb_v_sd=0.0,
+    )
     sem_ajuda = {
         (tipo, _rotulo(e)) for tipo in TIPOS_COM_AJUDA for e in t.get(tipo) if not _ajuda(e)
     } - {("text_input", "Nome do novo projeto")}
@@ -209,7 +239,14 @@ def test_modo_por_formula_mostra_as_medidas_e_adota_o_menor_diametro(banco_isola
     textos = " ".join(m.value for m in t.markdown)
     assert "Menor diâmetro comercial que atende" in textos and "série métrica (ISO)" in textos
     assert "Conferência com a Tabela 18" in textos
-    entrada = bp.EntradaBase(por_formula=True, chumbador="M12", n_sd_kN=-300.0, m_sd_kNm=20.0)
+    entrada = bp.EntradaBase(
+        por_formula=True,
+        chumbador="M12",
+        n_sd_kN=-300.0,
+        m_sd_kNm=20.0,
+        armadura_de_ancoragem=True,
+        v_sd_kN=0.0,
+    )
     menor = bp.menor_diametro_que_atende(entrada)
     assert menor is not None
     t.button(key="pb_adotar_d").click().run()
@@ -263,7 +300,7 @@ def test_secao_de_soldas_e_a_compressao_por_contato(banco_isolado):
     t.toggle(key="pb_lug_cjp").set_value(True).run()
     assert not t.exception and not [w for w in t.number_input if w.key == "pb_perna_lug"]
     t = abrir(pb_m_sd=150.0, pb_n=6, pb_t=40.0)
-    assert any("solda do pilar na placa não passa" in e.value for e in t.error)
+    assert any("Solda do pilar na placa" in e.value for e in t.error)
     t.number_input(key="pb_perna_pilar").set_value(6.0).run()
     t.toggle(key="pb_contato").set_value(True).run()
     assert not t.exception

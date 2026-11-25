@@ -118,36 +118,22 @@ def _chumbador(
 # ============================================================================================
 def _pressao_no_corte(r: bp.ResultadoBase) -> tuple[Any, float, str]:
     """(σ(x) em MPa, σ máxima, como ela se distribui) no corte pelo plano do momento."""
-    e, g = r.entrada, r.geometria
-    if e.distribuicao == bp.DISTRIBUICAO_ELASTICA:
-        tab = r.linha
-        dist = bp.distribuicao_elastica(
-            g, e.n_sd_kN * 1e3, abs(e.m_sd_kNm) * 1e6, abs(e.m_sd_y_kNm) * 1e6, e.fck_MPa,
-            bp.area_resistente(e, tab),
-        )  # fmt: skip
-        w0, a_x, a_y = dist.plano
-        y_borda = g.ly / 2 if a_y > 0 else (-g.ly / 2 if a_y < 0 else 0.0)
+    corte = bp.corte_de_pressao(r)
+    if corte is None:
+        return (lambda x: 0.0), 0.0, "sem contato"
+    a, b, qa, qb, y = corte
 
-        def sigma(x: float) -> float:
-            return max(w0 + a_x * x + a_y * y_borda, 0.0)
+    def pressao(x):
+        if x < a or x > b or a == b:
+            return 0.0
+        return qa + (qb - qa) * (x - a) / (b - a)
 
-        maximo = max(sigma(-g.lx / 2), sigma(g.lx / 2))
-        onde = "linear elástica" + (", na borda mais comprimida" if a_y else "")
-        return sigma, maximo, onde
-    if r.caso == "C1" and r.sigma_c_sd:
-        valor = r.sigma_c_sd
-        return (lambda x: valor), valor, "uniforme em toda a placa"
-    if r.caso in ("C2", "C3", "T3") and r.l_c:
-        valor = r.sigma_c_sd if r.caso == "C2" and r.sigma_c_sd else r.sigma_c_rd
-        inicio = g.lx / 2 - r.l_c
-        oblique = " (na borda mais comprimida)" if e.m_sd_y_kNm else ""
-        nome = "σ_c,Sd" if r.caso == "C2" else "σ_c,Rd"
-        return (
-            (lambda x: valor if x >= inicio - 1e-9 else 0.0),
-            valor,
-            f"bloco uniforme {nome}{oblique}",
-        )
-    return (lambda x: 0.0), 0.0, ""
+    tipo = (
+        "linear elástica"
+        if r.entrada.distribuicao == bp.DISTRIBUICAO_ELASTICA
+        else "bloco uniforme"
+    )
+    return pressao, max(qa, qb), f"{tipo}, corte y = {_n(y, 2)} mm"
 
 
 def figura_das_pressoes(r: bp.ResultadoBase, combinacao: str = "") -> ImagemDiagrama | None:
@@ -189,6 +175,9 @@ def figura_das_pressoes(r: bp.ResultadoBase, combinacao: str = "") -> ImagemDiag
     # pressão de contato
     if sigma_max > 0:
         amostras = [(-lx / 2 + lx * k / 200) for k in range(201)]
+        corte = bp.corte_de_pressao(r)
+        assert corte is not None
+        amostras = sorted(set(amostras + list(corte[:2])))
         valores = [sigma(x) for x in amostras]
         borda = [
             tela(x, t_desenho + profundidade * v / sigma_max)
@@ -211,11 +200,8 @@ def figura_das_pressoes(r: bp.ResultadoBase, combinacao: str = "") -> ImagemDiag
             _cota(d, tela(inicio, y_cota), tela(fim, y_cota), (0, 1), f"trecho comprimido {_n(fim - inicio, 0)} mm", 0)  # fmt: skip
         # a resultante de compressão: C = N + ΣF
         compressao = e.n_sd_kN * 1e3 + sum(r.forcas_nos_chumbadores)
-        if compressao > 0:
-            pesos = sum(valores)
-            x_c = (
-                sum(x * v for x, v in zip(amostras, valores, strict=True)) / pesos if pesos else 0.0
-            )
+        if compressao > 0 and r.centro_pressao is not None:
+            x_c = r.centro_pressao[0]
             ponta = tela(x_c, t_desenho)
             base = tela(x_c, t_desenho + profundidade * 0.95)
             _seta(d, base, ponta)
@@ -244,20 +230,17 @@ def figura_das_pressoes(r: bp.ResultadoBase, combinacao: str = "") -> ImagemDiag
             _seta(d, a, b)  # compressão: N empurra o pilar
         else:
             _seta(d, b, a)
-    esforcos = f"N = {_n(n_kn, 1)} kN" + (
-        f";  M = {_n(abs(e.m_sd_kNm), 1)} kN·m" if e.m_sd_kNm else ""
-    )
+    esforcos = f"N = {_n(n_kn, 1)} kN" + (f";  M = {_n(e.m_sd_kNm, 1)} kN·m" if e.m_sd_kNm else "")
     if e.m_sd_y_kNm:
-        esforcos += f";  M_y = {_n(abs(e.m_sd_y_kNm), 1)} kN·m"
+        esforcos += f";  M_y = {_n(e.m_sd_y_kNm, 1)} kN·m"
     _texto(d, dg.mais(topo, (1, -1), 40 * ESC), esforcos, "lm")
 
     titulo = "Pressão sob a placa e forças nos chumbadores" + (
         f" — {combinacao}" if combinacao else ""
     )
     legenda = (
-        f"Corte pelo plano do momento (caso {r.caso}): pressão de contato {onde} — o M comprime o "
-        "lado direito —, a resultante de compressão C = N + ΣF_t e a força de cada chumbador "
-        "tracionado (a maior da linha)."
+        f"Pressão de contato ({onde}, caso {r.caso}). A seta C representa a resultante da área "
+        "inteira, projetada no corte. F_t indica a maior tração na fila de chumbadores."
     )
     return figura_final(imagem, titulo, legenda)
 
@@ -319,7 +302,12 @@ def figura_da_tracao_a_45(r: bp.ResultadoBase, combinacao: str = "") -> ImagemDi
         f"b_eff = {_n(governa.b_eff, 1)} mm",
         8 * ESC,
     )
-    t = math.sqrt(4 * governa.f * governa.m / (governa.b_eff * fy / 1.10))
+    t = math.sqrt(
+        4
+        * governa.f
+        * governa.m
+        / (governa.b_eff * fy / bp.sd.coeficientes(r.entrada.combinacao).a1)
+    )
     titulo = "Tração na placa: balanço até a face da mesa e largura a 45°" + (
         f" — {combinacao}" if combinacao else ""
     )
@@ -343,22 +331,20 @@ def figura_do_cone(r: bp.ResultadoBase, combinacao: str = "") -> ImagemDiagrama 
         return None
     bx, by, h = area.bx, area.by, area.h_ef
     margem = 0.16 * max(bx, by)
-    pontos = [(-bx / 2 - margem, -by / 2 - margem), (bx / 2 + margem, by / 2 + margem)]
+    xmin, xmax, ymin, ymax = bp.limites_bloco(e, bx, by)
+    pontos = [(xmin - margem, -ymax - margem), (xmax + margem, -ymin + margem)]
     imagem = Image.new("RGB", (_LARGURA_PX * ESC, _ALTURA_PX * ESC), _FUNDO)
     d = ImageDraw.Draw(imagem)
     tela = dg.Tela(pontos, (30, 20, _LARGURA_PX - 30, _ALTURA_PX - 20))
-    d.polygon(_retangulo(tela, -bx / 2, -by / 2, bx / 2, by / 2), fill=_CONCRETO, outline=_TRACO, width=2 * ESC)  # fmt: skip
+    d.polygon(_retangulo(tela,xmin,ymin,xmax,ymax), fill=_CONCRETO, outline=_TRACO, width=2 * ESC)  # fmt: skip
     x0, x1, y0, y1 = area.retangulo
-    a_nc = _retangulo(tela, x0, y0, x1, y1)
-    d.polygon(a_nc, fill=_FUNDO)
-    _hachurar(imagem, a_nc, passo=9 * ESC)
-    d.polygon(a_nc, outline=_TRACO, width=3 * ESC)
     for x, y, _ in area.tracionados:  # o quadrado 3·h_ef de cada um, cortado pelo bloco
         canto = (
-            max(x - 1.5 * h, -bx / 2), max(y - 1.5 * h, -by / 2),
-            min(x + 1.5 * h, bx / 2), min(y + 1.5 * h, by / 2),
+            max(x - 1.5 * h, xmin), max(y - 1.5 * h, ymin),
+            min(x + 1.5 * h, xmax), min(y + 1.5 * h, ymax),
         )  # fmt: skip
         quadrado = _retangulo(tela, *canto)
+        _hachurar(imagem, quadrado, passo=9 * ESC)
         for k in range(4):
             dg.tracejado(d, quadrado[k], quadrado[(k + 1) % 4], _COTA, largura=ESC)
     d.polygon(_retangulo(tela, -g.lx / 2, -g.ly / 2, g.lx / 2, g.ly / 2), outline=_COTA, width=ESC)
@@ -371,10 +357,10 @@ def figura_do_cone(r: bp.ResultadoBase, combinacao: str = "") -> ImagemDiagrama 
     c_menos_x, c_mais_x, c_menos_y, c_mais_y = area.bordas
     y_meio = (min(ys) + max(ys)) / 2
     x_meio = (min(xs) + max(xs)) / 2
-    _cota(d, tela(-bx / 2, -y_meio), tela(min(xs), -y_meio), (0, -1), f"c = {_n(c_menos_x, 0)}", 0)
-    _cota(d, tela(max(xs), -y_meio), tela(bx / 2, -y_meio), (0, -1), f"c = {_n(c_mais_x, 0)}", 0)
-    _cota(d, tela(x_meio, -by / 2), tela(x_meio, -min(ys)), (1, 0), f"c = {_n(c_menos_y, 0)}", 0)
-    _cota(d, tela(x_meio, -max(ys)), tela(x_meio, by / 2), (1, 0), f"c = {_n(c_mais_y, 0)}", 0)
+    _cota(d, tela(xmin, -y_meio), tela(min(xs), -y_meio), (0, -1), f"c = {_n(c_menos_x, 0)}", 0)
+    _cota(d, tela(max(xs), -y_meio), tela(xmax, -y_meio), (0, -1), f"c = {_n(c_mais_x, 0)}", 0)
+    _cota(d, tela(x_meio, -ymin), tela(x_meio, -min(ys)), (1, 0), f"c = {_n(c_menos_y, 0)}", 0)
+    _cota(d, tela(x_meio, -max(ys)), tela(x_meio, -ymax), (1, 0), f"c = {_n(c_mais_y, 0)}", 0)
     _texto(
         d,
         tela(x1, -y1),
@@ -432,7 +418,7 @@ def figuras_das_contas(r: bp.ResultadoBase) -> dict[str, list[ImagemDiagrama]]:
         "Placa de base: espessura t_p ≥ t_p,min",
     )
     nome = next((n for n in nomes_da_pressao if n in por_nome), "")
-    if nome:
+    if nome and resultado_de(nome)[0].equilibrio_valido:
         anexar(nome, figura_das_pressoes(*resultado_de(nome)))
     placa = "Placa de base: espessura t_p ≥ t_p,min"
     if placa in por_nome:
@@ -442,8 +428,13 @@ def figuras_das_contas(r: bp.ResultadoBase) -> dict[str, list[ImagemDiagrama]]:
             if r.casos:
                 item = max(r.casos, key=lambda i: i.resultado.f_t_sd)
                 resultado, combinacao = item.resultado, item.caso.nome
-        anexar(placa, figura_da_tracao_a_45(resultado, combinacao))
+        if resultado.equilibrio_valido:
+            anexar(placa, figura_da_tracao_a_45(resultado, combinacao))
     for nome_cone in (bp.LINHA_DO_CONE, "Cone de concreto: armadura de ancoragem no bloco"):
-        if nome_cone in por_nome:
+        if (
+            nome_cone in por_nome
+            and resultado_de(nome_cone)[0].equilibrio_valido
+            and por_nome[nome_cone].status != "ALERTA"
+        ):
             anexar(nome_cone, figura_do_cone(*resultado_de(nome_cone)))
     return saida

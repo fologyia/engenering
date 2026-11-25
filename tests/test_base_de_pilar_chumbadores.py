@@ -71,7 +71,11 @@ def test_rotulada_fora_da_tabela_18_pede_a_ancoragem_no_concreto():
     """Nota a: a Tabela 18 vale de 4 a 8 chumbadores; com 2, o embutimento dela não basta."""
     r = bp.calcular(ROTULADA)
     linha = _linha(r, "Tabela 18 com 2 chumbadores")
-    assert linha.status == "ALERTA" and r.status == "ALERTA" and "nota a" in linha.referencia
+    assert (
+        linha.status == "INFO"
+        and bp.ancoragem_verificada(r.entrada)
+        and "nota a" in linha.referencia
+    )
     verificada = bp.calcular(replace(ROTULADA, verificar_concreto=True))
     assert _linha(verificada, "Tabela 18 com 2 chumbadores").status == "INFO"
     for padrao in (PADRAO, replace(PADRAO, tipo=bp.TIPO_INTERNOS_E_EXTERNOS, n_chumbadores=8)):
@@ -172,9 +176,9 @@ def test_aco_mais_resistente_reduz_d_b_min_e_alerta_a_ancoragem():
     d36, d55 = _linha(a36, "Chumbador: diâmetro").solicitante, _linha(gr55, "Chumbador: diâmetro").solicitante  # fmt: skip
     assert d55 == pytest.approx(d36 * math.sqrt(400 / 517))
     assert (
-        _sem_a_solda(gr55) == "ALERTA"
+        _linha(gr55, "Cone de concreto").status == "NÃO OK"
         and bp.solda_do_pilar_reprova(gr55)
-        and _linha(gr55, "Aço do chumbador").status == "ALERTA"
+        and _linha(gr55, "Aço do chumbador").status == "INFO"
     )
     assert not _tem(
         bp.calcular(replace(C3_6, aco_chumbador="ASTM F1554 Gr 36")), "Aço do chumbador"
@@ -224,7 +228,8 @@ def test_armadura_de_ancoragem_tira_o_cone_da_conta():
     r = bp.calcular(replace(C3_6, verificar_concreto=True, armadura_de_ancoragem=True))
     linha = _linha(r, "Cone de concreto")
     assert linha.status == "INFO" and "armadura" in linha.formula
-    assert _sem_a_solda(r) == "OK"
+    assert _sem_a_solda(r) == "NÃO OK"
+    assert _linha(r, "Arruela: flexão sobre o furo da placa").status == "NÃO OK"
 
 
 def test_bloco_maior_passa_no_cone():
@@ -258,9 +263,16 @@ def test_guarda_chuva_arranca_pelo_gancho():
 @pytest.mark.parametrize("tipo", [bp.ANCORAGEM_QUIMICO, bp.ANCORAGEM_EXPANSAO])
 def test_pos_instalado_usa_o_fabricante_e_o_cone_com_k_7(tipo):
     sem = bp.calcular(replace(C3_6, ancoragem=tipo))
-    assert _linha(sem, "Pós-instalado").status == "ALERTA"
+    assert (
+        _linha(
+            sem, "Aderência da resina" if tipo == bp.ANCORAGEM_QUIMICO else "Pós-instalado"
+        ).status
+        == "ALERTA"
+    )
     com = bp.calcular(replace(C3_6, ancoragem=tipo, n_rd_fabricante_kN=120))
-    linha = _linha(com, "Pós-instalado")
+    linha = _linha(
+        com, "Limite individual adicional" if tipo == bp.ANCORAGEM_QUIMICO else "Pós-instalado"
+    )
     assert linha.status == "OK" and linha.resistente == 120
     assert "7·√f_c" in _linha(com, "Cone de concreto").formula
     assert "h_ef = " in _linha(com, "Cone de concreto").formula
@@ -270,22 +282,36 @@ def test_pos_instalado_usa_o_fabricante_e_o_cone_com_k_7(tipo):
 def test_base_mais_leve_nao_troca_o_diametro_do_pos_instalado_com_n_rd():
     """O N_Rd do fabricante é do diâmetro informado: trocar o chumbador o invalidaria."""
     e = replace(
-        C3_6, ancoragem=bp.ANCORAGEM_QUIMICO, n_rd_fabricante_kN=150, armadura_de_ancoragem=True
+        PADRAO,
+        ancoragem=bp.ANCORAGEM_QUIMICO,
+        n_rd_fabricante_kN=150,
+        armadura_de_ancoragem=True,
+        sistema_ancoragem="Ficha de teste",
+        categoria_aci=1,
+        h_ef_mm=250,
+        tau_cr_MPa=6,
+        tau_uncr_MPa=9,
+        n_sustentada_kN=0,
+        s_min_produto_mm=50,
+        c_min_produto_mm=60,
+        h_min_produto_mm=300,
     )
     leve = bp.base_mais_leve(e)
     assert leve is not None and leve.entrada.chumbador == e.chumbador
-    sem_n_rd = bp.base_mais_leve(replace(C3_6, verificar_concreto=True, armadura_de_ancoragem=True))
+    sem_n_rd = bp.base_mais_leve(
+        replace(PADRAO, verificar_concreto=True, armadura_de_ancoragem=True)
+    )
     assert sem_n_rd is not None  # o reto com porca pode trocar de diâmetro
 
 
 def test_sem_tracao_a_ancoragem_nao_se_aplica():
     r = bp.calcular(replace(PADRAO, ancoragem=bp.ANCORAGEM_EXPANSAO))
-    assert r.status == "OK" and _linha(r, "Ancoragem no concreto").status == "INFO"
+    assert r.situacao == "Inconclusivo" and _linha(r, "Ancoragem no concreto").status == "INFO"
 
 
 def test_momento_no_eixo_fraco_entra_pela_flexao_obliqua():
     r = bp.calcular(replace(PADRAO, m_sd_y_kNm=5))
-    assert r.status == "OK" and _linha(r, "Flexão oblíqua").status == "INFO"
+    assert r.situacao == "Inconclusivo" and _linha(r, "Flexão oblíqua").status == "INFO"
     assert r.zona_comprimida and any("Flexão oblíqua" in a for a in r.avisos)
     assert bp.registro_base(r)["entradas"]["M_Sd_y_kNm"] == 5
 
@@ -352,7 +378,7 @@ def test_desenho_mostra_cone_hachura_e_armadura_so_quando_existem():
     compressao = figura_da_base(bp.calcular(PADRAO)).png  # C1: sem hachura, sem cone
     assert _contar(cone, CONE, 12) > _contar(sem, CONE, 12) + 60  # linhas finas tracejadas
     assert _contar(armado, ARMADURA, 10) > _contar(cone, ARMADURA, 10) + 60
-    assert _contar(sem, HACHURA, 12) > _contar(compressao, HACHURA, 12) + 60
+    assert _contar(compressao, HACHURA, 12) > _contar(sem, HACHURA, 12) > 60  # C1: contato integral
 
 
 def test_desenho_usa_o_mesmo_bloco_da_verificacao_do_cone():

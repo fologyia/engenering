@@ -165,11 +165,12 @@ def test_diametro_que_cada_criterio_pede():
 
 
 def test_menor_diametro_comercial_que_atende_e_o_menor():
-    r = bp.menor_diametro_que_atende(TRACAO)
+    e = replace(TRACAO, v_sd_kN=0, armadura_de_ancoragem=True)
+    r = bp.menor_diametro_que_atende(e)
     assert r is not None and bp.chumbadores_passam(r)
     serie = [x.nome for x in bp.roscas_da_familia(bp.FAMILIA_METRICA)]
     anterior = serie[serie.index(r.entrada.chumbador) - 1]
-    assert not bp.chumbadores_passam(bp.calcular(replace(TRACAO, chumbador=anterior)))
+    assert not bp.chumbadores_passam(bp.calcular(replace(e, chumbador=anterior)))
     assert bp.menor_diametro_que_atende(bp.EntradaBase()) is None  # só no modo por fórmula
 
 
@@ -177,7 +178,7 @@ def test_tracao_alta_passa_do_maior_diametro_da_tabela_18():
     alta = replace(bp.EntradaBase(), n_sd_kN=-2000.0, v_sd_kN=0.0, chumbador='2"')
     tabela = bp.calcular(alta)
     assert linha(tabela, "Chumbador: diâmetro d_b ≥ d_b,min").status == "NÃO OK"
-    r = bp.menor_diametro_que_atende(replace(alta, por_formula=True))
+    r = bp.menor_diametro_que_atende(replace(alta, por_formula=True, armadura_de_ancoragem=True))
     assert r is not None and r.entrada.chumbador == '2 1/4"'
     assert linha(r, "Chumbador: diâmetro d_b ≥ d_b,min").status == "OK"
 
@@ -206,13 +207,16 @@ def test_entrada_invalida_por_formula():
 
 
 def test_base_mais_leve_fica_na_serie_e_o_digitado_fica():
-    leve = bp.base_mais_leve(replace(TRACAO, cortante=bp.CORTANTE_ARRUELAS, v_sd_kN=40.0))
+    leve = bp.base_mais_leve(
+        replace(TRACAO, n_sd_kN=100, m_sd_kNm=10, cortante=bp.CORTANTE_ARRUELAS, v_sd_kN=10.0)
+    )
     assert leve is not None and leve.entrada.chumbador in {r.nome for r in bp.roscas_da_familia(bp.FAMILIA_METRICA)}  # fmt: skip
     assert bp.passa_fora_o_cone(leve)
     livre = replace(
         TRACAO,
         chumbador=bp.CHUMBADOR_LIVRE,
         d_b_mm=27.0,
+        armadura_de_ancoragem=True,
         # sem cortante: com 200 kN de tração, o Ø 27 mm não leva também a flexão da cortante na
         # argamassa (ACI 318-19 17.7.1 e DG1) e a busca, que não troca o digitado, não acharia base
         cortante=bp.CORTANTE_ARRUELAS,

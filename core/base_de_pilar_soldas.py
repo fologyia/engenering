@@ -205,6 +205,30 @@ def _normal_no_ponto(
     return max(f_n, 0.0) if contato else abs(f_n)
 
 
+def pontos_do_grupo(
+    trechos, axial, momento, momento_y, cortante, contato, vx=None, vy=None, mz=0.0
+):
+    p = propriedades(trechos)
+    j = p.i_x + p.i_y
+    for t in trechos:
+        for x, y in ((t.x1, t.y1), (t.x2, t.y2)):
+            normal = _normal_no_ponto(p, axial, momento, momento_y, x, y, contato)
+            if vx is None and vy is None:
+                # V sem direção: limite superior sobre todas as orientações.
+                fv = (
+                    cortante / p.comprimento
+                    + (abs(mz) + abs(p.y_c) * cortante) * math.hypot(x, y - p.y_c) / j
+                )
+            else:
+                vx0, vy0 = vx or 0.0, vy or 0.0
+                torque = mz + p.y_c * vx0
+                fv = math.hypot(
+                    vx0 / p.comprimento - torque * (y - p.y_c) / j,
+                    vy0 / p.comprimento + torque * x / j,
+                )
+            yield PontoCritico(x, y, normal, fv, t.elemento)
+
+
 def ponto_critico(
     trechos: Sequence[Trecho],
     axial: float,
@@ -213,19 +237,14 @@ def ponto_critico(
     cortante: float,
     *,
     contato: bool,
+    vx=None,
+    vy=None,
+    mz=0.0,
 ) -> PontoCritico:
-    """O ponto do contorno com a maior força resultante por mm (forças em N e N·mm)."""
-    p = propriedades(trechos)
-    f_v = cortante / p.comprimento
-    pior: PontoCritico | None = None
-    for t in trechos:
-        for x, y in ((t.x1, t.y1), (t.x2, t.y2)):
-            usado = _normal_no_ponto(p, axial, momento, momento_y, x, y, contato)
-            ponto = PontoCritico(x, y, usado, f_v, t.elemento)
-            if pior is None or ponto.resultante > pior.resultante:
-                pior = ponto
-    assert pior is not None
-    return pior
+    return max(
+        pontos_do_grupo(trechos, axial, momento, momento_y, cortante, contato, vx, vy, mz),
+        key=lambda ponto: ponto.resultante,
+    )
 
 
 def _perna_automatica(passa: object, minima: float, maxima: float) -> float:
@@ -278,6 +297,10 @@ def solda_do_pilar(
     contato: bool,
     c: sd.Coeficientes,
     y_dorso: float | None = None,
+    vx: float | None = None,
+    vy: float | None = None,
+    mz: float = 0.0,
+    aco_placa: tuple[float, float] = (250.0, 400.0),
 ) -> SoldaDoPilar:
     """As verificações da solda de contorno do pilar na placa (forças em N e N·mm).
 
@@ -288,8 +311,6 @@ def solda_do_pilar(
     e_u = y_dorso is not None
     f_w = sd.ELETRODOS[eletrodo]
     fy, fu = aco_pilar
-    p = propriedades(trechos)
-    critico = ponto_critico(trechos, axial, momento, momento_y, cortante, contato=contato)
     minima = max(
         sd.perna_minima(min(t_f, t_placa)),
         sd.perna_minima(min(t_w, t_placa)) if alma or e_u else 0.0,  # no U, o dorso sempre
@@ -298,9 +319,37 @@ def solda_do_pilar(
     internos = [t for t in trechos if t.nome == "mesa, face interna"]
 
     def passa(perna: float) -> bool:
-        return critico.resultante <= _resistencia_por_mm(perna, f_w, c) + 1e-9
+        uteis = [t for t in trechos if t.comprimento + 1e-9 >= sd.comprimento_minimo(perna)]
+        if not uteis:
+            return False
+        ponto = ponto_critico(
+            uteis, axial, momento, momento_y, cortante, contato=contato, vx=vx, vy=vy, mz=mz
+        )
+        return ponto.resultante <= _resistencia_por_mm(perna, f_w, c) + 1e-9
 
     perna = perna_informada or _perna_automatica(passa, minima, maxima)
+    descartados = [t for t in trechos if t.comprimento + 1e-9 < sd.comprimento_minimo(perna)]
+    trechos = [t for t in trechos if t not in descartados]
+    if not trechos:
+        return SoldaDoPilar(
+            perna,
+            (
+                Verificacao(
+                    "Solda do pilar na placa: comprimento efetivo",
+                    None,
+                    None,
+                    "mm",
+                    _ref("6.2.6.2.3"),
+                    "Todos os segmentos ficam abaixo do mínimo.",
+                    status="NÃO OK",
+                ),
+            ),
+        )
+    p = propriedades(trechos)
+    pontos = list(
+        pontos_do_grupo(trechos, axial, momento, momento_y, cortante, contato, vx, vy, mz)
+    )
+    critico = max(pontos, key=lambda ponto: ponto.resultante)
     r_w = _resistencia_por_mm(perna, f_w, c)
     linhas: list[Verificacao] = []
     ref_w = _ref("6.2.5")
@@ -324,13 +373,13 @@ def solda_do_pilar(
                 else "f_n = −N/L − M·x/I_x − M_y·y/I_y = "
             )
             + f"{_n(critico.f_n / 1000, 3)} "
-            f"kN/mm em (x; y) = ({_n(critico.x, 0)}; {_n(critico.y, 0)}) mm, f_v = V/L = "
+            f"kN/mm em (x; y) = ({_n(critico.x, 0)}; {_n(critico.y, 0)}) mm. "
+            f"J_w = {_n(p.i_x + p.i_y)} mm³, y_c = {_n(p.y_c)} mm, M_z = {_n(mz / 1e6)} kN·m. "
+            "Cortante direto e torção em relação ao centro do grupo, f_v = "
             f"{_n(critico.f_v / 1000, 3)} kN/mm; L = {_n(p.comprimento, 0)} mm de filete "
-            f"({len(trechos)} trechos: "
-            + ("dorso da alma, mesas por fora" if e_u else "mesas por fora")
-            + (", mesas por dentro" if mesas_por_dentro else "")
-            + ((", face interna da alma" if e_u else ", os dois lados da alma") if alma else "")
-            + f"); F_w,Rd = 0,60·f_w·0,707·d_w/γ_w2 = 0,60 × {_n(f_w, 0)} × 0,707 × {_n(perna, 0)}"
+            f"({len(trechos)} trechos efetivos: {', '.join(dict.fromkeys(t.nome for t in trechos))}. {len(descartados)} excluídos por comprimento). "
+            f"A_w = {_n(0.707 * perna * p.comprimento, 1)} mm², I_x = {_n(p.i_x, 1)}, I_y = {_n(p.i_y, 1)} mm³. "
+            f"F_w,Rd = 0,60·f_w·0,707·d_w/γ_w2 = 0,60 × {_n(f_w, 0)} × 0,707 × {_n(perna, 0)}"
             f"/{_n(c.w2)}; {_texto_perna(perna_informada, perna)}{contato_txt}",
         )
     )
@@ -339,11 +388,6 @@ def solda_do_pilar(
     pior_mb: tuple[float, str] | None = None
     for elemento in sorted({t.elemento for t in trechos}):
         do_elemento = [t for t in trechos if t.elemento == elemento]
-        f_n_max = max(  # com as propriedades do contorno inteiro
-            _normal_no_ponto(p, axial, momento, momento_y, x, y, contato)
-            for t in do_elemento
-            for x, y in ((t.x1, t.y1), (t.x2, t.y2))
-        )
         t_el = t_w if elemento == "alma" else t_f
         r_n = fy * t_el / c.a1
         r_v, modo = sd.metal_base_ao_cisalhamento_por_mm(t_el, fy, fu, c)
@@ -352,7 +396,11 @@ def solda_do_pilar(
         faces = (
             2 if len({t.nome for t in do_elemento}) > 1 or (not e_u and elemento == "alma") else 1
         )
-        n_el, v_el = faces * f_n_max, faces * critico.f_v
+        local = max(
+            (pt for pt in pontos if pt.elemento == elemento),
+            key=lambda pt: math.hypot(pt.f_n / r_n, pt.f_v / (r_v * 1000)),
+        )
+        n_el, v_el = faces * local.f_n, faces * local.f_v
         razao = math.hypot(n_el / r_n, v_el / (r_v * 1000.0))
         k = "2·" if faces == 2 else ""
         texto = (
@@ -377,6 +425,31 @@ def solda_do_pilar(
             pior_mb[1],
         )
     )
+    fy_p, fu_p = aco_placa
+    r_vp, _ = sd.metal_base_ao_cisalhamento_por_mm(t_placa, fy_p, fu_p, c)
+    uc = max(math.hypot(pt.f_n / (fy_p * t_placa / c.a1), pt.f_v / (1000 * r_vp)) for pt in pontos)
+    linhas.append(
+        Verificacao(
+            "Solda do pilar na placa: metal-base da placa",
+            uc,
+            1.0,
+            "—",
+            _ref("6.5.5"),
+            f"Maior interação normal/cisalhamento nos extremos dos filetes, placa de {_n(t_placa)} mm.",
+        )
+    )
+    if any(t not in internos for t in descartados):
+        linhas.append(
+            Verificacao(
+                "Solda do pilar na placa: trechos curtos excluídos",
+                None,
+                None,
+                "mm",
+                _ref("6.2.6.2.3"),
+                ", ".join(t.nome for t in descartados),
+                status="NÃO OK",
+            )
+        )
     tabela_perna = sd.tabela(sd.NBR_2025, "perna")
     linhas.append(
         Verificacao(
@@ -387,7 +460,12 @@ def solda_do_pilar(
             f"{_ref('6.2.6.2.1')} ({tabela_perna})",
             f"d_w ≥ {_n(minima, 0)} mm pela parte menos espessa (mesa {_n(t_f, 1)}"
             + (f", alma {_n(t_w, 1)}" if alma or e_u else "")
-            + f" e placa {_n(t_placa, 1)} mm)",
+            + f" e placa {_n(t_placa, 1)} mm). Mesa/placa: {_n(sd.perna_minima(min(t_f, t_placa)), 0)} mm"
+            + (
+                f", alma/placa: {_n(sd.perna_minima(min(t_w, t_placa)), 0)} mm"
+                if alma or e_u
+                else ""
+            ),
             status="OK" if perna >= minima - 1e-9 else "NÃO OK",
             tipo="limite",
         )

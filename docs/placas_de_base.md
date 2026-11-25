@@ -1,354 +1,74 @@
-# Placas de base — base de pilar pela NBR 8800:2025, Subseção 6.7
+# Placas de base
 
-A página **Placas de base** (`app_pages/placa_de_base.py`, núcleo em `core/base_de_pilar.py`, desenho
-em `core/desenho_placa_base.py`) verifica a ligação de um pilar de perfil **I ou H** ao bloco de
-concreto: placa retangular soldada no pilar, chumbadores com porca sextavada pesada e argamassa
-expansiva de assentamento (6.7.1.2). As fórmulas da 6.7 são do momento em torno do eixo de maior
-inércia (6.7.1.3); com momento também no eixo de menor inércia, a base vai pelo mesmo método em duas
-direções (flexão oblíqua, abaixo).
+A página verifica a ligação entre um pilar e um bloco de concreto. A placa é retangular, com assentamento em argamassa. A NBR 8800:2025, subseção 6.7, fornece os casos uniaxiais para os perfis I e H e as disposições da Figura 21. A página também calcula configurações por método geral. O resultado identifica quais hipóteses precisam de confirmação independente.
 
-A página **Esforços do modelo** continua verificando as placas de base de todos os pilares do modelo,
-pelo AISC Design Guide 1 com a pressão de contato da 6.6.5 (2025) e o critério Anglo
-(`core/placa_base_pilares.py`). Esta página é a verificação de **uma** base pelo método da NBR.
+O cálculo de uma base, de cada combinação e da envoltória entra por `core.base_de_pilar.calcular`. A tela, o desenho, o registro e o memorial usam esse resultado. A verificação de todos os pilares em **Esforços do modelo** usa o cálculo separado do AISC Design Guide 1 em `core/base_plate.py`.
 
-## Entradas
+## Geometria e finalidade
 
-| Campo | Uso |
+- Em **verificação**, informar os lados e a altura reais do bloco e a posição do centro da placa em relação ao centro do bloco. Uma dimensão ausente torna inconclusivas as resistências que dependem do bloco. As distâncias às faces são medidas a partir das posições físicas das barras.
+- Em **pré-dimensionamento**, o programa pode estimar dimensões do bloco. Uma solução que atende recebe o status **Pré-dimensionado**. A massa usada na comparação é a da placa de aço.
+- As disposições disponíveis são tipo 1, tipo 2, rotulada em x, rotulada em y e internos e externos. O número permitido de chumbadores e a posição das barras dependem da disposição. Para o canal U, estão disponíveis tipo 1 e rotulada em x.
+- Na tipo 1, o comprimento mínimo é ℓx = d + 4a₁. Na tipo 2, a₁ em x pode ser ajustado dentro dos limites da nota f. As barras externas ficam a a₁ da borda em x. A placa pode ter dimensões maiores que as mínimas. O espaçamento efetivo é medido entre centros e a distância efetiva à borda considera as quatro faces.
+- A Tabela 18 fornece medidas de referência para a montagem. As verificações indicam quando aço, tipo de ancoragem, perfil ou número de barras saem do seu campo de aplicação. No modo por fórmula as roscas podem ser UNC, métricas ou especificadas pelo usuário. O detalhamento considera furo, arruela, porca, graute, embutimento e comprimento de rosca.
+- Para a pressão admissível em concreto, o fator de ampliação de área usa a maior área homotética à placa que cabe no bloco, concêntrica à área carregada. O deslocamento da placa reduz as dimensões disponíveis. A resistência é σc,Rd = 0,85 fck √(A₂/A₁) / γc, limitada a 1,7 fck / γc.
+
+## Esforços, pressão e equilíbrio
+
+O programa recebe kN e kN·m e calcula internamente em N e mm. N positivo comprime. As coordenadas x e y são medidas no plano da placa. M e M_y são os momentos generalizados cujo sentido positivo comprime x positivo e y positivo, respectivamente. Vx e Vy atuam ao longo desses eixos. Mz positivo gera cortantes tangenciais na direção (−y, x). A importação do modelo transforma momentos e cortantes conjuntamente segundo o eixo forte selecionado. Uma componente direcional preenchida prevalece sobre o módulo de V. A outra componente vazia vale zero. O módulo isolado exige a orientação desfavorável.
+
+C1 e T1 representam compressão e tração centradas. C2 tem contato sem chumbador tracionado. C3 e T3 combinam pressão e tração. Em T2 as barras equilibram a carga sem contato. Para o bloco uniforme uniaxial, C2 tem ℓc = ℓx − 2|M/N|. Na flexão oblíqua, a área comprimida é a interseção da placa com o semiplano comprimido. A posição e o ângulo do limite de contato entram no equilíbrio.
+
+O modelo elástico usa uma placa rígida, uma pressão afim truncada em zero e barras tracionadas no lado que levanta. A rigidez relativa usa E_s/E_cs e a área resistente da rosca. O núcleo do retângulo, para a distribuição linear e N de compressão, satisfaz 6|M/N|/ℓx + 6|M_y/N|/ℓy ≤ 1.
+
+Para cada combinação o motor integra a pressão no polígono e confere três resíduos nos eixos da entrada.
+
+| Resíduo | Expressão | Unidade exibida |
+| --- | --- | --- |
+| R_N | ∫p dA − ΣTᵢ − N | kN |
+| R_M | ∫xp dA − ΣxᵢTᵢ − M | kN·m |
+| R_M,y | ∫yp dA − ΣyᵢTᵢ − M_y | kN·m |
+
+A tolerância relativa é 10⁻⁷ com piso absoluto na unidade exibida. A escala de momento considera também a compressão vezes a maior dimensão da placa. A ausência de equilíbrio bloqueia a espessura e as verificações dependentes. A planta hachura o contato efetivo. O corte de pressão atravessa o centro da resultante e usa os valores do plano nas extremidades do corte.
+
+## Flexão da placa e perfil U
+
+Para as faixas em balanço, q = ∫p(u)·u du por unidade de largura. A espessura por flexão é √(4q/fyd). O motor procura o maior q entre todas as faixas de cada linha de engaste. Entre vértices do polígono e cruzamentos do engaste, q é um polinômio de grau até três. A busca inclui as extremidades e os pontos estacionários de cada intervalo. A região entre as mesas e as barras tracionadas têm verificações próprias. Para barras externas, a verificação local a 45° limita a largura efetiva pelas bordas e pelo espaçamento. A maior espessura exigida governa.
+
+No U, o centro da placa coincide com o centroide calculado da seção. As mesas abrem para +y e o dorso permanece na mesma posição ao inverter o momento. A aproximação de meia seção I adota engastes no dorso e a 0,80 b_f dele. As faixas dos dois lados são calculadas separadamente. A integração de cada faixa tem solução analítica de referência nos testes. A representatividade desses engastes para a placa bidimensional, da deformabilidade da ligação e do acréscimo de tração por efeito de alavanca exige um modelo independente da ligação real. O programa registra essa pendência para o U e para o carregamento fora do eixo principal.
+
+## Transferência de cortante
+
+| Opção | Modelo |
 | --- | --- |
-| Perfil do pilar | W, HP ou I duplamente simétrico do catálogo (6.7.1.1); U e outros são recusados. |
-| Disposição | Tipo 1: externos às mesas, 4 ≤ n_b ≤ 8 em duas linhas; tipo 2: 4 entre as mesas (Figura 21); **rotulada em y**: 2 no eixo y, um de cada lado da alma; **rotulada em x**: 2 no eixo x, um fora de cada mesa; **internos e externos**: 4 + 4 (as três últimas pelo método geral). |
-| Chumbador | Ø 3/4" a 2" (Tabela 18) ou **por fórmula** (qualquer diâmetro, ver abaixo); a₁ e a₂ mínimos ou maiores (o toggle libera os campos); no tipo 2, também o a₁ da direção ℓx, de 10 mm ao da tabela (nota f). |
-| Tipo do chumbador | Reto com porca e chapa na ponta (Tabela 18), **guarda-chuva** (gancho em J ou L, e_h), **químico** ou **parabolt** (pós-instalados, com o N_Rd do fabricante); embutimento h_ef; chapa na ponta; opção de verificar a ancoragem no concreto e de armadura de ancoragem no bloco. |
-| Aço do chumbador | ASTM A36 e F1554 Gr 36 (equivalentes, 6.7.1.5 c), F1554 Gr 55 e Gr 105, A193 B7, SAE 1020. |
-| Placa | Espessura, aço (ASTM A36, A572 Gr 50, A588) e argamassa e_n (0 = Tabela 18). |
-| Concreto | f_ck do bloco, combinação (γ_c = 1,4 ou 1,2) e o bloco (N_b × B_b) ou A₂/A₁ direto. |
-| Esforços | N_Sd (+ compressão), M_Sd, M_Sd,y (eixo de menor inércia) e V_Sd (a resultante) de cálculo no pé do pilar. |
-| Cortante | Atrito (μ = 0,45), placa de cisalhamento (b_v, b_h, t_pv) ou arruelas soldadas (t_a). |
+| Somente atrito | Compara V com μC/γa2 e o limite de cisalhamento do apoio. Uma insuficiência reprova essa combinação. O programa desconsidera a contribuição de atrito sob tração axial. |
+| Automático | Registra o mecanismo escolhido na combinação. Usa contato direto dos chumbadores quando o atrito não basta ou há torção. |
+| Contato direto no furo | Adota engate desigual de uma ou duas barras conforme a disposição. Confere o aço, a flexão na região do graute, o contato e o rasgamento no furo. A folga radial entra na comparação com o limite de serviço informado. |
+| Arruelas soldadas | Adota as barras engatadas pelo furo justo da arruela. Verifica a interação de tração e corte, a solda e, com Mz, a resultante de translação e torção em cada barra. |
+| Placa de cisalhamento | Usa a componente normal à face e verifica o dispositivo e sua solda. A componente paralela ou uma orientação desconhecida na verificação real exige conferência da orientação e do caminho de carga. |
 
-## Cálculo (`calcular`)
+Na flexão da barra considera-se a seção resistente da rosca e o braço até o ponto de aplicação da cortante. A hipótese adotada é rotação livre, sem apoio lateral do graute, com acréscimo d_b/2 no concreto. Para o contato direto, o braço é e_n + t_p/2 + d_b/2. Para a arruela soldada, é e_n + t_p + t_a/2 + d_b/2. A barra combina F_t/A_se com M/(1,5 W), sendo W = πd_s³/32. O braço segue a hipótese de 6.2.2.3 da EN 1992-4 e o limite da seção segue a NBR 8800. Uma alteração no diâmetro pode alterar a flexão, a geometria, as reações, o embutimento e as soldas.
 
-* **Geometria (6.7.2.1)**: ℓx = d + 4a₁ (no tipo 2, com o a₁ da direção ℓx); ℓy = (0,5n_b − 1)a₂ + 2a₁ ≥ b_f + 25 mm; ℓ₀ = (0,5n_b − 1)a₂
-  + 1,75(a₂ − t_w) ≤ d (tipo 2); m, n, n₀, X ≤ 1 e λ; a = ℓx/2 − a₁ (tipo 1) ou a₂/2 (tipo 2).
-* **Concreto**: σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c (6.6.5 da 2025; o teto vem com
-  A₂/A₁ = 4). Com o bloco informado, A₂ é a área dele quando é homotético à placa (6.6.5 a) e, quando
-  não é, a maior área homotética e concêntrica que cabe nele (6.6.5 b; a Figura 20 não foi vista —
-  é a regra da ACI 318 e da AISC J8). τ_c,Rd = 0,2f_ck/γ_c ≤ 4 MPa.
-* **Caso (6.7.1.4)**: C1 (e = 0), C2 (e ≤ ½(ℓx − N/(σ_c,Rd·ℓy))), C3; T1 (e = 0), T2 (e ≤ a), T3. A
-  base tipo 2 só cobre C1, C2, T1 e T2. As contas usam N·(e ± a) = M ± N·a, então a flexão pura
-  (N = 0) cai em C3 sem dividir por zero.
-* **Placa e chumbadores (6.7.2.2 a–f)**: t_p,min de cada caso (ℓ_max·√(2σ/(f_y/γ_a1)) e, com tração,
-  √(2n_b·F_t(m − a₁)/(ℓy·f_y/γ_a1)); no tipo 2, √(n_b·F_t(a₂ − t_w)/(ℓ₀·f_y/γ_a1))); ℓ_c de C3 e T3
-  pela raiz da equação de equilíbrio (sem raiz: "alterar a ligação"); F_t por chumbador e
-  d_b,min = √(4F_t/(0,75π·f_ub/γ_a2)), f_ub = 400 MPa.
-* **Cortante**: V_Rd = μσℓ_cℓy/γ_a2 ≤ τ_c,Rd·ℓx·ℓy; sem pressão de contato (T1, T2) não há atrito.
-  Com dispositivo, só ele resiste (6.7.2.3): placa de cisalhamento (6.7.2.4: V_Rd = σ_c,Rd(A₂/A₁ = 4)·
-  (b_v − e_n)·b_h, t_pv,min, t_pv ≤ t_p e os esforços na solda) ou arruelas soldadas (6.7.2.5: V_Rd,i
-  com a interação com a tração, ≤ 5d_b²σ_c,Rd). Nas arruelas, F_v,Rd,i é o menor entre o corte do
-  chumbador com a rosca no plano, 0,45·A_b·f_ub/γ_a2 (6.3.3.2 a), e o contato no furo da arruela,
-  mín(1,2·ℓ_f; 2,4·d_b)·t_a·f_u/γ_a2 (6.3.3.3, que a 6.3.3.2 manda atender; furo d_b + 1,5 mm, f_u =
-  450 MPa do aço de f_y = 345 MPa, ℓ_f até a borda da arruela). Só as arruelas de cima se soldam, com
-  solda para F_v,Rd,i.
-* **Tabela 18 e notas** (valores e notas a–i conferidos no texto da 2025):
-  * limites: a₁ e a₂; no tipo 2, 10 mm ≤ a₁ em ℓx ≤ o da tabela (nota f); f_ck ≥ f_ck,mín no reto
-    com porca (nota b: o concreto junto à porca da ponta); bloco informado com N_b ≥ máx(N_b,mín;
-    ℓx + 2e_n; ℓx + 2(a₃ − a₁)) e B_b ≥ máx(ℓy + 2e_n; ℓy + 2(a₃ − a₁)) (nota e; no tipo 2 é a
-    borda da placa a a₃ − a₁ da face, nota g);
-  * nota a (A36, de 4 a 8 chumbadores): aço fora do A36 ou a rotulada (2) com o reto com porca
-    ficam em ALERTA até a ancoragem no concreto ser verificada (então INFO);
-  * detalhamento: furo d_f (nota i), ancoragem h₁/h₂/r₁/r₂, arruela de f_y = 345 MPa com furo
-    d_b + 1,5 mm (notas a e c), também entre a placa e a porca de nivelamento, soldada só para a
-    cortante (nota d), argamassa, bloco mínimo com a altura máx(h₁ + 100; N_b) (nota e) e a
-    armadura mínima com d_a ≤ ½·[h₁ − 0,5(r₂ + d_b)] (nota h). Sem bloco informado, o cone usa o
-    bloco mínimo da nota e.
-* **Base mais leve** (`base_mais_leve`): percorre os 7 diâmetros e as espessuras comerciais (6,3 a
-  100 mm) e devolve a placa de menor massa que atende; o botão **Adotar** troca o chumbador e a
-  espessura da página. Sem resultado quando o que reprova não depende da placa (cortante, concreto).
+## Ancoragem no concreto
 
-Saídas: verificações por grupo (geometria, concreto e placa, chumbadores, cortante, Tabela 18), CSV,
-desenho (planta e corte, chumbadores tracionados em vermelho, pressão de contato no trecho ℓ_c), o
-memorial desta base em Word ou PDF e o registro no projeto (o memorial redesenha a figura pela
-entrada gravada em `figura_base_de_pilar`).
+A ACI 318-19, capítulo 17, fundamenta as verificações em concreto fissurado de peso normal. O código distingue armadura de ancoragem e armadura suplementar. A primeira pressupõe barras dimensionadas e desenvolvidas para transmitir o esforço. A segunda seleciona a condição do fator de redução para os modos previstos na tabela 17.5.3(b). O fator para o aço depende da ductilidade da barra. O pryout usa a tabela 17.5.3(c).
 
-## Disposições fora da Figura 21 (método geral)
+- **Tração.** Entram o aço, o cone do grupo tracionado e, conforme o tipo, o apoio da cabeça, o gancho, o arrancamento lateral ou o limite do fabricante. A área projetada do cone é a união das projeções efetivas recortadas pelo bloco.
+- **Resina.** São necessários a identificação e os dados do sistema avaliado para a barra, o embutimento e as condições de instalação. O cálculo considera τ_cr e τ_uncr, as verificações individual e de grupo, o efeito de borda e da excentricidade, os mínimos de espaçamento, borda e altura e a categoria de instalação. A maior tração sustentada de cálculo por barra é comparada com 0,55 φ N_ba. Uma resistência individual genérica entra apenas como limite adicional.
+- **Pryout.** O concreto usa k_cp N_cb(g). Para o químico, a resistência nominal é k_cp mín(N_cb(g), N_a(g)). O fator de corte é aplicado uma vez. O subconjunto mobilizado acompanha o mecanismo de transferência. No contato direto verifica-se o subconjunto mais desfavorável.
+- **Ruptura de borda.** O cálculo considera cada face, a fila solicitada, o menor c_a2, a excentricidade e′_V do grupo ativo e as componentes normal e paralela. Em bloco baixo e estreito, a redução de c_a1 considera a maior distância às duas bordas laterais, como determina 17.7.2.1.2. A componente paralela considera o limite de duas vezes a resistência normal e combina as duas componentes por uma interação elíptica conservadora. A interação de ancoragem da seção 17.8 usa as razões governantes de tração e corte.
+- **Limites da ligação.** A torção global transferida ao concreto requer conferência específica. A resistência global e a armadura da fundação pertencem ao modelo do bloco. A compatibilidade da rigidez rotacional com a análise global e a elevação da tração por deformação da placa exigem avaliação quando aplicáveis.
 
-A 6.7.1.1 admite outras configurações desde que atendam 6.1.1.3. Para a **rotulada** e a de
-**internos e externos**, o programa usa o mesmo método com os chumbadores em mais de uma linha
-(`equilibrio_geral`, `forcas_sem_contato`, `_espessura_pela_tracao`):
+## Soldas, busca e memorial
 
-* **C3 e T3:** bloco σ_c,Rd no trecho ℓ_c da borda comprimida; cada chumbador à esquerda da borda
-  desse trecho, x_n = ℓx/2 − ℓ_c, com força proporcional a (x_n − x_i) — placa rígida. Vale o menor
-  ℓ_c que equilibra N e M. Com uma só linha tracionada, dá a equação de ℓ_c da norma (testado).
-* **T1 e T2:** F_i = |N|/n − M·x_i/Σx²; T2 enquanto todos F_i ≥ 0 (o limite é M ≤ |N|·Σx²/(n·x_máx),
-  que é o ``a`` nos tipos 1 e 2).
-* **Espessura pela tração:** fora das mesas, t = √(4·T_linha·c/(ℓy·f_y/γ_a1)), c = |x| − 0,475·d
-  (a conta do tipo 1); entre as mesas, de cada lado da alma, t = √(2·n·F_máx·(a₂ − t_w)/(ℓ₀·f_y/γ_a1))
-  com ℓ₀ = (n − 1)·s + 1,75·(a₂ − t_w) (a conta do tipo 2). A arruela dos internos precisa caber entre
-  a alma e as mesas.
-* A rotulada (em y) só aguenta o momento que o concreto faz sozinho (os chumbadores ficam no eixo): no W 250
-  × 32,7 com N = 300 kN, cerca de 67 kN·m; acima disso, "Equilíbrio possível" reprova.
-* **Rotulada em x** (24/11/2026, `TIPO_ROTULADA_X`): 2 chumbadores no eixo x, a a₁ da borda em ℓx
-  (ℓx = d + 4·a₁, como a tipo 1), um fora de cada mesa; ℓy = máx(2·a₁; largura do perfil + 25 mm).
-  Segura M pelo binário dos chumbadores e gira no eixo fraco (M_y só com o concreto). Vale também
-  para o pilar U.
+As soldas do pilar são grupos de segmentos de linha no contorno real de I/H ou U. Os segmentos menores que o mínimo geométrico saem das propriedades resistentes. A seleção da perna recalcula o grupo, seu centro, os momentos de inércia e o momento polar. As solicitações combinam a força normal, os dois momentos, as duas cortantes, a torção aplicada e a excentricidade do grupo. O metal-base é conferido por elemento, no pilar e na placa. O contorno das arruelas e os filetes da placa de cisalhamento têm verificações próprias.
 
-## Pilar de perfil U (24/11/2026)
+A busca de menor massa recalcula cada combinação para cada par de diâmetro e espessura comercial. Somente um candidato que passa nas verificações e está livre de pendências pode ser sugerido. Os dados de um produto certificado permanecem vinculados à barra especificada. Uma busca sem solução significa que nenhum candidato avaliado atendeu sob aquelas hipóteses.
 
-A 6.7 é escrita para o perfil I ou H; o U (canal laminado do catálogo) vai pelo mesmo método, que a
-6.7.1.1 admite atendendo 6.1.1.3 (aviso e linha INFO no resultado). Decisões:
+O memorial Word ou PDF é gerado pelo núcleo a partir do registro técnico. Os quadros separam esforços, resíduos de equilíbrio e resultados por combinação. As equações e figuras de cada verificação usam a combinação correspondente.
 
-- **Posição**: a placa é centrada no **centro geométrico** do U (x̄ do dorso da alma, alma d·t_w e
-  duas mesas (b_f − t_w)·t_f), onde atuam N, M e M_y. Assim as contas de equilíbrio (C1 a T3, flexão
-  oblíqua, distribuição elástica) ficam as mesmas da I. A alma corre ao longo de ℓx; as mesas abrem
-  para +y (o lado que M_y > 0 comprime). Com M_y < 0 o U é espelhado (dorso em +x̄) e as contas
-  usam |M_y|.
-- **Balanços**: o U é **meia I de mesa 2·b_f** cortada pela alma. Em ℓx, m = (ℓx − 0,95·d)/2 como
-  na I. Em ℓy, as linhas de engaste ficam no dorso da alma e a 0,80·b_f dele (a linha
-  0,80·(2·b_f)/2 da I equivalente); n = o maior dos dois balanços. Entre as mesas, n₀ =
-  √(d·2·b_f)/4 e X = [4·d·(2b_f)/(d + 2b_f)²]·N/(ℓx·ℓy·σ_c,Rd). A espessura pela zona comprimida
-  usa a linha de cada lado (`Geometria.engaste_y`).
-- **Disposição**: só a **tipo 1** e a **rotulada em x** (`TIPOS_DO_U`); a tipo 2, a rotulada em y e
-  a de internos e externos contam com chumbadores dos dois lados da alma (`BaseInvalida`).
-- **Largura**: em vez de ℓy ≥ b_f + 25, 12,5 mm de placa além do U de cada lado (a placa é centrada
-  no centro geométrico, não no meio de b_f).
-- **Solda do contorno** (`base_de_pilar_soldas.contorno_do_pilar(..., y_dorso=...)`): dorso da alma
-  (sempre), faces externas das mesas, faces internas (opção) e face interna da alma (opção "alma").
-  O grupo não é simétrico em y: f_n = −N/L − M·x/I_x − (M_y − N·y_c)·(y − y_c)/I_y, com I_y pelo
-  centro do grupo; o teste confere ∫f_n ds = −N, ∫f_n·x ds = −M e ∫f_n·y ds = −M_y.
-- **Desenho**: `contorno_do_perfil(g)` dá o polígono da I ou do U para a planta e as figuras das
-  contas.
+## Conferências reproduzíveis
 
-Testes: `tests/test_base_de_pilar_perfil_u.py`.
+Os testes de `tests/test_base_de_pilar_validacao.py` cobrem T01–T20 da auditoria. Incluem quadratura independente de p, xp e yp, inversão de momentos, rotação dos eixos, sensibilidade ao diâmetro e ao graute, mecanismos de cortante, grupo de soldas, ausência de dados e bloqueio da busca. O caso T20 usa quatro barras de ¾″ e espaçamento de 6″. A referência para a resistência de cálculo ao pryout é 28.497 lbf, com tolerância relativa de 0,2% para as conversões e os dados arredondados. Esse exemplo verifica o modo de ruptura de ancoragem descrito. [Relatório Hilti PROFIS, Waterfowl 2B03, pp. 7 e 10](https://files-ask.hilti.com/original/cd/cd1kczablk.pdf).
 
-## Flexão oblíqua (momento nos dois eixos, 31/10/2026)
-
-Com M_Sd,y ≠ 0 (`flexao_obliqua`, com cache: o equilíbrio não depende da espessura), qualquer
-disposição vai pelo método geral em duas direções. M comprime x > 0 e M_y comprime y > 0; a zona
-comprimida é a parte da placa com n·p ≥ s, n = (cos θ, sen θ):
-
-* **Sem tração (C2):** a zona cujo centro cai na resultante (e_x = M/N, e_y = M_y/N), com
-  σ_c,Sd = N/A_c ≤ σ_c,Rd. Com M_y = 0 é o C2 da norma (ℓ_c = ℓx − 2e).
-* **Com tração (C3, T3):** σ_c,Rd na zona e F_i = k·(s − n·p_i) nos chumbadores do outro lado da
-  linha neutra (placa rígida); para cada θ, s e k fecham N e o momento na direção n (o menor s,
-  como na 6.7); θ fecha o momento ao longo da linha. Com M_y → 0 volta ao método de uma direção.
-* **Sem contato (T2):** F_i = |N|/n − M·x_i/Σx² − M_y·y_i/Σy², enquanto todos F_i ≥ 0.
-* **Espessura:** compressão com ℓ_max = máx(m; n; λ·n₀) (C) ou máx(m; n) (T) e, como na 6.7, p =
-  √(ℓ_c(2m − ℓ_c)) no lugar de m quando ℓ_c < m, com ℓ_c a maior profundidade da zona em ℓx (o
-  balanço n fica inteiro); tração pelas contas acima, com a linha toda na força do chumbador mais carregado dela
-  (n·F_máx; numa só direção as forças da linha são iguais e nada muda).
-* **Atrito:** μ·σ_c·A_c/γ_a2. Ancoragem na ACI com as forças de cada chumbador (ψ_ec nos dois
-  eixos).
-
-Os testes conferem o equilíbrio de N, M e M_y em todas as disposições (inclusive só M_y logo acima
-do C2, com a raiz na ponta da busca, θ = 90°) e a continuidade com M_y → 0.
-
-## Ancoragem no concreto (ACI 318-19, Capítulo 17)
-
-Sempre nos tipos que a Tabela 18 não cobre (guarda-chuva, químico, parabolt) e, no reto com porca,
-quando a opção está ligada (`verificar_ancoragem`). φ da condição B (sem armadura suplementar): 0,70
-nos concretados e 0,65 nos pós-instalados; concreto fissurado (ψ_c = 1,0).
-
-* **Arrancamento de um chumbador:** cabeça, φ·8·A_brg·f_c (17.6.3.2.2 a), A_brg da porca sextavada
-  pesada (s = 1,5·d + 3,2 mm) ou da chapa na ponta, menos a haste; gancho, φ·0,9·f_c·e_h·d_b
-  (17.6.3.2.2 b), com 3·d_b ≤ e_h ≤ 4,5·d_b; pós-instalado, o N_Rd do fabricante (sem ele, ALERTA).
-* **Cone do grupo tracionado (17.6.2):** A_Nc/A_Nco com o bloco (ou o bloco mínimo da nota e da
-  Tabela 18, placa centrada), h_ef reduzido pela 17.6.2.1.2 perto de três ou mais bordas, ψ_ed,N, ψ_ec,N pela
-  excentricidade das forças; N_b = 10 (concretado) ou 7 (pós-instalado)·√f_c·h_ef^1,5, ou
-  3,9·√f_c·h_ef^(5/3) no chumbador com cabeça de 280 a 635 mm. Com **armadura de ancoragem** no bloco
-  (17.5.2.1), o cone sai como informação e a armadura fica com o projeto do bloco.
-* **Arrancamento lateral (17.6.4):** chumbador com cabeça a menos de 0,4·h_ef da borda; grupo ao longo
-  da borda com (1 + s/(6·c_a1)) e o fator de c_a2.
-* Aço fora do A36 ou 2 chumbadores (rotulada) sem essa verificação: ALERTA (a Tabela 18 vale para
-  o A36, de 4 a 8 chumbadores — nota a).
-
-## Chumbador fora da Tabela 18 (por fórmula, 15/11/2026)
-
-Pedido: calcular o chumbador por fórmulas quando o diâmetro não é um dos 7 da Tabela 18. A 6.7.1.1
-admite outras configurações desde que atendam 6.1.1.3; a 6.7.1.5 c) liga a Tabela 18 ao A36 com
-porca pesada. Opção **Medidas do chumbador → Por fórmula** (`EntradaBase.por_formula`): diâmetro
-comercial (`ROSCAS`: polegada UNC 1/2" a 4", métrico ISO grosso M12 a M64) ou digitado
-(`CHUMBADOR_LIVRE`, com d_b e passo; passo 0 = o da métrica grossa mais perto). Cada medida que a
-tabela dava sai de `medidas_por_formula`, com a conta e a fonte na tela:
-
-| Medida | Fórmula | Fonte |
-|---|---|---|
-| Área resistente | A_s = π/4·(d − 0,9743·p)² (UNC) ou π/4·(d − 0,9382·p)² (ISO) | ASME B1.1 / ISO 898-1; se A_s < 0,75·A_b (5/8" e 1/2"), entra a verificação F_t ≤ A_s·f_ub/γ_a2 |
-| Porca sextavada pesada | s = 1,5·d_b + 3,2 mm, altura ≈ d_b | ASME B18.2.6 (a NBR 8800, 6.3, manda usar nas barras rosqueadas) |
-| Furo d_f | os furos da Tabela 18 interpolados em d_b; fora de 19–50 mm, a folga da ponta (14 ou 30 mm) | são os furos da AISC (Manual, Tabela 14-2) em mm |
-| Arruela | lado ≥ 2·d_f − d_b (cobre o furo com o chumbador na borda dele); t ≥ d_b/3, chapa comercial | AISC Design Guide 1 |
-| a₂ | máx(4·d_b concretado, 6·d_b pós-instalado; lado da arruela) | ACI 318-19 17.9.2 |
-| a₁ | máx(a₂/2; lado/2; d_f/2 + 6,35 mm) | a₂ = 2·a₁ em todas as linhas da Tabela 18; AISC FAQ 7.1.7 (as bordas do Cap. J não valem no furo de chumbador; ¼ in de chapa além do furo) |
-| a₃ | 6·d_b (concretado e químico), 8·d_b (expansão) | ACI 318-19 17.9.2, sem dados do produto |
-| e_n | porca + arruela + 15 mm | montagem (nota d) |
-| h₂, r₁, r₂ | h₂ = e_n + t_p + t_a + porca + 3 fios; r₁ = h₂ + 25 (assim na Tabela 18); r₂ ≥ máx(50; porca + 3 fios) | montagem |
-| h_ef | o menor, de 25 em 25 mm, que passa no cone (17.6.2), nunca menos que 12·d_b; sem tração ou com armadura de ancoragem, 12·d_b; se nenhum passa, o que mais ajuda | ACI 318-19 17.6.2 |
-| f_ck | ≥ 20 MPa | NBR 6118:2014, Tabela 7.1 (CA, classe I) |
-
-Nos 7 diâmetros da tabela as fórmulas dão a₁, a₂ e a₃ a até 5 mm dos dela e o furo a até 1 mm
-(teste). A ancoragem no concreto fica sempre ligada (`ancoragem_verificada`); a nota a (4 a 8
-chumbadores) e a nota b (f_ck,mín) não se aplicam; o bloco mínimo usa a₃ da ACI e altura h_ef + 100.
-
-**Diâmetro por fórmula:** `diametros_por_criterio` dá o d_b que cada critério pede com as forças da
-base — tração (6.7.2.2), arrancamento da porca ou do gancho (ACI 17.6.3) e, com arruelas soldadas, a
-cortante da 6.7.2.5 com a arruela e o furo de cada d_b. `menor_diametro_que_atende` recalcula a base
-inteira para cada diâmetro comercial da série (a₁, a₂, placa e forças mudam) e para no primeiro que
-passa nos chumbadores; o cone fica de fora dessa busca e da base mais leve: ele depende do bloco, do
-embutimento e da armadura, e o bloco mínimo (que cresce com a₃ = 6·d_b) faria um chumbador enorme
-"passar". Testes: `tests/test_base_de_pilar_por_formula.py` (áreas das roscas pelas tabelas ISO e
-UNC, medidas contra a Tabela 18, mesma geometria = mesma placa, h_ef mínimo, menor diâmetro, 2 1/4"
-para 2000 kN de tração).
-
-**Normas consultadas (15/11/2026):** EN 1993-1-8 (F_t,Rd = 0,9·f_ub·A_s/γ_M2; corte α_b = 0,44 −
-0,0003·f_yb) e EN 1992-4 (cone k₁ = 8,9 fissurado, arrancamento 7,5·A_h·f_ck, borda 8,7·c₁·√A_h·√f_ck)
-têm as mesmas verificações que a NBR 8800 e a ACI 318-19 já usadas aqui; a AISC (Manual, Tabela 14-2)
-dá os furos e arruelas, e a ACI 318-19 17.9.2 as distâncias. A tabela 14-2 completa não pôde ser lida
-(o site recusa leitura automática): os furos vêm da Tabela 18, que tem os mesmos valores em mm.
-
-## Várias combinações, soldas e cortante no concreto (16/11/2026)
-
-**Envoltória.** `EntradaBase.casos` (tuplas de `CasoDeCarga`: nome, N, M, M_y, V). Cada combinação
-passa por `_calcular_um` inteira (o caso C1 a T3 sai dela); em cada verificação vale a pior
-(status, depois aproveitamento), com `[nome]` no começo da fórmula quando os valores mudam entre
-combinações. `ResultadoBase.casos` guarda o resultado de cada uma, `combinacao_governante` a que
-governa (a desenhada e a do registro). Por fórmula, o h_ef é o maior dos cones; a perna automática
-do pilar é a maior das combinações (a solda é uma só). Aviso quando há compressão e tração. A página
-traz uma tabela editável e o botão para trazer as combinações ELU de um pilar de Esforços do modelo
-(`placa_base_pilares.combinacoes_dos_pilares`, as mesmas da seção de placas de lá).
-
-**Soldas** (`core/base_de_pilar_soldas.py`):
-
-* Pilar na placa: contorno (mesas por fora, por dentro com o raio estimado em t_f, os dois lados da
-  alma), método elástico — f_n = −N/L − M·x/I_x − M_y·y/I_y, f_v = V/L, resultante nas pontas dos
-  trechos contra 0,60·f_w·0,707·d_w/γ_w2 (6.2.5, sem o fator de direção). Compressão por contato
-  (pilar faceado, AISC 360-22 J1.4 a): só a tração vai à solda. Metal-base do pilar: dois filetes na
-  chapa, √((2f_n/(f_y·t/γ_a1))² + (2f_v/R_v,6.5.5)²) ≤ 1. Limites 6.2.6: perna mínima (Tabela 11),
-  máxima na ponta da mesa, trechos internos ≥ máx(4·d_w; 40). Perna 0 = automática.
-* Placa de cisalhamento: dois filetes ao longo de b_h com V_Rd e M = ½·σ_c,Rd·b_h·(b_v² − e_n²) da
-  6.7.2.4 (pela resistência da placa), binário com braço t_pv + 2·d_w/3; ou penetração total (INFO).
-* Arruelas soldadas: filete no contorno (4 lados) para F_v,Rd,i; perna máxima na borda da arruela.
-
-**Cortante no concreto** (ACI 318-19, só com a ancoragem verificada): arruelas soldadas → ruptura da
-borda pela fila da frente nas duas direções (17.7.2, com 17.7.2.1.2, ψ_ed, ψ_h, V_b com ℓ_e ≤ 8·d_a),
-pryout k_cp·N_cbg do grupo inteiro (17.7.3) e interação N/φN + V/φV ≤ 1,2 quando as duas razões
-passam de 0,2 (17.8); placa de cisalhamento → ruptura à frente dela (17.11.3, marcada "a confirmar":
-o texto da 17.11 não foi visto), A_Vc sem a área de apoio, V_b = 3,7·√f_c·c_a1^1,5. A altura do bloco
-entra como `bloco_z_mm` (0 = a mínima da nota e). Essas linhas, como o cone, ficam fora das buscas
-de diâmetro por fórmula; a solda do pilar fica fora da `base_mais_leve` (não depende da placa).
-
-**Testes que mudaram:** os que usavam M = 150 kN·m no W 250 × 32,7 (≈ Z_x·f_y = 148 kN·m) passaram
-a reprovar na solda do pilar — de verdade; eles agora conferem o resto sem a solda.
-
-## Espessura com faixa comprimida fina e tamanho da placa (16/11/2026)
-
-**Erro achado pelo usuário:** base de esforços pequenos (W 200, 4 × Ø 3/4", N = −5,1 kN, M = 1,9
-kN·m) saía com t_p,min = 30,8 mm em T3. A causa era t_p,min1 = ℓ_max·√(2σ_c,Rd/f_yd) com ℓ_max = n
-inteiro, mesmo com ℓ_c = 0,9 mm: a placa nunca caía com a carga. Agora `balanco_sob_pressao` reduz
-m **e n** por √(ℓ_c·(2·balanço − ℓ_c)) (a 6.7 faz no m; AISC DG1 3.3 manda fazer também no n) → 5,5 mm
-(governa a tração). Na flexão oblíqua, `espessura_pela_zona`: momento da pressão além de cada linha de
-engaste (x = ±0,95d/2, y = ±0,80b_f/2) por fatias, média numa janela da largura do balanço; numa faixa
-da largura toda é a fórmula da 6.7; com canto comprimido o canto não pede a placa toda (9,9 mm no
-caso do usuário com M_y = 1 kN·m). O diagnóstico que veio com o relato (m = a₁ + a₂, b_eff = d_b) não
-era o que o código fazia: o termo da tração já usava m − a₁ e ℓy.
-
-**ℓx e ℓy informados** (`lx_mm`, `ly_mm`; 0 = o mínimo d + 4·a₁ e os a₁/a₂): menor que o mínimo é
-erro; maior, os externos ficam a a₁ da borda em ℓx e os chumbadores centrados em ℓy.
-
-## Revisão: tração a 45°, C2, distribuição elástica e cortante pelos chumbadores (17/11/2026)
-
-Pedido com 2 "erros" e 3 implementações, e os casos de aceitação A a D
-(`tests/test_base_de_pilar_revisao.py`). O que se confirmou e o que foi feito:
-
-- **Tração (caso A):** o 34,8 mm já tinha sido corrigido em 16/11 (seção acima). Agora entra também
-  a verificação chumbador a chumbador, `espessura_a_45_graus`: balanço até a **face da mesa**
-  (m = |x| − d/2) na largura aberta a 45°, limitada pela borda e pela metade do espaçamento;
-  t = √(4·F_t·m/(b_eff·f_y/γ_a1)). Vale a maior entre ela e a da 6.7. No caso A, m = 45 mm e
-  b_eff = 90 mm dão 5,8 mm (F_t = 3,8 kN). O 8 a 15 mm pedido não sai dessa conta com o F_t do
-  equilíbrio; no caso C a mesma conta dá os 8,0 mm de referência. A argamassa não entra no balanço.
-- **C2 com e > ℓx/6 (caso B):** pelo bloco uniforme da 6.7, C2 é um equilíbrio válido. O erro era
-  na **espessura**: ela usava o balanço inteiro sob a pressão do canto (26,6 mm). Agora a C2 usa a
-  zona: `balanco_sob_pressao` em uma direção e `espessura_pela_zona` na oblíqua (11,8 mm). Uma
-  linha INFO explica que o lado oposto levanta.
-- **Distribuição linear elástica** (`distribuicao = "elastica"`, `distribuicao_elastica`): placa
-  rígida, w = σ₀ + a_x·x + a_y·y, pressão onde w > 0 e chumbadores com F = n·A_se·(−w), com
-  n = E_s/E_cs e E_cs pela NBR 6118, 8.2.8. O equilíbrio sai da mínima energia (convexa), por
-  Newton, com integrais exatas no polígono, e vale também na oblíqua.
-  - Exige σ_máx ≤ σ_c,Rd. A placa pela pressão linear integrada nas fatias.
-  - No caso B, os chumbadores tracionam (C3).
-  - No caso C (compressão), σ_máx = 0,55 MPa e t = 7,2 mm.
-- **Cortante pelos chumbadores:**
-  - **Arruelas soldadas:** os n chumbadores engatam juntos. Além da 6.7.2.5, entram:
-    - o aço pela ACI 17.7.1, com **0,80 pela argamassa** (17.7.1.2.1): 26,9 kN no Ø 3/4" (33,7
-      sem o 0,80);
-    - a flexão na argamassa, σ = V·(e_n/2 + t_p/2)/Z + F_t/A_se ≤ f_y/γ_a1, com Z do diâmetro da
-      área resistente (só com V > 0).
-  - **Direto no furo** (`CORTANTE_DIRETOS`): só 2 chumbadores, uma linha ALERTA com o
-    deslizamento (d_f − d_b)/2 e a ACI sempre ligada. O atrito não se soma.
-- **Interação 17.8:** a razão de tração é a do modo que governa (no caso C, o cone com 0,38), não a
-  do aço (0,11). Por isso, no caso C a interação é exigida (e passa).
-- **Ancoragem:**
-  - Aço à tração pela ACI (φ·N_sa = 0,75·A_se·f_uta).
-  - Linha INFO "Borda do bloco corta o cone de concreto" (`cone_truncado`). Perto de 3 ou 4
-    bordas, a 17.6.2.1.2 limita o h_ef útil, e embutir mais **não muda** a resistência; ela não
-    cai. No caso D (c = 120 mm), h_ef = 250 e h_ef = 80 dão os mesmos 25,0 kN e passam. Os 12,1 kN
-    do relato ignoram a 17.6.2.1.2 e usam φ 0,75 (condição A).
-  - Armadura de ancoragem com A_s ≥ N_ua/(0,75·f_y), em CA-50.
-  - Linha limite "Rosca acima do concreto" (h₂ da Tabela 18) e o comprimento da barra no
-    detalhamento.
-- **O que trava:** `o_que_trava` agrupa as reprovações em placa, chumbador, concreto, cortante,
-  geometria e solda; a página usa isso na "Base mais leve que atende".
-
-### Rodada 2 (17/11/2026): flexão na argamassa, espessura exibida, furo justo
-
-**Flexão na argamassa** (`flexao_na_argamassa`): o braço já era b = e_n/2 + t_p/2, e os
-engatados os mesmos do aço à cortante. A diferença estava no momento resistente: era o W elástico
-na rosca, M/W.
-- Agora a seção continua na rosca (d_s da área resistente: a rosca passa pela argamassa), mas o
-  momento resistente é o da barra redonda maciça. Vale M_Rd = Z·f_y ≤ 1,5·W·f_y (NBR 8800
-  5.4.2.2), e no círculo governa 1,5·W.
-- Fica σ = M/(1,5·W) + F_t/A_se ≤ f_y/γ_a1. O texto mostra n_engatados, b, M, W, σ_b, σ_t e o
-  limite.
-- Na C16: 149 MPa e 66 % (antes 93 % nos dados reconstruídos).
-- O "Z = π·d_b³/32 no fuste" do pedido dá o mesmo número por outro caminho, mas ignora a rosca.
-
-**Espessura exibida:** o status sempre comparou sem arredondar.
-- `casas_coerentes` e `percentual_coerente` (`core/verificacao.py`) aumentam as casas até a tela,
-  a tabela e o memorial não mostrarem "demanda = capacidade" numa reprovação.
-- O cartão e o destaque mostram t_p,min com 2 casas.
-- A linha que reprova sugere a chapa comercial seguinte.
-
-**Furo justo** (por fórmula, d_f menor que o padrão AISC 14-2): linha INFO, aviso e premissa no
-memorial (locação precisa com gabarito; alternativa: furo padrão + arruelas soldadas).
-
-## Atrito que não basta numa combinação de compressão (24/11/2026)
-
-V_Rd pelo atrito = μ·C/γ_a2 (0,45·N/1,35 = N/3 em C1) depende só da compressão da combinação. Com N
-pequeno (vento) e V grande, a linha dava NÃO OK de centenas de %. Agora, como já era nas combinações
-com tração, a cortante dessa combinação vai aos chumbadores (corte e flexão na argamassa, com o
-alerta do furo), e o atrito vira a linha INFO "Cortante: atrito na argamassa não basta", com o N que
-bastaria. Para os n chumbadores engatarem juntos, arruelas soldadas ou placa de cisalhamento.
-
-## Exemplo (do guia)
-
-W 250 × 32,7, tipo 1, 4 chumbadores Ø 1", placa de 25 mm ASTM A36, f_ck = 25 MPa, A₂/A₁ = 1,
-N_Sd = 300 kN, V_Sd = 20 kN: caso C1, placa 458 × 200 mm, σ_c,Rd = 0,85 × 25/1,4 = 15,18 MPa,
-σ_c,Sd = 3,28 MPa, t_p,min = 18,1 mm (72 %), V_Rd = 100 kN. Com 6 chumbadores, M_Sd = 150 kN·m e
-placa de 40 mm o caso passa a C3: ℓ_c = 130,5 mm, F_t = 98,1 kN por chumbador, d_b,min = 23,7 mm e
-t_p,min = 38,9 mm (97 %). Os testes
-(`tests/test_base_de_pilar.py`) conferem essas contas e o equilíbrio de forças e momentos entre o
-concreto e os chumbadores em C3, T1, T2 e T3.
-
-## Texto da norma conferido (31/10/2026)
-
-Vistos no texto da NBR 8800:2025 e aplicados (nada mais sai "a confirmar" nesta página):
-
-* **6.6.5 Apoios de concreto:** σ_c,Rd = 0,85·f_ck/γ_c·√(A₂/A₁) ≤ 1,7·f_ck/γ_c. A 2008 dava
-  f_ck/(γ_c·γ_n)·√(A₂/A₁) ≤ f_ck, γ_n = 1,4: com A₂/A₁ = 1 a 2025 admite 19 % a mais e o teto passa
-  de f_ck a 1,21·f_ck. A placa fica mais grossa onde a pressão governa (t_p,min1 ∝ √σ_c,Rd) e o
-  chumbador menos tracionado em C3 (ℓ_c menor). A Figura 20 (A₂ com o bloco não homotético) não foi
-  vista.
-* **6.3.3.2 Cisalhamento:** 0,45·A_b·f_ub/γ_a2 com a rosca no plano de corte (e parafuso comum),
-  0,56 sem; atender também a 6.3.3.3. Vale também na placa de base do Design Guide 1
-  (`core/base_plate.py`, Barras, treliças e pórticos e Esforços do modelo), que usava a 6.6.5 e os 0,40 da 2008.
-* **Tabela 18:** os valores batem com os do programa; as notas a–i estão acima.
-* **12.3.3.1 (tolerâncias de montagem):** pilar aprumado com desvio até 1:500. É a tolerância de
-  execução, não a imperfeição da análise; a flambagem continua com o desaprumo h/333 (0,3 %) da
-  análise (4.9.7.1.1 da 2008), maior que ela.
+As verificações de base também estão em `tests/test_base_de_pilar*.py`. A importação é exercitada em `tests/test_placa_base_pilares.py`, a página em `tests/test_placa_de_base_pagina.py` e a exportação em `tests/test_memorial_trecho.py`. O cálculo de ancoragens e as hipóteses do braço têm como referências a [ACI 318-19, capítulo 17](https://www.ocf.berkeley.edu/~chiep/wp-content/uploads/2024/01/CE-123-ACI-318-19.pdf) e a [nota técnica Hilti que aplica a EN 1992-4, 6.2.2.3](https://www.hilti.ch/medias/sys_master/documents/hf4/h84/10211081748510/HCW-FinalWhitePaper-SOFA-EN-04-2024-Technical-information-ASSET-DOC-23194478.pdf).

@@ -75,6 +75,9 @@ COLUNAS_CASOS = {
     "m_sd_kNm": "M_Sd (kN·m)",
     "m_sd_y_kNm": "M_Sd,y (kN·m)",
     "v_sd_kN": "V_Sd (kN)",
+    "vx_kN": "Vx (kN)",
+    "vy_kN": "Vy (kN)",
+    "mz_kNm": "Mz (kN·m)",
 }
 EXEMPLO_CASOS = [
     {"nome": "ELU1 — máxima compressão", "n_sd_kN": 600.0, "m_sd_kNm": 15.0, "m_sd_y_kNm": 0.0, "v_sd_kN": 25.0},
@@ -100,7 +103,11 @@ def _da_tela(linhas: list[dict]) -> list[dict]:
         for k in COLUNAS_CASOS:
             if k != "nome":
                 v = valores[k]
-                valores[k] = 0.0 if v in (None, "") or v != v else float(v)
+                valores[k] = (
+                    (None if k in ("vx_kN", "vy_kN") else 0.0)
+                    if v in (None, "") or v != v
+                    else float(v)
+                )
         valores["nome"] = nome
         saida.append(valores)
     return saida
@@ -326,7 +333,13 @@ with st.container(border=True), secao_protegida("2. Tipo de chumbador"):
         help=AJUDA["aco_chumbador"],
     )
     e_h = chapa_na_ponta = h_ef = n_rd_fabricante = 0.0
-    if ancoragem == bp.ANCORAGEM_PORCA and not por_formula:
+    if (
+        ancoragem == bp.ANCORAGEM_PORCA
+        and not por_formula
+        and tipo in bp.TIPOS_DA_NORMA
+        and bp.forma_do_perfil(perfil) == bp.FORMA_I
+        and bp.ACOS_CHUMBADOR[aco_chumbador].equivalente_a36
+    ):
         verificar_concreto = st.toggle(
             "Verificar a ancoragem no concreto (ACI 318-19)",
             key="pb_aci",
@@ -382,7 +395,56 @@ with st.container(border=True), secao_protegida("2. Tipo de chumbador"):
             persist_state="session",
             help=AJUDA["h_ef"],
         )
+    produto = {}
     if ancoragem in bp.POS_INSTALADOS:
+        with st.expander("Qualificação da ancoragem", expanded=True):
+            chave_prod = f"{ancoragem}_{aco_chumbador}_{chumbador}_{d_b_livre}_{passo_livre}_{h_ef}"
+            produto["sistema_ancoragem"] = st.text_input(
+                "Sistema, barra, certificado e condições de instalação",
+                key="pb_cert_" + chave_prod,
+                help="Identifique o produto, a barra, as condições de instalação e a faixa de temperatura da ficha.",
+            )
+            produto["categoria_aci"] = st.selectbox(
+                "Categoria de instalação",
+                [0, 1, 2, 3],
+                format_func=lambda n: str(n) if n else "Não informada",
+                key="pb_cat_" + chave_prod,
+                help="Categoria da avaliação do produto segundo ACI 355.2 ou 355.4.",
+            )
+            col = st.columns(3)
+            for campo, c, rotulo in zip(
+                ("s_min_produto_mm", "c_min_produto_mm", "h_min_produto_mm"),
+                col,
+                ("Espaçamento mínimo", "Borda mínima", "Altura mínima"),
+                strict=True,
+            ):
+                produto[campo] = c.number_input(
+                    rotulo + " do produto (mm)",
+                    min_value=0.0,
+                    key=campo + chave_prod,
+                    help="Valor mínimo da avaliação técnica para esta instalação.",
+                )
+            if ancoragem == bp.ANCORAGEM_QUIMICO:
+                col = st.columns(3)
+                produto["tau_cr_MPa"] = col[0].number_input(
+                    "τ_cr (MPa)",
+                    min_value=0.0,
+                    key="pb_taucr_" + chave_prod,
+                    help="Tensão característica de aderência no concreto fissurado para as condições da obra.",
+                )
+                produto["tau_uncr_MPa"] = col[1].number_input(
+                    "τ_uncr (MPa)",
+                    min_value=0.0,
+                    key="pb_tauu_" + chave_prod,
+                    help="Tensão característica no concreto não fissurado para a área de influência.",
+                )
+                produto["n_sustentada_kN"] = col[2].number_input(
+                    "Tração sustentada máxima por barra (kN)",
+                    min_value=0.0,
+                    value=None,
+                    key="pb_sust_" + chave_prod,
+                    help="Demanda individual de cálculo das ações de longa duração. Informe zero quando ausente.",
+                )
         n_rd_fabricante = colunas[2].number_input(
             "N_Rd do fabricante, por chumbador (kN)",
             0.0,
@@ -390,9 +452,29 @@ with st.container(border=True), secao_protegida("2. Tipo de chumbador"):
             0.0,
             1.0,
             format="%.1f",
-            key="pb_nrd_fab",
+            key="pb_nrd_fab_" + chave_prod,
             persist_state="session",
             help=AJUDA["n_rd_fabricante"],
+        )
+    ductil = st.selectbox(
+        "Ductilidade da barra",
+        [False, True],
+        index=1
+        if ancoragem in bp.CONCRETADOS and bp.ACOS_CHUMBADOR[aco_chumbador].equivalente_a36
+        else 0,
+        format_func=lambda v: "Dúctil comprovada" if v else "Frágil ou não comprovada",
+        help="A comprovação de ductilidade deve corresponder à barra utilizada.",
+    )
+    suplementar = st.checkbox(
+        "Armadura suplementar qualificada para a ruptura do concreto",
+        help="Aplica a condição de armadura suplementar da tabela 17.5.3(b) da ACI.",
+    )
+    esp_ponta = 0.0
+    if chapa_na_ponta:
+        esp_ponta = st.number_input(
+            "Espessura da chapa de ponta (mm)",
+            min_value=0.0,
+            help="Espessura adicional que entra no comprimento da barra.",
         )
     armadura = False
     if verificar_concreto:
@@ -480,18 +562,30 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
         persist_state="session",
         help=AJUDA["combinacao"],
     )
+    modo_bloco = st.radio(
+        "Finalidade",
+        ["pre_dimensionamento", "verificacao"],
+        format_func={
+            "pre_dimensionamento": "Pré-dimensionamento",
+            "verificacao": "Verificação da obra",
+        }.get,
+        horizontal=True,
+        key="pb_finalidade",
+        help="A verificação da obra requer as três dimensões reais do concreto.",
+    )
     bloco_informado = colunas[2].toggle(
         "Informar o bloco", key="pb_bloco", persist_state="session", help=AJUDA["bloco_informado"]
     )
     bloco_x = bloco_y = bloco_z = 0.0
     razao = 1.0
     colunas = st.columns(3)
+    dx = dy = 0.0
     if bloco_informado:
         bloco_x = colunas[0].number_input(
             "Bloco na direção de ℓx (mm)",
-            100.0,
+            0.0,
             10000.0,
-            900.0,
+            0.0,
             50.0,
             format="%.0f",
             key="pb_bx",
@@ -500,9 +594,9 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
         )
         bloco_y = colunas[1].number_input(
             "Bloco na direção de ℓy (mm)",
-            100.0,
+            0.0,
             10000.0,
-            900.0,
+            0.0,
             50.0,
             format="%.0f",
             key="pb_by",
@@ -520,6 +614,19 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
             persist_state="session",
             help=AJUDA["bloco_z"],
         )
+        col = st.columns(2)
+        dx = col[0].number_input(
+            "Centro da placa no bloco em x (mm)",
+            value=0.0,
+            key="pb_dx",
+            help="Distância com sinal a partir do centro do bloco.",
+        )
+        dy = col[1].number_input(
+            "Centro da placa no bloco em y (mm)",
+            value=0.0,
+            key="pb_dy",
+            help="Distância com sinal a partir do centro do bloco.",
+        )
     else:
         razao = colunas[0].number_input(
             "A₂/A₁",
@@ -532,6 +639,13 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
             persist_state="session",
             help=AJUDA["razao"],
         )
+
+    graute = st.number_input(
+        "Resistência de cálculo do graute (MPa)",
+        min_value=0.0,
+        key="pb_graute_rd",
+        help="Informe a resistência de cálculo à compressão da argamassa da obra.",
+    )
 
 with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
     st.subheader("5. Esforços de cálculo (ELU)", help=AJUDA["sec_esforcos"])
@@ -567,8 +681,15 @@ with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
                 ),
                 "M_Sd (kN·m)": st.column_config.NumberColumn(format="%.1f"),
                 "M_Sd,y (kN·m)": st.column_config.NumberColumn(format="%.1f"),
+                **{
+                    COLUNAS_CASOS[chave]: st.column_config.NumberColumn(format="%.2f")
+                    for chave in ("vx_kN", "vy_kN", "mz_kNm")
+                },
                 "V_Sd (kN)": st.column_config.NumberColumn(format="%.1f", min_value=0.0),
             },
+        )
+        st.caption(
+            "Vx e Vy têm sinal. Ao informar uma componente, a outra vazia vale zero e a resultante é calculada. Sem componentes usa-se V_Sd na orientação desfavorável."
         )
         casos = tuple(bp.caso_de_dicionario(linha) for linha in st.session_state[CASOS_TELA])
         if not casos:
@@ -596,11 +717,7 @@ with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
                 on_click=_trazer_do_modelo,
                 args=(
                     nomes_pilares[escolhido].perfil,
-                    [
-                        {"nome": nome, "n_sd_kN": round(n, 2), "m_sd_kNm": round(abs(m), 2),
-                         "m_sd_y_kNm": round(abs(my), 2), "v_sd_kN": round(v, 2)}
-                        for nome, n, m, my, v in nomes_pilares[escolhido].combinacoes
-                    ],
+                    nomes_pilares[escolhido].entradas_placa(),
                 ),
             )  # fmt: skip
         botoes[-1].button(
@@ -612,6 +729,8 @@ with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
             args=([dict(linha) for linha in EXEMPLO_CASOS],),
         )
     n_sd, m_sd, v_sd, m_sd_y = PADRAO.n_sd_kN, PADRAO.m_sd_kNm, PADRAO.v_sd_kN, 0.0
+    vx = vy = None
+    mz = 0.0
     if not varias:
         colunas = st.columns(3)
         n_sd = colunas[0].number_input(
@@ -627,7 +746,7 @@ with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
         )
         m_sd = colunas[1].number_input(
             "M_Sd (kN·m)",
-            0.0,
+            -20000.0,
             20000.0,
             PADRAO.m_sd_kNm,
             5.0,
@@ -658,6 +777,26 @@ with st.container(border=True), secao_protegida("5. Esforços de cálculo"):
             persist_state="session",
             help=AJUDA["m_sd_y"],
         )
+        with st.expander("Componentes de cortante e torção"):
+            col = st.columns(3)
+            vx = col[0].number_input(
+                "Vx (kN)",
+                value=None,
+                key="pb_vx",
+                help="Componente ao longo de ℓx. Prevalece sobre V_Sd.",
+            )
+            vy = col[1].number_input(
+                "Vy (kN)",
+                value=None,
+                key="pb_vy",
+                help="Componente ao longo de ℓy. Prevalece sobre V_Sd.",
+            )
+            mz = col[2].number_input(
+                "Mz (kN·m)",
+                value=0.0,
+                key="pb_mz",
+                help="Torção com sinal em torno da normal à placa.",
+            )
     distribuicao = st.radio(
         "Distribuição da pressão sob a placa",
         list(bp.DISTRIBUICOES),
@@ -684,7 +823,7 @@ with st.container(border=True), secao_protegida("6. Cortante"):
     t_arruela = 0.0
     penetracao_lug = False
     colunas = st.columns(3)
-    if cortante == bp.CORTANTE_ATRITO:
+    if cortante in (bp.CORTANTE_ATRITO, bp.CORTANTE_AUTO):
         mu = colunas[0].number_input(
             "μ (atrito)",
             0.1,
@@ -833,7 +972,27 @@ with st.container(border=True), secao_protegida("7. Soldas"):
             help=AJUDA["perna_arruela"],
         )
 
+limite_folga = None
+if cortante in (bp.CORTANTE_DIRETOS, bp.CORTANTE_AUTO):
+    limite_folga = st.number_input(
+        "Deslizamento admissível em serviço (mm)",
+        min_value=0.0,
+        value=None,
+        help="Limite do projeto para comparação com a folga de montagem.",
+    )
 entrada = bp.EntradaBase(
+    **produto,
+    modo_bloco=modo_bloco,
+    desloc_x_mm=dx,
+    desloc_y_mm=dy,
+    vx_kN=vx,
+    vy_kN=vy,
+    mz_kNm=mz,
+    graute_rd_MPa=graute,
+    folga_servico_mm=limite_folga,
+    aco_ductil=ductil,
+    armadura_suplementar=suplementar,
+    chapa_ponta_esp_mm=esp_ponta,
     perfil=perfil,
     tipo=tipo,
     n_chumbadores=int(n_chumbadores),
@@ -894,7 +1053,7 @@ except bp.BaseInvalida as erro:
 
 st.header("Resultados")
 colunas = st.columns(4)
-colunas[0].metric("Status", resultado.status, help=AJUDA["res_status"])
+colunas[0].metric("Status", resultado.situacao, help=AJUDA["res_status"])
 colunas[1].metric("Caso", resultado.caso, help=AJUDA["res_caso"])
 colunas[1].caption(
     CASOS[resultado.caso].capitalize()
@@ -907,13 +1066,20 @@ colunas[2].metric(
     f"{100 * aproveitamento:.0f} %" if math.isfinite(aproveitamento) else "sem resistência",
     help=AJUDA["res_aproveitamento"],
 )
-colunas[3].metric("t_p,min (mm)", _n(resultado.t_p_min, 2), help=AJUDA["res_tp"])
+colunas[3].metric(
+    "t_p,min (mm)",
+    _n(resultado.t_p_min, 2) if resultado.equilibrio_valido else "Indeterminada",
+    help=AJUDA["res_tp"],
+)
 colunas[3].caption(f"Adotada: {_n(entrada.t_placa_mm)} mm")
 governante = resultado.governante
 if governante is not None:
     st.markdown(f"**Governa:** {texto_markdown(governante.nome)}", help=AJUDA["res_governa"])
-for aviso in resultado.avisos:
-    st.warning(aviso, icon=":material/warning:")
+if resultado.avisos:
+    st.warning("\n\n".join(resultado.avisos), icon=":material/warning:")
+pendencias = [v.nome for v in resultado.verificacoes if v.status == "ALERTA"]
+if pendencias:
+    st.info("Pendências de verificação: " + ", ".join(pendencias) + ".")
 reprovadas = [v.nome for v in resultado.verificacoes if v.status == "NÃO OK"]
 if reprovadas:
     st.error(
@@ -936,13 +1102,6 @@ if resultado.envoltoria:
             ":material/info: Em cada verificação abaixo vale a combinação mais desfavorável: o nome "
             "dela vem entre colchetes no começo da fórmula."
         )
-if bp.solda_do_pilar_reprova(resultado):
-    st.error(
-        "A solda do pilar na placa não passa. Ela depende do perfil e dos esforços: trocar a placa "
-        "ou o chumbador não resolve. Veja o grupo **Soldas** abaixo.",
-        icon=":material/error:",
-    )
-
 with secao_protegida("Desenho da base"):
     st.subheader("A base", help=AJUDA["res_figura"])
     resultado_desenho = resultado
@@ -990,7 +1149,7 @@ if medidas is not None:
         if menor is None:
             st.warning(
                 f"Nenhum diâmetro comercial da série {familia} passa nos chumbadores: o que "
-                "reprova não depende do diâmetro — veja acima.",
+                "foi avaliado em cada candidato está nas verificações de ancoragem e cortante.",
                 icon=":material/warning:",
             )
         else:
@@ -1050,50 +1209,31 @@ st.download_button(
 
 with st.container(border=True), secao_protegida("Base mais leve que atende"):
     st.subheader("Base mais leve que atende", help=AJUDA["res_mais_leve"])
-    leve = bp.base_mais_leve(entrada)
-    if leve is None:
-        travas = {
-            parte: nomes
-            for parte, nomes in bp.o_que_trava(resultado).items()
-            if parte not in bp.TRAVAS_DA_BUSCA and parte != bp.TRAVA_SOLDA
-        }
-        st.warning(
-            "Nenhuma combinação de chumbador e espessura de chapa atende"
-            + (
-                ", porque reprova também o que não muda com a placa nem com o chumbador — "
-                + "; ".join(
-                    f"**{parte}**: " + ", ".join(texto_markdown(n) for n in nomes)
-                    for parte, nomes in travas.items()
-                )
-                + ". Resolva isso primeiro (o concreto com bloco maior, embutimento ou armadura "
-                "de ancoragem; a cortante com placa de cisalhamento ou arruelas soldadas; a "
-                "geometria com a₁, a₂ ou a placa)."
-                if travas
-                else ' até 100 mm de chapa e 2" de chumbador: trava a placa ou o chumbador — '
-                "aumente a placa em planta, afaste os chumbadores ou use mais chumbadores."
-            ),
-            icon=":material/warning:",
+    buscar = not varias or st.button(
+        "Calcular a busca na envoltória",
+        key="pb_buscar",
+        help="Recalcula todos os candidatos nas combinações informadas.",
+    )
+    if buscar:
+        st.session_state["pb_ultima_busca"] = (entrada, bp.base_mais_leve(entrada))
+    ultima = st.session_state.get("pb_ultima_busca")
+    buscada = ultima is not None and ultima[0] == entrada
+    leve = ultima[1] if buscada else None
+    if not buscada:
+        st.caption("A busca considera todas as combinações e verificações da ligação.")
+    elif leve is None:
+        st.info(
+            "Nenhum candidato avaliado satisfez todas as verificações para os dados informados."
         )
     else:
         g = leve.geometria
         nome_leve = bp.nome_do_chumbador(leve.entrada)
-        if bp.solda_do_pilar_reprova(leve):
-            st.caption(
-                ":material/info: A busca não olha a solda do pilar (não depende da placa nem do "
-                "chumbador); ela continua reprovando — veja o grupo Soldas."
-            )
         st.write(
             f"**Ø {nome_leve}** com placa **{g.lx:.0f} × {g.ly:.0f} × "
             f"{_n(leve.entrada.t_placa_mm)} mm** — {_n(leve.massa_da_placa_kg)} kg "
             f"(a atual: {_n(resultado.massa_da_placa_kg)} kg), aproveitamento "
             f"{100 * leve.aproveitamento_maximo:.0f} %."
         )
-        if por_formula:
-            st.caption(
-                ":material/info: Por fórmula, a busca troca entre os diâmetros comerciais da mesma "
-                "série e não olha o cone de concreto, que depende do bloco, do embutimento e da "
-                "armadura, não do diâmetro."
-            )
         if (leve.entrada.chumbador, leve.entrada.t_placa_mm) != (chumbador, entrada.t_placa_mm):
             chave_d = "pb_chumbador_f" if por_formula else "pb_chumbador"
             novo: dict[str, object] = {

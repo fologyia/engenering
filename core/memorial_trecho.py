@@ -452,12 +452,34 @@ def escrever_registro(
                 return f"{100 * valor:.0f} %"
             return numero_pt(valor) if isinstance(valor, float) else str(valor)
 
-        t.tabela(
-            [k.replace("Aproveitamento", "Aprov.") for k in cabecalhos],
-            [[celula(k, c.get(k)) for k in cabecalhos] for c in combinacoes],
-            legenda="Combinações de cálculo (ELU) e o resultado de cada uma",
-            fonte=7.5,
-        )
+        tabelas = [cabecalhos]
+        if "R_N (kN)" in cabecalhos:
+            tabelas = [
+                ["Combinação", "N_Sd (kN)", "M_Sd (kN·m)", "M_Sd,y (kN·m)", "V_Sd (kN)"],
+                ["Combinação", "Vx (kN)", "Vy (kN)", "Mz (kN·m)"],
+                ["Combinação", "R_N (kN)", "R_M (kN·m)", "R_M,y (kN·m)"],
+                ["Combinação", "Caso", "Status", "Aproveitamento", "Governa"],
+                ["Combinação", "t_p,min (mm)", "F_t máx (kN)"],
+            ]
+        for colunas in tabelas:
+            t.tabela(
+                [k.replace("Aproveitamento", "Aprov.") for k in colunas],
+                [
+                    [
+                        (
+                            "—"
+                            if c.get(k) is None
+                            else f"{c[k]:.2e}"
+                            if k.startswith("R_")
+                            else celula(k, c[k])
+                        )
+                        for k in colunas
+                    ]
+                    for c in combinacoes
+                ],
+                legenda="Combinações de cálculo (ELU)",
+                fonte=8,
+            )
         if all(isinstance(c.get("Aproveitamento"), (int, float)) for c in combinacoes):
             governante = str(resultados.get("combinacao_governante") or "")
             t.figura_do_diagrama(

@@ -199,14 +199,7 @@ AJUDA: dict[str, str] = {
         "Como a cortante passa para o concreto: só pelo atrito da placa na argamassa, ou por um "
         "dispositivo — e então só ele resiste (6.7.2.3)."
     ),
-    "cortante": (
-        "Atrito: vale só quando a placa aperta o concreto (C1, C2, C3 e T3). Placa de cisalhamento: "
-        "chapa soldada embaixo da placa, enterrada no bloco. Arruelas soldadas: os próprios "
-        "chumbadores resistem, com a arruela de furo justo soldada na placa (todos engatam "
-        "juntos). Direto no furo: sem arruela soldada a placa escorrega na folga do furo antes de "
-        "encostar e os chumbadores pegam um de cada vez — o programa conta só 2 e avisa; prefira "
-        "as arruelas ou a placa de cisalhamento."
-    ),
+    "cortante": "Só atrito reprova quando a pressão de contato é insuficiente. O modo automático permite transferir toda a cortante aos chumbadores. Arruelas soldadas mobilizam o grupo. Furos com folga mobilizam de um a dois chumbadores.",
     "mu": (
         "Coeficiente de atrito entre a placa e a argamassa. A norma dá 0,45 para argamassa "
         "expansiva; só mude com justificativa."
@@ -227,7 +220,7 @@ AJUDA: dict[str, str] = {
         "(d_b + 1,5 mm): a pressão nesse furo também limita a cortante (6.3.3.3)."
     ),
     # resultados
-    "res_status": "OK quando todas as verificações e limites passam; NÃO OK quando alguma reprova.",
+    "res_status": "Pré-dimensionado indica resultado condicionado ao bloco adotado. Inconclusivo indica uma pendência de verificação. Uma falha de resistência ou geometria reprova.",
     "res_caso": (
         "O caso da norma (6.7.1.4), pela força normal e pela excentricidade e = M/N: C1 a C3 na "
         "compressão, T1 a T3 na tração. Define as fórmulas usadas. Na flexão oblíqua, C2 e T2 "
@@ -259,12 +252,7 @@ AJUDA: dict[str, str] = {
         "(6.7.2.2), o arrancamento da porca ou do gancho no concreto (ACI 318-19) e, com as "
         "arruelas soldadas, a cortante (6.7.2.5). O maior deles manda."
     ),
-    "res_menor_diametro": (
-        "O menor diâmetro comercial da mesma série (polegada ou métrica) que passa em todas as "
-        "verificações dos chumbadores, recalculando a base inteira para cada um (a placa e as "
-        "forças mudam com o diâmetro). O cone de concreto fica de fora: ele depende do bloco, do "
-        "embutimento e da armadura."
-    ),
+    "res_menor_diametro": "Menor diâmetro comercial com aço, flexão, concreto e transmissão de cortante verificados para a placa atual.",
     "btn_adotar_diametro": "Usa na página o menor diâmetro comercial que atende, com o furo pela regra.",
     "res_comparacao": (
         "As medidas calculadas lado a lado com a linha da Tabela 18 de diâmetro mais perto, para "
@@ -274,13 +262,7 @@ AJUDA: dict[str, str] = {
         "Cada verificação com o valor atuante, o resistente e o item da norma. As fórmulas com os "
         "números deste caso ficam no expansor abaixo das tabelas."
     ),
-    "res_mais_leve": (
-        "A placa mais leve que atende trocando só o diâmetro do chumbador e a espessura (chapas "
-        "comerciais). Pilar, esforços, concreto e dispositivo de cortante ficam como estão. No "
-        "químico e no parabolt com N_Rd do fabricante, o diâmetro fica (o N_Rd é dele). Por "
-        "fórmula, troca entre os comerciais da mesma série, sem olhar o cone de concreto. A solda "
-        "do pilar fica de fora: ela não muda com a placa."
-    ),
+    "res_mais_leve": "Testa a base inteira em cada chapa e diâmetro comercial. A ficha de uma barra pós-instalada vale para o diâmetro qualificado.",
     "btn_adotar": "Usa na página o chumbador e a espessura da base mais leve que atende.",
     "btn_csv": "Baixa a tabela de verificações em CSV (abre direto no Excel).",
     "sec_memorial": (

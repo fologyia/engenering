@@ -229,12 +229,11 @@ def test_sigma_rd_da_6_6_5_limitado_a_1_7_fck_sobre_gama_c():
 
 
 # ------------------------------------------------------------------ cortante
-def test_com_tracao_nao_ha_atrito_e_a_cortante_vai_aos_chumbadores():
+def test_somente_atrito_em_tracao_reprova():
     r = bp.calcular(replace(PADRAO, n_sd_kN=-80, m_sd_kNm=10))
     nomes = [v.nome for v in r.verificacoes]
-    assert not [n for n in nomes if n.startswith("Cortante: atrito")]
-    assert _linha(r, "Chumbador: aço à cortante").status in ("OK", "NÃO OK")
-    assert math.isfinite(r.aproveitamento_maximo)
+    assert _linha(r, "Cortante: atrito").status == "NÃO OK"
+    assert bp.LINHA_FLEXAO_NA_ARGAMASSA not in nomes
     assert any("não há atrito" in a for a in r.avisos)
     sem_cortante = bp.calcular(replace(PADRAO, n_sd_kN=-80, v_sd_kN=0))
     assert _linha(sem_cortante, "Cortante: atrito").status == "OK"
@@ -348,7 +347,9 @@ def test_grupos_cobrem_todas_as_linhas_na_ordem():
 
 
 def test_base_mais_leve_atende_e_nao_ha_outra_mais_leve():
-    entrada = replace(PADRAO, n_sd_kN=100, m_sd_kNm=30, v_sd_kN=60, cortante=bp.CORTANTE_ARRUELAS)
+    entrada = replace(
+        PADRAO, n_sd_kN=100, m_sd_kNm=10, v_sd_kN=10, t_placa_mm=6.3, cortante=bp.CORTANTE_ARRUELAS
+    )
     assert bp.calcular(entrada).status == "NÃO OK"
     leve = bp.base_mais_leve(entrada)
     assert leve is not None and leve.status != "NÃO OK"
@@ -360,19 +361,22 @@ def test_base_mais_leve_atende_e_nao_ha_outra_mais_leve():
                 assert r.massa_da_placa_kg >= leve.massa_da_placa_kg - 1e-9
 
 
-def test_com_tracao_a_base_mais_leve_usa_a_cortante_nos_chumbadores():
-    entrada = replace(PADRAO, n_sd_kN=-80, m_sd_kNm=10)  # sem atrito: corte nos chumbadores
-    leve = bp.base_mais_leve(entrada)
-    assert leve is not None and leve.status != "NÃO OK"
+def test_busca_respeita_atrito_exclusivo_na_tracao():
+    entrada = replace(PADRAO, n_sd_kN=-80, m_sd_kNm=10)
+    assert bp.base_mais_leve(entrada) is None
 
 
 def test_registro_e_figura_no_memorial():
     r = bp.calcular(replace(PADRAO, n_chumbadores=6, m_sd_kNm=150, t_placa_mm=40))
     registro = bp.registro_base(r)
-    # M = 150 kN·m é quase o momento de plastificação do W 250 x 32,7: o filete do pilar reprova
-    # (de verdade); fora a solda, a base atende
+    # M = 150 kN·m é quase o momento de plastificação do W 250 x 32,7. Também governa a flexão
+    # da arruela sobre o furo. As duas falhas devem permanecer no registro e no memorial.
     assert registro["modulo_id"] == bp.MODULO_ID and registro["status"] == "Não atende"
-    assert bp.solda_do_pilar_reprova(r) and bp.passa_fora_a_solda_do_pilar(r)
+    assert bp.solda_do_pilar_reprova(r) and not bp.passa_fora_a_solda_do_pilar(r)
+    assert any(
+        v.nome == "Arruela: flexão sobre o furo da placa" and v.status == "NÃO OK"
+        for v in r.verificacoes
+    )
     resultados = registro["resultados"]
     assert resultados["caso"] == "C3"
     assert bp.entrada_de_dicionario(resultados["figura_base_de_pilar"]["entrada"]) == r.entrada

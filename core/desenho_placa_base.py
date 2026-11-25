@@ -274,24 +274,23 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
     tab = r.linha
     t_p, e_n = e.t_placa_mm, g.e_n
     bloco = bp.bloco_para_o_cone(e, g, tab)[0]  # o mesmo bloco da verificação do cone
+    xmin, xmax = -bloco / 2 - e.desloc_x_mm, bloco / 2 - e.desloc_x_mm
     h = bp.embutimento(e, tab)
     fundo = -1.25 * max(h, tab.h1 * 0.6)
     topo_placa = e_n + t_p
     altura_pilar = 0.45 * g.lx
     topo = topo_placa + altura_pilar
     seta = 0.5 * g.lx  # espaço para N e M em cima do pilar
-    tela = dg.Tela(
-        [(-bloco / 2 - 0.18 * bloco, -(topo + seta)), (bloco / 2 + 0.22 * bloco, -fundo)], caixa
-    )
+    tela = dg.Tela([(xmin - 0.18 * bloco, -(topo + seta)), (xmax + 0.22 * bloco, -fundo)], caixa)
 
     def p(x: float, z: float) -> Ponto:
         return tela(x, -z)
 
     fonte = _fonte(11 * ESC)
-    _concreto(dr, tela, -bloco / 2, fundo, bloco / 2, 0.0)
+    _concreto(dr, tela, xmin, fundo, xmax, 0.0)
     if e.armadura_de_ancoragem:  # estribos do bloco (Tabela 18), a 60 mm das faces
         cobrimento = 60.0
-        cantos = [p(-bloco / 2 + cobrimento, -cobrimento), p(bloco / 2 - cobrimento, -cobrimento), p(bloco / 2 - cobrimento, fundo + cobrimento), p(-bloco / 2 + cobrimento, fundo + cobrimento)]  # fmt: skip
+        cantos = [p(xmin + cobrimento, -cobrimento), p(xmax - cobrimento, -cobrimento), p(xmax - cobrimento, fundo + cobrimento), p(xmin + cobrimento, fundo + cobrimento)]  # fmt: skip
         for a, b in zip(cantos, cantos[1:] + cantos[:1], strict=True):
             dg.tracejado(dr, a, b, _ARMADURA, largura=2 * ESC, traco=5 * ESC)
         for c in cantos:
@@ -307,9 +306,10 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
 
         def _ate_a_face(x_base: float, sentido: float) -> Ponto:
             x_fim = x_base + sentido * 1.5 * h
-            if abs(x_fim) <= bloco / 2:
+            if xmin <= x_fim <= xmax:
                 return p(x_fim, 0.0)
-            return p(sentido * bloco / 2, -h + (bloco / 2 - sentido * x_base) / 1.5)
+            face = xmax if sentido > 0 else xmin
+            return p(face, -h + abs(face - x_base) / 1.5)
 
         trechos = [_ate_a_face(x_esq, -1.0), p(x_esq, -h), p(x_dir, -h), _ate_a_face(x_dir, 1.0)]
         for a, b in zip(trechos, trechos[1:], strict=False):
@@ -414,26 +414,22 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
         ocupados.append(_caixa_do_rotulo(dr, ponta, direcao, distancia * ESC, texto, fonte))
         dg.rotulo(dr, ponta, direcao, distancia * ESC, texto, _TRACAO, fonte, fundo=True)
     # a pressão de contato sob a placa
-    if r.l_c is not None and r.caso != "T1" and r.caso != "T2":
-        if r.caso == "C1":
-            x0, x1 = -g.lx / 2, g.lx / 2
-        else:
-            x1 = g.lx / 2
-            x0 = x1 - r.l_c
-        sigma = r.sigma_c_sd if r.sigma_c_sd is not None else r.sigma_c_rd
+    corte = bp.corte_de_pressao(r)
+    if corte is not None:
+        x0, x1, q0, q1, y_corte = corte
+        sigma = max(q0, q1)
         altura_px = 22 * ESC
         passos = max(int((x1 - x0) / (g.lx / 14)), 2)
-        for k_ in range(passos + 1):
-            xx = x0 + (x1 - x0) * k_ / passos
-            fim = p(xx, 0.0)
-            dg.seta(dr, (fim[0], fim[1] + altura_px), fim, _PRESSAO, largura=ESC, ponta_px=6 * ESC)
-        dr.line([(p(x0, 0)[0], p(x0, 0)[1] + altura_px), (p(x1, 0)[0], p(x1, 0)[1] + altura_px)], fill=_PRESSAO, width=2 * ESC)  # fmt: skip
-        nome = "σ_c,Sd" if r.sigma_c_sd is not None else "σ_c,Rd"
-        texto = f"{nome} = {_n(sigma, 2)} MPa"
-        if r.zona_comprimida:
-            texto += "\nna zona da planta"
-        elif r.caso != "C1":
-            texto += f"\nem ℓ_c = {_n(r.l_c)} mm"
+        contorno = []
+        for k in range(passos + 1):
+            f = k / passos
+            fim = p(x0 + (x1 - x0) * f, 0.0)
+            inicio = (fim[0], fim[1] + altura_px * ((1 - f) * q0 + f * q1) / sigma)
+            if inicio[1] - fim[1] > 2 * ESC:
+                dg.seta(dr, inicio, fim, _PRESSAO, largura=ESC, ponta_px=5 * ESC)
+            contorno.append(inicio)
+        dr.line(contorno, fill=_PRESSAO, width=2 * ESC)
+        texto = f"σ máx. no corte = {_n(sigma, 2)} MPa\ny = {_n(y_corte, 1)} mm"
         # embaixo das setas: no meio do trecho, ou logo ao lado da haste que atrapalha (dentro do
         # bloco); senão, mais abaixo no meio do trecho, com um fio até as setas
         y_setas = p(x0, 0.0)[1] + altura_px
@@ -442,7 +438,7 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
         meia = (dir_ - esq) / 2
         folga = raio * tela.esc + 5 * ESC
         hastes_x = [p(x, 0.0)[0] for x in xs]
-        limite_esq, limite_dir = p(-bloco / 2, 0.0)[0] + 4 * ESC, p(bloco / 2, 0.0)[0] - 4 * ESC
+        limite_esq, limite_dir = p(xmin, 0.0)[0] + 4 * ESC, p(xmax, 0.0)[0] - 4 * ESC
 
         def _livre(centro: float) -> bool:
             dentro = limite_esq <= centro - meia and centro + meia <= limite_dir
@@ -494,7 +490,7 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
     nome_h = (
         "h₁" if e.ancoragem == bp.ANCORAGEM_PORCA and not (e.h_ef_mm or e.por_formula) else "h_ef"
     )
-    dg.cota_alinhada(dr, p(bloco / 2, -h), p(bloco / 2, 0.0), direita, f"{nome_h} = {_n(h)}", 14 * ESC, fundo=True)  # fmt: skip
+    dg.cota_alinhada(dr, p(xmax, -h), p(xmax, 0.0), direita, f"{nome_h} = {_n(h)}", 14 * ESC, fundo=True)  # fmt: skip
     dr.text((caixa[0] * ESC, (caixa[1] - 14) * ESC), "Corte no plano do momento", fill=dg.COR_TEXTO, font=_fonte(13 * ESC), anchor="lb")  # fmt: skip
 
 
@@ -556,7 +552,8 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
         itens.append(
             ("tracejado", _HACHURA, f"Zona comprimida A_c = {_n(area / 100)} cm² (hachura)")
         )
-        itens.append(("tracejado", _PRESSAO, "LN: linha neutra da flexão oblíqua"))
+        if _linha_neutra(g, r.zona_comprimida) is not None:
+            itens.append(("tracejado", _PRESSAO, "LN: limite da zona comprimida"))
     elif r.l_c is not None and r.caso in ("C2", "C3", "T3"):
         itens.append(("tracejado", _HACHURA, f"Placa sob pressão: ℓ_c = {_n(r.l_c)} mm (hachura)"))
     # três colunas de 4 linhas (5 quando há muitos itens; cabem até 15)
@@ -577,7 +574,7 @@ def figura_da_base(r: bp.ResultadoBase) -> ImagemDiagrama:
     titulo = f"Base de pilar — {e.perfil}, {bp.NOMES_CURTOS[e.tipo]}"
     dr.text((18 * ESC, 14 * ESC), titulo, fill=dg.COR_TEXTO, font=_fonte(16 * ESC))
     obliqua = (
-        f" Flexão oblíqua: M_y = {_n(abs(e.m_sd_y_kNm), 1)} kN·m comprime o lado de cima da planta."
+        f" Flexão oblíqua: M_y = {_n(e.m_sd_y_kNm, 1)} kN·m nos eixos da planta."
         if e.m_sd_y_kNm
         else ""
     )
