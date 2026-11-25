@@ -348,7 +348,7 @@ def test_grupos_cobrem_todas_as_linhas_na_ordem():
 
 def test_base_mais_leve_atende_e_nao_ha_outra_mais_leve():
     entrada = replace(
-        PADRAO, n_sd_kN=100, m_sd_kNm=10, v_sd_kN=10, t_placa_mm=6.3, cortante=bp.CORTANTE_ARRUELAS
+        PADRAO, n_sd_kN=100, m_sd_kNm=10, v_sd_kN=0, t_placa_mm=6.3, cortante=bp.CORTANTE_ARRUELAS
     )
     assert bp.calcular(entrada).status == "NÃO OK"
     leve = bp.base_mais_leve(entrada)

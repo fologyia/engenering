@@ -896,9 +896,9 @@ def medidas_por_formula(e: EntradaBase, h_ef: float | None = None) -> MedidasPor
         (
             "Furo à borda da placa a₁",
             f"{_mm(a1)} mm",
-            f"a₁ ≥ máx(a₂/2; lado/2; d_f/2 + 6,4) = máx({_mm(a2 / 2)}; {_mm(lado / 2)}; "
-            f"{_mm(d_f / 2 + CHAPA_ALEM_DO_FURO)}): a₂ = 2·a₁ em todas as linhas da Tabela 18, a "
-            "arruela inteira na placa e ¼ in de chapa além do furo (AISC, FAQ 7.1.7)",
+            f"Sugestão geométrica máx(a₂/2; lado/2; d_f/2 + 6,4) = máx({_mm(a2 / 2)}; {_mm(lado / 2)}; "
+            f"{_mm(d_f / 2 + CHAPA_ALEM_DO_FURO)}). A parcela a₂/2 é heurística, não um limite normativo geral; "
+            "conferir bordas, arruela, montagem e resistência aplicáveis ao caso.",
         ),
         (
             "Chumbador à face do bloco a₃",
@@ -4288,6 +4288,20 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             )
             flexao = max(flexoes, key=lambda fl: fl.sigma)
             contas["flexao"] = flexao
+            if soldadas:
+                braco_dupla = (e.t_placa_mm + g.t_arruela / 2) / 2
+                comparacoes = [
+                    (vi * braco_dupla / (FATOR_PLASTICO_REDONDO * flexao.w) + ft / a_se) / flexao.limite
+                    for vi, ft in zip(cortes, forcas, strict=True)
+                ]
+                linhas.append(_info(
+                    "Sensibilidade: dupla curvatura do chumbador",
+                    f"Para comparação, b = (t_p + t_arruela/2)/2 = {_n(braco_dupla, 2)} mm; "
+                    f"índice máximo = {_n(max(comparacoes), 3)}, usando a mesma interação simplificada. "
+                    "Resultado paramétrico, não verificação normativa nem alternativa aprovada; "
+                    "exige comprovar apoio do graute, contato, soldas e restrições de rotação.",
+                    "AISC Design Guide 1: hipótese de dupla curvatura; comparação paramétrica",
+                ))
             linhas.append(
                 Verificacao(
                     LINHA_FLEXAO_NA_ARGAMASSA,
@@ -4298,6 +4312,13 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                     flexao.texto(),
                 )
             )
+        if v_i > 0:
+            linhas.append(_alerta(
+                "Compatibilidade dos modelos de cortante",
+                "ACI 318-19, EN 1992-4 e NBR 8800",
+                "As verificações combinam referências distintas e hipóteses de apoio do graute. "
+                "Validar a metodologia completa e a aplicação conjunta dos fatores antes da aprovação.",
+            ))
         if not soldadas:
             v_rd = n_eng * aco_v
         if ancoragem_verificada(e):
@@ -4429,15 +4450,24 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     borda_placa = min(min(g.lx / 2 - abs(x), g.ly / 2 - abs(y)) for x, y in g.posicoes)
     # disposições construtivas: limites (OK ou NÃO OK), não aproveitamento
     if medidas is not None:
+        minimo_geometrico = max(tab.lado_da_arruela / 2, tab.d_f / 2 + CHAPA_ALEM_DO_FURO)
         linhas.append(
             _limite(
                 "Distância a₁ (furo à borda da placa)",
-                borda_placa >= tab.a1 - 1e-9,
-                f"{ref_formula} (Tabela 18 e AISC)",
-                f"borda efetiva = {_n(borda_placa, 1)} mm ≥ {_n(tab.a1, 0)} mm, o mínimo calculado para Ø "
-                f"{tab.polegada}: máx(a₂/2; arruela/2; d_f/2 + 6,4 mm)",
+                borda_placa >= minimo_geometrico - 1e-9,
+                "Critério geométrico de montagem adotado",
+                f"Borda efetiva = {_n(borda_placa, 1)} mm; critério adotado = "
+                f"máx(lado da arruela/2; d_f/2 + 6,4) = {_n(minimo_geometrico, 1)} mm. "
+                "Conferir as distâncias normativas e o detalhamento para a ligação.",
             )
         )
+        if borda_placa < tab.a1 - 1e-9:
+            linhas.append(_alerta(
+                "Distância à borda: sugestão de pré-dimensionamento",
+                "Referência geométrica, não limite normativo geral",
+                f"A borda {_n(borda_placa, 1)} mm é menor que a sugestão {_n(tab.a1, 1)} mm, "
+                "que inclui a₂/2. Confirmar os limites aplicáveis à chapa e a montagem.",
+            ))
         linhas.append(
             _limite(
                 "Espaçamento a₂ entre chumbadores",

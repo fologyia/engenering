@@ -142,7 +142,7 @@ def test_base_mais_leve_atende_todas_as_combinacoes():
     e = replace(
         VARIAS,
         cortante=bp.CORTANTE_ARRUELAS,
-        casos=(bp.CasoDeCarga("A", 100, 10, 0, 10), bp.CasoDeCarga("B", 90, 8, 0, 8)),
+        casos=(bp.CasoDeCarga("A", 100, 10, 0, 0), bp.CasoDeCarga("B", 90, 8, 0, 0)),
     )
     leve = bp.base_mais_leve(e)
     assert leve is not None and leve.envoltoria

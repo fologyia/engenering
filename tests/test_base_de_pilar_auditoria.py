@@ -106,3 +106,13 @@ def test_u_espelhado_identifica_eixos_internos():
     r = bp.calcular(replace(U6, m_sd_y_kNm=-0.46))
     texto = _nomes(r)["Pilar U: método da 6.7 estendido"].formula
     assert "−y" in texto and "espelhados" in texto
+
+
+def test_comparacao_dupla_curvatura_nao_substitui_verificacao():
+    r = bp.calcular(replace(U6, cortante=bp.CORTANTE_ARRUELAS))
+    linhas = _nomes(r)
+    comparacao = linhas["Sensibilidade: dupla curvatura do chumbador"]
+    assert comparacao.status == "INFO"
+    assert "não verificação normativa" in comparacao.formula
+    assert linhas["Compatibilidade dos modelos de cortante"].status == "ALERTA"
+    assert bp.LINHA_FLEXAO_NA_ARGAMASSA in linhas

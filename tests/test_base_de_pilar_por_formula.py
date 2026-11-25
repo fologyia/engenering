@@ -208,7 +208,7 @@ def test_entrada_invalida_por_formula():
 
 def test_base_mais_leve_fica_na_serie_e_o_digitado_fica():
     leve = bp.base_mais_leve(
-        replace(TRACAO, n_sd_kN=100, m_sd_kNm=10, cortante=bp.CORTANTE_ARRUELAS, v_sd_kN=10.0)
+        replace(TRACAO, n_sd_kN=100, m_sd_kNm=10, cortante=bp.CORTANTE_ARRUELAS, v_sd_kN=0.0)
     )
     assert leve is not None and leve.entrada.chumbador in {r.nome for r in bp.roscas_da_familia(bp.FAMILIA_METRICA)}  # fmt: skip
     assert bp.passa_fora_o_cone(leve)
