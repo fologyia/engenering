@@ -74,13 +74,16 @@ def test_base_de_dois_chumbadores_direto_no_furo_um_leva_a_cortante():
     assert "só 1 de 2" in linha.formula
 
 
-def test_texto_do_trecho_interno_da_solda_diz_disponivel_e_exigido():
-    r = bp.calcular(replace(U6, solda_mesas_por_dentro=True))
-    linha = _nomes(r)["Solda do pilar na placa: comprimento dos trechos internos da mesa"]
-    g = r.geometria
-    assert linha.resistente == pytest.approx(g.b_f - g.t_w - g.t_f)  # b_f − t_w − r, sem ÷ 2
-    assert "disponível" in linha.formula and "exigido" in linha.formula
-    assert "b_f − t_w − r" in linha.formula
+def test_trecho_interno_curto_da_solda_nao_cria_reprovacao_separada():
+    e = replace(U6, solda_mesas_por_dentro=True)
+    r, so_externa = bp.calcular(e), bp.calcular(replace(e, solda_mesas_por_dentro=False))
+    nomes = _nomes(r)
+    assert "Solda do pilar na placa: comprimento dos trechos internos da mesa" not in nomes
+    # O trecho curto não entra na resistência; a solda restante continua verificada no grupo.
+    nome_filete = "Solda do pilar na placa: filete no ponto mais solicitado"
+    assert nomes[nome_filete].solicitante == pytest.approx(
+        _nomes(so_externa)[nome_filete].solicitante
+    )
 
 
 def test_espessura_mostra_a_razao_em_t_e_em_t_ao_quadrado():

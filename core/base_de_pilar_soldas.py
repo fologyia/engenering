@@ -18,7 +18,9 @@ linear) fica abaixo da resistência do filete por milímetro, 0,60·f_w·(0,707�
 6.2.5, Tabela 9), sem o fator 1 + 0,5·sen^1,5 θ (a favor da segurança). Com a extremidade do pilar
 faceada e a compressão passando por contato (AISC 360-22 J1.4 a), só a parte tracionada de f_n vai
 para a solda. O metal-base do pilar ao cisalhamento (6.5.5) e os limites de 6.2.6 (perna mínima da
-Tabela 11, máxima na ponta da mesa e comprimento mínimo dos trechos internos) completam.
+Tabela 11 e máxima na ponta da mesa) completam. Trechos abaixo do comprimento mínimo não entram
+no grupo resistente; o comprimento restante é verificado junto com a solicitação, sem uma
+reprovação separada só para o trecho interno da mesa.
 
 **Placa de cisalhamento.** Dois filetes ao longo de b_h, um de cada face, levam a cortante V_Rd e o
 momento ½·σ_c,Rd·b_h·(b_v² − e_n²) da 6.7.2.4 (a solda é dimensionada pela resistência da placa,
@@ -483,25 +485,6 @@ def solda_do_pilar(
             tipo="limite",
         )
     )
-    if internos:
-        menor = min(t.comprimento for t in internos)
-        minimo = sd.comprimento_minimo(perna)
-        linhas.append(
-            Verificacao(
-                "Solda do pilar na placa: comprimento dos trechos internos da mesa",
-                minimo,
-                menor,
-                "mm",
-                _ref("6.2.6.2.3"),
-                f"disponível: cada trecho entre a alma e a ponta da mesa tem {_n(menor, 1)} mm ("
-                + ("b_f − t_w − r" if e_u else "b_f/2 − t_w/2 − r")
-                + f", com o raio r estimado em t_f); exigido: máx(4·d_w; 40 mm) = "
-                f"{_n(minimo, 0)} mm (o mínimo de 40 mm é da NBR; o AISC pede só 4·d_w); senão, "
-                "solde só por fora das mesas",
-                status="OK" if menor >= minimo - 1e-9 else "NÃO OK",
-                tipo="limite",
-            )
-        )
     return SoldaDoPilar(perna, tuple(linhas))
 
 

@@ -120,10 +120,7 @@ def test_t11_sinal_da_componente_muda_a_borda():
 def test_t12_trechos_excluidos_recalculam_o_grupo():
     e = replace(PADRAO, perfil='U 6" x 12,20', m_sd_y_kNm=1, perna_pilar_mm=4)
     a, b = bp.calcular(e), bp.calcular(replace(e, solda_mesas_por_dentro=False))
-    assert (
-        linha(a, "Solda do pilar na placa: comprimento dos trechos internos da mesa").status
-        == "NÃO OK"
-    )
+    assert not any("comprimento dos trechos internos da mesa" in v.nome for v in a.verificacoes)
     nome = "Solda do pilar na placa: filete no ponto mais solicitado"
     assert linha(a, nome).solicitante == pytest.approx(linha(b, nome).solicitante)
 
