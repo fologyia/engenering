@@ -1215,7 +1215,8 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
         help="Recalcula todos os candidatos nas combinações informadas.",
     )
     if buscar:
-        st.session_state["pb_ultima_busca"] = (entrada, bp.base_mais_leve(entrada))
+        leve_busca, historico_busca = bp.buscar_base_mais_leve(entrada)
+        st.session_state["pb_ultima_busca"] = (entrada, leve_busca, historico_busca)
     ultima = st.session_state.get("pb_ultima_busca")
     buscada = ultima is not None and ultima[0] == entrada
     leve = ultima[1] if buscada else None
@@ -1223,7 +1224,8 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
         st.caption("A busca considera todas as combinações e verificações da ligação.")
     elif leve is None:
         st.info(
-            "Nenhum candidato avaliado satisfez todas as verificações para os dados informados."
+            "Nenhum candidato foi aprovado. Confira abaixo as reprovações, entradas inválidas "
+            "e hipóteses inconclusivas de cada tentativa."
         )
     else:
         g = leve.geometria
@@ -1250,6 +1252,30 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
                 on_click=st.session_state.update,
                 kwargs=novo,
             )
+
+    if buscada and len(ultima) > 2:
+        historico = ultima[2]
+        st.caption(
+            "Candidatos efetivamente calculados. Para cada diâmetro, a busca termina na primeira "
+            "espessura aprovada; as espessuras posteriores não foram avaliadas."
+        )
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Chumbador": item.chumbador,
+                        "Espessura (mm)": item.espessura_mm,
+                        "Resultado": item.status,
+                        "Aproveitamento (%)": None
+                        if item.aproveitamento is None
+                        else 100 * item.aproveitamento,
+                        "Pendências": "; ".join(item.motivos),
+                    }
+                    for item in historico
+                ]
+            ),
+            hide_index=True,
+        )
 
 with st.container(border=True), secao_protegida("Memorial desta base"):
     st.subheader("Memorial desta base", help=AJUDA["sec_memorial"])

@@ -74,6 +74,12 @@ def test_medidas_por_formula_ficam_perto_da_tabela_18(polegada):
     assert m.a2 == 2 * m.a1 or m.a1 > m.a2 / 2  # a proporção da Tabela 18, ou a arruela manda
 
 
+def test_borda_nbr_distingue_furo_padrao_e_alargado():
+    rosca = bp.ROSCAS["M16"]
+    assert bp.borda_nbr_placa(rosca, 18) == 22
+    assert bp.borda_nbr_placa(rosca, 20) == 24
+
+
 def test_contas_das_medidas_de_um_m30():
     m = bp.medidas_por_formula(replace(POR_FORMULA, chumbador="M30", t_placa_mm=25.0), 400.0)
     lin = m.linha

@@ -175,7 +175,7 @@ def test_tracao_sem_dispositivo_avisa_que_nao_ha_atrito(banco_isolado):
 
 
 def test_adotar_a_base_mais_leve_e_registrar(banco_com_projeto):
-    t = abrir(pb_n_sd=100.0, pb_m_sd=10.0, pb_v_sd=10.0, pb_t=6.3, pb_cortante=bp.CORTANTE_ARRUELAS)
+    t = abrir(pb_n_sd=100.0, pb_m_sd=10.0, pb_v_sd=0.0, pb_t=6.3, pb_cortante=bp.CORTANTE_ARRUELAS)
     assert _metricas(t)["Status"] == "NÃO OK"
     t.button(key="pb_adotar").click().run()
     assert not t.exception

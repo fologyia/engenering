@@ -116,3 +116,68 @@ def test_comparacao_dupla_curvatura_nao_substitui_verificacao():
     assert "não verificação normativa" in comparacao.formula
     assert linhas["Compatibilidade dos modelos de cortante"].status == "ALERTA"
     assert bp.LINHA_FLEXAO_NA_ARGAMASSA in linhas
+
+
+def test_faixa_critica_fora_do_aco_mostra_sensibilidade_sem_afrouxar():
+    """Terceira auditoria: a faixa de 21 mm caía fora das mesas do U. O adotado continua o da linha
+    inteira (a favor da segurança); o texto traz o valor com apoio a 45° só como sensibilidade."""
+    e = replace(U6, chumbador="5/8\"", por_formula=True, ancoragem=bp.ANCORAGEM_PORCA,
+                lx_mm=260, ly_mm=94, a1_mm=26.8, h_ef_mm=0, n_rd_fabricante_kN=0,
+                n_sd_kN=2.942, m_sd_kNm=1.064, m_sd_y_kNm=-0.6762, v_sd_kN=7.5593)  # fmt: skip
+    placa = _nomes(bp.calcular(e))["Placa de base: espessura t_p ≥ t_p,min"]
+    assert placa.solicitante > 20.0
+    assert "Sensibilidade, não adotada" in " ".join(map(str, placa.equacoes))
+
+
+def test_historico_da_busca_distingue_alerta_erro_e_aprovacao(monkeypatch):
+    from types import SimpleNamespace
+
+    entrada = replace(U6, por_formula=True, chumbador=bp.CHUMBADOR_LIVRE)
+    monkeypatch.setattr(bp, "ESPESSURAS_COMERCIAIS", (6.3, 8.0, 10.0, 12.7))
+
+    def calcular_falso(e):
+        if e.t_placa_mm == 6.3:
+            raise bp.BaseInvalida("geometria incompatível")
+        if e.t_placa_mm == 8.0:
+            return SimpleNamespace(
+                status="ALERTA",
+                aproveitamento_maximo=0.8,
+                verificacoes=(SimpleNamespace(status="ALERTA", nome="Modelo pendente"),),
+            )
+        return SimpleNamespace(
+            status="OK", aproveitamento_maximo=0.7, verificacoes=(), massa_da_placa_kg=2.0
+        )
+
+    monkeypatch.setattr(bp, "calcular", calcular_falso)
+    melhor, historico = bp.buscar_base_mais_leve(entrada)
+    assert melhor is not None
+    assert [c.status for c in historico] == ["Entrada inválida", "ALERTA", "OK"]
+    assert historico[0].motivos == ("geometria incompatível",)
+    assert historico[1].motivos == ("ALERTA: Modelo pendente",)
+    assert historico[-1].espessura_mm == 10.0  # 12,7 mm não foi avaliada
+
+
+def test_envoltoria_identifica_origem_de_textos_informativos_distintos():
+    casos = (
+        bp.CasoDeCarga("C01", 5, 0, 0, 0, vx_kN=3, vy_kN=4),
+        bp.CasoDeCarga("C02", 5, 0, 0, 0, vx_kN=6, vy_kN=8),
+    )
+    r = bp.calcular(replace(U6, casos=casos))
+    linha = _nomes(r)["Componentes simultâneas do cortante"]
+    assert linha.formula.startswith("[C01]") or linha.formula.startswith("[C02]")
+
+
+def test_distribuicao_cortante_equilibra_forcas_e_torcao_com_centro_deslocado():
+    pos = ((10.0, 20.0), (110.0, 20.0), (10.0, 120.0))
+    vx, vy, mz = 3000.0, -4000.0, 750000.0
+    reacoes = bp.distribuir_cortante_elastico(pos, vx, vy, mz)
+    assert sum(x for x, _ in reacoes) == pytest.approx(vx)
+    assert sum(y for _, y in reacoes) == pytest.approx(vy)
+    assert sum(
+        x * fy - y * fx for (x, y), (fx, fy) in zip(pos, reacoes, strict=True)
+    ) == pytest.approx(mz)
+
+
+def test_distribuicao_nao_inventa_reacao_para_torcao_em_um_chumbador():
+    with pytest.raises(bp.BaseInvalida):
+        bp.distribuir_cortante_elastico(((0.0, 0.0),), 0.0, 0.0, 1000.0)
