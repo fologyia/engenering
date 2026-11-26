@@ -198,7 +198,7 @@ def figura_dos_eixos(eixo_vertical: str = "Y", eixos: str = rb.EIXOS_FUNDACAO) -
     for nome in "XYZ":
         direcao = [0.0, 0.0, 0.0]
         direcao["XYZ".index(nome)] = comprimento
-        ponta = _proj(origem, *direcao, escala)
+        ponta = _proj(origem, direcao[0], direcao[1], direcao[2], escala)
         dg.seta(d, origem, ponta, _COR_ACAO, largura=4 * ESC, ponta_px=16 * ESC)
         tela = (ponta[0] - origem[0], ponta[1] - origem[1])
         dg.rotulo(d, ponta, tela, 8 * ESC, f"{nome}  ·  F{nome.lower()} +", _COR_ACAO, fonte)
@@ -226,10 +226,10 @@ def figura_dos_eixos(eixo_vertical: str = "Y", eixos: str = rb.EIXOS_FUNDACAO) -
     _quadro(d, (714, 72, 1166, 330), "Nas plantas (vista de cima)")
     origem_p = _p(800, 285)
     fonte_p = _fonte(15 * ESC)
-    for nome, direcao in (("X", (1.0, 0.0)), ("Y", (0.0, -1.0))):
-        ponta = dg.mais(origem_p, direcao, 110 * ESC)
+    for nome, direcao_planta in (("X", (1.0, 0.0)), ("Y", (0.0, -1.0))):
+        ponta = dg.mais(origem_p, direcao_planta, 110 * ESC)
         dg.seta(d, origem_p, ponta, _COR_FUND, largura=4 * ESC, ponta_px=14 * ESC)
-        dg.rotulo(d, ponta, direcao, 8 * ESC, nome, _COR_FUND, fonte_p)
+        dg.rotulo(d, ponta, direcao_planta, 8 * ESC, nome, _COR_FUND, fonte_p)
     simbolo_saindo(d, origem_p, 12 * ESC, _COR_FUND)
     dg.rotulo(d, origem_p, (-1.0, 1.0), 14 * ESC, "Z", _COR_FUND, fonte_p)
     simbolo_saindo(d, _p(942, 250), 10 * ESC, _COR_FUND)
