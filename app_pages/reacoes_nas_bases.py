@@ -132,9 +132,10 @@ with secao_protegida("Reações nas bases"):
                 st.warning(item.texto, icon=":material/warning:")
 
     # ======================================================== eixos e projeto
-    figura_eixos = de.figura_dos_eixos(
-        dados.eixo_vertical, str(st.session_state.get("rb_eixos") or rb.EIXOS_FUNDACAO)
-    )
+    # um sistema de eixos só (o da fundação: X e Y na planta, Z para cima) para a tabela, a
+    # planta de cada caso, o modelo 3D e o Excel — a figura padrão abaixo é a referência
+    eixos = rb.EIXOS_FUNDACAO
+    figura_eixos = de.figura_dos_eixos(dados.eixo_vertical)
     nomes_do_modelo = cm.Nomes.do_projeto(geometria, dados)
     corpos_do_modelo = cm._corpos(geometria)
     tipos = {
@@ -148,7 +149,7 @@ with secao_protegida("Reações nas bases"):
         figura_projeto = None
 
     def _figuras_do_excel() -> list[tuple[str, bytes]]:
-        figuras = [("Sistema de coordenadas", de.png_para_o_excel(figura_eixos))]
+        figuras = [("Padrão de eixos", de.png_para_o_excel(figura_eixos))]
         if figura_projeto is not None:
             figuras.append(("O projeto e os pés", de.png_para_o_excel(figura_projeto)))
         for caso in reacoes.casos:
@@ -160,66 +161,27 @@ with secao_protegida("Reações nas bases"):
         return [(titulo, png) for titulo, png in figuras if png]
 
     with st.container(border=True):
-        st.subheader("Sistema de coordenadas e o projeto", help=AJUDA["sec_eixos"])
+        st.subheader("Padrão de eixos", help=AJUDA["sec_eixos"])
         st.caption(
-            "Vão junto no Excel (aba Desenhos), para o engenheiro civil ler os sinais e achar cada "
-            "pé. Nas vistas 2D: ⊙ = o eixo sai da tela (a ponta da flecha vindo para você); ⊗ = o "
-            "eixo entra na tela (a cauda da flecha se afastando)."
+            "A referência para ler tudo nesta página: a tabela, a planta de cada caso, o modelo "
+            "3D e o Excel usam estes mesmos eixos (vai junto no Excel, aba Desenhos)."
         )
-        aba_eixos, aba_projeto = st.tabs(
-            [
-                ":material/explore: Sistema de coordenadas",
-                ":material/deployed_code: O projeto e os pés",
-            ]
+        mostrar_figura(figura_eixos)
+        st.download_button(
+            "Baixar o padrão de eixos (PNG)",
+            data=figura_eixos.png,
+            file_name="padrao_de_eixos.png",
+            mime="image/png",
+            icon=":material/download:",
+            key="rb_png_eixos",
+            help=AJUDA["btn_png_eixos"],
+            disabled=not figura_eixos.png,
         )
-        with aba_eixos:
-            mostrar_figura(figura_eixos)
-            st.download_button(
-                "Baixar o sistema de coordenadas (PNG)",
-                data=figura_eixos.png,
-                file_name="sistema_de_coordenadas.png",
-                mime="image/png",
-                icon=":material/download:",
-                key="rb_png_eixos",
-                help=AJUDA["btn_png_eixos"],
-                disabled=not figura_eixos.png,
-            )
-        with aba_projeto:
-            if figura_projeto is None:
-                st.info(
-                    "Sem o esqueleto do modelo (ou sem a posição dos pés) não há desenho do "
-                    "projeto: envie o …_esqueleto.csv da macro em Cargas do esqueleto.",
-                    icon=":material/account_tree:",
-                )
-            else:
-                mostrar_figura(figura_projeto)
-                st.download_button(
-                    "Baixar o desenho do projeto (PNG)",
-                    data=figura_projeto.png,
-                    file_name="projeto_e_os_pes.png",
-                    mime="image/png",
-                    icon=":material/download:",
-                    key="rb_png_projeto",
-                    help=AJUDA["btn_png_projeto"],
-                    disabled=not figura_projeto.png,
-                )
 
     # ======================================================== as reações
     with st.container(border=True):
         st.subheader("Reações de cada pé, caso a caso", help=AJUDA["sec_reacoes"])
-        eixos = st.radio(
-            "Eixos",
-            rb.EIXOS,
-            format_func=lambda e: (
-                "Da fundação (Z para cima)"
-                if e == rb.EIXOS_FUNDACAO
-                else f"Do SolidWorks ({dados.eixo_vertical} para cima)"
-            ),
-            horizontal=True,
-            key="rb_eixos",
-            help=AJUDA["eixos"],
-        )
-        st.caption(rb.convencao(reacoes, eixos))
+        st.caption(rb.convencao(reacoes, eixos) + " Os sentidos estão na figura Padrão de eixos.")
         tabela = rb.linhas(reacoes, plano, eixos)
         if tabela:
             aba_acao, aba_reacao = st.tabs(
@@ -281,6 +243,25 @@ with secao_protegida("Reações nas bases"):
             desenho = figura_das_reacoes(reacoes, caso_desenho)
             if desenho is not None:
                 mostrar_figura(desenho)
+        with st.expander("Onde fica cada pé (modelo 3D)"):
+            if figura_projeto is None:
+                st.info(
+                    "Sem o esqueleto do modelo (ou sem a posição dos pés) não há desenho do "
+                    "projeto: envie o …_esqueleto.csv da macro em Cargas do esqueleto.",
+                    icon=":material/account_tree:",
+                )
+            else:
+                mostrar_figura(figura_projeto)
+                st.download_button(
+                    "Baixar o desenho do projeto (PNG)",
+                    data=figura_projeto.png,
+                    file_name="projeto_e_os_pes.png",
+                    mime="image/png",
+                    icon=":material/download:",
+                    key="rb_png_projeto",
+                    help=AJUDA["btn_png_projeto"],
+                    disabled=not figura_projeto.png,
+                )
         with st.expander("Locação dos pés e natureza de cada caso"):
             st.dataframe(
                 pd.DataFrame(rb.linhas_da_locacao(reacoes, eixos), columns=rb.COLUNAS_LOCACAO),

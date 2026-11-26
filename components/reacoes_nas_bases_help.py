@@ -38,20 +38,15 @@ AJUDA: dict[str, str] = {
         "horizontal H como seta e o momento, quando há. São as ações da estrutura na fundação, "
         "características e sem combinar, nos eixos da fundação."
     ),
-    "eixos": (
-        "Eixos da fundação: X e Y na planta e Z para cima, como o engenheiro civil costuma usar — o "
-        "X é o do SolidWorks e o Y é o −Z do SolidWorks (a vista Superior com o Y para cima). Eixos "
-        "do SolidWorks: os do modelo, com o Y para cima. Os valores são os mesmos; só muda o nome "
-        "do eixo."
-    ),
     "sec_eixos": (
-        "O sistema de coordenadas das tabelas, desenhado para o engenheiro civil: os eixos do "
-        "SolidWorks e os da fundação lado a lado, a planta (Z saindo da tela, ⊙) e a frente (Y "
-        "entrando na tela, ⊗), e a diferença entre a ação na fundação e a reação no apoio. Na outra "
-        "aba, o modelo em 3D com o nome de cada pé (A1, A2…), o mesmo das tabelas."
+        "Um sistema de eixos só para a página inteira: X e Y na planta, Z para cima. A figura "
+        "mostra, no pé de um pilar, o sentido positivo de cada força (Fx, Fy, Fz) e de cada "
+        "momento (Mx, My, Mz, pela regra da mão direita) da tabela; um valor negativo é o sentido "
+        "contrário. Ao lado, a planta como aparece nos desenhos (Z saindo do papel) e a "
+        "correspondência com os eixos do SolidWorks."
     ),
     "btn_png_eixos": (
-        "Baixa o desenho do sistema de coordenadas em PNG, para mandar junto ou pôr num relatório."
+        "Baixa a figura do padrão de eixos em PNG, para mandar junto ou pôr num relatório."
     ),
     "btn_png_projeto": (
         "Baixa o modelo em 3D com o nome de cada pé em PNG (o mesmo que vai na aba Desenhos do "

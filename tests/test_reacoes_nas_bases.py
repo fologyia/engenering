@@ -301,12 +301,16 @@ def test_excel_com_os_desenhos():
     assert de.figura_do_projeto(ld.GeometriaDoModelo(), r) is None
 
 
-def test_sistema_de_coordenadas_do_modelo_com_z_para_cima():
+def test_padrao_de_eixos_e_um_so():
+    """A figura padrão é a mesma referência para tudo: eixos da fundação, Z para cima; registros
+    antigos com os eixos do SolidWorks desenham o mesmo padrão."""
     from core import desenho_eixos_fundacao as de
 
-    figura = de.figura_dos_eixos("Z", rb.EIXOS_MODELO)
-    assert figura.png and "da fundação" in figura.legenda  # com o Z para cima, são os mesmos
-    assert "do SolidWorks" in de.figura_dos_eixos("Y", rb.EIXOS_MODELO).legenda
+    figura = de.figura_dos_eixos("Z")
+    assert figura.png and figura.titulo == "Padrão de eixos das reações nas bases"
+    assert "Z para cima" in figura.legenda and "mão direita" in figura.legenda
+    antigo = de.figura_dos_eixos("Y", rb.EIXOS_MODELO)
+    assert antigo.png and antigo.legenda == de.figura_dos_eixos("Y").legenda
 
 
 def test_modelo_3d_desenha_as_mesmas_reacoes():
@@ -435,12 +439,11 @@ def test_pagina_com_o_portico_e_o_excel(banco_com_projeto):
     tabela = next(d.value for d in at.dataframe if "De onde veio" in d.value.columns)
     assert len(tabela) == 24 and set(tabela["Pé"]) == {"A1", "A2", "A3", "A4"}
     assert any("Excel" in _rotulo(b) for b in at.get("download_button"))
-    assert any("sistema de coordenadas" in _rotulo(b) for b in at.get("download_button"))
+    assert any("padrão de eixos" in _rotulo(b) for b in at.get("download_button"))
     assert any("desenho do projeto" in _rotulo(b) for b in at.get("download_button"))
     reacao = next(d.value for d in at.dataframe if "Rz (kN)" in d.value.columns)
     assert len(reacao) == 24
     assert reacao["Rz (kN)"].tolist() == pytest.approx((-tabela["Fz (kN)"]).tolist(), abs=1e-9)
-    at.radio(key="rb_eixos").set_value(rb.EIXOS_MODELO).run()
-    assert not at.exception
-    assert any("Eixos do modelo do SolidWorks (Y para cima)" in c.value for c in at.caption)
+    assert not at.radio  # um sistema de eixos só: sem escolher os do SolidWorks
+    assert any("Padrão de eixos" in c.value for c in at.caption)
     json.dumps(em.para_dicionario(dados))  # o projeto continua gravável

@@ -102,10 +102,7 @@ def test_reacoes_nas_bases_no_memorial_com_os_desenhos():
     modelo = montar_modelo_relatorio(projeto, registros_ids=[registro["id"]])
     capitulo = next(s for s in modelo["secoes"] if "Reações nas bases" in str(s.get("titulo", "")))
     titulos = [b.get("titulo") for b in capitulo.get("blocos", []) if b.get("tipo") == "imagem"]
-    assert (
-        "Sistema de coordenadas das reações nas bases" in titulos
-        and "O projeto e os pés" in titulos
-    )
+    assert "Padrão de eixos das reações nas bases" in titulos and "O projeto e os pés" in titulos
     texto = texto_word(gerar_relatorio_industrial_word(projeto, registros_ids=[registro["id"]]))
     assert "AÇÃO DA ESTRUTURA NA FUNDAÇÃO" in texto and "REAÇÃO DO APOIO NA ESTRUTURA" in texto
 
