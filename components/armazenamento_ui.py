@@ -125,7 +125,9 @@ def aviso_de_armazenamento() -> None:
     """Aviso completo no corpo da página, nas telas onde o usuário cria e salva projetos."""
     estado = armazenamento.situacao()
     if estado.exige_atencao:
-        st.warning(f"**{estado.titulo}.** {estado.detalhe}", icon=":material/cloud_off:")
+        # a chave dá a classe st-key-aviso_armazenamento, que a impressão das páginas esconde
+        with st.container(key="aviso_armazenamento"):
+            st.warning(f"**{estado.titulo}.** {estado.detalhe}", icon=":material/cloud_off:")
 
 
 def _situacao_do_espelho(estado: SituacaoArmazenamento) -> None:

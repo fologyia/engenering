@@ -178,6 +178,71 @@ def linhas_resumidas(
     )
 
 
+def _detalhes_das_linhas(linhas: Sequence[Verificacao], nome: Callable[[Verificacao], str]) -> None:
+    """Fórmula com os números do caso e item da norma de cada linha, em texto corrido."""
+    for v in linhas:
+        valores = (
+            f"{_valor_com_unidade(v.solicitante, v.unidade, casas_coerentes(v))} / "
+            f"{_valor_com_unidade(v.resistente, v.unidade, casas_coerentes(v))}"
+        )
+        partes = [f"**{texto_markdown(nome(v))}** — {v.status} ({texto_markdown(valores)})"]
+        if v.formula:
+            partes.append(f"Fórmula: {texto_markdown(v.formula)}")
+        if v.referencia:
+            partes.append(f"Referência: {texto_markdown(v.referencia)}")
+        st.markdown("  \n".join(partes))
+
+
+def _tabela_de_status(linhas: Sequence[Verificacao], nome: Callable[[Verificacao], str]) -> None:
+    configuracao = {
+        "Verificação": st.column_config.TextColumn(width="large"),
+        **{
+            coluna: st.column_config.TextColumn(width="small", help=ajuda)
+            for coluna, ajuda in AJUDA_COLUNAS_RESUMIDAS.items()
+        },
+    }
+    st.dataframe(
+        _chaves_estilo(linhas_resumidas(linhas, nome).style)(
+            lambda valor: COR_STATUS.get(valor, ""), subset=["Status"]
+        ),
+        hide_index=True,
+        width="stretch",
+        column_config=configuracao,
+    )
+
+
+def mostrar_verificacoes_por_status(
+    grupos: Sequence[tuple[str, Sequence[Verificacao]]],
+    *,
+    nome: Callable[[Verificacao], str] = lambda v: v.nome,
+) -> None:
+    """As que reprovam ou pedem atenção (NÃO OK, ALERTA) abertas, com a fórmula; as aprovadas
+    (OK, INFO) num expansor fechado, por categoria, com tabela e fórmulas."""
+    todas = [v for _, linhas in grupos for v in linhas]
+    conferir_linhas(todas)
+    problemas = [(g, [v for v in ls if v.status in ("NÃO OK", "ALERTA")]) for g, ls in grupos]
+    problemas = [(g, ls) for g, ls in problemas if ls]
+    aprovadas = [(g, [v for v in ls if v.status not in ("NÃO OK", "ALERTA")]) for g, ls in grupos]
+    aprovadas = [(g, ls) for g, ls in aprovadas if ls]
+    if not problemas:
+        st.success("Todas as verificações com critério passaram.", icon=":material/check_circle:")
+    for grupo, linhas in problemas:
+        st.markdown(f"**{texto_markdown(grupo)}**")
+        _tabela_de_status(linhas, nome)
+        _detalhes_das_linhas(linhas, nome)
+    quantas = sum(len(ls) for _, ls in aprovadas)
+    if quantas:
+        with st.expander(
+            f"Ver memorial detalhado das verificações aprovadas ({quantas})",
+            expanded=False,
+            icon=":material/functions:",
+        ):
+            for grupo, linhas in aprovadas:
+                st.markdown(f"#### {texto_markdown(grupo)}")
+                _tabela_de_status(linhas, nome)
+                _detalhes_das_linhas(linhas, nome)
+
+
 def mostrar_verificacoes_resumidas(
     grupos: Sequence[tuple[str, Sequence[Verificacao]]],
     *,

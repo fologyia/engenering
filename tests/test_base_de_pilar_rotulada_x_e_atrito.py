@@ -103,12 +103,18 @@ def test_atrito_que_basta_continua_como_antes():
 
 
 @pytest.mark.parametrize("n", [30.0, 10.0, 1.0])
-def test_atrito_que_nao_basta_reprova_sem_engatar_chumbadores(n):
+def test_atrito_que_nao_basta_manda_a_cortante_aos_chumbadores(n):
     r = bp.calcular(replace(PADRAO, n_sd_kN=n, v_sd_kN=20))
     nomes = _nomes(r)
-    assert nomes[ATRITO].status == "NÃO OK"
-    assert nomes[ATRITO].aproveitamento == pytest.approx(20 * 1.35 / (0.45 * n))
-    assert bp.LINHA_FLEXAO_NA_ARGAMASSA not in nomes
+    assert r.caso == "C1"
+    assert ATRITO not in nomes  # sem o NÃO OK de centenas de %
+    info = nomes[NAO_BASTA]
+    assert info.status == "INFO"
+    assert f"N_Sd ≥ {round(20 * 1.35 / 0.45)} kN" in info.formula
+    # a mesma verificação das combinações com tração
+    assert "Chumbador: aço à cortante (ACI 318-19)" in nomes
+    assert "Chumbadores direto no furo: deslizamento antes do contato" in nomes
+    assert any("atrito na argamassa" in a and "compressão desta combinação" in a for a in r.avisos)
 
 
 def test_atrito_igual_ao_caso_de_tracao_na_cortante_dos_chumbadores():
@@ -131,9 +137,9 @@ def test_envoltoria_com_uma_combinacao_de_vento():
     )
     r = bp.calcular(replace(PADRAO, casos=casos))
     nomes = _nomes(r)
-    assert nomes[ATRITO].status == "NÃO OK"
-    assert nomes[ATRITO].formula.startswith("[ELU2 vento]")
-    assert bp.LINHA_FLEXAO_NA_ARGAMASSA not in nomes
+    assert nomes[ATRITO].status == "OK"  # o da combinação com compressão grande
+    assert nomes[NAO_BASTA].status == "INFO"  # o vento foi aos chumbadores
+    assert "Chumbador: aço à cortante (ACI 318-19)" in nomes
 
 
 def test_placa_de_cisalhamento_nao_muda():

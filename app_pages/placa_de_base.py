@@ -13,7 +13,7 @@ from components.placa_de_base_help import AJUDA
 from components.project_tools import botao_registrar_calculo
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
-from components.verification_table import mostrar_verificacoes_resumidas, texto_markdown
+from components.verification_table import mostrar_verificacoes_por_status, texto_markdown
 from core import base_de_pilar as bp
 from core import soldas as sd
 from core.desenho_placa_base import figura_da_base
@@ -31,6 +31,22 @@ cabecalho_pagina(
     icone=":material/anchor:",
     cor="blue",
     ajuda_modulo="Placas de base",
+)
+# impressão direta pelo navegador: sem a barra lateral, os botões e os avisos de configuração
+st.html(
+    """<style>
+@media print {
+  [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
+  [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"],
+  [data-testid="stStatusWidget"], [data-testid="stElementToolbar"],
+  .stButton, .stDownloadButton, .stFormSubmitButton, [data-testid="stPageLink"],
+  .st-key-aviso_armazenamento {
+    display: none !important;
+  }
+  [data-testid="stMain"], [data-testid="stAppViewContainer"] { margin-left: 0 !important; }
+  [data-testid="stMainBlockContainer"] { padding-top: 0 !important; max-width: 100% !important; }
+}
+</style>"""
 )
 PADRAO = bp.EntradaBase()
 CASOS = {
@@ -53,6 +69,36 @@ def _n(valor: float, casas: int = 1) -> str:
 
 
 MODOS = {"tabela": "Da Tabela 18", "formula": "Por fórmula (fora da Tabela 18)"}
+
+#: Lugares logo abaixo dos campos em que 0 = automático: depois do cálculo, cada um mostra o
+#: valor que o programa adotou (os campos vêm antes do resultado na página).
+ADOTADOS: dict[str, object] = {}
+
+
+def _mostrar_adotados(e: bp.EntradaBase, r: bp.ResultadoBase) -> None:
+    g, tab = r.geometria, r.linha
+
+    def legenda(chave: str, texto: str) -> None:
+        lugar = ADOTADOS.get(chave)
+        if lugar is not None:
+            lugar.caption(f":material/auto_mode: Adotado automaticamente: {texto}")  # type: ignore[attr-defined]
+
+    if "h_ef" in ADOTADOS and not e.h_ef_mm:
+        legenda("h_ef", f"h_ef = {_n(bp.embutimento(e, tab), 0)} mm")
+    if not e.e_n_mm:
+        legenda("e_n", f"e_n = {_n(g.e_n, 0)} mm")
+    if not (e.lx_mm and e.ly_mm):
+        legenda("placa", f"{_n(g.lx, 0)} × {_n(g.ly, 0)} mm")
+    if not e.perna_pilar_mm and r.perna_do_pilar:
+        legenda("perna", f"d_w = {_n(r.perna_do_pilar, 0)} mm")
+    if not (e.bloco_x_mm and e.bloco_y_mm and e.bloco_z_mm):
+        bx, by, _ = bp.bloco_para_o_cone(e, g, tab)
+        h_a, _ = bp.altura_do_bloco(e, g, tab)
+        legenda(
+            "bloco",
+            f"bloco {_n(bx, 0)} × {_n(by, 0)} mm, altura {_n(h_a, 0)} mm (o mínimo da Tabela 18, "
+            "nota e, nas medidas deixadas em 0)",
+        )
 
 
 def _rotulo_rosca(nome: str) -> str:
@@ -395,6 +441,7 @@ with st.container(border=True), secao_protegida("2. Tipo de chumbador"):
             persist_state="session",
             help=AJUDA["h_ef"],
         )
+        ADOTADOS["h_ef"] = colunas[1].empty()
     produto = {}
     if ancoragem in bp.POS_INSTALADOS:
         with st.expander("Qualificação da ancoragem", expanded=True):
@@ -516,6 +563,7 @@ with st.container(border=True), secao_protegida("3. Placa"):
         persist_state="session",
         help=AJUDA["e_n"],
     )
+    ADOTADOS["e_n"] = colunas[2].empty()
     colunas = st.columns(3)
     lx_placa = colunas[0].number_input(
         "Comprimento ℓx (mm) — 0 = o mínimo",
@@ -539,6 +587,7 @@ with st.container(border=True), secao_protegida("3. Placa"):
         persist_state="session",
         help=AJUDA["ly_placa"],
     )
+    ADOTADOS["placa"] = colunas[2].empty()
 
 with st.container(border=True), secao_protegida("4. Concreto e bloco"):
     st.subheader("4. Concreto e bloco", help=AJUDA["sec_concreto"])
@@ -578,6 +627,7 @@ with st.container(border=True), secao_protegida("4. Concreto e bloco"):
     )
     bloco_x = bloco_y = bloco_z = 0.0
     razao = 1.0
+    ADOTADOS["bloco"] = st.empty()
     colunas = st.columns(3)
     dx = dy = 0.0
     if bloco_informado:
@@ -909,6 +959,7 @@ with st.container(border=True), secao_protegida("7. Soldas"):
         persist_state="session",
         help=AJUDA["perna_pilar"],
     )
+    ADOTADOS["perna"] = colunas[0].empty()
     eletrodo = colunas[1].selectbox(
         "Eletrodo",
         list(sd.ELETRODOS),
@@ -1050,6 +1101,8 @@ try:
 except bp.BaseInvalida as erro:
     st.error(str(erro), icon=":material/error:")
     st.stop()
+
+_mostrar_adotados(entrada, resultado)
 
 st.header("Resultados")
 colunas = st.columns(4)
@@ -1196,7 +1249,7 @@ if medidas is not None:
         )
 
 st.subheader("Verificações", help=AJUDA["res_verificacoes"])
-mostrar_verificacoes_resumidas(list(resultado.grupos))
+mostrar_verificacoes_por_status(list(resultado.grupos))
 st.download_button(
     "Verificações (CSV)",
     data=csv_verificacoes(list(resultado.verificacoes)),
@@ -1280,10 +1333,22 @@ with st.container(border=True), secao_protegida("Base mais leve que atende"):
 with st.container(border=True), secao_protegida("Memorial desta base"):
     st.subheader("Memorial desta base", help=AJUDA["sec_memorial"])
     projeto_ativo = obter_projeto_ativo()
+    completas = False
+    if resultado.envoltoria:
+        completas = st.checkbox(
+            "Incluir tabela completa de todas as combinações no memorial",
+            key="pb_anexo_combinacoes",
+            persist_state="session",
+            help="Sem marcar, o memorial traz só a envoltória: as combinações críticas (máxima "
+            "compressão e tração, maiores momentos e cortante, maior aproveitamento e a que "
+            "governa cada verificação). Marcado, a lista inteira vai no Anexo A.",
+        )
     botoes = st.columns(2)
     botoes[0].download_button(
         "Baixar o memorial (Word)",
-        data=lambda: bp.memorial_da_base(resultado, projeto=projeto_ativo),
+        data=lambda: bp.memorial_da_base(
+            resultado, projeto=projeto_ativo, combinacoes_completas=completas
+        ),
         file_name="memorial_placa_de_base.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         icon=":material/description:",
@@ -1294,7 +1359,9 @@ with st.container(border=True), secao_protegida("Memorial desta base"):
     )
     botoes[1].download_button(
         "Baixar o memorial (PDF)",
-        data=lambda: bp.memorial_da_base(resultado, projeto=projeto_ativo, formato="pdf"),
+        data=lambda: bp.memorial_da_base(
+            resultado, projeto=projeto_ativo, formato="pdf", combinacoes_completas=completas
+        ),
         file_name="memorial_placa_de_base.pdf",
         mime="application/pdf",
         icon=":material/picture_as_pdf:",
@@ -1306,7 +1373,7 @@ with st.container(border=True), secao_protegida("Memorial desta base"):
 with st.container(border=True), secao_protegida("Registrar no projeto"):
     st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
     botao_registrar_calculo(
-        bp.registro_base(resultado),
+        bp.registro_base(resultado, combinacoes_completas=completas),
         key="registrar_placa_de_base",
         rotulo="Registrar a base no projeto ativo",
     )

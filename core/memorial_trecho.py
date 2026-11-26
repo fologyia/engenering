@@ -453,14 +453,24 @@ def escrever_registro(
             return numero_pt(valor) if isinstance(valor, float) else str(valor)
 
         tabelas = [cabecalhos]
-        if "R_N (kN)" in cabecalhos:
-            tabelas = [
-                ["Combinação", "N_Sd (kN)", "M_Sd (kN·m)", "M_Sd,y (kN·m)", "V_Sd (kN)"],
-                ["Combinação", "Vx (kN)", "Vy (kN)", "Mz (kN·m)"],
-                ["Combinação", "R_N (kN)", "R_M (kN·m)", "R_M,y (kN·m)"],
-                ["Combinação", "Caso", "Status", "Aproveitamento", "Governa"],
-                ["Combinação", "t_p,min (mm)", "F_t máx (kN)"],
-            ]
+        prontas = [
+            tab
+            for tab in _lista(resultados.get("tabelas_memorial"))
+            if isinstance(tab, Mapping) and tab.get("cabecalhos")
+        ]
+        if "R_N (kN)" in cabecalhos and prontas:
+            # placa de base: a envoltória com as combinações críticas (e, se pedido, o Anexo A
+            # com todas), não o despejo de todas as combinações em várias tabelas
+            tabelas = []
+            for tab in prontas:
+                if tab.get("subtitulo"):
+                    t.titulo(str(tab["subtitulo"]), nivel + 2)
+                t.tabela(
+                    [str(k) for k in tab["cabecalhos"]],
+                    [[str(x) for x in linha] for linha in _lista(tab.get("linhas"))],
+                    legenda=texto_de_memorial(str(tab.get("legenda") or "Combinações")),
+                    fonte=float(tab.get("fonte") or 8),
+                )
         for colunas in tabelas:
             t.tabela(
                 [k.replace("Aproveitamento", "Aprov.") for k in colunas],

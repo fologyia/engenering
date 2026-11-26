@@ -89,6 +89,7 @@ from __future__ import annotations
 
 import functools
 import math
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields, replace
 from itertools import combinations
@@ -494,6 +495,18 @@ class Geometria:
         return -0.80 * self.b_f / 2, 0.80 * self.b_f / 2
 
 
+INCONCLUSIVO = "Inconclusivo"
+APROVADO_COM_RESSALVAS = "Aprovado com ressalvas"
+
+
+def falta_dado(v: Verificacao) -> bool:
+    """O alerta pede um dado que falta (então o resultado é inconclusivo, não uma ressalva)."""
+    texto = (v.formula or "").lower()
+    return any(
+        chave in texto for chave in ("inconclusiv", "informar", "informe ", "ligue a verificação")
+    )
+
+
 @dataclass(frozen=True)
 class ResultadoBase:
     entrada: EntradaBase
@@ -537,8 +550,12 @@ class ResultadoBase:
 
     @property
     def situacao(self) -> str:
+        """Inconclusivo só quando falta dado; alertas que são ressalvas (o mecanismo de cortante
+        escolhido, a torção, a orientação da placa de cisalhamento…) com todas as verificações
+        com critério passando saem como "Aprovado com ressalvas"."""
         if self.status == "ALERTA":
-            return "Inconclusivo"
+            alertas = [v for v in self.verificacoes if v.status == "ALERTA"]
+            return INCONCLUSIVO if any(map(falta_dado, alertas)) else APROVADO_COM_RESSALVAS
         if self.status == "OK" and self.entrada.modo_bloco == "pre_dimensionamento":
             return "Pré-dimensionado"
         return self.status
@@ -820,7 +837,7 @@ def lado_da_arruela(d_b: float, d_f: float) -> float:
 def borda_nbr_placa(rosca: Rosca, d_f: float) -> float | None:
     """Referência de borda da NBR 8800, Tabelas 16 e 17, para os diâmetros tabelados."""
     if rosca.nome in PARAFUSOS:
-        base = PARAFUSOS[rosca.nome][2]
+        base = float(PARAFUSOS[rosca.nome][2])
         padrao, _ = dimensoes_do_furo(rosca.nome, FURO_PADRAO, "NBR8800_2024")
     elif rosca.d_b >= (36 if rosca.familia == FAMILIA_METRICA else 31.75 + 1e-9):
         base = 1.25 * rosca.d_b
@@ -981,11 +998,10 @@ def ancoragem_verificada(e: EntradaBase) -> bool:
         or e.tipo not in TIPOS_DA_NORMA
         or not ACOS_CHUMBADOR[e.aco_chumbador].equivalente_a36
         or forma_do_perfil(e.perfil) == FORMA_U
-        or e.cortante
-        in (
-            *CORTANTE_PELOS_CHUMBADORES,
-            CORTANTE_AUTO,
-        )  # fora da 6.7: a cortante vai toda pela ACI 318-19
+        # fora da 6.7: a cortante vai toda pela ACI 318-19. As arruelas soldadas são da 6.7
+        # (6.7.2.5), e o automático só vai aos chumbadores quando o atrito não basta — então a
+        # verificação do aço do chumbador à cortante já entra pela seção da cortante.
+        or e.cortante == CORTANTE_DIRETOS
     )
 
 
@@ -1488,6 +1504,9 @@ def _intervalo_na_reta(
     return (min(pontos), max(pontos)) if pontos else None
 
 
+FATIAS_DA_ZONA = 240
+
+
 def espessura_pela_zona(
     g: Geometria,
     zona: tuple[Ponto, ...],
@@ -1495,86 +1514,72 @@ def espessura_pela_zona(
     fy_d: float,
     plano: tuple[float, float, float] | None = None,
 ) -> tuple[float, str]:
-    """Máximo do momento integrado em faixas unitárias independentes.
+    """t_p pela pressão na zona comprimida, linha a linha.
 
-    Entre vértices e cruzamentos do polígono com o engaste os limites da
-    integral são afins. Para pressão afim, q é um polinômio de grau até três.
-    Avalia os extremos de cada intervalo e as raízes internas de dq/dy.
+    Para cada linha de engaste da 6.7 (x = ±0,95·d/2 para m, y = ±0,80·b_f/2 para n; no U, o dorso
+    da alma e 0,80·b_f a partir dele), o momento por
+    unidade de largura da pressão além dela é calculado em fatias, q = ∫σ·(s − linha)·ds, e tirado
+    na média numa janela da largura do balanço (a placa reparte a carga de borda); t =
+    √(4·q/(f_y/γ_a1)). Com a zona numa faixa da largura toda, é exatamente a fórmula da 6.7 (m, n
+    ou p = √(ℓ_c·(2m − ℓ_c))); com um canto só comprimido, o canto não pede a placa toda.
+
+    A pressão é σ constante ou, com ``plano`` = (σ₀, a_x, a_y), a linear σ = σ₀ + a_x·x + a_y·y
+    (distribuição elástica), integrada exatamente em cada fatia.
     """
     if not zona:
         return 0.0, "sem zona comprimida"
-    w0, ax, ay = plano or (sigma, 0.0, 0.0)
-
-    def varrer(limitado: bool) -> tuple[float, str]:
-        # Cada linha de engaste só tem aço por trás dentro de um vão (linhas em x: entre as
-        # pontas das mesas; linhas em y: ao longo da alma). Com `limitado`, fora do vão o apoio vai
-        # para a diagonal a 45° do canto do aço e o balanço encurta da distância ao vão; sem ele, a
-        # linha vale em toda a largura (o adotado, a favor da segurança).
-        vao_em_y = g.faixa_y
-        vao_em_x = (-g.d / 2, g.d / 2)
-        linhas = (
-            (0, 0.475 * g.d, 1, vao_em_y),
-            (0, -0.475 * g.d, -1, vao_em_y),
-            (1, g.engaste_y[1], 1, vao_em_x),
-            (1, g.engaste_y[0], -1, vao_em_x),
-        )
-        pior, descricao = 0.0, "a zona comprimida não passa das linhas de engaste"
-        for eixo, linha, sinal, (v_min, v_max) in linhas:
-            outro = 1 - eixo
-            cortes = {p[outro] for p in zona} | {v_min, v_max}
-            for p, r in zip(zona, zona[1:] + zona[:1], strict=True):
-                if (p[eixo] - linha) * (r[eixo] - linha) < 0:
-                    cortes.add(
-                        p[outro] + (r[outro] - p[outro]) * (linha - p[eixo]) / (r[eixo] - p[eixo])
-                    )
-            # A linha de engaste efetiva anda com δ: pontos extras onde o balanço encurta.
-            v_baixo, v_alto = min(cortes), max(cortes)
-            cortes.update(v_baixo + (v_alto - v_baixo) * k / 96 for k in range(1, 96))
-            ordenados = sorted(cortes)
-
-            def momento(v, eixo=eixo, sinal=sinal, linha=linha, v_min=v_min, v_max=v_max):
-                limites = _intervalo_na_reta(zona, eixo, v)
-                if limites is None:
-                    return 0.0
-                efetiva = linha + sinal * max(0.0, v_min - v, v - v_max) if limitado else linha
-                a, b = sorted(max(0.0, sinal * (u - efetiva)) for u in limites)
-                grad, transv = (ax, ay) if eixo == 0 else (ay, ax)
-                return max(
-                    0.0,
-                    (w0 + grad * efetiva + transv * v) * (b * b - a * a) / 2
-                    + sinal * grad * (b**3 - a**3) / 3,
+    poligono = list(zona)
+    pressao = "a pressão linear elástica" if plano is not None else "a pressão"
+    pior, texto = 0.0, ""
+    y_baixo, y_cima = g.engaste_y
+    casos = (  # (eixo, linha do lado +, linha do lado − medida para fora, borda, lado, nome)
+        (0, 0.95 * g.d / 2, 0.95 * g.d / 2, g.lx / 2, g.ly, "m"),
+        (1, y_cima, -y_baixo, g.ly / 2, g.lx, "n"),
+    )
+    for eixo, meio_mais, meio_menos, borda, lado, nome in casos:
+        passo = lado / FATIAS_DA_ZONA
+        for sinal in (1.0, -1.0):
+            meio = meio_mais if sinal > 0 else meio_menos
+            balanco = borda - meio
+            if balanco <= 0:
+                continue
+            q: list[float] = []
+            for k in range(FATIAS_DA_ZONA):
+                valor = -lado / 2 + (k + 0.5) * passo
+                trecho = _intervalo_na_reta(poligono, eixo, valor)
+                momento = 0.0
+                if trecho is not None:
+                    perto, longe = sorted(sinal * v - meio for v in trecho)
+                    perto, longe = max(perto, 0.0), max(longe, 0.0)
+                    if plano is None:
+                        momento = sigma * (longe**2 - perto**2) / 2
+                    else:  # σ(u) = α + β·u, u medido da linha de engaste
+                        w0, a_x, a_y = plano
+                        a_eixo, a_outro = (a_x, a_y) if eixo == 0 else (a_y, a_x)
+                        alfa = w0 + a_eixo * sinal * meio + a_outro * valor
+                        beta = a_eixo * sinal
+                        momento = max(
+                            alfa * (longe**2 - perto**2) / 2 + beta * (longe**3 - perto**3) / 3,
+                            0.0,
+                        )
+                q.append(momento)
+            janela = max(1, min(FATIAS_DA_ZONA, round(balanco / passo)))
+            soma = sum(q[:janela])
+            maior = soma
+            for k in range(janela, FATIAS_DA_ZONA):
+                soma += q[k] - q[k - janela]
+                maior = max(maior, soma)
+            q_medio = maior / janela
+            t = math.sqrt(4 * q_medio / fy_d)
+            if t > pior:
+                pior = t
+                texto = (
+                    f"balanço {nome} = {_n(balanco, 1)} mm: momento d{pressao} além da linha "
+                    f"de engaste, por fatias, na média de uma janela de largura {nome} = "
+                    f"{_n(min(balanco, lado), 0)} mm: q = {_n(q_medio / 1e3, 2)} kN·m/m, "
+                    f"t = √(4·q/(f_y/γ_a1)) = {_n(t, 1)} mm"
                 )
-
-            for ini, fim in zip(ordenados, ordenados[1:], strict=False):
-                h = (fim - ini) / 3
-                q0, q1, q2, q3 = [momento(v) for v in (ini, ini + h, ini + 2 * h, fim)]
-                d1, d2, d3 = q1 - q0, q2 - 2 * q1 + q0, q3 - 3 * q2 + 3 * q1 - q0
-                a, b, c = d3 / 6, (d2 - d3) / 2, d1 - d2 / 2 + d3 / 3
-                candidatos = [(q0, ini), (q3, fim)]
-                disc = b * b - 3 * a * c
-                if abs(a) > 1e-12 * max(1, abs(b), abs(c)) and disc >= 0:
-                    raizes = [(-b + s * math.sqrt(disc)) / (3 * a) for s in (-1, 1)]
-                else:
-                    raizes = [-c / (2 * b)] if b else []
-                candidatos.extend((momento(ini + h * u), ini + h * u) for u in raizes if 0 < u < 3)
-                q, v = max(candidatos)
-                if q > pior:
-                    pior = q
-                    descricao = (
-                        f"Faixa unitária em {'y' if eixo == 0 else 'x'} = {_n(v)} mm, "
-                        f"engaste em {_n(linha)} mm. q = ∫p·u du = {_n(q / 1000)} kN·m/m."
-                    )
-        return pior, descricao
-
-    pior, descricao = varrer(False)
-    refinado, onde = varrer(True)
-    if refinado < 0.97 * pior:
-        descricao += (
-            " A faixa crítica passa de onde há aço por trás da linha de engaste (canto da placa)."
-            f" Sensibilidade, não adotada: com apoio a 45° a partir do canto do aço, t_p,min = "
-            f"{_n(math.sqrt(4 * refinado / fy_d), 1)} mm. Validar por linhas de plastificação ou MEF."
-        )
-    return math.sqrt(4 * pior / fy_d), descricao
+    return pior, texto or "a zona comprimida não passa das linhas de engaste"
 
 
 def corte_de_pressao(r: ResultadoBase) -> tuple[float, float, float, float, float] | None:
@@ -1872,7 +1877,7 @@ def distribuicao_elastica(
         matriz = [[rho * sum(v[i] * v[j] for v in vetores) for j in range(3)] for i in range(3)]
         solucao = _resolver_3x3(matriz, list(carga))
         if solucao is not None:
-            q_sem = tuple(solucao)
+            q_sem = (solucao[0], solucao[1], solucao[2])
 
             def pressao(x, y):
                 return q_sem[0] + q_sem[1] * x + q_sem[2] * y
@@ -2965,13 +2970,10 @@ def ruptura_da_borda_por_cortante(
             v_b = min(v_b1, v_b2)
             phi_v = 0.75 if e.armadura_suplementar else 0.70
             resultante = (e.desloc_x_mm, e.desloc_y_mm)
-            # Um único chumbador ativo não tem excentricidade dentro do próprio grupo.
-            # O equilíbrio da torção externa permanece sujeito à verificação independente.
-            ec = (
-                0.0
-                if len(ativos) == 1
-                else abs(sum(p[1 - eixo] for p in ativos) / len(ativos) - resultante[1 - eixo])
-            )
+            # e′_V em relação ao centroide dos chumbadores que levam a cortante (a fila da frente,
+            # hipótese acima): com um só, não há excentricidade (ψ_ec,V = 1,0). O equilíbrio da
+            # torção externa permanece sujeito à verificação independente.
+            ec = 0.0 if len(fila) == 1 else abs(sum(fila) / len(fila) - resultante[1 - eixo])
             psi_ec = 1 / (1 + ec / (1.5 * c1))
             base = phi_v * a_vc / a_vco * psi_h * v_b * psi_ec
             resistente = base * psi_ed
@@ -3340,12 +3342,20 @@ LINHAS_DO_BLOCO = (
 
 
 def chumbadores_passam(r: ResultadoBase) -> bool:
-    """Inclui o aço, a flexão, a ancoragem e o mecanismo de cortante."""
+    """Nenhuma verificação dos chumbadores ou da cortante reprova, fora as que dependem do bloco.
+
+    O cone, a ruptura da borda, o pryout e a interação dependem do bloco, do embutimento e da
+    armadura de ancoragem (ACI 318-19 17.5.2.1), não do diâmetro: com o bloco mínimo, que cresce
+    com a₃, contá-las faria a busca reprovar todos os diâmetros (ou um enorme "passar"). Elas
+    continuam nas verificações da base. Os alertas do mecanismo (direto no furo) também não
+    dependem do diâmetro.
+    """
     return all(
-        v.status not in ("NÃO OK", "ALERTA")
+        v.status != "NÃO OK"
         for grupo, linhas in r.grupos
         if grupo in (GRUPO_CHUMBADORES, GRUPO_CORTANTE)
         for v in linhas
+        if v.nome not in LINHAS_DO_BLOCO
     )
 
 
@@ -3488,24 +3498,12 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "Informar a espessura da chapa para o comprimento de corte.",
             )
         )
-    if min(e.bloco_x_mm, e.bloco_y_mm, e.bloco_z_mm) == 0:
-        texto_bloco = "Dimensões estimadas do bloco. Resistências condicionadas à execução e à verificação do bloco indicado."
-        if e.modo_bloco == "verificacao":
-            linhas.append(
-                _alerta(
-                    "Geometria real do bloco",
-                    "Geometria da obra",
-                    "Verificação inconclusiva. Informar largura, comprimento e altura reais.",
-                )
-            )
-        else:
-            linhas.append(_info("Pré-dimensionamento do bloco", texto_bloco))
-    if g.e_u or momento_y:
+    if min(e.bloco_x_mm, e.bloco_y_mm, e.bloco_z_mm) == 0 and e.modo_bloco == "verificacao":
         linhas.append(
             _alerta(
-                "Validação do modelo de placa",
-                "Campo de aplicação da NBR 8800, 6.7",
-                "Conferir o modelo de faixas e a compatibilidade da ligação com análise independente para esta geometria e carregamento.",
+                "Geometria real do bloco",
+                "Geometria da obra",
+                "Verificação inconclusiva. Informar largura, comprimento e altura reais.",
             )
         )
     if g.e_u:
@@ -3620,12 +3618,6 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "duas direções (zona comprimida além de uma linha neutra inclinada, placa rígida)",
                 f"{REF} 6.7.1.1 e 6.7.1.3",
             )
-        )
-        avisos.append(
-            "Flexão oblíqua (momento nos dois eixos): as fórmulas da 6.7 são só do eixo de maior "
-            "inércia, e o programa usa o mesmo método em duas direções — pressão de contato numa "
-            "zona da placa limitada por uma linha neutra inclinada e chumbadores com força "
-            "proporcional à distância a ela (placa rígida). Registre o método no memorial."
         )
     # ------------------------------------------------------------------ o caso
     inicios.append((GRUPO_CONCRETO_E_PLACA, len(linhas)))
@@ -3919,30 +3911,24 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     ) / 1e6
     tol_n = 1e-7 * max(1.0, abs(axial) / 1000, comp / 1000)
     tol_m = 1e-7 * max(1.0, momento / 1e6, momento_y / 1e6, comp * max(g.lx, g.ly) / 1e6)
-    linhas.append(
-        _limite(
-            "Equilíbrio dos esforços aplicados",
-            abs(rn) <= tol_n and max(abs(rm1), abs(rm2)) <= tol_m,
-            "Integração da pressão e forças individuais nos eixos da placa",
-            f"A_c = {_n(a, 2)} mm², C = {_n(comp / 1000, 4)} kN. "
-            f"R_N = {_n(rn, 7)} kN, R_M = {_n(rm1, 8)} e R_M,y = {_n(rm2, 8)} kN·m. "
-            "Momentos positivos comprimem x e y positivos, respectivamente.",
+    # conferência interna do programa: só aparece se falhar (então nada do resto vale)
+    equilibrou = abs(rn) <= tol_n and max(abs(rm1), abs(rm2)) <= tol_m
+    if not equilibrou:
+        linhas.append(
+            _limite(
+                "Equilíbrio dos esforços aplicados",
+                equilibrou,
+                "Integração da pressão e forças individuais nos eixos da placa",
+                f"A_c = {_n(a, 2)} mm², C = {_n(comp / 1000, 4)} kN. "
+                f"R_N = {_n(rn, 7)} kN, R_M = {_n(rm1, 8)} e R_M,y = {_n(rm2, 8)} kN·m. "
+                "Momentos positivos comprimem x e y positivos, respectivamente.",
+            )
         )
-    )
     item_caso = {"C1": "a", "C2": "b", "C3": "c", "T1": "d", "T2": "e", "T3": "f"}[caso]
     ref_caso = f"{REF} 6.7.2.2 {item_caso})"
     if obliqua is not None:
         ref_caso = f"{REF} 6.7.2.2 {item_caso}) e 6.7.1.1 (flexão oblíqua)"
     if dist is not None:
-        if axial > 0:
-            indice = 6 * (momento / g.lx + momento_y / g.ly) / axial
-            linhas.append(
-                _info(
-                    "Núcleo central no modelo linear",
-                    f"6|e_x|/ℓx + 6|e_y|/ℓy = {_n(indice, 4)}. "
-                    + ("Contato integral." if indice <= 1 else "Contato parcial."),
-                )
-            )
         ref_caso = f"método elástico da placa rígida ({REF} 6.7.1.1)"
     # ------------------------------------------------------------------ concreto e placa
     if dist is not None and sigma_sd is not None:
@@ -4025,14 +4011,6 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "Pico de pressão na superfície de contato.",
             )
         )
-    elif zona and e.modo_bloco == "verificacao":
-        linhas.append(
-            _alerta(
-                "Compressão no graute",
-                "Material da obra",
-                "Informar a resistência de cálculo do graute.",
-            )
-        )
     # ------------------------------------------------------------------ chumbadores
     inicios.append((GRUPO_CHUMBADORES, len(linhas)))
     medidas: MedidasPorFormula | None = None
@@ -4108,12 +4086,46 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
     if modo_v == CORTANTE_AUTO:
         modo_v = CORTANTE_DIRETOS if v_sd > v_rd or e.mz_kNm else CORTANTE_ATRITO
         linhas.append(_info("Mecanismo automático de cortante", CORTANTES[modo_v]))
-    if v_sd and modo_v == CORTANTE_DIRETOS:
+    elif modo_v == CORTANTE_ATRITO and v_sd > 0 and (caso.startswith("T") or v_rd <= 0):
+        # Com tração (T1, T2, T3) ou sem pressão de contato não há atrito (6.7.2.3): a cortante
+        # vai aos chumbadores (escolha do usuário, 18/11/2026)
+        modo_v = CORTANTE_DIRETOS
+        avisos.append(
+            f"Caso {caso}: com tração não há atrito na argamassa (6.7.2.3); a cortante V_Sd = "
+            f"{_n(v_sd / 1e3, 1)} kN foi verificada nos chumbadores (corte do chumbador e flexão na "
+            "argamassa). Para os n chumbadores engatarem juntos, use arruelas soldadas ou placa de "
+            "cisalhamento."
+        )
+    elif modo_v == CORTANTE_ATRITO and v_sd > v_rd + 1e-6:
+        # compressão pequena: o atrito desta combinação não basta, e a cortante vai aos
+        # chumbadores, como na tração (6.7.2.3; escolha do usuário, 24/11/2026)
+        modo_v = CORTANTE_DIRETOS
+        linhas.append(
+            _info(
+                "Cortante: atrito na argamassa não basta",
+                f"V_Sd = {_n(v_sd / 1e3, 1)} kN > V_Rd = {_n(v_rd / 1e3, 1)} kN pelo atrito "
+                f"(μ = {_n(e.mu)} sobre a compressão desta combinação, ÷ γ_a2 = {_n(c.a2)}): "
+                f"precisaria de N_Sd ≥ {_n(v_sd * c.a2 / e.mu / 1e3, 0)} kN. A cortante foi "
+                "verificada nos chumbadores (corte e flexão na argamassa)",
+                f"{REF} 6.7.2.3",
+            )
+        )
+        avisos.append(
+            f"Caso {caso}: a compressão desta combinação é pequena e o atrito na argamassa "
+            f"(V_Rd = {_n(v_rd / 1e3, 1)} kN) não leva V_Sd = {_n(v_sd / 1e3, 1)} kN; a cortante "
+            "foi verificada nos chumbadores, como nas combinações com tração (6.7.2.3). Para os n "
+            "chumbadores engatarem juntos, use arruelas soldadas ou placa de cisalhamento."
+        )
+    um_so_com_componentes = engatados_sem_arruela(n_b) == 1 and (
+        e.vx_kN is not None or e.vy_kN is not None
+    )
+    # o alerta só quando há o que conferir: torção M_z ou um chumbador só, fora do centro
+    if v_sd and modo_v == CORTANTE_DIRETOS and (e.mz_kNm or um_so_com_componentes):
         texto_engate = (
             "A hipótese de engate parcial não determina as reações individuais. "
             "Verificar forças e momentos do conjunto e mecanismos adicionais."
         )
-        if engatados_sem_arruela(n_b) == 1 and (e.vx_kN is not None or e.vy_kN is not None):
+        if um_so_com_componentes:
             vx, vy = e.vx_kN or 0.0, e.vy_kN or 0.0
             saldos = [e.mz_kNm - (x * vy - y * vx) / 1000 for x, y in g.posicoes]
             texto_engate += (
@@ -4390,16 +4402,6 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         )
         razoes_v.append(("aço do chumbador, 17.7.1", v_i / aco_v if aco_v > 0 else math.inf))
         contas["cortante_aco"] = (v_i, n_eng, f_ut)
-        if v_i > 0:
-            linhas.append(
-                _info(
-                    "Graute: hipótese para o cortante dos chumbadores",
-                    "O fator 0,80 considera a camada de graute. Sua aplicação pressupõe graute "
-                    "e apoio adequados; para camada excepcionalmente espessa, folgas ou condições "
-                    "de apoio incomuns, avaliar cálculos adicionais pelo responsável técnico.",
-                    "ACI 318-19 17.7.1.2.1",
-                )
-            )
         if not soldadas:
             v_rd = n_eng * aco_v
         if ancoragem_verificada(e):
@@ -4509,20 +4511,6 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             c=c,
         )
         linhas.extend(linhas_arruela)
-    if f_t:
-        d_in = tab.d_b + FOLGA_DO_FURO_DA_ARRUELA
-        balanco = max(0.0, (tab.d_f - d_in) / 2)
-        q_arr = f_t * balanco / (math.pi * d_in)
-        linhas.append(
-            Verificacao(
-                "Arruela: flexão sobre o furo da placa",
-                q_arr,
-                (345 / c.a1) * g.t_arruela**2 / 6,
-                "N·mm/mm",
-                "Faixas radiais elásticas",
-                f"Reação uniformemente distribuída no perímetro interno. F_t·(d_f − d_in)/(2π·d_in), balanço {_n(balanco)} mm. Resistência f_yd·t_a²/6.",
-            )
-        )
     # ------------------------------------------------------------------ disposições construtivas
     ref_18 = f"{REF} Tabela 18"
     inicios.append((GRUPO_CONSTRUTIVAS_FORMULA if medidas else GRUPO_CONSTRUTIVAS, len(linhas)))
@@ -4705,7 +4693,21 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         f"{tab.arruela} mm, espessura {_n(g.t_arruela, 1)} mm, aço com f_y = 345 MPa, furo "
         f"d_b + 1,5 = {_n(tab.d_b + FOLGA_DO_FURO_DA_ARRUELA, 1)} mm; uma também entre a placa "
         "e a porca de nivelamento; "
-        + ("as de cima soldadas à placa (6.7.2.5)" if soldadas else "soltas (nota d)")
+        + (
+            "as de cima soldadas à placa com filete no contorno (6.7.2.5), levam a cortante"
+            if soldadas
+            else "soltas, sem solda (nota d: a arruela especial vale também sem cortante, porque "
+            f"o furo da placa, d_f = {_n(tab.d_f, 0)} mm, é alargado e uma arruela comum não o "
+            "cobre)"
+        )
+    )
+    # a distância real do eixo do chumbador mais externo à face do bloco mínimo: são o c_a1 e o
+    # c_a2 que a ACI 318-19 usa quando o bloco não é informado
+    c_x_min = n_b_min / 2 - max(abs(x) for x, _ in g.posicoes)
+    c_y_min = b_b_min / 2 - max(abs(y) for _, y in g.posicoes)
+    texto_c = (
+        f"; com ele, o chumbador fica a {_n(c_x_min, 0)} mm da face em ℓx e a {_n(c_y_min, 0)} mm "
+        f"em ℓy (≥ a₃ = {_n(tab.a3, 0)} mm; são os c_a1 e c_a2 da ACI 318-19)"
     )
     argamassa_texto = (
         f"e_n = {_n(g.e_n, 0)} mm; f_ck ≥ 2 × {_n(e.fck_MPa, 0)} = {_n(2 * e.fck_MPa, 0)} MPa "
@@ -4739,7 +4741,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "Bloco mínimo",
                 f"N_b ≥ {_n(n_b_min, 0)} mm ao longo de ℓx, B_b ≥ {_n(b_b_min, 0)} mm (chumbador "
                 f"a a₃ = {_n(tab.a3, 0)} mm da face), altura ≥ h_ef + 100 = {_n(a_b_min, 0)} mm; "
-                f"f_ck ≥ {_n(FCK_MIN_NBR_6118, 0)} MPa; dimensionado pela NBR 6118",
+                f"f_ck ≥ {_n(FCK_MIN_NBR_6118, 0)} MPa; dimensionado pela NBR 6118" + texto_c,
             ),
         )
     else:
@@ -4767,7 +4769,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "Bloco mínimo",
                 f"N_b ≥ {_n(n_b_min, 0)} mm ao longo de ℓx, B_b ≥ {_n(b_b_min, 0)} mm, altura ≥ "
                 f"máx(h₁ + 100; N_b) = {_n(a_b_min, 0)} mm; f_ck,mín = {_n(tab.fck_min, 0)} MPa; "
-                "dimensionado pela NBR 6118 (nota e)",
+                "dimensionado pela NBR 6118 (nota e)" + texto_c,
             ),  # fmt: skip
         )
     if e.ancoragem in POS_INSTALADOS and not e.por_formula:
@@ -4807,28 +4809,6 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         d_min=d_min,
     )  # fmt: skip
     linhas = [replace(v, equacoes=equacoes[v.nome]) if v.nome in equacoes else v for v in linhas]
-    if e.modo_bloco == "verificacao":
-        linhas.append(
-            _info(
-                "Resistência global do bloco e fundação",
-                "Verificação externa. O resultado da ligação pressupõe o bloco, sua armadura e seus apoios dimensionados no projeto de fundação.",
-            )
-        )
-        if f_t > 0:
-            linhas.append(
-                _alerta(
-                    "Efeito de alavanca na tração dos chumbadores",
-                    "Compatibilidade da placa",
-                    "A tração calculada parte da placa rígida. Conferir o acréscimo por prying na placa deformável.",
-                )
-            )
-        if momento or momento_y:
-            linhas.append(
-                _info(
-                    "Rigidez rotacional da base",
-                    "Se o modelo global pressupõe engaste ou mola, confrontar a rigidez da ligação com a adotada no modelo.",
-                )
-            )
     if e.modo_bloco == "verificacao" and min(e.bloco_x_mm, e.bloco_y_mm, e.bloco_z_mm) == 0:
         for i, v in enumerate(linhas):
             if v.nome in (
@@ -5034,11 +5014,23 @@ def _envoltoria(e: EntradaBase) -> ResultadoBase:
         if linhas:
             grupos.append((nome_grupo, tuple(linhas)))
     todas = tuple(v for _, linhas_g in grupos for v in linhas_g)
-    avisos: list[str] = []
+    # o mesmo aviso com os números de cada combinação sai uma vez só, com quantas o têm
+    por_texto: dict[str, tuple[str, int]] = {}
     for item in por_caso:
+        vistos: set[str] = set()
         for aviso in item.resultado.avisos:
-            if aviso not in avisos:
-                avisos.append(aviso)
+            chave = re.sub(r"\bCaso [CT]\d\b|[-−]?\d+(?:[.,]\d+)*", "#", aviso)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            primeiro, quantas = por_texto.get(chave, (aviso, 0))
+            por_texto[chave] = (primeiro, quantas + 1)
+    avisos: list[str] = [
+        texto
+        if quantas == 1
+        else f"{texto} (o mesmo em {quantas} combinações; valores da primeira)"
+        for texto, quantas in por_texto.values()
+    ]
     comprimidas = [c.nome for c in e.casos if c.n_sd_kN > 0]
     tracionadas = [c.nome for c in e.casos if c.n_sd_kN < 0]
     if comprimidas and tracionadas:
@@ -5102,7 +5094,9 @@ def buscar_base_mais_leve(
     """Retorna a melhor base aprovada e o histórico de todos os candidatos efetivamente avaliados.
 
     Em cada diâmetro a busca para na primeira espessura aprovada; espessuras posteriores
-    não são calculadas e não aparecem no histórico. ALERTA nunca equivale a aprovação.
+    não são calculadas e não aparecem no histórico. Aprovada = nada reprova fora a solda do
+    pilar (por fórmula, fora o cone), que trocar a placa ou o chumbador não resolve; os alertas
+    do mecanismo escolhido (direto no furo, por exemplo) ficam no histórico.
     """
     melhor: ResultadoBase | None = None
     historico: list[CandidatoDaBusca] = []
@@ -5131,7 +5125,17 @@ def buscar_base_mais_leve(
             historico.append(
                 CandidatoDaBusca(candidato.chumbador, t, r.status, r.aproveitamento_maximo, motivos)
             )
-            if r.status != "OK":
+            # a solda do pilar (por fórmula, o cone) e os alertas do mecanismo escolhido não
+            # dependem da placa nem do chumbador: trocar a placa não os resolve (a tela avisa)
+            if not (passa_fora_o_cone(r) if e.por_formula else passa_fora_a_solda_do_pilar(r)):
+                continue
+            do_mecanismo = {
+                v.nome
+                for grupo, vs in getattr(r, "grupos", ())
+                if grupo == GRUPO_CORTANTE
+                for v in vs
+            }
+            if any(v.status == "ALERTA" and v.nome not in do_mecanismo for v in r.verificacoes):
                 continue
             if melhor is None or r.massa_da_placa_kg < melhor.massa_da_placa_kg - 1e-9:
                 melhor = r
@@ -5253,70 +5257,155 @@ def linhas_das_combinacoes(r: ResultadoBase) -> list[dict[str, Any]]:
     return saida
 
 
-def _tabelas_das_combinacoes(r: ResultadoBase) -> list[dict[str, Any]]:
-    """Tabelas curtas do relatório PDF: esforços, equilíbrio e resultados por combinação."""
+def combinacoes_criticas(r: ResultadoBase) -> list[tuple[ResultadoDoCaso, list[str]]]:
+    """As combinações que importam, cada uma com os critérios que a fazem crítica: máxima
+    compressão, máxima tração, maiores |M_Sd|, |M_Sd,y| e V_Sd, maior aproveitamento e a que
+    governa cada verificação da envoltória (o nome entre colchetes no começo da fórmula)."""
+    itens = list(r.casos)
+    if not itens:
+        return []
+    criterios: dict[str, list[str]] = {}
+
+    def marcar(item: ResultadoDoCaso, criterio: str) -> None:
+        lista = criterios.setdefault(item.caso.nome, [])
+        if criterio not in lista:
+            lista.append(criterio)
+
+    comprimidas = [i for i in itens if i.caso.n_sd_kN > 0]
+    tracionadas = [i for i in itens if i.caso.n_sd_kN < 0]
+    if comprimidas:
+        marcar(max(comprimidas, key=lambda i: i.caso.n_sd_kN), "máxima compressão")
+    if tracionadas:
+        marcar(min(tracionadas, key=lambda i: i.caso.n_sd_kN), "máxima tração")
+    for rotulo, valor in (
+        ("maior |M_Sd|", lambda i: abs(i.caso.m_sd_kNm)),
+        ("maior |M_Sd,y|", lambda i: abs(i.caso.m_sd_y_kNm)),
+        ("maior V_Sd", lambda i: abs(i.resultado.entrada.v_sd_kN)),
+    ):
+        maior = max(itens, key=valor)
+        if valor(maior) > 0:
+            marcar(maior, rotulo)
+    marcar(max(itens, key=lambda i: i.resultado.aproveitamento_maximo), "maior aproveitamento")
+    nomes = {i.caso.nome for i in itens}
+    for v in r.verificacoes:
+        achado = re.match(r"\[([^\]]+)\]", v.formula or "")
+        if achado and achado.group(1) in nomes and v.aproveitamento is not None:
+            item = next(i for i in itens if i.caso.nome == achado.group(1))
+            marcar(item, f"governa «{v.nome}»")
+    return [(i, criterios[i.caso.nome]) for i in itens if i.caso.nome in criterios]
+
+
+def nota_do_equilibrio(r: ResultadoBase) -> str:
+    """Uma nota só sobre o equilíbrio de todas as combinações (em lugar da tabela de resíduos)."""
+    itens = list(r.casos)
+    sem = [i.caso.nome for i in itens if not i.resultado.equilibrio_valido]
+    validos = [i for i in itens if i.resultado.equilibrio_valido]
+    texto = ""
+    if validos:
+        r_n = max(abs(i.resultado.residuos[0]) for i in validos)
+        r_m = max(max(abs(x) for x in i.resultado.residuos[1:]) for i in validos)
+        texto = (
+            f"Equilíbrio estático verificado em {len(validos)} de {len(itens)} combinações, com "
+            f"resíduo máximo de {f'{r_n:.1e}'.replace('.', ',')} kN na força e "
+            f"{f'{r_m:.1e}'.replace('.', ',')} kN·m nos momentos."
+        )
+    if sem:
+        texto += (" " if texto else "") + (
+            "Sem equilíbrio possível com esta placa (verificações dependentes não validadas): "
+            + ", ".join(sem)
+            + "."
+        )
+    return texto
+
+
+def _tabelas_das_combinacoes(r: ResultadoBase, *, completa: bool = False) -> list[dict[str, Any]]:
+    """As tabelas do memorial: a envoltória com as combinações críticas e, se pedido, o Anexo A
+    com todas as combinações (esforços e resultado de cada uma)."""
+    criticas = combinacoes_criticas(r)
+    tabelas: list[dict[str, Any]] = [
+        {
+            "legenda": (
+                f"Envoltória: as combinações críticas entre as {len(r.casos)} de cálculo. "
+                + nota_do_equilibrio(r)
+                + (" A lista completa está no Anexo A." if completa else "")
+            ),
+            "cabecalhos": [
+                "Combinação",
+                "Por que é crítica",
+                "N_Sd (kN)",
+                "M_Sd (kN·m)",
+                "M_Sd,y (kN·m)",
+                "V_Sd (kN)",
+                "Caso",
+                "Aprov.",
+            ],
+            "linhas": [
+                [
+                    item.caso.nome,
+                    "; ".join(criterios),
+                    _n(item.caso.n_sd_kN, 2),
+                    _n(item.caso.m_sd_kNm, 2),
+                    _n(item.caso.m_sd_y_kNm, 2),
+                    _n(item.resultado.entrada.v_sd_kN, 2),
+                    item.resultado.caso,
+                    f"{100 * item.resultado.aproveitamento_maximo:.1f} %",
+                ]
+                for item, criterios in criticas
+            ],
+            "fonte": 7.2,
+        }
+    ]
+    if not completa:
+        return tabelas
     itens = r.casos
-    tabelas: list[dict[str, Any]] = []
-    especificacoes = (
-        (
-            "Esforços aplicados por combinação",
-            ["Combinação", "N_Sd (kN)", "M_Sd (kN·m)", "M_Sd,y (kN·m)", "V_Sd (kN)"],
-            lambda item: [
-                item.caso.nome,
-                _n(item.caso.n_sd_kN, 2),
-                _n(item.caso.m_sd_kNm, 2),
-                _n(item.caso.m_sd_y_kNm, 2),
-                _n(item.resultado.entrada.v_sd_kN, 2),
+    tabelas.append(
+        {
+            "subtitulo": "Anexo A — Todas as combinações de cálculo",
+            "legenda": "Esforços e resultado de cada combinação.",
+            "cabecalhos": [
+                "Combinação",
+                "N_Sd (kN)",
+                "M_Sd (kN·m)",
+                "M_Sd,y (kN·m)",
+                "V_Sd (kN)",
+                "Caso",
+                "Aprov.",
+                "t_p,min (mm)",
+                "F_t máx (kN)",
             ],
-        ),
-        (
-            "Componentes e torção por combinação",
-            ["Combinação", "Vx (kN)", "Vy (kN)", "Mz (kN·m)"],
-            lambda item: [
-                item.caso.nome,
-                "—" if item.caso.vx_kN is None else _n(item.caso.vx_kN, 2),
-                "—" if item.caso.vy_kN is None else _n(item.caso.vy_kN, 2),
-                _n(item.caso.mz_kNm, 2),
+            "linhas": [
+                [
+                    item.caso.nome,
+                    _n(item.caso.n_sd_kN, 2),
+                    _n(item.caso.m_sd_kNm, 2),
+                    _n(item.caso.m_sd_y_kNm, 2),
+                    _n(item.resultado.entrada.v_sd_kN, 2),
+                    item.resultado.caso,
+                    f"{100 * item.resultado.aproveitamento_maximo:.1f} %",
+                    _n(item.resultado.t_p_min, 2)
+                    if item.resultado.equilibrio_valido
+                    else "Indeterminada",
+                    _n(item.resultado.f_t_sd / 1e3, 2) if item.resultado.equilibrio_valido else "—",
+                ]
+                for item in itens
             ],
-        ),
-        (
-            "Resíduos do equilíbrio por combinação",
-            ["Combinação", "R_N (kN)", "R_M (kN·m)", "R_M,y (kN·m)", "Equilíbrio"],
-            lambda item: [
-                item.caso.nome,
-                *(_n(x, 7) for x in item.resultado.residuos),
-                "Verificado" if item.resultado.equilibrio_valido else "Não verificado",
-            ],
-        ),
-        (
-            "Verificação por combinação",
-            ["Combinação", "Caso", "Situação", "Aproveitamento", "Verificação governante"],
-            lambda item: [
-                item.caso.nome,
-                item.resultado.caso,
-                item.resultado.situacao,
-                f"{100 * item.resultado.aproveitamento_maximo:.1f} %",
-                item.resultado.governante.nome if item.resultado.governante else "—",
-            ],
-        ),
-        (
-            "Espessura e tração por combinação",
-            ["Combinação", "t_p,min (mm)", "F_t máx (kN)"],
-            lambda item: [
-                item.caso.nome,
-                _n(item.resultado.t_p_min, 2)
-                if item.resultado.equilibrio_valido
-                else "Indeterminada",
-                _n(item.resultado.f_t_sd / 1e3, 2) if item.resultado.equilibrio_valido else "—",
-            ],
-        ),
+            "fonte": 7.2,
+        }
     )
-    for legenda, cabecalhos, linha in especificacoes:
+    if any(i.caso.vx_kN is not None or i.caso.vy_kN is not None or i.caso.mz_kNm for i in itens):
         tabelas.append(
             {
-                "legenda": legenda,
-                "cabecalhos": cabecalhos,
-                "linhas": [linha(item) for item in itens],
+                "legenda": "Anexo A — componentes da cortante e torção por combinação.",
+                "cabecalhos": ["Combinação", "Vx (kN)", "Vy (kN)", "Mz (kN·m)"],
+                "linhas": [
+                    [
+                        item.caso.nome,
+                        "—" if item.caso.vx_kN is None else _n(item.caso.vx_kN, 2),
+                        "—" if item.caso.vy_kN is None else _n(item.caso.vy_kN, 2),
+                        _n(item.caso.mz_kNm, 2),
+                    ]
+                    for item in itens
+                ],
                 "fonte": 7.2,
             }
         )
@@ -5333,7 +5422,11 @@ def entrada_de_dicionario(dados: Mapping[str, Any]) -> EntradaBase:
 
 
 def registro_base(
-    r: ResultadoBase, *, contexto: Mapping[str, Any] | None = None, responsavel: str = ""
+    r: ResultadoBase,
+    *,
+    contexto: Mapping[str, Any] | None = None,
+    responsavel: str = "",
+    combinacoes_completas: bool = False,
 ) -> dict[str, Any]:
     """O registro técnico da base de pilar, com a entrada para o memorial redesenhar a figura."""
     e, g = r.entrada, r.geometria
@@ -5435,7 +5528,11 @@ def registro_base(
             "detalhamento": [list(par) for par in r.detalhamento],
             "simbolos": [list(par) for par in simbolos_usados(r)],
             **({"combinacoes": linhas_das_combinacoes(r)} if r.envoltoria else {}),
-            **({"tabelas_memorial": _tabelas_das_combinacoes(r)} if r.envoltoria else {}),
+            **(
+                {"tabelas_memorial": _tabelas_das_combinacoes(r, completa=combinacoes_completas)}
+                if r.envoltoria
+                else {}
+            ),
         },
         metodo=(
             f"Base de pilar de perfil {'U' if r.geometria.e_u else 'I ou H'} com placa retangular, chumbadores e argamassa "
@@ -5631,7 +5728,11 @@ def _objetivo_do_memorial(r: ResultadoBase) -> str:
 
 
 def memorial_da_base(
-    r: ResultadoBase, *, projeto: Mapping[str, Any] | None = None, formato: str = "word"
+    r: ResultadoBase,
+    *,
+    projeto: Mapping[str, Any] | None = None,
+    formato: str = "word",
+    combinacoes_completas: bool = False,
 ) -> bytes:
     """O memorial só desta base: em Word, o trecho para colar no documento oficial
     (:mod:`core.memorial_trecho`); em PDF, o documento do padrão do memorial do projeto."""
@@ -5643,7 +5744,9 @@ def memorial_da_base(
         from core.technical_records import normalizar_registro_tecnico
 
         return trecho_de_registro(
-            normalizar_registro_tecnico(registro_base(r)),
+            normalizar_registro_tecnico(
+                registro_base(r, combinacoes_completas=combinacoes_completas)
+            ),
             projeto=projeto,
             figuras_por_verificacao=figuras_das_contas(r),
         )
@@ -5652,7 +5755,9 @@ def memorial_da_base(
 
     # o gerador do memorial está fora da lista do mypy: importado pelo nome (como em ligacoes)
     relatorio = importlib.import_module("core.project_report")
-    registro = normalizar_registro_tecnico(registro_base(r))
+    registro = normalizar_registro_tecnico(
+        registro_base(r, combinacoes_completas=combinacoes_completas)
+    )
     base: dict[str, Any] = dict(projeto) if projeto else {"nome": MODULO_TITULO}
     base["registros_tecnicos"] = [registro]
     nome = (

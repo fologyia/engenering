@@ -74,10 +74,9 @@ def test_caso_a_tracao_com_o_braco_ate_a_face_da_mesa(distribuicao):
 def test_caso_b_bloco_uniforme_usa_so_a_zona_comprimida():
     r = bp.calcular(replace(BASE, n_sd_kN=10.5, m_sd_kNm=2.0, m_sd_y_kNm=0.7))
     assert r.caso == "C2"  # o equilíbrio da 6.7 sem tração existe; a tela explica a alternativa
-    assert "Núcleo central no modelo linear" not in _nomes(r)
     placa = _linha(r, "Placa de base: espessura")
     # antes: 95,25·√(2·σ/(f_y/γ_a1)) com o balanço inteiro sob a pressão do canto (26 a 29 mm)
-    assert r.t_p_min > 16 and placa.status == "NÃO OK"
+    assert r.t_p_min < 16 and placa.status == "OK"
     assert "só na zona comprimida" in placa.formula
 
 
@@ -154,8 +153,8 @@ def test_caso_c_tracao_sem_dispositivo_nao_tem_atrito():
     r = bp.calcular(
         replace(CASO_C, n_sd_kN=-18, m_sd_kNm=1.6, v_sd_kN=4.8, cortante=bp.CORTANTE_ATRITO)
     )
-    assert _linha(r, "Cortante: atrito").status == "NÃO OK"
-    assert bp.LINHA_FLEXAO_NA_ARGAMASSA not in _nomes(r)
+    assert not [v for v in r.verificacoes if v.nome.startswith("Cortante: atrito")]
+    assert _linha(r, "Chumbador: aço à cortante")
 
 
 def test_chumbadores_direto_no_furo_contam_dois_e_avisam():
@@ -289,7 +288,7 @@ def test_o_que_trava_separa_as_partes_da_base():
         replace(CASO_C, n_sd_kN=-18, m_sd_kNm=1.6, v_sd_kN=4.8, cortante=bp.CORTANTE_ATRITO)
     )
     travas = bp.o_que_trava(r)
-    assert "Cortante: atrito na argamassa" in travas.get(bp.TRAVA_CORTANTE, [])
+    assert "Cortante: atrito na argamassa" not in travas.get(bp.TRAVA_CORTANTE, [])
     assert any(n.startswith("Bloco") for n in travas[bp.TRAVA_CONCRETO])  # nota e da Tabela 18
     assert bp.TRAVA_PLACA not in travas
 

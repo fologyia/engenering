@@ -33,21 +33,21 @@ A tolerância relativa é 10⁻⁷ com piso absoluto na unidade exibida. A escal
 
 ## Flexão da placa e perfil U
 
-Para as faixas em balanço, q = ∫p(u)·u du por unidade de largura. A espessura por flexão é √(4q/fyd). O motor procura o maior q entre todas as faixas de cada linha de engaste. Entre vértices do polígono e cruzamentos do engaste, q é um polinômio de grau até três. A busca inclui as extremidades e os pontos estacionários de cada intervalo. A região entre as mesas e as barras tracionadas têm verificações próprias. Para barras externas, a verificação local a 45° limita a largura efetiva pelas bordas e pelo espaçamento. A maior espessura exigida governa.
+Para as faixas em balanço, q = ∫p(u)·u du por unidade de largura, em fatias ao longo de cada linha de engaste (x = ±0,95·d/2 para m; y = ±0,80·b_f/2 para n). A placa reparte a carga de borda: q é tirado na média de uma janela da largura do próprio balanço, e a espessura por flexão é √(4q/fyd). Com a zona comprimida numa faixa da largura toda, é exatamente a fórmula da 6.7 (m, n ou √(ℓ_c·(2m − ℓ_c))); com só um canto comprimido (flexão oblíqua), o canto não pede a placa toda. A faixa de 1 mm mais carregada, usada entre 25 e 26/11/2026, superestimava muito a chapa (por exemplo 33 mm em vez de 17 mm num T3 com M_y = 2 kN·m) e foi retirada. A região entre as mesas e as barras tracionadas têm verificações próprias. Para barras externas, a verificação local a 45° limita a largura efetiva pelas bordas e pelo espaçamento. A maior espessura exigida governa.
 
-No U, o centro da placa coincide com o centroide calculado da seção. As mesas abrem para +y e o dorso permanece na mesma posição ao inverter o momento. A aproximação de meia seção I adota engastes no dorso e a 0,80 b_f dele. As faixas dos dois lados são calculadas separadamente. A integração de cada faixa tem solução analítica de referência nos testes. A representatividade desses engastes para a placa bidimensional, da deformabilidade da ligação e do acréscimo de tração por efeito de alavanca exige um modelo independente da ligação real. O programa registra essa pendência para o U e para o carregamento fora do eixo principal.
+No U, o centro da placa coincide com o centroide calculado da seção. As mesas abrem para +y e o dorso permanece na mesma posição ao inverter o momento. A aproximação de meia seção I adota engastes no dorso e a 0,80 b_f dele. As faixas dos dois lados são calculadas separadamente. A integração de cada faixa tem solução analítica de referência nos testes. A representatividade desses engastes para a placa bidimensional, da deformabilidade da ligação e do acréscimo de tração por efeito de alavanca exige um modelo independente da ligação real. O programa explica o método estendido numa linha INFO (U e flexão oblíqua), sem deixar o resultado inconclusivo.
 
 ## Transferência de cortante
 
 | Opção | Modelo |
 | --- | --- |
-| Somente atrito | Compara V com μC/γa2 e o limite de cisalhamento do apoio. Uma insuficiência reprova essa combinação. O programa desconsidera a contribuição de atrito sob tração axial. |
+| Atrito | Compara V com μC/γa2 e o limite de cisalhamento do apoio. Com tração (T1, T2, T3), sem contato ou com atrito insuficiente na combinação, não há atrito que leve V: a cortante dessa combinação vai aos chumbadores (contato direto no furo, com aviso), como no automático. |
 | Automático | Registra o mecanismo escolhido na combinação. Usa contato direto dos chumbadores quando o atrito não basta ou há torção. |
 | Contato direto no furo | Adota engate desigual de uma ou duas barras conforme a disposição. Confere o aço, a flexão na região do graute, o contato e o rasgamento no furo. A folga radial entra na comparação com o limite de serviço informado. |
 | Arruelas soldadas | Adota as barras engatadas pelo furo justo da arruela. Verifica a interação de tração e corte, a solda e, com Mz, a resultante de translação e torção em cada barra. |
 | Placa de cisalhamento | Usa a componente normal à face e verifica o dispositivo e sua solda. A componente paralela ou uma orientação desconhecida na verificação real exige conferência da orientação e do caminho de carga. |
 
-Na flexão da barra considera-se a seção resistente da rosca e o braço até o ponto de aplicação da cortante. A hipótese adotada é rotação livre, sem apoio lateral do graute, com acréscimo d_b/2 no concreto. Para o contato direto, o braço é e_n + t_p/2 + d_b/2. Para a arruela soldada, é e_n + t_p + t_a/2 + d_b/2. A barra combina F_t/A_se com M/(1,5 W), sendo W = πd_s³/32. O braço segue a hipótese de 6.2.2.3 da EN 1992-4 e o limite da seção segue a NBR 8800. Uma alteração no diâmetro pode alterar a flexão, a geometria, as reações, o embutimento e as soldas.
+A camada de argamassa entra pelo fator 0,80 no corte do aço do chumbador (ACI 318-19 17.7.1.2.1); não há verificação separada de flexão do chumbador na argamassa, que o tratava como balanço livre através do graute. Também não entram verificações sem conta própria (avisos genéricos de validação, rigidez, alavanca, fundação e graute) nem a flexão da arruela sobre o furo, que não governa com as arruelas da Tabela 18.
 
 ## Ancoragem no concreto
 

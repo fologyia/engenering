@@ -228,8 +228,7 @@ def test_armadura_de_ancoragem_tira_o_cone_da_conta():
     r = bp.calcular(replace(C3_6, verificar_concreto=True, armadura_de_ancoragem=True))
     linha = _linha(r, "Cone de concreto")
     assert linha.status == "INFO" and "armadura" in linha.formula
-    assert _sem_a_solda(r) == "NÃO OK"
-    assert _linha(r, "Arruela: flexão sobre o furo da placa").status == "NÃO OK"
+    assert _sem_a_solda(r) == "OK"
 
 
 def test_bloco_maior_passa_no_cone():
@@ -311,8 +310,8 @@ def test_sem_tracao_a_ancoragem_nao_se_aplica():
 
 def test_momento_no_eixo_fraco_entra_pela_flexao_obliqua():
     r = bp.calcular(replace(PADRAO, m_sd_y_kNm=5))
-    assert r.situacao == "Inconclusivo" and _linha(r, "Flexão oblíqua").status == "INFO"
-    assert r.zona_comprimida and any("Flexão oblíqua" in a for a in r.avisos)
+    assert r.status == "OK" and _linha(r, "Flexão oblíqua").status == "INFO"
+    assert r.zona_comprimida  # o método vai na linha INFO, sem aviso repetido
     assert bp.registro_base(r)["entradas"]["M_Sd_y_kNm"] == 5
 
 

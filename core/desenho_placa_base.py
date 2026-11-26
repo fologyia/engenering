@@ -429,7 +429,11 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
                 dg.seta(dr, inicio, fim, _PRESSAO, largura=ESC, ponta_px=5 * ESC)
             contorno.append(inicio)
         dr.line(contorno, fill=_PRESSAO, width=2 * ESC)
-        texto = f"σ máx. no corte = {_n(sigma, 2)} MPa\ny = {_n(y_corte, 1)} mm"
+        # a profundidade comprimida no corte (sempre positiva); a posição do corte em y só
+        # aparece na flexão oblíqua, em módulo
+        texto = f"σ máx. no corte = {_n(sigma, 2)} MPa\nℓ_c = {_n(abs(x1 - x0), 1)} mm"
+        if abs(y_corte) >= 0.5:
+            texto += f"\n(corte a {_n(abs(y_corte), 1)} mm do eixo x)"
         # embaixo das setas: no meio do trecho, ou logo ao lado da haste que atrapalha (dentro do
         # bloco); senão, mais abaixo no meio do trecho, com um fio até as setas
         y_setas = p(x0, 0.0)[1] + altura_px
@@ -475,9 +479,13 @@ def _corte(dr: ImageDraw.ImageDraw, r: bp.ResultadoBase, caixa: tuple[int, int, 
             fill=_FORCA,
             width=3 * ESC,
         )
-        t = math.radians(20)
+        # M > 0 comprime a direita (horário na tela, ponta descendo à direita); M < 0 comprime
+        # a esquerda (anti-horário, ponta descendo à esquerda) — o arco de 160° a 380° é simétrico
+        sentido = 1.0 if e.m_sd_kNm > 0 else -1.0
+        t = math.radians(20 if sentido > 0 else 160)
         ponta = (c[0] + raio_m * math.cos(t), c[1] + raio_m * math.sin(t))
-        dg.seta(dr, dg.mais(ponta, (math.sin(t), -math.cos(t)), 10 * ESC), ponta, _FORCA, largura=3 * ESC, ponta_px=11 * ESC)  # fmt: skip
+        tangente = (sentido * math.sin(math.radians(20)), -math.cos(math.radians(20)))
+        dg.seta(dr, dg.mais(ponta, tangente, 10 * ESC), ponta, _FORCA, largura=3 * ESC, ponta_px=11 * ESC)  # fmt: skip
         dg.rotulo(dr, c, (1.0, 0.0), raio_m + 8 * ESC, f"M = {_n(abs(e.m_sd_kNm), 1)} kN·m", _FORCA, fonte, fundo=True)  # fmt: skip
     if e.v_sd_kN:
         y_v = p(-g.lx / 2, e_n + t_p / 2)

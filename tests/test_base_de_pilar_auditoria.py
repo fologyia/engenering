@@ -113,7 +113,6 @@ def test_graute_aplica_reducao_sem_flexao_separada():
     linhas = _nomes(r)
     assert bp.LINHA_FLEXAO_NA_ARGAMASSA not in linhas
     assert "0,80" in linhas["Chumbador: aço à cortante (ACI 318-19)"].formula
-    assert "excepcionalmente" in linhas["Graute: hipótese para o cortante dos chumbadores"].formula
 
 
 def test_tracao_sem_contato_equilibra_forcas_e_momentos():
@@ -127,15 +126,15 @@ def test_tracao_sem_contato_equilibra_forcas_e_momentos():
     )
 
 
-def test_faixa_critica_fora_do_aco_mostra_sensibilidade_sem_afrouxar():
-    """Terceira auditoria: a faixa de 21 mm caía fora das mesas do U. O adotado continua o da linha
-    inteira (a favor da segurança); o texto traz o valor com apoio a 45° só como sensibilidade."""
+def test_canto_comprimido_usa_a_media_na_largura_do_balanco():
+    """A pressão num canto da placa vai pela média numa janela da largura do balanço (a placa
+    reparte a carga de borda), não pela faixa de 1 mm mais carregada."""
     e = replace(U6, chumbador="5/8\"", por_formula=True, ancoragem=bp.ANCORAGEM_PORCA,
                 lx_mm=260, ly_mm=94, a1_mm=26.8, h_ef_mm=0, n_rd_fabricante_kN=0,
                 n_sd_kN=2.942, m_sd_kNm=1.064, m_sd_y_kNm=-0.6762, v_sd_kN=7.5593)  # fmt: skip
     placa = _nomes(bp.calcular(e))["Placa de base: espessura t_p ≥ t_p,min"]
-    assert placa.solicitante > 20.0
-    assert "Sensibilidade, não adotada" in " ".join(map(str, placa.equacoes))
+    assert placa.solicitante < 20.0
+    assert "na média de uma janela" in placa.formula
 
 
 def test_historico_da_busca_distingue_alerta_erro_e_aprovacao(monkeypatch):

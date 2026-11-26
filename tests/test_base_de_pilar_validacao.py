@@ -91,11 +91,11 @@ def test_t09_corte_nulo():
     assert flexao(20, v=0).momento == flexao(20, v=0).sigma_b == 0
 
 
-def test_t10_atrito_exclusivo_e_opcao_automatica():
+def test_t10_atrito_que_nao_basta_vai_aos_chumbadores_e_opcao_automatica():
     e = replace(PADRAO, n_sd_kN=15.3, v_sd_kN=7.6)
-    assert linha(bp.calcular(e), "Cortante: atrito na argamassa").aproveitamento == pytest.approx(
-        7.6 / 5.1
-    )
+    r = bp.calcular(e)
+    assert "V_Rd = 5,1 kN" in linha(r, "Cortante: atrito na argamassa não basta").formula
+    assert linha(r, "Chumbador: aço à cortante (ACI 318-19)").solicitante > 0
     auto = bp.calcular(replace(e, cortante=bp.CORTANTE_AUTO))
     assert linha(auto, "Chumbador: aço à cortante (ACI 318-19)").solicitante > 0
     assert "direto" in linha(auto, "Mecanismo automático de cortante").formula
@@ -283,14 +283,16 @@ def test_torcao_pura_no_aco_e_flexao_de_cada_chumbador():
 
 @pytest.mark.parametrize("lado", [-1, 1])
 def test_faixa_do_u_contra_solucao_analitica_na_face_livre(lado):
-    # Faixa em ℓy, estreita em ℓx e de pressão triangular crescente para a borda.
-    # Para comprimento L e p(u)=p_max*u/L, o engaste recebe p_max*L²/3.
+    # Faixa em ℓy, entre as linhas de engaste em ℓx (mais larga que a janela da média), de
+    # pressão triangular crescente para a borda. Para comprimento L e p(u)=p_max*u/L, o engaste
+    # recebe p_max*L²/3.
     g = bp.geometria(replace(PADRAO, perfil='U 6" x 12,20'))
     apoio = g.engaste_y[0 if lado < 0 else 1]
     ponta = lado * g.ly / 2
     l = abs(ponta - apoio)
     pmax = 13
-    zona = ((-1, apoio), (1, apoio), (1, ponta), (-1, ponta))
+    x = 0.475 * g.d
+    zona = ((-x, apoio), (x, apoio), (x, ponta), (-x, ponta))
     plano = (-pmax * lado * apoio / l, 0, pmax * lado / l)
     t, _ = bp.espessura_pela_zona(g, zona, 0, 250 / 1.1, plano=plano)
     assert t == pytest.approx(math.sqrt(4 * pmax * l * l / (3 * (250 / 1.1))))
@@ -308,6 +310,7 @@ def test_t11_cortante_biaxial_verifica_interacao_da_borda(sinal):
         vx_kN=8 * sinal,
         vy_kN=6 * sinal,
         cortante=bp.CORTANTE_ARRUELAS,
+        verificar_concreto=True,
     )
     r = bp.calcular(e)
     borda = linha(r, bp.LINHA_RUPTURA_DA_BORDA)
@@ -334,24 +337,29 @@ def test_t11_excentricidade_da_fila_ativa_no_modelo_de_borda():
     assert linha(r, "Equilíbrio do cortante nos chumbadores").status == "ALERTA"
 
 
-def test_tabelas_do_memorial_pdf_separam_esforcos_componentes_residuos_e_resultados():
+def test_memorial_traz_a_envoltoria_e_o_anexo_a_so_quando_pedido():
     casos = (
         bp.CasoDeCarga("C42", 2.9, 1.1, 0.7, 0.0, vx_kN=4, vy_kN=-2, mz_kNm=0.35),
         bp.CasoDeCarga("C43", -5.0, -0.4, 0.1, 3.0),
     )
-    registro = bp.registro_base(bp.calcular(replace(PADRAO, casos=casos)))
+    resultado = bp.calcular(replace(PADRAO, casos=casos))
     from core.memorial_verificacoes import tabelas_do_registro
 
-    tabelas = tabelas_do_registro(registro)
-    assert [t["legenda"] for t in tabelas] == [
-        "Esforços aplicados por combinação",
-        "Componentes e torção por combinação",
-        "Resíduos do equilíbrio por combinação",
-        "Verificação por combinação",
-        "Espessura e tração por combinação",
-    ]
-    assert tabelas[1]["linhas"][0][1:] == ["4,00", "-2,00", "0,35"]
-    assert tabelas[2]["linhas"][0][-1] == "Verificado"
-    assert tabelas[4]["linhas"][0][1] != "—" and tabelas[4]["linhas"][0][2] != "—"
-    resultado = bp.calcular(replace(PADRAO, casos=casos))
+    # sem o anexo: só a envoltória, com a nota única do equilíbrio (sem a tabela de resíduos)
+    tabelas = tabelas_do_registro(bp.registro_base(resultado))
+    assert len(tabelas) == 1
+    envoltoria = tabelas[0]
+    assert envoltoria["legenda"].startswith("Envoltória")
+    assert "Equilíbrio estático verificado em 2 de 2 combinações" in envoltoria["legenda"]
+    criticas = {linha[0]: linha[1] for linha in envoltoria["linhas"]}
+    assert "máxima compressão" in criticas["C42"] and "máxima tração" in criticas["C43"]
+    assert not any("Resíduos" in t["legenda"] for t in tabelas)
+    # com o anexo: a lista inteira e as componentes, numa seção própria
+    tabelas = tabelas_do_registro(bp.registro_base(resultado, combinacoes_completas=True))
+    assert [t.get("subtitulo", "") for t in tabelas][1].startswith("Anexo A")
+    assert len(tabelas[1]["linhas"]) == 2
+    assert tabelas[2]["linhas"][0][1:] == ["4,00", "-2,00", "0,35"]
     assert bp.memorial_da_base(resultado, formato="pdf").startswith(b"%PDF")
+    assert bp.memorial_da_base(resultado, formato="pdf", combinacoes_completas=True).startswith(
+        b"%PDF"
+    )

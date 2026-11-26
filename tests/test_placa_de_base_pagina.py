@@ -147,7 +147,6 @@ def test_disposicoes_novas_e_momento_no_eixo_fraco(banco_isolado):
     t.number_input(key="pb_m_sd_y").set_value(5.0).run()
     assert not t.exception
     assert _metricas(t)["Status"] != "ALERTA"  # o M_y agora é calculado (flexão oblíqua)
-    assert any("Flexão oblíqua" in w.value for w in t.warning)
     assert any("flexão oblíqua" in c.value for c in t.caption)
 
 
