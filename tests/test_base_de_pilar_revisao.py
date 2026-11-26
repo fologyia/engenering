@@ -163,7 +163,7 @@ def test_chumbadores_direto_no_furo_contam_dois_e_avisam():
     )
     deslize = _linha(r, "Chumbadores direto no furo")
     assert deslize.status == "ALERTA"
-    assert "(d_f − d_b)/2 = 4,0 mm" in deslize.formula  # furo 27 mm, chumbador 19 mm
+    assert "(d_f − d_b)/2 = 1,0 mm" in deslize.formula  # furo 21 mm, chumbador 19 mm
     assert _linha(r, "Chumbador: aço à cortante").solicitante == pytest.approx(2.4)  # V/2
     assert LINHAS_OBRIGATORIAS <= set(_nomes(r))
     assert any("desliza" in a for a in r.avisos)

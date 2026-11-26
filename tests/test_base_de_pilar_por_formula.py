@@ -54,12 +54,16 @@ def test_series_comerciais_em_ordem_e_passo_do_digitado():
 
 
 # ------------------------------------------------------------------ medidas
-def test_furo_padrao_e_o_da_tabela_18_interpolado():
+def test_furo_padrao_e_diametro_mais_dois():
     for tab in bp.TABELA_18.values():
-        assert bp.furo_padrao(tab.d_b) == tab.d_f
-    assert bp.furo_padrao(28.5) == pytest.approx(37.0)  # d_b + 8, para cima
-    assert bp.furo_padrao(16.0) == 16.0 + 8.0  # furo alargado d_b + 8
-    assert bp.furo_padrao(63.5) == math.ceil(63.5 + 8.0)
+        assert bp.furo_padrao(tab.d_b) == tab.d_b + 2
+        assert (
+            bp.disposicoes(replace(POR_FORMULA, por_formula=False, chumbador=tab.polegada)).d_f
+            == tab.d_b + 2
+        )
+    assert bp.furo_padrao(28.5) == 30.5
+    assert bp.furo_padrao(16.0) == 18.0
+    assert bp.furo_padrao(63.5) == 65.5
 
 
 @pytest.mark.parametrize("polegada", list(bp.TABELA_18))
@@ -68,7 +72,7 @@ def test_medidas_por_formula_ficam_perto_da_tabela_18(polegada):
     tab = bp.TABELA_18[polegada]
     m = bp.medidas_por_formula(replace(POR_FORMULA, chumbador=polegada)).linha
     assert abs(m.a1 - tab.a1) <= 5 and abs(m.a2 - tab.a2) <= 5 and abs(m.a3 - tab.a3) <= 5
-    assert abs(m.d_f - tab.d_f) <= 1.5
+    assert m.d_f == m.d_b + 2
     assert 2 * m.d_f - m.d_b <= m.lado_da_arruela <= tab.lado_da_arruela  # cobre o furo
     assert m.t_arruela >= m.d_b / 3 / 1.02  # AISC: ≈ d_b/3 (a NBR usa aço de 345 MPa, mais fina)
     assert m.a2 == 2 * m.a1 or m.a1 > m.a2 / 2  # a proporção da Tabela 18, ou a arruela manda
@@ -84,8 +88,8 @@ def test_contas_das_medidas_de_um_m30():
     m = bp.medidas_por_formula(replace(POR_FORMULA, chumbador="M30", t_placa_mm=25.0), 400.0)
     lin = m.linha
     assert m.lado_da_porca == pytest.approx(1.5 * 30 + 3.2)
-    assert lin.d_f == 38.0  # 30 + 8
-    assert lin.arruela == "50 × 50"  # 2·38 − 30 = 46 → 50
+    assert lin.d_f == 32.0  # 30 + 2
+    assert lin.arruela == "50 × 50"
     assert lin.t_arruela == 12.5  # 30/3 = 10 → 12,5
     assert lin.a2 == 120.0 and lin.a1 == 60.0 and lin.a3 == 180.0  # 4·d, a₂/2, 6·d
     assert lin.e_n == 60.0  # 30 + 12,5 + 15 = 57,5 → 60
@@ -264,6 +268,6 @@ def test_memorial_mostra_as_entradas_novas_com_rotulo_proprio():
 
     rotulos = pares(bp.calcular(replace(TRACAO, chumbador="M30", n_sd_kN=-400.0)))
     assert "A_s = 561 mm²" in rotulos["Rosca do chumbador (por fórmula)"]
-    assert rotulos["Furo na placa e arruela"].startswith("d_f = 38 mm")
+    assert rotulos["Furo na placa e arruela"].startswith("d_f = 32 mm")
     assert "Embutimento h_ef [mm]" in rotulos and "a₃, do chumbador à face do bloco [mm]" in rotulos
     assert "Rosca do chumbador (por fórmula)" not in pares(bp.calcular(C3_6))  # Tabela 18

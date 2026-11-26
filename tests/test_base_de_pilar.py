@@ -245,7 +245,7 @@ def test_com_tracao_nao_ha_atrito_e_a_cortante_vai_aos_chumbadores():
 def test_furo_da_placa_e_d_b_mais_8_mm():
     assert bp.TABELA_18['3/4"'].d_f == 27
     assert all(t.d_f == t.d_b + 8 for t in bp.TABELA_18.values())
-    assert bp.furo_padrao(16) == 24
+    assert bp.furo_padrao(16) == 18
 
 
 def test_placa_de_cisalhamento():

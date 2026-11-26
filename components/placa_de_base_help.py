@@ -56,9 +56,8 @@ AJUDA: dict[str, str] = {
         "porca."
     ),
     "d_f": (
-        "Diâmetro do furo na placa de base (mm). Zero usa a regra: os furos da Tabela 18, que são "
-        "os mesmos da AISC (Manual, Tabela 14-2), interpolados no diâmetro. O furo é folgado para "
-        "absorver o erro de locação dos chumbadores; a arruela especial cobre a folga."
+        "Diâmetro do furo na placa de base (mm). Zero adota o diâmetro do chumbador mais 2 mm. "
+        "A folga exige atenção à precisão de locação dos chumbadores."
     ),
     "tabela_18": (
         "Ligado, a₁ e a₂ são os mínimos do diâmetro escolhido — os da Tabela 18 ou, por fórmula, "

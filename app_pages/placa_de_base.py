@@ -300,7 +300,7 @@ with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
             d_b_atual = bp.ROSCAS[chumbador].d_b
         _sessao("pb_df", 0.0)  # sem valor padrão no widget: o botão Adotar zera este campo
         d_f = colunas[2].number_input(
-            f"Furo na placa d_f (mm) — 0 = {bp.furo_padrao(d_b_atual):.0f}",
+            f"Furo na placa d_f (mm) — 0 = {bp.furo_padrao(d_b_atual):g}",
             0.0,
             400.0,
             step=1.0,

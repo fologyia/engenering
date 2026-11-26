@@ -232,7 +232,8 @@ NOTA_TABELA_18 = (
     "Tabela 18 (notas): vale para chumbadores de aço ASTM A36, de 4 a 8 por base, com arruelas "
     "especiais de aço com f_y = 345 MPa e furo d_b + 1,5 mm — soldadas à placa só quando passam "
     "a cortante, e com uma também entre a placa e a porca de nivelamento, logo abaixo dela. O "
-    "bloco segue a NBR 6118 com as dimensões mínimas da nota e e a armadura mínima da nota h."
+    "bloco segue a NBR 6118 com as dimensões mínimas da nota e e a armadura mínima da nota h. "
+    "O furo da placa é adotado como d_b + 2 mm, em lugar do valor da tabela; conferir a locação."
 )
 GRUPO_GEOMETRIA = "Geometria da base"
 GRUPO_CONCRETO_E_PLACA = "Concreto e placa de base"
@@ -799,27 +800,12 @@ def roscas_da_familia(familia: str) -> list[Rosca]:
 
 
 def furo_padrao(d_b: float) -> float:
-    """d_f (mm): furo alargado da placa, d_b + 8 mm (a folga da Tabela 18 em todos os diâmetros).
-
-    Abaixo de 19 mm e acima de 50 mm, a folga (d_f − d_b) da ponta da tabela. Arredondado para o
-    milímetro de cima.
-    """
-    pontos = [(linha.d_b, linha.d_f) for linha in TABELA_18.values()]
-    if d_b <= pontos[0][0]:
-        furo = d_b + pontos[0][1] - pontos[0][0]
-    elif d_b >= pontos[-1][0]:
-        furo = d_b + pontos[-1][1] - pontos[-1][0]
-    else:
-        furo = next(
-            f0 + (f1 - f0) * (d_b - d0) / (d1 - d0)
-            for (d0, f0), (d1, f1) in zip(pontos, pontos[1:], strict=False)
-            if d0 <= d_b <= d1
-        )
-    return _acima(furo, 1.0)
+    """Diâmetro adotado para o furo na placa: diâmetro do chumbador mais 2 mm."""
+    return d_b + 2.0
 
 
 def furo_justo(e: EntradaBase, tab: LinhaTabela18) -> bool:
-    """O furo informado é menor que o padrão (d_b + 8 mm) para o diâmetro."""
+    """O furo informado é menor que o padrão (d_b + 2 mm) para o diâmetro."""
     return e.por_formula and e.d_f_mm > 0 and tab.d_f < furo_padrao(tab.d_b) - 1e-9
 
 
@@ -909,7 +895,7 @@ def medidas_por_formula(e: EntradaBase, h_ef: float | None = None) -> MedidasPor
         (
             "Furo na placa d_f",
             f"{_mm(d_f)} mm",
-            "informado" if e.d_f_mm else "furo alargado d_b + 8 mm (NBR 8800, furos alargados)",
+            "informado" if e.d_f_mm else "furo adotado d_b + 2 mm",
         ),
         (
             "Arruela especial",
@@ -981,7 +967,8 @@ def disposicoes(e: EntradaBase) -> LinhaTabela18:
     """A linha da Tabela 18 do chumbador ou, por fórmula, as medidas calculadas (h_ef provisório)."""
     if e.por_formula:
         return medidas_por_formula(e).linha
-    return TABELA_18[e.chumbador]
+    linha = TABELA_18[e.chumbador]
+    return replace(linha, d_f=furo_padrao(linha.d_b))
 
 
 def nome_do_chumbador(e: EntradaBase) -> str:
@@ -4616,7 +4603,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
             _info(
                 "Furo justo na placa",
                 f"d_f = {_n(tab.d_f, 1)} mm < furo padrão {_n(padrao, 0)} mm para Ø {tab.polegada} "
-                "(furo alargado d_b + 8 mm da placa de base): o "
+                "(furo adotado d_b + 2 mm da placa de base): o "
                 f"deslizamento cai para {_n((tab.d_f - tab.d_b) / 2, 1)} mm, mas some a tolerância "
                 "de locação dos chumbadores — o furo justo exige locação precisa (template ou "
                 "gabarito de montagem). Alternativa: furo padrão + arruelas soldadas",
@@ -4696,9 +4683,8 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
         + (
             "as de cima soldadas à placa com filete no contorno (6.7.2.5), levam a cortante"
             if soldadas
-            else "soltas, sem solda (nota d: a arruela especial vale também sem cortante, porque "
-            f"o furo da placa, d_f = {_n(tab.d_f, 0)} mm, é alargado e uma arruela comum não o "
-            "cobre)"
+            else "soltas, sem solda; arruela especial adotada também sem cortante; "
+            f"furo da placa d_f = {_n(tab.d_f, 1)} mm"
         )
     )
     # a distância real do eixo do chumbador mais externo à face do bloco mínimo: são o c_a1 e o
@@ -4754,7 +4740,7 @@ def _calcular_um(e: EntradaBase) -> ResultadoBase:
                 "sextavada pesada",
             ),
             ("Disposição", TIPOS[e.tipo]),
-            ("Furo na placa", f"d_f = {_n(tab.d_f, 0)} mm"),
+            ("Furo na placa", f"d_f = {_mm(tab.d_f)} mm"),
             ("Ancoragem", _texto_da_ancoragem(e, tab)),
             ("Arruelas especiais", arruelas_texto),
             ("Argamassa expansiva", argamassa_texto),
@@ -5591,7 +5577,7 @@ def registro_base(
             *(
                 [
                     f"Furo justo na placa (d_f = {_n(tab.d_f, 1)} mm, menor que o padrão de "
-                    f"{_n(furo_padrao(tab.d_b), 0)} mm, d_b + 8): hipótese de locação "
+                    f"{_n(furo_padrao(tab.d_b), 1)} mm, d_b + 2): hipótese de locação "
                     "precisa dos chumbadores, com template ou gabarito de montagem."
                 ]
                 if furo_justo(e, tab)
