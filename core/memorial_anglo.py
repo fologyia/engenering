@@ -26,8 +26,10 @@ from core.project_report import montar_modelo_relatorio
 PERFIL_ANGLO = "Anglo de emissão de relatório"
 MODELO = Path(__file__).resolve().parents[1] / "assets" / "modelo_anglo.docx"
 MODELO_PREENCHIDO = MODELO.with_name("modelo_anglo_preenchido.docx")
+MODELO_EMISSAO = MODELO.with_name("modelo_anglo_emissao.docx")
 VAZIO = "[a preencher]"
 FINALIDADES = ("", "ASB", "ICE", "IFA", "IFC", "IFD", "IFI", "IFP", "VOD")
+LAYOUTS_ANGLO = {"emissao": "Padrão do memorial preenchido", "completo": "Modelo completo rev2"}
 CAPITULOS = {
     "escopo": "Objetivo e escopo",
     "normas": "Códigos e normas",
@@ -56,6 +58,49 @@ _GRUPOS = {
     **dict.fromkeys(("447", "461"), "bases"),
     **dict.fromkeys(("482", "486", "491", "500", "505", "509"), "acessos"),
 }
+_CAPITULOS_EMISSAO = {
+    "escopo": "Objetivo e escopo",
+    "normas": "Códigos e normas",
+    "referencias": "Documentos de referência",
+    "premissas": "Premissas de cálculo",
+    "entradas": "DADOS DE ENTRADA E ESFORÇOS SOLICITANTES DE CÁLCULO",
+    "geometria": "GEOMETRIA ADOTADA E DETALHAMENTO CONSTRUTIVO",
+    "placa": "VERIFICAÇÃO DA PLACA DE BASE À COMPRESSÃO E FLEXÃO",
+    "ancoragem": "VERIFICAÇÃO DA ANCORAGEM NO CONCRETO",
+    "solda": "VERIFICAÇÃO DAS LIGAÇÕES SOLDADAS",
+    "elu": CAPITULOS["elu"],
+    "els": CAPITULOS["els"],
+    "ligacoes": CAPITULOS["ligacoes"],
+    "acessos": CAPITULOS["acessos"],
+    "resumo": "QUADRO RESUMO DE VERIFICAÇÕES E NOTAS EXECUTIVAS DE MONTAGEM",
+    "anexos": CAPITULOS["anexos"],
+}
+_DESTINOS_EMISSAO = {"cargas": "entradas", "447": "placa", "461": "ancoragem", "420": "solda"}
+_CAMPOS_VERIFICACAO_EMISSAO = {
+    "placa": (
+        "Tensão de contato no concreto",
+        "Espessura mínima da placa sob compressão",
+        "Espessura mínima da placa sob tração",
+    ),
+    "ancoragem": (
+        "Resistência do aço dos chumbadores",
+        "Ruptura do cone de concreto à tração",
+        "Arrancamento e ruptura de borda ao cisalhamento",
+    ),
+    "solda": ("Solicitação e resistência da ligação soldada",),
+}
+_FINALIDADES_EMISSAO = {
+    "IFA": (2, 0),
+    "IFC": (2, 4),
+    "IAP": (2, 7),
+    "IFI": (2, 10),
+    "IFP": (4, 0),
+    "ASB": (4, 4),
+    "VOD": (4, 7),
+    "ICE": (4, 10),
+    "IFD": (4, 10),
+}
+_PREFIXOS_INTERNACIONAIS = ("ACI ", "AISC ", "ANSI", "ASTM ", "AWS ", "EN ", "ISO ", "OSHA", "RCSC")
 
 # Posições no DOCX original rev2. O modelo de emissão conserva os quadros
 # dessas referências, mas não copia resultados, taxas ou aprovações de exemplo.
@@ -153,10 +198,10 @@ def _secao_calculo(registro: Mapping[str, Any]) -> str:
         return "505"
     if any(t in titulo for t in ("chumbador", "ancoragem")):
         return "461"
-    if any(t in titulo for t in ("base", "fundação", "fundacao")):
-        return "447"
     if "solda" in titulo:
         return "420"
+    if any(t in titulo for t in ("base", "fundação", "fundacao")):
+        return "447"
     if "parafus" in titulo:
         return "398"
     if any(t in titulo for t in ("ligaç", "ligacao", "emenda")):
@@ -192,7 +237,9 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
     """Compõe o Word e a prévia com o mesmo conjunto de dados."""
     metadata_extra = dict(metadata_extra or {})
     config = projeto.get("configuracao_relatorio") or {}
-    anglo = metadata_extra.get("anglo", config.get("anglo") or {})
+    anglo = dict(metadata_extra.get("anglo", config.get("anglo") or {}))
+    layout = "completo" if anglo.get("layout") == "completo" else "emissao"
+    anglo["layout"] = layout
     base = projeto.get("base_projeto") or {}
     omitidos = set(anglo.get("nao_aplicaveis") or ()) & set(OPCIONAIS)
     permitidos = {str(v) for v in registros_ids} if registros_ids is not None else None
@@ -285,6 +332,15 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
         "pendencias": [],
         "anexos": [],
         "resumo": [],
+        "quadro_emissao": [],
+        "geometria_emissao": [
+            [
+                _texto(" · ".join(str(c[k]) for k in ("tag", "nome") if c.get(k))),
+                _texto(" · ".join(str(c[k]) for k in ("perfil", "material") if c.get(k))),
+                _texto(c.get("descricao")),
+            ]
+            for c in projeto.get("componentes", [])
+        ],
     }
     textos = {
         "41": [projeto.get("objetivo")],
@@ -325,6 +381,17 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
                 for linha in bloco["linhas"]
                 if isinstance(linha[2], tuple)
             ]
+            tabelas["quadro_emissao"] = [
+                [
+                    " · ".join(v for v in (linha[1], linha[2][0]) if v != "-"),
+                    VAZIO,
+                    VAZIO,
+                    linha[5],
+                    linha[6],
+                ]
+                for linha in bloco["linhas"]
+                if isinstance(linha[2], tuple)
+            ]
     historico = [
         item
         for item in (config.get("emissoes") or [])
@@ -337,6 +404,7 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
     payload = {
         "base": modelo["snapshot_hash"],
         "referencia_anglo": _referencia_anglo()[1],
+        "modelo_emissao": _hash_emissao() if layout == "emissao" else None,
         "anglo": anglo,
         "campos": campos,
         "textos": textos,
@@ -346,28 +414,52 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
     snapshot = hashlib.sha256(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()
     ).hexdigest()
+    capitulos = CAPITULOS
+    grupos = {
+        chave: [
+            s
+            for destino, secoes in calculos.items()
+            if _GRUPOS.get(destino, destino) == chave
+            for s in secoes
+        ]
+        for chave in CAPITULOS
+    }
+    if layout == "emissao":
+        grupos = {chave: [] for chave in _CAPITULOS_EMISSAO}
+        for destino, secoes in calculos.items():
+            grupos[_DESTINOS_EMISSAO.get(destino, _GRUPOS.get(destino, destino))].extend(secoes)
+        capitulos = {
+            chave: titulo
+            for chave, titulo in _CAPITULOS_EMISSAO.items()
+            if chave
+            in {"escopo", "normas", "referencias", "premissas", "entradas", "geometria", "resumo"}
+            or grupos[chave]
+            or (
+                not ids
+                and chave in {"placa", "ancoragem", "solda"}
+                and ("ligacoes" if chave == "solda" else "bases") not in omitidos
+            )
+            or (chave == "anexos" and documentos and chave not in omitidos)
+        }
     return {
         **modelo,
         "snapshot_hash": snapshot,
         "anglo": anglo,
         "campos_anglo": campos,
-        "capitulos_anglo": CAPITULOS,
+        "capitulos_anglo": capitulos,
         "omitidos_anglo": omitidos,
         "textos_anglo": textos,
         "tabelas_anglo": tabelas,
         "calculos_anglo": calculos,
         "excluidos_anglo": excluidos,
-        "grupos_anglo": {
-            chave: [
-                s
-                for destino, secoes in calculos.items()
-                if _GRUPOS.get(destino, destino) == chave
-                for s in secoes
-            ]
-            for chave in CAPITULOS
-        },
+        "grupos_anglo": grupos,
         "historico_anglo": anteriores,
     }
+
+
+@lru_cache(maxsize=1)
+def _hash_emissao():
+    return hashlib.sha256(MODELO_EMISSAO.read_bytes()).hexdigest()
 
 
 def _substituir_texto(paragrafo, valor):
@@ -431,14 +523,178 @@ def _render_calculo(doc, antes, secao, nivel):
             )
 
 
+def _render_emissao(doc, modelo, referencia):
+    """Compõe os capítulos sobre o documento de emissão validado pelo usuário."""
+    fim = doc.element.body.sectPr
+    quadros = dict(
+        zip(
+            (
+                "normas",
+                "internacionais",
+                "criterios",
+                "documentos",
+                "programas",
+                "geometria",
+                "apoios",
+                "resumo",
+            ),
+            (t._tbl for t in doc.tables[3:]),
+            strict=True,
+        )
+    )
+    for elemento in list(doc.element.body)[19:-1]:
+        doc.element.body.remove(elemento)
+    dados = modelo["tabelas_anglo"]
+    textos = modelo["textos_anglo"]
+    numero_quadro = 0
+
+    def titulo(texto, nivel=2):
+        _inserir_texto(doc, fim, texto, f"Heading {nivel}")
+
+    def paragrafo(texto):
+        return _inserir_texto(doc, fim, texto)
+
+    def trecho(*chaves, padrao=False):
+        linhas = [
+            texto
+            for chave in chaves
+            for texto in textos.get(chave, [])
+            if texto and _texto(texto) != VAZIO
+        ]
+        if not linhas and padrao:
+            paragrafo(_ROTULO_REFERENCIA).paragraph_format.keep_with_next = True
+            linhas = [
+                Paragraph(referencia.element.body[i], referencia).text
+                for i in _TEXTOS_PADRAO[chaves[0]]
+            ]
+        for linha in linhas or [VAZIO]:
+            paragrafo(linha)
+
+    def quadro(chave, linhas, nome, *, padrao=None):
+        nonlocal numero_quadro
+        numero_quadro += 1
+        legenda = _inserir_texto(doc, fim, f"Tabela {numero_quadro}. {nome}.", "Caption")
+        legenda.paragraph_format.keep_with_next = True
+        if not _tem_dados(linhas) and padrao is not None:
+            paragrafo(_ROTULO_REFERENCIA).paragraph_format.keep_with_next = True
+            original = Table(referencia.element.body[padrao], referencia)
+            largura = len(Table(quadros[chave], doc).columns)
+            linhas = [[cell.text for cell in row.cells[:largura]] for row in original.rows[1:]]
+        node = quadros[chave]
+        fim.addprevious(node)
+        _preencher_tabela(Table(node, doc), linhas)
+
+    for chave, nome in modelo["capitulos_anglo"].items():
+        titulo(nome, 1)
+        if chave == "escopo":
+            titulo("Objetivo")
+            trecho("41", "45")
+            titulo("Localização e condições de operação")
+            trecho("50")
+        elif chave == "normas":
+            nacionais, internacionais = [], []
+            for linha in dados["normas"]:
+                codigo, descricao, edicao, uso = linha
+                if codigo.upper().startswith(_PREFIXOS_INTERNACIONAIS):
+                    internacionais.append(
+                        [
+                            codigo,
+                            f"{descricao} ({edicao})" if edicao != VAZIO else descricao,
+                            uso,
+                        ]
+                    )
+                else:
+                    nacionais.append(linha)
+            titulo("Normas brasileiras e regulamentos")
+            quadro(
+                "normas",
+                nacionais,
+                "Normas brasileiras e regulamentos",
+                padrao=_QUADROS_PADRAO["normas"],
+            )
+            titulo("Normas e referências internacionais")
+            quadro(
+                "internacionais", internacionais, "Normas e referências internacionais", padrao=64
+            )
+        elif chave == "referencias":
+            titulo("Critérios e padrões do cliente")
+            quadro(
+                "criterios",
+                [linha[:2] for linha in dados["criterios"]],
+                "Critérios e padrões do cliente",
+                padrao=_QUADROS_PADRAO["criterios"],
+            )
+            titulo("Desenhos e documentos do projeto")
+            quadro("documentos", dados["documentos"], "Desenhos e documentos do projeto")
+            titulo("Programas e planilhas de cálculo")
+            quadro("programas", dados["programas"], "Programas e planilhas de cálculo")
+        elif chave == "premissas":
+            trecho("premissas", padrao=True)
+        elif chave == "entradas":
+            titulo("Propriedades geométricas e especificação dos materiais")
+            linhas = dados["geometria_emissao"] or [
+                [
+                    elemento,
+                    especificacao,
+                    _texto(
+                        " · ".join(
+                            f"{nome} = {valor} MPa"
+                            for nome, valor in (("fy", fy), ("fu", fu))
+                            if valor != VAZIO
+                        )
+                    ),
+                ]
+                for elemento, especificacao, fy, fu, _ in dados["materiais"]
+            ]
+            quadro("geometria", linhas, "Propriedades geométricas e materiais")
+            titulo("Esforços solicitantes críticos nos apoios")
+            quadro("apoios", [], "Esforços nos apoios por combinação simultânea")
+            if dados["casos"] or dados["elu_comb"] or dados["els_comb"]:
+                titulo("Casos de carga e combinações cadastrados")
+                for codigo, nome_caso, origem, cargas in dados["casos"]:
+                    paragrafo(f"{codigo} · {nome_caso} · {origem} · {cargas}")
+                for _, nome_comb, fatores, _ in dados["elu_comb"]:
+                    paragrafo(f"ELU · {nome_comb} · {fatores}")
+                for _, nome_comb, tipo, fatores, _ in dados["els_comb"]:
+                    paragrafo(f"{tipo} · {nome_comb} · {fatores}")
+            for texto in textos.get("cargas", []) + textos.get("combinacoes", []):
+                if texto:
+                    paragrafo(texto)
+        elif chave == "geometria":
+            trecho("126", "224", "251")
+        elif chave == "resumo":
+            quadro("resumo", dados["quadro_emissao"], "Resumo das verificações")
+            if "montagem" not in modelo["omitidos_anglo"]:
+                titulo("Notas executivas para obra e montagem")
+                trecho("532")
+            titulo("Conclusão")
+            trecho("conclusao")
+        elif chave == "anexos":
+            for codigo, titulo_doc, revisao in dados["documentos"]:
+                paragrafo(f"{codigo} · {titulo_doc} · Rev. {revisao}")
+        elif not modelo["grupos_anglo"][chave]:
+            for subtitulo in _CAMPOS_VERIFICACAO_EMISSAO[chave]:
+                titulo(subtitulo)
+                identificacao = paragrafo(f"Elemento: {VAZIO}. Combinação: {VAZIO}.")
+                identificacao.paragraph_format.keep_with_next = True
+                metodo = paragrafo(
+                    f"Método e referência: {VAZIO}. Solicitação e resistência: {VAZIO}."
+                )
+                metodo.paragraph_format.keep_with_next = True
+                paragrafo(f"Conclusão: {VAZIO}.")
+        for calculo in modelo["grupos_anglo"][chave]:
+            _render_calculo(doc, fim, calculo, 2)
+
+
 def gerar_word_anglo(modelo) -> bytes:
     """Preenche a cópia preparada do documento, preservando a geometria da referência."""
-    doc = Document(MODELO)
+    emissao = modelo["anglo"].get("layout") == "emissao"
+    doc = Document(MODELO_EMISSAO if emissao else MODELO)
     referencia, _ = _referencia_anglo()
     md, campos = modelo["metadata"], modelo["campos_anglo"]
     anglo = modelo["anglo"]
     capa = list(doc.element.body)
-    for indice, valor in {
+    textos_capa = {
         2: _texto(campos["unidade_industrial"]),
         3: _texto(campos["area"]),
         4: _texto(campos["titulo_capa"]),
@@ -447,9 +703,21 @@ def gerar_word_anglo(modelo) -> bytes:
         8: "Anglo American No: ",
         9: f"Revision: {_texto(md['revisao'])}",
         10: f"Date: {_texto(md['emissao'])}\tContractor No: {_texto(campos['numero_contratada'])}",
-    }.items():
+    }
+    if emissao:
+        textos_capa = {
+            2: "\n".join(
+                _texto(campos[k])
+                for k in ("unidade_industrial", "area", "titulo_capa", "tag_equipamento")
+            )
+            + f"\nMEMÓRIA DE CÁLCULO ESTRUTURAL – {_texto(campos['fase'])}",
+            3: "Anglo American No: ",
+            4: f"Revisão: {_texto(md['revisao'])}",
+            5: f"Data: {_texto(md['emissao'])}\tNº Contratada: {_texto(campos['numero_contratada'])}",
+        }
+    for indice, valor in textos_capa.items():
         _substituir_texto(Paragraph(capa[indice], doc), valor)
-    for node in capa[8].xpath(".//w:sdtContent//w:t"):
+    for node in capa[3 if emissao else 8].xpath(".//w:sdtContent//w:t"):
         node.text = _texto(campos["numero_anglo"])
     for n, papel in enumerate(("responsavel", "verificador", "aprovador"), 1):
         _celula(doc.tables[0].cell(n, 1), md.get(papel))
@@ -466,7 +734,8 @@ def gerar_word_anglo(modelo) -> bytes:
         (i["revisao"], i["emissao"], i.get("descricao_revisao"), i.get("responsavel"), None, None)
         for i in modelo["historico_anglo"]
     ] + [linha_atual]
-    for linha, valores in zip(list(doc.tables[1].rows)[2:], linhas, strict=False):
+    linhas_disponiveis = list(doc.tables[1].rows)[2:]
+    for linha, valores in zip(linhas_disponiveis, linhas[-len(linhas_disponiveis) :], strict=False):
         for cell, valor in zip(linha.cells, valores, strict=True):
             _celula(cell, valor)
     destinos = {
@@ -479,9 +748,14 @@ def gerar_word_anglo(modelo) -> bytes:
         "IFP": (4, 7),
         "VOD": (4, 10),
     }
-    if finalidade := destinos.get(campos["finalidade"]):
+    if finalidade := (_FINALIDADES_EMISSAO if emissao else destinos).get(campos["finalidade"]):
         linha, coluna = finalidade
         _celula(doc.tables[2].rows[linha].cells[coluna], "X")
+        if emissao and campos["finalidade"] in {"ICE", "IFD"}:
+            descricao = "CERTIFICADO" if campos["finalidade"] == "ICE" else "PARA PROJETO"
+            _celula(
+                doc.tables[2].rows[linha].cells[coluna + 1], f"{campos['finalidade']} - {descricao}"
+            )
     for part in doc.part.package.parts:
         if "/header" in str(part.partname):
             for node in part.element.xpath("//w:t"):
@@ -494,6 +768,11 @@ def gerar_word_anglo(modelo) -> bytes:
         update = OxmlElement("w:updateFields")
         doc.settings.element.append(update)
     update.set(qn("w:val"), "true")
+    if emissao:
+        _render_emissao(doc, modelo, referencia)
+        saida = BytesIO()
+        doc.save(saida)
+        return saida.getvalue()
     capitulo = ""
     for node in list(doc.element.body)[22:]:
         if node.tag == qn("w:sectPr"):

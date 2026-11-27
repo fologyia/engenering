@@ -19,6 +19,7 @@ from core import memorial_do_projeto as mdp
 from core.memorial_anglo import (
     CAPITULOS,
     FINALIDADES,
+    LAYOUTS_ANGLO,
     MODELO_PREENCHIDO,
     OPCIONAIS,
     PERFIL_ANGLO,
@@ -191,7 +192,7 @@ def _registrar_emissao(
             "snapshot_hash": snapshot,
             "emissao": metadata["emissao"],
             **(
-                {k: metadata["anglo"].get(k) for k in ("finalidade", "descricao_revisao")}
+                {k: metadata["anglo"].get(k) for k in ("finalidade", "descricao_revisao", "layout")}
                 | {"responsavel": metadata["responsavel"]}
                 if perfil == PERFIL_ANGLO
                 else {}
@@ -462,9 +463,17 @@ with st.container(border=True):
                 _registrar_emissao(
                     projeto,
                     perfil=_perfil_rapido,
-                    secoes=list(CAPITULOS) if _rapido_anglo else list(_secoes_rapidas),
+                    secoes=(
+                        list(_modelo_rapido["capitulos_anglo"])
+                        if _rapido_anglo
+                        else list(_secoes_rapidas)
+                    ),
                     registros_ids=[str(item["id"]) for item in _modelo_rapido["registros"]],
-                    metadata=_metadata_rapida,
+                    metadata=(
+                        _metadata_rapida | {"anglo": _modelo_rapido["anglo"]}
+                        if _rapido_anglo
+                        else _metadata_rapida
+                    ),
                     snapshot=_modelo_rapido["snapshot_hash"],
                 )
                 st.session_state[_chave_rapida] = {
@@ -854,13 +863,20 @@ with st.expander("Identificação e controle do documento", expanded=True):
 config_anglo = dict(config_salva.get("anglo") or {})
 if perfil_anglo:
     with st.expander("Identificação Anglo e finalidade da emissão", expanded=True):
+        config_anglo["layout"] = st.selectbox(
+            "Formato do memorial Anglo",
+            list(LAYOUTS_ANGLO),
+            index=int(config_anglo.get("layout") == "completo"),
+            format_func=LAYOUTS_ANGLO.__getitem__,
+            key=f"anglo_layout_{projeto['id']}",
+        )
         st.caption(
             "O Word gerado usa os dados do projeto e apresenta os preenchimentos "
             "do modelo Anglo como referências onde couber. Confirme a aplicabilidade "
             "das referências antes da emissão."
         )
         st.download_button(
-            "Baixar modelo Anglo original preenchido",
+            "Baixar modelo de referência rev2",
             data=MODELO_PREENCHIDO.read_bytes(),
             file_name="MODELO - Memoria de Calculo Estruturas Metalicas - rev2.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -879,10 +895,11 @@ if perfil_anglo:
                 rotulo, value=config_anglo.get(chave, ""), key=f"anglo_{chave}_{projeto['id']}"
             )
         finalidade_salva = config_anglo.get("finalidade")
+        finalidades = (*FINALIDADES, "IAP") if config_anglo["layout"] == "emissao" else FINALIDADES
         config_anglo["finalidade"] = st.selectbox(
             "Finalidade da emissão",
-            FINALIDADES,
-            index=FINALIDADES.index(finalidade_salva) if finalidade_salva in FINALIDADES else 0,
+            finalidades,
+            index=finalidades.index(finalidade_salva) if finalidade_salva in finalidades else 0,
             format_func=lambda valor: valor or "A preencher",
             key=f"anglo_finalidade_{projeto['id']}",
         )
@@ -939,7 +956,7 @@ else:
 
 st.subheader("Prévia da composição")
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Seções", len(selecoes))
+m1.metric("Seções", len(modelo["capitulos_anglo"]) if perfil_anglo else len(selecoes))
 m2.metric("Registros anexados", len(ids_registros))
 m3.metric(
     "Preenchimento médio",
@@ -978,7 +995,7 @@ if incompletos:
             )
 with st.expander("Sumário planejado"):
     if perfil_anglo:
-        for chave, nome in CAPITULOS.items():
+        for chave, nome in modelo["capitulos_anglo"].items():
             st.write(nome + (" · Não aplicável" if chave in modelo["omitidos_anglo"] else ""))
             for calculo in modelo["grupos_anglo"][chave]:
                 st.caption(calculo["titulo"])
@@ -1065,7 +1082,7 @@ if st.button(
             _registrar_emissao(
                 projeto,
                 perfil=perfil,
-                secoes=list(CAPITULOS) if perfil_anglo else list(selecoes),
+                secoes=list(modelo["capitulos_anglo"]) if perfil_anglo else list(selecoes),
                 registros_ids=[str(item["id"]) for item in modelo["registros"]],
                 metadata=metadata,
                 snapshot=modelo["snapshot_hash"],
