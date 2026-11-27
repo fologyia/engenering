@@ -151,6 +151,10 @@ def chave_do_calculo(registro: Mapping[str, Any]) -> tuple[str, ...]:
     * Nas outras: a cópia idêntica (mesma página, título, peça, entradas e resultados). Duas
       colunas diferentes com o mesmo título são dois cálculos e ficam os dois.
     """
+    # Capítulos externos são documentos independentes, mesmo com título,
+    # entradas e peça iguais. Só o responsável pode superá-los explicitamente.
+    if registro.get("origem_calculo") == "manual_externo":
+        return ("manual_externo", _texto(registro.get("id")))
     modulo = _texto(registro.get("modulo_id")).casefold()
     titulo = " ".join(_texto(registro.get("titulo")).casefold().split())
     if modulo in DO_MODELO_INTEIRO:
@@ -203,11 +207,11 @@ def repetidos(registros: Sequence[Mapping[str, Any]]) -> dict[str, str]:
 
 
 def ordem_do_projeto(
-    registros: Sequence[Mapping[str, Any]], *, fora: Sequence[str] = ()
+    registros: Sequence[Mapping[str, Any]], *, fora: Sequence[str] = (), desduplicar: bool = True
 ) -> list[str]:
     """Os ids que entram no memorial: um de cada cálculo, vigentes, na ordem das etapas (e, na
     mesma etapa, na ordem em que foram registrados). ``fora`` = módulos que não entram."""
-    sobram = repetidos(registros)
+    sobram = repetidos(registros) if desduplicar else {}
     excluidos = {m.casefold() for m in fora}
     entram = [
         (posicao, r)
@@ -281,12 +285,18 @@ def quadro(projeto: Mapping[str, Any], *, fora: Sequence[str] = ()) -> list[Linh
 
 
 def juntar(
-    projeto: Mapping[str, Any], *, fora: Sequence[str] = ()
+    projeto: Mapping[str, Any],
+    *,
+    fora: Sequence[str] = (),
+    ids_a_superar: Sequence[str] | None = None,
 ) -> tuple[dict[str, Any], int, list[str]]:
     """O projeto arrumado para o memorial: os repetidos superados pelo mais novo e a composição
     do memorial com um de cada, na ordem do projeto. Devolve (projeto, superados, ids na ordem)."""
     documento = deepcopy(dict(projeto))
     sobram = repetidos(documento.get("registros_tecnicos", []) or [])
+    if ids_a_superar is not None:
+        selecionados = set(ids_a_superar)
+        sobram = {antigo: novo for antigo, novo in sobram.items() if antigo in selecionados}
     for antigo, novo in sobram.items():
         documento = superar_registro(
             documento,
@@ -294,7 +304,9 @@ def juntar(
             motivo="Registrado de novo: vale o mais novo (Juntar o projeto, Memorial de cálculo).",
             substituto_id=novo,
         )
-    ordem = ordem_do_projeto(documento.get("registros_tecnicos", []) or [], fora=fora)
+    ordem = ordem_do_projeto(
+        documento.get("registros_tecnicos", []) or [], fora=fora, desduplicar=False
+    )
     todos = [
         _texto(r.get("id"))
         for r in documento.get("registros_tecnicos", []) or []

@@ -15,7 +15,12 @@ from components.ui import cabecalho_pagina
 from core import casos_de_aceite as ca
 from core.project_checklist import resumo_checklist
 from core.project_store import criar_item, salvar_projeto
-from core.project_validation import SEVERIDADES, validar_projeto
+from core.project_validation import (
+    SEVERIDADES,
+    chave_estavel_achado,
+    item_para_achado,
+    validar_projeto,
+)
 from core.project_workflow import avaliar_todas_transicoes
 
 st.set_page_config(
@@ -189,20 +194,19 @@ if filtrados:
             "Ação recomendada": st.column_config.TextColumn(width="large"),
         },
     )
-    _ja_no_checklist = {
-        str(item.get("origem_validacao"))
-        for item in projeto["checklist"]
-        if isinstance(item, dict) and item.get("origem_validacao")
-    }
     # Achados da categoria Checklist já SÃO itens do checklist: convertê-los
     # criaria um item "Checklist aberto: Checklist aberto: ..." em cascata.
-    _bloqueios_sem_item = [
-        item
+    _chaves_achados = [chave_estavel_achado(item) for item in resultado["achados"]]
+    _ambiguas = {chave for chave in _chaves_achados if _chaves_achados.count(chave) > 1}
+    _bloqueios_por_chave = {
+        chave_estavel_achado(item): item
         for item in filtrados
         if item["severidade"] == "Bloqueio"
         and item["categoria"] not in {"Checklist", "Prazos"}
-        and item["id"] not in _ja_no_checklist
-    ]
+        and chave_estavel_achado(item) not in _ambiguas
+        and item_para_achado(projeto["checklist"], item, achados=resultado["achados"]) is None
+    }
+    _bloqueios_sem_item = list(_bloqueios_por_chave.values())
     with st.container(horizontal=True):
         st.download_button(
             "Baixar achados filtrados (CSV)",
@@ -226,7 +230,7 @@ if filtrados:
                         estado="Aberto",
                         evidencia=item["evidencia"],
                         critico=True,
-                        origem_validacao=item["id"],
+                        origem_validacao=chave_estavel_achado(item),
                     )
                 )
             with tratar_conflito_de_gravacao():
@@ -252,14 +256,44 @@ if filtrados:
         st.markdown(f"**Ação recomendada:** {achado['recomendacao']}")
         if achado.get("evidencia"):
             st.code(achado["evidencia"], language=None)
-        existente = next(
-            (item for item in projeto["checklist"] if item.get("origem_validacao") == achado_id),
-            None,
-        )
+        _destino = {
+            "Materiais": "app_pages/materiais_tecnicos.py",
+            "Casos de carga": "app_pages/casos_carga.py",
+            "Combinações de carga": "app_pages/casos_carga.py",
+        }.get(achado["categoria"], "app_pages/gestao_projetos.py")
+        if st.button("Abrir área para tratar", icon=":material/arrow_forward:"):
+            _categoria = achado["categoria"]
+            _secao = (
+                "Escopo"
+                if _categoria in {"Identificação", "Responsabilidades", "Escopo físico"}
+                else "Cálculos"
+                if _categoria
+                in {
+                    "Cálculos",
+                    "Registros técnicos",
+                    "Resultado técnico",
+                    "Critério numérico",
+                    "Rastreabilidade de cálculo",
+                }
+                else "Entrega"
+                if _categoria in {"Checklist", "Prazos"}
+                else "Base técnica"
+            )
+            st.session_state["projeto_jornada_alvo"] = {
+                "secao": _secao,
+                "campo": achado["titulo"],
+            }
+            st.switch_page(_destino)
+        existente = item_para_achado(projeto["checklist"], achado, achados=resultado["achados"])
         if achado["categoria"] in {"Checklist", "Prazos"}:
             st.caption(
                 ":material/checklist: Este achado aponta para um item que já está no checklist: "
                 "trate-o na aba Checklist de Gestão de projetos."
+            )
+        elif chave_estavel_achado(achado) in _ambiguas:
+            st.warning(
+                "Existem achados indistinguíveis nesta regra. Trate-os na origem ou cadastre "
+                "itens individuais no checklist para não vincular uma peça à outra."
             )
         elif existente is not None:
             st.caption(
@@ -287,7 +321,7 @@ if filtrados:
                         estado="Aberto",
                         evidencia=achado["evidencia"],
                         critico=achado["severidade"] == "Bloqueio",
-                        origem_validacao=achado_id,
+                        origem_validacao=chave_estavel_achado(achado),
                     )
                 )
                 with tratar_conflito_de_gravacao():

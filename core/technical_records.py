@@ -144,6 +144,23 @@ def calcular_hash_registro(registro: Mapping[str, Any]) -> str:
             "materiais_ids",
         )
     }
+    # Campos específicos de capítulos externos também compõem sua assinatura;
+    # registros legados conservam exatamente a assinatura anterior.
+    if registro.get("origem_calculo") == "manual_externo":
+        campos.update(
+            {
+                chave: registro.get(chave)
+                for chave in (
+                    "origem_calculo",
+                    "preenchimento",
+                    "resultado_tecnico",
+                    "modelo_externo",
+                    "documento_externo",
+                    "peca",
+                    "responsavel",
+                )
+            }
+        )
     serializado = json.dumps(
         campos,
         ensure_ascii=False,

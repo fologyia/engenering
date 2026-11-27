@@ -15,7 +15,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 from core import base_tecnica as bt
 from core import criterio_anglo as ca
 from core import vento_nbr6123 as vb
-from core.project_store import obter_projeto_ativo
+from core.project_store import CAMPO_GRAVACAO, obter_projeto_ativo
 
 configurar_pagina("Base técnica do projeto", ":material/tune:")
 cabecalho_pagina(
@@ -47,23 +47,50 @@ if projeto is None:
         icon=":material/folder_off:",
     )
 else:
+    _chave_versao = f"bt_versao_{projeto['id']}"
+    _chave_geracao = f"bt_geracao_{projeto['id']}"
+    st.session_state.setdefault(_chave_versao, int(projeto.get(CAMPO_GRAVACAO, 0)))
+    st.session_state.setdefault(_chave_geracao, 0)
+    if st.button(
+        "Recarregar base salva",
+        icon=":material/refresh:",
+        help="Descarta os dados ainda não salvos desta tela e carrega a versão atual.",
+    ):
+        st.session_state.pop(f"bt_cliente_{projeto['id']}", None)
+        st.session_state[_chave_versao] = int(projeto.get(CAMPO_GRAVACAO, 0))
+        st.session_state[_chave_geracao] += 1
+        st.rerun()
+    if int(projeto.get(CAMPO_GRAVACAO, 0)) != st.session_state[_chave_versao]:
+        st.warning(
+            "O projeto foi atualizado desde que esta base foi aberta. Recarregue a base salva antes de editar novamente."
+        )
     with st.container(border=True):
         st.subheader("Critério do cliente", help=AJUDA["sec_cliente"])
         cliente = st.radio(
             "Critério de projeto",
             list(bt.CLIENTES),
-            index=list(bt.CLIENTES).index(salva.cliente if salva else bt.CLIENTE_ANGLO),
+            index=list(bt.CLIENTES).index(salva.cliente) if salva else None,
             format_func=lambda chave: bt.CLIENTES[chave],
-            key="bt_cliente",
+            key=f"bt_cliente_{projeto['id']}",
             horizontal=True,
             help=AJUDA["cliente"],
         )
         if cliente == bt.CLIENTE_ANGLO:
             st.caption(f":material/description: {ca.REFERENCIA}. Aplicação: {ca.APLICACAO}")
+        if cliente is None:
+            st.info(
+                "Escolha o critério aplicável antes de salvar. Os valores iniciais abaixo são sugestões a conferir."
+            )
+        elif salva is None or salva.cliente != cliente:
+            st.caption(
+                "Os valores iniciais são sugestões; confira a origem e a aplicabilidade de cada um antes de salvar."
+            )
     inicial = (
-        salva if (salva is not None and salva.cliente == cliente) else bt.base_do_cliente(cliente)
+        salva
+        if (salva is not None and salva.cliente == cliente)
+        else bt.base_do_cliente(cliente or bt.CLIENTE_NENHUM)
     )
-    sufixo = f"{projeto['id']}_{cliente}"
+    sufixo = f"{projeto['id']}_{cliente}_{st.session_state[_chave_geracao]}"
     with st.form(f"bt_formulario_{sufixo}", border=True):
         st.subheader("Local e vento", help=AJUDA["sec_local"])
         colunas = st.columns(4)
@@ -109,7 +136,9 @@ else:
             "S₃ do cliente",
             min_value=0.5,
             max_value=1.5,
-            value=float(inicial.vento.s3_cliente or ca.S3),
+            value=float(
+                inicial.vento.s3_cliente or (ca.S3 if cliente == bt.CLIENTE_ANGLO else 1.0)
+            ),
             step=0.01,
             format="%.2f",
             help=AJUDA["s3_cliente"],
@@ -160,6 +189,7 @@ else:
             type="primary",
             icon=":material/save:",
             help=AJUDA["btn_salvar"],
+            disabled=cliente is None,
         )
     if salvar:
         valor_sobrecarga = (
@@ -189,7 +219,8 @@ else:
         if erros:
             for erro in erros:
                 st.error(erro, icon=":material/error:")
-        elif gravar_base(nova):
+        elif gravar_base(nova, gravacao_esperada=st.session_state[_chave_versao]):
+            st.session_state.pop(_chave_versao, None)
             st.toast("Base técnica gravada no projeto.", icon=":material/check_circle:")
             st.rerun()
 

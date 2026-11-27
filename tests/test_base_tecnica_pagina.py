@@ -155,6 +155,8 @@ def test_sem_projeto_a_pagina_abre_e_explica(banco_isolado, pagina):
 # ------------------------------------------------------------------ base técnica
 def test_salvar_a_base_anglo_grava_no_projeto(banco_com_projeto):
     t = abrir(BASE)
+    assert next(b for b in t.button if b.label == "Salvar a base técnica").disabled
+    t.radio(key=f"bt_cliente_{obter_projeto_ativo()['id']}").set_value(bt.CLIENTE_ANGLO).run()
     next(b for b in t.button if b.label == "Salvar a base técnica").click().run()
     assert not t.exception and not t.error
     base = bt.base_do_projeto(obter_projeto_ativo())
@@ -163,6 +165,20 @@ def test_salvar_a_base_anglo_grava_no_projeto(banco_com_projeto):
     t.run()
     assert metrica(t, "Deslocamento do topo sob vento") == "H/400"
     assert any("0,95" in w.value for w in t.warning)
+
+
+def test_base_nao_sobrescreve_alteracao_de_outra_sessao(banco_com_projeto):
+    t = abrir(BASE)
+    projeto = obter_projeto_ativo()
+    t.radio(key=f"bt_cliente_{projeto['id']}").set_value(bt.CLIENTE_ANGLO).run()
+    atualizado = obter_projeto_ativo()
+    atualizado["base_tecnica"] = bt.para_dicionario(bt.base_do_cliente(bt.CLIENTE_NENHUM))
+    salvar_projeto(atualizado, motivo="Alteração em outra sessão")
+    next(b for b in t.button if b.label == "Salvar a base técnica").click().run()
+    assert t.error
+    assert bt.base_do_projeto(obter_projeto_ativo()).cliente == bt.CLIENTE_NENHUM
+    next(b for b in t.button if b.label == "Recarregar base salva").click().run()
+    assert not t.exception
 
 
 def test_consulta_do_criterio_funciona_sem_projeto(banco_isolado):

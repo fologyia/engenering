@@ -44,6 +44,8 @@ def _espelhar_projeto(
         return
     try:
         with _conectar(caminho_banco) as conexao:
+            # A fotografia precisa reunir documento e histórico do mesmo instante.
+            conexao.execute("BEGIN")
             linha = conexao.execute(
                 "SELECT id, code, payload_json FROM projects WHERE id = ?", (str(projeto_id),)
             ).fetchone()

@@ -153,6 +153,25 @@ class SecaoDeVigasTests(unittest.TestCase):
             any("Vigas e eixos" in secao.get("titulo", "") for secao in modelo["secoes"])
         )
 
+    def test_provedor_respeita_selecao_e_snapshot_ignora_registro_excluido(self):
+        escolhida = registro_de_viga(SCRIPT_SIMPLES, titulo="Viga selecionada")
+        excluida = registro_de_viga(SCRIPT_SIMPLES, titulo="Viga excluída")
+        projeto = projeto_minimo(escolhida, excluida)
+        kwargs = {
+            "secoes_incluidas": ["vigas_eixos"],
+            "registros_ids": [escolhida["id"]],
+            "metadata_extra": {"emissao": "01/01/2026"},
+        }
+        antes = montar_modelo_relatorio(projeto, **kwargs)
+        assert "Viga selecionada" in str(antes["secoes"])
+        assert "Viga excluída" not in str(antes["secoes"])
+        excluida["titulo"] = "Viga excluída alterada"
+        depois = montar_modelo_relatorio(projeto, **kwargs)
+        assert antes["snapshot_hash"] == depois["snapshot_hash"]
+        assert antes["secoes"] == depois["secoes"]
+        sem_registros = montar_modelo_relatorio(projeto, **{**kwargs, "registros_ids": []})
+        assert not any("Vigas e eixos" in s["titulo"] for s in sem_registros["secoes"])
+
     def test_barra_comprimida_ganha_tabela_de_estabilidade(self):
         # Perfil I fletido em x e comprimido: a carga crítica fora do plano
         # (Iy) é a que manda, e o memorial precisa mostrar as duas.

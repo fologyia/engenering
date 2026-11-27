@@ -63,6 +63,9 @@ def exportar_carteira(
     sql += " ORDER BY updated_at DESC, name COLLATE NOCASE"
     pacotes: list[dict[str, Any]] = []
     with _conectar(caminho_banco) as conexao:
+        # SELECT sozinho não inicia uma transação no sqlite3: sem BEGIN,
+        # documento, revisões e eventos podem vir de gravações diferentes.
+        conexao.execute("BEGIN")
         for linha in conexao.execute(sql, parametros).fetchall():
             pacotes.append(_pacote_projeto(conexao, linha["id"], linha["payload_json"]))
     pacote = {

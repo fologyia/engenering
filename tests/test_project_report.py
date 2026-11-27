@@ -37,6 +37,53 @@ def _texto_pdf(conteudo: bytes) -> str:
     return "\n".join(pagina.extract_text() or "" for pagina in PdfReader(BytesIO(conteudo)).pages)
 
 
+def test_contexto_estrutural_reaproveita_dados_e_rastreia_referencias_selecionadas():
+    projeto = _projeto_documentado()
+    primeiro = projeto["registros_tecnicos"][0]
+    primeiro["referencias"] = ["Critério de projeto CP-01 revisão 2"]
+    projeto["base_projeto"]["base_carregamentos"] = "Cargas conforme desenho DA-01 revisão 3."
+    excluido = dict(primeiro, id="outro", titulo="Cálculo excluído", referencias=["REF EXCLUÍDA"])
+    projeto["registros_tecnicos"].append(excluido)
+    selecao = ["contexto_estrutural", "conclusao"]
+    metadata = {
+        "contexto_estrutural": {
+            "sistema": "Pórtico com travamento no plano.",
+            "conclusao_geral": "Revisar a ligação B.",
+        }
+    }
+    args = dict(secoes_incluidas=selecao, registros_ids=[primeiro["id"]], metadata_extra=metadata)
+    for texto in (
+        _texto_word(gerar_relatorio_industrial_word(projeto, **args)),
+        _texto_pdf(gerar_relatorio_industrial_pdf(projeto, **args)),
+    ):
+        assert "Pórtico com travamento no plano." in texto
+        assert "Cargas conforme desenho DA-01 revisão 3." in texto
+        assert "Critério de projeto CP-01 revisão 2" in texto
+        assert "REF EXCLUÍDA" not in texto
+        assert "Combinações consideradas na análise: [a preencher]" in texto
+        assert "Revisar a ligação B." in texto
+
+    antes = montar_modelo_relatorio(projeto, **args)["snapshot_hash"]
+    projeto["base_projeto"]["base_carregamentos"] = "Outra base de carregamentos."
+    assert montar_modelo_relatorio(projeto, **args)["snapshot_hash"] != antes
+
+
+def test_conclusao_cita_maior_aproveitamento_disponivel_sem_incluir_registro_excluido():
+    projeto = _projeto_documentado()
+    primeiro = projeto["registros_tecnicos"][0]
+    primeiro["resultados"] = {"utilizacao_maxima": 0.72}
+    outro = dict(
+        primeiro, id="outro", titulo="Barra excluída", resultados={"utilizacao_maxima": 1.4}
+    )
+    projeto["registros_tecnicos"].append(outro)
+    modelo = montar_modelo_relatorio(
+        projeto, secoes_incluidas=["conclusao"], registros_ids=[primeiro["id"]]
+    )
+    assert "72,0%" in modelo["maior_aproveitamento"]
+    assert "Barra excluída" not in modelo["maior_aproveitamento"]
+    assert modelo["maior_aproveitamento"] in modelo["secoes"][0]["paragrafos"]
+
+
 def test_modelo_relatorio_filtra_secoes_e_registros():
     projeto = _projeto_documentado()
     modelo = montar_modelo_relatorio(
@@ -224,7 +271,7 @@ def test_conclusao_lista_cada_calculo_e_deixa_a_geral_em_aberto():
     projeto = _projeto_documentado()
     modelo = montar_modelo_relatorio(projeto, secoes_incluidas=["conclusao"])
     conclusao = modelo["secoes"][0]
-    assert conclusao["paragrafos"] == ["Síntese dos cálculos anexados: 1 cálculo — 1 atende."]
+    assert conclusao["paragrafos"][0] == "Síntese dos cálculos anexados: 1 cálculo — 1 atende."
     assert conclusao["bullets"] == ["Barra B12 (Atende): Atende aos critérios informados."]
     assert conclusao["paragrafos_finais"] == [
         f"Conclusão geral: {A_PREENCHER}",

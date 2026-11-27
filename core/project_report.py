@@ -18,6 +18,7 @@ from html import escape
 from io import BytesIO
 from typing import Any
 
+from core.calculo_externo import eh_externo
 from core.materials_registry import avaliar_material, resumir_fonte
 from core.memorial_blocos import PALETA_TONS, blocos_da_secao, tom_valido
 from core.memorial_verificacoes import (
@@ -54,6 +55,7 @@ MODULOS_FORA_DO_MEMORIAL = frozenset({"casos_carga", "circulo_mohr"})
 _SECOES_BASE = (
     ("escopo", "Objetivo e escopo"),
     ("base", "Base de projeto"),
+    ("contexto_estrutural", "Concepção e análise estrutural"),
     ("componentes", "Equipamentos e escopo físico"),
     ("materiais", "Materiais"),
     ("plano_calculo", "Quadro-resumo dos cálculos"),
@@ -305,6 +307,8 @@ def sintetizar_calculos(registros: Sequence[Mapping[str, Any]]) -> dict[str, Any
     contagem = {"total": len(registros), "atendem": 0, "atencao": 0, "nao_atendem": 0, "outros": 0}
     for registro in registros:
         situacao = _texto(registro.get("status"), "").casefold()
+        if eh_externo(registro) and registro.get("preenchimento") != "Informado":
+            situacao = "pendente"
         contagem[_SITUACOES.get(situacao, "outros")] += 1
     partes = []
     if contagem["atendem"]:
@@ -356,6 +360,17 @@ def avaliar_integridade_registro(registro: Mapping[str, Any]) -> dict[str, Any]:
         "Referências": registro.get("referencias"),
         "Conclusão": registro.get("conclusao"),
     }
+    if eh_externo(registro):
+        for chave, rotulo in (("entradas", "Entradas"), ("resultados", "Resultados")):
+            dados = registro.get(chave) or {}
+            itens[rotulo] = (
+                any(
+                    isinstance(linha, Mapping) and _texto(linha.get("valor"), "")
+                    for linha in dados.get("grandezas", [])
+                )
+                if isinstance(dados, Mapping)
+                else False
+            )
     preenchidos = sum(bool(valor) for valor in itens.values())
     percentual = round(100 * preenchidos / len(itens))
     faltantes = [rotulo for rotulo, valor in itens.items() if not valor]
@@ -438,6 +453,24 @@ def _hash_snapshot(
     pacote = {
         "projeto_id": projeto.get("id"),
         "projeto_revisao": projeto.get("revisao"),
+        "dados_projeto": {
+            chave: projeto.get(chave)
+            for chave in (
+                "nome",
+                "codigo",
+                "cliente",
+                "unidade_industrial",
+                "area",
+                "tag_equipamento",
+                "objetivo",
+                "descricao",
+                "processo",
+                "regime_operacao",
+                "base_projeto",
+                "criterios_projeto",
+                "anexos",
+            )
+        },
         "secoes": list(secoes),
         "metadata": dict(metadata),
         "componentes": projeto.get("componentes", []),
@@ -454,6 +487,12 @@ def _metadados(
     projeto: Mapping[str, Any], metadata_extra: Mapping[str, Any] | None
 ) -> dict[str, Any]:
     extras = dict(metadata_extra or {})
+    configuracao = projeto.get("configuracao_relatorio") or {}
+    contexto = extras.get("contexto_estrutural", configuracao.get("contexto_estrutural", {}))
+    contexto = dict(contexto) if isinstance(contexto, Mapping) else {}
+    base = projeto.get("base_projeto") or {}
+    if isinstance(base, Mapping) and base.get("base_carregamentos"):
+        contexto.setdefault("acoes", base["base_carregamentos"])
     emissao = extras.get("emissao") or datetime.now().astimezone().strftime("%d/%m/%Y")
     return {
         "titulo": extras.get("titulo") or "Memorial de cálculo do projeto industrial",
@@ -467,6 +506,7 @@ def _metadados(
         "aprovador": extras.get("aprovador") or projeto.get("aprovador"),
         "situacao": extras.get("situacao") or projeto.get("status"),
         "emissao": emissao,
+        "contexto_estrutural": contexto,
     }
 
 
@@ -482,6 +522,8 @@ def _peca_ou_titulo(
 
 def _reprovou(registro: Mapping[str, Any], contagens_por_id: Mapping[int, Any]) -> bool:
     """O cálculo reprovou: alguma verificação "NÃO OK" ou, sem tabela, a situação "Não atende"."""
+    if eh_externo(registro) and registro.get("preenchimento") != "Informado":
+        return False
     resumo = contagens_por_id.get(id(registro))
     if resumo is not None:
         return bool(resumo["reprovadas"])
@@ -490,6 +532,8 @@ def _reprovou(registro: Mapping[str, Any], contagens_por_id: Mapping[int, Any]) 
 
 def _aproveitamento_texto(registro: Mapping[str, Any], resumo: Mapping[str, Any] | None) -> str:
     """Aproveitamento máximo do cálculo, em %, quando o registro o declara."""
+    if eh_externo(registro) and registro.get("preenchimento") != "Informado":
+        return "-"
     if resumo is not None and resumo["aproveitamento_max"] is not None:
         valor = float(resumo["aproveitamento_max"])
         return "∞" if math.isinf(valor) else f"{valor:.1f}%".replace(".", ",")
@@ -499,6 +543,44 @@ def _aproveitamento_texto(registro: Mapping[str, Any], resumo: Mapping[str, Any]
         if math.isfinite(utilizacao):
             return f"{100 * utilizacao:.1f}%".replace(".", ",")
     return "-"
+
+
+def _maior_aproveitamento(
+    registros: Sequence[Mapping[str, Any]],
+    contagens_por_id: Mapping[int, Any],
+    titulos_exibidos: Mapping[int, str],
+) -> str | None:
+    """Descreve somente aproveitamentos que os registros selecionados declaram."""
+    candidatos = []
+    for registro in registros:
+        if eh_externo(registro) and registro.get("preenchimento") != "Informado":
+            continue
+        resumo = contagens_por_id.get(id(registro))
+        valor = resumo.get("aproveitamento_max") if resumo is not None else None
+        if valor is None:
+            resultados = registro.get("resultados")
+            taxa = resultados.get("utilizacao_maxima") if isinstance(resultados, Mapping) else None
+            if (
+                isinstance(taxa, (int, float))
+                and not isinstance(taxa, bool)
+                and math.isfinite(taxa)
+            ):
+                valor = taxa * 100
+        if (
+            isinstance(valor, (int, float))
+            and not isinstance(valor, bool)
+            and not math.isnan(valor)
+        ):
+            candidatos.append((valor, registro, resumo))
+    if not candidatos:
+        return None
+    _, registro, resumo = max(candidatos, key=lambda item: item[0])
+    titulo = titulos_exibidos[id(registro)]
+    return (
+        f"Entre os cálculos com aproveitamento registrado, o maior é "
+        f"{_aproveitamento_texto(registro, resumo)}, em {titulo}. "
+        "A comparação abrange somente os cálculos selecionados que informam essa grandeza."
+    )
 
 
 def _linha_do_quadro(
@@ -519,7 +601,11 @@ def _linha_do_quadro(
         "-" if resumo is None else str(resumo["passaram"]),
         "-" if resumo is None else str(resumo["reprovadas"]),
         _aproveitamento_texto(registro, resumo),
-        _texto(registro.get("status")),
+        (
+            f"{_texto(registro.get('status'))} · externo"
+            if eh_externo(registro)
+            else _texto(registro.get("status"))
+        ),
     ]
 
 
@@ -568,6 +654,8 @@ def _item_de_conclusao(
 ) -> str:
     """Uma linha por cálculo na conclusão; a de uma análise com tabela diz também o que não passou."""
     titulo = titulos_exibidos.get(id(registro), _texto(registro.get("titulo"), "Registro técnico"))
+    if eh_externo(registro):
+        titulo += " — preenchimento externo"
     resumo = contagens_por_id.get(id(registro))
     conclusao = _campo(registro.get("conclusao"))
     if resumo is None:
@@ -591,7 +679,9 @@ def montar_modelo_relatorio(
     e não existe a seção de aprovações.
     """
 
-    ativas = set(secoes_incluidas or SECOES_RELATORIO)
+    ativas = set(secoes_incluidas if secoes_incluidas is not None else SECOES_RELATORIO)
+    if secoes_incluidas is None:
+        ativas.discard("contexto_estrutural")
     metadata = _metadados(projeto, metadata_extra)
     # Antes do hash: o mesmo conteúdo, com e sem capa, são documentos diferentes.
     metadata["somente_capitulos"] = somente_capitulos
@@ -616,8 +706,11 @@ def montar_modelo_relatorio(
     metadata["snapshot_hash"] = hash_snapshot
     sintese = sintetizar_calculos(registros)
     titulos_exibidos = _titulos_exibidos(registros)
-    contagens_por_id = {id(item): contagens(item) for item in registros}
+    contagens_por_id = {
+        id(item): None if eh_externo(item) else contagens(item) for item in registros
+    }
     reprovados = [item for item in registros if _reprovou(item, contagens_por_id)]
+    maior_aproveitamento = _maior_aproveitamento(registros, contagens_por_id, titulos_exibidos)
 
     resumo = [
         {"rotulo": "Cálculos anexados", "valor": str(len(registros))},
@@ -782,6 +875,58 @@ def montar_modelo_relatorio(
             }
         )
     adicionar("base", {"tabelas": tabelas_base})
+    contexto = metadata["contexto_estrutural"]
+    referencias_por_calculo: list[list[str]] = []
+    sem_referencias = 0
+    for registro in registros:
+        referencias = registro.get("referencias") or []
+        if isinstance(referencias, str):
+            referencias = [referencias]
+        if not any(str(referencia).strip() for referencia in referencias):
+            sem_referencias += 1
+        for referencia in referencias:
+            if str(referencia).strip():
+                referencias_por_calculo.append(
+                    [titulos_exibidos[id(registro)], str(referencia).strip()]
+                )
+    tabelas_contexto = []
+    if referencias_por_calculo:
+        tabelas_contexto.append(
+            {
+                "legenda": "Referências informadas nos cálculos selecionados.",
+                "cabecalhos": ["Cálculo", "Referência registrada"],
+                "linhas": referencias_por_calculo,
+                "larguras": [3400, 5960],
+                "fonte": 8.0,
+            }
+        )
+    adicionar(
+        "contexto_estrutural",
+        {
+            "paragrafos": [
+                "As informações a seguir descrevem a concepção e a análise informadas para esta emissão. "
+                "As verificações e suas hipóteses particulares constam nos cálculos selecionados.",
+                *[
+                    f"{rotulo}: {_campo(contexto.get(chave))}"
+                    for chave, rotulo in (
+                        ("sistema", "Sistema estrutural e geometria"),
+                        ("vinculos", "Vínculos e condições de contorno"),
+                        ("acoes", "Ações e origem dos carregamentos"),
+                        ("combinacoes", "Combinações consideradas na análise"),
+                        ("modelo", "Modelo, programa e método de análise"),
+                        ("servico", "Deslocamentos, vibrações e limites de serviço"),
+                        ("validacao", "Conferência do modelo e suas limitações"),
+                    )
+                ],
+                *(
+                    [f"Referências não informadas em {sem_referencias} cálculo(s) selecionado(s)."]
+                    if sem_referencias
+                    else []
+                ),
+            ],
+            "tabelas": tabelas_contexto,
+        },
+    )
     adicionar(
         "componentes",
         {
@@ -923,6 +1068,56 @@ def montar_modelo_relatorio(
             titulo_exibido = titulos_exibidos.get(
                 id(registro), _texto(registro.get("titulo"), "Registro técnico")
             )
+            if eh_externo(registro):
+                tabelas_externas = []
+                for chave, legenda in (
+                    ("entradas", "Dados informados"),
+                    ("resultados", "Resultados informados"),
+                ):
+                    dados = registro.get(chave) or {}
+                    linhas = dados.get("grandezas", []) if isinstance(dados, Mapping) else []
+                    tabelas_externas.append(
+                        {
+                            "legenda": legenda + ".",
+                            "cabecalhos": ["Grandeza", "Valor", "Unidade", "Fonte"],
+                            "linhas": [
+                                [
+                                    _campo(linha.get(campo))
+                                    for campo in ("grandeza", "valor", "unidade", "fonte")
+                                ]
+                                for linha in linhas
+                                if isinstance(linha, Mapping)
+                            ]
+                            or [[A_PREENCHER] * 4],
+                            "larguras": [2700, 1800, 1500, 3360],
+                            "fonte": 7.8,
+                        }
+                    )
+                return {
+                    "titulo": f"{numeracao} {titulo_exibido}",
+                    "nivel": nivel,
+                    "paragrafos": [
+                        "Origem: preenchimento manual ou externo. Os valores e resultados, quando preenchidos, são declarados pelo responsável.",
+                        f"Peça: {_campo(_peca_registro(registro, componentes_por_id) if _peca_registro(registro, componentes_por_id) != '-' else '')}.",
+                        f"Preenchimento: {_campo(registro.get('preenchimento'))}. Resultado técnico informado: {_campo(registro.get('status'))}.",
+                        f"Responsável: {_campo(registro.get('responsavel'))}. Documento externo: {_campo(registro.get('documento_externo'))}.",
+                        f"Objetivo: {_campo(registro.get('resumo'))}",
+                        f"Método: {_campo(registro.get('metodo'))}",
+                    ],
+                    "bullets": (
+                        [f"Premissa: {v}" for v in registro.get("premissas", []) if _texto(v, "")]
+                        or [f"Premissa: {A_PREENCHER}"]
+                    )
+                    + (
+                        [f"Referência: {v}" for v in registro.get("referencias", []) if _texto(v, "")]
+                        or [f"Referência: {A_PREENCHER}"]
+                    ),
+                    "formulas": list(registro.get("equacoes", [])) or [A_PREENCHER],
+                    "tabelas": tabelas_externas,
+                    "paragrafos_finais": [
+                        f"Conclusão informada: {_campo(registro.get('conclusao'))}"
+                    ],
+                }
             linhas_verificacao = extrair_linhas(registro)
             if linhas_verificacao is not None:
                 # Flambagem e parafusos fecham numa tabela de verificações: o capítulo mostra o
@@ -1129,15 +1324,16 @@ def montar_modelo_relatorio(
     adicionar(
         "conclusao",
         {
-            "paragrafos": [f"Síntese dos cálculos anexados: {sintese['texto']}."],
+            "paragrafos": [f"Síntese dos cálculos anexados: {sintese['texto']}."]
+            + ([maior_aproveitamento] if maior_aproveitamento else []),
             "bullets": [
                 _item_de_conclusao(registro, contagens_por_id, titulos_exibidos)
                 for registro in registros
             ],
             "tabelas": tabelas_conclusao,
             "paragrafos_finais": [
-                f"Conclusão geral: {A_PREENCHER}",
-                f"Recomendações: {A_PREENCHER}",
+                f"Conclusão geral: {_campo(contexto.get('conclusao_geral'))}",
+                f"Recomendações: {_campo(contexto.get('recomendacoes'))}",
             ],
         },
     )
@@ -1150,6 +1346,7 @@ def montar_modelo_relatorio(
         "resumo_executivo": {"linhas": linhas_resumo},
         "secoes": secoes,
         "sintese": sintese,
+        "maior_aproveitamento": maior_aproveitamento,
         "registros": registros,
         "secoes_incluidas": list(ativas),
         "snapshot_hash": hash_snapshot,

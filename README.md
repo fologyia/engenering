@@ -150,6 +150,14 @@ computador.
 
 ### Memorial de cálculo
 
+- **Projeto e entrega em uma jornada**: use **Carteira de projetos** para escolher, criar ou
+  restaurar projetos e **Projeto ativo** para percorrer escopo, base, cálculos e entrega. O
+  cadastro guiado salva cada etapa sob demanda e preserva a edição detalhada e os atalhos antigos;
+- **cálculos manuais ou externos**: crie capítulos por modelo ou personalizados, associe a uma
+  peça e registre grandezas, valores, unidades, fontes, método e conclusão. O programa não faz
+  esses cálculos; um resultado declarado pelo responsável é identificado como externo;
+- **composição como rascunho**: a seleção e os textos do memorial podem ser guardados antes da
+  geração; o histórico guarda metadados e não arquiva cópias de Word e PDF;
 - **juntar o projeto num documento**: o quadro das etapas (o que cada página registrou e o que
   falta) e o botão que deixa um de cada cálculo, na ordem do projeto, tirando os repetidos;
 - **memorial de cálculo como molde**: os cálculos registrados entram completos
@@ -179,6 +187,12 @@ computador.
   só os capítulos numerados — sem capa, resumo executivo, controle de revisões nem
   aprovações —, em títulos e tabelas padrão do Word, que assumem o estilo do
   documento que os receber;
+- **memorial estrutural detalhado**: selecione esse perfil para acrescentar a concepção
+  estrutural, vínculos, ações, combinações efetivamente processadas, modelo, serviço e
+  conferências. A base de carregamentos cadastrada sugere o texto de ações; as referências
+  vêm dos cálculos selecionados. Complete e revise os campos livres antes de gerar: eles
+  ficam salvos no projeto e são reutilizados na emissão rápida. A conclusão também destaca
+  o maior aproveitamento informado entre os cálculos selecionados, quando disponível;
 - **as figuras da página entram no memorial**: a seção e a coluna em pé (Flambagem de colunas),
   o pilar mais carregado em pé (Pilares do modelo), a planta e o corte da ligação (Projeto de
   parafusos), a planta e as elevações do contraventamento, a viga de piso, o esquema de Vigas e
@@ -189,7 +203,7 @@ computador.
   registros superados ficam fora da seleção padrão;
 - listas de resultados (reações de apoio, envoltória, esbeltez de paredes,
   ranking de sensibilidade) viram tabelas próprias;
-- perfis de memorial completo, memorial de cálculos, resumo executivo e capítulos para incluir
+- perfis de memorial completo, estrutural detalhado, memorial de cálculos, resumo executivo e capítulos para incluir
   em outro documento, com seleção independente das seções e dos registros anexados;
 - controle de código, revisão, situação, elaboração, verificação e aprovação;
 - Word editável e PDF gerados a partir do mesmo modelo de dados; o PDF usa uma

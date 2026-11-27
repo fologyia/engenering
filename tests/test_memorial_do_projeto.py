@@ -123,9 +123,13 @@ def test_central_junta_o_projeto(banco_com_projeto):
     assert not at.exception, [str(e.value) for e in at.exception]
     quadro = next(d.value for d in at.dataframe if "Etapa" in d.value.columns)
     fundacoes = quadro[quadro["Etapa"] == "Fundações"].iloc[0]
-    assert fundacoes["No memorial"] == "1 cálculo(s) · 2 repetido(s) a tirar"
+    assert fundacoes["Grupos identificados"] == "1 grupo(s) · 2 possível(is) repetido(s)"
     botao = at.button(key="juntar_projeto")
-    assert "tira 2 repetido(s)" in botao.label
+    assert "2 possível(is) repetido(s)" in botao.label
+    # O usuário escolhe as duplicatas a superar depois de conferir cada par.
+    for checkbox in at.checkbox:
+        if checkbox.key and checkbox.key.startswith(f"superar_{projeto['id']}_"):
+            checkbox.check()
     botao.click().run()
     assert not at.exception, [str(e.value) for e in at.exception]
     salvo = obter_projeto_ativo()
@@ -139,4 +143,27 @@ def test_central_junta_o_projeto(banco_com_projeto):
     assert vigente in incluidos and flambagem in incluidos
     assert incluidos.index(flambagem) < incluidos.index(vigente)  # pilares antes das fundações
     assert not any(r["id"] in incluidos for r in quadros if r["id"] != vigente)
-    assert "tira" not in at.button(key="juntar_projeto").label
+    assert "possível" not in at.button(key="juntar_projeto").label
+
+
+def test_central_nao_supera_duplicatas_sem_escolha(banco_com_projeto):
+    projeto = obter_projeto_ativo()
+    for _ in range(2):
+        adicionar_registro_tecnico(
+            projeto["id"], _registro("esforcos_modelo", "Quadro de cargas", "2026-10-01")
+        )
+    at = AppTest.from_file(APP, default_timeout=180)
+    at.run()
+    at.switch_page(PAGINA).run()
+    at.button(key="juntar_projeto").click().run()
+    assert not at.exception
+    salvo = obter_projeto_ativo()
+    quadros = [r for r in salvo["registros_tecnicos"] if r["titulo"] == "Quadro de cargas"]
+    assert len(quadros) == 2
+    assert all(r["status"] != STATUS_SUPERADO for r in quadros)
+    assert all(r["id"] in salvo["configuracao_relatorio"]["registros_incluidos"] for r in quadros)
+    at.button(key="gerar_rapido").click().run()
+    assert not at.exception
+    gerado = at.session_state[f"relatorio_rapido_{projeto['id']}"]
+    texto = texto_word(gerado["word"])
+    assert "cálculo 1 de 2" in texto and "cálculo 2 de 2" in texto

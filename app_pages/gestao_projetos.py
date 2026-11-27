@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from components.armazenamento_ui import aviso_de_armazenamento
+from components.jornada_projeto_ui import renderizar_jornada
 from components.project_tools import (
     contexto_sessao_projeto,
     obter_projeto_para_edicao,
@@ -142,7 +143,7 @@ def _marca(estado: Mapping[str, Any], campo: str) -> str:
     if not dados or dados["preenchido"]:
         return ""
     return {
-        "Bloqueio": " · bloqueia a emissão",
+        "Bloqueio": " · necessário para liberar",
         "Pendência": " · pendência",
         "Atenção": " · recomendado",
     }.get(dados["severidade"], "")
@@ -292,7 +293,8 @@ def _dialogo_novo_projeto() -> None:
     # cliente, unidade, área e TAG — que são pendências — e NÃO pedia o
     # objetivo, que é bloqueio: o projeto nascia travado e sem dizer por quê.
     st.caption(
-        "Estes são os três **campos** que bloqueiam a emissão do memorial. "
+        "Comece com nome, código e objetivo. São necessários para a liberação do projeto; "
+        "um memorial de rascunho poderá ser gerado antes de concluir a validação. "
         "Depois de criar, ainda faltarão o escopo físico, a matriz normativa "
         "e o primeiro cálculo registrado — o painel da aba **Dados e base** "
         "mostra o que falta e onde resolver."
@@ -361,13 +363,16 @@ def _dialogo_novo_projeto() -> None:
         st.rerun()
 
 
+if st.session_state.pop("abrir_criacao_projeto", False):
+    _dialogo_novo_projeto()
+
 sincronizar_projeto_ativo()
 aviso_de_armazenamento()
 mostrar_arquivados = st.toggle("Mostrar projetos arquivados", value=False)
 projetos = listar_projetos(incluir_arquivados=mostrar_arquivados)
 ativo_contexto = st.session_state.get("projeto_ativo")
 
-with st.container(border=True):
+with st.expander("Trocar ou criar projeto", expanded=not bool(ativo_contexto)):
     topo1, topo2 = st.columns([4, 1])
     with topo1:
         opcoes = {
@@ -426,16 +431,24 @@ if projeto is None:
 
 validacao = validar_projeto(projeto)
 resumo = resumir_projeto(projeto, validacao=validacao)
-c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 1])
-c1.metric("Situação", projeto["status"], help=validacao["prontidao"])
-c2.metric("Revisão", f"{int(projeto['revisao']):02d}")
-c3.metric("Índice documental", f"{validacao['indice_documental']}%", help=validacao["aviso"])
-c4.metric("Bloqueios", validacao["contagens"]["Bloqueio"])
-c5.metric(
-    "Prazos vencidos",
-    resumo["checklist_vencidos"],
-    help="Itens do checklist abertos com prazo anterior a hoje.",
-)
+renderizar_jornada(projeto, validacao, resumo, _salvar)
+st.divider()
+with st.expander("Indicadores e ferramentas do projeto", expanded=False):
+    st.caption(
+        "O índice documental mede preenchimento e rastreabilidade, não aprovação de engenharia."
+    )
+    indicadores = st.container()
+with indicadores:
+    c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 1])
+    c1.metric("Situação", projeto["status"], help=validacao["prontidao"])
+    c2.metric("Revisão", f"{int(projeto['revisao']):02d}")
+    c3.metric("Índice documental", f"{validacao['indice_documental']}%", help=validacao["aviso"])
+    c4.metric("Bloqueios", validacao["contagens"]["Bloqueio"])
+    c5.metric(
+        "Prazos vencidos",
+        resumo["checklist_vencidos"],
+        help="Itens do checklist abertos com prazo anterior a hoje.",
+    )
 
 with st.container(horizontal=True):
     st.page_link(
@@ -459,7 +472,8 @@ with st.container(horizontal=True):
         icon=":material/download:",
     )
 
-abas = st.tabs(
+edicao_detalhada = st.expander("Edição detalhada, revisões e administração", expanded=False)
+abas = edicao_detalhada.tabs(
     [
         "Visão geral",
         "Dados e base",
@@ -617,7 +631,8 @@ with abas[1], secao_protegida("aba 2"):
         ]
         if bloqueios_validacao:
             st.error(
-                f"{len(bloqueios_validacao)} bloqueio(s) impedem a emissão do memorial.",
+                f"{len(bloqueios_validacao)} bloqueio(s) impedem a liberação do projeto. "
+                "Ainda é possível gerar um memorial para revisão.",
                 icon=":material/block:",
             )
             for achado in bloqueios_validacao:
@@ -629,7 +644,7 @@ with abas[1], secao_protegida("aba 2"):
                     st.page_link(pagina, label=rotulo_link, icon=":material/arrow_forward:")
         elif faltando:
             st.warning(
-                f"Nada bloqueia a emissão. Ainda faltam {len(faltando)} "
+                f"Não há bloqueios automáticos. Ainda faltam {len(faltando)} "
                 "campo(s) para a documentação ficar completa: "
                 + ", ".join(item["rotulo"] for item in faltando[:4])
                 + ("…" if len(faltando) > 4 else "."),
@@ -637,7 +652,7 @@ with abas[1], secao_protegida("aba 2"):
             )
         else:
             st.success(
-                "Cadastro completo e sem bloqueios: o memorial pode ser emitido.",
+                "Cadastro completo e sem bloqueios automáticos. Confira o projeto antes de liberar.",
                 icon=":material/check_circle:",
             )
             st.page_link(
@@ -654,7 +669,7 @@ with abas[1], secao_protegida("aba 2"):
     # ---------------------------------------------------------------- bloco 1
     with st.container(border=True):
         st.subheader("Essencial")
-        st.caption("Sem estes campos o memorial não pode ser emitido.")
+        st.caption("Estes campos identificam o projeto e são necessários para sua liberação.")
         with st.form("projeto_essencial"):
             a, b = st.columns(2)
             nome = a.text_input("Nome" + _marca(estado, "nome"), value=projeto.get("nome", ""))

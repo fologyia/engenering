@@ -175,6 +175,10 @@ def _secao_dados_e_backup(*, expandida: bool) -> None:
 sincronizar_projeto_ativo()
 ativo = st.session_state.get("projeto_ativo") or {}
 
+if st.button("Novo projeto", icon=":material/add:", type="primary"):
+    st.session_state["abrir_criacao_projeto"] = True
+    st.switch_page("app_pages/gestao_projetos.py")
+
 incluir_arquivados = st.toggle("Incluir projetos arquivados", value=False)
 projetos = carregar_projetos(incluir_arquivados=incluir_arquivados)
 if not projetos:

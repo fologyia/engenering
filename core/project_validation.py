@@ -7,6 +7,8 @@ próprio usuário, produzindo uma fila rastreável para a Central de Validação
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -30,6 +32,7 @@ class AchadoValidacao:
     recomendacao: str
     modulo: str = "Projeto"
     evidencia: str = ""
+    origem: str = ""
 
     def como_dict(self) -> dict[str, str]:
         return asdict(self)
@@ -37,6 +40,46 @@ class AchadoValidacao:
 
 def _texto(valor: Any) -> str:
     return str(valor or "").strip()
+
+
+def chave_estavel_achado(achado: Mapping[str, Any]) -> str:
+    """Identifica o assunto do achado sem depender da sua posição na fila.
+
+    Título e categoria também são gravados no checklist: assim itens legados
+    com identificador sequencial podem ser reconhecidos sem confiar nesse número.
+    """
+    identidade = [
+        _texto(achado.get(campo)) for campo in ("categoria", "modulo", "titulo", "origem")
+    ]
+    dados = json.dumps(identidade, ensure_ascii=False, separators=(",", ":"))
+    return "achado-" + hashlib.sha256(dados.encode("utf-8")).hexdigest()[:24]
+
+
+def item_para_achado(
+    checklist: Sequence[Mapping[str, Any]],
+    achado: Mapping[str, Any],
+    *,
+    achados: Sequence[Mapping[str, Any]] = (),
+) -> Mapping[str, Any] | None:
+    """Encontra vínculos atuais ou antigos pelo assunto, nunca pelo número da fila."""
+    chave = chave_estavel_achado(achado)
+    for item in checklist:
+        origem = _texto(item.get("origem_validacao"))
+        if origem == chave:
+            return item
+        if (
+            origem.startswith("VAL-")
+            and _texto(item.get("item")) == _texto(achado.get("titulo"))
+            and _texto(item.get("categoria")) == _texto(achado.get("categoria"))
+            and sum(
+                _texto(outro.get("titulo")) == _texto(achado.get("titulo"))
+                and _texto(outro.get("categoria")) == _texto(achado.get("categoria"))
+                for outro in achados
+            )
+            <= 1
+        ):
+            return item
+    return None
 
 
 def _numero(valor: Any) -> float | None:
@@ -54,6 +97,19 @@ def _numero(valor: Any) -> float | None:
     return numero if math.isfinite(numero) else None
 
 
+def _ha_grandeza_informada(dados: Mapping[str, Any]) -> bool:
+    """Linhas de um molde externo só contam quando têm valor, inclusive zero."""
+    linhas = dados.get("grandezas")
+    if not isinstance(linhas, list):
+        return bool(dados)
+    return any(
+        isinstance(linha, Mapping)
+        and linha.get("valor") is not None
+        and str(linha.get("valor")).strip() != ""
+        for linha in linhas
+    ) or any(bool(valor) for chave, valor in dados.items() if chave != "grandezas")
+
+
 def _achado(
     contador: int,
     severidade: str,
@@ -64,6 +120,7 @@ def _achado(
     *,
     modulo: str = "Projeto",
     evidencia: str = "",
+    origem: str = "",
 ) -> AchadoValidacao:
     return AchadoValidacao(
         id=f"VAL-{contador:04d}",
@@ -74,6 +131,7 @@ def _achado(
         recomendacao=recomendacao,
         modulo=modulo,
         evidencia=evidencia,
+        origem=origem,
     )
 
 
@@ -201,8 +259,10 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
     """
 
     achados: list[AchadoValidacao] = []
+    origem_atual = ""
 
     def adicionar(*args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("origem", origem_atual)
         achados.append(_achado(len(achados) + 1, *args, **kwargs))
 
     preenchidos = 0
@@ -261,6 +321,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             "Cadastre ao menos o equipamento, linha, estrutura ou ponto de verificação principal.",
         )
     for indice, item in enumerate(componentes, start=1):
+        origem_atual = f"componente:{_texto(item.get('id')) or indice}"
         identificacao = _texto(item.get("tag")) or _texto(item.get("descricao")) or f"item {indice}"
         for campo, rotulo, severidade_campo in CAMPOS_COMPONENTE:
             pontos_totais += 1
@@ -283,6 +344,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 "Inclua a fonte do material e confirme se os valores representam a condição real de fornecimento.",
             )
 
+    origem_atual = ""
     materiais = [item for item in projeto.get("materiais_projeto", []) if isinstance(item, Mapping)]
     pontos_totais += 1
     if materiais:
@@ -296,7 +358,8 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             "Cadastre os materiais em Materiais do projeto e vincule-os aos itens do escopo.",
         )
     ids_materiais = {_texto(item.get("id")) for item in materiais}
-    for material in materiais:
+    for indice_material, material in enumerate(materiais, start=1):
+        origem_atual = f"material:{_texto(material.get('id')) or indice_material}"
         avaliacao = avaliar_material(material)
         pontos_totais += 1
         if avaliacao["nivel"] in {"Confirmado", "Rastreável"}:
@@ -320,7 +383,8 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 "Complete a proveniência, a aplicabilidade e a conferência antes da emissão final.",
                 evidencia="; ".join(avaliacao["pendencias"][:3]),
             )
-    for componente in componentes:
+    for indice_componente, componente in enumerate(componentes, start=1):
+        origem_atual = f"componente:{_texto(componente.get('id')) or indice_componente}"
         material_id = _texto(componente.get("material_id"))
         if material_id and material_id not in ids_materiais:
             adicionar(
@@ -331,6 +395,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 "Refaça o vínculo em Materiais do projeto e confira a fonte registrada.",
             )
 
+    origem_atual = ""
     normas = [item for item in projeto.get("normas", []) if isinstance(item, Mapping)]
     pontos_totais += 1
     if normas:
@@ -344,6 +409,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             "Cadastre as referências aplicáveis e confirme edição, escopo e origem do documento.",
         )
     for indice, item in enumerate(normas, start=1):
+        origem_atual = f"norma:{_texto(item.get('id')) or indice}"
         codigo = _texto(item.get("codigo")) or f"referência {indice}"
         pontos_totais += 2
         if _texto(item.get("codigo")):
@@ -377,6 +443,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
 
     # Registros superados ficam no histórico e fora da cobrança: o cálculo
     # que os substituiu é o que responde pela peça agora.
+    origem_atual = ""
     registros = [
         item
         for item in projeto.get("registros_tecnicos", [])
@@ -395,6 +462,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     for indice, registro in enumerate(registros, start=1):
+        origem_atual = f"registro:{_texto(registro.get('id')) or indice}"
         modulo = _texto(registro.get("modulo")) or "Registro técnico"
         titulo = _texto(registro.get("titulo")) or f"Registro {indice}"
         status = _texto(registro.get("status")).lower()
@@ -417,7 +485,14 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
             (conclusao, "conclusão"),
         ):
             pontos_totais += 1
-            if valor:
+            informado = (
+                _ha_grandeza_informada(valor)
+                if registro.get("origem_calculo") == "manual_externo"
+                and rotulo in {"entradas", "resultados"}
+                and isinstance(valor, Mapping)
+                else bool(valor)
+            )
+            if informado:
                 preenchidos += 1
             else:
                 adicionar(
@@ -514,8 +589,10 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
                 evidencia=f"P(não atendimento) = {probabilidade:.2f}%",
             )
 
+    origem_atual = ""
     checklist = [item for item in projeto.get("checklist", []) if isinstance(item, Mapping)]
     for indice, item in enumerate(checklist, start=1):
+        origem_atual = f"checklist:{_texto(item.get('id')) or indice}"
         pontos_totais += 1
         estado = _texto(item.get("estado")) or "Aberto"
         titulo = _texto(item.get("item")) or f"Item {indice}"
@@ -540,6 +617,7 @@ def validar_projeto(projeto: Mapping[str, Any]) -> dict[str, Any]:
     # Extensões independentes podem acrescentar regras sem aumentar este
     # orquestrador central. A versão da regra segue na evidência do achado.
     for regra, resultado_regra in executar_regras(projeto):
+        origem_atual = f"regra:{regra.id}"
         preenchidos += resultado_regra.pontos_preenchidos
         pontos_totais += resultado_regra.pontos_totais
         for achado_regra in resultado_regra.achados:

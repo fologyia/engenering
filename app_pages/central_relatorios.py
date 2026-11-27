@@ -8,11 +8,11 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
+from components.memorial_previa_ui import mostrar_previa
 from components.project_tools import (
     obter_projeto_ativo_para_edicao,
     registrar_gravacao_vista,
     sincronizar_projeto_ativo,
-    tratar_conflito_de_gravacao,
 )
 from components.ui import cabecalho_pagina
 from core import memorial_do_projeto as mdp
@@ -25,11 +25,14 @@ from core.project_report import (
     gerar_relatorio_industrial_word,
     montar_modelo_relatorio,
 )
-from core.project_store import EVENTO_EMISSAO, salvar_projeto
-from core.technical_records import registro_superado, rotulo_componente
+from core.project_store import CAMPO_GRAVACAO, EVENTO_EMISSAO, ProjetoConflitoErro, salvar_projeto
+from core.technical_records import rotulo_componente
 
 PERFIS = {
-    "Memorial industrial completo": list(SECOES_RELATORIO),
+    "Memorial industrial completo": [
+        chave for chave in SECOES_RELATORIO if chave != "contexto_estrutural"
+    ],
+    "Memorial estrutural detalhado": list(SECOES_RELATORIO),
     "Memorial de cálculos": [
         "escopo",
         "base",
@@ -66,6 +69,13 @@ def _entra_no_memorial(registro: dict) -> bool:
     return str(registro.get("modulo_id") or "").strip().casefold() not in MODULOS_FORA_DO_MEMORIAL
 
 
+def _data_salva(valor: str) -> date:
+    try:
+        return datetime.strptime(valor, "%d/%m/%Y").date()
+    except (TypeError, ValueError):
+        return date.today()
+
+
 st.set_page_config(
     page_title="Memorial de cálculo",
     page_icon=":material/description:",
@@ -92,6 +102,54 @@ if projeto is None:
         icon=":material/folder_managed:",
     )
     st.stop()
+
+_chave_base_edicao = f"base_edicao_memorial_{projeto['id']}"
+_chave_conflito_edicao = f"conflito_edicao_memorial_{projeto['id']}"
+st.session_state.setdefault(_chave_base_edicao, int(projeto.get(CAMPO_GRAVACAO, 0)))
+if st.session_state.get(_chave_conflito_edicao):
+    st.error(
+        "O projeto foi alterado em outra sessão enquanto este memorial estava sendo editado. "
+        "Recarregue os dados antes de tentar salvar ou gerar novamente."
+    )
+    if st.button("Descartar edição local e recarregar", key=f"recarregar_memorial_{projeto['id']}"):
+        _prefixos_edicao = (
+            "perfil_documental_",
+            "perfil_relatorio_anterior_",
+            "secoes_relatorio_",
+            "composicao_relatorio_",
+            "contexto_",
+            "titulo_memorial_",
+            "subtitulo_memorial_",
+            "codigo_memorial_",
+            "revisao_memorial_",
+            "responsavel_memorial_",
+            "verificador_memorial_",
+            "aprovador_memorial_",
+            "situacao_memorial_",
+            "emissao_memorial_",
+            "capitulo_previa_",
+            "superar_",
+        )
+        for _chave in list(st.session_state):
+            if projeto["id"] in _chave and _chave.startswith(_prefixos_edicao):
+                del st.session_state[_chave]
+        st.session_state.pop(_chave_base_edicao, None)
+        st.session_state.pop(_chave_conflito_edicao, None)
+        st.rerun()
+    st.stop()
+
+
+def _salvar_memorial(documento: dict, **opcoes: object) -> dict:
+    """Compara com a versão efetivamente vista, inclusive após reruns dos widgets."""
+    documento[CAMPO_GRAVACAO] = st.session_state[_chave_base_edicao]
+    try:
+        salvo = salvar_projeto(documento, **opcoes)
+    except ProjetoConflitoErro:
+        st.session_state[_chave_conflito_edicao] = True
+        st.rerun()
+    st.session_state[_chave_base_edicao] = int(salvo[CAMPO_GRAVACAO])
+    registrar_gravacao_vista(salvo)
+    return salvo
 
 
 def _registrar_emissao(
@@ -127,13 +185,11 @@ def _registrar_emissao(
     configuracao["ultimo_snapshot_hash"] = snapshot
     configuracao["ultima_emissao"] = metadata["emissao"]
     documento["configuracao_relatorio"] = configuracao
-    with tratar_conflito_de_gravacao():
-        salvo = salvar_projeto(
-            documento,
-            motivo=f"Memorial gerado: {metadata['codigo']} R{metadata['revisao']} ({metadata['situacao']}, perfil {perfil})",
-            tipo_evento=EVENTO_EMISSAO,
-        )
-    registrar_gravacao_vista(salvo)
+    _salvar_memorial(
+        documento,
+        motivo=f"Memorial gerado: {metadata['codigo']} R{metadata['revisao']} ({metadata['situacao']}, perfil {perfil})",
+        tipo_evento=EVENTO_EMISSAO,
+    )
 
 
 st.subheader(f"{projeto['codigo']} · {projeto['nome']}")
@@ -159,44 +215,63 @@ if _perfil_rapido not in PERFIS:
     _perfil_rapido = PERFIL_PADRAO
 # Seções gravadas por versões antigas do programa (validação, checklist,
 # normas, cargas) já não existem; o que sobrar vazio cai no perfil.
-_secoes_rapidas = [
-    chave for chave in _config_projeto.get("secoes") or [] if chave in SECOES_RELATORIO
-] or PERFIS[_perfil_rapido]
+_secoes_armazenadas = _config_projeto.get("secoes")
+if _secoes_armazenadas is None:
+    _secoes_rapidas = PERFIS[_perfil_rapido]
+else:
+    _secoes_rapidas = [chave for chave in _secoes_armazenadas if chave in SECOES_RELATORIO]
+    if _secoes_armazenadas and not _secoes_rapidas:
+        _secoes_rapidas = PERFIS[_perfil_rapido]
 _so_capitulos_rapido = _perfil_rapido in PERFIS_SOMENTE_CAPITULOS
 # Registros superados não entram por padrão: o cálculo que os substituiu é
 # o que responde pela peça. Quem quiser anexá-los marca na composição abaixo.
 # Do mesmo cálculo registrado várias vezes, só o mais novo; na ordem do projeto.
 _ids_vigentes = mdp.ordem_do_projeto(
-    projeto.get("registros_tecnicos", []), fora=sorted(MODULOS_FORA_DO_MEMORIAL)
+    projeto.get("registros_tecnicos", []), fora=sorted(MODULOS_FORA_DO_MEMORIAL), desduplicar=False
 )
+_ids_configurados = _config_projeto.get("registros_incluidos")
+_ids_existentes = {
+    str(item.get("id"))
+    for item in projeto.get("registros_tecnicos", [])
+    if isinstance(item, dict) and _entra_no_memorial(item) and item.get("id")
+}
 _registros_rapidos = [
     valor
-    for valor in (_config_projeto.get("registros_incluidos") or _ids_vigentes)
-    if valor in _ids_vigentes
+    for valor in (_ids_vigentes if _ids_configurados is None else _ids_configurados)
+    if str(valor) in _ids_existentes
 ]
 _metadata_rapida = {
     "titulo": _ident_projeto.get("titulo") or "Memorial de cálculo do projeto industrial",
     "subtitulo": _ident_projeto.get("subtitulo") or SUBTITULO_PADRAO,
     "codigo": _ident_projeto.get("codigo") or projeto["codigo"],
-    "revisao": f"{int(projeto.get('revisao', 0)):02d}",
-    "responsavel": projeto.get("responsavel", ""),
-    "verificador": projeto.get("verificador", ""),
-    "aprovador": projeto.get("aprovador", ""),
+    "revisao": _ident_projeto.get("revisao") or f"{int(projeto.get('revisao', 0)):02d}",
+    "responsavel": _ident_projeto.get("responsavel", projeto.get("responsavel", "")),
+    "verificador": _ident_projeto.get("verificador", projeto.get("verificador", "")),
+    "aprovador": _ident_projeto.get("aprovador", projeto.get("aprovador", "")),
     "situacao": _ident_projeto.get("situacao") or "Para revisão",
-    "emissao": date.today().strftime("%d/%m/%Y"),
+    "emissao": _ident_projeto.get("emissao") or date.today().strftime("%d/%m/%Y"),
 }
 
 # ---------------------------------------------------------------------------
 # Juntar o projeto
 # ---------------------------------------------------------------------------
 _quadro_do_projeto = mdp.quadro(projeto, fora=sorted(MODULOS_FORA_DO_MEMORIAL))
-_repetidos = sum(linha.repetidos for linha in _quadro_do_projeto)
+_registros_reuniao = {
+    str(item.get("id")): item
+    for item in projeto.get("registros_tecnicos", [])
+    if isinstance(item, dict) and _entra_no_memorial(item) and item.get("id")
+}
+_pares_repetidos = {
+    antigo: novo
+    for antigo, novo in mdp.repetidos(list(_registros_reuniao.values())).items()
+    if antigo in _registros_reuniao and novo in _registros_reuniao
+}
+_repetidos = len(_pares_repetidos)
 with st.container(border=True):
     st.markdown(
         "##### Juntar o projeto num documento",
         help=(
-            "O memorial junta o que cada página registrou neste projeto: um de cada cálculo (o "
-            "mais novo, quando o mesmo foi registrado mais de uma vez), na ordem do projeto — "
+            "O memorial reúne o que cada página registrou neste projeto, na ordem do projeto — "
             "cargas, vento, barras, pilares, vigas, escadas, ligações, placas de base, fundações "
             "e o modelo em 3D."
         ),
@@ -207,7 +282,11 @@ with st.container(border=True):
                 [
                     {
                         "Etapa": linha.etapa,
-                        "No memorial": linha.situacao,
+                        "Grupos identificados": (
+                            f"{linha.calculos} grupo(s) · {linha.repetidos} possível(is) repetido(s)"
+                            if linha.repetidos
+                            else f"{linha.calculos} grupo(s)"
+                        ),
                         "Cálculos": " · ".join(linha.titulos) or "—",
                         "Registrado em": linha.ultimo or "—",
                     }
@@ -228,28 +307,54 @@ with st.container(border=True):
                     st.page_link(_linha.pagina, label=_linha.etapa, icon=":material/arrow_outward:")
     else:
         st.caption("Nenhum cálculo registrado ainda neste projeto.")
+    _ids_para_superar = []
+    if _pares_repetidos:
+        st.markdown("**Confira as possíveis duplicatas**")
+        st.caption(
+            "Marque apenas os registros que o mais novo substitui. Os demais permanecem "
+            "vigentes e entram na composição."
+        )
+        for _antigo, _novo in _pares_repetidos.items():
+            _registro_antigo = _registros_reuniao[_antigo]
+            _registro_novo = _registros_reuniao[_novo]
+            _descricao_antigo = (
+                f"{_registro_antigo.get('titulo', 'Cálculo')} · "
+                f"{_registro_antigo.get('peca') or 'sem peça'} · "
+                f"{str(_registro_antigo.get('criado_em') or '')[:16].replace('T', ' ')}"
+            )
+            _descricao_novo = (
+                f"{_registro_novo.get('titulo', 'Cálculo')} · "
+                f"{_registro_novo.get('peca') or 'sem peça'} · "
+                f"{str(_registro_novo.get('criado_em') or '')[:16].replace('T', ' ')}"
+            )
+            if st.checkbox(
+                f"Superar {_descricao_antigo}",
+                key=f"superar_{projeto['id']}_{_antigo}",
+                help=f"O substituto sugerido é {_descricao_novo}.",
+            ):
+                _ids_para_superar.append(_antigo)
+            st.caption(f"Substituto sugerido: {_descricao_novo}")
     if st.button(
-        "Juntar: um de cada cálculo, na ordem do projeto"
-        + (f" (tira {_repetidos} repetido(s))" if _repetidos else ""),
+        "Juntar cálculos na ordem do projeto"
+        + (f" ({_repetidos} possível(is) repetido(s))" if _repetidos else ""),
         icon=":material/merge:",
         key="juntar_projeto",
         disabled=not _quadro_do_projeto,
         help=(
-            "Os registros repetidos do mesmo cálculo viram Superado (ficam no histórico, saem do "
-            "memorial) e a composição do memorial passa a ser um de cada, na ordem do projeto. "
-            "Depois é só emitir logo abaixo."
+            "Somente as duplicatas marcadas serão superadas. Os registros restantes serão "
+            "incluídos na ordem do projeto."
         ),
     ):
-        _juntado, _superados, _ordem = mdp.juntar(projeto, fora=sorted(MODULOS_FORA_DO_MEMORIAL))
-        with tratar_conflito_de_gravacao():
-            _salvo = salvar_projeto(
-                _juntado,
-                motivo=(
-                    f"Memorial: projeto juntado ({len(_ordem)} cálculo(s), {_superados} "
-                    "repetido(s) superado(s))"
-                ),
-            )
-        registrar_gravacao_vista(_salvo)
+        _juntado, _superados, _ordem = mdp.juntar(
+            projeto, fora=sorted(MODULOS_FORA_DO_MEMORIAL), ids_a_superar=_ids_para_superar
+        )
+        _salvar_memorial(
+            _juntado,
+            motivo=(
+                f"Memorial: projeto juntado ({len(_ordem)} cálculo(s), {_superados} "
+                "repetido(s) superado(s))"
+            ),
+        )
         st.session_state.pop(f"composicao_relatorio_{projeto['id']}", None)
         st.toast(
             f"Projeto juntado: {len(_ordem)} cálculo(s) no memorial"
@@ -275,15 +380,37 @@ with st.container(border=True):
         + ". Para escolher outras seções, registros ou identificação, ajuste "
         "abaixo e use o botão do fim da página."
     )
+    if _ids_configurados is not None:
+        _ids_omitidos = [item for item in _ids_vigentes if item not in _registros_rapidos]
+        if _ids_omitidos:
+            _titulos_omitidos = [
+                str(_registros_reuniao[item].get("titulo") or "Cálculo")
+                for item in _ids_omitidos
+                if item in _registros_reuniao
+            ]
+            st.info(
+                f"{len(_ids_omitidos)} cálculo(s) vigente(s) não estão na seleção salva: "
+                + "; ".join(_titulos_omitidos[:5])
+                + ("; …" if len(_titulos_omitidos) > 5 else "")
+                + ". Revise a composição abaixo se desejar incluí-los."
+            )
     if st.button(
         "Gerar Word e PDF com esta configuração",
         type="primary",
         icon=":material/bolt:",
         width="stretch",
         key="gerar_rapido",
+        disabled=not bool(_secoes_rapidas),
     ):
         with st.spinner("Montando o memorial…"):
             try:
+                _modelo_rapido = montar_modelo_relatorio(
+                    projeto,
+                    secoes_incluidas=_secoes_rapidas,
+                    registros_ids=_registros_rapidos,
+                    metadata_extra=_metadata_rapida,
+                    somente_capitulos=_so_capitulos_rapido,
+                )
                 _word_rapido = gerar_relatorio_industrial_word(
                     projeto,
                     secoes_incluidas=_secoes_rapidas,
@@ -301,19 +428,6 @@ with st.container(border=True):
             except Exception as erro:  # noqa: BLE001 - a falha precisa aparecer
                 st.exception(erro)
             else:
-                st.session_state[_chave_rapida] = {
-                    "word": _word_rapido,
-                    "pdf": _pdf_rapido,
-                    "codigo": _metadata_rapida["codigo"],
-                    "revisao": _metadata_rapida["revisao"],
-                }
-                _modelo_rapido = montar_modelo_relatorio(
-                    projeto,
-                    secoes_incluidas=_secoes_rapidas,
-                    registros_ids=_registros_rapidos,
-                    metadata_extra=_metadata_rapida,
-                    somente_capitulos=_so_capitulos_rapido,
-                )
                 _registrar_emissao(
                     projeto,
                     perfil=_perfil_rapido,
@@ -322,9 +436,28 @@ with st.container(border=True):
                     metadata=_metadata_rapida,
                     snapshot=_modelo_rapido["snapshot_hash"],
                 )
+                st.session_state[_chave_rapida] = {
+                    "word": _word_rapido,
+                    "pdf": _pdf_rapido,
+                    "codigo": _metadata_rapida["codigo"],
+                    "revisao": _metadata_rapida["revisao"],
+                    "snapshot_hash": _modelo_rapido["snapshot_hash"],
+                }
 
     _gerado_rapido = st.session_state.get(_chave_rapida)
     if _gerado_rapido:
+        _snapshot_atual_rapido = montar_modelo_relatorio(
+            projeto,
+            secoes_incluidas=_secoes_rapidas,
+            registros_ids=_registros_rapidos,
+            metadata_extra=_metadata_rapida,
+            somente_capitulos=_so_capitulos_rapido,
+        )["snapshot_hash"]
+        if _gerado_rapido.get("snapshot_hash") != _snapshot_atual_rapido:
+            st.warning(
+                "Os dados ou a configuração salva mudaram desde esta geração rápida. "
+                "Gere novamente para obter arquivos atualizados."
+            )
         _nome = (
             re.sub(r"[^A-Za-z0-9._-]+", "_", str(_gerado_rapido["codigo"])).strip("_")
             or "memorial_industrial"
@@ -365,6 +498,7 @@ perfil = (
         list(PERFIS),
         default=perfil_padrao,
         selection_mode="single",
+        key=f"perfil_documental_{projeto['id']}",
         help="O perfil sugere seções; você pode ajustar a seleção antes de gerar.",
     )
     or perfil_padrao
@@ -381,7 +515,17 @@ if somente_capitulos:
 chave_perfil = f"perfil_relatorio_anterior_{projeto['id']}"
 chave_secoes = f"secoes_relatorio_{projeto['id']}"
 if st.session_state.get(chave_perfil) != perfil:
-    st.session_state[chave_secoes] = PERFIS[perfil]
+    _secoes_salvas = projeto.get("configuracao_relatorio", {}).get("secoes")
+    if (
+        chave_perfil not in st.session_state
+        and perfil == perfil_padrao
+        and _secoes_salvas is not None
+    ):
+        st.session_state[chave_secoes] = [
+            chave for chave in _secoes_salvas if chave in SECOES_RELATORIO
+        ]
+    else:
+        st.session_state[chave_secoes] = PERFIS[perfil]
     st.session_state[chave_perfil] = perfil
 
 selecoes = st.multiselect(
@@ -413,8 +557,8 @@ for indice, item in enumerate(registros, start=1):
     linhas_composicao.append(
         {
             "id": item["id"],
-            "Incluir": item["id"] in config_salva.get("registros_incluidos", _ids_vigentes)
-            and not registro_superado(item),
+            "Incluir": item["id"]
+            in (_ids_vigentes if _ids_configurados is None else _ids_configurados),
             "Ordem": ordem_salva.get(item["id"], indice - 1) + 1,
             "Peça": item.get("peca") or ", ".join(pecas_vinculadas) or "—",
             "Módulo": item.get("modulo", "Módulo"),
@@ -425,6 +569,11 @@ for indice, item in enumerate(registros, start=1):
         }
     )
 st.markdown("##### Composição e ordem dos capítulos")
+st.page_link(
+    "app_pages/calculos_manuais.py",
+    label="Adicionar ou editar cálculo manual ou externo",
+    icon=":material/edit_note:",
+)
 if _fora_do_memorial:
     st.caption(
         f":material/info: {_fora_do_memorial} registro(s) de Círculo de Mohr ou de casos de "
@@ -469,13 +618,126 @@ if linhas_composicao:
         ["Ordem", "Peça", "Módulo", "Registro"]
     )
     ids_registros = linhas_selecionadas["id"].astype(str).tolist()
+    ordem_todos_registros = (
+        composicao.sort_values(["Ordem", "Peça", "Módulo", "Registro"])["id"].astype(str).tolist()
+    )
 else:
     ids_registros = []
+    ordem_todos_registros = []
 if not registros:
     st.info(
         "O projeto ainda não possui cálculos registrados. O memorial pode ser emitido como "
         "molde, com a memória de cálculo vazia."
     )
+
+contexto_salvo = config_salva.get("contexto_estrutural") or {}
+contexto_estrutural = dict(contexto_salvo)
+_base_carregamentos = projeto.get("base_projeto", {}).get("base_carregamentos", "")
+if _base_carregamentos:
+    contexto_estrutural.setdefault("acoes", _base_carregamentos)
+if "contexto_estrutural" in selecoes:
+    with st.expander("Concepção e análise estrutural", expanded=True):
+        st.caption(
+            "Descreva as decisões do projeto em texto livre. Estes campos aparecem no Word e no "
+            "PDF e são guardados ao salvar o rascunho ou gerar os documentos. Os cálculos selecionados fornecem "
+            "suas próprias referências e memória; confirme que as combinações abaixo são as "
+            "realmente processadas."
+        )
+        if st.button(
+            "Sugerir texto a partir do projeto",
+            icon=":material/auto_fix_high:",
+            key=f"sugerir_contexto_{projeto['id']}",
+            help="Preenche somente campos vazios usando informações registradas neste projeto e nos cálculos selecionados.",
+        ):
+            from core.rascunho_memorial import sugerir_contexto
+
+            _selecionados_contexto = [
+                item for item in registros if str(item.get("id")) in ids_registros
+            ]
+            _sugestoes = sugerir_contexto(projeto, _selecionados_contexto)
+            _aplicadas = 0
+            for _chave, _sugestao in _sugestoes.items():
+                _chave_widget = f"contexto_{_chave}_{projeto['id']}"
+                _atual = st.session_state.get(_chave_widget, contexto_estrutural.get(_chave, ""))
+                if not str(_atual or "").strip() and str(_sugestao or "").strip():
+                    st.session_state[_chave_widget] = _sugestao
+                    _aplicadas += 1
+            st.toast(
+                f"{_aplicadas} campo(s) vazio(s) sugerido(s) com dados do projeto; revise antes de salvar."
+            )
+        st.caption(
+            "Origem das sugestões: cadastro do projeto e cálculos selecionados. Edite e confira os textos antes da emissão."
+        )
+        for chave, rotulo, ajuda in (
+            (
+                "sistema",
+                "Sistema estrutural e geometria",
+                "Arranjo, dimensões relevantes e elementos resistentes.",
+            ),
+            (
+                "vinculos",
+                "Vínculos e condições de contorno",
+                "Apoios, ligações, travamentos e hipóteses adotadas.",
+            ),
+            (
+                "acoes",
+                "Ações e origem dos carregamentos",
+                "Ações consideradas e fonte dos valores, incluindo eventuais imperfeições.",
+            ),
+            (
+                "combinacoes",
+                "Combinações consideradas na análise",
+                "Identifique as combinações efetivamente processadas e sua origem.",
+            ),
+            (
+                "modelo",
+                "Modelo, programa e método de análise",
+                "Programa e versão, idealização, método e efeitos considerados.",
+            ),
+            (
+                "servico",
+                "Deslocamentos, vibrações e limites de serviço",
+                "Critérios e resultados de serviço aplicáveis ao projeto.",
+            ),
+            (
+                "validacao",
+                "Conferência do modelo e suas limitações",
+                "Equilíbrio, conferências independentes e restrições conhecidas.",
+            ),
+            (
+                "conclusao_geral",
+                "Conclusão geral",
+                "Síntese técnica do escopo avaliado e das suas condições.",
+            ),
+            (
+                "recomendacoes",
+                "Recomendações e pendências",
+                "Providências, exclusões e pontos que precisam de definição.",
+            ),
+        ):
+            contexto_estrutural[chave] = st.text_area(
+                rotulo,
+                value=contexto_estrutural.get(chave, ""),
+                help=ajuda,
+                key=f"contexto_{chave}_{projeto['id']}",
+            )
+        faltantes_contexto = [
+            rotulo
+            for chave, rotulo in (
+                ("sistema", "sistema"),
+                ("vinculos", "vínculos"),
+                ("acoes", "ações"),
+                ("combinacoes", "combinações"),
+                ("modelo", "modelo"),
+                ("servico", "serviço"),
+                ("validacao", "conferência"),
+                ("conclusao_geral", "conclusão"),
+                ("recomendacoes", "recomendações"),
+            )
+            if not str(contexto_estrutural.get(chave, "")).strip()
+        ]
+        if faltantes_contexto:
+            st.info("A preencher no memorial: " + ", ".join(faltantes_contexto) + ".")
 
 # O que foi usado na última emissão vira o padrão da próxima: redigitar
 # título, subtítulo e situação a cada emissão era trabalho repetido que o
@@ -491,27 +753,52 @@ with st.expander("Identificação e controle do documento", expanded=True):
     titulo = c1.text_input(
         "Título",
         value=_identificacao_salva.get("titulo") or "Memorial de cálculo do projeto industrial",
+        key=f"titulo_memorial_{projeto['id']}",
     )
     subtitulo = c1.text_input(
         "Subtítulo",
         value=_identificacao_salva.get("subtitulo") or SUBTITULO_PADRAO,
+        key=f"subtitulo_memorial_{projeto['id']}",
     )
     codigo_documento = c2.text_input(
         "Código do documento",
         value=_identificacao_salva.get("codigo") or projeto["codigo"],
+        key=f"codigo_memorial_{projeto['id']}",
     )
-    revisao = c2.text_input("Revisão", value=f"{int(projeto.get('revisao', 0)):02d}")
+    revisao = c2.text_input(
+        "Revisão",
+        value=_identificacao_salva.get("revisao") or f"{int(projeto.get('revisao', 0)):02d}",
+        key=f"revisao_memorial_{projeto['id']}",
+    )
     d1, d2, d3 = st.columns(3)
-    responsavel = d1.text_input("Elaborado por", value=projeto.get("responsavel", ""))
-    verificador = d2.text_input("Verificado por", value=projeto.get("verificador", ""))
-    aprovador = d3.text_input("Aprovado por", value=projeto.get("aprovador", ""))
+    responsavel = d1.text_input(
+        "Elaborado por",
+        value=_identificacao_salva.get("responsavel", projeto.get("responsavel", "")),
+        key=f"responsavel_memorial_{projeto['id']}",
+    )
+    verificador = d2.text_input(
+        "Verificado por",
+        value=_identificacao_salva.get("verificador", projeto.get("verificador", "")),
+        key=f"verificador_memorial_{projeto['id']}",
+    )
+    aprovador = d3.text_input(
+        "Aprovado por",
+        value=_identificacao_salva.get("aprovador", projeto.get("aprovador", "")),
+        key=f"aprovador_memorial_{projeto['id']}",
+    )
     e1, e2 = st.columns(2)
     situacao = e1.selectbox(
         "Situação do documento",
         _situacoes,
         index=_situacoes.index(_situacao_salva) if _situacao_salva in _situacoes else 0,
+        key=f"situacao_memorial_{projeto['id']}",
     )
-    emissao = e2.date_input("Data de emissão", value=date.today(), format="DD/MM/YYYY")
+    emissao = e2.date_input(
+        "Data de emissão",
+        value=_data_salva(_identificacao_salva.get("emissao", "")),
+        format="DD/MM/YYYY",
+        key=f"emissao_memorial_{projeto['id']}",
+    )
 
     if not (responsavel and verificador and aprovador):
         st.caption(
@@ -529,7 +816,21 @@ metadata = {
     "aprovador": aprovador,
     "situacao": situacao,
     "emissao": emissao.strftime("%d/%m/%Y"),
+    "contexto_estrutural": contexto_estrutural,
 }
+configuracao_rascunho = dict(config_salva)
+configuracao_rascunho.update(
+    {
+        "perfil": perfil,
+        "secoes": list(selecoes),
+        "ordem_registros": ordem_todos_registros,
+        "registros_incluidos": list(ids_registros),
+        "contexto_estrutural": dict(contexto_estrutural),
+        "identificacao": {
+            chave: valor for chave, valor in metadata.items() if chave != "contexto_estrutural"
+        },
+    }
+)
 modelo = montar_modelo_relatorio(
     projeto,
     secoes_incluidas=selecoes,
@@ -543,7 +844,7 @@ m1, m2, m3, m4 = st.columns(4)
 m1.metric("Seções", len(selecoes))
 m2.metric("Registros anexados", len(ids_registros))
 m3.metric(
-    "Integridade média",
+    "Preenchimento médio",
     f"{round(sum(avaliar_integridade_registro(item)['percentual'] for item in modelo['registros']) / max(len(modelo['registros']), 1))}%",
 )
 _sintese = modelo["sintese"]
@@ -552,6 +853,8 @@ st.caption(
     f"Situação declarada pelos módulos: {_sintese['texto']}. "
     f"Snapshot desta composição: `{modelo['snapshot_hash']}`"
 )
+if modelo["maior_aproveitamento"]:
+    st.caption(modelo["maior_aproveitamento"])
 incompletos = [
     item for item in modelo["registros"] if avaliar_integridade_registro(item)["percentual"] < 100
 ]
@@ -560,10 +863,56 @@ if incompletos:
         f"{len(incompletos)} registro(s) selecionado(s) têm partes vazias (coluna 'Lacunas'); "
         "elas saem no memorial como “[a preencher]”, para completar no Word."
     )
+    with st.expander("Ver lacunas por cálculo"):
+        for _indice_incompleto, _incompleto in enumerate(incompletos, start=1):
+            _faltantes_registro = avaliar_integridade_registro(_incompleto)["faltantes"]
+            st.write(f"{_incompleto.get('titulo', 'Cálculo')}: {', '.join(_faltantes_registro)}.")
+            _indice_etapa = mdp.indice_da_etapa(_incompleto)
+            _pagina_calculo = (
+                mdp.ETAPAS[_indice_etapa].pagina
+                if _indice_etapa < len(mdp.ETAPAS)
+                else "app_pages/calculos_manuais.py"
+            )
+            st.page_link(
+                _pagina_calculo,
+                label=f"Abrir origem do cálculo {_indice_incompleto}",
+                icon=":material/arrow_outward:",
+            )
 with st.expander("Sumário planejado"):
     st.markdown("\n".join(f"- {secao['titulo']}" for secao in modelo["secoes"]))
     if not somente_capitulos:
         st.markdown(f"- {modelo['numero_aprovacoes']}. Aprovações")
+
+if modelo["secoes"]:
+    st.markdown("##### Conteúdo do capítulo")
+    _indice_previa = st.selectbox(
+        "Escolha um capítulo para conferir",
+        list(range(len(modelo["secoes"]))),
+        format_func=lambda indice: modelo["secoes"][indice]["titulo"],
+        key=f"capitulo_previa_{projeto['id']}",
+    )
+    st.caption(
+        "Prévia do conteúdo e da ordem; a paginação e a aparência final são definidas no Word e no PDF."
+    )
+    mostrar_previa(modelo["secoes"][_indice_previa])
+
+if any(
+    configuracao_rascunho.get(chave) != config_salva.get(chave)
+    for chave in (
+        "perfil",
+        "secoes",
+        "ordem_registros",
+        "registros_incluidos",
+        "contexto_estrutural",
+        "identificacao",
+    )
+):
+    st.caption("Há alterações na composição que ainda não foram salvas como rascunho.")
+if st.button("Salvar rascunho", icon=":material/save:", key=f"salvar_rascunho_{projeto['id']}"):
+    projeto["configuracao_relatorio"] = configuracao_rascunho
+    _salvar_memorial(projeto, motivo="Rascunho da composição do memorial salvo")
+    st.toast("Rascunho do memorial salvo, sem gerar ou aprovar documentos.")
+    st.rerun()
 
 if not selecoes:
     st.warning("Selecione ao menos uma seção antes de gerar o documento.")
@@ -594,6 +943,15 @@ if st.button(
         except Exception as erro:
             st.exception(erro)
         else:
+            projeto["configuracao_relatorio"] = configuracao_rascunho
+            _registrar_emissao(
+                projeto,
+                perfil=perfil,
+                secoes=list(selecoes),
+                registros_ids=list(ids_registros),
+                metadata=metadata,
+                snapshot=modelo["snapshot_hash"],
+            )
             st.session_state[chave_arquivos] = {
                 "word": word,
                 "pdf": pdf,
@@ -603,42 +961,26 @@ if st.button(
                 "registros": ids_registros,
                 "snapshot_hash": modelo["snapshot_hash"],
             }
-            configuracao = dict(projeto.get("configuracao_relatorio", {}))
-            configuracao.update(
-                {
-                    "perfil": perfil,
-                    "secoes": list(selecoes),
-                    "ordem_registros": list(ids_registros),
-                    "registros_incluidos": list(ids_registros),
-                    "identificacao": {
-                        "titulo": titulo,
-                        "subtitulo": subtitulo,
-                        "codigo": codigo_documento,
-                        "situacao": situacao,
-                    },
-                }
+            st.success(
+                "Documentos gerados a partir da mesma composição. A geração não aprova o projeto."
             )
-            projeto["configuracao_relatorio"] = configuracao
-            _registrar_emissao(
-                projeto,
-                perfil=perfil,
-                secoes=list(selecoes),
-                registros_ids=list(ids_registros),
-                metadata=metadata,
-                snapshot=modelo["snapshot_hash"],
-            )
-            st.success("Documentos gerados a partir da mesma revisão de dados.")
 
 arquivos = st.session_state.get(chave_arquivos)
 if arquivos:
+    _metadata_gerada = arquivos["metadata"]
+    if arquivos.get("snapshot_hash") != modelo["snapshot_hash"]:
+        st.warning(
+            "A composição ou os dados mudaram após a geração. Gere novamente para atualizar os arquivos."
+        )
     nome_base = (
-        re.sub(r"[^A-Za-z0-9._-]+", "_", str(codigo_documento)).strip("_") or "memorial_industrial"
+        re.sub(r"[^A-Za-z0-9._-]+", "_", str(_metadata_gerada["codigo"])).strip("_")
+        or "memorial_industrial"
     )
     d1, d2 = st.columns(2)
     d1.download_button(
         "Baixar Word editável",
         data=arquivos["word"],
-        file_name=f"{nome_base}_R{revisao}.docx",
+        file_name=f"{nome_base}_R{_metadata_gerada['revisao']}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         icon=":material/download:",
         type="primary",
@@ -647,7 +989,7 @@ if arquivos:
     d2.download_button(
         "Baixar PDF para distribuição",
         data=arquivos["pdf"],
-        file_name=f"{nome_base}_R{revisao}.pdf",
+        file_name=f"{nome_base}_R{_metadata_gerada['revisao']}.pdf",
         mime="application/pdf",
         icon=":material/picture_as_pdf:",
         width="stretch",
@@ -664,6 +1006,9 @@ _emissoes = [
     if isinstance(item, dict)
 ]
 with st.expander(f"Histórico de emissões ({len(_emissoes)})", expanded=False):
+    st.caption(
+        "O histórico guarda somente identificação e metadados. Arquivos anteriores não são armazenados para novo download."
+    )
     if _emissoes:
         st.dataframe(
             pd.DataFrame(

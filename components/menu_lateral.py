@@ -15,6 +15,10 @@ from core import preferencias_menu as pm
 _BUSCA = "menu_busca"
 _DESTINO = "menu_destino"
 _RECENTES = 4
+_ENTRADAS_PROJETO = (
+    "app_pages/painel_industrial.py",
+    "app_pages/gestao_projetos.py",
+)
 
 _ESTILO = """
 <style>
@@ -151,13 +155,28 @@ def menu_lateral(paginas: dict[str, st.Page], atual: str) -> None:
 
         st.caption("TODAS AS PÁGINAS")
         for grupo in nv.MENU:
+            # As páginas antigas continuam registradas e pesquisáveis. No menu principal,
+            # a jornada de projeto e entrega começa em dois lugares previsíveis.
+            if grupo.nome == "Entrega":
+                continue
             # A chave leva a página aberta: cada troca de página volta a abrir só o grupo dela.
             with st.expander(
                 grupo.nome,
-                expanded=grupo is grupo_atual,
+                expanded=grupo is grupo_atual
+                or (
+                    grupo.nome == "Projeto"
+                    and grupo_atual is not None
+                    and grupo_atual.nome == "Entrega"
+                ),
                 icon=grupo.icone,
                 key=f"menu_{grupo.nome}_{atual}",
             ):
+                if grupo.nome == "Projeto":
+                    for caminho in _ENTRADAS_PROJETO:
+                        item = nv.item_da_pagina(caminho)
+                        if item is not None:
+                            _ligacao(item)
+                    continue
                 for secao, itens in grupo.secoes():
                     if secao:
                         st.html(f'<div class="menu-secao">{secao}</div>')

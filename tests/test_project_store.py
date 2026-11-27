@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 
@@ -16,6 +17,32 @@ from core.project_store import (
     restaurar_revisao,
     salvar_projeto,
 )
+
+
+def test_exportacao_carteira_preserva_estado_durante_gravacao_concorrente(tmp_path, monkeypatch):
+    from core import project_carteira
+
+    banco = tmp_path / "projetos.sqlite3"
+    projeto = criar_projeto("Original", codigo="PRJ-1", caminho_banco=banco)
+    with sqlite3.connect(banco) as conexao:
+        conexao.execute("PRAGMA journal_mode=WAL")
+
+    montar_pacote = project_carteira._pacote_projeto
+
+    def gravar_durante_exportacao(conexao, projeto_id, payload):
+        projeto["objetivo"] = "Alterado durante exportação"
+        salvar_projeto(
+            projeto, motivo="Alteração concorrente", criar_revisao=True, caminho_banco=banco
+        )
+        return montar_pacote(conexao, projeto_id, payload)
+
+    monkeypatch.setattr(project_carteira, "_pacote_projeto", gravar_durante_exportacao)
+    pacote = json.loads(project_carteira.exportar_carteira(caminho_banco=banco))["projetos"][0]
+
+    assert pacote["projeto"]["objetivo"] == ""
+    assert [revisao["revisao"] for revisao in pacote["revisoes"]] == [0]
+    assert all(evento["descricao"] != "Alteração concorrente" for evento in pacote["eventos"])
+    assert len(historico_revisoes(projeto["id"], caminho_banco=banco)) == 2
 
 
 def test_ciclo_permanente_com_revisoes_exportacao_e_importacao(tmp_path):

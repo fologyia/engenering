@@ -7,6 +7,7 @@ apagado" do Streamlit Cloud é simulado trocando o arquivo SQLite por outro, vaz
 from __future__ import annotations
 
 import json
+import sqlite3
 
 from core import espelho_remoto as er
 from core.project_store import (
@@ -59,6 +60,39 @@ def projeto_cheio(banco, *, nome="Mezanino da britagem", codigo="PRJ-1"):
 
 
 class TestGravacaoVaiParaOEspelho:
+    def test_espelho_reune_documento_e_historico_do_mesmo_instante(self, tmp_path, monkeypatch):
+        from core import project_espelho
+
+        banco = tmp_path / "p.sqlite3"
+        projeto = criar_projeto("Mezanino", codigo="PRJ-1", caminho_banco=banco)
+        with sqlite3.connect(banco) as conexao:
+            conexao.execute("PRAGMA journal_mode=WAL")
+        montar_pacote = project_espelho._pacote_projeto
+        enviados = []
+        monkeypatch.setattr(er, "obter_espelho", lambda: object())
+        monkeypatch.setattr(
+            er, "enviar", lambda caminho, conteudo, motivo: enviados.append(conteudo)
+        )
+
+        def gravar_evento_concorrente(conexao, projeto_id, payload):
+            with sqlite3.connect(banco) as outra:
+                outra.execute(
+                    "INSERT INTO project_events "
+                    "(project_id, created_at, kind, description, revision, status) "
+                    "VALUES (?, '2026-01-01', 'salvamento', 'Concorrente', 0, 'Em elaboração')",
+                    (projeto_id,),
+                )
+            return montar_pacote(conexao, projeto_id, payload)
+
+        monkeypatch.setattr(project_espelho, "_pacote_projeto", gravar_evento_concorrente)
+        project_espelho._espelhar_projeto(projeto["id"], "Teste", caminho_banco=banco)
+        remoto = json.loads(enviados[0])
+        assert all(evento["descricao"] != "Concorrente" for evento in remoto["eventos"])
+        assert any(
+            evento["descricao"] == "Concorrente"
+            for evento in historico_eventos(projeto["id"], caminho_banco=banco)
+        )
+
     def test_cada_operacao_de_escrita_aparece_no_repositorio(
         self, tmp_path, espelho_github, github_falso
     ):

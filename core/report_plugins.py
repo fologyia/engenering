@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -64,10 +64,12 @@ def _float_seguro(valor: Any) -> float | None:
     return numero if math.isfinite(numero) else None
 
 
-def _registros_do_modulo(projeto: Mapping[str, Any], modulo_id: str) -> list[Mapping[str, Any]]:
+def _registros_do_modulo(
+    registros: Sequence[Mapping[str, Any]], modulo_id: str
+) -> list[Mapping[str, Any]]:
     return [
         item
-        for item in projeto.get("registros_tecnicos", [])
+        for item in registros
         if isinstance(item, Mapping)
         and str(item.get("modulo_id", "")).strip().casefold() == modulo_id
     ]
@@ -176,7 +178,9 @@ def _secao_vigas_eixos(projeto: Mapping[str, Any], contexto: Mapping[str, Any]) 
     mais uma linha genérica da tabela de registros — o memorial trazia o
     número, mas não a seção que o governou nem a combinação que o produziu.
     """
-    registros = _registros_do_modulo(projeto, "vigas_eixos")
+    # A composição é a autoridade para todas as seções, inclusive extensões:
+    # registros excluídos ou superados não reaparecem só por pertencerem ao projeto.
+    registros = _registros_do_modulo(contexto.get("registros", []), "vigas_eixos")
     if not registros:
         # Sem viga registrada não há seção: quatro tabelas com "-" só
         # engordariam o memorial.

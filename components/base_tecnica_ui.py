@@ -15,7 +15,7 @@ import streamlit as st
 from components.project_tools import registrar_gravacao_vista, tratar_conflito_de_gravacao
 from core import base_tecnica as bt
 from core import plano_de_cargas as pc
-from core.project_store import obter_projeto_ativo, salvar_projeto
+from core.project_store import CAMPO_GRAVACAO, obter_projeto_ativo, salvar_projeto
 
 
 def base_ativa() -> bt.BaseTecnica | None:
@@ -62,7 +62,9 @@ def gravar_campo_do_projeto(campo: str, valor: Any, motivo: str) -> bool:
     return gravar_campos_do_projeto({campo: valor}, motivo)
 
 
-def gravar_campos_do_projeto(campos: Mapping[str, Any], motivo: str) -> bool:
+def gravar_campos_do_projeto(
+    campos: Mapping[str, Any], motivo: str, *, gravacao_esperada: int | None = None
+) -> bool:
     """Grava vários campos do projeto ativo numa gravação só (uma revisão, nada pela metade)."""
     projeto = obter_projeto_ativo()
     if projeto is None:
@@ -72,15 +74,19 @@ def gravar_campos_do_projeto(campos: Mapping[str, Any], motivo: str) -> bool:
         )
         return False
     projeto.update(campos)
+    if gravacao_esperada is not None:
+        projeto[CAMPO_GRAVACAO] = gravacao_esperada
     with tratar_conflito_de_gravacao():
         salvo = salvar_projeto(projeto, motivo=motivo)
     registrar_gravacao_vista(salvo)
     return True
 
 
-def gravar_base(base: bt.BaseTecnica) -> bool:
-    return gravar_campo_do_projeto(
-        "base_tecnica", bt.para_dicionario(base), "Base técnica do projeto atualizada"
+def gravar_base(base: bt.BaseTecnica, *, gravacao_esperada: int | None = None) -> bool:
+    return gravar_campos_do_projeto(
+        {"base_tecnica": bt.para_dicionario(base)},
+        "Base técnica do projeto atualizada",
+        gravacao_esperada=gravacao_esperada,
     )
 
 

@@ -83,3 +83,21 @@ def test_a_pagina_mostra_o_perfil_novo_e_explica_o_que_ele_faz(banco_com_projeto
     assert "só os capítulos numerados" in legendas
     sumario = " ".join(str(m.value) for m in teste.markdown)
     assert "Aprovações" not in sumario  # o sumário planejado não promete o que o modo não gera
+
+
+def test_memorial_estrutural_guarda_contexto_para_emissao_rapida(banco_com_projeto):
+    projeto_id = registrar_analises()
+    projeto = obter_projeto_ativo()
+    projeto["configuracao_relatorio"] = {"perfil": "Memorial estrutural detalhado"}
+    salvar_projeto(projeto)
+    teste = abrir()
+    teste.text_area(key=f"contexto_sistema_{projeto_id}").set_value(
+        "Pórtico metálico com contraventamentos."
+    )
+    next(botao for botao in teste.button if botao.label == "Gerar Word e PDF").click().run()
+    assert not teste.exception, [str(e.value) for e in teste.exception]
+    assert obter_projeto_ativo()["configuracao_relatorio"]["contexto_estrutural"]["sistema"] == (
+        "Pórtico metálico com contraventamentos."
+    )
+    gerado = gerar_rapido(teste, projeto_id)
+    assert "Pórtico metálico com contraventamentos." in texto_word(gerado["word"])
