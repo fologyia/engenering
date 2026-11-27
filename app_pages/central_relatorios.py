@@ -16,6 +16,14 @@ from components.project_tools import (
 )
 from components.ui import cabecalho_pagina
 from core import memorial_do_projeto as mdp
+from core.memorial_anglo import (
+    CAPITULOS,
+    FINALIDADES,
+    OPCIONAIS,
+    PERFIL_ANGLO,
+    gerar_word_anglo,
+    montar_modelo_anglo,
+)
 from core.memorial_blocos import contar_imagens
 from core.project_report import (
     MODULOS_FORA_DO_MEMORIAL,
@@ -29,6 +37,7 @@ from core.project_store import CAMPO_GRAVACAO, EVENTO_EMISSAO, ProjetoConflitoEr
 from core.technical_records import rotulo_componente
 
 PERFIS = {
+    PERFIL_ANGLO: list(SECOES_RELATORIO),
     "Memorial industrial completo": [
         chave for chave in SECOES_RELATORIO if chave != "contexto_estrutural"
     ],
@@ -128,6 +137,7 @@ if st.session_state.get(_chave_conflito_edicao):
             "situacao_memorial_",
             "emissao_memorial_",
             "capitulo_previa_",
+            "anglo_",
             "superar_",
         )
         for _chave in list(st.session_state):
@@ -179,6 +189,12 @@ def _registrar_emissao(
             "registros": len(registros_ids),
             "snapshot_hash": snapshot,
             "emissao": metadata["emissao"],
+            **(
+                {k: metadata["anglo"].get(k) for k in ("finalidade", "descricao_revisao")}
+                | {"responsavel": metadata["responsavel"]}
+                if perfil == PERFIL_ANGLO
+                else {}
+            ),
         }
     )
     configuracao["emissoes"] = emissoes[-50:]
@@ -251,6 +267,14 @@ _metadata_rapida = {
     "situacao": _ident_projeto.get("situacao") or "Para revisão",
     "emissao": _ident_projeto.get("emissao") or date.today().strftime("%d/%m/%Y"),
 }
+
+_rapido_anglo = _perfil_rapido == PERFIL_ANGLO
+if _rapido_anglo:
+    _metadata_rapida["anglo"] = _config_projeto.get("anglo") or {}
+    _metadata_rapida["titulo"] = _ident_projeto.get("titulo") or projeto["nome"]
+    _metadata_rapida["codigo"] = (
+        _metadata_rapida["anglo"].get("numero_anglo") or _metadata_rapida["codigo"]
+    )
 
 # ---------------------------------------------------------------------------
 # Juntar o projeto
@@ -395,7 +419,7 @@ with st.container(border=True):
                 + ". Revise a composição abaixo se desejar incluí-los."
             )
     if st.button(
-        "Gerar Word e PDF com esta configuração",
+        "Gerar Word Anglo" if _rapido_anglo else "Gerar Word e PDF com esta configuração",
         type="primary",
         icon=":material/bolt:",
         width="stretch",
@@ -404,35 +428,41 @@ with st.container(border=True):
     ):
         with st.spinner("Montando o memorial…"):
             try:
-                _modelo_rapido = montar_modelo_relatorio(
-                    projeto,
-                    secoes_incluidas=_secoes_rapidas,
-                    registros_ids=_registros_rapidos,
-                    metadata_extra=_metadata_rapida,
-                    somente_capitulos=_so_capitulos_rapido,
-                )
-                _word_rapido = gerar_relatorio_industrial_word(
-                    projeto,
-                    secoes_incluidas=_secoes_rapidas,
-                    registros_ids=_registros_rapidos,
-                    metadata_extra=_metadata_rapida,
-                    somente_capitulos=_so_capitulos_rapido,
-                )
-                _pdf_rapido = gerar_relatorio_industrial_pdf(
-                    projeto,
-                    secoes_incluidas=_secoes_rapidas,
-                    registros_ids=_registros_rapidos,
-                    metadata_extra=_metadata_rapida,
-                    somente_capitulos=_so_capitulos_rapido,
-                )
+                if _rapido_anglo:
+                    _modelo_rapido = montar_modelo_anglo(
+                        projeto, registros_ids=_registros_rapidos, metadata_extra=_metadata_rapida
+                    )
+                    _word_rapido, _pdf_rapido = gerar_word_anglo(_modelo_rapido), None
+                else:
+                    _modelo_rapido = montar_modelo_relatorio(
+                        projeto,
+                        secoes_incluidas=_secoes_rapidas,
+                        registros_ids=_registros_rapidos,
+                        metadata_extra=_metadata_rapida,
+                        somente_capitulos=_so_capitulos_rapido,
+                    )
+                    _word_rapido = gerar_relatorio_industrial_word(
+                        projeto,
+                        secoes_incluidas=_secoes_rapidas,
+                        registros_ids=_registros_rapidos,
+                        metadata_extra=_metadata_rapida,
+                        somente_capitulos=_so_capitulos_rapido,
+                    )
+                    _pdf_rapido = gerar_relatorio_industrial_pdf(
+                        projeto,
+                        secoes_incluidas=_secoes_rapidas,
+                        registros_ids=_registros_rapidos,
+                        metadata_extra=_metadata_rapida,
+                        somente_capitulos=_so_capitulos_rapido,
+                    )
             except Exception as erro:  # noqa: BLE001 - a falha precisa aparecer
                 st.exception(erro)
             else:
                 _registrar_emissao(
                     projeto,
                     perfil=_perfil_rapido,
-                    secoes=list(_secoes_rapidas),
-                    registros_ids=list(_registros_rapidos),
+                    secoes=list(CAPITULOS) if _rapido_anglo else list(_secoes_rapidas),
+                    registros_ids=[str(item["id"]) for item in _modelo_rapido["registros"]],
                     metadata=_metadata_rapida,
                     snapshot=_modelo_rapido["snapshot_hash"],
                 )
@@ -446,13 +476,18 @@ with st.container(border=True):
 
     _gerado_rapido = st.session_state.get(_chave_rapida)
     if _gerado_rapido:
-        _snapshot_atual_rapido = montar_modelo_relatorio(
-            projeto,
-            secoes_incluidas=_secoes_rapidas,
-            registros_ids=_registros_rapidos,
-            metadata_extra=_metadata_rapida,
-            somente_capitulos=_so_capitulos_rapido,
-        )["snapshot_hash"]
+        if _rapido_anglo:
+            _snapshot_atual_rapido = montar_modelo_anglo(
+                projeto, registros_ids=_registros_rapidos, metadata_extra=_metadata_rapida
+            )["snapshot_hash"]
+        else:
+            _snapshot_atual_rapido = montar_modelo_relatorio(
+                projeto,
+                secoes_incluidas=_secoes_rapidas,
+                registros_ids=_registros_rapidos,
+                metadata_extra=_metadata_rapida,
+                somente_capitulos=_so_capitulos_rapido,
+            )["snapshot_hash"]
         if _gerado_rapido.get("snapshot_hash") != _snapshot_atual_rapido:
             st.warning(
                 "Os dados ou a configuração salva mudaram desde esta geração rápida. "
@@ -473,15 +508,16 @@ with st.container(border=True):
             width="stretch",
             key="baixar_rapido_word",
         )
-        _c2.download_button(
-            "Baixar PDF para distribuição",
-            data=_gerado_rapido["pdf"],
-            file_name=f"{_nome}_R{_gerado_rapido['revisao']}.pdf",
-            mime="application/pdf",
-            icon=":material/picture_as_pdf:",
-            width="stretch",
-            key="baixar_rapido_pdf",
-        )
+        if _gerado_rapido.get("pdf") and not _rapido_anglo:
+            _c2.download_button(
+                "Baixar PDF para distribuição",
+                data=_gerado_rapido["pdf"],
+                file_name=f"{_nome}_R{_gerado_rapido['revisao']}.pdf",
+                mime="application/pdf",
+                icon=":material/picture_as_pdf:",
+                width="stretch",
+                key="baixar_rapido_pdf",
+            )
 
 st.divider()
 st.markdown("### Ajustar a composição")
@@ -505,6 +541,7 @@ perfil = (
 )
 
 somente_capitulos = perfil in PERFIS_SOMENTE_CAPITULOS
+perfil_anglo = perfil == PERFIL_ANGLO
 if somente_capitulos:
     st.caption(
         ":material/content_paste: Este perfil gera só os capítulos numerados — sem capa, resumo "
@@ -528,12 +565,18 @@ if st.session_state.get(chave_perfil) != perfil:
         st.session_state[chave_secoes] = PERFIS[perfil]
     st.session_state[chave_perfil] = perfil
 
-selecoes = st.multiselect(
-    "Seções incluídas",
-    options=list(SECOES_RELATORIO),
-    format_func=lambda chave: SECOES_RELATORIO[chave],
-    key=chave_secoes,
-)
+if perfil_anglo:
+    selecoes = PERFIS[PERFIL_ANGLO]
+    st.caption(
+        "A sequência de capítulos segue o modelo Anglo. Indique os capítulos não aplicáveis na identificação."
+    )
+else:
+    selecoes = st.multiselect(
+        "Seções incluídas",
+        options=list(SECOES_RELATORIO),
+        format_func=lambda chave: SECOES_RELATORIO[chave],
+        key=chave_secoes,
+    )
 
 registros = [item for item in projeto.get("registros_tecnicos", []) if _entra_no_memorial(item)]
 _fora_do_memorial = len(projeto.get("registros_tecnicos", [])) - len(registros)
@@ -752,7 +795,8 @@ with st.expander("Identificação e controle do documento", expanded=True):
     c1, c2 = st.columns([2, 1])
     titulo = c1.text_input(
         "Título",
-        value=_identificacao_salva.get("titulo") or "Memorial de cálculo do projeto industrial",
+        value=_identificacao_salva.get("titulo")
+        or (projeto["nome"] if perfil_anglo else "Memorial de cálculo do projeto industrial"),
         key=f"titulo_memorial_{projeto['id']}",
     )
     subtitulo = c1.text_input(
@@ -806,6 +850,38 @@ with st.expander("Identificação e controle do documento", expanded=True):
             "do projeto. Preencher lá evita redigitar a cada emissão."
         )
 
+config_anglo = dict(config_salva.get("anglo") or {})
+if perfil_anglo:
+    with st.expander("Identificação Anglo e finalidade da emissão", expanded=True):
+        for chave, rotulo in (
+            ("numero_anglo", "Número do documento Anglo"),
+            ("numero_contratada", "Número do documento da contratada"),
+            ("fase", "Fase do projeto"),
+            ("descricao_revisao", "Descrição da revisão"),
+            ("criterio_cliente", "Código do critério do cliente"),
+            ("cargo_responsavel", "Cargo de quem elaborou"),
+            ("cargo_verificador", "Cargo de quem verificou"),
+            ("cargo_aprovador", "Cargo de quem aprova"),
+        ):
+            config_anglo[chave] = st.text_input(
+                rotulo, value=config_anglo.get(chave, ""), key=f"anglo_{chave}_{projeto['id']}"
+            )
+        finalidade_salva = config_anglo.get("finalidade")
+        config_anglo["finalidade"] = st.selectbox(
+            "Finalidade da emissão",
+            FINALIDADES,
+            index=FINALIDADES.index(finalidade_salva) if finalidade_salva in FINALIDADES else 0,
+            format_func=lambda valor: valor or "A preencher",
+            key=f"anglo_finalidade_{projeto['id']}",
+        )
+        config_anglo["nao_aplicaveis"] = st.multiselect(
+            "Capítulos não aplicáveis",
+            OPCIONAIS,
+            default=[ch for ch in config_anglo.get("nao_aplicaveis", []) if ch in OPCIONAIS],
+            format_func=CAPITULOS.__getitem__,
+            key=f"anglo_nao_aplicaveis_{projeto['id']}",
+        )
+
 metadata = {
     "titulo": titulo,
     "subtitulo": subtitulo,
@@ -818,26 +894,36 @@ metadata = {
     "emissao": emissao.strftime("%d/%m/%Y"),
     "contexto_estrutural": contexto_estrutural,
 }
+if perfil_anglo:
+    metadata["anglo"] = config_anglo
+    metadata["codigo"] = config_anglo.get("numero_anglo") or codigo_documento
 configuracao_rascunho = dict(config_salva)
 configuracao_rascunho.update(
     {
         "perfil": perfil,
+        "anglo": config_anglo,
         "secoes": list(selecoes),
         "ordem_registros": ordem_todos_registros,
         "registros_incluidos": list(ids_registros),
         "contexto_estrutural": dict(contexto_estrutural),
         "identificacao": {
-            chave: valor for chave, valor in metadata.items() if chave != "contexto_estrutural"
-        },
+            chave: valor
+            for chave, valor in metadata.items()
+            if chave not in {"contexto_estrutural", "anglo"}
+        }
+        | {"codigo": codigo_documento},
     }
 )
-modelo = montar_modelo_relatorio(
-    projeto,
-    secoes_incluidas=selecoes,
-    registros_ids=ids_registros,
-    metadata_extra=metadata,
-    somente_capitulos=somente_capitulos,
-)
+if perfil_anglo:
+    modelo = montar_modelo_anglo(projeto, registros_ids=ids_registros, metadata_extra=metadata)
+else:
+    modelo = montar_modelo_relatorio(
+        projeto,
+        secoes_incluidas=selecoes,
+        registros_ids=ids_registros,
+        metadata_extra=metadata,
+        somente_capitulos=somente_capitulos,
+    )
 
 st.subheader("Prévia da composição")
 m1, m2, m3, m4 = st.columns(4)
@@ -879,10 +965,26 @@ if incompletos:
                 icon=":material/arrow_outward:",
             )
 with st.expander("Sumário planejado"):
-    st.markdown("\n".join(f"- {secao['titulo']}" for secao in modelo["secoes"]))
-    if not somente_capitulos:
-        st.markdown(f"- {modelo['numero_aprovacoes']}. Aprovações")
+    if perfil_anglo:
+        for chave, nome in CAPITULOS.items():
+            st.write(nome + (" · Não aplicável" if chave in modelo["omitidos_anglo"] else ""))
+            for calculo in modelo["grupos_anglo"][chave]:
+                st.caption(calculo["titulo"])
+        faltas_capa = [
+            chave.replace("_", " ") for chave, valor in modelo["campos_anglo"].items() if not valor
+        ]
+        if faltas_capa:
+            st.caption("Campos a preencher na capa — " + ", ".join(faltas_capa))
+    else:
+        st.markdown("\n".join(f"- {secao['titulo']}" for secao in modelo["secoes"]))
+        if not somente_capitulos:
+            st.markdown(f"- {modelo['numero_aprovacoes']}. Aprovações")
 
+if perfil_anglo and modelo["excluidos_anglo"]:
+    st.warning(
+        "Cálculos em capítulos marcados como não aplicáveis: "
+        + ", ".join(modelo["excluidos_anglo"])
+    )
 if modelo["secoes"]:
     st.markdown("##### Conteúdo do capítulo")
     _indice_previa = st.selectbox(
@@ -900,6 +1002,7 @@ if any(
     configuracao_rascunho.get(chave) != config_salva.get(chave)
     for chave in (
         "perfil",
+        "anglo",
         "secoes",
         "ordem_registros",
         "registros_incluidos",
@@ -919,27 +1022,30 @@ if not selecoes:
 
 chave_arquivos = f"relatorio_gerado_{projeto['id']}"
 if st.button(
-    "Gerar Word e PDF",
+    "Gerar Word Anglo" if perfil_anglo else "Gerar Word e PDF",
     type="primary",
     icon=":material/docs:",
     disabled=not bool(selecoes),
 ):
     with st.spinner("Montando o memorial e paginando os documentos..."):
         try:
-            word = gerar_relatorio_industrial_word(
-                projeto,
-                secoes_incluidas=selecoes,
-                registros_ids=ids_registros,
-                metadata_extra=metadata,
-                somente_capitulos=somente_capitulos,
-            )
-            pdf = gerar_relatorio_industrial_pdf(
-                projeto,
-                secoes_incluidas=selecoes,
-                registros_ids=ids_registros,
-                metadata_extra=metadata,
-                somente_capitulos=somente_capitulos,
-            )
+            if perfil_anglo:
+                word, pdf = gerar_word_anglo(modelo), None
+            else:
+                word = gerar_relatorio_industrial_word(
+                    projeto,
+                    secoes_incluidas=selecoes,
+                    registros_ids=ids_registros,
+                    metadata_extra=metadata,
+                    somente_capitulos=somente_capitulos,
+                )
+                pdf = gerar_relatorio_industrial_pdf(
+                    projeto,
+                    secoes_incluidas=selecoes,
+                    registros_ids=ids_registros,
+                    metadata_extra=metadata,
+                    somente_capitulos=somente_capitulos,
+                )
         except Exception as erro:
             st.exception(erro)
         else:
@@ -947,8 +1053,8 @@ if st.button(
             _registrar_emissao(
                 projeto,
                 perfil=perfil,
-                secoes=list(selecoes),
-                registros_ids=list(ids_registros),
+                secoes=list(CAPITULOS) if perfil_anglo else list(selecoes),
+                registros_ids=[str(item["id"]) for item in modelo["registros"]],
                 metadata=metadata,
                 snapshot=modelo["snapshot_hash"],
             )
@@ -986,14 +1092,15 @@ if arquivos:
         type="primary",
         width="stretch",
     )
-    d2.download_button(
-        "Baixar PDF para distribuição",
-        data=arquivos["pdf"],
-        file_name=f"{nome_base}_R{_metadata_gerada['revisao']}.pdf",
-        mime="application/pdf",
-        icon=":material/picture_as_pdf:",
-        width="stretch",
-    )
+    if arquivos.get("pdf") and not perfil_anglo:
+        d2.download_button(
+            "Baixar PDF para distribuição",
+            data=arquivos["pdf"],
+            file_name=f"{nome_base}_R{_metadata_gerada['revisao']}.pdf",
+            mime="application/pdf",
+            icon=":material/picture_as_pdf:",
+            width="stretch",
+        )
     st.caption(
         f"Arquivos do snapshot {arquivos.get('snapshot_hash', '')[:16]}… . "
         "Se alterar dados, seleção ou revisão, gere novamente antes de baixar."

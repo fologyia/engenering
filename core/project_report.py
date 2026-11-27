@@ -671,6 +671,7 @@ def montar_modelo_relatorio(
     registros_ids: Sequence[str] | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
     somente_capitulos: bool = False,
+    repetir_bases: bool = False,
 ) -> dict[str, Any]:
     """Monta um modelo neutro, usado igualmente por Word e PDF.
 
@@ -1109,7 +1110,11 @@ def montar_modelo_relatorio(
                         or [f"Premissa: {A_PREENCHER}"]
                     )
                     + (
-                        [f"Referência: {v}" for v in registro.get("referencias", []) if _texto(v, "")]
+                        [
+                            f"Referência: {v}"
+                            for v in registro.get("referencias", [])
+                            if _texto(v, "")
+                        ]
                         or [f"Referência: {A_PREENCHER}"]
                     ),
                     "formulas": list(registro.get("equacoes", [])) or [A_PREENCHER],
@@ -1123,7 +1128,7 @@ def montar_modelo_relatorio(
                 # Flambagem e parafusos fecham numa tabela de verificações: o capítulo mostra o
                 # resultado, o que passou e, no fim, o que não passou (core/memorial_verificacoes).
                 assinatura = assinatura_da_base(registro, linhas_verificacao)
-                repetida_de = bases_vistas.get(assinatura)
+                repetida_de = None if repetir_bases else bases_vistas.get(assinatura)
                 bases_vistas.setdefault(assinatura, numeracao)
                 imagens_verif, aviso_verif = imagens_do_registro(registro, projeto)
                 return capitulo_de_verificacoes(
@@ -1222,11 +1227,19 @@ def montar_modelo_relatorio(
                 )
                 for indice, registro in enumerate(grupo["registros"], start=1):
                     secoes.append(
-                        capitulo_registro(f"{numero}.{indice_grupo}.{indice}", 3, registro)
+                        {
+                            **capitulo_registro(f"{numero}.{indice_grupo}.{indice}", 3, registro),
+                            "registro_id": str(registro.get("id") or ""),
+                        }
                     )
         else:
             for indice, registro in enumerate(registros_capitulos, start=1):
-                secoes.append(capitulo_registro(f"{numero}.{indice}", 2, registro))
+                secoes.append(
+                    {
+                        **capitulo_registro(f"{numero}.{indice}", 2, registro),
+                        "registro_id": str(registro.get("id") or ""),
+                    }
+                )
         if not registros_capitulos:
             secoes[-1]["nota"] = "Nenhum cálculo foi anexado a esta emissão."
         numero += 1
