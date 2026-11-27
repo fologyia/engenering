@@ -315,11 +315,19 @@ def _dialogo_novo_projeto() -> None:
         st.error(erro_modelos)
     if modelo_sugerido is not None:
         semear = st.checkbox(
-            f"Semear o checklist com o modelo **{modelo_sugerido.nome}** "
+            f"Criar checklist com o modelo **{modelo_sugerido.nome}** "
             f"({len(modelo_sugerido.itens)} itens)",
             value=True,
             help=modelo_sugerido.descricao or None,
         )
+        if semear:
+            with st.expander("Ver verificações que serão adicionadas"):
+                st.caption(
+                    "Os itens entram abertos. Revise a aplicabilidade, as referências e os "
+                    "critérios de cada projeto antes de concluir a verificação."
+                )
+                for item_modelo in modelo_sugerido.itens:
+                    st.markdown(f"- **{item_modelo.categoria or 'Projeto'}:** {item_modelo.item}")
     else:
         semear = False
     with st.form("form_novo_projeto", border=False):

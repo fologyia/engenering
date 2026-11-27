@@ -9,11 +9,18 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 import streamlit as st
 
-from core.checklist_templates import ModeloChecklistErro, tipos_de_projeto
+from core.checklist_templates import (
+    ModeloChecklistErro,
+    aplicar_modelo,
+    itens_ja_aplicados,
+    modelo_para_tipo,
+    tipos_de_projeto,
+)
 from core.project_store import CAMPO_GRAVACAO, criar_item
 from core.project_validation import pendencias_de_preenchimento
 
@@ -331,6 +338,43 @@ def renderizar_jornada(
         st.caption(
             f"{bloqueios} bloqueio(s) na validação. Um rascunho pode ser gerado para revisão; isso não aprova o projeto."
         )
+        try:
+            modelo = modelo_para_tipo(str(projeto.get("tipo_projeto") or ""))
+        except ModeloChecklistErro as erro:
+            modelo = None
+            st.error(f"Não foi possível carregar os modelos de checklist: {erro}")
+        if modelo:
+            st.markdown("##### Checklist sugerido para este tipo de projeto")
+            st.caption(
+                f"Modelo: {modelo.nome}. Os itens são sugestões para revisar a aplicabilidade; "
+                "entram como abertos e não comprovam cálculos nem aprovação."
+            )
+            aplicados = itens_ja_aplicados(projeto, modelo)
+            disponiveis = {item.chave: item for item in modelo.itens if item.chave not in aplicados}
+            if disponiveis:
+                escolhas = st.multiselect(
+                    "Verificações a acrescentar",
+                    list(disponiveis),
+                    default=list(disponiveis),
+                    format_func=lambda chave: disponiveis[chave].item,
+                    key=f"jornada_checklist_{identificador}_{modelo.id}",
+                )
+                if st.button(
+                    "Adicionar verificações ao checklist",
+                    key=f"jornada_aplicar_checklist_{identificador}",
+                    disabled=not escolhas,
+                    icon=":material/add_task:",
+                ):
+                    selecionado = replace(
+                        modelo, itens=tuple(item for item in modelo.itens if item.chave in escolhas)
+                    )
+                    documento, novos, _ = aplicar_modelo(projeto, selecionado)
+                    if novos:
+                        salvar(documento, f"Checklist: {len(novos)} sugestões do modelo {modelo.nome}")
+                    st.session_state.pop(f"jornada_checklist_{identificador}_{modelo.id}", None)
+                    st.rerun()
+            else:
+                st.caption("Os itens deste modelo já estão no checklist do projeto.")
         st.page_link(
             "app_pages/central_validacao.py",
             label="Revisar validação e pendências",

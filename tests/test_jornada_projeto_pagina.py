@@ -4,9 +4,19 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+from core.checklist_templates import aplicar_modelo, modelo_para_tipo
 from core.project_store import obter_projeto_ativo, salvar_projeto
 
 APP = str(Path(__file__).resolve().parent.parent / "app.py")
+
+
+def test_modelo_de_plataforma_separa_verificacoes_essenciais():
+    modelo = modelo_para_tipo("Plataforma de acesso")
+    documento, novos, _ = aplicar_modelo({"checklist": []}, modelo)
+    textos = " ".join(item["item"].casefold() for item in novos)
+    assert all(termo in textos for termo in ("barras", "parafusos", "soldas", "placa de base"))
+    assert all(item["estado"] == "Aberto" for item in novos)
+    assert not aplicar_modelo(documento, modelo)[1]
 
 
 def _abrir() -> AppTest:
@@ -56,3 +66,20 @@ def test_jornada_detecta_gravacao_concorrente_antes_de_salvar(banco_com_projeto)
     assert not teste.exception
     assert any("gravado por outra sessão" in str(item.value) for item in teste.error)
     assert obter_projeto_ativo()["descricao"] == "Alterado em outra sessão."
+
+
+def test_checklist_sugerido_por_tipo_acrescenta_itens_abertos_sem_duplicar(banco_com_projeto):
+    projeto = obter_projeto_ativo()
+    projeto["tipo_projeto"] = "Estrutura metálica"
+    projeto["checklist"] = []
+    salvar_projeto(projeto)
+    teste = _abrir()
+    teste.session_state[f"jornada_secao_{projeto['id']}"] = "Entrega"
+    teste.run()
+    teste.button(key=f"jornada_aplicar_checklist_{projeto['id']}").click().run()
+    assert not teste.exception
+    checklist = obter_projeto_ativo()["checklist"]
+    assert checklist and all(item["estado"] == "Aberto" for item in checklist)
+    assert all(item["origem_modelo"].startswith("estrutura_metalica:") for item in checklist)
+    assert any("barras" in item["item"].lower() for item in checklist)
+    assert not any(b.key == f"jornada_aplicar_checklist_{projeto['id']}" for b in teste.button)
