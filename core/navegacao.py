@@ -42,7 +42,10 @@ class GrupoMenu:
 
 
 VISAO_GERAL = ItemMenu(
-    "app_pages/inicio.py", "Visão geral", ":material/home:", "Ver tudo o que o programa faz"
+    "app_pages/inicio.py",
+    "Visão geral",
+    ":material/home:",
+    "Acompanhar os indicadores do projeto ativo e acessar os módulos",
 )
 
 BARRAS = "Barras e vigas"

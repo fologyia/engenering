@@ -14,6 +14,7 @@ from typing import Any
 
 import streamlit as st
 
+from components.painel_projeto_ui import renderizar_painel_projeto
 from core.checklist_templates import (
     ModeloChecklistErro,
     aplicar_modelo,
@@ -197,11 +198,9 @@ def renderizar_jornada(
         st.caption("Rascunho ainda não salvo: " + ", ".join(pendentes) + ".")
 
     if secao == "Visão geral":
+        renderizar_painel_projeto(projeto, validacao, resumo, origem="jornada")
         st.subheader("Continue de onde parou")
         faltantes = pendencias_de_preenchimento(projeto)
-        st.caption(
-            "O índice documental mede preenchimento; não representa aprovação de engenharia."
-        )
         if faltantes:
             for item in faltantes[:5]:
                 destino = "Base técnica" if item["grupo"] == "base" else "Escopo"
@@ -249,10 +248,6 @@ def renderizar_jornada(
                 on_click=_abrir_secao,
                 args=(chave_secao, "Entrega"),
             )
-        st.caption(
-            f"{validacao['contagens']['Bloqueio']} bloqueio(s) · {validacao['contagens']['Pendência']} pendência(s) · {resumo['registros']} cálculo(s) vigente(s)."
-        )
-
     elif secao == "Escopo":
         st.subheader("Identificação e escopo")
         st.caption("A escolha do tipo orienta as sugestões de elementos após salvar a etapa.")
@@ -370,7 +365,9 @@ def renderizar_jornada(
                     )
                     documento, novos, _ = aplicar_modelo(projeto, selecionado)
                     if novos:
-                        salvar(documento, f"Checklist: {len(novos)} sugestões do modelo {modelo.nome}")
+                        salvar(
+                            documento, f"Checklist: {len(novos)} sugestões do modelo {modelo.nome}"
+                        )
                     st.session_state.pop(f"jornada_checklist_{identificador}_{modelo.id}", None)
                     st.rerun()
             else:
