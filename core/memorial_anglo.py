@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Mapping
 from copy import deepcopy
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from core.project_report import montar_modelo_relatorio
 
 PERFIL_ANGLO = "Anglo de emissão de relatório"
 MODELO = Path(__file__).resolve().parents[1] / "assets" / "modelo_anglo.docx"
+MODELO_PREENCHIDO = MODELO.with_name("modelo_anglo_preenchido.docx")
 VAZIO = "[a preencher]"
 FINALIDADES = ("", "ASB", "ICE", "IFA", "IFC", "IFD", "IFI", "IFP", "VOD")
 CAPITULOS = {
@@ -54,6 +56,79 @@ _GRUPOS = {
     **dict.fromkeys(("447", "461"), "bases"),
     **dict.fromkeys(("482", "486", "491", "500", "505", "509"), "acessos"),
 }
+
+# Posições no DOCX original rev2. O modelo de emissão conserva os quadros
+# dessas referências, mas não copia resultados, taxas ou aprovações de exemplo.
+_QUADROS_PADRAO = {
+    "normas": 59,
+    "criterios": 70,
+    "materiais": 107,
+    "divergencias": 101,
+    "minimos": 113,
+    "vento": 166,
+    "coeficientes": 199,
+    "elu_comb": 206,
+    "els_comb": 211,
+    "plataformas": 484,
+    "escadas": 488,
+    "guarda_corpos": 493,
+    "marinheiro": 503,
+}
+_QUADROS_ADICIONAIS = {
+    "139": (145,),
+    "155": (157,),
+    "172": (174,),
+    "229": (233,),
+    "266": (270,),
+    "357": (359,),
+    "393": (395,),
+    "420": (422,),
+    "442": (444,),
+}
+_TEXTOS_PADRAO = {
+    "premissas": tuple(range(84, 97)),
+    "115": (116, 117, 118, 119),
+    "163": (168, 169, 170),
+    "179": (180,),
+    "185": (187,),
+    "202": (204,),
+    "229": (231,),
+    "273": tuple(range(275, 287)),
+    "288": tuple(i for i in range(290, 307) if i != 298),
+    "307": tuple(range(309, 320)),
+    "320": tuple(range(322, 327)),
+    "327": tuple(range(329, 337)),
+    "338": tuple(range(340, 345)),
+    "346": (348, 350, 351),
+    "362": (363, 364),
+    "373": (375, 376, 377),
+    "383": tuple(range(385, 393)),
+    "398": tuple(i for i in range(400, 420) if i != 403),
+    "420": tuple(range(425, 430)),
+    "432": tuple(range(433, 437)),
+    "447": tuple(range(449, 460)),
+    "461": tuple(range(463, 468)),
+    "491": (496, 497, 498),
+    "505": (506, 507, 508),
+    "montagem": tuple(range(515, 524)),
+    "532": (533, 534),
+}
+_ROTULO_REFERENCIA = "Referência do modelo Anglo — confirme a aplicabilidade ao projeto."
+
+
+@lru_cache(maxsize=1)
+def _referencia_anglo():
+    conteudo = MODELO_PREENCHIDO.read_bytes()
+    doc = Document(BytesIO(conteudo))
+    return doc, hashlib.sha256(conteudo).hexdigest()
+
+
+def _tem_dados(linhas):
+    return any(
+        valor is not None and str(valor).strip() not in {"", VAZIO}
+        for linha in linhas
+        for valor in linha
+    )
 
 
 def _texto(valor: Any) -> str:
@@ -219,7 +294,6 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
         "126": [contexto.get("sistema")],
         "cargas": [contexto.get("acoes")],
         "combinacoes": [
-            "Os quadros abaixo mostram as combinações cadastradas como ELU ou ELS.",
             contexto.get("combinacoes"),
             *[
                 f"{_texto(c.get('nome'))} ({_texto(c.get('tipo'))}): {fatores_legiveis(c, casos)}. Cadastrada."
@@ -262,6 +336,7 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
     anteriores = list({str(item["revisao"]): item for item in historico}.values())[-4:]
     payload = {
         "base": modelo["snapshot_hash"],
+        "referencia_anglo": _referencia_anglo()[1],
         "anglo": anglo,
         "campos": campos,
         "textos": textos,
@@ -359,6 +434,7 @@ def _render_calculo(doc, antes, secao, nivel):
 def gerar_word_anglo(modelo) -> bytes:
     """Preenche a cópia preparada do documento, preservando a geometria da referência."""
     doc = Document(MODELO)
+    referencia, _ = _referencia_anglo()
     md, campos = modelo["metadata"], modelo["campos_anglo"]
     anglo = modelo["anglo"]
     capa = list(doc.element.body)
@@ -438,20 +514,33 @@ def gerar_word_anglo(modelo) -> bytes:
         if match := re.fullmatch(r"\{\{(cap|sub|table):(\w+)\}\}", p.text):
             tipo, chave = match.groups()
             if tipo == "table":
-                _preencher_tabela(
-                    Table(node.getnext(), doc), modelo["tabelas_anglo"].get(chave, [])
-                )
+                tabela = Table(node.getnext(), doc)
+                linhas = modelo["tabelas_anglo"].get(chave, [])
+                if chave in _QUADROS_PADRAO and not _tem_dados(linhas):
+                    padrao = referencia.element.body[_QUADROS_PADRAO[chave]]
+                    aviso = _inserir_texto(doc, node, _ROTULO_REFERENCIA)
+                    aviso.paragraph_format.keep_with_next = True
+                    tabela._tbl.addprevious(deepcopy(padrao))
+                    if chave == "normas":
+                        legenda = _inserir_texto(doc, tabela._tbl, "Referências internacionais")
+                        legenda.paragraph_format.keep_with_next = True
+                        tabela._tbl.addprevious(deepcopy(referencia.element.body[64]))
+                    tabela._tbl.getparent().remove(tabela._tbl)
+                else:
+                    _preencher_tabela(tabela, linhas)
             else:
                 textos = modelo["textos_anglo"].get(chave, [])
                 calculos = modelo["calculos_anglo"].get(chave, [])
                 if (
                     tipo == "sub"
+                    and chave not in _TEXTOS_PADRAO
+                    and chave not in _QUADROS_ADICIONAIS
                     and node.getnext().tag != qn("w:tbl")
                     and Paragraph(node.getnext(), doc).style.name != "Caption"
                     and not Paragraph(node.getnext(), doc).text.startswith("{{table:")
                     and not textos
                     and not calculos
-                ) or chave == "montagem":
+                ):
                     textos = (
                         [f"Elemento: {VAZIO}. Dados e método: {VAZIO}. Resultado: {VAZIO}."]
                         if chave in _GRUPOS
@@ -459,6 +548,20 @@ def gerar_word_anglo(modelo) -> bytes:
                     )
                 for texto in textos:
                     _inserir_texto(doc, node, texto)
+                if chave in _QUADROS_ADICIONAIS:
+                    aviso = _inserir_texto(doc, node, _ROTULO_REFERENCIA)
+                    aviso.paragraph_format.keep_with_next = True
+                    for indice in _QUADROS_ADICIONAIS[chave]:
+                        node.addprevious(deepcopy(referencia.element.body[indice]))
+                if not calculos and chave in _TEXTOS_PADRAO:
+                    if chave not in _QUADROS_ADICIONAIS:
+                        aviso = _inserir_texto(doc, node, _ROTULO_REFERENCIA)
+                        aviso.paragraph_format.keep_with_next = True
+                    for indice in _TEXTOS_PADRAO[chave]:
+                        texto = Paragraph(referencia.element.body[indice], referencia).text
+                        texto = texto.partition(" Na planilha da emenda W 200,")[0]
+                        texto = re.sub(r"\[OK(?=\]| \|)", VAZIO[:-1], texto)
+                        _inserir_texto(doc, node, texto)
                 for calculo in calculos:
                     _render_calculo(doc, node, calculo, 3 if tipo == "sub" else 2)
             node.getparent().remove(node)

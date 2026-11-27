@@ -19,6 +19,7 @@ from core import memorial_do_projeto as mdp
 from core.memorial_anglo import (
     CAPITULOS,
     FINALIDADES,
+    MODELO_PREENCHIDO,
     OPCIONAIS,
     PERFIL_ANGLO,
     gerar_word_anglo,
@@ -853,6 +854,17 @@ with st.expander("Identificação e controle do documento", expanded=True):
 config_anglo = dict(config_salva.get("anglo") or {})
 if perfil_anglo:
     with st.expander("Identificação Anglo e finalidade da emissão", expanded=True):
+        st.caption(
+            "O Word gerado usa os dados do projeto e apresenta os preenchimentos "
+            "do modelo Anglo como referências onde couber. Confirme a aplicabilidade "
+            "das referências antes da emissão."
+        )
+        st.download_button(
+            "Baixar modelo Anglo original preenchido",
+            data=MODELO_PREENCHIDO.read_bytes(),
+            file_name="MODELO - Memoria de Calculo Estruturas Metalicas - rev2.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
         for chave, rotulo in (
             ("numero_anglo", "Número do documento Anglo"),
             ("numero_contratada", "Número do documento da contratada"),

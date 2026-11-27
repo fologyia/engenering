@@ -1,13 +1,49 @@
+import hashlib
 from io import BytesIO
 
 from docx import Document
 from docx.oxml.ns import qn
 
 from core.calculo_externo import salvar_capitulo
-from core.memorial_anglo import CAPITULOS, PERFIL_ANGLO, gerar_word_anglo, montar_modelo_anglo
+from core.memorial_anglo import (
+    CAPITULOS,
+    MODELO_PREENCHIDO,
+    PERFIL_ANGLO,
+    gerar_word_anglo,
+    montar_modelo_anglo,
+)
 from core.project_store import obter_projeto_ativo, salvar_projeto
 from tests.test_central_relatorios_pagina import abrir, gerar_rapido
 from tests.test_project_validation import _projeto_documentado
+
+
+def test_anglo_disponibiliza_o_original_e_prefere_dados_do_projeto():
+    assert hashlib.sha256(MODELO_PREENCHIDO.read_bytes()).hexdigest() == (
+        "8df7efb0345f86351748602a514677c1ac4a39f33be4af87176d6da353b2c0cf"
+    )
+    projeto = {"id": "anglo", "nome": "Plataforma de acesso"}
+    word = Document(BytesIO(gerar_word_anglo(montar_modelo_anglo(projeto))))
+    texto = "\n".join(n.text or "" for n in word.element.xpath(".//w:t"))
+    assert "Referência do modelo Anglo" in texto
+    assert "Referências internacionais" in texto
+    assert "ABNT NBR 8681" in texto
+    assert "AA-BR-DPST-DR-0001" in texto
+    assert "ASTM A36" in texto
+    assert "Nt,Sd / Nt,Rd" in texto
+    assert "[OK" not in texto
+    assert "Na planilha da emenda W 200" not in texto
+    assert "Perna mínima (mm)" in texto
+
+    projeto["normas"] = [{"codigo": "NORMA-CADASTRADA", "titulo": "Base do projeto"}]
+    configuracao = {"criterio_cliente": "CRITERIO-CADASTRADO", "nao_aplicaveis": ["bases"]}
+    modelo = montar_modelo_anglo(projeto, metadata_extra={"anglo": configuracao})
+    word = Document(BytesIO(gerar_word_anglo(modelo)))
+    texto = "\n".join(n.text or "" for n in word.element.xpath(".//w:t"))
+    assert "NORMA-CADASTRADA" in texto
+    assert "CRITERIO-CADASTRADO" in texto
+    assert "ABNT NBR 8681" not in texto
+    assert "Referências internacionais" not in texto
+    assert "Furo na placa (mm)" not in texto
 
 
 def test_anglo_preserva_formato_e_usa_apenas_registros_selecionados():
