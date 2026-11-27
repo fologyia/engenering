@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.incendio_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
@@ -27,6 +28,8 @@ st.caption(
     "Calcula quanto o perfil esquenta no tempo exigido de incêndio e se ele ainda resiste à "
     "combinação de incêndio — ou quanta proteção precisa."
 )
+mostrar_croqui_de_referencia("incendio")
+
 P = inc.EntradaIncendio()
 c_ = Campos("inc_", AJUDA)
 

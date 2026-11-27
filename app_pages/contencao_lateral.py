@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from components.contencao_lateral_help import AJUDA
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
@@ -26,6 +27,8 @@ st.caption(
     "Confere se o travamento que reduz o comprimento destravado de um pilar ou de uma viga tem a "
     "força e a rigidez que a norma exige — senão o comprimento destravado adotado não vale."
 )
+mostrar_croqui_de_referencia("contencao_lateral")
+
 P = cl.EntradaContencao()
 c_ = Campos("cl_", AJUDA)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.monovia_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
@@ -26,6 +27,8 @@ st.caption(
     "Coloca a talha na posição mais desfavorável, soma o impacto e a força lateral e verifica a "
     "viga, a mesa de baixo onde as rodas correm e o apoio."
 )
+mostrar_croqui_de_referencia("monovia")
+
 P = mo.EntradaMonovia()
 c_ = Campos("mo_", AJUDA)
 

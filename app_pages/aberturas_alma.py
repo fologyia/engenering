@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from components.aberturas_alma_help import AJUDA
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
@@ -27,6 +28,8 @@ st.caption(
     "Diz se o furo na alma pode ser feito sem cálculo (NBR 8800, F.3) e, quando não pode, "
     "verifica a viga na seção do furo: momento, cortante e as proporções."
 )
+mostrar_croqui_de_referencia("aberturas_alma")
+
 P = ab.EntradaAberturas()
 c_ = Campos("ab_", AJUDA)
 

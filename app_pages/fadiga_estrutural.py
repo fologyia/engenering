@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.fadiga_estrutural_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
@@ -27,6 +28,8 @@ st.caption(
     "Para estruturas de aço sob carga repetida: compara a variação de tensão em cada detalhe "
     "(solda, furo, recorte, parafuso) com a faixa admissível da categoria dele."
 )
+mostrar_croqui_de_referencia("fadiga_estrutural")
+
 P = fe.EntradaFadiga()
 c_ = Campos("fe_", AJUDA)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
@@ -26,6 +27,8 @@ st.caption(
     "Para mezanino ou piso com laje de concreto: a laje passa a trabalhar junto com a viga e "
     "o perfil pode ser bem mais leve que sozinho."
 )
+mostrar_croqui_de_referencia("viga_mista")
+
 P = vmx.EntradaMista()
 c_ = Campos("vmx_", AJUDA)
 

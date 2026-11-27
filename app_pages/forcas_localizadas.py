@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.forcas_localizadas_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
@@ -27,6 +28,8 @@ st.caption(
     "Verifica a mesa e a alma do perfil I ou H onde uma força concentrada entra — a verificação "
     "que a flexão e o cortante da viga não pegam — e, quando preciso, os enrijecedores."
 )
+mostrar_croqui_de_referencia("forcas_localizadas")
+
 P = fl.EntradaForcas()
 S = P.enrijecedor
 c_ = Campos("fl_", AJUDA)

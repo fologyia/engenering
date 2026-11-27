@@ -6,6 +6,7 @@ from typing import Any
 
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.ligacao_rigida_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
@@ -28,6 +29,8 @@ st.caption(
     "Verifica a ligação de momento parafusada mais comum dos pórticos: a viga soldada a uma "
     "chapa que avança além da mesa tracionada, parafusada na mesa do pilar."
 )
+mostrar_croqui_de_referencia("ligacao_rigida")
+
 P = lr.EntradaRigida()
 c_ = Campos("lr_", AJUDA)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.nos_tubulares_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
@@ -25,6 +26,8 @@ st.caption(
     "Em treliça de tubo sem chapa de nó, a parede do banzo é que limita a força das diagonais: "
     "verifica a face do banzo, a punção, a parede lateral e a própria diagonal."
 )
+mostrar_croqui_de_referencia("nos_tubulares")
+
 P = nt.EntradaNo()
 c_ = Campos("nt_", AJUDA)
 

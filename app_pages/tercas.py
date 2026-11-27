@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from components.croquis_de_referencia import mostrar_croqui_de_referencia
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.tercas_help import AJUDA
@@ -25,6 +26,8 @@ st.caption(
     "Verifica a terça (ou travessa) de chapa dobrada sob peso, sobrecarga e vento — inclusive a "
     "sucção, que comprime a mesa de baixo, solta."
 )
+mostrar_croqui_de_referencia("tercas")
+
 P = tc.EntradaTerca()
 c_ = Campos("tc_", AJUDA)
 
