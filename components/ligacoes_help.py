@@ -166,7 +166,8 @@ AJUDA: dict[str, str] = {
     ),
     "arranjo": (
         "Como os filetes estão: um filete vertical, dois verticais paralelos, dois horizontais "
-        "(em cima e embaixo), três lados em C ou o contorno de um retângulo."
+        "(em cima e embaixo), três lados em C ou U, dois lados em L, T, H, cruz ou contorno. "
+        "São grupos de cordões no plano, não a verificação completa das peças da ligação."
     ),
     "comprimento_solda": (
         "A altura do grupo (na direção da força V), em mm: o comprimento dos filetes verticais, "

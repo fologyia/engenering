@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.figuras import mostrar_figura
 from core.memorial_blocos import blocos_da_secao
 
 
@@ -46,6 +47,6 @@ def mostrar_previa(secao: Mapping[str, Any]) -> None:
                 st.write(linhas)
         elif tipo == "imagem":
             if bloco.get("png"):
-                st.image(bloco["png"], caption=bloco.get("legenda"))
+                mostrar_figura(bloco["png"], bloco.get("legenda"))
             elif bloco.get("legenda"):
                 st.caption(str(bloco["legenda"]))

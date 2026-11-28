@@ -5,13 +5,17 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components import robot_esforcos_ui as robot_ui
 from components.aberturas_alma_help import AJUDA
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import aberturas_alma as ab
+from core import desenho_aberturas_alma as desenho
 from core import perfil_i as pi
+from core import robot_integracao as robot_calculo
 
 configurar_pagina("Aberturas na alma", ":material/radio_button_unchecked:")
 cabecalho_pagina(
@@ -28,7 +32,6 @@ st.caption(
     "Diz se o furo na alma pode ser feito sem cálculo (NBR 8800, F.3) e, quando não pode, "
     "verifica a viga na seção do furo: momento, cortante e as proporções."
 )
-mostrar_croqui_de_referencia("aberturas_alma")
 
 P = ab.EntradaAberturas()
 c_ = Campos("ab_", AJUDA)
@@ -81,15 +84,28 @@ with st.container(border=True), secao_protegida("2. Aberturas"):
 
 entrada = ab.EntradaAberturas(familia=familia, perfil=perfil, d=d, bf=bf, tf=tf, tw=tw, aco=aco,
                               gama_a1=g1, L=L, q=q, Lb=Lb, aberturas=aberturas)  # fmt: skip
+esforcos_robot, origem_robot, pronto = robot_ui.aberturas("ab_robot", entrada)
+if not pronto:
+    st.stop()
+if esforcos_robot:
+    entrada = ab.com(entrada, esforcos=esforcos_robot)
 erros = ab.validar(entrada)
 if erros:
     for erro in erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = ab.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Detalhes das aberturas",
+        help="Vistas locais proporcionais às dimensões e à excentricidade informadas; não representam o vão inteiro.",
+    )
+    st.caption("Trechos locais proporcionais; a posição x é medida desde o apoio esquerdo.")
+    for abertura in entrada.aberturas:
+        mostrar_figura(svg_da_cena(desenho.detalhe(entrada, abertura)))
 mostrar_resultado(r.grupos, avisos=r.avisos)
 memorial_e_registro(
-    ab.registro(r),
+    robot_calculo.registrar(ab.registro(r), origem_robot),
     prefixo="ab_",
     arquivo="memorial_aberturas_na_alma",
     rotulo_registrar="Registrar as aberturas no projeto ativo",

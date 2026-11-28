@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.tercas_help import AJUDA
 from components.ui import cabecalho_pagina, configurar_pagina
+from core import desenho_tercas as desenho
 from core import tercas as tc
 
 configurar_pagina("Terças e travessas", ":material/roofing:")
@@ -26,7 +28,6 @@ st.caption(
     "Verifica a terça (ou travessa) de chapa dobrada sob peso, sobrecarga e vento — inclusive a "
     "sucção, que comprime a mesa de baixo, solta."
 )
-mostrar_croqui_de_referencia("tercas")
 
 P = tc.EntradaTerca()
 c_ = Campos("tc_", AJUDA)
@@ -91,6 +92,12 @@ if erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = tc.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Seção adotada",
+        help="Desenho proporcional do perfil informado, idealizado com cantos retos como no cálculo das propriedades.",
+    )
+    mostrar_figura(svg_da_cena(desenho.secao(entrada)))
 mostrar_resultado(r.grupos, avisos=r.avisos)
 memorial_e_registro(
     tc.registro(r),

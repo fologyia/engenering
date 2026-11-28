@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components import robot_esforcos_ui as robot_ui
 from components.figuras import mostrar_figura
 from components.ligacoes_help import AJUDA
 from components.project_tools import botao_registrar_calculo
@@ -421,6 +422,7 @@ if tipo == lg.CHAPA_SIMPLES:
             help=AJUDA["eletrodo"],
         )
         st.subheader("4. Esforços de cálculo", help=AJUDA["sec_esforcos"])
+        robot_ui.ligacao("lig_robot_chapa", {"lig_v": "v", "lig_n_sd": "n"})
         registradas = lg.reacoes_do_projeto(obter_projeto_ativo())
         if registradas:
             rotulos = [r.rotulo for r in registradas]
@@ -608,6 +610,7 @@ elif tipo == lg.CANTONEIRA_DUPLA:
         )  # fmt: skip
     with st.container(border=True), secao_protegida("3. Esforço de cálculo"):
         st.subheader("3. Esforço de cálculo", help=AJUDA["sec_esforcos"])
+        robot_ui.ligacao("lig_robot_cant", {"lig_c_v": "v"})
         registradas = lg.reacoes_do_projeto(obter_projeto_ativo())
         if registradas:
             rotulos = [r.rotulo for r in registradas]
@@ -792,6 +795,7 @@ elif tipo == lg.PERFIL_FRIO:
         )  # fmt: skip
     with st.container(border=True), secao_protegida("3. Esforços de cálculo"):
         st.subheader("3. Esforços de cálculo", help=AJUDA["sec_esforcos"])
+        robot_ui.ligacao("lig_robot_frio", {"lig_f_n": "n", "lig_f_v": "v"})
         c = st.columns(4)
         n_sd = c[0].number_input(
             "N_Sd (kN)", -5000.0, 5000.0, PADRAO_FRIO.n_sd_kN, 1.0, key="lig_f_n",
@@ -1456,10 +1460,26 @@ st.download_button(
 with st.container(border=True), secao_protegida("Memorial desta ligação"):
     st.subheader("Memorial desta ligação", help=AJUDA["sec_memorial"])
     projeto_ativo = obter_projeto_ativo()
+    registro_ligacao = lg.registro_ligacao(resultado, giro_graus=giro)
+    if tipo == lg.CHAPA_SIMPLES:
+        registro_ligacao = robot_ui.registro(
+            "lig_robot_chapa", registro_ligacao, {"lig_v": v_sd, "lig_n_sd": n_sd}
+        )
+    elif tipo == lg.CANTONEIRA_DUPLA:
+        registro_ligacao = robot_ui.registro("lig_robot_cant", registro_ligacao, {"lig_c_v": v_sd})
+    elif tipo == lg.PERFIL_FRIO:
+        registro_ligacao = robot_ui.registro(
+            "lig_robot_frio", registro_ligacao, {"lig_f_n": n_sd, "lig_f_v": v_sd}
+        )
     botoes = st.columns(2)
     botoes[0].download_button(
         "Baixar o memorial (Word)",
-        data=lambda: lg.memorial_da_ligacao(resultado, projeto=projeto_ativo, giro_graus=giro),
+        data=lambda: lg.memorial_da_ligacao(
+            resultado,
+            projeto=projeto_ativo,
+            giro_graus=giro,
+            registro_preparado=registro_ligacao,
+        ),
         file_name=f"memorial_ligacao_{resultado.tipo}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         icon=":material/description:",
@@ -1471,7 +1491,11 @@ with st.container(border=True), secao_protegida("Memorial desta ligação"):
     botoes[1].download_button(
         "Baixar o memorial (PDF)",
         data=lambda: lg.memorial_da_ligacao(
-            resultado, projeto=projeto_ativo, formato="pdf", giro_graus=giro
+            resultado,
+            projeto=projeto_ativo,
+            formato="pdf",
+            giro_graus=giro,
+            registro_preparado=registro_ligacao,
         ),
         file_name=f"memorial_ligacao_{resultado.tipo}.pdf",
         mime="application/pdf",
@@ -1484,7 +1508,7 @@ with st.container(border=True), secao_protegida("Memorial desta ligação"):
 with st.container(border=True), secao_protegida("Registrar no projeto"):
     st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
     botao_registrar_calculo(
-        lg.registro_ligacao(resultado, giro_graus=giro),
+        registro_ligacao,
         key="registrar_ligacao",
         rotulo="Registrar a ligação no projeto ativo",
     )

@@ -9,8 +9,7 @@ junta esses registros. Este módulo arruma o que entra:
   "Superado" (ficam no histórico, saem do memorial);
 * **na ordem do projeto** — cargas, vento, barras, pilares, vigas, escadas, ligações, placas de
   base, fundações e o modelo em 3D, como o fluxo do projeto (:mod:`core.roteiro`);
-* **o que falta** — num projeto com o modelo do SolidWorks, as etapas do modelo que ainda não
-  têm registro aparecem com a página onde registrar.
+* **o que falta** — as etapas disponíveis para o modelo ativo aparecem com a página onde registrar.
 
 Sem Streamlit.
 """
@@ -23,6 +22,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from core import robot
 from core.project_records import superar_registro
 from core.technical_records import registro_superado
 
@@ -35,6 +35,8 @@ class Etapa:
     registros: tuple[tuple[str, str], ...]
     #: Aparece mesmo sem registro quando o projeto tem os resultados do SolidWorks.
     do_modelo: bool = False
+    #: Página para registrar esta etapa quando o projeto usa o Robot.
+    pagina_robot: str = ""
 
 
 ETAPAS: tuple[Etapa, ...] = (
@@ -54,6 +56,7 @@ ETAPAS: tuple[Etapa, ...] = (
         "app_pages/esforcos_modelo.py",
         (("esforcos_modelo", "Verificação das barras"),),
         do_modelo=True,
+        pagina_robot="app_pages/esforcos_modelo.py",
     ),
     Etapa("Sensores do modelo", "app_pages/sensores_do_modelo.py", (("sensores_do_modelo", ""),)),
     Etapa(
@@ -98,12 +101,14 @@ ETAPAS: tuple[Etapa, ...] = (
         "app_pages/esforcos_modelo.py",
         (("esforcos_modelo", "Placas de base"), ("placa_de_base", "")),
         do_modelo=True,
+        pagina_robot="app_pages/placa_de_base.py",
     ),
     Etapa(
         "Fundações",
         "app_pages/reacoes_nas_bases.py",
         (("esforcos_modelo", "Quadro de cargas"), ("reacoes_nas_bases", "")),
         do_modelo=True,
+        pagina_robot="app_pages/reacoes_nas_bases.py",
     ),
     Etapa(
         "Fadiga e incêndio",
@@ -250,13 +255,13 @@ def _data(iso: str) -> str:
 
 
 def quadro(projeto: Mapping[str, Any], *, fora: Sequence[str] = ()) -> list[LinhaDaEtapa]:
-    """Uma linha por etapa: as que têm registro e, num projeto com o modelo do SolidWorks, as
-    etapas do modelo ainda sem registro (com a página onde registrar)."""
+    """Uma linha por etapa com registro ou disponível para o modelo ativo."""
     registros = [r for r in projeto.get("registros_tecnicos", []) or [] if isinstance(r, Mapping)]
     excluidos = {m.casefold() for m in fora}
     registros = [r for r in registros if _texto(r.get("modulo_id")).casefold() not in excluidos]
     sobram = repetidos(registros)
-    com_modelo = bool(projeto.get("esforcos_do_modelo"))
+    com_robot = robot.ativo(projeto)
+    com_solidworks = not com_robot and bool(projeto.get("esforcos_do_modelo"))
     por_etapa: dict[int, list[Mapping[str, Any]]] = {}
     tirar: dict[int, int] = {}
     for _, r in _vigentes(registros):
@@ -269,12 +274,14 @@ def quadro(projeto: Mapping[str, Any], *, fora: Sequence[str] = ()) -> list[Linh
     for indice in range(len(ETAPAS) + 1):
         itens = por_etapa.get(indice, [])
         etapa = ETAPAS[indice] if indice < len(ETAPAS) else None
-        if not itens and not tirar.get(indice) and not (etapa and etapa.do_modelo and com_modelo):
+        pagina_robot = etapa.pagina_robot if etapa and com_robot else ""
+        pendente = pagina_robot or (etapa and etapa.do_modelo and com_solidworks)
+        if not itens and not tirar.get(indice) and not pendente:
             continue
         linhas.append(
             LinhaDaEtapa(
                 etapa.nome if etapa else OUTROS,
-                etapa.pagina if etapa else "",
+                pagina_robot or (etapa.pagina if etapa else ""),
                 len(itens),
                 tirar.get(indice, 0),
                 tuple(_texto(r.get("titulo")) for r in itens),

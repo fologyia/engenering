@@ -7,6 +7,7 @@ import math
 import pandas as pd
 import streamlit as st
 
+from components import robot_esforcos_ui as robot_ui
 from components.edicao_de_tabela import com_edicoes
 from components.figuras import mostrar_figura
 from components.placa_de_base_help import AJUDA
@@ -193,6 +194,8 @@ def _pilares_do_modelo() -> list:
     except (ArithmeticError, ValueError, KeyError, TypeError):
         return []
 
+
+robot_ui.placa("pb_robot", _trazer_do_modelo)
 
 with st.container(border=True), secao_protegida("1. Pilar e chumbadores"):
     st.subheader("1. Pilar e chumbadores", help=AJUDA["sec_pilar"])
@@ -1343,11 +1346,19 @@ with st.container(border=True), secao_protegida("Memorial desta base"):
             "compressão e tração, maiores momentos e cortante, maior aproveitamento e a que "
             "governa cada verificação). Marcado, a lista inteira vai no Anexo A.",
         )
+    registro_base = robot_ui.registro(
+        "pb_robot",
+        bp.registro_base(resultado, combinacoes_completas=completas),
+        st.session_state[CASOS_TELA] if varias else None,
+    )
     botoes = st.columns(2)
     botoes[0].download_button(
         "Baixar o memorial (Word)",
         data=lambda: bp.memorial_da_base(
-            resultado, projeto=projeto_ativo, combinacoes_completas=completas
+            resultado,
+            projeto=projeto_ativo,
+            combinacoes_completas=completas,
+            registro_preparado=registro_base,
         ),
         file_name="memorial_placa_de_base.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -1360,7 +1371,11 @@ with st.container(border=True), secao_protegida("Memorial desta base"):
     botoes[1].download_button(
         "Baixar o memorial (PDF)",
         data=lambda: bp.memorial_da_base(
-            resultado, projeto=projeto_ativo, formato="pdf", combinacoes_completas=completas
+            resultado,
+            projeto=projeto_ativo,
+            formato="pdf",
+            combinacoes_completas=completas,
+            registro_preparado=registro_base,
         ),
         file_name="memorial_placa_de_base.pdf",
         mime="application/pdf",
@@ -1373,7 +1388,7 @@ with st.container(border=True), secao_protegida("Memorial desta base"):
 with st.container(border=True), secao_protegida("Registrar no projeto"):
     st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
     botao_registrar_calculo(
-        bp.registro_base(resultado, combinacoes_completas=completas),
+        registro_base,
         key="registrar_placa_de_base",
         rotulo="Registrar a base no projeto ativo",
     )

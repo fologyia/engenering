@@ -15,6 +15,7 @@ import streamlit as st
 from components.project_tools import registrar_gravacao_vista, tratar_conflito_de_gravacao
 from core import base_tecnica as bt
 from core import plano_de_cargas as pc
+from core import robot
 from core.project_store import CAMPO_GRAVACAO, obter_projeto_ativo, salvar_projeto
 
 
@@ -63,7 +64,11 @@ def gravar_campo_do_projeto(campo: str, valor: Any, motivo: str) -> bool:
 
 
 def gravar_campos_do_projeto(
-    campos: Mapping[str, Any], motivo: str, *, gravacao_esperada: int | None = None
+    campos: Mapping[str, Any],
+    motivo: str,
+    *,
+    gravacao_esperada: int | None = None,
+    criar_revisao: bool = False,
 ) -> bool:
     """Grava vários campos do projeto ativo numa gravação só (uma revisão, nada pela metade)."""
     projeto = obter_projeto_ativo()
@@ -77,7 +82,7 @@ def gravar_campos_do_projeto(
     if gravacao_esperada is not None:
         projeto[CAMPO_GRAVACAO] = gravacao_esperada
     with tratar_conflito_de_gravacao():
-        salvo = salvar_projeto(projeto, motivo=motivo)
+        salvo = salvar_projeto(projeto, motivo=motivo, criar_revisao=criar_revisao)
     registrar_gravacao_vista(salvo)
     return True
 
@@ -137,7 +142,12 @@ def situacao_das_etapas(projeto: Any) -> list[tuple[bool, str]]:
     geradas = [a for a in plano.acoes if a.origem != "Informada"]
     registros = [r for r in projeto.get("registros_tecnicos", []) if isinstance(r, dict)]
     verificacoes = [r for r in registros if (r.get("resultados") or {}).get("verificações")]
-    casos_do_modelo = len((projeto.get("esforcos_do_modelo") or {}).get("casos") or {})
+    if robot.ativo(projeto):
+        casos_do_modelo = len(robot.modelo_do_projeto(projeto).get("casos") or {})
+        fonte = "do Robot"
+    else:
+        casos_do_modelo = len((projeto.get("esforcos_do_modelo") or {}).get("casos") or {})
+        fonte = "do modelo"
     return [
         (base is not None, base.rotulo_cliente if base else "não preenchida"),
         (bool(geradas), f"{len(geradas)} gerada(s)" if geradas else "nenhuma gerada"),
@@ -145,7 +155,7 @@ def situacao_das_etapas(projeto: Any) -> list[tuple[bool, str]]:
         (
             bool(verificacoes) or bool(casos_do_modelo),
             f"{len(verificacoes)} verificado(s)"
-            + (f", {casos_do_modelo} caso(s) do modelo" if casos_do_modelo else ""),
+            + (f", {casos_do_modelo} caso(s) {fonte}" if casos_do_modelo else ""),
         ),
         (bool(registros), f"{len(registros)} registro(s)"),
     ]
@@ -172,11 +182,18 @@ def mapa_do_projeto(ajuda: str) -> None:
                     color="green" if feita else "gray",
                 )
                 st.page_link(pagina, label="Abrir", icon=icone)
-        st.page_link(
-            "app_pages/roteiro_projeto.py",
-            label="Roteiro passo a passo (com o SolidWorks e os arquivos de cada passo)",
-            icon=":material/format_list_numbered:",
-        )
+        if projeto and robot.ativo(projeto):
+            st.page_link(
+                "app_pages/gestao_projetos.py",
+                label="Acompanhar cálculos e entrega no Projeto ativo",
+                icon=":material/format_list_numbered:",
+            )
+        else:
+            st.page_link(
+                "app_pages/roteiro_projeto.py",
+                label="Roteiro passo a passo (com o SolidWorks e os arquivos de cada passo)",
+                icon=":material/format_list_numbered:",
+            )
 
 
 def gravar_acoes_no_plano(acoes: Sequence[pc.Acao], *, origem: str) -> bool:

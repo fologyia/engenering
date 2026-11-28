@@ -875,6 +875,9 @@ def montar_modelo_relatorio(
                 "fonte": 7.3,
             }
         )
+    from core.robot_integracao import tabelas_de_proveniencia
+
+    tabelas_base.extend(tabelas_de_proveniencia(registros))
     adicionar("base", {"tabelas": tabelas_base})
     contexto = metadata["contexto_estrutural"]
     referencias_por_calculo: list[list[str]] = []

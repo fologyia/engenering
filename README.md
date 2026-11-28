@@ -492,6 +492,32 @@ estudo rodado antes da troca achar cada corpo no esqueleto novo.
 
 ### Esforços do modelo
 
+Para usar o **Autodesk Robot**, abra **Projeto ativo → Cálculos → Importar do Robot** ou
+selecione **Robot** em **Esforços do modelo**. Envie o TXT
+exportado pelo Robot, uma planilha XLSX, CSV ou cole as tabelas. Use as tabelas **Nós** e
+**Barras**, a aba **Info** da tabela de cargas para os casos e a tabela **Combinações**. Na
+aba **Valores** das tabelas de forças e de reações, exporte as seis componentes. Inclua as
+extremidades e os pontos críticos nas barras e exporte as reações nos eixos globais, com Z
+para cima. Confira as colunas, as unidades e a prévia e salve a remessa com a revisão do modelo.
+
+Em **Casos e combinações**, escolha os esforços das combinações já calculadas no Robot ou
+vincule os casos simples lineares ao **Plano de cargas** para combinar no Toolkit. Confirme
+os perfis, os eixos fortes, os materiais e os comprimentos de flambagem antes de verificar as
+barras. A página **Reações nas bases** gera o Excel por nó e caso simples. Cadastre o relatório
+do Robot em **Documentos de entrada** e vincule a referência da revisão em **Esforços do modelo**.
+
+Também é possível enviar a nota de cálculo **HTML ou RTF** do Autodesk Robot. Inclua as tabelas
+na composição do relatório ou complete a remessa com os TXT da mesma revisão. Confira na prévia
+qual arquivo forneceu cada tabela. O projeto reaproveita o mapeamento compatível na próxima revisão.
+Em **Casos e combinações**, vincule os casos simples e confirme os fatores para usar **Comparar
+Robot e Toolkit**. Por exemplo, `1:1,25; 2:1,5` indica os fatores dos casos 1 e 2.
+
+Use **Trazer do Robot** para preencher as solicitações em **Placas de base**, **Emendas de
+pilares**, **Ligações estruturais** e **Aberturas na alma**. A Central de relatórios identifica
+os dados importados que foram usados e indica os registros afetados quando a remessa muda.
+
+#### SolidWorks
+
 Importa os resultados do **SolidWorks Simulation** (`core/esforcos_modelo.py`; detalhes em
 `docs/esforcos_do_modelo.md`): "Listar forças da viga" e "Listar forças resultantes" de cada estudo
 (um por caso de carga, com o código no nome). O programa lê o formato em português (cp1252, ponto de

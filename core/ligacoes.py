@@ -1192,12 +1192,22 @@ ARRANJO_PARALELOS = "dois_paralelos"
 ARRANJO_HORIZONTAIS = "dois_horizontais"
 ARRANJO_TRES_LADOS = "tres_lados"
 ARRANJO_CONTORNO = "contorno"
+ARRANJO_L = "canto_l"
+ARRANJO_T = "t_central"
+ARRANJO_H = "h_central"
+ARRANJO_CRUZ = "cruz_central"
+ARRANJO_U = "u_inferior"
 ARRANJOS = {
     ARRANJO_UM: "Um filete (vertical)",
     ARRANJO_PARALELOS: "Dois filetes paralelos (verticais)",
     ARRANJO_HORIZONTAIS: "Dois filetes horizontais (em cima e embaixo)",
     ARRANJO_TRES_LADOS: "Três lados (vertical + dois horizontais, em C)",
     ARRANJO_CONTORNO: "Contorno retangular",
+    ARRANJO_L: "Dois lados em L",
+    ARRANJO_T: "T central",
+    ARRANJO_H: "H com travessa central",
+    ARRANJO_CRUZ: "Cruz central",
+    ARRANJO_U: "Três lados em U",
 }
 #: Filetes numa linha ou paralelos: valem para o aumento pela direção da força (6.2.5.2 a).
 ARRANJOS_EM_LINHA = (ARRANJO_UM, ARRANJO_PARALELOS, ARRANJO_HORIZONTAIS)
@@ -1237,6 +1247,16 @@ def _segmentos(e: EntradaSolda) -> list[tuple[float, float, float, float]]:
         return [(0.0, 0.0, b, 0.0), (0.0, h, b, h)]
     if e.arranjo == ARRANJO_TRES_LADOS:
         return [(0.0, 0.0, 0.0, h), (0.0, 0.0, b, 0.0), (0.0, h, b, h)]
+    if e.arranjo == ARRANJO_L:
+        return [(0.0, 0.0, 0.0, h), (0.0, 0.0, b, 0.0)]
+    if e.arranjo == ARRANJO_T:
+        return [(b / 2, 0.0, b / 2, h), (0.0, h, b, h)]
+    if e.arranjo == ARRANJO_H:
+        return [(0.0, 0.0, 0.0, h), (b, 0.0, b, h), (0.0, h / 2, b, h / 2)]
+    if e.arranjo == ARRANJO_CRUZ:
+        return [(b / 2, 0.0, b / 2, h), (0.0, h / 2, b, h / 2)]
+    if e.arranjo == ARRANJO_U:
+        return [(0.0, 0.0, 0.0, h), (b, 0.0, b, h), (0.0, 0.0, b, 0.0)]
     return [(0.0, 0.0, 0.0, h), (b, 0.0, b, h), (0.0, 0.0, b, 0.0), (0.0, h, b, h)]
 
 
@@ -2222,6 +2242,7 @@ def memorial_da_ligacao(
     projeto: Mapping[str, Any] | None = None,
     formato: str = "word",
     giro_graus: float = 0.0,
+    registro_preparado: Mapping[str, Any] | None = None,
 ) -> bytes:
     """O memorial só desta ligação. Em Word, o trecho para colar no documento oficial
     (:mod:`core.memorial_trecho`); em PDF, o documento no padrão do memorial do projeto.
@@ -2237,14 +2258,18 @@ def memorial_da_ligacao(
         from core.memorial_trecho import trecho_de_registro
 
         return trecho_de_registro(
-            normalizar_registro_tecnico(registro_ligacao(r, giro_graus=giro_graus)),
+            normalizar_registro_tecnico(
+                registro_preparado or registro_ligacao(r, giro_graus=giro_graus)
+            ),
             projeto=projeto,
         )
 
     # O gerador do memorial ainda está fora da lista do mypy (adoção gradual): importado pelo nome
     # para não arrastar os módulos dele para a verificação deste.
     relatorio = importlib.import_module("core.project_report")
-    registro = normalizar_registro_tecnico(registro_ligacao(r, giro_graus=giro_graus))
+    registro = normalizar_registro_tecnico(
+        registro_preparado or registro_ligacao(r, giro_graus=giro_graus)
+    )
     base: dict[str, Any] = dict(projeto) if projeto else {"nome": MODULO_TITULO}
     base["registros_tecnicos"] = [registro]
     nome = (

@@ -117,3 +117,19 @@ def test_pagina(banco_isolado):
     assert not ap.sem_ajuda(t), ap.sem_ajuda(t)
     t = ap.abrir(PAGINA)
     assert ap.metricas(t)["Situação"] == "ATENDE"
+
+
+def test_secao_local_mostra_alturas_sem_inventar_nervuras():
+    from dataclasses import replace
+
+    from core import cena_3d as c3
+    from core import desenho_viga_mista as desenho
+
+    e = replace(P, tc=110.0, hF=50.0)
+    figura = desenho.secao_local(e)
+    textos = " ".join(i.texto for i in figura.itens if isinstance(i, c3.Etiqueta2D))
+    assert "t_c = 110 mm" in textos and "h_F = 50 mm" in textos
+    assert "formato das nervuras não informado" in textos
+    assert all(
+        40 <= y <= 330 for p in figura.itens if isinstance(p, c3.Poligono2D) for _, y in p.pontos
+    )

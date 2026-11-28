@@ -109,24 +109,32 @@ class _Tripla:
     v_fraco: float = 0.0  # cortante nas mesas (acompanha o momento do eixo fraco)
 
 
-def _triplas(combinados: Sequence[em.Combinado], eixo_forte: str, b2: float) -> list[_Tripla]:
+def _triplas(
+    combinados: Sequence[em.Combinado],
+    eixo_forte: str,
+    fator_b2: float,
+    segunda_ordem: frozenset[str] = frozenset(),
+) -> list[_Tripla]:
     forte, fraco = (4, 3) if eixo_forte == em.EIXO_M2 else (3, 4)
     # Flexão em torno de 2 vem com o cortante na direção 1 (V₁ ↔ M₂; V₂ ↔ M₁).
     v_forte, v_fraco = (1, 2) if eixo_forte == em.EIXO_M2 else (2, 1)
-    return [
-        _Tripla(
-            nome,
-            ponto,
-            b2 * v[0],
-            b2 * v[forte],
-            b2 * v[fraco],
-            b2 * math.hypot(v[1], v[2]),
-            b2 * v[5],  # o torque também passa pelo B₂, como os outros esforços
-            b2 * abs(v[v_forte]),
-            b2 * abs(v[v_fraco]),
+    triplas = []
+    for nome, ponto, v in combinados:
+        b2 = 1.0 if nome in segunda_ordem else fator_b2
+        triplas.append(
+            _Tripla(
+                nome,
+                ponto,
+                b2 * v[0],
+                b2 * v[forte],
+                b2 * v[fraco],
+                b2 * math.hypot(v[1], v[2]),
+                b2 * v[5],  # o torque também passa pelo B₂, como os outros esforços
+                b2 * abs(v[v_forte]),
+                b2 * abs(v[v_fraco]),
+            )
         )
-        for nome, ponto, v in combinados
-    ]
+    return triplas
 
 
 def _cortantes_rd(perfil: Any, fy: float) -> tuple[tuple[float, str], tuple[float, str]]:
@@ -575,19 +583,33 @@ def estados_ultimos(estados: Sequence[str]) -> list[str]:
 
 
 def verificar_barras(
-    dados: em.EsforcosDoModelo, plano: pc.PlanoDeCargas, estados: Sequence[str] = (comb.ELU_NORMAL,)
+    dados: em.EsforcosDoModelo,
+    plano: pc.PlanoDeCargas,
+    estados: Sequence[str] = (comb.ELU_NORMAL,),
+    *,
+    preparo: em.PreparoDasCombinacoes | None = None,
 ) -> tuple[list[ResultadoDaBarra], list[str]]:
     """Verifica todas as barras com as combinações ELU escolhidas (as de serviço ficam de fora)."""
-    preparo = em.preparar_combinacoes(dados, plano, estados_ultimos(estados))
+    preparo = (
+        preparo
+        if preparo is not None
+        else em.preparar_combinacoes(dados, plano, estados_ultimos(estados))
+    )
     if preparo is None:
         return [], ["Nenhum caso do plano de cargas foi importado."]
     resultados: list[ResultadoDaBarra] = []
     avisos: list[str] = []
-    for membro in dados.nomes_dos_membros:
+    nomes_dos_membros = (
+        dados.nomes_dos_membros if preparo.resultados is None else preparo.resultados
+    )
+    for membro in nomes_dos_membros:
         cfg = dados.membros.get(membro, em.ConfiguracaoDoMembro())
         tipo = dados.parametros_do_tipo(cfg.tipo)
         if not cfg.perfil:
             resultados.append(_pendente(membro, cfg, "escolha o perfil na tabela das barras"))
+            continue
+        if cfg.eixo_forte not in (em.EIXO_M1, em.EIXO_M2):
+            resultados.append(_pendente(membro, cfg, "confirme o eixo forte na tabela das barras"))
             continue
         lx = cfg.lx_m or tipo.lx_m
         ly = cfg.ly_m or tipo.ly_m
@@ -610,7 +632,12 @@ def verificar_barras(
         combinados, metodo, aviso = em.combinados_do_membro(membro, preparo)
         if aviso:
             avisos.append(aviso)
-        triplas = _triplas(combinados, cfg.eixo_forte, tipo.b2)
+        if not combinados:
+            resultados.append(
+                _pendente(membro, cfg, "faltam esforços para as combinações selecionadas")
+            )
+            continue
+        triplas = _triplas(combinados, cfg.eixo_forte, tipo.b2, preparo.segunda_ordem)
         try:
             if cfg.perfil in ct.CATALOGO_CANTONEIRAS:
                 resultado = _verificar_cantoneira(membro, cfg, triplas, fy, max(lx, ly) * 1e3)
@@ -738,6 +765,7 @@ def registro_das_barras(
     *,
     contexto: Mapping[str, Any] | None = None,
     responsavel: str = "",
+    preparo: em.PreparoDasCombinacoes | None = None,
 ) -> dict[str, Any]:
     linhas = [_linha_do_registro(r) for r in resultados]
     sintese = resumo(resultados)
@@ -753,7 +781,7 @@ def registro_das_barras(
             else ""
         )
     )
-    tabela = {
+    tabela: dict[str, Any] = {
         "legenda": "Verificação das barras do modelo — combinação e ponto que governam cada uma.",
         "cabecalhos": [
             "Barra",
@@ -781,6 +809,12 @@ def registro_das_barras(
         "larguras": [2200, 1500, 900, 1000, 900, 900, 900, 1060],
         "fonte": 7.0,
     }
+    do_robot = preparo is not None and preparo.resultados is not None
+    if do_robot:
+        tabela["cabecalhos"].insert(4, "Posição")
+        for linha, resultado in zip(tabela["linhas"], resultados, strict=True):
+            linha.insert(4, resultado.ponto or "—")
+        tabela["larguras"] = [1600, 1400, 900, 1450, 1000, 700, 700, 750, 860]
     entradas: dict[str, Any] = {
         "casos_do_modelo": ", ".join(dados.casos),
         "estados_limites": ", ".join(estados_ultimos(estados)),
@@ -811,15 +845,22 @@ def registro_das_barras(
             "tabelas_memorial": [tabela],
         },
         metodo=(
-            "Esforços de cálculo de cada barra em todas as combinações ELU do plano de cargas, ponto "
+            f"Esforços de cálculo por barra, combinação ELU e posição. {preparo.metodo}. "
+            if preparo is not None and do_robot
+            else "Esforços de cálculo de cada barra em todas as combinações ELU do plano de cargas, ponto "
             "a ponto, a partir dos estudos do SolidWorks Simulation (um por caso de carga). "
+        )
+        + (
             "Verificação pela NBR 8800 (compressão com todos os modos de flambagem e flambagem "
             "local, flexão com FLT, FLM e FLA, B₁ e interação N + Mx + My numa única equação); "
             "cantoneiras simples pela 5.3.5.4."
         ),
         premissas=[
-            "Esforços de primeira ordem do SolidWorks multiplicados pelo B₂ do tipo de barra, em "
-            "todos os esforços (a favor da segurança).",
+            "B₂ do tipo aplicado aos esforços de primeira ordem. B₂ igual a 1 para combinações "
+            "já calculadas em segunda ordem no Robot."
+            if do_robot
+            else "Esforços de primeira ordem do SolidWorks multiplicados pelo B₂ do tipo de barra, "
+            "em todos os esforços (a favor da segurança).",
             "B₁ com C_m = 1 (a favor da segurança); comprimentos de flambagem K·L informados.",
             "Ruptura da seção líquida e ligações verificadas à parte; torção não verificada.",
         ],

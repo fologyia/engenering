@@ -5,11 +5,13 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.forcas_localizadas_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
+from core import desenho_forcas_localizadas as desenho
 from core import forcas_localizadas as fl
 from core import perfil_i as pi
 
@@ -28,7 +30,6 @@ st.caption(
     "Verifica a mesa e a alma do perfil I ou H onde uma força concentrada entra — a verificação "
     "que a flexão e o cortante da viga não pegam — e, quando preciso, os enrijecedores."
 )
-mostrar_croqui_de_referencia("forcas_localizadas")
 
 P = fl.EntradaForcas()
 S = P.enrijecedor
@@ -129,6 +130,13 @@ if erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = fl.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Detalhes das forças",
+        help="Vista local de cada força e do enrijecedor, quando sua geometria está definida.",
+    )
+    for forca in entrada.forcas:
+        mostrar_figura(svg_da_cena(desenho.detalhe(entrada, forca)))
 mostrar_resultado(r.grupos, avisos=r.avisos)
 memorial_e_registro(
     fl.registro(r),

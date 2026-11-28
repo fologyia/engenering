@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from components import emendas_do_modelo_ui as emu
+from components import robot_esforcos_ui as robot_ui
 from components.cena_3d_svg import svg_da_cena
 from components.emenda_pilar_help import AJUDA
 from components.figuras import mostrar_figura
@@ -17,6 +18,7 @@ from components.ui import cabecalho_pagina, configurar_pagina
 from components.verification_table import COR_STATUS, mostrar_tabela_verificacoes
 from core import desenho_emenda_pilar as de
 from core import emenda_pilar as ep
+from core import robot
 from core.project_store import obter_projeto_ativo
 
 configurar_pagina("Emenda de pilar", ":material/vertical_split:")
@@ -91,7 +93,13 @@ def _escolha(
 projeto_ativo = obter_projeto_ativo()
 modelo = emu.ModeloDoProjeto(projeto_ativo)
 with st.container(border=True), secao_protegida("Trazer do modelo"):
-    emu.secao_trazer_do_modelo(modelo, P)
+    if projeto_ativo and robot.ativo(projeto_ativo):
+        robot_ui.emenda(
+            "emp_robot",
+            lambda linhas, notas: emu.deixar_para_a_proxima({emu.CASOS_BASE: linhas}, notas),
+        )
+    else:
+        emu.secao_trazer_do_modelo(modelo, P)
     emu.mostrar_notas_da_origem()
 
 with st.container(border=True), secao_protegida("1. Perfis e materiais"):
@@ -342,6 +350,10 @@ with st.container(border=True), secao_protegida("Disposições construtivas"):
 
 with st.container(border=True), secao_protegida("Desenho esquemático"):
     st.subheader("Desenho esquemático", help=AJUDA["sec_desenho"])
+    st.caption(
+        "Seção transversal esquemática no pilar superior, fora das fileiras de parafusos; sem raios e calços."
+    )
+    mostrar_figura(svg_da_cena(de.secao_da_emenda(r)))
     lado = st.columns(2)
     with lado[0]:
         mostrar_figura(svg_da_cena(de.vista_da_mesa(r)))
@@ -364,10 +376,19 @@ with st.container(border=True), secao_protegida("Exportar"):
 with st.container(border=True), secao_protegida("Memorial desta emenda"):
     st.subheader("Memorial desta emenda", help=AJUDA["sec_memorial"])
     figuras = de.figuras_para_o_registro(r)
+    registro_emenda = robot_ui.registro(
+        "emp_robot",
+        ep.registro(r, figuras=figuras),
+        [
+            {"Caso": c.nome, "N (kN)": c.N, "M_x (kN·m)": c.Mx, "V (kN)": c.V, "M_y (kN·m)": c.My}
+            for c in casos
+        ],
+    )
     botoes = st.columns(2)
     botoes[0].download_button(
         "Baixar o memorial (Word)",
-        data=lambda: ep.memorial_da_emenda(r, projeto=projeto_ativo, figuras=figuras),
+        data=lambda: ep.memorial_da_emenda(r, projeto=projeto_ativo, figuras=figuras,
+                                          registro_preparado=registro_emenda),
         file_name="memorial_emenda_de_pilar.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         icon=":material/description:", width="stretch", on_click="ignore",
@@ -375,7 +396,8 @@ with st.container(border=True), secao_protegida("Memorial desta emenda"):
     )  # fmt: skip
     botoes[1].download_button(
         "Baixar o memorial (PDF)",
-        data=lambda: ep.memorial_da_emenda(r, projeto=projeto_ativo, figuras=figuras, formato="pdf"),
+        data=lambda: ep.memorial_da_emenda(r, projeto=projeto_ativo, figuras=figuras, formato="pdf",
+                                          registro_preparado=registro_emenda),
         file_name="memorial_emenda_de_pilar.pdf", mime="application/pdf",
         icon=":material/picture_as_pdf:", width="stretch", on_click="ignore",
         key="emp_memorial_pdf", help=AJUDA["btn_memorial_pdf"],
@@ -384,7 +406,7 @@ with st.container(border=True), secao_protegida("Memorial desta emenda"):
 with st.container(border=True), secao_protegida("Registrar no projeto"):
     st.subheader("Registrar no projeto", help=AJUDA["reg_registrar"])
     botao_registrar_calculo(
-        ep.registro(r, figuras=figuras),
+        registro_emenda,
         key="registrar_emenda_pilar",
         rotulo="Registrar a emenda no projeto ativo",
     )

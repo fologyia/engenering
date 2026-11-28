@@ -101,3 +101,17 @@ def test_pagina(banco_isolado):
     assert ap.metricas(t)["Situação"] == "ATENDE COM RESSALVAS"
     t = ap.abrir(PAGINA, tc_uso=tc.TRAVESSA)
     assert not ap.sem_ajuda(t)
+
+
+def test_secao_desenhada_reflete_dimensoes_do_perfil():
+    from dataclasses import replace
+
+    from core import cena_3d as c3
+    from core import desenho_tercas as desenho
+
+    e = replace(P, bw=180, bf=60, D=15, t=3)
+    figura = desenho.secao(e)
+    assert len([i for i in figura.itens if isinstance(i, c3.Poligono2D)]) == 5
+    textos = " ".join(i.texto for i in figura.itens if isinstance(i, c3.Etiqueta2D))
+    assert "180 mm" in textos and "60 mm" in textos and "15 mm" in textos
+    assert "sem raios de dobra" in textos

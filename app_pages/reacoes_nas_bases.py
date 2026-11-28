@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components import robot_ui
 from components.figuras import mostrar_figura
 from components.project_tools import botao_registrar_calculo
 from components.reacoes_nas_bases_help import AJUDA
@@ -19,6 +20,7 @@ from core import lista_de_material as lm
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import reacoes_nas_bases as rb
+from core import robot
 from core import tratamento_do_modelo as tm
 from core.desenho_reacoes import figura_das_reacoes
 from core.project_store import obter_projeto_ativo
@@ -37,10 +39,15 @@ projeto = obter_projeto_ativo()
 if projeto is None:
     st.info(
         "Nenhum projeto ativo. Abra ou crie um em **Projetos**: as reações saem dos "
-        "resultados do SolidWorks gravados no projeto.",
+        "resultados gravados no projeto.",
         icon=":material/folder_off:",
     )
     st.stop()
+if robot.ativo(projeto):
+    with secao_protegida("Reações globais do Robot"):
+        robot_ui.mostrar_fundacoes(projeto)
+    st.stop()
+
 tratado = tm.do_projeto(projeto)  # o gravado, com o que tem prova já consertado
 dados = tratado.dados
 if not dados.casos:

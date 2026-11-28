@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from components import conferencia_das_cargas_ui as cdc
+from components import robot_ui
 from components.base_tecnica_help import AJUDA as AJUDA_BASE
 from components.base_tecnica_ui import (
     gravar_campos_do_projeto,
@@ -38,6 +39,7 @@ from core import malha_do_modelo as mm
 from core import plano_de_cargas as pc
 from core import quadro_fundacoes as qf
 from core import reacoes_nas_bases as rb
+from core import robot
 from core import section_catalog as sc
 from core import sensores_do_modelo as sm
 from core import tratamento_do_modelo as tm
@@ -47,8 +49,8 @@ from core.project_store import obter_projeto_ativo
 configurar_pagina("Esforços do modelo", ":material/upload_file:")
 cabecalho_pagina(
     "Esforços do modelo",
-    "Importe as forças das vigas e as reações do SolidWorks, confira se o modelo recebeu as "
-    "cargas do plano e veja o pior caso de cada barra nas combinações.",
+    "Importe os resultados do SolidWorks ou as tabelas do Autodesk Robot e verifique as barras "
+    "e as reações do modelo.",
     categoria="Gestão industrial",
     icone=":material/upload_file:",
     cor="violet",
@@ -64,6 +66,25 @@ if projeto is None:
         "guardados no projeto.",
         icon=":material/folder_off:",
     )
+    st.stop()
+
+chave_fonte = f"modelo_fonte_{projeto['id']}"
+if st.query_params.pop("fonte", None) == "robot":
+    st.session_state[chave_fonte] = robot.ROBOT
+fonte = st.radio(
+    "Fonte da importação",
+    [robot.SOLIDWORKS, robot.ROBOT],
+    index=int(robot.ativo(projeto)),
+    horizontal=True,
+    key=chave_fonte,
+    help="Escolha o formato das tabelas que você quer importar e o modelo a verificar.",
+)
+if fonte == robot.ROBOT:
+    with secao_protegida("Tabelas e resultados do Robot"):
+        robot_ui.mostrar_esforcos(projeto)
+    st.stop()
+if robot.ativo(projeto):
+    robot_ui.ativar_solidworks(projeto)
     st.stop()
 
 plano = pc.plano_do_projeto(projeto)

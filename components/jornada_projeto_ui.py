@@ -15,6 +15,7 @@ from typing import Any
 import streamlit as st
 
 from components.painel_projeto_ui import renderizar_painel_projeto
+from core import robot
 from core.checklist_templates import (
     ModeloChecklistErro,
     aplicar_modelo,
@@ -308,6 +309,26 @@ def renderizar_jornada(
 
     elif secao == "Cálculos":
         st.subheader("Cálculos do projeto")
+        com_robot = robot.ativo(projeto)
+        with st.container(border=True):
+            st.markdown("##### Autodesk Robot")
+            if com_robot:
+                modelo = robot.modelo_do_projeto(projeto)
+                st.caption(f"{modelo['nome']} · revisão {modelo['revisao']}")
+            else:
+                st.caption("Envie as tabelas ou o relatório do Robot para este projeto.")
+            st.page_link(
+                "app_pages/esforcos_modelo.py",
+                label="Revisar modelo e verificar barras" if com_robot else "Importar do Robot",
+                icon=":material/upload_file:",
+                query_params={"fonte": "robot"},
+            )
+            if com_robot:
+                st.page_link(
+                    "app_pages/reacoes_nas_bases.py",
+                    label="Reações nas bases",
+                    icon=":material/table_chart:",
+                )
         registros = [r for r in projeto.get("registros_tecnicos", []) if isinstance(r, Mapping)]
         st.caption(
             f"{len(registros)} registro(s) no projeto, incluindo o histórico. A situação técnica é informada por cada registro."

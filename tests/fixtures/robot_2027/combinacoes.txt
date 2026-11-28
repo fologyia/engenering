@@ -1,0 +1,3 @@
+Combinações;Nome;Tipo de análise;Tipo de combinação;Natureza do caso;Definição
+ 3 (C);ELU normal;Combinação linear;ELU;variável;1*1.25+2*1.50
+ 4 (C);ELS rara;Combinação linear;ELS;variável;(1+2)*1.00

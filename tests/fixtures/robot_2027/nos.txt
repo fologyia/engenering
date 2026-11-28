@@ -1,0 +1,5 @@
+Nó;X (m);Y (m);Z (m);Norma de apoio;Apoio
+ 1;0,0;0,0;0,0;xxxxxx;QA fixed
+ 2;0,0;0,0;3,00;;
+ 3;4,00;0,0;3,00;;
+ 4;4,00;0,0;0,0;xxxxxx;QA fixed

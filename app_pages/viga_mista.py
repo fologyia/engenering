@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from components.viga_mista_help import AJUDA
+from core import desenho_viga_mista as desenho
 from core import perfil_i as pi
 from core import viga_mista as vmx
 
@@ -27,7 +29,6 @@ st.caption(
     "Para mezanino ou piso com laje de concreto: a laje passa a trabalhar junto com a viga e "
     "o perfil pode ser bem mais leve que sozinho."
 )
-mostrar_croqui_de_referencia("viga_mista")
 
 P = vmx.EntradaMista()
 c_ = Campos("vmx_", AJUDA)
@@ -125,6 +126,12 @@ if erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = vmx.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Seção local da viga mista",
+        help="Perfil e alturas informadas em um recorte local; o conector é simbólico e a forma da fôrma não é conhecida.",
+    )
+    mostrar_figura(svg_da_cena(desenho.secao_local(entrada)))
 mostrar_resultado(r.grupos, avisos=r.avisos)
 memorial_e_registro(
     vmx.registro(r),

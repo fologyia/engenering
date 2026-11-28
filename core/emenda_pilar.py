@@ -1466,6 +1466,7 @@ def memorial_da_emenda(
     projeto: Mapping[str, Any] | None = None,
     figuras: list[dict[str, object]] | None = None,
     formato: str = "word",
+    registro_preparado: Mapping[str, Any] | None = None,
 ) -> bytes:
     """O memorial só desta emenda: em Word, o trecho para colar no documento oficial
     (:mod:`core.memorial_trecho`); em PDF, o documento do padrão do memorial do projeto."""
@@ -1473,7 +1474,7 @@ def memorial_da_emenda(
 
     from core.technical_records import normalizar_registro_tecnico
 
-    reg = normalizar_registro_tecnico(registro(r, figuras=figuras))
+    reg = normalizar_registro_tecnico(registro_preparado or registro(r, figuras=figuras))
     if formato != "pdf":
         from core.memorial_trecho import trecho_de_registro
 

@@ -192,6 +192,13 @@ def salvar_projeto(
     """
     inicializar_banco(caminho_banco)
     documento = _validar_documento(projeto)
+    if documento.get("modelo_robot") and any(
+        (registro.get("entradas") or {}).get("assinatura_remessa_robot")
+        for registro in documento.get("registros_tecnicos", ())
+    ):
+        from core.project_dependencies import sincronizar_estados_dependencias
+
+        documento = sincronizar_estados_dependencias(documento)
     gravacao_lida = documento.pop(CAMPO_GRAVACAO, None)
     instante = _agora()
     with _conectar(caminho_banco) as conexao:

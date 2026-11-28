@@ -735,6 +735,10 @@ def tratar(
 def do_projeto(projeto: Mapping[str, Any] | None) -> ModeloTratado:
     """O modelo tratado do projeto gravado: o ponto de entrada das páginas do SolidWorks."""
     projeto = projeto or {}
+    from core import robot
+
+    if robot.ativo(projeto):
+        return tratar(em.EsforcosDoModelo(eixo_vertical="Z"))
     return tratar(
         em.esforcos_do_projeto(projeto),
         am.do_projeto(projeto),

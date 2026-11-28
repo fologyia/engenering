@@ -137,3 +137,41 @@ def test_pagina(banco_isolado):
     t = ap.abrir(PAGINA, lr_familia_viga=pi.FAMILIA_SOLDADO)
     assert not ap.sem_ajuda(t)
     assert "Situação" in ap.metricas(t)
+
+
+def test_desenho_chapa_representa_fileiras_tracionadas():
+    from dataclasses import replace
+
+    from core import cena_3d as c3
+    from core import desenho_ligacao_rigida as desenho
+
+    normal = desenho.vista_chapa(P)
+    simetria = desenho.vista_chapa(replace(P, simetrica=False))
+    textos = " ".join(x.texto for x in normal.itens if isinstance(x, c3.Etiqueta2D))
+    assert "g = 100" in textos and "posições não informadas" in textos
+    assert len(normal.itens) == len(simetria.itens)
+    assert normal.itens[0].pontos != simetria.itens[0].pontos
+
+
+def test_pagina_4es_nao_apresenta_aprovacao_completa(banco_isolado):
+    t = ap.abrir(PAGINA, lr_configuracao="4ES — enrijecedor (estudo preliminar)")
+    assert not t.exception
+    assert any("não dimensiona nem aprova" in w.value for w in t.warning)
+    assert not ap.sem_ajuda(t)
+    assert any("Critérios parciais" == h.value for h in t.subheader)
+    assert not t.metric
+
+
+def test_4es_recusa_furos_interferindo_com_enrijecedor(banco_isolado):
+    t = ap.abrir(
+        PAGINA, lr_configuracao="4ES — enrijecedor (estudo preliminar)", **{"4es_esp": 90.0}
+    )
+    assert any("fora da alma" in e.value for e in t.error)
+    assert len(t.get("image")) == 1  # apenas o esquema lateral
+
+
+def test_4es_informa_borda_real_do_pilar(banco_isolado):
+    t = ap.abrir(PAGINA, lr_configuracao="4ES — enrijecedor (estudo preliminar)")
+    assert t.number_input(key="4es_borda_pilar").value == 100
+    t.number_input(key="4es_borda_pilar").set_value(5).run()
+    assert any("fora da mesa do pilar" in e.value for e in t.error)

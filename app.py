@@ -12,6 +12,8 @@ from components.menu_lateral import menu_lateral
 from components.project_tools import sincronizar_projeto_ativo
 from components.robustez import executar_pagina, iniciar_execucao, secao_protegida
 from core import navegacao as nv
+from core import robot
+from core.project_store import obter_projeto_ativo
 
 st.set_page_config(
     page_title="Mecânica Toolkit",
@@ -62,7 +64,22 @@ with secao_protegida("menu"):
 with secao_protegida("lateral"):
     situacao_na_lateral()
     acesso_na_lateral()
-executar_pagina(pagina)
+paginas_do_solidworks = {
+    "app_pages/colunas_do_modelo.py",
+    "app_pages/modelo_3d.py",
+    "app_pages/sensores_do_modelo.py",
+}
+if st.session_state["_pagina_atual"] in paginas_do_solidworks and robot.ativo(
+    obter_projeto_ativo() or {}
+):
+    st.info("Esta página usa o modelo do SolidWorks. O projeto está com o Autodesk Robot ativo.")
+    st.page_link(
+        "app_pages/esforcos_modelo.py",
+        label="Verificar o modelo ativo",
+        icon=":material/upload_file:",
+    )
+else:
+    executar_pagina(pagina)
 
 with st.sidebar:
     st.caption("Projetos industriais • análise • rastreabilidade")

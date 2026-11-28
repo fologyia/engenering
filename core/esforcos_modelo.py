@@ -985,7 +985,7 @@ def _r(valor: float) -> float:
     return float(f"{valor:.6g}")
 
 
-def para_dicionario(dados: EsforcosDoModelo) -> dict[str, Any]:
+def para_dicionario(dados: EsforcosDoModelo, *, preservar_precisao: bool = False) -> dict[str, Any]:
     """Compacto: cada ponto é uma lista [elemento, fim, N, V1, V2, M1, M2, T]."""
     return {
         "eixo_vertical": dados.eixo_vertical,
@@ -1006,7 +1006,14 @@ def para_dicionario(dados: EsforcosDoModelo) -> dict[str, Any]:
                     else list(c.reacoes.momento_modelo),
                 },
                 "membros": {
-                    nome: [[p.elemento, p.fim, *(_r(v) for v in p.vetor())] for p in pontos]
+                    nome: [
+                        [
+                            p.elemento,
+                            p.fim,
+                            *(p.vetor() if preservar_precisao else map(_r, p.vetor())),
+                        ]
+                        for p in pontos
+                    ]
                     for nome, pontos in c.membros.items()
                 },
             }
@@ -1876,6 +1883,9 @@ class PreparoDasCombinacoes:
     nomes: tuple[str, ...]
     fatores: tuple[tuple[float, ...], ...]
     casos: tuple[CasoImportado, ...]
+    resultados: Mapping[str, tuple[Combinado, ...]] | None = None
+    metodo: str = ""
+    segunda_ordem: frozenset[str] = frozenset()
 
 
 def preparar_combinacoes(
@@ -1899,6 +1909,8 @@ def combinados_do_membro(
     membro: str, preparo: PreparoDasCombinacoes
 ) -> tuple[list[Combinado], str, str | None]:
     """Os esforços de cálculo da barra em cada combinação e ponto, o método e o aviso (se houver)."""
+    if preparo.resultados is not None:
+        return list(preparo.resultados.get(membro, ())), preparo.metodo, None
     nomes, fatores, casos = preparo.nomes, preparo.fatores, preparo.casos
     alinhados = _pontos_alinhados(membro, casos)
     if alinhados is not None:
@@ -1943,16 +1955,25 @@ def combinados_do_membro(
 
 
 def envoltoria(
-    dados: EsforcosDoModelo, plano: pc.PlanoDeCargas, estados: Sequence[str]
+    dados: EsforcosDoModelo,
+    plano: pc.PlanoDeCargas,
+    estados: Sequence[str],
+    *,
+    preparo: PreparoDasCombinacoes | None = None,
 ) -> ResultadoDaEnvoltoria:
     """Combina os casos importados com os fatores do plano e acha o pior de cada barra."""
-    preparo = preparar_combinacoes(dados, plano, estados)
+    preparo = preparo if preparo is not None else preparar_combinacoes(dados, plano, estados)
     if preparo is None:
         return ResultadoDaEnvoltoria((), 0, (), ("Nenhum caso do plano de cargas foi importado.",))
     avisos: list[str] = []
     membros: list[EnvoltoriaDoMembro] = []
-    for membro in dados.nomes_dos_membros:
+    nomes_dos_membros = (
+        dados.nomes_dos_membros if preparo.resultados is None else preparo.resultados
+    )
+    for membro in nomes_dos_membros:
         combinados, metodo, aviso = combinados_do_membro(membro, preparo)
+        if not combinados:
+            continue
         if aviso:
             avisos.append(aviso)
 
@@ -1988,7 +2009,9 @@ def envoltoria(
                 metodo,
             )
         )
-    sobram = [c for c in dados.casos if c not in plano.codigos]
+    sobram = (
+        [c for c in dados.casos if c not in plano.codigos] if preparo.resultados is None else []
+    )
     if sobram:
         avisos.append(
             f"Casos importados fora do plano de cargas (não combinados): {', '.join(sobram)}."

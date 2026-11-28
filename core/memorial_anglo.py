@@ -265,6 +265,11 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
         somente_capitulos=True,
         repetir_bases=True,
     )
+    from core.robot_integracao import tabelas_de_proveniencia
+
+    fontes_robot = tabelas_de_proveniencia(
+        [r for r in projeto.get("registros_tecnicos", []) if str(r.get("id")) in ids]
+    )
     md = modelo["metadata"]
     contexto = md["contexto_estrutural"]
     campos = {
@@ -329,6 +334,7 @@ def montar_modelo_anglo(projeto, *, registros_ids=None, metadata_extra=None):
             if "ELS" in str(c.get("tipo") or "").upper()
         ],
         "modelo": [["Modelo e método", _texto(contexto.get("modelo"))]],
+        "fontes_robot": fontes_robot,
         "pendencias": [],
         "anexos": [],
         "resumo": [],
@@ -660,6 +666,13 @@ def _render_emissao(doc, modelo, referencia):
             for texto in textos.get("cargas", []) + textos.get("combinacoes", []):
                 if texto:
                     paragrafo(texto)
+            if dados["fontes_robot"]:
+                _render_calculo(
+                    doc,
+                    fim,
+                    {"titulo": "Dados do Autodesk Robot", "tabelas": dados["fontes_robot"]},
+                    2,
+                )
         elif chave == "geometria":
             trecho("126", "224", "251")
         elif chave == "resumo":

@@ -292,3 +292,32 @@ def test_memorial_da_ligacao_em_word_e_pdf():
     for proibida in PALAVRAS_PROIBIDAS:
         assert proibida not in texto, proibida
     assert lg.memorial_da_ligacao(r, formato="pdf").startswith(b"%PDF")
+
+
+@pytest.mark.parametrize(
+    ("arranjo", "comprimento_total"),
+    [
+        (lg.ARRANJO_L, 250),
+        (lg.ARRANJO_T, 250),
+        (lg.ARRANJO_H, 400),
+        (lg.ARRANJO_CRUZ, 250),
+        (lg.ARRANJO_U, 400),
+    ],
+)
+def test_novos_arranjos_grupo_solda(arranjo, comprimento_total):
+    """Carga centrada: força por comprimento é P / soma dos cordões."""
+    e = lg.EntradaSolda(
+        arranjo=arranjo,
+        comprimento_mm=150,
+        largura_mm=100,
+        n_sd_kN=30,
+        v_sd_kN=40,
+        m_sd_kNm=0,
+        metodo=lg.METODO_ELASTICO,
+    )
+    forca, _, total = lg.forca_por_mm_na_solda(e)
+    assert total == pytest.approx(comprimento_total)
+    assert forca == pytest.approx(50 / comprimento_total)
+    resultado = lg.calcular_solda(e)
+    assert resultado.verificacoes
+    assert lg.figura_solda(e).png.startswith(b"\x89PNG")

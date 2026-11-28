@@ -18,7 +18,7 @@ COR_PILAR = "#d9dde3"
 COR_TALA = "#9cc3e6"
 COR_INTERNA = "#c2410c"
 COR_FURO = "#ffffff"
-LARGURA, ALTURA = 460.0, 560.0
+LARGURA, ALTURA = 460.0, 610.0
 Faixa = tuple[float, float]
 
 
@@ -58,7 +58,7 @@ def _vista(
     x_max = max(pilar_sup[1], pilar_inf[1], tala[1])
     enq = c3.Enquadramento(
         [(x_min - 90, -altura_pilar), (x_max + 90, altura_pilar)],
-        (20, 40, LARGURA - 20, ALTURA - 20),
+        (20, 40, LARGURA - 20, ALTURA - 70),
     )
 
     def p(x: float, y: float) -> tuple[float, float]:
@@ -87,8 +87,15 @@ def _vista(
         for j in range(n_fileiras):
             y = lado * (gap / 2 + e_pilar + j * passo_v)
             for x in xs:
-                itens.append(c3.circulo(p(x, y), raio, preenchimento=COR_FURO,
+                centro = p(x, y)
+                itens.append(c3.circulo(centro, raio, preenchimento=COR_FURO,
                                         contorno=d2.COR_ESTRUTURA))  # fmt: skip
+                # Marcas de centro deixam o posicionamento dos furos legível mesmo
+                # quando o diâmetro é pequeno na escala da vista.
+                braco = max(raio + 3.0, 5.0)
+                cx, cy = centro
+                itens.append(d2.linha((cx - braco, cy), (cx + braco, cy), d2.COR_SUAVE, 0.7))
+                itens.append(d2.linha((cx, cy - braco), (cx, cy + braco), d2.COR_SUAVE, 0.7))
     # cotas, no lado de baixo (pilar inferior): e e s à esquerda, a ponta da tala à direita
     y1 = gap / 2 + e_pilar
     x_esq = x_min - 30
@@ -104,6 +111,25 @@ def _vista(
     if cota_x1 is not None:  # U: do dorso da alma (x = 0) à primeira linha de furos
         y_c = meia + 45  # abaixo da cota de g
         itens += d2.cota(p(0.0, y_c), p(cota_x1, y_c), f"x1 = {d2.n(cota_x1, 0)}")
+    quantidade = 2 * n_fileiras * len(xs)
+    itens.append(
+        d2.texto(
+            LARGURA / 2,
+            ALTURA - 38,
+            f"{quantidade} furos Ø {d2.n(d_h, 1)} mm · folga da emenda = {d2.n(gap, 1)} mm",
+            tamanho=10,
+            cor=d2.COR_TEXTO,
+        )
+    )
+    itens.append(
+        d2.texto(
+            LARGURA / 2,
+            ALTURA - 20,
+            "Azul: tala visível · cinza: pilar · cotas em mm",
+            tamanho=10,
+            cor=d2.COR_SUAVE,
+        )
+    )
     return c3.Desenho2D(LARGURA, ALTURA, tuple(itens), titulo=titulo)
 
 
@@ -147,9 +173,82 @@ def vista_da_alma(r: ep.ResultadoEmenda) -> c3.Desenho2D:
     )  # fmt: skip
 
 
+def secao_da_emenda(r: ep.ResultadoEmenda) -> c3.Desenho2D:
+    """Corte transversal esquemático fora das fileiras de parafusos, no pilar superior.
+
+    O corte apresenta a disposição das talas; não representa os raios de laminação,
+    calços ou folgas de montagem. Para o U, o dorso da alma é a origem horizontal.
+    """
+    e, perfil = r.entrada, r.superior
+    eh_u = perfil.familia == ep.FAMILIA_U
+    x0 = 0.0 if eh_u else -perfil.bf / 2
+    x1 = x0 + perfil.bf
+    alma_x0 = x0 if eh_u else -perfil.tw / 2
+    alma_x1 = alma_x0 + perfil.tw
+    y0, y1 = -perfil.d / 2, perfil.d / 2
+    enq = c3.Enquadramento(
+        [
+            (min(x0, -e.bw / 2) - e.twp - 90, y0 - e.tp - 65),
+            (max(x1, e.bw / 2) + e.twp + 90, y1 + e.tp + 65),
+        ],
+        (25, 45, 555, 445),
+    )
+
+    def p(x: float, y: float) -> tuple[float, float]:
+        return enq((x, y))
+
+    itens: list[d2.Item] = []
+    # Os três retângulos descrevem a seção nominal sem supor raios não medidos.
+    itens.extend(
+        [
+            _retangulo(p, alma_x0, y0, alma_x1, y1, COR_PILAR),
+            _retangulo(p, x0, y0, x1, y0 + perfil.tf, COR_PILAR),
+            _retangulo(p, x0, y1 - perfil.tf, x1, y1, COR_PILAR),
+        ]
+    )
+    bx0 = x0 if eh_u else -e.bp / 2
+    bx1 = bx0 + e.bp
+    itens.extend(
+        [
+            _retangulo(p, bx0, y0 - e.tp, bx1, y0, COR_TALA),
+            _retangulo(p, bx0, y1, bx1, y1 + e.tp, COR_TALA),
+            _retangulo(p, alma_x0 - e.twp, -e.bw / 2, alma_x0, e.bw / 2, COR_TALA),
+            _retangulo(p, alma_x1, -e.bw / 2, alma_x1 + e.twp, e.bw / 2, COR_TALA),
+        ]
+    )
+    if e.talas_internas:
+        faixas = [(x1 - e.bi, x1)] if eh_u else [(x0, x0 + e.bi), (x1 - e.bi, x1)]
+        for a, b in faixas:
+            itens.append(_retangulo(p, a, y0 + perfil.tf, b, y0 + perfil.tf + e.ti, COR_INTERNA))
+            itens.append(_retangulo(p, a, y1 - perfil.tf - e.ti, b, y1 - perfil.tf, COR_INTERNA))
+    itens += d2.cota(
+        p(bx0, y0 - e.tp - 22), p(bx1, y0 - e.tp - 22), f"tala da mesa: {ep._n(e.bp)} mm"
+    )
+    itens += d2.cota(
+        p(x1 + e.twp + 32, -e.bw / 2),
+        p(x1 + e.twp + 32, e.bw / 2),
+        f"tala da alma: {ep._n(e.bw)} mm",
+    )
+    itens.append(
+        d2.texto(
+            290, 468, "Azul: talas externas e da alma · cinza: perfil", tamanho=11, cor=d2.COR_SUAVE
+        )
+    )
+    if e.talas_internas:
+        itens.append(
+            d2.texto(290, 487, "Laranja: talas internas das mesas", tamanho=11, cor=COR_INTERNA)
+        )
+    titulo = f"Seção transversal — pilar superior {perfil.nome}"
+    return c3.Desenho2D(580, 500, tuple(itens), titulo=titulo)
+
+
 def figuras_para_o_registro(r: ep.ResultadoEmenda) -> list[dict[str, object]]:
     """A vista da mesa e a da alma, prontas para o memorial desenhar."""
     return [
+        c3.desenho_para_dicionario(
+            secao_da_emenda(r),
+            legenda="Seção transversal esquemática no pilar superior, fora das fileiras de parafusos.",
+        ),
         c3.desenho_para_dicionario(
             vista_da_mesa(r),
             legenda="Emenda de pilar: vista da mesa, com a tala externa, os furos e as cotas"

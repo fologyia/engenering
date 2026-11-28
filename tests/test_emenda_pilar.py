@@ -390,7 +390,7 @@ def test_pagina_mostra_os_numeros_do_nucleo(banco_isolado):
     assert str(metricas["Total de parafusos"]) == "24"
     assert metricas["Situação mínima"] == "b"
     assert any("1 item(ns) a VERIFICAR" in w.value for w in t.warning)
-    assert len(t.get("image")) == 2
+    assert len(t.get("image")) == 3
 
 
 def test_pagina_com_u_e_talas_internas(banco_isolado):
@@ -407,6 +407,29 @@ def _textos_svg(desenho) -> str:
     from components.cena_3d_svg import svg_da_cena
 
     return " ".join(re.findall(r">([^<>]+)</text>", svg_da_cena(desenho)))
+
+
+def test_secao_transversal_mostra_talas_e_perfil():
+    from core import desenho_emenda_pilar as de
+
+    for entrada in (P, ep.com(P, talas_internas=True), U):
+        desenho = de.secao_da_emenda(ep.calcular(entrada))
+        texto = _textos_svg(desenho)
+        assert "tala da mesa" in texto and "tala da alma" in texto
+        assert ("Laranja: talas internas" in texto) == entrada.talas_internas
+        assert desenho.titulo.startswith("Seção transversal")
+
+
+def test_vistas_identificam_furos_e_folga():
+    from core import desenho_emenda_pilar as de
+
+    entrada = ep.com(P, gap=1.0)
+    resultado = ep.calcular(entrada)
+    mesa = _textos_svg(de.vista_da_mesa(resultado))
+    alma = _textos_svg(de.vista_da_alma(resultado))
+    assert "8 furos" in mesa and "8 furos" in alma
+    assert "folga da emenda = 1,0 mm" in mesa
+    assert "Ø 20,6 mm" in mesa
 
 
 def test_cota_x1_so_no_u():
@@ -429,7 +452,7 @@ def test_registro_leva_so_as_linhas_que_se_aplicam_e_os_desenhos(r):
     assert nomes[0].startswith("1. Corte") and "Continuidade: extensão de cada lado" in nomes
     assert len(registro["resultados"]["combinacoes"]) == 3  # 2 casos + o mínimo b
     imagens, aviso = imagens_do_registro(registro, {})
-    assert aviso == "" and len(imagens) == 2
+    assert aviso == "" and len(imagens) == 3
     assert any("SCI P207" in x for x in registro["referencias"])
     assert registro["entradas"]["total_de_parafusos"] == 24
 

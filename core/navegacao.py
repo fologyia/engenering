@@ -151,7 +151,7 @@ MENU: tuple[GrupoMenu, ...] = (
                 "app_pages/esforcos_modelo.py",
                 "Esforços do modelo",
                 ":material/upload_file:",
-                "Importar o SolidWorks e verificar barras, fundações e placas de base",
+                "Importar SolidWorks ou Autodesk Robot e verificar barras e fundações",
             ),
             ItemMenu(
                 "app_pages/colunas_do_modelo.py",

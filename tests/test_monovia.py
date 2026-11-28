@@ -132,3 +132,17 @@ def test_pagina(banco_isolado):
     assert ap.metricas(t)["Situação"] == "ATENDE"
     t = ap.abrir(PAGINA, mo_familia=pi.FAMILIA_SOLDADO, mo_sistema=mo.BALANCO)
     assert not ap.sem_ajuda(t)
+
+
+def test_secao_da_monovia_reflete_rodas_e_perfil():
+    from dataclasses import replace
+
+    from core import cena_3d as c3
+    from core import desenho_monovia as desenho
+
+    e = mo.EntradaMonovia()
+    dois = desenho.secao(e)
+    um = desenho.secao(replace(e, rodas_por_eixo=1))
+    assert len([i for i in dois.itens if isinstance(i, c3.Seta2D)]) == 2
+    assert len([i for i in um.itens if isinstance(i, c3.Seta2D)]) == 1
+    assert "por convenção" in " ".join(i.texto for i in um.itens if isinstance(i, c3.Etiqueta2D))

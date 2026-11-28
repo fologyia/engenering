@@ -1,0 +1,5 @@
+Caso;Legenda;Nome do caso;Natureza;Tipo de análise
+1;PP;PP;permanente;Estático - Linear
+2;SC;SC;variável;Estático - Linear
+3;;ELU normal;variável;Combinação linear
+4;;ELS rara;variável;Combinação linear

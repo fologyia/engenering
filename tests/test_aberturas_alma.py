@@ -86,3 +86,26 @@ def test_pagina(banco_isolado):
     t = ap.abrir(PAGINA)
     assert not ap.sem_ajuda(t), ap.sem_ajuda(t)
     assert ap.metricas(t)["Situação"] == "ATENDE"
+
+
+def test_desenho_detalha_forma_e_excentricidade():
+    from dataclasses import replace
+
+    from core import cena_3d as c3
+    from core import desenho_aberturas_alma as desenho
+
+    entrada = ab.EntradaAberturas()
+    furo = entrada.aberturas[1]
+    central = desenho.detalhe(entrada, furo)
+    deslocado = desenho.detalhe(entrada, replace(furo, e=30))
+
+    # A abertura branca se move para cima sem mudar as dimensões do retângulo.
+    def branco(d):
+        return next(
+            x for x in d.itens if isinstance(x, c3.Poligono2D) and x.preenchimento == "#ffffff"
+        )
+
+    pontos1, pontos2 = branco(central).pontos, branco(deslocado).pontos
+    assert pontos2[0][1] < pontos1[0][1]
+    assert pontos2[1][0] - pontos2[0][0] == pytest.approx(pontos1[1][0] - pontos1[0][0])
+    assert "300" in " ".join(x.texto for x in central.itens if isinstance(x, c3.Etiqueta2D))

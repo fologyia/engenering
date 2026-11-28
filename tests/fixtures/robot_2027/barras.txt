@@ -1,0 +1,4 @@
+Barra;Nó 1;Nó 2;Seção;Material;Comprimento (m);Gama (Deg);Tipo;Objeto estrutural
+ 1;1;2;IPE 200;ASTM A36;3,00;0,0;Barra simples;Barra
+ 2;2;3;IPE 200;ASTM A36;4,00;0,0;Barra simples;Barra
+ 3;4;3;IPE 200;ASTM A36;3,00;0,0;Barra simples;Barra

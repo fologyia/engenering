@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.nos_tubulares_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
+from core import desenho_nos_tubulares as desenho
 from core import nos_tubulares as nt
 
 configurar_pagina("Nós de treliça tubular", ":material/hive:")
@@ -26,7 +28,6 @@ st.caption(
     "Em treliça de tubo sem chapa de nó, a parede do banzo é que limita a força das diagonais: "
     "verifica a face do banzo, a punção, a parede lateral e a própria diagonal."
 )
-mostrar_croqui_de_referencia("nos_tubulares")
 
 P = nt.EntradaNo()
 c_ = Campos("nt_", AJUDA)
@@ -93,6 +94,12 @@ if erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = nt.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Elevação do nó",
+        help="Esquema no plano da treliça conforme o tipo e os ângulos escolhidos; não detalha as soldas.",
+    )
+    mostrar_figura(svg_da_cena(desenho.elevacao(entrada)))
 mostrar_resultado(r.grupos, avisos=r.avisos)
 memorial_e_registro(
     nt.registro(r),

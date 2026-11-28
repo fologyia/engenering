@@ -130,3 +130,16 @@ def test_pagina(banco_isolado):
     assert ap.metricas(t)["Situação"] == "ATENDE"
     t = ap.abrir(PAGINA, nt_tipo=nt.NO_X)
     assert not ap.sem_ajuda(t)
+
+
+@pytest.mark.parametrize(("tipo", "n_ramos"), [(nt.NO_T, 1), (nt.NO_X, 2), (nt.NO_K, 2)])
+def test_elevacao_conforme_tipo_de_no(tipo, n_ramos):
+    from core import cena_3d as c3
+    from core import desenho_nos_tubulares as desenho
+
+    e = nt.com(P, tipo=tipo)
+    figura = desenho.elevacao(e)
+    assert len([i for i in figura.itens if isinstance(i, c3.Poligono2D)]) == n_ramos + 1
+    textos = " ".join(i.texto for i in figura.itens if isinstance(i, c3.Etiqueta2D))
+    assert ("g =" in textos) == (tipo == nt.NO_K)
+    assert "sem recortes" in textos

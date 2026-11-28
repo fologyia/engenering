@@ -54,6 +54,21 @@ class Abertura:
 
 
 @dataclass(frozen=True)
+class EsforcoNaAbertura:
+    combinacao: str
+    momento_kNm: float
+    cortante_kN: float
+
+
+@dataclass(frozen=True)
+class EsforcosImportados:
+    locais: tuple[tuple[EsforcoNaAbertura, ...], ...]
+    maximo_momento_kNm: float
+    maximo_cortante_kN: float
+    cortante_apoios_kN: float
+
+
+@dataclass(frozen=True)
 class EntradaAberturas:
     familia: str = pi.FAMILIA_W
     perfil: str = "W 410 x 46,1"
@@ -72,6 +87,7 @@ class EntradaAberturas:
             Abertura("Eletrocalha", RETANGULAR, 300.0, 120.0, 4200.0, 0.0),
         )
     )
+    esforcos: EsforcosImportados | None = None
 
 
 def obter_perfil(e: EntradaAberturas) -> pi.PerfilI:
@@ -92,6 +108,10 @@ def validar(e: EntradaAberturas) -> list[str]:
         erros.append("Vão positivo e carga não negativa.")
     if not e.aberturas:
         erros.append("Informe pelo menos uma abertura.")
+    if e.esforcos and (
+        len(e.esforcos.locais) != len(e.aberturas) or any(not casos for casos in e.esforcos.locais)
+    ):
+        erros.append("Informe os esforços simultâneos de cada abertura.")
     for a in e.aberturas:
         h0 = a.largura if a.forma == CIRCULAR else a.altura
         if a.largura <= 0 or h0 <= 0:
@@ -198,17 +218,22 @@ def calcular(e: EntradaAberturas) -> ResultadoAberturas:
     L = e.L
     avisos = list(pi.avisos_do_perfil(p))
     perfil_aco = p.perfil_aco()
-    V_apoio = q * L / 2
-    cis = nb.verificar_cisalhamento(perfil_aco, fy, E, V_apoio)
+    dados = e.esforcos
+    V_apoio = dados.cortante_apoios_kN * 1000 if dados else q * L / 2
+    V_max = dados.maximo_cortante_kN * 1000 if dados else V_apoio
+    M_max = dados.maximo_momento_kNm * 1e6 if dados else q * L**2 / 8
+    cis = nb.verificar_cisalhamento(perfil_aco, fy, E, V_max)
     V_Rd = cis.resistencia_N
-    flex = nb.verificar_flexao(perfil_aco, fy, E, pi.G_ACO, q * L**2 / 8, eixo="x",
-                               comprimento_destravado_mm=e.Lb or None, cb=1.14, soldado=p.soldado)  # fmt: skip
+    flex = nb.verificar_flexao(perfil_aco, fy, E, pi.G_ACO, M_max, eixo="x",
+                               comprimento_destravado_mm=e.Lb or None, cb=1.0 if dados else 1.14,
+                               soldado=p.soldado)  # fmt: skip
     grupos: list[vm.Grupo] = []
     gerais = [
-        Verificacao("Viga sem aberturas: flexão", q * L**2 / 8 / 1e6, flex.resistencia_Nmm / 1e6,
-                    "kN·m", "ABNT NBR 8800:2025, 5.4.2", f"q·L²/8; {flex.modo_governante}"),
-        Verificacao("Viga sem aberturas: cortante", V_apoio / 1000, V_Rd / 1000, "kN",
-                    "ABNT NBR 8800:2025, 5.4.3", "q·L/2"),
+        Verificacao("Viga sem aberturas: flexão", M_max / 1e6, flex.resistencia_Nmm / 1e6,
+                    "kN·m", "ABNT NBR 8800:2025, 5.4.2",
+                    f"{'Máximo exportado' if dados else 'q·L²/8'}; {flex.modo_governante}"),
+        Verificacao("Viga sem aberturas: cortante", V_max / 1000, V_Rd / 1000, "kN",
+                    "ABNT NBR 8800:2025, 5.4.3", "Máximo exportado" if dados else "q·L/2"),
     ]  # fmt: skip
     grupos.append(vm.Grupo("Viga", gerais))
     f3 = _condicoes_f3(e, p, fy, V_apoio / 1000, V_Rd / 1000)
@@ -240,20 +265,31 @@ def calcular(e: EntradaAberturas) -> ResultadoAberturas:
         avisos.append(
             "As aberturas não se enquadram em F.3: verificadas pelo AISC Design Guide 2 (F.2)."
         )
-    for a in e.aberturas:
+    for i, a in enumerate(e.aberturas):
         circ = a.forma == CIRCULAR
         D = a.largura
         h0_m = D if circ else a.altura
         a0_v, h0_v = (0.45 * D, 0.9 * D) if circ else (a.largura, a.altura)
-        M = q * a.x * (L - a.x) / 2
-        V = abs(q * (L / 2 - a.x))
         Mm = momento_maximo_na_abertura(p, fy, h0_m, a.e)
         Vm, s_sup, s_inf = cortante_maximo_na_abertura(p, fy, a0_v, h0_v, a.e)
         M_Rd, V_Rd_ab = Mm / g1, Vm / g1
+        caso_governante = "Viga biapoiada"
+        if dados:
+            demanda = max(
+                dados.locais[i],
+                key=lambda c: (
+                    abs(c.momento_kNm * 1e6 / M_Rd) ** 3 + abs(c.cortante_kN * 1000 / V_Rd_ab) ** 3
+                ),
+            )
+            M, V = abs(demanda.momento_kNm) * 1e6, abs(demanda.cortante_kN) * 1000
+            caso_governante = demanda.combinacao
+        else:
+            M = q * a.x * (L - a.x) / 2
+            V = abs(q * (L / 2 - a.x))
         inter = (M / M_Rd) ** 3 + (V / V_Rd_ab) ** 3
         ref = "AISC Design Guide 2 (F.2)"
         linhas = [
-            vm.linha_info("Esforços no centro da abertura", M / 1e6, "kN·m", "Viga biapoiada",
+            vm.linha_info("Esforços no centro da abertura", M / 1e6, "kN·m", caso_governante,
                           f"M = {_n(M / 1e6, 2)} kN·m, V = {_n(V / 1000, 2)} kN a "
                           f"{_n(a.x, 0)} mm do apoio"),
             vm.linha_info("Momento resistente na abertura", Mm / g1 / 1e6, "kN·m", ref,
@@ -310,7 +346,8 @@ def registro(r: ResultadoAberturas) -> dict[str, Any]:
     entradas = {
         "perfil": r.perfil.descricao,
         "aco": f"{e.aco} (f_y = {_n(r.fy, 0)} MPa)",
-        "viga": f"biapoiada, L = {_n(e.L, 0)} mm, q_d = {_n(e.q, 2)} kN/m",
+        "viga": f"biapoiada, L = {_n(e.L, 0)} mm, "
+        + ("esforços importados do Robot" if e.esforcos else f"q_d = {_n(e.q, 2)} kN/m"),
         "aberturas": "; ".join(
             f"{a.nome}: {a.forma.lower()} "
             + (
@@ -334,7 +371,9 @@ def registro(r: ResultadoAberturas) -> dict[str, Any]:
             "(aberturas sem reforço em viga de aço)."
         ),
         premissas=[
-            "Viga biapoiada com carga uniforme de cálculo; aberturas sem chapa de reforço.",
+            "Viga biapoiada com esforços do Robot e aberturas sem chapa de reforço."
+            if e.esforcos
+            else "Viga biapoiada com carga uniforme de cálculo; aberturas sem chapa de reforço.",
             "Abertura circular: h₀ = D₀ na flexão; h₀ = 0,9·D₀ e a₀ = 0,45·D₀ no cortante (DG2).",
             "Coeficiente γ_a1 da NBR 8800 no lugar de φ = 0,90 do guia.",
         ],

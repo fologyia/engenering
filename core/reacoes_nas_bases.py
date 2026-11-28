@@ -32,6 +32,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 
 from core import apoios_do_modelo as am
 from core import criterio_anglo as ca
@@ -48,6 +49,7 @@ Ponto = tuple[float, float, float]
 
 FONTE_APOIO = "reação no apoio (macro)"
 FONTE_PILAR = "base do pilar (forças da viga)"
+FONTE_ROBOT = "reação nodal do Robot"
 EIXOS_FUNDACAO = "fundação"
 EIXOS_MODELO = "modelo"
 EIXOS = (EIXOS_FUNDACAO, EIXOS_MODELO)
@@ -101,6 +103,7 @@ class ReacoesNasBases:
     #: A direção da seção de cada pilar (nome no Simulation) que valeu: a do esqueleto ou a que
     #: as reações da macro deram.
     direcoes: Mapping[str, ds.DirecoesDaSecao] = field(default_factory=dict)
+    casos_robot: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
 
     def acao(self, pe: str, caso: str) -> AcaoNoPe | None:
         return next((a for a in self.acoes if a.pe == pe and a.caso == caso), None)
@@ -493,7 +496,11 @@ def do_projeto(projeto: Mapping[str, object]) -> ReacoesNasBases:
     apoios da macro, o esqueleto, o plano e a direção da seção de cada pilar): o Modelo em 3D
     desenha as mesmas."""
     from core import cena_do_modelo as cm  # o desenho 3D importa este módulo
+    from core import robot
     from core import tratamento_do_modelo as tm  # importa o diagnóstico, como este módulo
+
+    if robot.ativo(projeto):
+        return montar_do_robot(robot.modelo_do_projeto(projeto))
 
     tratado = tm.do_projeto(projeto)
     dados, apoios = tratado.dados, tratado.apoios
@@ -516,6 +523,41 @@ def do_projeto(projeto: Mapping[str, object]) -> ReacoesNasBases:
             direcoes = None
     return montar(
         dados, apoios, plano=plano, geometria=geometria, leituras=leituras, direcoes=direcoes
+    )
+
+
+def montar_do_robot(modelo: Mapping[str, Any]) -> ReacoesNasBases:
+    """Uma fundação por nó de apoio do Robot, com reações globais dos casos simples."""
+    from core import robot
+
+    casos = {codigo: caso for codigo, caso in modelo["casos"].items() if caso["tipo"] == "Casos"}
+    apoios = am.de_dicionario(modelo["reacoes"])
+    nos = {n.no: n.ponto for c in apoios.casos.values() for n in c.nos}
+    for no in modelo.get("nos_apoiados", ()):
+        ponto = modelo["nos"][str(no)]
+        nos.setdefault(no, (ponto[0], ponto[1], ponto[2]))
+    pes = tuple(Pe(f"Nó {no}", ponto, apoio=str(no)) for no, ponto in sorted(nos.items()))
+    acoes = []
+    faltam = []
+    for codigo, caso in casos.items():
+        if caso["analise"] not in (robot.LINEAR, robot.SEGUNDA_ORDEM):
+            faltam.append(
+                f"Caso {codigo}: confirme o tipo de análise estática em Esforços do modelo."
+            )
+            continue
+        apoios_caso = apoios.casos.get(codigo)
+        pontos = apoios_caso.nos if apoios_caso else ()
+        for no in pontos:
+            fx, fy, fz = (-f / 1000 for f in no.forca_N)
+            mx, my, mz = (-m / 1000 for m in no.momento_Nm)
+            acoes.append(AcaoNoPe(f"Nó {no.no}", codigo, (fx, fy, fz), (mx, my, mz), FONTE_ROBOT))
+        ausentes = nos.keys() - {p.no for p in pontos}
+        if ausentes:
+            faltam.append(
+                f"Caso {codigo}: faltam reações nos nós {', '.join(map(str, sorted(ausentes)))}."
+            )
+    return ReacoesNasBases(
+        pes, tuple(acoes), tuple(casos), "Z", faltam=tuple(faltam), casos_robot=casos
     )
 
 
@@ -623,7 +665,9 @@ def linhas(
                 continue
             f = nos_eixos(a.forca_kN, r.eixo_vertical, eixos)
             m = nos_eixos(a.momento_kNm, r.eixo_vertical, eixos)
-            acao = plano.acao(caso) if plano is not None else None
+            caso_robot = r.casos_robot.get(caso, {})
+            acao = plano.acao(caso_robot.get("codigo_plano", caso)) if plano is not None else None
+            descricao = caso_robot.get("nome") or (acao.nome if acao is not None else "—")
             saida.append(
                 [
                     pe.rotulo,
@@ -633,7 +677,7 @@ def linhas(
                     _arredondar(-f[vertical]),
                     _arredondar(math.hypot(*(f[k] for k in horizontais))),
                     _arredondar(math.hypot(*(m[k] for k in horizontais))),
-                    acao.nome if acao is not None else "—",
+                    descricao,
                     pe.pilar or "—",
                     a.fonte,
                 ]
@@ -729,19 +773,23 @@ COLUNAS_CASOS = [
 def linhas_dos_casos(r: ReacoesNasBases, plano: pc.PlanoDeCargas | None) -> list[list[object]]:
     saida: list[list[object]] = []
     for caso in r.casos:
-        acao = plano.acao(caso) if plano is not None else None
+        caso_robot = r.casos_robot.get(caso, {})
+        acao = plano.acao(caso_robot.get("codigo_plano", caso)) if plano is not None else None
+        descricao = caso_robot.get("nome") or (acao.nome if acao else "não está no plano de cargas")
         if acao is None:
-            saida.append([caso, "não está no plano de cargas", "—", "—", "", "", "", "", ""])
+            saida.append(
+                [caso, descricao, caso_robot.get("natureza") or "—", "—", "", "", "", "", ""]
+            )
             continue
         try:
             categoria = comb.categoria_nbr(acao.categoria)
         except ValueError:
-            saida.append([caso, acao.nome, "—", acao.categoria, "", "", "", "", ""])
+            saida.append([caso, descricao, "—", acao.categoria, "", "", "", "", ""])
             continue
         saida.append(
             [
                 caso,
-                acao.nome,
+                descricao,
                 categoria.tipo,
                 categoria.rotulo,
                 categoria.gamma,
@@ -809,8 +857,9 @@ def linhas_do_resumo(r: ReacoesNasBases) -> list[list[object]]:
 def convencao(r: ReacoesNasBases, eixos: str) -> str:
     if eixos == EIXOS_MODELO:
         vertical = "Y" if r.eixo_vertical == "Y" else "Z"
+        nome = "Autodesk Robot" if r.casos_robot else "SolidWorks"
         return (
-            f"Eixos do modelo do SolidWorks ({vertical} para cima). Força e momento que a estrutura "
+            f"Eixos do modelo do {nome} ({vertical} para cima). Força e momento que a estrutura "
             f"faz na fundação (a reação com o sinal trocado): F{vertical} negativa é para baixo, "
             "compressão. N = compressão (positiva) e H = a força horizontal resultante."
         )
@@ -827,6 +876,16 @@ def convencao(r: ReacoesNasBases, eixos: str) -> str:
         "M horizontal = a resultante de Mx e My (o Mz é a torção). Momentos pela regra da mão "
         "direita."
     )
+
+
+def descricao_da_reacao(r: ReacoesNasBases) -> tuple[str, str]:
+    if r.casos_robot:
+        return (
+            "REAÇÃO DO APOIO NA ESTRUTURA — valores do Autodesk Robot",
+            "A reação global do apoio tem sinal oposto à ação na fundação. "
+            "Rz positiva indica reação para cima.",
+        )
+    return GRUPO_REACAO, EXPLICA_REACAO
 
 
 # ---------------------------------------------------------------------------------------------
@@ -861,6 +920,9 @@ def xlsx(
         folha.append(list(cabecalho))
         for linha in dados_:
             folha.append(list(linha))
+            for celula in folha[folha.max_row]:
+                if celula.data_type == "f":
+                    celula.data_type = "s"
         for celula in folha[1]:
             celula.font, celula.fill = fonte_cabecalho, fundo
             celula.alignment = Alignment(wrap_text=True, vertical="center")
@@ -878,7 +940,7 @@ def xlsx(
     assert leia is not None
     leia.title = "Leia-me"
     titulo = "Reações nas bases para o projeto da fundação" + (f" — {projeto}" if projeto else "")
-    if pendentes:
+    if pendentes or (r.casos_robot and r.faltam):
         titulo += " — PRELIMINAR (com pendências)"
     leia.append([titulo])
     leia["A1"].font = Font(bold=True, size=13)
@@ -886,20 +948,24 @@ def xlsx(
     if responsavel:
         leia.append([f"Responsável: {responsavel}"])
     leia.append([])
+    titulo_reacao, texto_reacao = descricao_da_reacao(r)
+    fonte_das_reacoes = (
+        "Fonte: tabela Reações do Robot. Uma linha por nó de apoio e caso simples."
+        if r.casos_robot
+        else f"De onde veio: “{FONTE_APOIO}” = a reação de cada nó apoiado, lida do SolidWorks pela macro; "
+        f"“{FONTE_PILAR}” = a força na base do pilar, levada aos eixos do modelo pela direção da seção."
+    )
     for texto in (
         NOTA_COMBINACOES,
         convencao(r, eixos),
         EXPLICA_ACAO,
-        EXPLICA_REACAO,
+        texto_reacao,
         "Na aba Reações por pé, as duas vêm lado a lado, cada uma com o seu título; a aba Resumo "
         "por pé e o desenho de cada caso são da ação na fundação."
         + (" O sistema de coordenadas está desenhado na aba Desenhos." if figuras else ""),
         "Unidades: kN e kN·m; coordenadas em m.",
         f"Casos: {', '.join(r.casos)}. Pés: {len(r.pes)} (locação na aba Locação).",
-        "De onde veio: "
-        + f"“{FONTE_APOIO}” = a reação de cada nó apoiado, lida do SolidWorks pela macro; "
-        + f"“{FONTE_PILAR}” = a força na base do pilar, levada aos eixos do modelo pela direção "
-        + "da seção do pilar.",
+        fonte_das_reacoes,
     ):
         leia.append([texto])
     if r.conferencia:
@@ -935,7 +1001,7 @@ def xlsx(
     grupos = (
         (1, 2, "Pé e caso", "475569"),
         (3, 11, GRUPO_ACAO, "B91C1C"),
-        (12, 17, GRUPO_REACAO, "15803D"),
+        (12, 17, titulo_reacao, "15803D"),
         (18, 20, "Identificação", "475569"),
     )
     for inicio, fim, texto, cor in grupos:
@@ -986,6 +1052,7 @@ def registro_das_reacoes(
     pendentes: Sequence[dm.Achado] = (),
     cena: Mapping[str, object] | None = None,
     legenda_da_cena: str = "",
+    contexto: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """As reações nas bases para o memorial: a ação de cada pé caso a caso (a carga para a
     fundação), a reação do apoio (o sinal trocado), a locação, os casos e o resumo; com o sistema
@@ -1012,8 +1079,9 @@ def registro_das_reacoes(
         "fonte": 6.5,
     }
     cabecalho_reacao = colunas_da_reacao(r, eixos)
+    titulo_reacao, texto_reacao = descricao_da_reacao(r)
     tabela_reacao = {
-        "legenda": f"{GRUPO_REACAO}. {EXPLICA_REACAO}",
+        "legenda": f"{titulo_reacao}. {texto_reacao}",
         "cabecalhos": cabecalho_reacao[:8],
         "linhas": [[_celula(v) for v in l[:8]] for l in linhas_da_reacao(r, plano, eixos)],
         "fonte": 6.5,
@@ -1057,15 +1125,19 @@ def registro_das_reacoes(
         entradas={
             "casos": ", ".join(r.casos),
             "pes": len(r.pes),
-            "eixos": "da fundação (Z para cima)" if eixos == EIXOS_FUNDACAO else "do SolidWorks",
+            "eixos": "da fundação (Z para cima)" if eixos == EIXOS_FUNDACAO else "do modelo",
+            **dict(contexto or {}),
         },
         resultados=resultados,
         metodo=(
-            "A reação de cada apoio lida do SolidWorks pela macro exportar_casos_de_carga ou, sem "
+            "Reações globais de cada nó de apoio e caso simples calculadas no Autodesk Robot. "
+            if r.casos_robot
+            else "A reação de cada apoio lida do SolidWorks pela macro exportar_casos_de_carga ou, sem "
             "ela, a força na base de cada pilar levada aos eixos do modelo pela direção da seção; a "
-            "soma dos pés conferida contra a reação total de cada caso. " + convencao(r, eixos)
-        ),
-        premissas=[NOTA_COMBINACOES, EXPLICA_ACAO, EXPLICA_REACAO],
+            "soma dos pés conferida contra a reação total de cada caso. "
+        )
+        + convencao(r, eixos),
+        premissas=[NOTA_COMBINACOES, EXPLICA_ACAO, texto_reacao],
         alertas=alertas,
         referencias=[f"{ca.REFERENCIA}, item 5.9."],
         conclusao=destaque,

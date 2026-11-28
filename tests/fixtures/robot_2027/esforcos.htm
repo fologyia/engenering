@@ -1,0 +1,1717 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+   http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+
+<head>
+<title></title>
+<meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />
+<meta name="GENERATOR" content="Autodesk ROHTML v.39.0.0.7560" />
+<!--CSS File: 'C:\Program Files\Common Files\Autodesk Shared\Structural\COM\2026\rohtml.css' - opened-->
+<style type="text/css">
+<!--
+/* Last css modifications: 10/15/2005 K_B */
+
+
+
+/*******************************************************************************\
+* Default font style and margins for the entire document.
+\*******************************************************************************/
+body
+{
+   margin:0px;
+   padding:10px;
+   font-family:Arial,Helvetica,Sans-Serif;
+   font-size:9pt;
+}
+
+
+
+/*******************************************************************************\
+* Default font style and margins for headers of level 1.
+\*******************************************************************************/
+h1
+{
+   margin:10px 0;
+   font-size:14pt;
+   font-weight:bold;
+}
+
+
+
+/*******************************************************************************\
+* Default font style and margins for headers of level 2.
+\*******************************************************************************/
+h2
+{
+   margin:10px 0;
+   font-size:14pt;
+   border-bottom:1px solid black;
+   font-variant:small-caps;
+   font-weight:bold;
+}
+
+
+
+/*******************************************************************************\
+* Default font style and margins for headers of level 3.
+\*******************************************************************************/
+h3
+{
+   margin:10px 0;
+   font-size:13pt;
+   text-decoration:underline;
+   font-variant:small-caps;
+   font-weight:bold;
+}
+
+
+
+/*******************************************************************************\
+* Default font style and margins for headers of level 4.
+\*******************************************************************************/
+h4
+{
+   margin:10px 0;
+   font-size:11pt;
+   font-variant:small-caps;
+   font-weight:bold;
+}
+
+/*******************************************************************************\
+* Default font style and margins for headers of level 5 and 6.
+\*******************************************************************************/
+h5, h6
+{
+   margin:10px 0;
+   font-size:8pt;
+   text-decoration:underline;
+}
+
+
+
+/*******************************************************************************\
+* General settings for all autoformatted and user-defined tables in the document.
+\*******************************************************************************/
+table
+{
+   text-align:left;
+}
+table, td, th
+{
+   border-collapse:collapse;
+   border-color:black;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the AddNoteHeader and AddNoteFooter functions.
+\*******************************************************************************/
+table.note_header
+{
+   margin-bottom:20px;
+   border:1px solid #dddddd;
+}
+td.note_header
+{
+   margin-bottom:0;
+   padding:5px;
+   font-size:14pt;
+   background-color:#eeeeee;
+   border:0;
+   line-height:1.5em;
+}
+td.header_footer_bmp
+{
+   font-size:9pt;
+   padding:5px;
+   background-color:white;
+   border:1px solid #dddddd;
+   vertical-align:center;
+   text-align:center;
+}
+span.note_header
+{
+   margin-bottom:0;
+   font-size:12pt;
+   background-color:#eeeeee;
+}
+span.note_header_app
+{
+   font-size:8pt;
+   background-color:#eeeeee;
+}
+table.note_footer
+{
+   margin-top:20px;
+   font-size:14pt;
+   border:1px solid #dddddd;
+}
+td.note_footer
+{
+   margin-top:0;
+   padding:5px;
+   font-size:14pt;
+   background-color:#eeeeee;
+   border:0;
+}
+span.note_footer
+{
+   font-size:12pt;
+   background-color:#eeeeee;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the AddValue2 function and ROTF_LIST_1 table format.
+\*******************************************************************************/
+td.list1
+{
+   padding-right:10px;
+   white-space:nowrap;
+}
+th.list1
+{
+   white-space:nowrap;
+}
+div.list1
+{
+   padding-left:15px;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the AddValue5 function and ROTF_LIST_2 table format.
+\*******************************************************************************/
+td.list2
+{
+   white-space:nowrap;
+}
+th.list2
+{
+   white-space:nowrap;
+}
+div.list2
+{
+   padding-left:15px;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the AddMessage2 function and ROTF_LIST_3 table format.
+\*******************************************************************************/
+td.list3
+{
+   white-space:nowrap;
+}
+th.list3
+{
+   white-space:nowrap;
+}
+div.list3
+{
+   padding-left:15px;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the AddText2 function and ROTF_LIST_4 table format.
+\*******************************************************************************/
+td.list4
+{
+   white-space:nowrap;
+}
+th.list4
+{
+   white-space:nowrap;
+}
+div.list4
+{
+   padding-left:15px;
+}
+td.list4
+{
+   padding-right:10px;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the Verify function and ROTF_VERIFY_1 table format.
+\*******************************************************************************/
+td.verify1
+{
+   white-space:nowrap;
+}
+th.verify1
+{
+   white-space:nowrap;
+}
+div.verify1
+{
+   padding-left:15px;
+}
+td.verify1
+{
+   background-color:#eeeeee;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the ROTF_TABLE_1 table format.
+\*******************************************************************************/
+table.table1
+{
+   border:1px solid #dddddd;
+}
+td.table1
+{
+   border:1px solid #dddddd;
+   white-space:nowrap;
+}
+th.table1
+{
+   border:1px solid #dddddd;
+   text-align:center;
+   background-color:#eeeeee;
+   white-space:nowrap;
+}
+#tfooter1
+{
+   border-top-width:2px;
+}
+#trowfooter1
+{
+   border-top-width:2px;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the ROTF_TABLE_2 table format.
+\*******************************************************************************/
+table.table2
+{
+   border:0;
+}
+td.table2
+{
+   text-align:center;
+   white-space:nowrap;
+}
+th.table2
+{
+   text-align:center;
+   white-space:nowrap;
+}
+#tfooter2
+{
+   border-top:1px solid #000000;
+}
+#trowheader2
+{
+   border-right:1px solid #000000;
+}
+#trowcolheader2
+{
+   border-right:1px solid #000000;
+   border-bottom:1px solid #000000;
+}
+#trowfooter2
+{
+   border-top:1px solid #000000;
+   border-right:1px solid #000000;
+}
+#tcolheader2
+{
+   border-bottom:1px solid #000000;
+}
+
+
+
+/*******************************************************************************\
+* Style definitions used by the ROTF_TABLE_3 table format.
+\*******************************************************************************/
+table.table3
+{
+   border:1px solid #dddddd;
+}
+td.table3
+{
+   border:1px solid #dddddd;
+   border:1px solid #dddddd;
+   white-space:nowrap;
+}
+th.table3
+{
+   border:1px solid #dddddd;
+   text-align:left;
+   white-space:nowrap;
+}
+#tfooter3
+{
+   border-top:2px solid #dddddd;
+}
+#trowheader3
+{
+   border-right:2px solid #dddddd;
+}
+#trowcolheader3
+{
+   border-right:2px solid #dddddd;
+   border-bottom:2px solid #dddddd;
+}
+#trowfooter3
+{
+   border-top:2px solid #dddddd;
+   border-right:2px solid #dddddd;
+}
+#tcolheader3
+{
+   border-bottom:2px solid #dddddd;
+}
+
+
+
+
+/*******************************************************************************\
+* Style definitions used by the ROTF_TABLE_4 table format.
+\*******************************************************************************/
+table.table4
+{
+   border:0px;
+}
+th.table4
+{
+   border:1px solid #dddddd;
+   text-align:center;
+   background-color:#fefefe;
+   word-wrap:break-word;
+   padding-right:5px;
+   padding-left:5px;
+}
+td.table4
+{
+   border-bottom:1px solid #dddddd;
+   border-right:1px solid #dddddd;
+   border-left:1px solid #dddddd;
+   text-align:right;
+   word-wrap:break-word;
+   padding-right:5px;
+   padding-left:5px;
+}
+#tfooter4
+{
+   border-top:1px solid #dddddd;
+}
+#trowheader4
+{
+   border-right:1px solid #dddddd;
+   border-left:1px solid #dddddd;
+   border-top:0px;
+}
+#trowcolheader4
+{
+   border-right:1px solid #dddddd;
+   border-left:1px solid #dddddd;
+   border-bottom:1px solid #dddddd;
+   border-top:1px solid #dddddd;
+   background-color:#fefefe;
+   font-weight:bold;
+}
+#trowfooter4.table4
+{
+   border-top:0px;
+   border-right:1px solid #dddddd;
+}
+#tcolheader4
+{
+   border-bottom:1px solid #dddddd;
+   border-top:1px solid #dddddd;
+   border-left:1px solid #dddddd;
+}
+
+
+/*******************************************************************************\
+* End of style definitions ******************************************************>
+\*******************************************************************************/
+-->
+</style></head>
+<body>
+<div style=" white-space:normal; word-wrap: break-word;" style=" white-space:normal; word-wrap: break-word;">
+<div class="table4"><table border="1" width="100%" class="table4" id="rohtml_rect" style="font-family:Arial; font-size:8pt; text-decoration:none;">
+
+	<thead>
+	<tr>
+		<th width="35%" class="table4" id="trowcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>Barra/P­onto/Caso</span></th>
+
+		<th width="22%" class="table4" id="tcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>FX (kN)</span></th>
+
+		<th width="22%" class="table4" id="tcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>FY (kN)</span></th>
+
+		<th width="21%" class="table4" id="tcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>FZ (kN)</span></th>
+	</tr>
+
+	</thead>
+	<tfoot>
+	</tfoot>
+	<tbody>
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>9,38</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>18,76</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>39,87</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,26</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>28,14</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>3,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>9,38</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>18,76</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>39,87</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,26</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>28,14</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>3,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>9,38</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>18,76</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>39,87</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,26</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>28,14</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>3,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>9,38</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>18,76</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>39,87</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,26</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>28,14</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>3,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>9,38</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>18,76</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>39,87</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,26</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>28,14</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>3,01</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>1,00</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-0,62</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>4,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-2,63</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,86</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>1,00</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-0,62</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>4,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-2,63</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,86</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>1,00</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-0,62</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>4,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-2,63</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,86</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>1,00</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-0,62</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>4,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-2,63</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,86</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>1,00</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-0,62</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>4,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-2,63</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,99</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>-1,86</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,62</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,63</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>1,86</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,62</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,63</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>1,86</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,62</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,63</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>1,86</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,62</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,63</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>1,86</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,62</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,00</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>1,99</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>2,63</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>4,24</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>1,86</span></td>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="21%" class="table4"><span>2,99</span></td>
+	</tr>
+
+	</tbody>
+</table></div>
+
+<div><table width="100%" id="rohtml_rect">
+
+	<thead>
+	</thead>
+	<tfoot>
+	</tfoot>
+	<tbody>
+	<tr>
+		<td><span>
+<br /></span></td>
+	</tr>
+
+	</tbody>
+</table></div>
+
+<div class="table4"><table border="1" width="100%" class="table4" id="rohtml_rect" style="font-family:Arial; font-size:8pt; text-decoration:none;">
+
+	<thead>
+	<tr>
+		<th width="35%" class="table4" id="trowcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>Barra/P­onto/Caso</span></th>
+
+		<th width="22%" class="table4" id="tcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>MX (kNm)</span></th>
+
+		<th width="22%" class="table4" id="tcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>MY (kNm)</span></th>
+
+		<th width="21%" class="table4" id="tcolheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>MZ (kNm)</span></th>
+	</tr>
+
+	</thead>
+	<tfoot>
+	</tfoot>
+	<tbody>
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,77</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-3,53</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-7,51</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­1­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-5,30</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,01</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-2,03</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-4,31</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-3,04</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-0,26</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-0,52</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,11</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­3­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-0,79</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,49</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,98</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>2,08</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­4­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>1,47</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>2,48</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>5,28</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>1­/­	­2­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>3,73</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>2,48</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>5,28</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>3,73</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,62</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>2,64</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­2­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>1,87</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,00</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,00</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,01</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,01</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-0,62</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,23</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-2,62</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­4­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,85</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,24</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-2,47</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-5,26</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>2­/­	­3­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-3,71</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,75</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-3,51</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-7,46</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-5,26</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,01</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-2,01</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-4,28</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­2­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-3,02</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-0,26</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-0,52</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-1,10</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>-0,78</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,49</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>0,98</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>2,08</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­4­/­5­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>1,47</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­1</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>1,24</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­2</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>2,47</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­3 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>5,26</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	<tr>
+		<th width="35%" class="table4" id="trowheader4" style="font-family:Arial; font-size:8pt; text-decoration:none;"><span>3­/­	­3­/­	­4 (­C­)</span></th>
+
+		<td width="22%" class="table4"><span>0,0</span></td>
+
+		<td width="22%" class="table4"><span>3,71</span></td>
+
+		<td width="21%" class="table4"><span>0,0</span></td>
+	</tr>
+
+	</tbody>
+</table></div>
+
+<div><table width="100%" id="rohtml_rect">
+
+	<thead>
+	</thead>
+	<tfoot>
+	</tfoot>
+	<tbody>
+	<tr>
+		<td><span>
+<br /></span></td>
+	</tr>
+
+	</tbody>
+</table></div>
+</div></body>
+</html>

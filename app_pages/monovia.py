@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.monovia_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
+from core import desenho_monovia as desenho
 from core import monovia as mo
 from core import perfil_i as pi
 
@@ -27,7 +29,6 @@ st.caption(
     "Coloca a talha na posição mais desfavorável, soma o impacto e a força lateral e verifica a "
     "viga, a mesa de baixo onde as rodas correm e o apoio."
 )
-mostrar_croqui_de_referencia("monovia")
 
 P = mo.EntradaMonovia()
 c_ = Campos("mo_", AJUDA)
@@ -118,6 +119,12 @@ if erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = mo.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Seção e contato das rodas",
+        help="Seção do perfil escolhido, com os pontos de contato informados na mesa inferior; o diâmetro das rodas não é modelado.",
+    )
+    mostrar_figura(svg_da_cena(desenho.secao(entrada)))
 
 with st.container(border=True), secao_protegida("Esforços"):
     c_.titulo("Esforços de cálculo", "sec_esforcos")

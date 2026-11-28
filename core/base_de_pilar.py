@@ -5719,6 +5719,7 @@ def memorial_da_base(
     projeto: Mapping[str, Any] | None = None,
     formato: str = "word",
     combinacoes_completas: bool = False,
+    registro_preparado: Mapping[str, Any] | None = None,
 ) -> bytes:
     """O memorial só desta base: em Word, o trecho para colar no documento oficial
     (:mod:`core.memorial_trecho`); em PDF, o documento do padrão do memorial do projeto."""
@@ -5731,7 +5732,7 @@ def memorial_da_base(
 
         return trecho_de_registro(
             normalizar_registro_tecnico(
-                registro_base(r, combinacoes_completas=combinacoes_completas)
+                registro_preparado or registro_base(r, combinacoes_completas=combinacoes_completas)
             ),
             projeto=projeto,
             figuras_por_verificacao=figuras_das_contas(r),
@@ -5742,7 +5743,7 @@ def memorial_da_base(
     # o gerador do memorial está fora da lista do mypy: importado pelo nome (como em ligacoes)
     relatorio = importlib.import_module("core.project_report")
     registro = normalizar_registro_tecnico(
-        registro_base(r, combinacoes_completas=combinacoes_completas)
+        registro_preparado or registro_base(r, combinacoes_completas=combinacoes_completas)
     )
     base: dict[str, Any] = dict(projeto) if projeto else {"nome": MODULO_TITULO}
     base["registros_tecnicos"] = [registro]

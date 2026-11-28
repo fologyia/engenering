@@ -67,6 +67,56 @@ def catalogar_fontes_projeto(projeto: Mapping[str, Any]) -> dict[str, dict[str, 
         "Critérios gerais do projeto",
         calcular_hash_criterios(criterios if isinstance(criterios, Mapping) else None),
     )
+    modelo = projeto.get("modelo_robot")
+    if isinstance(modelo, Mapping) and modelo.get("assinatura"):
+        casos = modelo.get("casos", {})
+        esforcos = modelo.get("esforcos", {})
+        dados = {
+            "remessa": (
+                "Remessa ativa do Robot",
+                (projeto.get("origem_do_modelo"), modelo["assinatura"]),
+            ),
+            "calculo": (
+                "Configurações do Robot",
+                (
+                    modelo.get("origem_combinacoes"),
+                    casos,
+                    esforcos.get("membros"),
+                    esforcos.get("parametros"),
+                    esforcos.get("norma"),
+                    modelo.get("eixos_pendentes"),
+                ),
+            ),
+            "combinacoes": (
+                "Origem e casos das combinações do Robot",
+                (modelo.get("origem_combinacoes"), casos),
+            ),
+            "apoios": (
+                "Casos simples das fundações",
+                {
+                    k: (c.get("analise"), c.get("codigo_plano"))
+                    for k, c in casos.items()
+                    if c.get("tipo") == "Casos"
+                },
+            ),
+            "comparacao": ("Fatores e vínculos da comparação do Robot", casos),
+            "plano": ("Plano de cargas do Toolkit", projeto.get("plano_de_cargas", {})),
+        }
+        for tipo, (rotulo, valor) in dados.items():
+            chave = f"robot:{tipo}"
+            fontes[chave] = _fonte(chave, "robot", tipo, rotulo, _hash(valor))
+        for barra, cfg in esforcos.get("membros", {}).items():
+            chave = f"robot:barra:{barra}"
+            parametro = esforcos.get("parametros", {}).get(cfg.get("tipo"))
+            valor = (
+                cfg,
+                parametro,
+                esforcos.get("norma"),
+                barra in modelo.get("eixos_pendentes", ()),
+            )
+            fontes[chave] = _fonte(
+                chave, "robot", barra, f"Configuração da barra {barra}", _hash(valor)
+            )
 
     colecoes = (
         ("casos_carga", "casos_carga", "Casos de carga"),
@@ -161,9 +211,16 @@ def preparar_registro_dependencias(
             [*inferir_chaves_dependencia(item), *(_texto(chave) for chave in dependencias_chaves)]
         )
     )
+    fontes_capturadas = {
+        d["chave"]: d
+        for d in item.get("dependencias", [])
+        if isinstance(d, Mapping)
+        and _texto(d.get("chave")).startswith("robot:")
+        and d.get("hash_origem")
+    }
     dependencias = []
     for chave in chaves:
-        fonte = fontes.get(chave)
+        fonte = fontes_capturadas.get(chave) or fontes.get(chave)
         if fonte:
             dependencias.append(deepcopy(fonte))
         else:
@@ -227,7 +284,7 @@ def sincronizar_estados_dependencias(projeto: Mapping[str, Any]) -> dict[str, An
     """Reavalia o grafo sem alterar as fotografias que originaram os cálculos."""
     documento = deepcopy(dict(projeto))
     registros = [
-        item for item in documento.get("registros_tecnicos", []) if isinstance(item, Mapping)
+        dict(item) for item in documento.get("registros_tecnicos", []) if isinstance(item, Mapping)
     ]
     fontes = catalogar_fontes_projeto(documento)
     ciclos = _ciclos_registros(registros)
@@ -238,6 +295,21 @@ def sincronizar_estados_dependencias(projeto: Mapping[str, Any]) -> dict[str, An
         dependencias = [
             item for item in registro.get("dependencias", []) if isinstance(item, Mapping)
         ]
+        entradas = registro.get("entradas") or {}
+        assinatura_robot = (
+            entradas.get("assinatura_remessa_robot") if isinstance(entradas, Mapping) else None
+        )
+        if assinatura_robot and not any(item.get("tipo") == "robot" for item in dependencias):
+            dependencias.append(
+                _fonte(
+                    "robot:remessa",
+                    "robot",
+                    "remessa",
+                    "Remessa ativa do Robot",
+                    _hash(("Robot", assinatura_robot)),
+                )
+            )
+            registro["dependencias"] = dependencias
         motivos: list[str] = []
         status = STATUS_ATUAL
         if registro_id in ciclos:

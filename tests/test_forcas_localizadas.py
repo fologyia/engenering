@@ -209,3 +209,20 @@ def test_perfil_de_outra_pagina_e_verificar_forcas():
     nomes = [v.nome for v in linhas]
     assert nomes[0] == "Pé: escoamento local da alma"
     assert "Pé: enrijecedores necessários" in nomes
+
+
+@pytest.mark.parametrize(("tipo", "quantidade"), [(fl.COMPRESSAO, 1), (fl.TRACAO, 1), (fl.PAR, 2)])
+def test_detalhe_desenha_sentido_da_forca(tipo, quantidade):
+    from dataclasses import replace
+
+    from core import cena_3d as c3
+    from core import desenho_forcas_localizadas as desenho
+
+    e = fl.EntradaForcas()
+    f = replace(e.forcas[0], tipo=tipo)
+    figura = desenho.detalhe(e, f)
+    setas = [i for i in figura.itens if isinstance(i, c3.Seta2D)]
+    assert len(setas) == quantidade
+    assert (setas[0].b[1] < setas[0].a[1]) == (tipo == fl.TRACAO)
+    textos = " ".join(i.texto for i in figura.itens if isinstance(i, c3.Etiqueta2D))
+    assert "ponta não representada" in textos

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import streamlit as st
 
+from components.cena_3d_svg import svg_da_cena
 from components.contencao_lateral_help import AJUDA
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components.figuras import mostrar_figura
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
 from core import contencao_lateral as cl
+from core import desenho_contencao_lateral as desenho
 from core import perfil_i as pi
 
 configurar_pagina("Contenção lateral (travamentos)", ":material/fence:")
@@ -27,7 +29,6 @@ st.caption(
     "Confere se o travamento que reduz o comprimento destravado de um pilar ou de uma viga tem a "
     "força e a rigidez que a norma exige — senão o comprimento destravado adotado não vale."
 )
-mostrar_croqui_de_referencia("contencao_lateral")
 
 P = cl.EntradaContencao()
 c_ = Campos("cl_", AJUDA)
@@ -132,6 +133,12 @@ if erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = cl.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Caso de contenção",
+        help="Esquema funcional do tipo escolhido; não representa a geometria real da ligação.",
+    )
+    mostrar_figura(svg_da_cena(desenho.esquema(entrada)))
 mostrar_resultado(r.grupos, avisos=r.avisos)
 memorial_e_registro(
     cl.registro(r),

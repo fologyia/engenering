@@ -6,30 +6,43 @@ from typing import Any
 
 import streamlit as st
 
-from components.croquis_de_referencia import mostrar_croqui_de_referencia
+from components import robot_esforcos_ui as robot_ui
+from components.cena_3d_svg import svg_da_cena
+from components.figuras import mostrar_figura
 from components.ligacao_rigida_help import AJUDA
 from components.pagina_padrao import Campos, memorial_e_registro, mostrar_resultado
+from components.rigida_4es_ui import mostrar as mostrar_4es
 from components.robustez import secao_protegida
 from components.ui import cabecalho_pagina, configurar_pagina
+from core import desenho_ligacao_rigida as desenho
 from core import ligacao_rigida as lr
 from core import perfil_i as pi
 
 configurar_pagina("Ligação rígida viga–pilar", ":material/join_inner:")
 cabecalho_pagina(
     "Ligação rígida viga–pilar",
-    "Chapa de extremidade estendida com 4 parafusos na mesa tracionada (4E) • parafusos, chapa, "
-    "soldas, mesa e alma do pilar, painel de alma e enrijecedores • ABNT NBR 8800:2025 • AISC 358",
+    "Chapa de extremidade estendida • 4E e estudo preliminar do enrijecedor 4ES • "
+    "ABNT NBR 8800:2025 • AISC 358",
     categoria="Dimensionamento",
     icone=":material/join_inner:",
     cor="blue",
     ajuda_modulo="Ligação rígida viga–pilar",
     modulo_id=lr.MODULO_ID,
 )
+tipo = st.selectbox(
+    "Configuração da ligação",
+    ("4E — sem enrijecedor da chapa", "4ES — enrijecedor (estudo preliminar)"),
+    key="lr_configuracao",
+    help="A 4E é o cálculo existente. A 4ES reúne verificações preliminares da chapa, dos parafusos, do pilar e do enrijecedor; ainda não dimensiona a ligação completa.",
+)
+if tipo.startswith("4ES"):
+    mostrar_4es()
+    st.stop()
+
 st.caption(
     "Verifica a ligação de momento parafusada mais comum dos pórticos: a viga soldada a uma "
     "chapa que avança além da mesa tracionada, parafusada na mesa do pilar."
 )
-mostrar_croqui_de_referencia("ligacao_rigida")
 
 P = lr.EntradaRigida()
 c_ = Campos("lr_", AJUDA)
@@ -75,6 +88,7 @@ with st.container(border=True), secao_protegida("1. Perfis e aços"):
 
 with st.container(border=True), secao_protegida("2. Esforços"):
     c_.titulo("2. Esforços de cálculo", "sec_esforcos")
+    robot_ui.ligacao("lr_robot", {"lr_M": "m", "lr_V": "v"})
     c = st.columns(4)
     M = c_.numero("M (kN·m)", "M", P.M, c[0], minimo=0.1, passo=5.0)
     V = c_.numero("V (kN)", "V", P.V, c[1], passo=5.0)
@@ -145,9 +159,15 @@ if erros:
         st.error(erro, icon=":material/error:")
     st.stop()
 r = lr.calcular(entrada)
+with st.container(border=True):
+    st.subheader(
+        "Detalhe da chapa",
+        help="Vista frontal proporcional da chapa e das quatro posições dos parafusos tracionados do modelo 4E.",
+    )
+    mostrar_figura(svg_da_cena(desenho.vista_chapa(entrada)))
 mostrar_resultado(r.grupos, avisos=r.avisos)
 memorial_e_registro(
-    lr.registro(r),
+    robot_ui.registro("lr_robot", lr.registro(r), {"lr_M": M, "lr_V": V}),
     prefixo="lr_",
     arquivo="memorial_ligacao_rigida",
     rotulo_registrar="Registrar a ligação no projeto ativo",
